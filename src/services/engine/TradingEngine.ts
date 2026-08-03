@@ -7,6 +7,7 @@ import {
   AccountFunds,
   HistoricalCandle,
   ApiCredentials,
+  TradeRecord,
 } from '../brokers/BrokerAdapter';
 import { BrokerAdapterRegistry } from '../brokers/adapters';
 import { PublicDelayedMarketDataProvider } from '../marketData/PublicDelayedMarketDataProvider';
@@ -91,7 +92,7 @@ export class TradingEngine {
     }
   }
 
-  // --- Abstracted Execution API ---
+  // --- Universal Abstracted Execution API ---
   public async placeOrder(order: OrderRequest): Promise<OrderResult> {
     if (!this.activeBrokerAdapter) {
       return {
@@ -123,6 +124,20 @@ export class TradingEngine {
     return this.activeBrokerAdapter.cancelOrder(orderId);
   }
 
+  public async squareOff(positionId: string): Promise<{ success: boolean; message?: string }> {
+    if (!this.activeBrokerAdapter) {
+      return { success: false, message: 'No live broker connected.' };
+    }
+    return this.activeBrokerAdapter.squareOff(positionId);
+  }
+
+  public async exitAll(): Promise<{ success: boolean; closedCount: number }> {
+    if (!this.activeBrokerAdapter) {
+      return { success: false, closedCount: 0 };
+    }
+    return this.activeBrokerAdapter.exitAll();
+  }
+
   public async getPositions(): Promise<Position[]> {
     if (!this.activeBrokerAdapter) {
       return [];
@@ -149,6 +164,13 @@ export class TradingEngine {
       return [];
     }
     return this.activeBrokerAdapter.fetchOrders();
+  }
+
+  public async getTradeHistory(): Promise<TradeRecord[]> {
+    if (!this.activeBrokerAdapter) {
+      return [];
+    }
+    return this.activeBrokerAdapter.fetchTradeHistory();
   }
 
   public async getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {

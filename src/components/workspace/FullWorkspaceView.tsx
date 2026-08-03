@@ -16,11 +16,13 @@ import {
   Command,
   X,
   Link2,
-  ShieldAlert
+  ShieldAlert,
+  Settings,
 } from 'lucide-react';
 import { WatchlistItem, PositionItem } from '../../types/landing';
 import { useDemoMode } from '../../context/DemoModeContext';
 import { BrokerRequiredModal } from './BrokerRequiredModal';
+import { BrokerSettingsModal } from '../brokers/BrokerSettingsModal';
 
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 
@@ -52,6 +54,7 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
     { id: '2', symbol: 'NIFTY 25 SEP 22200 PE', type: 'NRML', lots: 25, pnl: -1125.0, ltp: 186.3 },
   ]);
   const [notification, setNotification] = useState<string | null>(null);
+  const [isBrokerSettingsOpen, setIsBrokerSettingsOpen] = useState(false);
 
   const totalPnL = positions.reduce((acc, curr) => acc + curr.pnl, 0);
 
@@ -101,10 +104,11 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
 
   const showNotification = (msg: string) => {
     setNotification(msg);
-    setTimeout(() => setNotification(null), 3500);
+    setTimeout(() => {
+      setNotification(null);
+    }, 3000);
   };
 
-  // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
@@ -207,7 +211,7 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
           </div>
         </div>
 
-        {/* Broker Switcher / Connection Status Pill */}
+        {/* Broker Switcher / Connection Status Pill / Settings Button */}
         <div className="flex items-center gap-3 font-mono text-xs">
           {isDemoMode ? (
             <div className="flex items-center gap-2.5 rounded-xl border border-[#222636] bg-[#090a0f] px-3 py-1.5">
@@ -234,6 +238,7 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
                     key={broker}
                     onClick={() => {
                       setConnectedBroker(broker);
+                      tradingCoreRuntime.switchActiveBroker(broker.toLowerCase());
                       showNotification(`CONNECTED TO BROKER: ${broker}`);
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] transition-colors cursor-pointer ${
@@ -248,6 +253,16 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
               </div>
             </div>
           )}
+
+          {/* Broker Runtime Settings Modal Trigger */}
+          <button
+            onClick={() => setIsBrokerSettingsOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-[#222636] bg-[#11131c] px-3 py-1.5 text-xs text-[#8c93a6] hover:text-[#f3f4f6] hover:border-[#33384f] transition-colors cursor-pointer"
+            title="Broker Runtime Settings"
+          >
+            <Settings className="h-3.5 w-3.5 text-[#10b981]" />
+            <span className="hidden sm:inline">Broker Settings</span>
+          </button>
         </div>
 
         {/* Hotkey Indicator */}
@@ -284,6 +299,13 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
             onNavigateToBroker();
           }
         }}
+      />
+
+      {/* Broker Runtime Settings Modal */}
+      <BrokerSettingsModal
+        isOpen={isBrokerSettingsOpen}
+        onClose={() => setIsBrokerSettingsOpen(false)}
+        onNavigateToConnect={onNavigateToBroker}
       />
 
       {/* Workspace Grid */}
@@ -455,4 +477,3 @@ export const FullWorkspaceView: React.FC<FullWorkspaceViewProps> = ({
     </div>
   );
 };
-

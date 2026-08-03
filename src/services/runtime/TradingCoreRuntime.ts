@@ -1,17 +1,36 @@
 import { brokerManager, BrokerManager, BrokerConnectionInfo } from '../brokers/BrokerManager';
 import { tradingEngine, TradingEngine } from '../engine/TradingEngine';
-import { BrokerAdapter, OrderRequest, OrderResult, Position, Holding, AccountFunds, HistoricalCandle } from '../brokers/BrokerAdapter';
+import {
+  BrokerAdapter,
+  OrderRequest,
+  OrderResult,
+  Position,
+  Holding,
+  AccountFunds,
+  HistoricalCandle,
+  TradeRecord,
+} from '../brokers/BrokerAdapter';
 import { PublicDelayedMarketDataProvider } from '../marketData/PublicDelayedMarketDataProvider';
 
-export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_EXECUTED' | 'TICK_UPDATE';
+export type RuntimeEvent =
+  | 'BROKER_CONNECTED'
+  | 'BROKER_DISCONNECTED'
+  | 'ORDER_EXECUTED'
+  | 'TICK_UPDATE'
+  | 'PORTFOLIO_SYNCED'
+  | 'SESSION_REFRESHED'
+  | 'STATUS_CHANGED';
 
 export type EventListener = (payload: any) => void;
+
+export type MarketDataProviderType = 'CONNECTED_BROKER' | 'EXPLORE_MODE' | 'PAPER_FEED' | 'REPLAY_FEED';
 
 export class TradingCoreRuntime {
   private static instance: TradingCoreRuntime;
   private brokerMgr: BrokerManager = brokerManager;
   private engine: TradingEngine = tradingEngine;
   private marketDataProvider = new PublicDelayedMarketDataProvider();
+  private currentMarketDataProviderType: MarketDataProviderType = 'CONNECTED_BROKER';
   private listeners: Map<RuntimeEvent, Set<EventListener>> = new Map();
 
   private constructor() {}
@@ -40,6 +59,7 @@ export class TradingCoreRuntime {
     const res = await this.brokerMgr.connectOAuth(brokerId, authCode);
     if (res.success) {
       this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' });
+      await this.syncPortfolio(brokerId);
     }
     return res;
   }
@@ -48,6 +68,7 @@ export class TradingCoreRuntime {
     const res = await this.brokerMgr.connectApiKeys(brokerId, credentials);
     if (res.success) {
       this.emit('BROKER_CONNECTED', { brokerId, method: 'ApiKeys' });
+      await this.syncPortfolio(brokerId);
     }
     return res;
   }
@@ -58,10 +79,42 @@ export class TradingCoreRuntime {
   }
 
   public switchActiveBroker(brokerId: string): boolean {
-    return this.brokerMgr.setPrimaryBroker(brokerId);
+    const success = this.brokerMgr.setPrimaryBroker(brokerId);
+    if (success) {
+      this.engine.switchActiveBroker(brokerId);
+      this.emit('STATUS_CHANGED', { brokerId, status: 'Primary Switched' });
+    }
+    return success;
   }
 
-  // --- Execution Engine Delegations ---
+  public renameConnection(brokerId: string, nickname: string): void {
+    this.brokerMgr.renameConnection(brokerId, nickname);
+  }
+
+  public async refreshSession(brokerId: string): Promise<{ success: boolean; error?: string }> {
+    const res = await this.brokerMgr.refreshSession(brokerId);
+    if (res.success) {
+      this.emit('SESSION_REFRESHED', { brokerId });
+      await this.syncPortfolio(brokerId);
+    }
+    return res;
+  }
+
+  public async testLatency(brokerId: string): Promise<number> {
+    return this.brokerMgr.testLatency(brokerId);
+  }
+
+  public async testConnectivity(brokerId: string): Promise<{ success: boolean; latencyMs: number; message: string }> {
+    return this.brokerMgr.testConnectivity(brokerId);
+  }
+
+  public async syncPortfolio(brokerId?: string): Promise<any> {
+    const data = await this.brokerMgr.syncPortfolio(brokerId);
+    this.emit('PORTFOLIO_SYNCED', data);
+    return data;
+  }
+
+  // --- Universal Execution Engine Delegations ---
   public async placeOrder(order: OrderRequest): Promise<OrderResult> {
     const result = await this.engine.placeOrder(order);
     this.emit('ORDER_EXECUTED', result);
@@ -74,6 +127,14 @@ export class TradingCoreRuntime {
 
   public async cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }> {
     return this.engine.cancelOrder(orderId);
+  }
+
+  public async squareOff(positionId: string): Promise<{ success: boolean; message?: string }> {
+    return this.engine.squareOff(positionId);
+  }
+
+  public async exitAll(): Promise<{ success: boolean; closedCount: number }> {
+    return this.engine.exitAll();
   }
 
   public async getPositions(): Promise<Position[]> {
@@ -92,10 +153,22 @@ export class TradingCoreRuntime {
     return this.engine.getOrders();
   }
 
-  // --- Separated Market Data Stream ---
+  public async getTradeHistory(): Promise<TradeRecord[]> {
+    return this.engine.getTradeHistory();
+  }
+
+  // --- Market Data Provider Management ---
+  public setMarketDataProvider(type: MarketDataProviderType): void {
+    this.currentMarketDataProviderType = type;
+  }
+
+  public getMarketDataProviderType(): MarketDataProviderType {
+    return this.currentMarketDataProviderType;
+  }
+
   public async getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {
     const activeBroker = this.brokerMgr.getPrimaryBroker();
-    if (activeBroker) {
+    if (activeBroker && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
       return activeBroker.getHistoricalData(symbol, timeframe);
     }
     return [];
@@ -103,13 +176,13 @@ export class TradingCoreRuntime {
 
   public subscribeTicks(symbols: string[], callback: (tick: any) => void): () => void {
     const activeBroker = this.brokerMgr.getPrimaryBroker();
-    if (activeBroker) {
+    if (activeBroker && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
       return activeBroker.subscribeWebSocket(symbols, (tick) => {
         callback(tick);
         this.emit('TICK_UPDATE', tick);
       });
     }
-    // Fallback in Explore Mode
+    // Fallback feed
     return this.marketDataProvider.subscribeTicks(symbols, (tick) => {
       callback(tick);
       this.emit('TICK_UPDATE', tick);

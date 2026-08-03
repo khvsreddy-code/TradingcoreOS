@@ -35,6 +35,18 @@ export interface Holding {
   dayChange: number;
 }
 
+export interface TradeRecord {
+  tradeId: string;
+  orderId: string;
+  symbol: string;
+  side: 'Buy' | 'Sell';
+  quantity: number;
+  price: number;
+  timestamp: string;
+  product: string;
+  pnl?: number;
+}
+
 export interface AccountFunds {
   totalCapital: number;
   availableMargin: number;
@@ -61,20 +73,28 @@ export interface HistoricalCandle {
 
 export type BrokerConnectionStatus =
   | 'Connected'
-  | 'Session Expired'
+  | 'Refreshing Session'
   | 'Authentication Required'
-  | 'Syncing'
+  | 'Syncing Portfolio'
+  | 'Offline'
   | 'Maintenance'
   | 'Read Only'
   | 'OAuth Pending'
   | 'Connecting...';
 
 export interface BrokerCapabilities {
-  supportsOptions: boolean;
-  supportsCommodities: boolean;
-  supportsGTT: boolean;
-  supportsBracketOrders: boolean;
+  supportsEquity: boolean;
+  supportsFO: boolean;
+  supportsCommodity: boolean;
+  supportsCurrency: boolean;
   supportsBasketOrders: boolean;
+  supportsGTT: boolean;
+  supportsWebSocket: boolean;
+  supportsHistoricalData: boolean;
+  supportsOrderModification: boolean;
+  supportsOrderCancellation: boolean;
+  supportsOptions: boolean;
+  supportsBracketOrders: boolean;
   supportsMarginTrading: boolean;
 }
 
@@ -83,7 +103,7 @@ export interface BrokerAdapter {
   readonly name: string;
   readonly supportsOAuth: boolean;
   readonly supportsAPIKeys: boolean;
-  readonly supportedSegments: string[]; // e.g. ['Equity', 'F&O', 'Commodity']
+  readonly supportedSegments: string[]; // e.g. ['Equity', 'F&O', 'Commodity', 'Currency']
   readonly developerPortalUrl?: string;
   readonly capabilities: BrokerCapabilities;
 
@@ -96,14 +116,16 @@ export interface BrokerAdapter {
   fetchHoldings(): Promise<Holding[]>;
   fetchPositions(): Promise<Position[]>;
   fetchOrders(): Promise<OrderResult[]>;
+  fetchTradeHistory(): Promise<TradeRecord[]>;
 
   getMarketData(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>>;
   getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]>;
   placeOrder(order: OrderRequest): Promise<OrderResult>;
   modifyOrder(orderId: string, updates: Partial<OrderRequest>): Promise<OrderResult>;
   cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }>;
+  squareOff(positionId: string): Promise<{ success: boolean; message?: string }>;
+  exitAll(): Promise<{ success: boolean; closedCount: number }>;
   getOptionChain(symbol: string): Promise<any>;
   subscribeWebSocket(symbols: string[], callback: (tick: any) => void): () => void;
   logout(): Promise<void>;
 }
-
