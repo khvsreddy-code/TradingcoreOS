@@ -6,7 +6,7 @@ export class BrokerOAuthService {
    */
   public static async initiateOAuth(brokerId: string, customClientId?: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const redirectUri = `${window.location.origin}/auth/broker-callback`;
+      const redirectUri = `${import.meta.env.VITE_APP_URL || window.location.origin}/auth/broker-callback`;
       let fetchUrl = `/api/auth/broker/login?broker=${encodeURIComponent(brokerId)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
       if (customClientId) {
         fetchUrl += `&client_id=${encodeURIComponent(customClientId)}`;
@@ -38,7 +38,7 @@ export class BrokerOAuthService {
     state?: string
   ): Promise<{ success: boolean; clientCode?: string; error?: string }> {
     try {
-      const redirectUri = `${window.location.origin}/auth/broker-callback`;
+      const redirectUri = `${import.meta.env.VITE_APP_URL || window.location.origin}/auth/broker-callback`;
       const res = await fetch('/api/auth/broker/callback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

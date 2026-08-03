@@ -30,7 +30,7 @@ export const BrokerCallbackPage: React.FC = () => {
             broker: paramBrokerId,
             code,
             state,
-            redirectUri: `${window.location.origin}/auth/broker-callback`,
+            redirectUri: `${import.meta.env.VITE_APP_URL || window.location.origin}/auth/broker-callback`,
           }),
         });
 

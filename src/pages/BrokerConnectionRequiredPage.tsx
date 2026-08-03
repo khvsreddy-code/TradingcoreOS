@@ -508,7 +508,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                           <span className="text-cyan-400 text-[10px]">OAuth 2.0 Standard</span>
                         </div>
                         <p className="text-[10px] text-slate-300 select-all font-mono break-all bg-slate-900 p-1.5 rounded border border-slate-800">
-                          {window.location.origin}/auth/broker-callback
+                          {import.meta.env.VITE_APP_URL || window.location.origin}/auth/broker-callback
                         </p>
                       </div>
                     </div>
