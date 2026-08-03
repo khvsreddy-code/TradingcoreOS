@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { BROKERS_CONFIG, BrokerItem } from '../constants/brokers';
 import { tradingCoreRuntime } from '../services/runtime/TradingCoreRuntime';
+import { BrokerOAuthService } from '../services/oauth/BrokerOAuthService';
 import { useAuth } from '../auth/hooks/useAuth';
 
 interface BrokerConnectionRequiredPageProps {
@@ -92,20 +93,51 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
     return () => clearInterval(interval);
   }, [currentStep]);
 
+  // OAuth Popup Message Listener
+  useEffect(() => {
+    const handleOAuthMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (
+        event.data &&
+        (event.data.type === 'TRADINGCORE_BROKER_CONNECTED' || event.data.type === 'TRADINGCORE_BROKER_OAUTH_SUCCESS')
+      ) {
+        const authBrokerId = event.data.broker || event.data.brokerId;
+        const code = event.data.code;
+        setIsConnecting(true);
+        setError(null);
+        try {
+          const res = await tradingCoreRuntime.connectBrokerOAuth(authBrokerId, code);
+          if (res.success) {
+            setIsConnecting(false);
+            setCurrentStep('verifying');
+          } else {
+            setError(res.error || 'OAuth authorization token verification failed.');
+            setIsConnecting(false);
+          }
+        } catch (err: any) {
+          setError(err?.message || 'Error processing broker authorization message.');
+          setIsConnecting(false);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, []);
+
   const handleConnectOAuth = async (broker: BrokerItem) => {
     setIsConnecting(true);
     setError(null);
+
     try {
-      const res = await tradingCoreRuntime.connectBrokerOAuth(broker.id);
-      if (res.success) {
-        setIsConnecting(false);
-        setCurrentStep('verifying');
-      } else {
-        setError(res.error || 'Failed to authenticate with broker via OAuth.');
+      // Initiate OAuth authorization using BrokerOAuthService & PopupManager
+      const initResult = await BrokerOAuthService.initiateOAuth(broker.id, apiKey.trim() || undefined);
+      if (!initResult.success) {
+        setError(initResult.error || 'Failed to launch broker OAuth window.');
         setIsConnecting(false);
       }
-    } catch (err: any) {
-      setError(err?.message || 'An unexpected error occurred during OAuth connection.');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to initiate broker OAuth popup.');
       setIsConnecting(false);
     }
   };
@@ -436,15 +468,50 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
               {authMethod === 'oauth' ? (
                 <div className="space-y-4 pt-2">
-                  <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs text-slate-300 space-y-2">
-                    <div className="flex items-center gap-2 text-cyan-400 font-medium">
-                      <Zap className="w-4 h-4" />
-                      <span>Official Direct Broker Authorization</span>
+                  <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs text-slate-300 space-y-2.5">
+                    <div className="flex items-center justify-between text-cyan-400 font-medium">
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4" />
+                        <span>Official Direct Broker Authorization</span>
+                      </div>
+                      <a
+                        href={selectedBroker.developerPortalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+                      >
+                        Developer Portal <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
-                    <p className="text-slate-400 leading-relaxed">
-                      You will authorize TradingCore directly through {selectedBroker.name}'s official portal.
-                      TradingCore never sees or stores your password.
+                    <p className="text-slate-400 leading-relaxed text-[11px]">
+                      Clicking below opens the official {selectedBroker.name} login authorization page in a secure popup window.
+                      TradingCore never stores your password.
                     </p>
+
+                    <div className="pt-1 border-t border-slate-800/80 space-y-2">
+                      <div>
+                        <label className="block text-[11px] font-mono text-slate-300 mb-1">
+                          App Key / Client ID <span className="text-slate-400 font-normal">(Optional for custom developer app)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder={selectedBroker.clientIdPlaceholder}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
+                        />
+                      </div>
+
+                      <div className="text-[11px] font-mono bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 text-slate-400 space-y-1">
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span>Registered Callback URL:</span>
+                          <span className="text-cyan-400 text-[10px]">OAuth 2.0 Standard</span>
+                        </div>
+                        <p className="text-[10px] text-slate-300 select-all font-mono break-all bg-slate-900 p-1.5 rounded border border-slate-800">
+                          {window.location.origin}/auth/broker-callback
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   <button

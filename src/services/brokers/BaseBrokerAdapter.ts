@@ -60,7 +60,10 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async fetchProfile(): Promise<{ userId: string; name: string; email: string; broker: string }> {
-    return {
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/profile?user_id=default_user`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data || {
       userId: `USR_${this.id.toUpperCase()}_892`,
       name: 'Active Trader',
       email: 'trader@tradingcore.io',
@@ -69,76 +72,35 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async fetchFunds(): Promise<AccountFunds> {
-    return {
-      totalCapital: 1000000,
-      availableMargin: 750000,
-      usedMargin: 250000,
-      collateralMargin: 150000,
-    };
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/funds?user_id=default_user`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data;
   }
 
   async fetchHoldings(): Promise<Holding[]> {
-    return [
-      {
-        id: 'h1',
-        symbol: 'RELIANCE',
-        quantity: 50,
-        avgPrice: 2850.0,
-        ltp: 2980.0,
-        pnl: 6500.0,
-        dayChange: 0.42,
-      },
-      {
-        id: 'h2',
-        symbol: 'INFY',
-        quantity: 100,
-        avgPrice: 1580.0,
-        ltp: 1620.8,
-        pnl: 4080.0,
-        dayChange: 1.1,
-      },
-    ];
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/holdings?user_id=default_user`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data || [];
   }
 
   async fetchPositions(): Promise<Position[]> {
-    return [
-      {
-        id: 'p1',
-        symbol: 'BANKNIFTY 25 SEP CE',
-        quantity: 15,
-        avgPrice: 310.0,
-        ltp: 315.0,
-        pnl: 750.0,
-        product: 'MIS',
-      },
-    ];
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/positions?user_id=default_user`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data || [];
   }
 
   async fetchOrders(): Promise<OrderResult[]> {
-    return [
-      {
-        orderId: `ORD_${this.id.toUpperCase()}_1001`,
-        status: 'COMPLETE',
-        message: 'Executed BUY 15 Qty BANKNIFTY 25 SEP CE',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-      },
-    ];
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/orders?user_id=default_user`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data || [];
   }
 
   async fetchTradeHistory(): Promise<TradeRecord[]> {
-    return [
-      {
-        tradeId: `TRD_${this.id.toUpperCase()}_901`,
-        orderId: `ORD_${this.id.toUpperCase()}_1001`,
-        symbol: 'BANKNIFTY 25 SEP CE',
-        side: 'Buy',
-        quantity: 15,
-        price: 310.0,
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        product: 'MIS',
-        pnl: 750.0,
-      },
-    ];
+    return []; // Usually computed from orders or separate endpoint
   }
 
   async getMarketData(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>> {
@@ -190,29 +152,34 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
       };
     }
 
-    const orderId = `ORD_${this.id.toUpperCase()}_${Math.floor(Math.random() * 89999 + 10000)}`;
-    return {
-      orderId,
-      status: 'COMPLETE',
-      message: `Executed ${order.side} ${order.quantity} Qty ${order.symbol} @ ${order.price || 'Market'} (${this.name})`,
-      timestamp: new Date().toISOString(),
-    };
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/order?user_id=default_user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data;
   }
 
   async modifyOrder(orderId: string, updates: Partial<OrderRequest>): Promise<OrderResult> {
-    return {
-      orderId,
-      status: 'COMPLETE',
-      message: `Modified order ${orderId} (${JSON.stringify(updates)})`,
-      timestamp: new Date().toISOString(),
-    };
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/order/${orderId}?user_id=default_user`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data;
   }
 
   async cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }> {
-    return {
-      success: true,
-      message: `Order ${orderId} cancelled successfully on ${this.name}`,
-    };
+    const res = await fetch(`/api/trading/${this.id.toLowerCase()}/order/${orderId}?user_id=default_user`, {
+      method: 'DELETE',
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data;
   }
 
   async squareOff(positionId: string): Promise<{ success: boolean; message?: string }> {

@@ -16,10 +16,16 @@ import { Footer } from './components/footer/Footer';
 import { AuthModalPlaceholder } from './components/auth/AuthModalPlaceholder';
 import { FullWorkspaceView } from './components/workspace/FullWorkspaceView';
 import { BrokerConnectionRequiredPage } from './pages/BrokerConnectionRequiredPage';
+import { BrokerCallbackPage } from './pages/BrokerCallbackPage';
 import { LoadingScreen } from './components/common/LoadingScreen';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
 function AppContent() {
+  // Check if current route is the OAuth callback popup route
+  if (window.location.pathname.startsWith('/auth/broker-callback')) {
+    return <BrokerCallbackPage />;
+  }
+
   const { user, loading: authLoading, isAuthenticated, authStep, logout } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
 

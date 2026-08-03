@@ -203,7 +203,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                 <div>
                   <p className="text-xs font-bold text-[#f3f4f6]">No Brokers Connected</p>
                   <p className="text-[11px] font-mono text-[#8c93a6] mt-0.5">
-                    TradingCore is running in Explore Mode.
+                    Connect your broker account to authorize live execution.
                   </p>
                 </div>
                 {onNavigateToConnect && (

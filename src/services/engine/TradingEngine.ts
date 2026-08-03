@@ -175,7 +175,7 @@ export class TradingEngine {
     if (this.activeBrokerAdapter) {
       return this.activeBrokerAdapter.getHistoricalData(symbol, timeframe);
     }
-    // Fallback in Explore Mode
+    // Fallback if no active broker
     return [];
   }
 
