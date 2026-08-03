@@ -10,7 +10,6 @@ import {
   HistoricalCandle,
   TradeRecord,
 } from '../brokers/BrokerAdapter';
-import { PublicDelayedMarketDataProvider } from '../marketData/PublicDelayedMarketDataProvider';
 
 export type RuntimeEvent =
   | 'BROKER_CONNECTED'
@@ -23,13 +22,12 @@ export type RuntimeEvent =
 
 export type EventListener = (payload: any) => void;
 
-export type MarketDataProviderType = 'CONNECTED_BROKER' | 'EXPLORE_MODE' | 'PAPER_FEED' | 'REPLAY_FEED';
+export type MarketDataProviderType = 'CONNECTED_BROKER';
 
 export class TradingCoreRuntime {
   private static instance: TradingCoreRuntime;
   private brokerMgr: BrokerManager = brokerManager;
   private engine: TradingEngine = tradingEngine;
-  private marketDataProvider = new PublicDelayedMarketDataProvider();
   private currentMarketDataProviderType: MarketDataProviderType = 'CONNECTED_BROKER';
   private listeners: Map<RuntimeEvent, Set<EventListener>> = new Map();
 
@@ -40,6 +38,10 @@ export class TradingCoreRuntime {
       TradingCoreRuntime.instance = new TradingCoreRuntime();
     }
     return TradingCoreRuntime.instance;
+  }
+
+  public hasConnectedBroker(): boolean {
+    return this.brokerMgr.getAllConnections().length > 0;
   }
 
   // --- Broker Manager Delegations ---
@@ -182,11 +184,7 @@ export class TradingCoreRuntime {
         this.emit('TICK_UPDATE', tick);
       });
     }
-    // Fallback feed
-    return this.marketDataProvider.subscribeTicks(symbols, (tick) => {
-      callback(tick);
-      this.emit('TICK_UPDATE', tick);
-    });
+    return () => {};
   }
 
   // --- Runtime Event Bus ---

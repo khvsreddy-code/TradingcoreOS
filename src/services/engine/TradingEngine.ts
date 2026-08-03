@@ -10,13 +10,11 @@ import {
   TradeRecord,
 } from '../brokers/BrokerAdapter';
 import { BrokerAdapterRegistry } from '../brokers/adapters';
-import { PublicDelayedMarketDataProvider } from '../marketData/PublicDelayedMarketDataProvider';
 
 export class TradingEngine {
   private static instance: TradingEngine;
   private activeBrokerAdapter: BrokerAdapter | null = null;
   private connectedAdapters: Map<string, BrokerAdapter> = new Map();
-  private publicMarketDataProvider = new PublicDelayedMarketDataProvider();
 
   private constructor() {}
 
@@ -185,8 +183,7 @@ export class TradingEngine {
     if (this.activeBrokerAdapter) {
       return this.activeBrokerAdapter.subscribeWebSocket(symbols, callback);
     }
-    // Fallback to Public Market Data Provider in Explore Mode
-    return this.publicMarketDataProvider.subscribeTicks(symbols, callback);
+    return () => {};
   }
 }
 

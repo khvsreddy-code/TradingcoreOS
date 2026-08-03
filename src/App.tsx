@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider } from './auth/context/AuthContext';
-import { DemoModeProvider } from './context/DemoModeContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
 import { Navbar } from './components/navigation/Navbar';
@@ -15,10 +14,10 @@ import { FutureModules } from './components/roadmap/FutureModules';
 import { FAQSection } from './components/faq/FAQSection';
 import { Footer } from './components/footer/Footer';
 import { AuthModalPlaceholder } from './components/auth/AuthModalPlaceholder';
-import { DemoModal } from './components/demo/DemoModal';
 import { FullWorkspaceView } from './components/workspace/FullWorkspaceView';
-import { BrokerConnection } from './pages/BrokerConnection';
+import { BrokerConnectionRequiredPage } from './pages/BrokerConnectionRequiredPage';
 import { LoadingScreen } from './components/common/LoadingScreen';
+import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
 function AppContent() {
   const { user, loading: authLoading, isAuthenticated, authStep, logout } = useAuth();
@@ -26,28 +25,42 @@ function AppContent() {
 
   const [currentView, setCurrentView] = useState<'landing' | 'app' | 'broker-connection'>('landing');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [hasConnectedBroker, setHasConnectedBroker] = useState<boolean>(() =>
+    tradingCoreRuntime.hasConnectedBroker()
+  );
 
   const isSystemInitializing = authLoading || profileLoading;
+
+  // Sync broker connection state on runtime events
+  useEffect(() => {
+    const checkBroker = () => {
+      setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker());
+    };
+    checkBroker();
+    const unsub1 = tradingCoreRuntime.on('BROKER_CONNECTED', checkBroker);
+    const unsub2 = tradingCoreRuntime.on('BROKER_DISCONNECTED', checkBroker);
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, []);
 
   // Persistence & Route Protection Effect
   useEffect(() => {
     if (!isSystemInitializing) {
       if (isAuthenticated && user) {
-        if (!user.is_onboarded) {
-          // Un-onboarded users are strictly directed to Broker Connection
+        if (!hasConnectedBroker) {
           setCurrentView('broker-connection');
         } else if (currentView === 'landing' && window.location.hash === '#app') {
           setCurrentView('app');
         }
       } else {
-        // Unauthenticated users trying to access protected views are redirected to landing
         if (currentView === 'app' || currentView === 'broker-connection') {
           setCurrentView('landing');
         }
       }
     }
-  }, [isAuthenticated, user, isSystemInitializing]);
+  }, [isAuthenticated, user, hasConnectedBroker, isSystemInitializing, currentView]);
 
   const handleOpenAuthModal = () => {
     setIsAuthModalOpen(true);
@@ -57,22 +70,13 @@ function AppContent() {
     setIsAuthModalOpen(false);
   };
 
-  const handleOpenDemoModal = () => {
-    setIsDemoModalOpen(true);
-  };
-
-  const handleCloseDemoModal = () => {
-    setIsDemoModalOpen(false);
-  };
-
   const handleLaunchPlatform = () => {
     if (!isAuthenticated) {
-      // Require login first
       setIsAuthModalOpen(true);
       return;
     }
 
-    if (user && !user.is_onboarded) {
+    if (!tradingCoreRuntime.hasConnectedBroker()) {
       setCurrentView('broker-connection');
     } else {
       setCurrentView('app');
@@ -90,7 +94,7 @@ function AppContent() {
       setCurrentView('broker-connection');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (view === 'workspace' || view === 'app') {
-      if (user && !user.is_onboarded) {
+      if (!tradingCoreRuntime.hasConnectedBroker()) {
         setCurrentView('broker-connection');
       } else {
         setCurrentView('app');
@@ -102,7 +106,7 @@ function AppContent() {
     }
   };
 
-  // 1. Initial / Loading State Screen (No generic spinners)
+  // 1. Initial / Loading State Screen
   if (isSystemInitializing) {
     let loadingMsg = 'Checking Session...';
     let subMsg = 'Restoring encrypted OAuth token & user profile';
@@ -124,34 +128,21 @@ function AppContent() {
     return <LoadingScreen message={loadingMsg} submessage={subMsg} />;
   }
 
-  // 2. Onboarding Protection & Broker Connection Page
-  if (isAuthenticated && user && !user.is_onboarded) {
+  // 2. Mandatory Broker Connection Flow for Authenticated Users without a Broker
+  if (isAuthenticated && user && (!hasConnectedBroker || currentView === 'broker-connection')) {
     return (
-      <BrokerConnection
-        onCompleteOnboarding={() => {
+      <BrokerConnectionRequiredPage
+        onBrokerConnected={() => {
+          setHasConnectedBroker(true);
           setCurrentView('app');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        onLogout={logout}
       />
     );
   }
 
-  // 3. User explicitly on Broker Connection Page (e.g. from user menu)
-  if (currentView === 'broker-connection') {
-    return (
-      <BrokerConnection
-        onCompleteOnboarding={() => {
-          setCurrentView('app');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onLogout={logout}
-      />
-    );
-  }
-
-  // 4. Authenticated Full Trading Workspace View
-  if (currentView === 'app') {
+  // 3. Authenticated Full Trading Workspace View (Only accessible if broker is connected)
+  if (currentView === 'app' && hasConnectedBroker) {
     return (
       <FullWorkspaceView
         onBackToLanding={handleBackToLanding}
@@ -160,7 +151,7 @@ function AppContent() {
     );
   }
 
-  // 5. Landing Page
+  // 4. Landing Page
   return (
     <div className="min-h-screen bg-[#090a0f] text-[#f3f4f6] font-sans selection:bg-[#10b981]/30 selection:text-[#10b981] overflow-x-hidden">
       {/* NAVIGATION BAR */}
@@ -176,16 +167,15 @@ function AppContent() {
         {/* 1. HERO SECTION */}
         <Hero
           onLaunch={handleLaunchPlatform}
-          onOpenDemo={handleOpenDemoModal}
         />
 
-        {/* 2. WORKSPACE PREVIEW (ENLARGED CENTERPIECE) */}
+        {/* 2. WORKSPACE PREVIEW */}
         <WorkspacePreview onLaunch={handleLaunchPlatform} />
 
         {/* 3. SUPPORTED BROKERS STRIP */}
         <BrokerStrip onSelectBroker={() => handleLaunchPlatform()} />
 
-        {/* 4. WHY TRADINGCORE (BENTO GRID) */}
+        {/* 4. WHY TRADINGCORE */}
         <WhyTradingCore />
 
         {/* 5. PRECISION FEATURES DEEP DIVE */}
@@ -213,13 +203,6 @@ function AppContent() {
         onClose={handleCloseAuthModal}
         onLaunchWorkspace={handleLaunchPlatform}
       />
-
-      {/* DEMO VIDEO & TERMINAL WALKTHROUGH MODAL */}
-      <DemoModal
-        isOpen={isDemoModalOpen}
-        onClose={handleCloseDemoModal}
-        onLaunch={handleLaunchPlatform}
-      />
     </div>
   );
 }
@@ -227,9 +210,7 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <DemoModeProvider>
-        <AppContent />
-      </DemoModeProvider>
+      <AppContent />
     </AuthProvider>
   );
 }

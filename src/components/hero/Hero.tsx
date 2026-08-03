@@ -4,7 +4,7 @@ import { ArrowUpRight, Play, Zap, LineChart, Shield, Globe } from 'lucide-react'
 
 interface HeroProps {
   onLaunch: () => void;
-  onOpenDemo: () => void;
+  onOpenDemo?: () => void;
 }
 
 export const Hero: React.FC<HeroProps> = ({ onLaunch, onOpenDemo }) => {
@@ -62,11 +62,11 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch, onOpenDemo }) => {
           </button>
 
           <button
-            onClick={onOpenDemo}
+            onClick={onLaunch}
             className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg border border-[#222636] bg-[#11131c] px-6 py-3 text-sm font-medium text-[#f3f4f6] transition-all hover:border-[#33384f] hover:bg-[#181b28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981] cursor-pointer"
           >
-            Watch Demo
-            <Play className="h-3.5 w-3.5 fill-current text-[#8c93a6]" />
+            Bring Your Own Broker
+            <Shield className="h-3.5 w-3.5 text-[#10b981]" />
           </button>
         </motion.div>
 

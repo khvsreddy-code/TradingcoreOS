@@ -57,4 +57,22 @@ export const BROKERS_CONFIG: BrokerItem[] = [
     tag: 'F',
     description: 'Single sign-on tokenized OAuth 2.0 authentication pipeline.',
   },
+  {
+    id: 'groww',
+    name: 'Groww',
+    apiVersion: 'Groww API v1',
+    status: 'OAuth Supported',
+    badgeColor: '#00d290',
+    tag: 'G',
+    description: 'Secure tokenized API connection with Groww developer gateway.',
+  },
+  {
+    id: 'icicidirect',
+    name: 'ICICI Direct',
+    apiVersion: 'Breeze API v2',
+    status: 'OAuth Supported',
+    badgeColor: '#f43f5e',
+    tag: 'I',
+    description: 'Direct Breeze REST & WebSocket institutional authentication.',
+  },
 ];

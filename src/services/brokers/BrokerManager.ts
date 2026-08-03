@@ -20,7 +20,63 @@ export class BrokerManager {
   private primaryBrokerId: string | null = null;
   private lastUsedBrokerId: string | null = null;
 
-  private constructor() {}
+  private constructor() {
+    this.loadFromStorage();
+  }
+
+  private saveToStorage(): void {
+    try {
+      const serializable = Array.from(this.connections.values()).map((c) => ({
+        brokerId: c.brokerId,
+        nickname: c.nickname,
+        status: c.status,
+        isPrimary: c.isPrimary,
+        lastSyncedAt: c.lastSyncedAt,
+        tokenExpiry: c.tokenExpiry,
+        permissions: c.permissions,
+      }));
+      localStorage.setItem('tradingcore_connected_brokers', JSON.stringify(serializable));
+      localStorage.setItem('tradingcore_primary_broker', this.primaryBrokerId || '');
+    } catch (e) {
+      console.error('Failed to save broker connections:', e);
+    }
+  }
+
+  private loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem('tradingcore_connected_brokers');
+      const primaryStored = localStorage.getItem('tradingcore_primary_broker');
+      if (stored) {
+        const items = JSON.parse(stored);
+        if (Array.isArray(items)) {
+          items.forEach((item: any) => {
+            const adapter = BrokerAdapterRegistry.getAdapter(item.brokerId);
+            if (adapter) {
+              this.connections.set(item.brokerId.toLowerCase(), {
+                brokerId: adapter.id,
+                name: adapter.name,
+                nickname: item.nickname || `${adapter.name} Main`,
+                status: item.status || 'Connected',
+                isPrimary: item.isPrimary || false,
+                lastSyncedAt: item.lastSyncedAt || new Date().toISOString(),
+                tokenExpiry: item.tokenExpiry,
+                latencyMs: Math.floor(Math.random() * 12 + 6),
+                permissions: item.permissions || ['Read Portfolio', 'Execute Orders', 'WebSocket Stream'],
+                adapter,
+              });
+            }
+          });
+        }
+      }
+      if (primaryStored && this.connections.has(primaryStored.toLowerCase())) {
+        this.primaryBrokerId = primaryStored.toLowerCase();
+      } else if (this.connections.size > 0) {
+        this.primaryBrokerId = Array.from(this.connections.keys())[0];
+      }
+    } catch (e) {
+      console.error('Failed to load broker connections:', e);
+    }
+  }
 
   public static getInstance(): BrokerManager {
     if (!BrokerManager.instance) {
@@ -79,6 +135,7 @@ export class BrokerManager {
         this.primaryBrokerId = adapter.id;
       }
       this.lastUsedBrokerId = adapter.id;
+      this.saveToStorage();
       return { success: true };
     } else {
       this.updateConnectionStatus(brokerId, 'Authentication Required');
@@ -120,6 +177,7 @@ export class BrokerManager {
         this.primaryBrokerId = adapter.id;
       }
       this.lastUsedBrokerId = adapter.id;
+      this.saveToStorage();
       return { success: true };
     } else {
       this.updateConnectionStatus(brokerId, 'Authentication Required');
@@ -134,6 +192,7 @@ export class BrokerManager {
       this.connections.forEach((info, key) => {
         info.isPrimary = key === id;
       });
+      this.saveToStorage();
       return true;
     }
     return false;
@@ -144,6 +203,7 @@ export class BrokerManager {
     const info = this.connections.get(id);
     if (info) {
       info.nickname = nickname;
+      this.saveToStorage();
     }
   }
 
@@ -268,6 +328,7 @@ export class BrokerManager {
           if (primaryInfo) primaryInfo.isPrimary = true;
         }
       }
+      this.saveToStorage();
     }
   }
 
