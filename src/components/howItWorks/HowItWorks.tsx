@@ -91,7 +91,7 @@ export const HowItWorks: React.FC<{ onLaunch?: () => void }> = ({ onLaunch }) =>
             onClick={onLaunch}
             className="inline-flex items-center gap-2 rounded-lg bg-[#10b981] px-6 py-3 text-xs font-bold text-[#090a0f] hover:bg-[#059669] transition-all cursor-pointer"
           >
-            Launch Free Demo Workspace Now
+            Connect Broker & Launch Setup
           </button>
         </div>
       </div>

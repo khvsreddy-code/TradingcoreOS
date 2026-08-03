@@ -4,10 +4,9 @@ import { ArrowUpRight, Play, Zap, LineChart, Shield, Globe } from 'lucide-react'
 
 interface HeroProps {
   onLaunch: () => void;
-  onOpenDemo?: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onLaunch, onOpenDemo }) => {
+export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
   return (
     <section className="relative pt-16 pb-6 overflow-hidden bg-[#090a0f]">
       {/* Background Subtle Geometry Grid */}
