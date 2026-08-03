@@ -6,5 +6,6 @@ export interface NavItem {
 export interface NavbarProps {
   onOpenAuthModal: () => void;
   onLaunchPlatform: () => void;
-  currentView?: 'landing' | 'app';
+  onNavigate?: (view: string) => void;
+  currentView?: 'landing' | 'app' | 'broker-connection';
 }

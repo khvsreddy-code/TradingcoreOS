@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Menu, X, ArrowUpRight } from 'lucide-react';
 import { NavbarProps, NavItem } from '../../types/navigation';
+import { useAuth } from '../../auth/hooks/useAuth';
+import { UserMenu } from '../../auth/components/UserMenu';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Why TradingCore', href: '#why-tradingcore' },
@@ -16,9 +18,11 @@ const NAV_ITEMS: NavItem[] = [
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuthModal,
   onLaunchPlatform,
+  onNavigate,
   currentView = 'landing',
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen((prev) => !prev);
@@ -86,29 +90,39 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: Action CTA Buttons (Desktop) */}
         <div className="hidden lg:flex items-center gap-3">
-          <button
-            onClick={onOpenAuthModal}
-            className="rounded-lg border border-[#222636] bg-[#11131c] px-4 py-2 text-sm font-medium text-[#f3f4f6] transition-all hover:border-[#33384f] hover:bg-[#181b28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]"
-          >
-            Sign In
-          </button>
-          <button
-            onClick={onLaunchPlatform}
-            className="group flex items-center gap-1.5 rounded-lg bg-[#10b981] px-4 py-2 text-sm font-semibold text-[#090a0f] transition-all hover:bg-[#059669] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]"
-          >
-            Launch Platform
-            <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </button>
+          {isAuthenticated ? (
+            <UserMenu onNavigate={onNavigate} />
+          ) : (
+            <>
+              <button
+                onClick={onOpenAuthModal}
+                className="rounded-lg border border-[#222636] bg-[#11131c] px-4 py-2 text-sm font-medium text-[#f3f4f6] transition-all hover:border-[#33384f] hover:bg-[#181b28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={onLaunchPlatform}
+                className="group flex items-center gap-1.5 rounded-lg bg-[#10b981] px-4 py-2 text-sm font-semibold text-[#090a0f] transition-all hover:bg-[#059669] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]"
+              >
+                Launch Platform
+                <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Toggle Button (< 1024px) */}
         <div className="flex items-center gap-2 lg:hidden">
-          <button
-            onClick={onLaunchPlatform}
-            className="flex items-center gap-1 rounded-lg bg-[#10b981] px-3 py-1.5 text-xs font-semibold text-[#090a0f] transition-all hover:bg-[#059669]"
-          >
-            Launch
-          </button>
+          {isAuthenticated ? (
+            <UserMenu onNavigate={onNavigate} />
+          ) : (
+            <button
+              onClick={onLaunchPlatform}
+              className="flex items-center gap-1 rounded-lg bg-[#10b981] px-3 py-1.5 text-xs font-semibold text-[#090a0f] transition-all hover:bg-[#059669]"
+            >
+              Launch
+            </button>
+          )}
           <button
             onClick={toggleMobileMenu}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#222636] bg-[#11131c] text-[#8c93a6] transition-colors hover:text-[#f3f4f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]"
@@ -156,25 +170,33 @@ export const Navbar: React.FC<NavbarProps> = ({
               ))}
 
               <div className="mt-4 pt-4 border-t border-[#222636] flex flex-col gap-2.5">
-                <button
-                  onClick={() => {
-                    closeMobileMenu();
-                    onOpenAuthModal();
-                  }}
-                  className="w-full rounded-lg border border-[#222636] bg-[#11131c] py-2.5 text-sm font-medium text-[#f3f4f6] transition-colors hover:bg-[#181b28]"
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => {
-                    closeMobileMenu();
-                    onLaunchPlatform();
-                  }}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#10b981] py-2.5 text-sm font-semibold text-[#090a0f] transition-colors hover:bg-[#059669]"
-                >
-                  Launch Platform
-                  <ArrowUpRight className="h-4 w-4" />
-                </button>
+                {isAuthenticated ? (
+                  <div className="py-2">
+                    <UserMenu onNavigate={onNavigate} />
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        onOpenAuthModal();
+                      }}
+                      className="w-full rounded-lg border border-[#222636] bg-[#11131c] py-2.5 text-sm font-medium text-[#f3f4f6] transition-colors hover:bg-[#181b28]"
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        onLaunchPlatform();
+                      }}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#10b981] py-2.5 text-sm font-semibold text-[#090a0f] transition-colors hover:bg-[#059669]"
+                    >
+                      Launch Platform
+                      <ArrowUpRight className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
@@ -183,3 +205,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+
