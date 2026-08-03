@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider } from './auth/context/AuthContext';
+import { DemoModeProvider } from './context/DemoModeContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
 import { Navbar } from './components/navigation/Navbar';
@@ -151,7 +152,12 @@ function AppContent() {
 
   // 4. Authenticated Full Trading Workspace View
   if (currentView === 'app') {
-    return <FullWorkspaceView onBackToLanding={handleBackToLanding} />;
+    return (
+      <FullWorkspaceView
+        onBackToLanding={handleBackToLanding}
+        onNavigateToBroker={() => handleNavigateFromMenu('broker-connection')}
+      />
+    );
   }
 
   // 5. Landing Page
@@ -221,7 +227,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <DemoModeProvider>
+        <AppContent />
+      </DemoModeProvider>
     </AuthProvider>
   );
 }
