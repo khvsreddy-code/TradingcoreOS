@@ -1,0 +1,18 @@
+# dependencies
+/node_modules
+
+# Next.js
+/.next
+/out
+
+# production
+/build
+
+# environment
+.env*
+!.env.example
+
+# tooling
+*.tsbuildinfo
+coverage/
+.DS_Store
