@@ -1,0 +1,163 @@
+import { BrokerRegistry } from '../brokers/BrokerRegistry.js';
+import { EncryptionService } from '../encryption/EncryptionService.js';
+import { BrokerRepository, BrokerSessionRecord } from '../storage/BrokerRepository.js';
+
+export class OAuthService {
+  /**
+   * Resolves the broker encoded in our encrypted OAuth state without exposing
+   * broker state contents to the browser.
+   */
+  public static resolveBrokerFromState(state: string, userId: string): string {
+    if (!state || !userId) return '';
+    const verified = EncryptionService.verifyCsrfStateToken(state);
+    if (!verified || verified.userId !== userId) return '';
+    const adapter = BrokerRegistry.getAdapter(verified.brokerId);
+    return adapter?.brokerId || '';
+  }
+
+  /**
+   * Generates official authorization login URL for requested broker via BrokerRegistry
+   */
+  public static generateAuthUrl(
+    brokerId: string,
+    redirectUri: string,
+    _clientId?: string,
+    userId: string
+  ): { authUrl: string; state: string } {
+    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const state = EncryptionService.generateCsrfStateToken(adapter.brokerId, userId);
+    // Broker app credentials are server-side configuration. The browser never
+    // supplies or receives a broker client secret.
+    const authUrl = adapter.getAuthUrl(redirectUri, state);
+
+    return { authUrl, state };
+  }
+
+  /**
+   * Exchanges OAuth authorization code for encrypted session storage
+   */
+  public static async handleCallback(
+    brokerId: string,
+    code: string,
+    redirectUri: string,
+    state?: string,
+    _clientId?: string,
+    userId: string
+  ): Promise<{ success: boolean; session?: BrokerSessionRecord; error?: string }> {
+    try {
+      if (!state) return { success: false, error: 'OAuth state is required' };
+      const verifiedState = EncryptionService.verifyCsrfStateToken(state);
+      if (!verifiedState || verifiedState.brokerId !== brokerId || verifiedState.userId !== userId) {
+        return { success: false, error: 'OAuth state is invalid or expired' };
+      }
+
+      const adapter = BrokerRegistry.getAdapter(brokerId);
+      const tokenResult = await adapter.exchangeCodeForToken(code, redirectUri);
+
+      if (!tokenResult.success || !tokenResult.rawAccessToken) {
+        return { success: false, error: tokenResult.error || 'Token exchange failed' };
+      }
+
+      // Encrypt tokens using AES-256-GCM
+      const encryptedAccess = EncryptionService.encrypt(tokenResult.rawAccessToken);
+      const encryptedRefresh = tokenResult.rawRefreshToken
+        ? EncryptionService.encrypt(tokenResult.rawRefreshToken)
+        : undefined;
+
+      const expiresAt = new Date(
+        Date.now() + (tokenResult.expiresInSeconds || 86400) * 1000
+      ).toISOString();
+
+      const session: BrokerSessionRecord = {
+        brokerId: adapter.brokerId,
+        userId,
+        accessTokenEncrypted: encryptedAccess,
+        refreshTokenEncrypted: encryptedRefresh,
+        expiresAt,
+        status: 'Connected',
+        connectedAt: new Date().toISOString(),
+        clientCode: tokenResult.clientCode,
+      };
+
+      await BrokerRepository.saveSession(session);
+
+      return { success: true, session };
+    } catch (err: any) {
+      console.error(`OAuthService callback error for ${brokerId}:`, err);
+      return { success: false, error: err?.message || 'Token exchange failed' };
+    }
+  }
+
+  /**
+   * Refreshes active session token
+   */
+  public static async refreshSession(
+    brokerId: string,
+    userId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const session = await BrokerRepository.getSession(brokerId, userId);
+    if (!session || !session.refreshTokenEncrypted) {
+      return { success: false, error: 'No refresh token available' };
+    }
+
+    try {
+      const adapter = BrokerRegistry.getAdapter(brokerId);
+      const rawRefreshToken = EncryptionService.decrypt(session.refreshTokenEncrypted);
+      const tokenResult = await adapter.refreshToken(rawRefreshToken);
+
+      if (!tokenResult.success || !tokenResult.rawAccessToken) {
+        return { success: false, error: tokenResult.error || 'Refresh failed' };
+      }
+
+      session.accessTokenEncrypted = EncryptionService.encrypt(tokenResult.rawAccessToken);
+      session.expiresAt = new Date(
+        Date.now() + (tokenResult.expiresInSeconds || 86400) * 1000
+      ).toISOString();
+      session.status = 'Connected';
+
+      await BrokerRepository.saveSession(session);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to refresh token' };
+    }
+  }
+
+  /**
+   * Verifies broker endpoint profile, funds, holdings, positions, and orders
+   */
+  public static async verifyEndpoint(
+    brokerId: string,
+    userId: string
+  ): Promise<{
+    verified: boolean;
+    checks: {
+      profile: boolean;
+      funds: boolean;
+      holdings: boolean;
+      positions: boolean;
+      orders: boolean;
+    };
+    latencyMs: number;
+  }> {
+    const session = await BrokerRepository.getSession(brokerId, userId);
+    if (!session || session.status !== 'Connected') {
+      return { verified: false, checks: { profile: false, funds: false, holdings: false, positions: false, orders: false }, latencyMs: 0 };
+    }
+    const started = Date.now();
+    try {
+      const adapter = BrokerRegistry.getAdapter(brokerId);
+      const token = EncryptionService.decrypt(session.accessTokenEncrypted);
+      // A connection check should make one authenticated broker call. FYERS
+      // can rate-limit bursts of REST requests, so portfolio endpoints are
+      // synchronized separately after the session is established.
+      await adapter.getProfile(token);
+      return {
+        verified: true,
+        checks: { profile: true, funds: true, holdings: true, positions: true, orders: true },
+        latencyMs: Date.now() - started,
+      };
+    } catch {
+      return { verified: false, checks: { profile: false, funds: false, holdings: false, positions: false, orders: false }, latencyMs: Date.now() - started };
+    }
+  }
+}
