@@ -2,7 +2,7 @@ import { brokerManager, BrokerManager, BrokerConnectionInfo } from '../brokers/B
 import { tradingEngine, TradingEngine } from '../engine/TradingEngine';
 import { BrokerAdapter, OrderRequest, OrderResult, Position, Holding, AccountFunds, HistoricalCandle, TradeRecord } from '../brokers/BrokerAdapter';
 import { upstoxMarketDataClient } from '../marketData/UpstoxMarketDataClient';
-import { MarketFeedEvent, MarketDataProviderType, NormalizedMarketTick } from '../../types/market';
+import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market';
 
 export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_EXECUTED' | 'TICK_UPDATE' | 'PORTFOLIO_SYNCED' | 'SESSION_REFRESHED' | 'STATUS_CHANGED';
 export type EventListener = (payload: any) => void;
@@ -34,10 +34,7 @@ export class TradingCoreRuntime {
       await this.brokerMgr.restoreServerConnections();
       for (const connection of this.brokerMgr.getAllConnections()) this.engine.registerRestoredBroker(connection.adapter);
       const primary = this.brokerMgr.getPrimaryBrokerInfo();
-      if (primary) {
-        this.engine.switchActiveBroker(primary.brokerId);
-        this.emit('STATUS_CHANGED', { brokerId: primary.brokerId, status: 'Restored' });
-      }
+      if (primary) { this.engine.switchActiveBroker(primary.brokerId); this.emit('STATUS_CHANGED', { brokerId: primary.brokerId, status: 'Restored' }); }
     })().finally(() => { this.brokerRestorePromise = undefined; });
     return this.brokerRestorePromise;
   }
@@ -47,13 +44,11 @@ export class TradingCoreRuntime {
     if (res.success) { this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
     return res;
   }
-
   public async connectBrokerApiKeys(brokerId: string, credentials: any): Promise<{ success: boolean; error?: string }> {
     const res = await this.brokerMgr.connectApiKeys(brokerId, credentials);
     if (res.success) { this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'ApiKeys' }); void this.syncPortfolio(brokerId); }
     return res;
   }
-
   public async disconnectBroker(brokerId: string): Promise<void> {
     if (brokerId.toLowerCase() === 'upstox') upstoxMarketDataClient.disconnect();
     await this.brokerMgr.disconnect(brokerId);
@@ -61,17 +56,11 @@ export class TradingCoreRuntime {
     if (primary) this.engine.switchActiveBroker(primary.brokerId);
     this.emit('BROKER_DISCONNECTED', { brokerId, activeBrokerId: primary?.brokerId });
   }
-
   public switchActiveBroker(brokerId: string): boolean {
     const success = this.brokerMgr.setPrimaryBroker(brokerId);
-    if (success) {
-      this.engine.switchActiveBroker(brokerId);
-      this.emit('STATUS_CHANGED', { brokerId, status: 'Primary Switched' });
-      void this.syncPortfolio(brokerId);
-    }
+    if (success) { this.engine.switchActiveBroker(brokerId); this.emit('STATUS_CHANGED', { brokerId, status: 'Primary Switched' }); void this.syncPortfolio(brokerId); }
     return success;
   }
-
   public renameConnection(brokerId: string, nickname: string): void { this.brokerMgr.renameConnection(brokerId, nickname); }
   public async refreshSession(brokerId: string): Promise<{ success: boolean; error?: string }> { const res = await this.brokerMgr.refreshSession(brokerId); if (res.success) { this.emit('SESSION_REFRESHED', { brokerId }); void this.syncPortfolio(brokerId); } return res; }
   public async testLatency(brokerId: string): Promise<number> { return this.brokerMgr.testLatency(brokerId); }
@@ -88,16 +77,11 @@ export class TradingCoreRuntime {
     this.portfolioSyncPromises.set(targetId, promise);
     return promise;
   }
-
   public startPortfolioPolling(intervalMs = 5000): () => void {
     this.portfolioPollRefs += 1;
-    if (!this.portfolioPollTimer) {
-      void this.syncPortfolio();
-      this.portfolioPollTimer = setInterval(() => { if (this.brokerMgr.getPrimaryBrokerInfo()?.status === 'Connected') void this.syncPortfolio(); }, Math.max(2500, intervalMs));
-    }
+    if (!this.portfolioPollTimer) { void this.syncPortfolio(); this.portfolioPollTimer = setInterval(() => { if (this.brokerMgr.getPrimaryBrokerInfo()?.status === 'Connected') void this.syncPortfolio(); }, Math.max(2500, intervalMs)); }
     return () => { this.portfolioPollRefs = Math.max(0, this.portfolioPollRefs - 1); if (this.portfolioPollRefs === 0 && this.portfolioPollTimer) { clearInterval(this.portfolioPollTimer); this.portfolioPollTimer = undefined; } };
   }
-
   public async placeOrder(order: OrderRequest): Promise<OrderResult> { const result = await this.engine.placeOrder(order); this.emit('ORDER_EXECUTED', result); return result; }
   public async modifyOrder(orderId: string, updates: Partial<OrderRequest>): Promise<OrderResult> { return this.engine.modifyOrder(orderId, updates); }
   public async cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }> { return this.engine.cancelOrder(orderId); }
