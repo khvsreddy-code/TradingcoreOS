@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider } from './auth/context/AuthContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
@@ -41,11 +41,14 @@ function AppContent() {
   const isWorkspaceRoute = (path: string): path is WorkspaceRoute => ['/live','/models','/automations','/indicators','/portfolio','/profile'].includes(path);
 
   const [currentView, setCurrentView] = useState<'landing' | 'app' | 'broker-connection'>(() => viewFromPath(window.location.pathname));
+  const initialProtectedEntry = useRef(['/dashboard','/live','/models','/automations','/indicators','/portfolio','/profile'].includes(window.location.pathname));
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [hasConnectedBroker, setHasConnectedBroker] = useState<boolean>(() => tradingCoreRuntime.hasConnectedBroker());
   const [brokerRestoreReady, setBrokerRestoreReady] = useState(!isAuthenticated);
   const protectedEntry = currentView === 'app' || currentView === 'broker-connection';
-  const isSystemInitializing = authLoading || (protectedEntry && isAuthenticated && !brokerRestoreReady);
+  // Only the initial protected page load may wait for broker restoration. Once the
+  // workspace is open, module navigation is local and must not wait on REST calls.
+  const isSystemInitializing = authLoading || (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,9 +110,6 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Navigation must never wait for broker REST/database calls. The destination shell
-  // renders immediately; broker restoration is already running globally and only the
-  // protected-entry guard redirects to /broker when no connected session exists.
   const navigateWorkspace = (path: WorkspaceRoute) => {
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
     setCurrentView('app');
