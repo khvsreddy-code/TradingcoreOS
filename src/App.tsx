@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { AuthProvider } from './auth/context/AuthContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
@@ -15,18 +15,21 @@ import { FutureModules } from './components/roadmap/FutureModules';
 import { FAQSection } from './components/faq/FAQSection';
 import { Footer } from './components/footer/Footer';
 import { AuthModalPlaceholder } from './components/auth/AuthModalPlaceholder';
-import { FullWorkspaceView } from './components/workspace/FullWorkspaceView';
-import { ModelsPage } from './pages/ModelsPage';
-import { AutomationsPage } from './pages/AutomationsPage';
-import { IndicatorsPage } from './pages/IndicatorsPage';
-import { PortfolioPage } from './pages/PortfolioPage';
-import { ProfilePage } from './pages/ProfilePage';
 import { WorkspaceRoute } from './components/workspace/WorkspaceModuleShell';
 import { BrokerConnectionRequiredPage } from './pages/BrokerConnectionRequiredPage';
 import { BrokerCallbackPage } from './pages/BrokerCallbackPage';
 import { LegalPage } from './pages/LegalPage';
 import { LoadingScreen } from './components/common/LoadingScreen';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
+
+// Keep the landing shell small. Heavy workspace modules (especially the chart
+// engine) load only when their route is opened, without changing their UI.
+const FullWorkspaceView = lazy(() => import('./components/workspace/FullWorkspaceView').then(m => ({ default: m.FullWorkspaceView })));
+const ModelsPage = lazy(() => import('./pages/ModelsPage').then(m => ({ default: m.ModelsPage })));
+const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
+const IndicatorsPage = lazy(() => import('./pages/IndicatorsPage').then(m => ({ default: m.IndicatorsPage })));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
 
 function AppContent() {
   if (window.location.pathname.startsWith('/auth/broker-callback')) return <BrokerCallbackPage />;
@@ -35,6 +38,7 @@ function AppContent() {
 
   const { user, loading: authLoading, isAuthenticated, authStep } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
+  void profile;
 
   const viewFromPath = (path: string): 'landing' | 'app' | 'broker-connection' =>
     path === '/broker' ? 'broker-connection' : ['/dashboard','/live','/models','/automations','/indicators','/portfolio','/profile'].includes(path) ? 'app' : 'landing';
@@ -46,8 +50,6 @@ function AppContent() {
   const [hasConnectedBroker, setHasConnectedBroker] = useState<boolean>(() => tradingCoreRuntime.hasConnectedBroker());
   const [brokerRestoreReady, setBrokerRestoreReady] = useState(!isAuthenticated);
   const protectedEntry = currentView === 'app' || currentView === 'broker-connection';
-  // Only the initial protected page load may wait for broker restoration. Once the
-  // workspace is open, module navigation is local and must not wait on REST calls.
   const isSystemInitializing = authLoading || (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
 
   useEffect(() => {
@@ -160,12 +162,14 @@ function AppContent() {
 
   if (currentView === 'app' && hasConnectedBroker) {
     const workspacePath = isWorkspaceRoute(window.location.pathname) ? window.location.pathname : '/live';
-    if (workspacePath === '/models') return <ModelsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />;
-    if (workspacePath === '/automations') return <AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />;
-    if (workspacePath === '/indicators') return <IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />;
-    if (workspacePath === '/portfolio') return <PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />;
-    if (workspacePath === '/profile') return <ProfilePage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />;
-    return <FullWorkspaceView onBackToLanding={handleBackToLanding} onNavigateToBroker={() => navigate('/broker')} onNavigate={navigateWorkspace} />;
+    return <Suspense fallback={<LoadingScreen message="Loading Workspace..." submessage="Preparing trading module" />}>
+      {workspacePath === '/models' && <ModelsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
+      {workspacePath === '/automations' && <AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
+      {workspacePath === '/indicators' && <IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
+      {workspacePath === '/portfolio' && <PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
+      {workspacePath === '/profile' && <ProfilePage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
+      {workspacePath === '/live' && <FullWorkspaceView onBackToLanding={handleBackToLanding} onNavigateToBroker={() => navigate('/broker')} onNavigate={navigateWorkspace} />}
+    </Suspense>;
   }
 
   return (
