@@ -1,20 +1,22 @@
-import { ReactNode } from 'react';
-import { Activity, Bot, BrainCircuit, Gauge, BriefcaseBusiness, UserCircle, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { ReactNode, useEffect, useState } from 'react';
+import { Activity, Bot, BrainCircuit, Gauge, BriefcaseBusiness, UserCircle, SlidersHorizontal } from 'lucide-react';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 
 export type WorkspaceRoute = '/live' | '/models' | '/automations' | '/indicators' | '/portfolio' | '/profile';
-
 const nav: Array<{ path: WorkspaceRoute; label: string; icon: typeof Activity }> = [
-  { path: '/live', label: 'Live Trading', icon: Activity },
-  { path: '/models', label: 'Models', icon: BrainCircuit },
-  { path: '/automations', label: 'Automations', icon: Bot },
-  { path: '/indicators', label: 'Indicators', icon: Gauge },
-  { path: '/portfolio', label: 'Portfolio', icon: BriefcaseBusiness },
-  { path: '/profile', label: 'Profile', icon: UserCircle },
+  { path: '/live', label: 'Live Trading', icon: Activity }, { path: '/models', label: 'Models', icon: BrainCircuit },
+  { path: '/automations', label: 'Automations', icon: Bot }, { path: '/indicators', label: 'Indicators', icon: Gauge },
+  { path: '/portfolio', label: 'Portfolio', icon: BriefcaseBusiness }, { path: '/profile', label: 'Profile', icon: UserCircle },
 ];
 
 export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLanding, onBroker }: { active: WorkspaceRoute; children: ReactNode; onNavigate: (path: WorkspaceRoute) => void; onBackToLanding: () => void; onBroker?: () => void }) {
-  const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
+  const [brokerState, setBrokerState] = useState(() => ({ active: tradingCoreRuntime.getPrimaryBrokerInfo(), count: tradingCoreRuntime.getAllConnections().length }));
+  useEffect(() => {
+    const refresh = () => setBrokerState({ active: tradingCoreRuntime.getPrimaryBrokerInfo(), count: tradingCoreRuntime.getAllConnections().length });
+    const a = tradingCoreRuntime.on('STATUS_CHANGED', refresh); const b = tradingCoreRuntime.on('BROKER_CONNECTED', refresh); const c = tradingCoreRuntime.on('BROKER_DISCONNECTED', refresh);
+    return () => { a(); b(); c(); };
+  }, []);
+  const broker = brokerState.active;
   return <div className="min-h-screen bg-[#080a0f] text-[#f3f4f6] font-sans">
     <header className="sticky top-0 z-30 border-b border-[#222636] bg-[#0c0e15]/95 backdrop-blur-xl">
       <div className="h-14 px-4 flex items-center justify-between gap-4">
@@ -24,7 +26,8 @@ export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLan
           <span className="hidden sm:inline text-[10px] font-mono text-[#10b981]">● LIVE SYSTEM</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="hidden md:inline text-[10px] font-mono text-[#8c93a6]">{broker?.name || 'Broker not selected'}</span>
+          <span className="hidden md:inline text-[9px] font-mono text-[#64748b]">{brokerState.count} CONNECTED</span>
+          <span className="hidden sm:inline rounded-md border border-[#10b981]/30 bg-[#10b981]/10 px-2 py-1 text-[9px] font-mono font-bold text-[#10b981]">ACTIVE: {broker?.name?.toUpperCase() || 'NONE'}</span>
           <button onClick={onBroker} className="border border-[#222636] px-2.5 py-1.5 rounded-md text-xs hover:bg-[#141824]"><SlidersHorizontal className="inline w-3 h-3 mr-1"/> Broker</button>
         </div>
       </div>
@@ -39,7 +42,6 @@ export function WorkspaceModuleShell({ active, children, onNavigate, onBackToLan
 export function ModuleHeader({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
   return <div className="border-b border-[#222636] bg-[#0a0c12] px-5 py-6 md:px-8"><div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><div className="text-[9px] font-mono uppercase tracking-[.2em] text-[#10b981]">{eyebrow}</div><h1 className="mt-1 text-2xl md:text-3xl font-bold tracking-tight">{title}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[#7e889d]">{description}</p></div>{action}</div></div>;
 }
-
 export function Panel({ title, subtitle, children, className = '' }: { title: string; subtitle?: string; children: ReactNode; className?: string }) {
   return <section className={`rounded-xl border border-[#222636] bg-[#0c0e15] ${className}`}><div className="border-b border-[#1b1f2a] px-4 py-3"><div className="text-[10px] font-mono uppercase tracking-widest text-[#c9ceda]">{title}</div>{subtitle && <div className="mt-1 text-[10px] text-[#64748b]">{subtitle}</div>}</div><div className="p-4">{children}</div></section>;
 }
