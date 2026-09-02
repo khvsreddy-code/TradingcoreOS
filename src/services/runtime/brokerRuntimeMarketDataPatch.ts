@@ -2,10 +2,17 @@ import { tradingCoreRuntime } from './TradingCoreRuntime';
 import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 
 /**
- * Compatibility shim: keep the existing workspace UI while routing market data
- * and intraday history through the broker that is currently marked ACTIVE.
+ * Compatibility layer: keep the existing workspace UI while routing market
+ * data and intraday history through the active broker. It also prevents stale
+ * broker responses from crossing an account switch.
  */
 const runtime = tradingCoreRuntime as any;
+type HistoryCacheEntry = { expiresAt: number; data: any[] };
+const historyCache = new Map<string, HistoryCacheEntry>();
+const HISTORY_TTL_MS = 1200;
+let routeGeneration = 0;
+
+const clearHistoryCache = () => historyCache.clear();
 
 runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (event: any) => void) {
   const initial = this.getPrimaryBrokerInfo?.();
@@ -40,8 +47,19 @@ runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (eve
 
 const originalGetHistoricalData = runtime.getHistoricalData.bind(runtime);
 runtime.getHistoricalData = async function (symbol: string, timeframe: string) {
+  const brokerId = this.getPrimaryBrokerInfo?.()?.brokerId?.toLowerCase();
+  if (!brokerId) return [];
+  const generationAtStart = routeGeneration;
+  const key = `${brokerId}:${symbol}:${timeframe}`;
+  const cached = historyCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
   const rows = await originalGetHistoricalData(symbol, timeframe);
-  if (!Array.isArray(rows) || timeframe === 'day') return rows;
+  if (generationAtStart !== routeGeneration || this.getPrimaryBrokerInfo?.()?.brokerId?.toLowerCase() !== brokerId) return [];
+  if (!Array.isArray(rows) || timeframe === 'day') {
+    if (Array.isArray(rows) && rows.length) historyCache.set(key, { data: rows, expiresAt: Date.now() + HISTORY_TTL_MS });
+    return rows;
+  }
 
   const indiaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });
   const today = indiaDay.format(new Date());
@@ -50,27 +68,51 @@ runtime.getHistoricalData = async function (symbol: string, timeframe: string) {
     return Number.isFinite(ts.getTime()) && indiaDay.format(ts) === today;
   });
 
-  // Never silently paint yesterday/older candles on an intraday chart. A genuine
-  // empty result is safer than presenting stale candles as today's market history.
+  // Do not paint an older session as today's intraday chart. An empty result is
+  // safer than stale market history. The live WebSocket supplies the updating
+  // candle once the market feed is connected.
+  historyCache.set(key, { data: currentSession, expiresAt: Date.now() + HISTORY_TTL_MS });
   return currentSession;
 };
 
 const originalConnectBrokerOAuth = runtime.connectBrokerOAuth.bind(runtime);
 runtime.connectBrokerOAuth = async function (brokerId: string, authCode?: string) {
   const result = await originalConnectBrokerOAuth(brokerId, authCode);
-  if (result?.success) this.switchActiveBroker(brokerId);
+  if (result?.success) {
+    routeGeneration += 1;
+    clearHistoryCache();
+    this.switchActiveBroker(brokerId);
+  }
   return result;
 };
 
 const originalConnectBrokerApiKeys = runtime.connectBrokerApiKeys.bind(runtime);
 runtime.connectBrokerApiKeys = async function (brokerId: string, credentials: any) {
   const result = await originalConnectBrokerApiKeys(brokerId, credentials);
-  if (result?.success) this.switchActiveBroker(brokerId);
+  if (result?.success) {
+    routeGeneration += 1;
+    clearHistoryCache();
+    this.switchActiveBroker(brokerId);
+  }
   return result;
+};
+
+const originalSwitchActiveBroker = runtime.switchActiveBroker.bind(runtime);
+runtime.switchActiveBroker = function (brokerId: string) {
+  const previous = this.getPrimaryBrokerInfo?.()?.brokerId?.toLowerCase();
+  const success = originalSwitchActiveBroker(brokerId);
+  if (success && previous !== brokerId.toLowerCase()) {
+    routeGeneration += 1;
+    clearHistoryCache();
+    if (previous) brokerMarketDataClient.disconnect(previous);
+  }
+  return success;
 };
 
 const originalDisconnectBroker = runtime.disconnectBroker.bind(runtime);
 runtime.disconnectBroker = async function (brokerId: string) {
+  routeGeneration += 1;
+  clearHistoryCache();
   brokerMarketDataClient.disconnect(brokerId);
   return originalDisconnectBroker(brokerId);
 };
