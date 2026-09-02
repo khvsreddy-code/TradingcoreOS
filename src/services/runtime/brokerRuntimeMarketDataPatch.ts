@@ -31,10 +31,11 @@ runtime.getHistoricalData = async function (symbol: string, timeframe: string) {
   const rows = await originalGetHistoricalData(symbol, timeframe);
   if (!Array.isArray(rows) || rows.length < 2 || timeframe === 'day') return rows;
 
-  const indiaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const indiaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });
+  const today = indiaDay.format(new Date());
   const currentSession = rows.filter((row: any) => {
     const ts = new Date(row.timestamp);
-    return Number.isFinite(ts.getTime()) && new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(ts) === indiaDate;
+    return Number.isFinite(ts.getTime()) && indiaDay.format(ts) === today;
   });
 
   // For intraday charts, never render older-session candles as if they were
