@@ -2,19 +2,18 @@ import { tradingCoreRuntime } from './TradingCoreRuntime';
 import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 
 /**
- * Compatibility shim kept isolated so the existing runtime/UI contracts do not
- * change. The previous runtime hard-coded Upstox for every live chart stream.
- * This replaces only that provider selection with the primary connected broker
- * and normalizes intraday history to the current India trading session.
+ * Compatibility shim: keep the existing workspace UI while routing market data
+ * and intraday history through the broker that is currently marked ACTIVE.
  */
 const runtime = tradingCoreRuntime as any;
 
 runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (event: any) => void) {
-  const info = this.getPrimaryBrokerInfo?.();
-  if (!info || info.status !== 'Connected') {
+  const initial = this.getPrimaryBrokerInfo?.();
+  if (!initial || initial.status !== 'Connected') {
     listener({ type: 'error', error: 'Connect a broker before starting live market data.' });
     return () => {};
   }
+
   const relay = (event: any) => {
     if (event.type === 'tick' && event.tick) {
       this.market.set(event.tick.instrumentKey, event.tick);
@@ -23,13 +22,26 @@ runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (eve
     listener(event);
     this.marketListeners?.forEach((subscriber: any) => subscriber(event));
   };
-  return brokerMarketDataClient.subscribe(info.brokerId, instrumentKeys, relay);
+
+  let currentBrokerId = initial.brokerId;
+  let stopFeed = brokerMarketDataClient.subscribe(currentBrokerId, instrumentKeys, relay);
+  const stopBrokerSwitch = this.on('STATUS_CHANGED', (event: any) => {
+    if (event?.status !== 'Primary Switched') return;
+    const next = this.getPrimaryBrokerInfo?.();
+    if (!next || next.brokerId === currentBrokerId || next.status !== 'Connected') return;
+    stopFeed();
+    currentBrokerId = next.brokerId;
+    listener({ type: 'status', status: 'reconnecting' });
+    stopFeed = brokerMarketDataClient.subscribe(currentBrokerId, instrumentKeys, relay);
+  });
+
+  return () => { stopBrokerSwitch(); stopFeed(); };
 };
 
 const originalGetHistoricalData = runtime.getHistoricalData.bind(runtime);
 runtime.getHistoricalData = async function (symbol: string, timeframe: string) {
   const rows = await originalGetHistoricalData(symbol, timeframe);
-  if (!Array.isArray(rows) || rows.length < 2 || timeframe === 'day') return rows;
+  if (!Array.isArray(rows) || timeframe === 'day') return rows;
 
   const indiaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });
   const today = indiaDay.format(new Date());
@@ -38,10 +50,9 @@ runtime.getHistoricalData = async function (symbol: string, timeframe: string) {
     return Number.isFinite(ts.getTime()) && indiaDay.format(ts) === today;
   });
 
-  // For intraday charts, never render older-session candles as if they were
-  // today's history. If the broker has not published today's history yet,
-  // return the original data so the UI can surface a genuine feed problem.
-  return currentSession.length >= 2 ? currentSession : rows;
+  // Never silently paint yesterday/older candles on an intraday chart. A genuine
+  // empty result is safer than presenting stale candles as today's market history.
+  return currentSession;
 };
 
 const originalConnectBrokerOAuth = runtime.connectBrokerOAuth.bind(runtime);
