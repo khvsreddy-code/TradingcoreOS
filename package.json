@@ -1,0 +1,11 @@
+{
+  "name": "tradingcore-os",
+  "private": true,
+  "version": "30.5.1",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}
