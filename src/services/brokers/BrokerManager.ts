@@ -22,9 +22,8 @@ export class BrokerManager {
   private lastUsedBrokerId: string | null = null;
 
   private constructor() {
-    // A browser snapshot is not proof of a server-side broker session. Connections are established only after verification.
-    localStorage.removeItem('tradingcore_connected_brokers');
-    localStorage.removeItem('tradingcore_primary_broker');
+    // localStorage is only used as a preference for which already-verified server
+    // session should be primary. It is never treated as proof that a broker is connected.
   }
 
   private saveToStorage(): void {
@@ -105,10 +104,12 @@ export class BrokerManager {
 
   /**
    * Rehydrates broker connections from the authenticated user's server-side
-   * broker sessions. Browser localStorage is never treated as proof of ownership.
+   * broker sessions. Browser storage can only nominate a primary among sessions
+   * that the server has independently verified.
    */
   public async restoreServerConnections(): Promise<void> {
     try {
+      const preferredPrimary = localStorage.getItem('tradingcore_primary_broker')?.toLowerCase() || '';
       const response = await tradingApi('/api/auth/broker/sessions');
       const data = await response.json();
       if (!response.ok || !data?.success || !Array.isArray(data.sessions)) return;
@@ -127,21 +128,29 @@ export class BrokerManager {
           name: adapter.name,
           nickname: `${adapter.name} Main`,
           status: 'Connected',
-          isPrimary: this.primaryBrokerId === null,
+          isPrimary: false,
           lastSyncedAt: session.connectedAt || new Date().toISOString(),
           tokenExpiry: session.expiresAt,
           latencyMs: undefined,
           permissions: ['Read Portfolio', 'Execute Orders', 'WebSocket Stream', 'Historical Data'],
           adapter,
         });
+      }
 
-        if (!this.primaryBrokerId) this.primaryBrokerId = brokerId;
+      // Preserve the user's last selected broker across reloads, but only if that
+      // broker is currently authenticated. Otherwise use the first verified session.
+      if (preferredPrimary && this.connections.has(preferredPrimary)) {
+        this.primaryBrokerId = preferredPrimary;
+      } else if (this.connections.size > 0) {
+        this.primaryBrokerId = Array.from(this.connections.keys())[0];
       }
 
       if (this.primaryBrokerId) {
         this.connections.forEach((info, key) => {
           info.isPrimary = key === this.primaryBrokerId;
         });
+        this.lastUsedBrokerId = this.primaryBrokerId;
+        this.saveToStorage();
       }
     } catch (error) {
       console.warn('Unable to restore server-side broker connections:', error);
@@ -156,13 +165,10 @@ export class BrokerManager {
 
   public async connectOAuth(brokerId: string, authCode?: string): Promise<{ success: boolean; error?: string }> {
     const adapter = BrokerAdapterRegistry.getAdapter(brokerId);
-    if (!adapter) {
-      return { success: false, error: `Broker adapter ${brokerId} not found.` };
-    }
+    if (!adapter) return { success: false, error: `Broker adapter ${brokerId} not found.` };
 
     this.updateConnectionStatus(brokerId, 'Connecting...');
     const res = await adapter.authenticateOAuth(authCode);
-
     if (res.success) {
       const isFirst = this.connections.size === 0;
       const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -178,24 +184,18 @@ export class BrokerManager {
         permissions: ['Read Portfolio', 'Execute Orders', 'WebSocket Stream', 'Historical Data'],
         adapter,
       });
-
-      if (isFirst || !this.primaryBrokerId) {
-        this.primaryBrokerId = adapter.id;
-      }
+      if (isFirst || !this.primaryBrokerId) this.primaryBrokerId = adapter.id;
       this.lastUsedBrokerId = adapter.id;
       this.saveToStorage();
       return { success: true };
-    } else {
-      this.updateConnectionStatus(brokerId, 'Authentication Required');
-      return { success: false, error: res.error || 'Authentication failed' };
     }
+    this.updateConnectionStatus(brokerId, 'Authentication Required');
+    return { success: false, error: res.error || 'Authentication failed' };
   }
 
   public async connectApiKeys(brokerId: string, credentials: ApiCredentials): Promise<{ success: boolean; error?: string }> {
     const adapter = BrokerAdapterRegistry.getAdapter(brokerId);
-    if (!adapter) {
-      return { success: false, error: `Broker adapter ${brokerId} not found.` };
-    }
+    if (!adapter) return { success: false, error: `Broker adapter ${brokerId} not found.` };
 
     this.updateConnectionStatus(brokerId, 'Connecting...');
     const validation = await adapter.validateApiKeys(credentials);
@@ -220,39 +220,29 @@ export class BrokerManager {
         permissions: ['Read Portfolio', 'Execute Orders', 'Modify Orders', 'WebSocket Feed'],
         adapter,
       });
-
-      if (isFirst || !this.primaryBrokerId) {
-        this.primaryBrokerId = adapter.id;
-      }
+      if (isFirst || !this.primaryBrokerId) this.primaryBrokerId = adapter.id;
       this.lastUsedBrokerId = adapter.id;
       this.saveToStorage();
       return { success: true };
-    } else {
-      this.updateConnectionStatus(brokerId, 'Authentication Required');
-      return { success: false, error: saveRes.error || 'Failed to save credentials' };
     }
+    this.updateConnectionStatus(brokerId, 'Authentication Required');
+    return { success: false, error: saveRes.error || 'Failed to save credentials' };
   }
 
   public setPrimaryBroker(brokerId: string): boolean {
     const id = brokerId.toLowerCase();
-    if (this.connections.has(id)) {
-      this.primaryBrokerId = id;
-      this.connections.forEach((info, key) => {
-        info.isPrimary = key === id;
-      });
-      this.saveToStorage();
-      return true;
-    }
-    return false;
+    if (!this.connections.has(id)) return false;
+    this.primaryBrokerId = id;
+    this.connections.forEach((info, key) => { info.isPrimary = key === id; });
+    this.lastUsedBrokerId = id;
+    this.saveToStorage();
+    return true;
   }
 
   public renameConnection(brokerId: string, nickname: string): void {
     const id = brokerId.toLowerCase();
     const info = this.connections.get(id);
-    if (info) {
-      info.nickname = nickname;
-      this.saveToStorage();
-    }
+    if (info) { info.nickname = nickname; this.saveToStorage(); }
   }
 
   public updateConnectionStatus(brokerId: string, status: BrokerConnectionStatus): void {
@@ -260,9 +250,7 @@ export class BrokerManager {
     const existing = this.connections.get(id);
     if (existing) {
       existing.status = status;
-      if (status === 'Connected') {
-        existing.lastSyncedAt = new Date().toISOString();
-      }
+      if (status === 'Connected') existing.lastSyncedAt = new Date().toISOString();
     }
   }
 
@@ -270,44 +258,27 @@ export class BrokerManager {
     const id = brokerId.toLowerCase();
     const info = this.connections.get(id);
     const start = performance.now();
-    if (info) {
-      await info.adapter.getMarketData(['NIFTY 50']);
-    } else {
-      await new Promise((res) => setTimeout(res, 80));
-    }
-    const end = performance.now();
-    const latency = Math.round(end - start);
-    if (info) {
-      info.latencyMs = latency;
-    }
+    if (info) await info.adapter.getMarketData(['NIFTY 50']);
+    else await new Promise((res) => setTimeout(res, 80));
+    const latency = Math.round(performance.now() - start);
+    if (info) info.latencyMs = latency;
     return latency;
   }
 
   public async testConnectivity(brokerId: string): Promise<{ success: boolean; latencyMs: number; message: string }> {
     const id = brokerId.toLowerCase();
     const info = this.connections.get(id);
-    if (!info) {
-      return { success: false, latencyMs: 0, message: 'Broker not connected' };
-    }
-
+    if (!info) return { success: false, latencyMs: 0, message: 'Broker not connected' };
     try {
       const start = performance.now();
       await info.adapter.fetchProfile();
       const latencyMs = Math.round(performance.now() - start);
       info.latencyMs = latencyMs;
       info.status = 'Connected';
-      return {
-        success: true,
-        latencyMs,
-        message: `API endpoint ping successful (${latencyMs}ms)`,
-      };
+      return { success: true, latencyMs, message: `API endpoint ping successful (${latencyMs}ms)` };
     } catch (err: any) {
       info.status = 'Offline';
-      return {
-        success: false,
-        latencyMs: 0,
-        message: err?.message || 'Connection test failed',
-      };
+      return { success: false, latencyMs: 0, message: err?.message || 'Connection test failed' };
     }
   }
 
@@ -315,7 +286,6 @@ export class BrokerManager {
     const id = brokerId.toLowerCase();
     const info = this.connections.get(id);
     if (!info) return { success: false, error: 'Connection not found' };
-
     this.updateConnectionStatus(id, 'Refreshing Session');
     const res = await info.adapter.authenticateOAuth();
     if (res.success) {
@@ -323,10 +293,9 @@ export class BrokerManager {
       info.tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       info.lastSyncedAt = new Date().toISOString();
       return { success: true };
-    } else {
-      this.updateConnectionStatus(id, 'Authentication Required');
-      return { success: false, error: res.error || 'Refresh failed' };
     }
+    this.updateConnectionStatus(id, 'Authentication Required');
+    return { success: false, error: res.error || 'Refresh failed' };
   }
 
   public async syncPortfolio(brokerId?: string): Promise<{
@@ -336,23 +305,14 @@ export class BrokerManager {
     orders: OrderResult[];
     trades: TradeRecord[];
   }> {
-    const targetId = brokerId || this.primaryBrokerId;
-    if (!targetId) {
-      return { funds: null, holdings: [], positions: [], orders: [], trades: [] };
-    }
-
-    const info = this.connections.get(targetId.toLowerCase());
-    if (!info) {
-      return { funds: null, holdings: [], positions: [], orders: [], trades: [] };
-    }
+    const targetId = (brokerId || this.primaryBrokerId)?.toLowerCase();
+    if (!targetId) return { funds: null, holdings: [], positions: [], orders: [], trades: [] };
+    const info = this.connections.get(targetId);
+    if (!info) return { funds: null, holdings: [], positions: [], orders: [], trades: [] };
 
     this.updateConnectionStatus(targetId, 'Syncing Portfolio');
-
     try {
-      // One authenticated request replaces five browser->Vercel->Supabase hops.
-      // The server fans the broker calls out in parallel and returns partial data
-      // if one optional endpoint is rate-limited.
-      const response = await tradingApi(`/api/trading/${encodeURIComponent(targetId.toLowerCase())}/portfolio-snapshot`);
+      const response = await tradingApi(`/api/trading/${encodeURIComponent(targetId)}/portfolio-snapshot`);
       const payload = await response.json();
       if (!response.ok || !payload?.success) throw new Error(payload?.error || 'Portfolio snapshot failed');
       const data = payload.data || {};
@@ -368,10 +328,7 @@ export class BrokerManager {
     } catch (error) {
       console.warn(`Fast broker snapshot failed for ${targetId}; using parallel fallback:`, error);
       const safe = async <T,>(task: () => Promise<T>, fallback: T): Promise<T> => {
-        try { return await task(); } catch (err) {
-          console.warn(`Broker sync warning for ${targetId}:`, err);
-          return fallback;
-        }
+        try { return await task(); } catch (err) { console.warn(`Broker sync warning for ${targetId}:`, err); return fallback; }
       };
       const [funds, holdings, positions, orders, trades] = await Promise.all([
         safe(() => info.adapter.fetchFunds(), null),
@@ -402,10 +359,7 @@ export class BrokerManager {
       if (this.primaryBrokerId === id) {
         const remaining = Array.from(this.connections.keys());
         this.primaryBrokerId = remaining.length > 0 ? remaining[0] : null;
-        if (this.primaryBrokerId) {
-          const primaryInfo = this.connections.get(this.primaryBrokerId);
-          if (primaryInfo) primaryInfo.isPrimary = true;
-        }
+        if (this.primaryBrokerId) this.connections.get(this.primaryBrokerId)!.isPrimary = true;
       }
       this.saveToStorage();
     }
@@ -413,15 +367,11 @@ export class BrokerManager {
 
   public checkHealth(): Record<string, BrokerConnectionStatus> {
     const statusMap: Record<string, BrokerConnectionStatus> = {};
-    this.connections.forEach((info, id) => {
-      statusMap[id] = info.status;
-    });
+    this.connections.forEach((info, id) => { statusMap[id] = info.status; });
     return statusMap;
   }
 
-  public getLastUsedBrokerId(): string | null {
-    return this.lastUsedBrokerId;
-  }
+  public getLastUsedBrokerId(): string | null { return this.lastUsedBrokerId; }
 }
 
 export const brokerManager = BrokerManager.getInstance();
