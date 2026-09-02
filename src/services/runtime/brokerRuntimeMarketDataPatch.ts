@@ -17,6 +17,20 @@ runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (eve
   return brokerMarketDataClient.subscribe(info.brokerId, instrumentKeys, listener);
 };
 
+const originalConnectBrokerOAuth = runtime.connectBrokerOAuth.bind(runtime);
+runtime.connectBrokerOAuth = async function (brokerId: string, authCode?: string) {
+  const result = await originalConnectBrokerOAuth(brokerId, authCode);
+  if (result?.success) this.switchActiveBroker(brokerId);
+  return result;
+};
+
+const originalConnectBrokerApiKeys = runtime.connectBrokerApiKeys.bind(runtime);
+runtime.connectBrokerApiKeys = async function (brokerId: string, credentials: any) {
+  const result = await originalConnectBrokerApiKeys(brokerId, credentials);
+  if (result?.success) this.switchActiveBroker(brokerId);
+  return result;
+};
+
 const originalDisconnectBroker = runtime.disconnectBroker.bind(runtime);
 runtime.disconnectBroker = async function (brokerId: string) {
   brokerMarketDataClient.disconnect(brokerId);
