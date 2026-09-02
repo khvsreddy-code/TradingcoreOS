@@ -1,0 +1,6 @@
+{
+  "name": "TradingCore",
+  "description": "Browser-Based Trading Operating System for Professional Traders",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
