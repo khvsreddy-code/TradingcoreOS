@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { brokerRoutes } from './src/server/routes/broker.routes.js';
+import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 
 const app = express();
@@ -39,6 +40,8 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth/broker', brokerRoutes);
+// FYERS-specific historical/stream routes must run before the generic adapter routes.
+app.use('/api/trading', brokerMarketDataRoutes);
 app.use('/api/trading', tradingRoutes);
 
 export default app;
