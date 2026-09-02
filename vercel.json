@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "outputDirectory": "frontend",
+  "buildCommand": "echo 'TradingCore OS: frontend is static HTML/CSS/JS; no Vite build required'",
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
