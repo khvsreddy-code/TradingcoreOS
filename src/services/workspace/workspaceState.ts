@@ -3,8 +3,6 @@ export type AutomationMode = 'Paper' | 'Live' | 'Off';
 export type AutomationConfig = { id:string; name:string; description:string; mode:AutomationMode; enabled:boolean; kind:'VWAP_RECLAIM'|'EMA_CROSS'|'OPENING_RANGE'|'RSI_REVERSAL'|'DONCHIAN_BREAKOUT'|'SUPERTREND_FLIP'|'BOLLINGER_BREAKOUT'|'CPR_BREAKOUT'|'PDH_PDL_SWEEP'; period?:number; fast?:number; slow?:number; multiplier?:number };
 const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='clean-chart-v1';
 
-// New chart sessions start with no studies/levels rendered. Users can add any
-// study directly from the Live Chart toolbar without leaving the chart.
 export const defaultIndicators: IndicatorConfig[] = [
  {id:'ema20',kind:'EMA',period:20,enabled:false}, {id:'vwap',kind:'VWAP',enabled:false},
  {id:'bb20',kind:'Bollinger Bands',period:20,multiplier:2,enabled:false}, {id:'rsi14',kind:'RSI',period:14,enabled:false},
@@ -42,19 +40,32 @@ export const defaultAutomations: AutomationConfig[] = [
 
 function read<T>(key:string, fallback:T):T { try { const x=localStorage.getItem(key); return x?JSON.parse(x):fallback; } catch{return fallback;} }
 
+// Keep one mutable in-memory reference. LiveChart's worker callbacks are intentionally
+// long-lived; mutating this reference prevents a stale React closure from losing a
+// study that was just added/toggled while the worker is computing.
+let indicatorStateCache: IndicatorConfig[] | null = null;
+
 export const getIndicators=()=>{
+  if (indicatorStateCache) return indicatorStateCache;
   const version=localStorage.getItem(`${IND}:version`);
   const stored=read<IndicatorConfig[]|null>(IND,null);
   if(version!==IND_VERSION){
-    // One-time migration: preserve the indicator library/configuration but start
-    // the chart visually clean. Users can re-enable anything from the toolbar.
     const cleaned=(stored || defaultIndicators).map((item)=>({...item,enabled:false}));
     localStorage.setItem(IND,JSON.stringify(cleaned));
     localStorage.setItem(`${IND}:version`,IND_VERSION);
-    return cleaned;
+    indicatorStateCache = cleaned;
+    return indicatorStateCache;
   }
-  return stored || defaultIndicators;
+  indicatorStateCache = stored || defaultIndicators.map((item)=>({...item}));
+  return indicatorStateCache;
 };
-export const saveIndicators=(v:IndicatorConfig[])=>{localStorage.setItem(IND,JSON.stringify(v));localStorage.setItem(`${IND}:version`,IND_VERSION);window.dispatchEvent(new CustomEvent('tradingcore:indicators',{detail:v}));};
+
+export const saveIndicators=(v:IndicatorConfig[])=>{
+  const cache=getIndicators();
+  cache.splice(0,cache.length,...v.map((item)=>({...item})));
+  localStorage.setItem(IND,JSON.stringify(cache));
+  localStorage.setItem(`${IND}:version`,IND_VERSION);
+  window.dispatchEvent(new CustomEvent('tradingcore:indicators',{detail:cache.slice()}));
+};
 export const getAutomations=()=>read<AutomationConfig[]>(AUTO,defaultAutomations);
 export const saveAutomations=(v:AutomationConfig[])=>{localStorage.setItem(AUTO,JSON.stringify(v));window.dispatchEvent(new CustomEvent('tradingcore:automations',{detail:v}));};
