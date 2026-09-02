@@ -14,7 +14,7 @@ async function getFyersSession(req: AuthenticatedRequest, res: Response) {
   const userId = req.tradingCoreUserId!;
   const session = await BrokerRepository.getSession('fyers', userId);
   if (!session || session.status !== 'Connected') { res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' }); return null; }
-  try { const token = EncryptionService.decrypt(session.accessTokenEncrypted); return { userId, token }; }
+  try { return { userId, token: EncryptionService.decrypt(session.accessTokenEncrypted) }; }
   catch { res.status(500).json({ success: false, error: 'Unable to decrypt the Fyers session.' }); return null; }
 }
 
@@ -27,20 +27,13 @@ function toFyersSymbol(symbol: string): string {
     'nse_index|niftyfinancialservices': 'NSE:FINNIFTY-INDEX', 'nse_index|finnifty': 'NSE:FINNIFTY-INDEX',
     'nse_index|niftymidcapselect': 'NSE:MIDCPNIFTY-INDEX', 'bse_index|sensex': 'BSE:SENSEX-INDEX',
   };
-  if (aliases[normalized]) return aliases[normalized];
-  if (/^(NSE|BSE|MCX):/i.test(value)) return value;
-  return value;
+  return aliases[normalized] || (/^(NSE|BSE|MCX):/i.test(value) ? value : value);
 }
 
 const fyersResolution: Record<string,string> = {
-  '1minute': '1', '3minute': '3', '5minute': '5', '15minute': '15',
-  '30minute': '30', '60minute': '60', 'day': 'D'
+  '1minute':'1','3minute':'3','5minute':'5','15minute':'15','30minute':'30','60minute':'60','day':'D'
 };
-
-const intervalSeconds: Record<string, number> = {
-  '1minute': 60, '3minute': 180, '5minute': 300, '15minute': 900,
-  '30minute': 1800, '60minute': 3600, 'day': 86400
-};
+const intradayIntervals = new Set(['1minute','3minute','5minute','15minute','30minute','60minute']);
 
 function indiaDate(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
@@ -50,24 +43,22 @@ function mapFyersCandles(rows: any[]): any[] {
   return (rows || []).map((c: any[]) => ({
     timestamp: new Date(Number(c[0]) * 1000).toISOString(),
     open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5] || 0),
-  })).filter((c: any) => [c.open, c.high, c.low, c.close].every(Number.isFinite))
-    .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  })).filter((c: any) => [c.open, c.high, c.low, c.close].every(Number.isFinite));
 }
 
 function normalizeCandles(rows: any[], limit: number): any[] {
   const unique = new Map<number, any>();
   for (const row of rows || []) {
-    const timestamp = new Date(row.timestamp).getTime();
-    if (Number.isFinite(timestamp)) unique.set(timestamp, row);
+    const time = new Date(row.timestamp).getTime();
+    if (Number.isFinite(time)) unique.set(time, row);
   }
   return [...unique.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-limit);
 }
 
-async function requestFyersHistory(accessToken: string, symbol: string, resolution: string, query: URLSearchParams): Promise<any[]> {
+async function requestFyersHistory(accessToken: string, symbol: string, resolution: string, from: string, to: string): Promise<any[]> {
+  const query = new URLSearchParams({ date_format: '1', range_from: from, range_to: to, cont_flag: '1' });
   const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(symbol)}&resolution=${encodeURIComponent(resolution)}&${query.toString()}`;
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-  });
+  const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
   const text = await response.text();
   let payload: any;
   try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
@@ -75,35 +66,41 @@ async function requestFyersHistory(accessToken: string, symbol: string, resoluti
   return mapFyersCandles(payload?.candles || []);
 }
 
-function rangeForCandleTarget(interval: string, target: number, multiplier = 1) {
-  const seconds = intervalSeconds[interval] || 300;
-  // Intraday markets are not open 24/7. The factor below converts the desired
-  // bar count into a generous calendar window while keeping requests bounded.
-  const calendarSeconds = seconds * target * 1.75 * multiplier;
-  const from = new Date(Date.now() - calendarSeconds * 1000);
-  return { from: indiaDate(from), to: indiaDate() };
-}
-
+/**
+ * Build history backwards in broker-safe date windows. The previous
+ * implementation deliberately requested only today, which made a full chart
+ * impossible. FYERS history is date-range based, so requests are chunked and
+ * merged until the target is reached or the broker has no older data.
+ */
 async function fetchFyersHistoryTarget(accessToken: string, symbol: string, interval: string, target: number): Promise<any[]> {
   const resolution = fyersResolution[interval] || interval;
-  const attempts = [1, 1.8, 3.2];
-  let best: any[] = [];
-  const errors: string[] = [];
+  const chunkDays = intradayIntervals.has(interval) ? 90 : 3650;
+  const maxLookbackDays = intradayIntervals.has(interval) ? 365 * 5 : 365 * 25;
+  const now = new Date();
+  let end = new Date(now);
+  let all: any[] = [];
+  let emptyWindows = 0;
 
-  for (const multiplier of attempts) {
-    const range = rangeForCandleTarget(interval, target, multiplier);
+  for (let lookedBack = 0; lookedBack < maxLookbackDays && all.length < target && emptyWindows < 2; lookedBack += chunkDays) {
+    const start = new Date(end.getTime() - chunkDays * 86_400_000);
     try {
-      const query = new URLSearchParams({ date_format: '1', range_from: range.from, range_to: range.to, cont_flag: '1' });
-      const rows = normalizeCandles(await requestFyersHistory(accessToken, symbol, resolution, query), target);
-      if (rows.length > best.length) best = rows;
-      if (best.length >= target) break;
+      const rows = await requestFyersHistory(accessToken, symbol, resolution, indiaDate(start), indiaDate(end));
+      if (rows.length) {
+        all = normalizeCandles([...rows, ...all], target);
+        emptyWindows = 0;
+      } else {
+        emptyWindows += 1;
+      }
     } catch (error: any) {
-      errors.push(error?.message || 'history request failed');
+      // Keep trying older windows; a single date-range rejection should not
+      // collapse the chart to one live candle.
+      if (all.length === 0) throw error;
+      emptyWindows += 1;
     }
+    end = new Date(start.getTime() - 1000);
   }
 
-  if (!best.length) throw new Error(errors.join(' · ') || `Fyers returned no historical candles for ${symbol}`);
-  return best;
+  return normalizeCandles(all, target);
 }
 
 brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Response, next) => {
@@ -117,6 +114,7 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
 
   try {
     const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit);
+    if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
     res.setHeader('Cache-Control', 'private, max-age=15');
     return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
   } catch (err: any) {
@@ -142,8 +140,7 @@ brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: 
 brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: AuthenticatedRequest, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
   const session = await getFyersSession(req, res); if (!session) return;
-  const rawSymbols = String(req.query.instrument_keys || '').split(',').map(x => x.trim()).filter(Boolean);
-  const symbols = rawSymbols.map(toFyersSymbol).filter(Boolean);
+  const symbols = String(req.query.instrument_keys || '').split(',').map(x => toFyersSymbol(x.trim())).filter(Boolean);
   if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
   if (symbols.length > 100) return res.status(400).json({ success: false, error: 'Too many market symbols requested' });
   res.status(200);
@@ -153,6 +150,6 @@ brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: Authenticated
   res.flushHeaders();
   const write = (event: any) => { try { res.write(`${JSON.stringify(event)}\n`); } catch {} };
   const unsubscribe = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, write);
-  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 12000);
+  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 12_000);
   req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
 });
