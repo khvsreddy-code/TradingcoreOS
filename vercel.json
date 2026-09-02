@@ -1,7 +1,0 @@
-{
-  "version": 2,
-  "buildCommand": "echo 'TradingCore OS: no frontend build step required'",
-  "routes": [
-    { "src": "/(.*)", "dest": "/api/index.py" }
-  ]
-}
