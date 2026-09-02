@@ -14,7 +14,15 @@ runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (eve
     listener({ type: 'error', error: 'Connect a broker before starting live market data.' });
     return () => {};
   }
-  return brokerMarketDataClient.subscribe(info.brokerId, instrumentKeys, listener);
+  const relay = (event: any) => {
+    if (event.type === 'tick' && event.tick) {
+      this.market.set(event.tick.instrumentKey, event.tick);
+      this.emit('TICK_UPDATE', event.tick);
+    }
+    listener(event);
+    this.marketListeners?.forEach((subscriber: any) => subscriber(event));
+  };
+  return brokerMarketDataClient.subscribe(info.brokerId, instrumentKeys, relay);
 };
 
 const originalConnectBrokerOAuth = runtime.connectBrokerOAuth.bind(runtime);
