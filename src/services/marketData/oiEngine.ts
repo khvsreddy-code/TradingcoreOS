@@ -78,10 +78,11 @@ function quoteOi(contract: OptionContract, side: 'call' | 'put'): { oi: number; 
  * Native browser-safe OI analytics. The chain is normalized once at the broker
  * boundary and all OI/Delta-OI/profile calculations happen locally here.
  *
- * OI levels are deliberately constrained to a compact chart set: up to three
- * PUT/support and three CALL/resistance levels, prioritising the strongest OI
- * walls that are roughly 3–7 strikes from ATM/LTP. A 1–7 strike fallback is
- * used when the preferred band has too few meaningful walls.
+ * The chart keeps a deliberately compact set: max three PUT/support and max
+ * three CALL/resistance levels. Candidates are preferred 3–7 strikes from LTP,
+ * then fall back only when the preferred band does not contain enough meaningful
+ * walls. Ranking is driven primarily by OI strength and Delta-OI magnitude, with
+ * distance used as a proximity tie-breaker rather than overriding strength.
  */
 export function buildOIChartAnalytics(chain: OptionChain, spotOverride?: number, atr = 0): OIChartAnalytics {
   const contracts = (chain.contracts || []).filter(c => finite(c.strike)).sort((a, b) => a.strike - b.strike);
@@ -136,38 +137,42 @@ export function buildOIChartAnalytics(chain: OptionChain, spotOverride?: number,
     .filter(w => w.state !== 'MITIGATED')
     .map(w => ({
       w,
-      score: w.strength * 0.62 + Math.min(1, Math.abs(w.deltaOi) / deltaScale) * 0.18 + Math.max(0, 1 - Math.max(0, w.distanceStrikes - 3) / 5) * 0.20,
+      // 50% raw OI strength + 30% Delta-OI magnitude + 20% proximity within
+      // the requested 3–7 strike window. This stops nearby weak walls from
+      // beating a materially stronger wall simply because they are closer.
+      score: w.strength * 0.50
+        + Math.min(1, Math.abs(w.deltaOi) / deltaScale) * 0.30
+        + Math.max(0, 1 - Math.max(0, w.distanceStrikes - 3) / 5) * 0.20,
     }))
-    .sort((a, b) => b.score - a.score || a.w.distance - b.w.distance)
-    .map(({ w }) => w);
+    .sort((a, b) => b.score - a.score || a.w.distance - b.w.distance);
 
   const chooseSide = (side: OILevelSide): OILevel[] => {
     const preferred = makeCandidates(side, 3, 7);
     const fallback = makeCandidates(side, 1, 7);
     const extended = makeCandidates(side, 0, 10);
-    const selected: OIWall[] = [];
-    for (const w of [...preferred, ...fallback, ...extended]) {
-      if (selected.some(x => x.strike === w.strike)) continue;
-      selected.push(w);
+    const selected: Array<{ w: OIWall; score: number }> = [];
+    for (const candidate of [...preferred, ...fallback, ...extended]) {
+      if (selected.some(x => x.w.strike === candidate.w.strike)) continue;
+      selected.push(candidate);
       if (selected.length === 3) break;
     }
-    return selected.sort((a, b) => a.distance - b.distance).map((w, i) => ({
-      strike: w.strike,
-      side,
-      oi: w.oi,
-      deltaOi: w.deltaOi,
-      strength: w.strength,
-      width: w.width,
-      state: stateFor(side, w.strike),
-      distance: w.distance,
-      distanceStrikes: w.distanceStrikes,
-      label: `${side === 'support' ? 'OI S' : 'OI R'}${i + 1}`,
-    }));
+    return selected
+      .sort((a, b) => b.score - a.score || a.w.distance - b.w.distance)
+      .map(({ w }, i) => ({
+        strike: w.strike,
+        side,
+        oi: w.oi,
+        deltaOi: w.deltaOi,
+        strength: w.strength,
+        width: w.width,
+        state: stateFor(side, w.strike),
+        distance: w.distance,
+        distanceStrikes: w.distanceStrikes,
+        label: `${side === 'support' ? 'OI S' : 'OI R'}${i + 1}`,
+      }));
   };
 
-  const levels = [...chooseSide('support'), ...chooseSide('resistance')]
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, 6);
+  const levels = [...chooseSide('support'), ...chooseSide('resistance')];
 
   const activeWalls = walls.filter(w => w.state !== 'MITIGATED');
   const zones: OIZone[] = activeWalls.slice(0, 8).map(w => ({

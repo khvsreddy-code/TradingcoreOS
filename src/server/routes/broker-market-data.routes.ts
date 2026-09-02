@@ -1,0 +1,119 @@
+import { Router, Request, Response } from 'express';
+import { BrokerRegistry } from '../brokers/BrokerRegistry.js';
+import { BrokerRepository } from '../storage/BrokerRepository.js';
+import { EncryptionService } from '../encryption/EncryptionService.js';
+import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
+import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
+
+export const brokerMarketDataRoutes = Router();
+brokerMarketDataRoutes.use(requireUser);
+
+async function getFyersSession(req: AuthenticatedRequest, res: Response) {
+  const brokerId = String(req.params.brokerId || '').toLowerCase();
+  if (brokerId !== 'fyers') return null;
+
+  const userId = req.tradingCoreUserId!;
+  const session = await BrokerRepository.getSession('fyers', userId);
+  if (!session || session.status !== 'Connected') {
+    res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' });
+    return null;
+  }
+
+  try {
+    const token = EncryptionService.decrypt(session.accessTokenEncrypted);
+    return { userId, token };
+  } catch {
+    res.status(500).json({ success: false, error: 'Unable to decrypt the Fyers session.' });
+    return null;
+  }
+}
+
+/** Map TradingCore's canonical/index keys to the broker-native FYERS symbol format. */
+function toFyersSymbol(symbol: string): string {
+  const value = decodeURIComponent(String(symbol || '')).trim();
+  const normalized = value.toLowerCase().replace(/\s+/g, '');
+  const aliases: Record<string, string> = {
+    'nse_index|nifty50': 'NSE:NIFTY50-INDEX',
+    'nse_index|nifty50index': 'NSE:NIFTY50-INDEX',
+    'nse_index|niftybank': 'NSE:NIFTYBANK-INDEX',
+    'nse_index|niftybankindex': 'NSE:NIFTYBANK-INDEX',
+    'nse_index|niftyfinancialservices': 'NSE:FINNIFTY-INDEX',
+    'nse_index|finnifty': 'NSE:FINNIFTY-INDEX',
+    'nse_index|niftymidcapselect': 'NSE:MIDCPNIFTY-INDEX',
+    'bse_index|sensex': 'BSE:SENSEX-INDEX',
+  };
+  if (aliases[normalized]) return aliases[normalized];
+  if (/^(NSE|BSE|MCX):/i.test(value)) return value;
+  return value;
+}
+
+brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const session = await getFyersSession(req as AuthenticatedRequest, res);
+  if (!session) return;
+
+  const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
+  const interval = String(req.query.interval || '');
+  if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
+
+  try {
+    const adapter = BrokerRegistry.getAdapter('fyers');
+    const data = await adapter.getHistoricalData(session.token, symbol, interval);
+    const candles = Array.isArray(data) ? data
+      .filter((c: any) => Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)))
+      .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) : [];
+    if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} historical candle(s) for ${symbol}.` });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, data: candles });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || 'Unable to load Fyers historical candles' });
+  }
+});
+
+brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const session = await getFyersSession(req as AuthenticatedRequest, res);
+  if (!session) return;
+
+  const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
+  const expiryDate = String(req.query.expiry_date || 'current_week');
+  if (!symbol) return res.status(400).json({ success: false, error: 'instrument_key is required' });
+
+  try {
+    const adapter = BrokerRegistry.getAdapter('fyers');
+    const data = await adapter.getOptionChain(session.token, symbol, expiryDate);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || 'Unable to load Fyers option chain' });
+  }
+});
+
+/** Authenticated NDJSON stream from FYERS -> TradingCore -> browser. */
+brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: AuthenticatedRequest, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const session = await getFyersSession(req, res);
+  if (!session) return;
+
+  const rawSymbols = String(req.query.instrument_keys || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const symbols = rawSymbols.map(toFyersSymbol).filter(Boolean);
+  if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
+  if (symbols.length > 100) return res.status(400).json({ success: false, error: 'Too many market symbols requested' });
+
+  res.status(200);
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const write = (event: any) => {
+    try { res.write(`${JSON.stringify(event)}\n`); } catch { /* request closed */ }
+  };
+
+  const unsubscribe = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, write);
+  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 12_000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
