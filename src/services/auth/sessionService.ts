@@ -2,84 +2,63 @@ import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 import { Session as SupabaseSession, AuthChangeEvent } from '@supabase/supabase-js';
 import { Session } from '../../auth/types';
 
+const SESSION_TIMEOUT_MS = 15_000;
+
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(label)), SESSION_TIMEOUT_MS)),
+  ]);
+}
+
 export const sessionService = {
-  /**
-   * Helper to map Supabase Session to decoupled Session type
-   */
   mapSupabaseSession(supabaseSession: SupabaseSession | null): Session | null {
     if (!supabaseSession) return null;
     return {
       access_token: supabaseSession.access_token,
       refresh_token: supabaseSession.refresh_token,
       expires_at: supabaseSession.expires_at,
-      user: {
-        id: supabaseSession.user.id,
-        email: supabaseSession.user.email,
-      },
+      user: { id: supabaseSession.user.id, email: supabaseSession.user.email },
     };
   },
 
   /**
-   * Get the current active session
+   * Get the persisted Supabase session. A transient network delay must not be
+   * interpreted as a logout; if the cached access token is expired we attempt a
+   * refresh before returning an unauthenticated result.
    */
   async getSession(): Promise<{ session: SupabaseSession | null; error: Error | null }> {
-    if (!isSupabaseConfigured()) {
-      return { session: null, error: new Error('Supabase credentials not configured') };
-    }
-
+    if (!isSupabaseConfigured()) return { session: null, error: new Error('Supabase credentials not configured') };
     try {
       const supabase = getSupabaseClient();
-      const result = await Promise.race([
-        supabase.auth.getSession(),
-        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Supabase session check timed out')), 5000)),
-      ]);
-      const { data, error } = result;
-      if (error) return { session: null, error };
-      return { session: data.session, error: null };
+      const result = await withTimeout(supabase.auth.getSession(), 'Supabase session check timed out');
+      if (result.error) return { session: null, error: result.error };
+      if (result.data.session) return { session: result.data.session, error: null };
+
+      const refreshed = await withTimeout(supabase.auth.refreshSession(), 'Supabase session refresh timed out');
+      if (refreshed.error) return { session: null, error: refreshed.error };
+      return { session: refreshed.data.session, error: null };
     } catch (err: any) {
       return { session: null, error: err };
     }
   },
 
-  /**
-   * Refresh the active session
-   */
   async refreshSession(): Promise<{ session: SupabaseSession | null; error: Error | null }> {
-    if (!isSupabaseConfigured()) {
-      return { session: null, error: new Error('Supabase credentials not configured') };
-    }
-
+    if (!isSupabaseConfigured()) return { session: null, error: new Error('Supabase credentials not configured') };
     try {
       const supabase = getSupabaseClient();
-      const result = await Promise.race([
-        supabase.auth.refreshSession(),
-        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Supabase session refresh timed out')), 5000)),
-      ]);
-      const { data, error } = result;
-      if (error) return { session: null, error };
-      return { session: data.session, error: null };
+      const result = await withTimeout(supabase.auth.refreshSession(), 'Supabase session refresh timed out');
+      if (result.error) return { session: null, error: result.error };
+      return { session: result.data.session, error: null };
     } catch (err: any) {
       return { session: null, error: err };
     }
   },
 
-  /**
-   * Subscribe to authentication state changes (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, etc.)
-   */
-  onAuthStateChange(
-    callback: (event: AuthChangeEvent, session: SupabaseSession | null) => void
-  ): { unsubscribe: () => void } {
-    if (!isSupabaseConfigured()) {
-      return { unsubscribe: () => {} };
-    }
-
+  onAuthStateChange(callback: (event: AuthChangeEvent, session: SupabaseSession | null) => void): { unsubscribe: () => void } {
+    if (!isSupabaseConfigured()) return { unsubscribe: () => {} };
     const supabase = getSupabaseClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
-
-    return {
-      unsubscribe: () => {
-        subscription.unsubscribe();
-      },
-    };
+    return { unsubscribe: () => subscription.unsubscribe() };
   },
 };

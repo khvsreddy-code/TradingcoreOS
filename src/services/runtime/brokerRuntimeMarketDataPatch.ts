@@ -3,14 +3,14 @@ import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 
 /**
  * Compatibility layer: keep the existing workspace UI while routing market
- * data and intraday history through the active broker. It also prevents stale
- * broker responses from crossing an account switch.
+ * data and history through the currently active broker. Responses are guarded
+ * so a stale request can never cross an account switch.
  */
 const runtime = tradingCoreRuntime as any;
 type HistoryCacheEntry = { expiresAt: number; data: any[] };
 const historyCache = new Map<string, HistoryCacheEntry>();
 const lastTickTime = new Map<string, number>();
-const HISTORY_TTL_MS = 1200;
+const HISTORY_TTL_MS = 30_000;
 let routeGeneration = 0;
 
 const clearHistoryCache = () => historyCache.clear();
@@ -18,6 +18,16 @@ const tickTime = (value: any) => {
   const n = typeof value === 'number' ? value : Date.parse(String(value));
   if (!Number.isFinite(n)) return 0;
   return n > 1e12 ? n : n * 1000;
+};
+
+const dedupeAndSortHistory = (rows: any[]) => {
+  const byTime = new Map<number, any>();
+  for (const row of rows || []) {
+    const time = tickTime(row?.timestamp);
+    if (!time || !Number.isFinite(Number(row?.open)) || !Number.isFinite(Number(row?.high)) || !Number.isFinite(Number(row?.low)) || !Number.isFinite(Number(row?.close))) continue;
+    byTime.set(time, row);
+  }
+  return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
 };
 
 runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (event: any) => void) {
@@ -32,8 +42,6 @@ runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (eve
       const key = String(event.tick.instrumentKey || '');
       const timestamp = tickTime(event.tick.timestamp) || Date.now();
       const previous = lastTickTime.get(key) || 0;
-      // Broker reconnects can replay a tick or deliver packets out of order.
-      // Ignore older packets so candle/analytics state only moves forward.
       if (key && timestamp < previous) return;
       if (key) lastTickTime.set(key, timestamp);
       this.market.set(event.tick.instrumentKey, event.tick);
@@ -63,29 +71,19 @@ runtime.getHistoricalData = async function (symbol: string, timeframe: string) {
   const brokerId = this.getPrimaryBrokerInfo?.()?.brokerId?.toLowerCase();
   if (!brokerId) return [];
   const generationAtStart = routeGeneration;
-  const key = `${brokerId}:${symbol}:${timeframe}`;
+  const key = `${brokerId}:${symbol}:${timeframe}:25000`;
   const cached = historyCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   const rows = await originalGetHistoricalData(symbol, timeframe);
   if (generationAtStart !== routeGeneration || this.getPrimaryBrokerInfo?.()?.brokerId?.toLowerCase() !== brokerId) return [];
-  if (!Array.isArray(rows) || timeframe === 'day') {
-    if (Array.isArray(rows) && rows.length) historyCache.set(key, { data: rows, expiresAt: Date.now() + HISTORY_TTL_MS });
-    return rows;
-  }
+  if (!Array.isArray(rows)) return [];
 
-  const indiaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });
-  const today = indiaDay.format(new Date());
-  const currentSession = rows.filter((row: any) => {
-    const ts = new Date(row.timestamp);
-    return Number.isFinite(ts.getTime()) && indiaDay.format(ts) === today;
-  });
-
-  // Do not paint an older session as today's intraday chart. An empty result is
-  // safer than stale market history. The live WebSocket supplies the updating
-  // candle once the market feed is connected.
-  historyCache.set(key, { data: currentSession, expiresAt: Date.now() + HISTORY_TTL_MS });
-  return currentSession;
+  // Never collapse intraday history to the current session. That was the
+  // direct cause of charts showing only the candle formed after login.
+  const history = dedupeAndSortHistory(rows).slice(-25_000);
+  if (history.length) historyCache.set(key, { data: history, expiresAt: Date.now() + HISTORY_TTL_MS });
+  return history;
 };
 
 const originalConnectBrokerOAuth = runtime.connectBrokerOAuth.bind(runtime);
