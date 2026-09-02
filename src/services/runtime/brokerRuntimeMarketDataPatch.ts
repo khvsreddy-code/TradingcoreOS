@@ -9,10 +9,16 @@ import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 const runtime = tradingCoreRuntime as any;
 type HistoryCacheEntry = { expiresAt: number; data: any[] };
 const historyCache = new Map<string, HistoryCacheEntry>();
+const lastTickTime = new Map<string, number>();
 const HISTORY_TTL_MS = 1200;
 let routeGeneration = 0;
 
 const clearHistoryCache = () => historyCache.clear();
+const tickTime = (value: any) => {
+  const n = typeof value === 'number' ? value : Date.parse(String(value));
+  if (!Number.isFinite(n)) return 0;
+  return n > 1e12 ? n : n * 1000;
+};
 
 runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (event: any) => void) {
   const initial = this.getPrimaryBrokerInfo?.();
@@ -23,6 +29,13 @@ runtime.subscribeMarketData = function (instrumentKeys: string[], listener: (eve
 
   const relay = (event: any) => {
     if (event.type === 'tick' && event.tick) {
+      const key = String(event.tick.instrumentKey || '');
+      const timestamp = tickTime(event.tick.timestamp) || Date.now();
+      const previous = lastTickTime.get(key) || 0;
+      // Broker reconnects can replay a tick or deliver packets out of order.
+      // Ignore older packets so candle/analytics state only moves forward.
+      if (key && timestamp < previous) return;
+      if (key) lastTickTime.set(key, timestamp);
       this.market.set(event.tick.instrumentKey, event.tick);
       this.emit('TICK_UPDATE', event.tick);
     }
@@ -81,6 +94,7 @@ runtime.connectBrokerOAuth = async function (brokerId: string, authCode?: string
   if (result?.success) {
     routeGeneration += 1;
     clearHistoryCache();
+    lastTickTime.clear();
     this.switchActiveBroker(brokerId);
   }
   return result;
@@ -92,6 +106,7 @@ runtime.connectBrokerApiKeys = async function (brokerId: string, credentials: an
   if (result?.success) {
     routeGeneration += 1;
     clearHistoryCache();
+    lastTickTime.clear();
     this.switchActiveBroker(brokerId);
   }
   return result;
@@ -104,6 +119,7 @@ runtime.switchActiveBroker = function (brokerId: string) {
   if (success && previous !== brokerId.toLowerCase()) {
     routeGeneration += 1;
     clearHistoryCache();
+    lastTickTime.clear();
     if (previous) brokerMarketDataClient.disconnect(previous);
   }
   return success;
@@ -113,6 +129,7 @@ const originalDisconnectBroker = runtime.disconnectBroker.bind(runtime);
 runtime.disconnectBroker = async function (brokerId: string) {
   routeGeneration += 1;
   clearHistoryCache();
+  lastTickTime.clear();
   brokerMarketDataClient.disconnect(brokerId);
   return originalDisconnectBroker(brokerId);
 };
