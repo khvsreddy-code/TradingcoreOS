@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.9
+requests>=2.32
+fyers-apiv3>=3.0.0
+
+websocket-client>=1.8
+
+cryptography>=42.0
