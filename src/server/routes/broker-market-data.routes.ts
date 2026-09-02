@@ -32,16 +32,18 @@ function toFyersSymbol(symbol: string): string {
   return value;
 }
 
-const fyersResolution: Record<string,string> = {'1minute':'1','3minute':'3','5minute':'5','15minute':'15','30minute':'30','60minute':'60','day':'D'};
+const fyersResolution: Record<string,string> = {
+  '1minute': '1', '3minute': '3', '5minute': '5', '15minute': '15',
+  '30minute': '30', '60minute': '60', 'day': 'D'
+};
 
-function indiaDate() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-}
+const intervalSeconds: Record<string, number> = {
+  '1minute': 60, '3minute': 180, '5minute': 300, '15minute': 900,
+  '30minute': 1800, '60minute': 3600, 'day': 86400
+};
 
-function toIndiaDayEpochs(date: string) {
-  const start = Math.floor(new Date(`${date}T00:00:00+05:30`).getTime() / 1000);
-  const end = Math.floor(Date.now() / 1000);
-  return { start, end };
+function indiaDate(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
 }
 
 function mapFyersCandles(rows: any[]): any[] {
@@ -50,6 +52,15 @@ function mapFyersCandles(rows: any[]): any[] {
     open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5] || 0),
   })).filter((c: any) => [c.open, c.high, c.low, c.close].every(Number.isFinite))
     .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+function normalizeCandles(rows: any[], limit: number): any[] {
+  const unique = new Map<number, any>();
+  for (const row of rows || []) {
+    const timestamp = new Date(row.timestamp).getTime();
+    if (Number.isFinite(timestamp)) unique.set(timestamp, row);
+  }
+  return [...unique.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-limit);
 }
 
 async function requestFyersHistory(accessToken: string, symbol: string, resolution: string, query: URLSearchParams): Promise<any[]> {
@@ -64,33 +75,35 @@ async function requestFyersHistory(accessToken: string, symbol: string, resoluti
   return mapFyersCandles(payload?.candles || []);
 }
 
-async function fetchFyersCurrentSession(accessToken: string, symbol: string, interval: string): Promise<any[]> {
+function rangeForCandleTarget(interval: string, target: number, multiplier = 1) {
+  const seconds = intervalSeconds[interval] || 300;
+  // Intraday markets are not open 24/7. The factor below converts the desired
+  // bar count into a generous calendar window while keeping requests bounded.
+  const calendarSeconds = seconds * target * 1.75 * multiplier;
+  const from = new Date(Date.now() - calendarSeconds * 1000);
+  return { from: indiaDate(from), to: indiaDate() };
+}
+
+async function fetchFyersHistoryTarget(accessToken: string, symbol: string, interval: string, target: number): Promise<any[]> {
   const resolution = fyersResolution[interval] || interval;
-  const date = indiaDate();
+  const attempts = [1, 1.8, 3.2];
+  let best: any[] = [];
   const errors: string[] = [];
 
-  // FYERS supports current-day intraday history with date_format=1. This is
-  // deliberately attempted first so the chart can never silently fall back
-  // to a 30-day dataset and display yesterday/older candles as today's chart.
-  try {
-    const query = new URLSearchParams({ date_format: '1', range_from: date, range_to: date, cont_flag: '1' });
-    const rows = await requestFyersHistory(accessToken, symbol, resolution, query);
-    if (rows.length >= 2) return rows;
-  } catch (error: any) { errors.push(error?.message || 'date-format history failed'); }
+  for (const multiplier of attempts) {
+    const range = rangeForCandleTarget(interval, target, multiplier);
+    try {
+      const query = new URLSearchParams({ date_format: '1', range_from: range.from, range_to: range.to, cont_flag: '1' });
+      const rows = normalizeCandles(await requestFyersHistory(accessToken, symbol, resolution, query), target);
+      if (rows.length > best.length) best = rows;
+      if (best.length >= target) break;
+    } catch (error: any) {
+      errors.push(error?.message || 'history request failed');
+    }
+  }
 
-  // Some FYERS deployments are stricter about date_format and accept epoch
-  // ranges for the same current-session request. Keep the range bounded to
-  // today's India session instead of requesting 30 days.
-  try {
-    const { start, end } = toIndiaDayEpochs(date);
-    const query = new URLSearchParams({ date_format: '0', range_from: String(start), range_to: String(end), cont_flag: '1' });
-    const rows = await requestFyersHistory(accessToken, symbol, resolution, query);
-    const today = rows.filter((c: any) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(c.timestamp)) === date);
-    if (today.length >= 2) return today;
-    if (rows.length >= 2) return rows.filter((c: any) => new Date(c.timestamp).getTime() <= Date.now());
-  } catch (error: any) { errors.push(error?.message || 'epoch history failed'); }
-
-  throw new Error(errors.join(' · ') || `Fyers returned no current-session candles for ${symbol}`);
+  if (!best.length) throw new Error(errors.join(' · ') || `Fyers returned no historical candles for ${symbol}`);
+  return best;
 }
 
 brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Response, next) => {
@@ -98,24 +111,16 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
   const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
   const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '');
+  const requestedLimit = Number(req.query.limit || 25_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(25_000, Math.floor(requestedLimit))) : 25_000;
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {
-    if (interval === 'day') {
-      const adapter = BrokerRegistry.getAdapter('fyers');
-      const data = await adapter.getHistoricalData(session.token, symbol, interval);
-      const candles = Array.isArray(data) ? data : [];
-      if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} daily candle(s) for ${symbol}.` });
-      res.setHeader('Cache-Control', 'no-store');
-      return res.json({ success: true, data: candles });
-    }
-
-    const candles = await fetchFyersCurrentSession(session.token, symbol, interval);
-    if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} current-session candle(s) for ${symbol}.` });
-    res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, data: candles });
+    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit);
+    res.setHeader('Cache-Control', 'private, max-age=15');
+    return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `Unable to load current-session Fyers candles for ${symbol}` });
+    return res.status(502).json({ success: false, error: err?.message || `Unable to load Fyers historical candles for ${symbol}` });
   }
 });
 
@@ -127,7 +132,7 @@ brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: 
   try {
     const adapter = BrokerRegistry.getAdapter('fyers');
     const data = await adapter.getOptionChain(session.token, symbol, expiryDate);
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'private, max-age=5');
     return res.json({ success: true, data });
   } catch (err: any) {
     return res.status(502).json({ success: false, error: err?.message || 'Unable to load Fyers option chain' });
