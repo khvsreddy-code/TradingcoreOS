@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Settings2, Trash2, X } from 'lucide-react';
 import { IndicatorConfig, INDICATOR_LIBRARY } from '../../services/marketData/indicatorEngine';
-import { getIndicators, saveIndicators } from '../../services/workspace/workspaceState';
+import { defaultIndicators, getIndicators, saveIndicators } from '../../services/workspace/workspaceState';
 
 const fmtConfig = (x: IndicatorConfig) => {
   const parts: string[] = [];
@@ -11,6 +11,8 @@ const fmtConfig = (x: IndicatorConfig) => {
   if (x.smooth) parts.push(`S${x.smooth}`);
   return parts.join(' · ');
 };
+
+const defaultIds = new Set(defaultIndicators.map(x => x.id));
 
 export function IndicatorDock() {
   const [path, setPath] = useState(() => window.location.pathname);
@@ -37,6 +39,7 @@ export function IndicatorDock() {
   }, [path]);
 
   const active = useMemo(() => items.filter(x => x.enabled), [items]);
+  const managed = useMemo(() => items.filter(x => x.enabled || !defaultIds.has(x.id)), [items]);
   if (path !== '/live') return null;
 
   const commit = (next: IndicatorConfig[]) => {
@@ -50,15 +53,15 @@ export function IndicatorDock() {
   return <div className="fixed z-[80] top-[185px] right-[310px] max-w-[330px] font-mono text-[10px] max-[1500px]:right-4 max-[900px]:top-[120px] max-[900px]:right-3">
     {!open ? <button onClick={() => setOpen(true)} className="rounded-lg border border-[#222636] bg-[#0b0e15]/95 px-3 py-2 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#10b981]/50 hover:text-white"><span className="text-[#10b981]">●</span> STUDIES <b className="ml-1">{active.length}</b></button> :
       <div className="w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-[#2a3040] bg-[#0b0e15]/98 shadow-2xl backdrop-blur">
-        <div className="flex items-center justify-between border-b border-[#222636] px-3 py-2.5"><div><div className="text-[9px] uppercase tracking-widest text-[#64748b]">Chart studies</div><div className="mt-0.5 text-xs font-semibold text-white">{active.length} active</div></div><button onClick={() => { setOpen(false); setEditing(null); }} className="rounded-md p-1 text-[#64748b] hover:text-white"><X className="h-3.5 w-3.5"/></button></div>
+        <div className="flex items-center justify-between border-b border-[#222636] px-3 py-2.5"><div><div className="text-[9px] uppercase tracking-widest text-[#64748b]">Chart studies</div><div className="mt-0.5 text-xs font-semibold text-white">{active.length} active · {managed.length} added</div></div><button onClick={() => { setOpen(false); setEditing(null); }} className="rounded-md p-1 text-[#64748b] hover:text-white"><X className="h-3.5 w-3.5"/></button></div>
         <div className="max-h-[420px] overflow-y-auto p-2">
-          {active.length ? active.map(x => {
+          {managed.length ? managed.map(x => {
             const lib = INDICATOR_LIBRARY.find(l => l.kind === x.kind);
             const isEditing = editing === x.id;
-            return <div key={x.id} className="mb-1.5 rounded-lg border border-[#222636] bg-[#090c12] last:mb-0">
+            return <div key={x.id} className={`mb-1.5 rounded-lg border bg-[#090c12] last:mb-0 ${x.enabled ? 'border-[#222636]' : 'border-[#222636]/70 opacity-70'}`}>
               <div className="flex items-center gap-2 px-2.5 py-2">
-                <button onClick={() => patch(x.id, { enabled: false })} title="Hide study" className="text-[#10b981] hover:text-white"> <Eye className="h-3.5 w-3.5"/></button>
-                <button onClick={() => setEditing(isEditing ? null : x.id)} className="min-w-0 flex-1 text-left"><div className="truncate text-[10px] font-semibold text-[#e5e7eb]">{x.kind}</div><div className="mt-0.5 text-[8px] text-[#64748b]">{fmtConfig(x) || (lib?.overlay ? 'Overlay' : 'Pane')}</div></button>
+                <button onClick={() => patch(x.id, { enabled: !x.enabled })} title={x.enabled ? 'Hide study' : 'Show study'} className={x.enabled ? 'text-[#10b981] hover:text-white' : 'text-[#64748b] hover:text-white'}>{x.enabled ? <Eye className="h-3.5 w-3.5"/> : <EyeOff className="h-3.5 w-3.5"/>}</button>
+                <button onClick={() => setEditing(isEditing ? null : x.id)} className="min-w-0 flex-1 text-left"><div className="truncate text-[10px] font-semibold text-[#e5e7eb]">{x.kind}</div><div className="mt-0.5 text-[8px] text-[#64748b]">{x.enabled ? (fmtConfig(x) || (lib?.overlay ? 'Overlay' : 'Pane')) : 'Hidden · ' + (fmtConfig(x) || (lib?.overlay ? 'Overlay' : 'Pane'))}</div></button>
                 <button onClick={() => setEditing(isEditing ? null : x.id)} title="Settings" className={`rounded-md p-1.5 ${isEditing ? 'bg-[#10b981]/10 text-[#10b981]' : 'text-[#64748b] hover:text-white'}`}><Settings2 className="h-3.5 w-3.5"/></button>
                 <button onClick={() => remove(x.id)} title="Delete study" className="rounded-md p-1.5 text-[#64748b] hover:text-[#ef4444]"><Trash2 className="h-3.5 w-3.5"/></button>
               </div>
@@ -70,7 +73,7 @@ export function IndicatorDock() {
                 {x.kind === 'Ichimoku Cloud' && <><label>Conversion<input type="number" min="2" value={x.period ?? 9} onChange={e => patch(x.id, { period: Number(e.target.value) || 9 })} className="mt-1 w-full rounded border border-[#222636] bg-[#080a10] p-1.5 text-[10px] text-white outline-none"/></label><label>Base<input type="number" min="3" value={x.slow ?? 26} onChange={e => patch(x.id, { slow: Number(e.target.value) || 26 })} className="mt-1 w-full rounded border border-[#222636] bg-[#080a10] p-1.5 text-[10px] text-white outline-none"/></label></>}
               </div>}
             </div>;
-          }) : <div className="px-2 py-5 text-center text-[#64748b]">No active studies. Use + Indicator to add one.</div>}
+          }) : <div className="px-2 py-5 text-center text-[#64748b]">No active or user-added studies. Use + Indicator to add one.</div>}
         </div>
         <div className="flex items-center justify-between border-t border-[#222636] px-3 py-2 text-[8px] text-[#64748b]"><span>TradingView-style controls</span><button onClick={() => commit(items.map(x => ({ ...x, enabled: false })))} className="text-[#ef4444] hover:text-white">Hide all</button></div>
       </div>}
