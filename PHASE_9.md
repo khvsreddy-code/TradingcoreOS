@@ -1,0 +1,2 @@
+# Phase 9 — Alerts & Event Engine
+Implemented: persistent alert registry; price above/below and crossing; indicator threshold alerts; OI event alerts; level-event alerts; one-shot/recurring alerts; enable/disable/delete; bounded event history; server-side evaluation API; active-alert UI and history UI. Designed to be fed by the existing persistent market/OI/account hubs, rather than page refresh loops.
