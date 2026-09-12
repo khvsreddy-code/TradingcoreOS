@@ -4,7 +4,11 @@
   "regions": ["bom1"],
   "rewrites": [
     {
-      "source": "/:path((?!api/).*)",
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
