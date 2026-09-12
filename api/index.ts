@@ -1,5 +1,8 @@
 import app from '../server.js';
 
-// Vercel auto-detects TypeScript files under /api as Node.js Functions.
-// Keep the Express app as the default export; routing is handled by server.ts.
+// Single Express entrypoint for every /api/* route.
+// Vercel rewrites /api/* to this function so nested Express routes retain
+// their original request path and middleware context.
 export default app;
+
+export const config = { maxDuration: 60 };
