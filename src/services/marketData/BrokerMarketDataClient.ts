@@ -35,7 +35,17 @@ class BrokerMarketDataClient {
 
       try {
         const response = await tradingApi(`/api/trading/fyers/market-stream?instrument_keys=${encodeURIComponent(instrumentKeys.join(','))}${depthInstrumentKey ? `&depth_symbol=${encodeURIComponent(depthInstrumentKey)}` : ''}`, { signal: controller.signal });
-        if (!response.ok || !response.body) throw new Error(`FYERS market stream failed (${response.status})`);
+        if (!response.ok || !response.body) {
+          const body = await response.text().catch(() => '');
+          let detail = '';
+          try {
+            const parsed = JSON.parse(body);
+            detail = parsed?.error || parsed?.message || '';
+          } catch {
+            detail = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+          }
+          throw new Error(detail ? `FYERS market stream failed (${response.status}): ${detail}` : `FYERS market stream failed (${response.status})`);
+        }
         attempt = 0;
         listener({ type: 'status', status: 'connected' });
         const reader = response.body.getReader();
