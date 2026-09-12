@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { OAuthController } from '../../../../src/server/auth/OAuthController.js';
-import { requireUser, type AuthenticatedRequest } from '../../../../src/server/auth/requireUser.js';
+import { OAuthController } from '../../../src/server/auth/OAuthController.js';
+import { requireUser, type AuthenticatedRequest } from '../../../src/server/auth/requireUser.js';
 
 /**
  * Explicit Vercel Function for the broker OAuth login endpoint.
