@@ -20,6 +20,7 @@ import { BrokerConnectionRequiredPage } from './pages/BrokerConnectionRequiredPa
 import { BrokerCallbackPage } from './pages/BrokerCallbackPage';
 import { LegalPage } from './pages/LegalPage';
 import { LoadingScreen } from './components/common/LoadingScreen';
+import { BrokerRuntimeSwitcher } from './components/brokers/BrokerRuntimeSwitcher';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
 // Keep the landing shell small. Heavy workspace modules (especially the chart
@@ -168,7 +169,7 @@ function AppContent() {
       {workspacePath === '/indicators' && <IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
       {workspacePath === '/portfolio' && <PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
       {workspacePath === '/profile' && <ProfilePage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/live' && <FullWorkspaceView onBackToLanding={handleBackToLanding} onNavigateToBroker={() => navigate('/broker')} onNavigate={navigateWorkspace} />}
+      {workspacePath === '/live' && <><BrokerRuntimeSwitcher onConnect={() => navigate('/broker')} /><FullWorkspaceView onBackToLanding={handleBackToLanding} onNavigateToBroker={() => navigate('/broker')} onNavigate={navigateWorkspace} /></>}
     </Suspense>;
   }
 
