@@ -14,7 +14,9 @@ interface Session {
   connectGeneration: number;
   depthSymbols: Set<string>;
   reconnectTimer?: ReturnType<typeof setTimeout>;
-  pollTimer?: ReturnType<typeof setInterval>;
+  pollTimer?: ReturnType<typeof setTimeout>;
+  fallbackInFlight: boolean;
+  fallbackFailureCount: number;
   usingQuoteFallback: boolean;
 }
 
@@ -38,6 +40,8 @@ export class FyersMarketDataTransport {
         connectGeneration: 0,
         depthSymbols: new Set(),
         pollTimer: undefined,
+        fallbackInFlight: false,
+        fallbackFailureCount: 0,
         usingQuoteFallback: false,
       };
       this.sessions.set(userId, session);
@@ -66,7 +70,7 @@ export class FyersMarketDataTransport {
     if (!session) return;
     session.closing = true;
     clearTimeout(session.reconnectTimer);
-    if (session.pollTimer) clearInterval(session.pollTimer);
+    if (session.pollTimer) clearTimeout(session.pollTimer);
     session.pollTimer = undefined;
     session.socket?.close();
     this.sessions.delete(userId);
@@ -109,7 +113,8 @@ export class FyersMarketDataTransport {
       }
       session.reconnectAttempt = 0;
       session.usingQuoteFallback = false;
-      if (session.pollTimer) clearInterval(session.pollTimer);
+      session.fallbackFailureCount = 0;
+      if (session.pollTimer) clearTimeout(session.pollTimer);
       session.pollTimer = undefined;
       this.emit(session, { type: 'status', status: 'connected' });
       this.sendSubscribe(session, [...session.instruments], session.includeDepth, depthSymbols);
@@ -156,10 +161,18 @@ export class FyersMarketDataTransport {
   private static startQuoteFallback(session: Session): void {
     if (session.closing || session.usingQuoteFallback || !session.instruments.size) return;
     session.usingQuoteFallback = true;
-    if (session.pollTimer) clearInterval(session.pollTimer);
+    session.fallbackFailureCount = 0;
+    if (session.pollTimer) clearTimeout(session.pollTimer);
+
+    const schedule = (delayMs: number) => {
+      if (session.closing || !session.usingQuoteFallback || !session.instruments.size) return;
+      if (session.pollTimer) clearTimeout(session.pollTimer);
+      session.pollTimer = setTimeout(() => void poll(), delayMs);
+    };
 
     const poll = async () => {
-      if (session.closing || !session.instruments.size) return;
+      if (session.closing || !session.instruments.size || !session.usingQuoteFallback || session.fallbackInFlight) return;
+      session.fallbackInFlight = true;
       try {
         const symbols = [...session.instruments].join(',');
         const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(symbols)}`, {
@@ -188,17 +201,28 @@ export class FyersMarketDataTransport {
           });
           if (tick) { this.emit(session, { type: 'tick', tick }); emitted = true; }
         }
+        session.fallbackFailureCount = 0;
         if (emitted) this.emit(session, { type: 'status', status: 'connected' });
+        // Quotes are a resilience fallback, not the primary live feed. Polling
+        // every second was causing avoidable FYERS rate-limit exhaustion during
+        // websocket outages. Keep a modest 3s cadence and let websocket recovery
+        // take over immediately when it succeeds.
+        schedule(3000);
       } catch (error: any) {
         if (!session.closing) {
+          session.fallbackFailureCount += 1;
+          const message = error?.message || 'FYERS live quote fallback failed';
           this.emit(session, { type: 'status', status: 'reconnecting' });
-          this.emit(session, { type: 'error', error: error?.message || 'FYERS live quote fallback failed' });
+          this.emit(session, { type: 'error', error: message });
+          const backoff = Math.min(15000, 3000 * 2 ** Math.min(session.fallbackFailureCount - 1, 3));
+          schedule(backoff);
         }
+      } finally {
+        session.fallbackInFlight = false;
       }
     };
 
     void poll();
-    session.pollTimer = setInterval(() => void poll(), 1000);
   }
 
   private static scheduleReconnect(userId: string, session: Session, includeDepth = false): void {
