@@ -21,10 +21,6 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
       window.history.pushState({}, '', path);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }));
-    const style = document.createElement('style');
-    style.id = 'tco-workspace-nav-style';
-    style.textContent = `#tco-workspace-nav{border-top:1px solid #171b25;background:#0a0d13}.tco-nav-inner{height:34px;display:flex;align-items:center;gap:2px;padding:0 10px;overflow:auto}.tco-nav-btn{height:25px;padding:0 12px;border:1px solid transparent;border-radius:5px;background:transparent;color:#697388;font:700 9px/25px JetBrains Mono,monospace;letter-spacing:.08em;white-space:nowrap;cursor:pointer}.tco-nav-btn:hover{color:#d1d5db;background:#11151e}.tco-nav-btn.active{color:#10b981;border-color:#10b98133;background:#10b9810d}`;
-    document.head.appendChild(style);
   }
 
   const underlyingFor = (label: string) => {
@@ -38,18 +34,18 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
   };
 
   const instrument = () => {
-    const text = document.body.innerText;
-    const m = text.match(/NIFTY 50|BANK NIFTY|FINNIFTY|MIDCAP SELECT|SENSEX/i);
-    const label = m?.[0] || '';
-    return { label, underlying: underlyingFor(label), isIndex: Boolean(underlyingFor(label)) };
+    // Use the selected chart header, not the watchlist body text. The watchlist
+    // always contains NIFTY, so body-wide matching misclassified stocks as index options.
+    const candidates = qa<HTMLButtonElement>('main section button');
+    const selected = candidates.find(button => /·\s*(Index|Stock|Equity|Future|Option|Instrument)/i.test(button.textContent || '') && !(button.textContent || '').includes('LIVE ORDER'));
+    const text = selected?.textContent?.trim() || '';
+    const match = text.match(/^(.+?)\s*·\s*(Index|Stock|Equity|Future|Option|Instrument)/i);
+    const label = (match?.[1] || text).trim();
+    const type = (match?.[2] || '').trim();
+    const underlying = underlyingFor(label);
+    return { label, type, underlying, isIndex: Boolean(underlying) || /^index$/i.test(type) };
   };
 
-  const nativeValue = (el: HTMLInputElement | HTMLSelectElement, value: string) => {
-    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  };
   const mk = (tag: 'input' | 'select', placeholder = '') => {
     const el = document.createElement(tag) as HTMLInputElement | HTMLSelectElement;
     el.className = 'tco-q2-control';
@@ -58,10 +54,7 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
   };
   const sel = (values: string[]) => { const s = mk('select') as HTMLSelectElement; values.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; s.appendChild(o); }); return s; };
 
-  async function loadChain(key: string) {
-    const data = await tradingCoreRuntime.getOptionChain(key, 'current_week');
-    return data as any;
-  }
+  async function loadChain(key: string) { return await tradingCoreRuntime.getOptionChain(key, 'current_week') as any; }
 
   function chooseContract(data: any, side: 'CE' | 'PE', mode: string) {
     const rows = Array.isArray(data?.contracts) ? data.contracts : [];
@@ -94,20 +87,20 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
   }
 
   function renderOrder() {
-    const p = panel();
-    if (!p) return;
+    const p = panel(); if (!p) return;
     let ui = q<HTMLElement>('[data-tco-q2]', p);
     if (!ui) { ui = document.createElement('div'); ui.dataset.tcoQ2 = '1'; p.appendChild(ui); }
-    if (ui.dataset.signature === `${instrument().label}` && ui.children.length) return;
-    ui.dataset.signature = instrument().label;
+    const current = instrument();
+    const signature = `${current.label}|${current.type}`;
+    if (ui.dataset.signature === signature && ui.children.length) return;
+    ui.dataset.signature = signature;
     qa<HTMLElement>(':scope > *', p).forEach(x => { if (x !== ui) x.style.display = 'none'; });
-    ui.innerHTML = '';
-    ui.className = 'tco-q2';
-    const { label, underlying, isIndex } = instrument();
+    ui.innerHTML = ''; ui.className = 'tco-q2';
+    const { label, underlying, isIndex } = current;
     const title = document.createElement('div'); title.className = 'tco-q2-title'; title.innerHTML = `<span>${isIndex ? 'OPTION ORDER' : 'CASH ORDER'}</span><b>${label || 'SELECTED INSTRUMENT'}</b>`; ui.appendChild(title);
 
     let cepe: HTMLSelectElement | undefined, mode: HTMLSelectElement | undefined;
-    if (isIndex) { const row = document.createElement('div'); row.className = 'tco-q2-grid'; cepe = sel(['CE', 'PE']); mode = sel(['ATM', 'ITM +1', 'ITM +2', 'ITM +3', 'OTM +1', 'OTM +2', 'OTM +3']); row.append(cepe, mode); ui.appendChild(row); }
+    if (isIndex && underlying) { const row = document.createElement('div'); row.className = 'tco-q2-grid'; cepe = sel(['CE', 'PE']); mode = sel(['ATM', 'ITM +1', 'ITM +2', 'ITM +3', 'OTM +1', 'OTM +2', 'OTM +3']); row.append(cepe, mode); ui.appendChild(row); }
     const side = sel(['Buy', 'Sell']); const orderType = sel(['Market', 'Limit', 'SL-L', 'SL-M']);
     const row1 = document.createElement('div'); row1.className = 'tco-q2-grid'; row1.append(side, orderType); ui.appendChild(row1);
     const qty = mk('input', 'Quantity') as HTMLInputElement; qty.value = '1'; qty.min = '1';
@@ -155,10 +148,8 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
         idempotencyKey: globalThis.crypto.randomUUID(),
       } as any;
       status.textContent = 'Submitting…'; submit.disabled = true;
-      try {
-        const result = await tradingCoreRuntime.placeOrder(order);
-        status.textContent = `${result.status} · ${result.orderId || ''}${result.message ? ` · ${result.message}` : ''}`;
-      } catch (e: any) { status.textContent = `REJECTED · ${e?.message || 'Order failed'}`; }
+      try { const result = await tradingCoreRuntime.placeOrder(order); status.textContent = `${result.status} · ${result.orderId || ''}${result.message ? ` · ${result.message}` : ''}`; }
+      catch (e: any) { status.textContent = `REJECTED · ${e?.message || 'Order failed'}`; }
       finally { submit.disabled = false; }
     });
     void refresh();
