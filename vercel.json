@@ -4,7 +4,18 @@
   "regions": ["bom1"],
   "rewrites": [
     { "source": "/api", "destination": "/api/index" },
-    { "source": "/api/:path*", "destination": "/api/index" }
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/auth/broker-callback", "destination": "/" },
+    { "source": "/broker", "destination": "/" },
+    { "source": "/dashboard", "destination": "/" },
+    { "source": "/live", "destination": "/" },
+    { "source": "/models", "destination": "/" },
+    { "source": "/automations", "destination": "/" },
+    { "source": "/indicators", "destination": "/" },
+    { "source": "/portfolio", "destination": "/" },
+    { "source": "/profile", "destination": "/" },
+    { "source": "/privacy", "destination": "/" },
+    { "source": "/terms", "destination": "/" }
   ],
   "functions": {
     "api/index.ts": {
