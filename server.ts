@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { brokerRoutes } from './src/server/routes/broker.routes.js';
+import { instrumentSearchPriorityRoutes } from './src/server/routes/instrument-search-priority.routes.js';
 import { workspaceFixRoutes } from './src/server/routes/workspace-fix.routes.js';
 import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
 import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
@@ -42,6 +43,9 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth/broker', brokerRoutes);
+// The prioritized FYERS search route must run before the broader workspace-fix
+// search route so plain "nifty" ranks NIFTY 50 ahead of FINNIFTY.
+app.use('/api/trading', instrumentSearchPriorityRoutes);
 // Workspace-fix routes must run before the legacy market-data routes so their
 // improved suggestions and option-chain normalization win deterministically.
 app.use('/api/trading', workspaceFixRoutes);
