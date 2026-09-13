@@ -184,6 +184,51 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   box-shadow: 0 0 0 4px rgba(52,211,153,.08), 0 0 14px rgba(52,211,153,.45);
 }
 
+/* TradingView-style desktop watchlist rail injected by workspaceHotfix.ts. */
+.tco-watchlist-source-hidden { display: none !important; }
+.tco-watchlist-rail {
+  margin: -4px -4px 14px;
+  padding: 9px;
+  border: 1px solid #222636;
+  border-radius: 12px;
+  background: #0c0e15;
+}
+.tco-watchlist-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 3px 8px;
+  font: 700 9px/1 'JetBrains Mono', monospace;
+  letter-spacing: .14em;
+  color: #64748b;
+}
+.tco-watchlist-live { color: #10b981; font-size: 8px; letter-spacing: .04em; }
+.tco-watchlist-item,
+.tco-watchlist-add {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 9px;
+  border: 1px solid #1d2330;
+  border-radius: 8px;
+  background: #090c12;
+  color: #d1d5db;
+  text-align: left;
+  font: 500 9px/1.35 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.tco-watchlist-item:hover { border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.05); }
+.tco-watchlist-remove { position: absolute; right: 7px; top: 5px; color: #64748b; font-size: 13px; }
+.tco-watchlist-remove:hover { color: #ef4444; }
+.tco-watchlist-add { border-style: dashed; color: #64748b; text-align: center; }
+.tco-watchlist-add:hover { border-color: rgba(16,185,129,.35); color: #10b981; }
+@media (max-width: 1535px) {
+  .tco-watchlist-rail { display: none !important; }
+  .tco-watchlist-source-hidden { display: flex !important; }
+}
+
 @media (max-width: 900px) {
   .hero-title { letter-spacing: -.055em; }
   .terminal-shell { border-radius: 16px; }
