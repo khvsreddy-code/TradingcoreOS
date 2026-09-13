@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { brokerRoutes } from './src/server/routes/broker.routes.js';
+import { workspaceFixRoutes } from './src/server/routes/workspace-fix.routes.js';
 import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
 import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
 import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
@@ -41,6 +42,9 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth/broker', brokerRoutes);
+// Workspace-fix routes must run before the legacy market-data routes so their
+// improved suggestions and option-chain normalization win deterministically.
+app.use('/api/trading', workspaceFixRoutes);
 // Broker-specific routes must run before generic adapter routes.
 // Historical routes are deliberately mounted before brokerMarketDataRoutes so
 // the quota-safe implementations take precedence over legacy adapter paths.
