@@ -16,7 +16,6 @@ interface FeedSession {
   closing: boolean;
   connectGeneration: number;
 }
-/** 
 
 /** One shared upstream Upstox V3 connection per authenticated TradingCore user. */
 export class UpstoxMarketDataTransport {
@@ -25,7 +24,7 @@ export class UpstoxMarketDataTransport {
   static subscribe(userId: string, accessToken: string, instrumentKeys: string[], listener: Listener, mode: 'full' | 'full_d30' = 'full'): () => void {
     let session = this.sessions.get(userId);
     if (!session) {
-      session = { instruments: new Set(), listeners: new Set(), status: 'disconnected', reconnectAttempt: 0, accessToken, closing: false, connectGeneration: 0, mode }; 
+      session = { instruments: new Set(), listeners: new Set(), status: 'disconnected', reconnectAttempt: 0, accessToken, closing: false, connectGeneration: 0, mode };
       this.sessions.set(userId, session);
     }
     session.accessToken = accessToken;
@@ -78,10 +77,7 @@ export class UpstoxMarketDataTransport {
       const socket = new WebSocket(endpoint, { followRedirects: true });
       session.socket = socket;
       socket.on('open', () => {
-        if (generation !== session.connectGeneration || session.closing) {
-          try { socket.close(); } catch {}
-          return;
-        }
+        if (generation !== session.connectGeneration || session.closing) { try { socket.close(); } catch {} return; }
         session.reconnectAttempt = 0;
         this.setStatus(session, 'connected');
         this.sendSubscription(session, 'sub', [...session.instruments]);
@@ -90,7 +86,6 @@ export class UpstoxMarketDataTransport {
         try { this.handleMessage(session, Buffer.isBuffer(message) ? message : Buffer.from(message as ArrayBuffer)); }
         catch { this.emit(session, { type: 'error', error: 'Malformed Upstox feed message was ignored' }); }
       });
-
       socket.on('error', () => undefined);
       socket.on('close', (code, reason) => {
         if (generation !== session.connectGeneration) return;
