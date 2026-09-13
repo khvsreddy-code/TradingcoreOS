@@ -23,7 +23,7 @@ export interface DynamicLevelSettings {
 }
 
 export const DEFAULT_DYNAMIC_LEVEL_SETTINGS: DynamicLevelSettings = {
-  enabled: false,
+  enabled: true,
   pivotLength: 10,
   lookbackPeriod: 800,
   maxLevelsPerType: 30,
@@ -49,9 +49,7 @@ export function getDynamicLevelSettings(): DynamicLevelSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_DYNAMIC_LEVEL_SETTINGS };
     return { ...DEFAULT_DYNAMIC_LEVEL_SETTINGS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_DYNAMIC_LEVEL_SETTINGS };
-  }
+  } catch { return { ...DEFAULT_DYNAMIC_LEVEL_SETTINGS }; }
 }
 
 export function saveDynamicLevelSettings(value: DynamicLevelSettings) {
