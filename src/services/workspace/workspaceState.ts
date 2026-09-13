@@ -1,7 +1,7 @@
 import { IndicatorConfig, defaultIndicatorStyle } from '../marketData/indicatorEngine';
 export type AutomationMode = 'Paper' | 'Live' | 'Off';
 export type AutomationConfig = { id:string; name:string; description:string; mode:AutomationMode; enabled:boolean; kind:'VWAP_RECLAIM'|'EMA_CROSS'|'OPENING_RANGE'|'RSI_REVERSAL'|'DONCHIAN_BREAKOUT'|'SUPERTREND_FLIP'|'BOLLINGER_BREAKOUT'|'CPR_BREAKOUT'|'PDH_PDL_SWEEP'; period?:number; fast?:number; slow?:number; multiplier?:number };
-const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='indicator-settings-v2';
+const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='indicator-settings-v3';
 
 export const defaultIndicators: IndicatorConfig[] = [
  {id:'ema20',kind:'EMA',period:20,enabled:false}, {id:'vwap',kind:'VWAP',enabled:false},
@@ -21,7 +21,8 @@ export const defaultIndicators: IndicatorConfig[] = [
  {id:'fvg-mit',kind:'FVG + Mitigation',enabled:false}, {id:'ob-mit',kind:'Order Blocks + Mitigation',period:5,enabled:false}, {id:'break-retest',kind:'Breakout / Retest',period:5,enabled:false},
  {id:'failed-break',kind:'Failed Breakout',period:5,enabled:false}, {id:'rejection',kind:'Rejection Candles',enabled:false}, {id:'inside',kind:'Inside Bar Breakout',enabled:false},
  {id:'engulf',kind:'Engulfing Patterns',enabled:false}, {id:'pinbars',kind:'Pin Bars',enabled:false}, {id:'nr7',kind:'NR7 Volatility Contraction',enabled:false},
- {id:'developing-day',kind:'Developing Day High/Low',enabled:false}, {id:'vwap-dev',kind:'VWAP Deviation Bands',multiplier:1,enabled:false}, {id:'avwap',kind:'Anchored VWAP',period:5,enabled:false},
+ {id:'developing-day',kind:'Developing Day High/Low',enabled:false}, {id:'vwap-dev',kind:'VWAP Deviation Bands',multiplier:1,enabled:false},
+ {id:'avwap',kind:'Anchored VWAP',anchor:'Swing High',enabled:false},
  {id:'cpr-extended',kind:'CPR R1-R5 / S1-S5',enabled:false}, {id:'camarilla',kind:'Camarilla Pivots',enabled:false}, {id:'fib-pivots',kind:'Fibonacci Pivots',enabled:false},
  {id:'weekly-pivots',kind:'Weekly Pivots',enabled:false}, {id:'monthly-pivots',kind:'Monthly Pivots',enabled:false},
 ];
@@ -39,14 +40,12 @@ export const defaultAutomations: AutomationConfig[] = [
 ];
 
 function read<T>(key:string, fallback:T):T { try { const x=localStorage.getItem(key); return x?JSON.parse(x):fallback; } catch{return fallback;} }
-
 let indicatorStateCache: IndicatorConfig[] | null = null;
-
 const normalizeIndicator=(item: IndicatorConfig): IndicatorConfig => {
   const style=defaultIndicatorStyle(item.kind);
-  return { ...item, source: item.source || (item.kind === 'VWAP' || item.kind === 'CCI' || item.kind === 'MFI' ? 'hlc3' : 'close'), color: item.color || style.color, lineWidth: item.lineWidth || style.lineWidth, lineStyle: item.lineStyle ?? style.lineStyle };
+  const anchor=(item as IndicatorConfig & {anchor?:string}).anchor;
+  return { ...item, source: item.source || (item.kind === 'VWAP' || item.kind === 'CCI' || item.kind === 'MFI' ? 'hlc3' : 'close'), color: item.color || style.color, lineWidth: item.lineWidth || style.lineWidth, lineStyle: item.lineStyle ?? style.lineStyle, ...(item.kind === 'Anchored VWAP' ? {anchor: anchor || 'Swing High'} : {}) };
 };
-
 export const getIndicators=()=>{
   if (indicatorStateCache) return indicatorStateCache;
   const stored=read<IndicatorConfig[]|null>(IND,null);
@@ -56,7 +55,6 @@ export const getIndicators=()=>{
   localStorage.setItem(`${IND}:version`,IND_VERSION);
   return indicatorStateCache;
 };
-
 export const saveIndicators=(v:IndicatorConfig[])=>{
   const cache=getIndicators();
   cache.splice(0,cache.length,...v.map(normalizeIndicator));
