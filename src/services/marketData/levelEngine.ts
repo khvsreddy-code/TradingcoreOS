@@ -1,6 +1,7 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 
 export type CoreLevelState = 'ACTIVE' | 'TESTING' | 'BROKEN';
+export type CoreLevelSource = 'SWING' | 'SESSION' | 'OPENING_RANGE' | 'EQUAL_HL' | 'PREVIOUS_CLOSE';
 
 export interface CoreLevel {
   side: 'support' | 'resistance';
@@ -9,7 +10,10 @@ export interface CoreLevel {
   state: CoreLevelState;
   distance: number;
   tests: number;
-  source: 'SWING' | 'SESSION' | 'OPENING_RANGE' | 'EQUAL_HL' | 'PREVIOUS_CLOSE';
+  source: CoreLevelSource;
+  reactionAtr: number;
+  rejectionRatio: number;
+  volumeRatio: number;
 }
 
 export interface ChartAnalytics {
@@ -26,17 +30,32 @@ export interface ChartAnalytics {
   bias: 'BULLISH' | 'BEARISH' | 'RANGE';
 }
 
+type Candidate = {
+  price: number;
+  touches: number;
+  source: CoreLevelSource;
+  reactionAtr: number;
+  rejectionRatio: number;
+  volumeRatio: number;
+  anchor: boolean;
+};
+
 const round = (n: number) => Math.round(n * 100) / 100;
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
 function atr14(candles: HistoricalCandle[]): number {
   if (candles.length < 2) return 0;
-  const tr = candles.slice(1).map((c, i) => {
-    const prev = candles[i].close;
+  const tr = candles.map((c, i) => {
+    if (i === 0) return Math.max(0, c.high - c.low);
+    const prev = candles[i - 1].close;
     return Math.max(c.high - c.low, Math.abs(c.high - prev), Math.abs(c.low - prev));
   });
-  const window = tr.slice(-14);
-  return window.reduce((a, b) => a + b, 0) / Math.max(1, window.length);
+  const period = Math.min(14, tr.length);
+  if (period <= 0) return 0;
+  let value = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < tr.length; i++) value = ((value * (period - 1)) + tr[i]) / period;
+  return value;
 }
 
 function sessionBuckets(candles: HistoricalCandle[]) {
@@ -50,61 +69,118 @@ function sessionBuckets(candles: HistoricalCandle[]) {
   return [...map.values()].sort((a, b) => new Date(a[0].timestamp).getTime() - new Date(b[0].timestamp).getTime());
 }
 
-function pivotLevels(candles: HistoricalCandle[]) {
-  const lows: number[] = [];
-  const highs: number[] = [];
-  for (let i = 2; i < candles.length - 2; i++) {
+function pivotLevels(candles: HistoricalCandle[], span = 5) {
+  const lows: Array<{ index: number; price: number }> = [];
+  const highs: Array<{ index: number; price: number }> = [];
+  if (candles.length < span * 2 + 1) return { lows, highs };
+  for (let i = span; i < candles.length - span; i++) {
     const c = candles[i];
-    const lowPivot = c.low <= candles[i - 1].low && c.low <= candles[i - 2].low && c.low <= candles[i + 1].low && c.low <= candles[i + 2].low;
-    const highPivot = c.high >= candles[i - 1].high && c.high >= candles[i - 2].high && c.high >= candles[i + 1].high && c.high >= candles[i + 2].high;
-    if (lowPivot) lows.push(c.low);
-    if (highPivot) highs.push(c.high);
+    let lowPivot = true;
+    let highPivot = true;
+    for (let j = 1; j <= span; j++) {
+      if (c.low > candles[i - j].low || c.low > candles[i + j].low) lowPivot = false;
+      if (c.high < candles[i - j].high || c.high < candles[i + j].high) highPivot = false;
+      if (!lowPivot && !highPivot) break;
+    }
+    if (lowPivot) lows.push({ index: i, price: c.low });
+    if (highPivot) highs.push({ index: i, price: c.high });
   }
   return { lows, highs };
 }
 
-function cluster(values: number[], tolerance: number) {
-  const sorted = values.filter(finite).sort((a, b) => a - b);
-  const groups: number[][] = [];
+function cluster(values: Array<{ index: number; price: number }>, tolerance: number) {
+  const sorted = values.filter(x => finite(x.price)).sort((a, b) => a.price - b.price);
+  const groups: Array<Array<{ index: number; price: number }>> = [];
   for (const value of sorted) {
     const group = groups[groups.length - 1];
-    if (group && Math.abs(value - group[group.length - 1]) <= tolerance) group.push(value);
+    if (group && Math.abs(value.price - group[group.length - 1].price) <= tolerance) group.push(value);
     else groups.push([value]);
   }
   return groups.map(group => ({
-    price: group.reduce((a, b) => a + b, 0) / group.length,
+    price: group.reduce((a, b) => a + b.price, 0) / group.length,
     touches: group.length,
+    latestIndex: Math.max(...group.map(x => x.index)),
   }));
 }
 
-function nearestDistinct(
-  values: Array<{ price: number; touches: number; source: CoreLevel['source'] }>,
-  spot: number,
-  side: 'support' | 'resistance',
-  minGap: number,
-  limit = 4,
-) {
-  const filtered = values
-    .filter(x => finite(x.price) && (side === 'support' ? x.price < spot : x.price > spot))
-    .sort((a, b) => side === 'support' ? b.price - a.price : a.price - b.price);
-  const out: Array<{ price: number; touches: number; source: CoreLevel['source'] }> = [];
-  for (const value of filtered) {
-    if (out.every(x => Math.abs(x.price - value.price) >= minGap)) {
-      out.push(value);
-      if (out.length >= limit) break;
-    }
+function meanVolume(candles: HistoricalCandle[], endIndex: number, period = 20) {
+  const start = Math.max(0, endIndex - period + 1);
+  const values = candles.slice(start, endIndex + 1).map(c => Math.max(0, c.volume || 0)).filter(v => v > 0);
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
+function pivotReaction(candles: HistoricalCandle[], pivotIndex: number, side: 'support' | 'resistance', atr: number) {
+  if (!atr || pivotIndex >= candles.length - 1) return 0;
+  const end = Math.min(candles.length - 1, pivotIndex + 8);
+  let excursion = 0;
+  for (let i = pivotIndex + 1; i <= end; i++) {
+    excursion = Math.max(excursion, side === 'support'
+      ? candles[i].high - candles[pivotIndex].low
+      : candles[pivotIndex].high - candles[i].low);
   }
-  return out;
+  return clamp(excursion / atr, 0, 5);
+}
+
+function rejectionRatio(c: HistoricalCandle, side: 'support' | 'resistance') {
+  const range = Math.max(c.high - c.low, Number.EPSILON);
+  const body = Math.abs(c.close - c.open);
+  const wick = side === 'support'
+    ? Math.min(c.open, c.close) - c.low
+    : c.high - Math.max(c.open, c.close);
+  return clamp(wick / range, 0, 1) * (wick > body ? 1 : 0.5);
+}
+
+function candidatePriority(c: Candidate) {
+  const sourcePriority: Record<CoreLevelSource, number> = {
+    SESSION: 5,
+    PREVIOUS_CLOSE: 5,
+    OPENING_RANGE: 5,
+    EQUAL_HL: 4,
+    SWING: 1,
+  };
+  return [c.anchor ? 1 : 0, sourcePriority[c.source], c.touches, c.reactionAtr, c.rejectionRatio, c.volumeRatio];
+}
+
+function compareCandidate(a: Candidate, b: Candidate) {
+  const pa = candidatePriority(a);
+  const pb = candidatePriority(b);
+  for (let i = 0; i < pa.length; i++) {
+    if (pa[i] !== pb[i]) return pb[i] - pa[i];
+  }
+  return 0;
+}
+
+function mergeCandidates(candidates: Candidate[], tolerance: number, spot: number, side: 'support' | 'resistance') {
+  const relevant = candidates
+    .filter(c => side === 'support' ? c.price < spot : c.price > spot)
+    .sort((a, b) => side === 'support' ? b.price - a.price : a.price - b.price);
+  const groups: Candidate[][] = [];
+  for (const candidate of relevant) {
+    const group = groups.find(g => Math.abs(g[0].price - candidate.price) <= tolerance);
+    if (group) group.push(candidate);
+    else groups.push([candidate]);
+  }
+  return groups.map(group => {
+    const best = [...group].sort(compareCandidate)[0];
+    const touchSum = group.reduce((sum, x) => sum + x.touches, 0);
+    const weightSum = group.reduce((sum, x) => sum + Math.max(1, x.touches), 0);
+    return {
+      ...best,
+      price: group.reduce((sum, x) => sum + x.price * Math.max(1, x.touches), 0) / weightSum,
+      touches: touchSum,
+    };
+  });
+}
+
+function passesEvidence(candidate: Candidate) {
+  return candidate.anchor || candidate.touches >= 2 || candidate.reactionAtr >= 0.75 || candidate.rejectionRatio >= 0.45;
 }
 
 /**
- * Price-action level engine.
- *
- * Support/resistance is built only from observable OHLC structure:
- * confirmed swing pivots, previous-session extremes, previous close,
- * current opening-range extremes, and clustered equal highs/lows.
- * VWAP remains an informational statistic but is deliberately excluded from
- * the support/resistance set.
+ * Quantitative price-action level engine.
+ * Raw OHLC structure creates the candidate price. Wilder ATR, volatility-normalized
+ * reaction, rejection geometry and real-volume participation only validate/normalize
+ * that candidate. No directional indicator voting or synthetic confidence score is used.
  */
 export function buildChartAnalytics(candles: HistoricalCandle[], spot: number): ChartAnalytics {
   if (!candles.length || !finite(spot) || spot <= 0) {
@@ -124,7 +200,6 @@ export function buildChartAnalytics(candles: HistoricalCandle[], spot: number): 
   const openingHigh = opening.length ? Math.max(...opening.map(c => c.high)) : dayHigh;
   const openingLow = opening.length ? Math.min(...opening.map(c => c.low)) : dayLow;
 
-  // VWAP is retained for the dashboard only. It never creates a price-action level.
   let pv = 0;
   let vv = 0;
   for (const c of currentSession) {
@@ -133,57 +208,81 @@ export function buildChartAnalytics(candles: HistoricalCandle[], spot: number): 
     vv += volume;
   }
   const vwap = vv > 0 ? pv / vv : currentSession[currentSession.length - 1]?.close || spot;
-  const atr = atr14(candles);
-  const minGap = Math.max(atr * 0.35, spot * 0.00045, 1);
-  const clusterTolerance = Math.max(atr * 0.18, spot * 0.00025, 1);
 
-  // Use the current session when enough candles exist; otherwise use the most
-  // recent 180 candles so the level engine still has confirmed structure.
-  const structure = currentSession.length >= 20 ? currentSession : candles.slice(-180);
-  const pivots = pivotLevels(structure);
+  const atr = atr14(candles);
+  const safeAtr = Math.max(atr, spot * 0.0002, Number.EPSILON);
+  const recent = candles.slice(-5);
+  const shortTr = recent.length ? recent.reduce((sum, c, i) => {
+    const globalIndex = candles.length - recent.length + i;
+    const prev = globalIndex > 0 ? candles[globalIndex - 1].close : c.close;
+    return sum + Math.max(c.high - c.low, Math.abs(c.high - prev), Math.abs(c.low - prev));
+  }, 0) / recent.length : safeAtr;
+  const volatilityRatio = shortTr / safeAtr;
+  const mergeDistance = safeAtr * clamp(0.24 + volatilityRatio * 0.10, 0.28, 0.60);
+  const clusterTolerance = safeAtr * clamp(0.12 + volatilityRatio * 0.04, 0.14, 0.24);
+
+  const structure = candles.slice(-240);
+  const pivots = pivotLevels(structure, 5);
   const lowClusters = cluster(pivots.lows, clusterTolerance);
   const highClusters = cluster(pivots.highs, clusterTolerance);
 
-  const candidatesSupport: Array<{ price: number; touches: number; source: CoreLevel['source'] }> = [];
-  const candidatesResistance: Array<{ price: number; touches: number; source: CoreLevel['source'] }> = [];
+  const supports: Candidate[] = [];
+  const resistances: Candidate[] = [];
 
-  for (const p of lowClusters) candidatesSupport.push({ price: p.price, touches: p.touches, source: p.touches >= 2 ? 'EQUAL_HL' : 'SWING' });
-  for (const p of highClusters) candidatesResistance.push({ price: p.price, touches: p.touches, source: p.touches >= 2 ? 'EQUAL_HL' : 'SWING' });
-
-  if (finite(previousLow)) candidatesSupport.push({ price: previousLow, touches: 1, source: 'SESSION' });
-  if (finite(previousHigh)) candidatesResistance.push({ price: previousHigh, touches: 1, source: 'SESSION' });
-  if (finite(previousClose)) {
-    if (previousClose < spot) candidatesSupport.push({ price: previousClose, touches: 1, source: 'PREVIOUS_CLOSE' });
-    if (previousClose > spot) candidatesResistance.push({ price: previousClose, touches: 1, source: 'PREVIOUS_CLOSE' });
+  for (const p of lowClusters) {
+    const source: CoreLevelSource = p.touches >= 2 ? 'EQUAL_HL' : 'SWING';
+    const candle = structure[p.latestIndex];
+    const avgVol = meanVolume(structure, p.latestIndex);
+    const volRatio = avgVol > 0 && (candle.volume || 0) > 0 ? (candle.volume || 0) / avgVol : 0;
+    supports.push({ price: p.price, touches: p.touches, source, reactionAtr: round(pivotReaction(structure, p.latestIndex, 'support', safeAtr)), rejectionRatio: round(rejectionRatio(candle, 'support')), volumeRatio: round(volRatio), anchor: false });
   }
-  if (finite(openingLow)) candidatesSupport.push({ price: openingLow, touches: 1, source: 'OPENING_RANGE' });
-  if (finite(openingHigh)) candidatesResistance.push({ price: openingHigh, touches: 1, source: 'OPENING_RANGE' });
-  if (finite(dayLow)) candidatesSupport.push({ price: dayLow, touches: 1, source: 'SESSION' });
-  if (finite(dayHigh)) candidatesResistance.push({ price: dayHigh, touches: 1, source: 'SESSION' });
+  for (const p of highClusters) {
+    const source: CoreLevelSource = p.touches >= 2 ? 'EQUAL_HL' : 'SWING';
+    const candle = structure[p.latestIndex];
+    const avgVol = meanVolume(structure, p.latestIndex);
+    const volRatio = avgVol > 0 && (candle.volume || 0) > 0 ? (candle.volume || 0) / avgVol : 0;
+    resistances.push({ price: p.price, touches: p.touches, source, reactionAtr: round(pivotReaction(structure, p.latestIndex, 'resistance', safeAtr)), rejectionRatio: round(rejectionRatio(candle, 'resistance')), volumeRatio: round(volRatio), anchor: false });
+  }
 
-  const supports = nearestDistinct(candidatesSupport, spot, 'support', minGap);
-  const resistances = nearestDistinct(candidatesResistance, spot, 'resistance', minGap);
+  const addAnchor = (price: number | undefined, side: 'support' | 'resistance', source: CoreLevelSource) => {
+    if (!finite(price)) return;
+    (side === 'support' ? supports : resistances).push({ price, touches: 1, source, reactionAtr: 0, rejectionRatio: 0, volumeRatio: 0, anchor: true });
+  };
+  addAnchor(previousLow, 'support', 'SESSION');
+  addAnchor(previousHigh, 'resistance', 'SESSION');
+  if (finite(previousClose)) {
+    if (previousClose < spot) addAnchor(previousClose, 'support', 'PREVIOUS_CLOSE');
+    if (previousClose > spot) addAnchor(previousClose, 'resistance', 'PREVIOUS_CLOSE');
+  }
+  addAnchor(openingLow, 'support', 'OPENING_RANGE');
+  addAnchor(openingHigh, 'resistance', 'OPENING_RANGE');
+  addAnchor(dayLow, 'support', 'SESSION');
+  addAnchor(dayHigh, 'resistance', 'SESSION');
 
-  const build = (levels: Array<{ price: number; touches: number; source: CoreLevel['source'] }>, side: 'support' | 'resistance'): CoreLevel[] => levels.map(level => {
-    const testTolerance = Math.max(atr * 0.22, spot * 0.0003, 1);
+  const mergedSupport = mergeCandidates(supports.filter(passesEvidence), mergeDistance, spot, 'support').slice(0, 3);
+  const mergedResistance = mergeCandidates(resistances.filter(passesEvidence), mergeDistance, spot, 'resistance').slice(0, 3);
+
+  const build = (levels: Candidate[], side: 'support' | 'resistance'): CoreLevel[] => levels.map(level => {
+    const testTolerance = Math.max(safeAtr * 0.20, spot * 0.00025);
+    const distance = Math.abs(spot - level.price);
     const broken = side === 'support' ? spot < level.price - testTolerance : spot > level.price + testTolerance;
-    const testing = Math.abs(spot - level.price) <= Math.max(atr * 0.35, spot * 0.0005, 1);
+    const testing = distance <= Math.max(safeAtr * 0.30, spot * 0.00045);
     return {
       side,
       price: round(level.price),
-      // Structural field is an observable touch count, not a synthetic confidence score.
       structural: level.touches,
       state: broken ? 'BROKEN' : testing ? 'TESTING' : 'ACTIVE',
-      distance: round(Math.abs(spot - level.price)),
+      distance: round(distance),
       tests: level.touches,
       source: level.source,
+      reactionAtr: level.reactionAtr,
+      rejectionRatio: level.rejectionRatio,
+      volumeRatio: level.volumeRatio,
     };
   });
 
-  // Simple price-action bias for the existing dashboard: last confirmed swing
-  // relationship plus session location. It does not affect level selection.
-  const recentLows = pivots.lows.slice(-3);
-  const recentHighs = pivots.highs.slice(-3);
+  const recentLows = pivots.lows.slice(-3).map(x => x.price);
+  const recentHighs = pivots.highs.slice(-3).map(x => x.price);
   const higherStructure = recentHighs.length >= 2 && recentLows.length >= 2 && recentHighs[recentHighs.length - 1] > recentHighs[recentHighs.length - 2] && recentLows[recentLows.length - 1] > recentLows[recentLows.length - 2];
   const lowerStructure = recentHighs.length >= 2 && recentLows.length >= 2 && recentHighs[recentHighs.length - 1] < recentHighs[recentHighs.length - 2] && recentLows[recentLows.length - 1] < recentLows[recentLows.length - 2];
   const bias = higherStructure && spot >= openingHigh ? 'BULLISH' : lowerStructure && spot <= openingLow ? 'BEARISH' : 'RANGE';
@@ -193,8 +292,8 @@ export function buildChartAnalytics(candles: HistoricalCandle[], spot: number): 
     previousHigh: round(previousHigh), previousLow: round(previousLow),
     openingHigh: round(openingHigh), openingLow: round(openingLow),
     dayHigh: round(dayHigh), dayLow: round(dayLow),
-    support: build(supports, 'support'),
-    resistance: build(resistances, 'resistance'),
+    support: build(mergedSupport, 'support'),
+    resistance: build(mergedResistance, 'resistance'),
     bias,
   };
 }
