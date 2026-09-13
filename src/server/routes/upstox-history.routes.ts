@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
+import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 
 /**
  * Upstox V3 historical candles have broker-enforced date windows:
@@ -36,6 +37,9 @@ function normalizeCandles(rows: any[], limit: number): any[] {
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, candle]) => candle).slice(-limit);
 }
 
+const cache = new Map<string, { expiresAt: number; data: any[] }>();
+const inflight = new Map<string, Promise<any[]>>();
+
 upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'upstox') return next();
   const userId = req.tradingCoreUserId!;
@@ -49,19 +53,46 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
   const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(10_000, Math.floor(requestedLimit))) : 10_000;
   if (!config || !instrumentKey) { res.status(400).json({ success: false, error: 'instrument_key and a supported interval are required' }); return; }
 
+  const key = `${userId}:upstox:${instrumentKey}:${interval}:${limit}`;
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.setHeader('Cache-Control', 'private, max-age=20');
+    res.json({ success: true, data: cached.data, requested: limit, returned: cached.data.length, cached: true });
+    return;
+  }
+  const existing = inflight.get(key);
+  if (existing) {
+    try {
+      const data = await existing;
+      res.setHeader('Cache-Control', 'private, max-age=20');
+      res.json({ success: true, data, requested: limit, returned: data.length, cached: true });
+    } catch (error: any) {
+      res.status(502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles' });
+    }
+    return;
+  }
+
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const to = new Date();
-    const from = new Date(to.getTime() - config.lookbackDays * 86_400_000);
-    const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(to)}/${isoDate(from)}`;
-    const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
-    const payload = await response.json();
-    if (!response.ok || payload?.status === 'error') return res.status(502).json({ success: false, error: payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})` });
-    const candles = normalizeCandles(payload?.data?.candles || [], limit);
-    if (candles.length < 2) return res.status(502).json({ success: false, error: `Upstox returned only ${candles.length} valid candle(s).` });
-    res.setHeader('Cache-Control', 'private, max-age=10');
+    const task = withBrokerRequestGate('upstox', accessToken, async () => {
+      const to = new Date();
+      const from = new Date(to.getTime() - config.lookbackDays * 86_400_000);
+      const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(to)}/${isoDate(from)}`;
+      const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
+      const payload = await response.json();
+      if (!response.ok || payload?.status === 'error') throw new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`);
+      const candles = normalizeCandles(payload?.data?.candles || [], limit);
+      if (candles.length < 2) throw new Error(`Upstox returned only ${candles.length} valid candle(s).`);
+      cache.set(key, { data: candles, expiresAt: Date.now() + 120_000 });
+      return candles;
+    });
+    inflight.set(key, task);
+    const candles = await task;
+    res.setHeader('Cache-Control', 'private, max-age=20');
     return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
   } catch (error: any) {
     return res.status(502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles' });
+  } finally {
+    inflight.delete(key);
   }
 });
