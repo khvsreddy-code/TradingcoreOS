@@ -245,9 +245,33 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .tct-chartbody .min-h-\[430px\] { height: 100% !important; flex: 1 1 auto !important; }
 .tct-chartbody .min-h-\[360px\] { height: 100% !important; }
 
-@media (max-width: 900px) {
+/* Watchlist rename control: keep it inside the watchlist header area, never over the ticker search box. */
+.tc5-rename {
+  left: 218px !important;
+  top: 151px !important;
+  width: 31px !important;
+  height: 31px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  font-size: 0 !important;
+  z-index: 301 !important;
+}
+.tc5-rename::after { content: '✎'; font-size: 13px; line-height: 1; }
+.tc5-rename-modal {
+  left: 8px !important;
+  top: 194px !important;
+  width: min(230px, calc(100vw - 20px)) !important;
+  z-index: 1001 !important;
+}
+
+@media (max-width: 1000px) {
   .hero-title { letter-spacing: -.055em; }
   .terminal-shell { border-radius: 16px; }
+  .tc5-rename { left: 178px !important; top: 151px !important; }
+  .tc5-rename-modal { left: 8px !important; top: 194px !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
