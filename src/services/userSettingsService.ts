@@ -1,6 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from './auth/supabaseClient';
 
-const BLOCKED_KEY = /(?:supabase|access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|client[_-]?secret|api[_-]?secret|private[_-]?key|password|credential)/i;
+const BLOCKED_KEY = /(?:supabase|fyers|upstox).*(?:token|secret|credential|password|private|api[_-]?key)|(?:access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|client[_-]?secret|api[_-]?secret|private[_-]?key|password|credential)/i;
 const INTERNAL_KEYS = new Set(['tc_user_settings_sync']);
 
 function collectLocalSettings(): Record<string, unknown> {
@@ -20,9 +20,7 @@ function collectLocalSettings(): Record<string, unknown> {
 function restoreLocalSettings(settings: Record<string, unknown>) {
   Object.entries(settings || {}).forEach(([key, value]) => {
     if (INTERNAL_KEYS.has(key) || BLOCKED_KEY.test(key)) return;
-    try {
-      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-    } catch { /* ignore quota/serialization errors */ }
+    try { localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value)); } catch { /* ignore quota/serialization errors */ }
   });
 }
 
