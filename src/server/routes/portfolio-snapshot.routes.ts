@@ -14,9 +14,9 @@ const inflight = new Map<string, Promise<any>>();
 /**
  * Portfolio sync used to fire funds + holdings + positions + orders + trades
  * concurrently. That is five broker REST requests at the exact same instant.
- * Serialize them through the broker request gate and cache the resulting
+ * Serialize each broker call through the request gate and cache the resulting
  * snapshot briefly. This keeps FYERS comfortably below its documented limits
- * and also prevents duplicate React polling loops from multiplying requests.
+ * and prevents duplicate React polling loops from multiplying requests.
  */
 portfolioSnapshotRoutes.get('/:brokerId/portfolio-snapshot', async (req: AuthenticatedRequest, res: Response, next) => {
   const brokerId = String(req.params.brokerId || '').toLowerCase();
@@ -49,17 +49,20 @@ portfolioSnapshotRoutes.get('/:brokerId/portfolio-snapshot', async (req: Authent
     const adapter = BrokerRegistry.getAdapter(brokerId);
     if (!adapter) { res.status(400).json({ success: false, error: 'Unknown broker ID' }); return; }
 
-    const task = withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, async () => {
+    const task = (async () => {
       const data: Record<string, unknown> = {};
-      // Sequential by design. The gate also spaces each broker request.
-      try { data.funds = await adapter.getFunds(token); } catch { data.funds = null; }
-      try { data.holdings = await adapter.getHoldings(token); } catch { data.holdings = []; }
-      try { data.positions = await adapter.getPositions(token); } catch { data.positions = []; }
-      try { data.orders = await adapter.getOrders(token); } catch { data.orders = []; }
-      try { data.trades = await adapter.getTrades(token); } catch { data.trades = []; }
+      // Each individual broker REST call enters the gate separately. Holding
+      // one gate slot for the entire snapshot would still allow the five
+      // upstream calls to burst together.
+      try { data.funds = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getFunds(token)); } catch { data.funds = null; }
+      try { data.holdings = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getHoldings(token)); } catch { data.holdings = []; }
+      try { data.positions = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getPositions(token)); } catch { data.positions = []; }
+      try { data.orders = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getOrders(token)); } catch { data.orders = []; }
+      try { data.trades = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getTrades(token)); } catch { data.trades = []; }
       cache.set(key, { data, expiresAt: Date.now() + 10_000 });
       return data;
-    });
+    })();
+
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=5');
