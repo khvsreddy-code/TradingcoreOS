@@ -23,7 +23,7 @@ import { LoadingScreen } from './components/common/LoadingScreen';
 import { BrokerRuntimeSwitcher } from './components/brokers/BrokerRuntimeSwitcher';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
-const FullWorkspaceView = lazy(() => import('./components/workspace/FullWorkspaceView').then(m => ({ default: m.FullWorkspaceView })));
+const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminal').then(m => ({ default: m.LiveTradingTerminal })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(m => ({ default: m.ModelsPage })));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
@@ -157,7 +157,7 @@ function AppContent() {
       {workspacePath === '/indicators' && <IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
       {workspacePath === '/portfolio' && <PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
       {workspacePath === '/profile' && <ProfilePage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/live' && (hasConnectedBroker ? <><BrokerRuntimeSwitcher onConnect={() => navigate('/broker')} /><FullWorkspaceView onBackToLanding={handleBackToLanding} onNavigateToBroker={() => navigate('/broker')} onNavigate={navigateWorkspace} /></> : <BrokerConnectionRequiredPage onBack={() => navigate('/dashboard')} onBrokerConnected={() => { setHasConnectedBroker(true); navigate('/live'); }} />)}
+      {workspacePath === '/live' && (hasConnectedBroker ? <><BrokerRuntimeSwitcher onConnect={() => navigate('/broker')} /><LiveTradingTerminal /></> : <BrokerConnectionRequiredPage onBack={() => navigate('/dashboard')} onBrokerConnected={() => { setHasConnectedBroker(true); navigate('/live'); }} />)}
     </Suspense></RouteErrorBoundary>;
   }
 
