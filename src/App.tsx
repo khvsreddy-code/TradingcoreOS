@@ -23,7 +23,7 @@ import { LoadingScreen } from './components/common/LoadingScreen';
 import { BrokerRuntimeSwitcher } from './components/brokers/BrokerRuntimeSwitcher';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
-const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminalV4').then(m => ({ default: m.LiveTradingTerminalV4 })));
+const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminalV5').then(m => ({ default: m.LiveTradingTerminalV5 })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(m => ({ default: m.ModelsPage })));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
