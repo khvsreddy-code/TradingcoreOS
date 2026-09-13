@@ -10,6 +10,16 @@ function focusedChart() {
   return { symbol: (el?.querySelector('select') as HTMLSelectElement | null)?.value || '', label: (el?.querySelector('strong') as HTMLElement | null)?.textContent || '' };
 }
 
+function upstoxUnderlyingKey(symbol: string, label: string): string {
+  const text = `${symbol} ${label}`.toUpperCase().replace(/\s+/g, ' ').trim();
+  if (text.includes('NIFTY BANK') || text.includes('BANK NIFTY')) return 'NSE_INDEX|Nifty Bank';
+  if (text.includes('FINNIFTY') || text.includes('NIFTY FIN SERVICE') || text.includes('NIFTY FINANCIAL')) return 'NSE_INDEX|Nifty Fin Service';
+  if (text.includes('MIDCP') || text.includes('NIFTY MIDCAP')) return 'NSE_INDEX|Nifty Midcap Select';
+  if (text.includes('SENSEX')) return 'BSE_INDEX|SENSEX';
+  if (text.includes('NIFTY')) return 'NSE_INDEX|Nifty 50';
+  return symbol;
+}
+
 type Risk = { quantity: number; target: string; stopLoss: string; trailing: string };
 type Props = { busy: boolean; message: string; pinned: boolean; onPin: () => void; onClose: () => void; onSubmit: (side: OrderRequest['side'], symbol: string, extra?: any) => void };
 
@@ -22,17 +32,28 @@ export function AdvancedOrderTicket({ busy, message, onSubmit }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   useEffect(() => { const id = window.setInterval(() => setMeta(focusedChart()), 500); return () => window.clearInterval(id); }, []);
+  const brokerId = tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() || '';
   const isIndex = /NIFTY|SENSEX|FINNIFTY|MIDCP/i.test(`${meta.label} ${meta.symbol}`); const isOption = /(?:CE|PE)$/i.test(meta.symbol) || /OPTION/i.test(meta.label); const isFuture = /(?:FUT)$/i.test(meta.symbol) || /FUTURE/i.test(meta.label); const segment = isIndex ? 'INDEX' : isFuture ? 'FUTURE' : isOption ? 'OPTION' : 'EQUITY';
+  const optionUnderlying = brokerId === 'upstox' ? upstoxUnderlyingKey(meta.symbol, meta.label) : meta.symbol;
 
-  useEffect(() => { let dead = false; if (!isIndex || !meta.symbol) { setData(null); return () => { dead = true; }; } tradingCoreRuntime.getOptionChain(meta.symbol).then(x => { if (!dead) setData(x); }).catch(() => { if (!dead) setData({ error: 'Option chain unavailable' }); }); return () => { dead = true; }; }, [meta.symbol, isIndex]);
+  useEffect(() => {
+    let dead = false;
+    if (!isIndex || !meta.symbol) { setData(null); return () => { dead = true; }; }
+    setData(null);
+    tradingCoreRuntime.getOptionChain(optionUnderlying).then(x => { if (!dead) setData(x); }).catch((error: any) => {
+      if (!dead) setData({ error: error?.message || 'Option chain unavailable' });
+    });
+    return () => { dead = true; };
+  }, [meta.symbol, meta.label, isIndex, optionUnderlying]);
+
   const rows = Array.isArray(data?.contracts) ? data.contracts : Array.isArray(data) ? data : []; const spot = n(data?.spot ?? data?.underlyingPrice);
   const sortedStrikes = useMemo(() => rows.map((r: any) => n(r.strike ?? r.strikePrice)).filter(Boolean).sort((a: number, b: number) => a - b), [rows]);
   const atm = useMemo(() => sortedStrikes.reduce((best: number, strike: number) => !best || Math.abs(strike - spot) < Math.abs(best - spot) ? strike : best, 0), [sortedStrikes, spot]);
   useEffect(() => { if (!rows.length) return; const row = rows.find((x: any) => n(x.strike ?? x.strikePrice) === atm) || rows[0]; const call = row?.call; const put = row?.put; if (call) { setCe(call.instrumentKey || call.symbol || ''); const lot = n(call.lotSize) || n(put?.lotSize) || 1; setCeRisk(x => ({ ...x, quantity: x.quantity === 1 ? lot : x.quantity })); } if (put) { setPe(put.instrumentKey || put.symbol || ''); const lot = n(put.lotSize) || n(call?.lotSize) || 1; setPeRisk(x => ({ ...x, quantity: x.quantity === 1 ? lot : x.quantity })); } }, [data, atm, rows.length]);
 
   const findContract = (side: 'CE' | 'PE', selected: string) => { for (const row of rows) { const contract = side === 'CE' ? row.call : row.put; const key = contract?.instrumentKey || contract?.symbol; if (key === selected) return { row, contract }; } return { row: null, contract: null }; };
-  const submitStock = (side: OrderRequest['side']) => { if (!meta.symbol) return; onSubmit(side, meta.symbol, { quantity: stockQty, price: stockPrice, triggerPrice: stockTrigger, orderType, product, validity, target: stockRisk.target, stopLoss: stockRisk.stopLoss, trailing: stockRisk.trailing }); };
-  const submitOption = (side: 'CE' | 'PE', tradeSide: OrderRequest['side']) => { const selected = side === 'CE' ? ce : pe; const risk = side === 'CE' ? ceRisk : peRisk; if (!selected) return; onSubmit(tradeSide, selected, { quantity: risk.quantity, price: stockPrice, triggerPrice: stockTrigger, orderType, product, validity, target: risk.target, stopLoss: risk.stopLoss, trailing: risk.trailing }); };
+  const submitStock = (side: OrderRequest['side']) => { if (!meta.symbol) return; onSubmit(side, meta.symbol, { quantity: stockQty, price: stockPrice, triggerPrice: stockTrigger, orderType, product, validity, target: stockRisk.target, stopLoss: stockRisk.stopLoss, trailing: stockRisk.trailing, instrumentToken: meta.symbol }); };
+  const submitOption = (side: 'CE' | 'PE', tradeSide: OrderRequest['side']) => { const selected = side === 'CE' ? ce : pe; const risk = side === 'CE' ? ceRisk : peRisk; if (!selected) return; onSubmit(tradeSide, selected, { quantity: risk.quantity, price: stockPrice, triggerPrice: stockTrigger, orderType, product, validity, target: risk.target, stopLoss: risk.stopLoss, trailing: risk.trailing, instrumentToken: selected }); };
   const renderRisk = (risk: Risk, setRisk: (fn: (x: Risk) => Risk) => void) => <div className="aot-risk-grid"><div><label>Target</label><input placeholder="₹ / points" value={risk.target} onChange={e => setRisk(x => ({ ...x, target: e.target.value }))} /></div><div><label>Stop loss</label><input placeholder="₹ / points" value={risk.stopLoss} onChange={e => setRisk(x => ({ ...x, stopLoss: e.target.value }))} /></div><div><label>Trailing SL</label><input placeholder="₹ / points" value={risk.trailing} onChange={e => setRisk(x => ({ ...x, trailing: e.target.value }))} /></div></div>;
   const renderOptionLeg = (side: 'CE' | 'PE', selected: string, setSelected: (v: string) => void, risk: Risk, setRisk: (fn: (x: Risk) => Risk) => void) => { const found = findContract(side, selected); const contract = found.contract; const strike = n(found.row?.strike ?? found.row?.strikePrice); return <div className="aot-leg"><div className="aot-leg-head"><div><b>{side}</b><small>{strike ? `${strike} strike` : 'Select strike'}</small></div><strong>₹{money(contract?.ltp ?? contract?.lastPrice)}</strong></div><label>Strike</label><select value={selected} onChange={e => setSelected(e.target.value)}>{rows.map((row: any) => { const z = side === 'CE' ? row.call : row.put; const key = z?.instrumentKey || z?.symbol; if (!key) return null; return <option key={key} value={key}>{n(row.strike ?? row.strikePrice)} {side} · ₹{money(z.ltp ?? z.lastPrice)}</option>; })}</select><div className="aot-two"><div><label>Quantity / lots</label><input type="number" min="1" value={risk.quantity} onChange={e => setRisk(x => ({ ...x, quantity: Math.max(1, n(e.target.value)) }))} /></div><div><label>Lot size</label><input readOnly value={n(contract?.lotSize) || '—'} /></div></div>{renderRisk(risk, setRisk)}<div className="aot-actions"><button className="aot-buy" disabled={busy || !selected} onClick={() => submitOption(side, 'Buy')}>BUY {side}</button><button className="aot-sell" disabled={busy || !selected} onClick={() => submitOption(side, 'Sell')}>SELL {side}</button></div></div>; };
 
