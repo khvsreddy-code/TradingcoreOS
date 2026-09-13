@@ -5,24 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TradingCore — Browser Trading Operating System</title>
     <script>
-      (function() {
-        try {
-          var originalFetch = window.fetch;
-          var _fetch = originalFetch;
-          Object.defineProperty(window, 'fetch', {
-            get: function() {
-              return _fetch;
-            },
-            set: function(v) {
-              _fetch = v;
-            },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) {
-          // ignore
-        }
-      })();
+      window.addEventListener('vite:preloadError', function (event) {
+        event.preventDefault();
+        window.location.reload();
+      });
     </script>
   </head>
   <body>
@@ -30,4 +16,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
