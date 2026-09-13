@@ -9,7 +9,7 @@ export interface CoreLevel {
   state: CoreLevelState;
   distance: number;
   tests: number;
-  source: 'SWING' | 'SESSION' | 'RANGE' | 'VWAP';
+  source: 'SWING' | 'SESSION' | 'OPENING_RANGE' | 'EQUAL_HL' | 'PREVIOUS_CLOSE';
 }
 
 export interface ChartAnalytics {
@@ -27,6 +27,7 @@ export interface ChartAnalytics {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
 function atr14(candles: HistoricalCandle[]): number {
   if (candles.length < 2) return 0;
@@ -49,79 +50,151 @@ function sessionBuckets(candles: HistoricalCandle[]) {
   return [...map.values()].sort((a, b) => new Date(a[0].timestamp).getTime() - new Date(b[0].timestamp).getTime());
 }
 
-function nearestDistinct(values: number[], spot: number, side: 'support' | 'resistance', minGap: number, limit = 4) {
+function pivotLevels(candles: HistoricalCandle[]) {
+  const lows: number[] = [];
+  const highs: number[] = [];
+  for (let i = 2; i < candles.length - 2; i++) {
+    const c = candles[i];
+    const lowPivot = c.low <= candles[i - 1].low && c.low <= candles[i - 2].low && c.low <= candles[i + 1].low && c.low <= candles[i + 2].low;
+    const highPivot = c.high >= candles[i - 1].high && c.high >= candles[i - 2].high && c.high >= candles[i + 1].high && c.high >= candles[i + 2].high;
+    if (lowPivot) lows.push(c.low);
+    if (highPivot) highs.push(c.high);
+  }
+  return { lows, highs };
+}
+
+function cluster(values: number[], tolerance: number) {
+  const sorted = values.filter(finite).sort((a, b) => a - b);
+  const groups: number[][] = [];
+  for (const value of sorted) {
+    const group = groups[groups.length - 1];
+    if (group && Math.abs(value - group[group.length - 1]) <= tolerance) group.push(value);
+    else groups.push([value]);
+  }
+  return groups.map(group => ({
+    price: group.reduce((a, b) => a + b, 0) / group.length,
+    touches: group.length,
+  }));
+}
+
+function nearestDistinct(
+  values: Array<{ price: number; touches: number; source: CoreLevel['source'] }>,
+  spot: number,
+  side: 'support' | 'resistance',
+  minGap: number,
+  limit = 4,
+) {
   const filtered = values
-    .filter(Number.isFinite)
-    .filter(v => side === 'support' ? v < spot : v > spot)
-    .sort((a, b) => side === 'support' ? b - a : a - b);
-  const out: number[] = [];
-  for (const v of filtered) {
-    if (out.every(x => Math.abs(x - v) >= minGap)) {
-      out.push(v);
+    .filter(x => finite(x.price) && (side === 'support' ? x.price < spot : x.price > spot))
+    .sort((a, b) => side === 'support' ? b.price - a.price : a.price - b.price);
+  const out: Array<{ price: number; touches: number; source: CoreLevel['source'] }> = [];
+  for (const value of filtered) {
+    if (out.every(x => Math.abs(x.price - value.price) >= minGap)) {
+      out.push(value);
       if (out.length >= limit) break;
     }
   }
   return out;
 }
 
-/** Lightweight browser-safe adaptation of the TradingCoreOS level blueprint. */
+/**
+ * Price-action level engine.
+ *
+ * Support/resistance is built only from observable OHLC structure:
+ * confirmed swing pivots, previous-session extremes, previous close,
+ * current opening-range extremes, and clustered equal highs/lows.
+ * VWAP remains an informational statistic but is deliberately excluded from
+ * the support/resistance set.
+ */
 export function buildChartAnalytics(candles: HistoricalCandle[], spot: number): ChartAnalytics {
-  if (!candles.length || !spot) {
+  if (!candles.length || !finite(spot) || spot <= 0) {
     return { vwap: 0, atr: 0, previousHigh: 0, previousLow: 0, openingHigh: 0, openingLow: 0, dayHigh: 0, dayLow: 0, support: [], resistance: [], bias: 'RANGE' };
   }
 
   const sessions = sessionBuckets(candles);
-  const current = sessions[sessions.length - 1] || candles;
-  const previous = sessions[sessions.length - 2] || [];
-  const todayStart = new Date(current[0].timestamp).getTime();
-  const currentSession = candles.filter(c => new Date(c.timestamp).getTime() >= todayStart);
+  const currentSession = sessions[sessions.length - 1] || candles;
+  const previousSession = sessions[sessions.length - 2] || [];
   const opening = currentSession.slice(0, Math.min(3, currentSession.length));
+
   const dayHigh = Math.max(...currentSession.map(c => c.high), spot);
   const dayLow = Math.min(...currentSession.map(c => c.low), spot);
-  const previousHigh = previous.length ? Math.max(...previous.map(c => c.high)) : dayHigh;
-  const previousLow = previous.length ? Math.min(...previous.map(c => c.low)) : dayLow;
+  const previousHigh = previousSession.length ? Math.max(...previousSession.map(c => c.high)) : dayHigh;
+  const previousLow = previousSession.length ? Math.min(...previousSession.map(c => c.low)) : dayLow;
+  const previousClose = previousSession.length ? previousSession[previousSession.length - 1].close : undefined;
   const openingHigh = opening.length ? Math.max(...opening.map(c => c.high)) : dayHigh;
   const openingLow = opening.length ? Math.min(...opening.map(c => c.low)) : dayLow;
 
-  let pv = 0, vv = 0;
+  // VWAP is retained for the dashboard only. It never creates a price-action level.
+  let pv = 0;
+  let vv = 0;
   for (const c of currentSession) {
-    const typical = (c.high + c.low + c.close) / 3;
     const volume = Math.max(0, c.volume || 0);
-    pv += typical * volume;
+    pv += ((c.high + c.low + c.close) / 3) * volume;
     vv += volume;
   }
   const vwap = vv > 0 ? pv / vv : currentSession[currentSession.length - 1]?.close || spot;
   const atr = atr14(candles);
   const minGap = Math.max(atr * 0.35, spot * 0.00045, 1);
+  const clusterTolerance = Math.max(atr * 0.18, spot * 0.00025, 1);
 
-  const swingsSupport: number[] = [];
-  const swingsResistance: number[] = [];
-  const source = currentSession.length > 8 ? currentSession : candles.slice(-120);
-  for (let i = 2; i < source.length - 2; i++) {
-    const c = source[i];
-    if (c.low <= source[i - 1].low && c.low <= source[i - 2].low && c.low <= source[i + 1].low && c.low <= source[i + 2].low) swingsSupport.push(c.low);
-    if (c.high >= source[i - 1].high && c.high >= source[i - 2].high && c.high >= source[i + 1].high && c.high >= source[i + 2].high) swingsResistance.push(c.high);
+  // Use the current session when enough candles exist; otherwise use the most
+  // recent 180 candles so the level engine still has confirmed structure.
+  const structure = currentSession.length >= 20 ? currentSession : candles.slice(-180);
+  const pivots = pivotLevels(structure);
+  const lowClusters = cluster(pivots.lows, clusterTolerance);
+  const highClusters = cluster(pivots.highs, clusterTolerance);
+
+  const candidatesSupport: Array<{ price: number; touches: number; source: CoreLevel['source'] }> = [];
+  const candidatesResistance: Array<{ price: number; touches: number; source: CoreLevel['source'] }> = [];
+
+  for (const p of lowClusters) candidatesSupport.push({ price: p.price, touches: p.touches, source: p.touches >= 2 ? 'EQUAL_HL' : 'SWING' });
+  for (const p of highClusters) candidatesResistance.push({ price: p.price, touches: p.touches, source: p.touches >= 2 ? 'EQUAL_HL' : 'SWING' });
+
+  if (finite(previousLow)) candidatesSupport.push({ price: previousLow, touches: 1, source: 'SESSION' });
+  if (finite(previousHigh)) candidatesResistance.push({ price: previousHigh, touches: 1, source: 'SESSION' });
+  if (finite(previousClose)) {
+    if (previousClose < spot) candidatesSupport.push({ price: previousClose, touches: 1, source: 'PREVIOUS_CLOSE' });
+    if (previousClose > spot) candidatesResistance.push({ price: previousClose, touches: 1, source: 'PREVIOUS_CLOSE' });
   }
+  if (finite(openingLow)) candidatesSupport.push({ price: openingLow, touches: 1, source: 'OPENING_RANGE' });
+  if (finite(openingHigh)) candidatesResistance.push({ price: openingHigh, touches: 1, source: 'OPENING_RANGE' });
+  if (finite(dayLow)) candidatesSupport.push({ price: dayLow, touches: 1, source: 'SESSION' });
+  if (finite(dayHigh)) candidatesResistance.push({ price: dayHigh, touches: 1, source: 'SESSION' });
 
-  const supports = nearestDistinct([...swingsSupport, previousLow, openingLow, dayLow, vwap - Math.max(atr * 0.5, minGap)], spot, 'support', minGap);
-  const resistances = nearestDistinct([...swingsResistance, previousHigh, openingHigh, dayHigh, vwap + Math.max(atr * 0.5, minGap)], spot, 'resistance', minGap);
+  const supports = nearestDistinct(candidatesSupport, spot, 'support', minGap);
+  const resistances = nearestDistinct(candidatesResistance, spot, 'resistance', minGap);
 
-  const build = (prices: number[], side: 'support' | 'resistance'): CoreLevel[] => prices.map((price) => {
-    const tolerance = Math.max(atr * 0.12, spot * 0.00025, 1);
-    const touches = source.filter(c => Math.abs((side === 'support' ? c.low : c.high) - price) <= tolerance).length;
-    const broken = side === 'support' ? spot < price - tolerance : spot > price + tolerance;
-    const testing = Math.abs(spot - price) <= Math.max(atr * 0.35, spot * 0.0005);
+  const build = (levels: Array<{ price: number; touches: number; source: CoreLevel['source'] }>, side: 'support' | 'resistance'): CoreLevel[] => levels.map(level => {
+    const testTolerance = Math.max(atr * 0.22, spot * 0.0003, 1);
+    const broken = side === 'support' ? spot < level.price - testTolerance : spot > level.price + testTolerance;
+    const testing = Math.abs(spot - level.price) <= Math.max(atr * 0.35, spot * 0.0005, 1);
     return {
-      side, price: round(price), structural: round(price), distance: round(Math.abs(spot - price)),
-      tests: touches, state: broken ? 'BROKEN' : testing ? 'TESTING' : 'ACTIVE',
-      source: price === previousHigh || price === previousLow ? 'SESSION' : price === openingHigh || price === openingLow ? 'RANGE' : 'SWING'
+      side,
+      price: round(level.price),
+      // Structural field is an observable touch count, not a synthetic confidence score.
+      structural: level.touches,
+      state: broken ? 'BROKEN' : testing ? 'TESTING' : 'ACTIVE',
+      distance: round(Math.abs(spot - level.price)),
+      tests: level.touches,
+      source: level.source,
     };
   });
 
-  const support = build(supports, 'support');
-  const resistance = build(resistances, 'resistance');
-  const score = (spot > vwap ? 1 : -1) + (spot > openingHigh ? 1 : spot < openingLow ? -1 : 0) + (spot > previousHigh ? 1 : spot < previousLow ? -1 : 0);
-  const bias = score >= 2 ? 'BULLISH' : score <= -2 ? 'BEARISH' : 'RANGE';
+  // Simple price-action bias for the existing dashboard: last confirmed swing
+  // relationship plus session location. It does not affect level selection.
+  const recentLows = pivots.lows.slice(-3);
+  const recentHighs = pivots.highs.slice(-3);
+  const higherStructure = recentHighs.length >= 2 && recentLows.length >= 2 && recentHighs[recentHighs.length - 1] > recentHighs[recentHighs.length - 2] && recentLows[recentLows.length - 1] > recentLows[recentLows.length - 2];
+  const lowerStructure = recentHighs.length >= 2 && recentLows.length >= 2 && recentHighs[recentHighs.length - 1] < recentHighs[recentHighs.length - 2] && recentLows[recentLows.length - 1] < recentLows[recentLows.length - 2];
+  const bias = higherStructure && spot >= openingHigh ? 'BULLISH' : lowerStructure && spot <= openingLow ? 'BEARISH' : 'RANGE';
 
-  return { vwap: round(vwap), atr: round(atr), previousHigh: round(previousHigh), previousLow: round(previousLow), openingHigh: round(openingHigh), openingLow: round(openingLow), dayHigh: round(dayHigh), dayLow: round(dayLow), support, resistance, bias };
+  return {
+    vwap: round(vwap), atr: round(atr),
+    previousHigh: round(previousHigh), previousLow: round(previousLow),
+    openingHigh: round(openingHigh), openingLow: round(openingLow),
+    dayHigh: round(dayHigh), dayLow: round(dayLow),
+    support: build(supports, 'support'),
+    resistance: build(resistances, 'resistance'),
+    bias,
+  };
 }
