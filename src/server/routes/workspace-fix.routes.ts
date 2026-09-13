@@ -235,10 +235,16 @@ workspaceFixRoutes.get('/:brokerId/option-chain', async (req: AuthenticatedReque
     const broker = BrokerRegistry.getAdapter(brokerId);
     const underlying = brokerId === 'fyers' ? normalizeFyersUnderlying(rawKey) : rawKey;
     const expiry = String(req.query.expiry_date || 'current_week');
-    const data = await broker.getOptionChain(token, underlying, expiry);
-    if (!data || !Array.isArray(data.contracts) || !data.contracts.length) {
+    const rawData = await broker.getOptionChain(token, underlying, expiry);
+    if (!rawData || !Array.isArray(rawData.contracts) || !rawData.contracts.length) {
       throw new Error('Broker returned an empty option chain. Check that the selected symbol is F&O-enabled and the expiry is active.');
     }
+    const contracts = rawData.contracts.map((contract: any) => ({
+      ...contract,
+      call: contract.call ? { ...contract.call, oiChange: Number(contract.call.oi || 0) - Number(contract.call.previousOi ?? contract.call.oi ?? 0) } : contract.call,
+      put: contract.put ? { ...contract.put, oiChange: Number(contract.put.oi || 0) - Number(contract.put.previousOi ?? contract.put.oi ?? 0) } : contract.put,
+    }));
+    const data = { ...rawData, contracts };
     return res.json({ success: true, data: { ...data, analytics: optionAnalytics(data) } });
   } catch (err: any) {
     return res.status(502).json({ success: false, error: err?.message || `Unable to load ${brokerId} option chain` });
