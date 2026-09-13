@@ -21,7 +21,7 @@ const css = `
 .tc5-rename{position:fixed;left:8px;top:76px;width:205px;height:34px;z-index:300;cursor:pointer;background:#0b0e15;color:#cbd5e1;border:1px solid #252b38;border-radius:7px;text-align:left;padding:6px 9px}
 .tc5-rename-modal{position:fixed;left:12px;top:120px;width:290px;z-index:1000;background:#0b0e15;color:#e5e7eb;border:1px solid #303747;border-radius:9px;padding:12px;box-shadow:0 20px 60px #000d}
 .tc5-rename-modal input{width:100%;box-sizing:border-box;background:#11151f;color:#fff;border:1px solid #252b38;border-radius:6px;padding:8px}
-.tc5-backdrop{position:fixed;inset:0;z-index:500;background:#0007;backdrop-filter:blur(1px)}
+.tc5-backdrop{position:fixed;inset:0;z-index:500;background:transparent;backdrop-filter:none}
 .tc5-window{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(900px,calc(100vw - 32px));height:min(620px,calc(100vh - 110px));min-width:420px;min-height:260px;max-width:calc(100vw - 20px);max-height:calc(100vh - 40px);z-index:510;display:flex;flex-direction:column;overflow:hidden;resize:both;background:#080a0f;color:#e5e7eb;border:1px solid #3a4354;border-radius:10px;box-shadow:0 28px 90px #000e}
 .tc5-head{height:42px;min-height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#0e121a;border-bottom:1px solid #252b38;user-select:none;cursor:grab}.tc5-head:active{cursor:grabbing}
 .tc5-head b{font:700 11px ui-monospace,monospace}.tc5-head small{color:#64748b;font:9px ui-monospace,monospace}.tc5-spacer{flex:1}
@@ -51,6 +51,8 @@ export function LiveTradingTerminalV5() {
       const target = e.target as HTMLElement | null;
       const button = target?.closest('button') as HTMLButtonElement | null;
       if (!button) return;
+      const controlBar = button.closest('.tc4-toolbar, .tc4-bottom');
+      if (!controlBar) return;
       const text = (button.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
       if (!/^(levels|positions|orders|trades|order ticket)$/.test(text)) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
