@@ -8,6 +8,11 @@ export interface OrderRequest {
   orderType: 'Market' | 'Limit' | 'SL' | 'SL-M';
   side: 'Buy' | 'Sell';
   product: 'CNC' | 'MIS' | 'NRML';
+  /** Optional broker-native smart risk fields. FYERS supports stop-loss/target at entry. */
+  stopLoss?: number;
+  takeProfit?: number;
+  /** UI/risk-plan value; broker adapters may support this separately from entry. */
+  trailingStopLoss?: number;
   /** Client-generated key used to make live order submission retry-safe. */
   idempotencyKey?: string;
 }
@@ -107,21 +112,19 @@ export interface BrokerAdapter {
   readonly name: string;
   readonly supportsOAuth: boolean;
   readonly supportsAPIKeys: boolean;
-  readonly supportedSegments: string[]; // e.g. ['Equity', 'F&O', 'Commodity', 'Currency']
+  readonly supportedSegments: string[];
   readonly developerPortalUrl?: string;
   readonly capabilities: BrokerCapabilities;
 
   authenticateOAuth(authCode?: string): Promise<{ success: boolean; sessionToken?: string; error?: string }>;
   saveApiKeys(credentials: ApiCredentials): Promise<{ success: boolean; error?: string }>;
   validateApiKeys(credentials: ApiCredentials): Promise<{ isValid: boolean; message?: string }>;
-  
   fetchProfile(): Promise<{ userId: string; name: string; email: string; broker: string }>;
   fetchFunds(): Promise<AccountFunds>;
   fetchHoldings(): Promise<Holding[]>;
   fetchPositions(): Promise<Position[]>;
   fetchOrders(): Promise<OrderResult[]>;
   fetchTradeHistory(): Promise<TradeRecord[]>;
-
   getMarketData(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>>;
   getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]>;
   placeOrder(order: OrderRequest): Promise<OrderResult>;
