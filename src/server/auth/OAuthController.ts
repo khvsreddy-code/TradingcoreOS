@@ -30,7 +30,7 @@ export class OAuthController {
   }
 
   /**
-   * POST /api/auth/broker/callback/
+   * POST /api/auth/broker/callback
    */
   public static async handleCallback(req: AuthenticatedRequest, res: Response): Promise<Response> {
     try {
@@ -51,12 +51,8 @@ export class OAuthController {
 
       // The callback endpoint is intentionally NOT behind requireUser.
       // The broker-hosted popup can be a separate browser context, so relying
-      // on the TradingCore Supabase session here causes the exact
-      // "Authenticated TradingCore session required" failure seen in production.
-      //
-      // Instead, the server validates its own encrypted, 15-minute state token
-      // and derives BOTH the TradingCore user and broker from it. The browser
-      // cannot supply or override user_id.
+      // on the TradingCore Supabase session here would be unreliable.
+      // The encrypted state binds the callback to the initiating TradingCore user.
       const verifiedState = OAuthService.resolveOAuthState(state);
       if (!verifiedState) {
         return res.status(400).json({ success: false, error: 'OAuth state is invalid or expired' });
@@ -75,12 +71,11 @@ export class OAuthController {
 
       const result = await OAuthService.handleCallback(
         targetBroker,
-        code,
+        authorizationCode,
         callbackRedirect,
         tradingCoreUserId,
         state
       );
-
 
       if (result.success && result.session) {
         return res.json({
@@ -91,11 +86,11 @@ export class OAuthController {
           clientCode: result.session.clientCode,
           message: 'Broker authorized and session encrypted successfully',
         });
-      } else {
-        return res
-          .status(400)
-          .json({ success: false, error: result.error || 'Token exchange failed' });
       }
+
+      return res
+        .status(400)
+        .json({ success: false, error: result.error || 'Token exchange failed' });
     } catch (err: any) {
       return res
         .status(500)
@@ -117,9 +112,8 @@ export class OAuthController {
     const result = await OAuthService.refreshSession(targetBroker, req.tradingCoreUserId!);
     if (result.success) {
       return res.json({ success: true, message: 'Session refreshed successfully' });
-    } else {
-      return res.status(400).json({ success: false, error: result.error });
     }
+    return res.status(400).json({ success: false, error: result.error });
   }
 
   /**
