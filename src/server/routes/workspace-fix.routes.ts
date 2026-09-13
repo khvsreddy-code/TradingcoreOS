@@ -151,8 +151,7 @@ workspaceFixRoutes.get('/:brokerId/instruments/search', async (req: Authenticate
     if (!token) return;
     try {
       const tokens = q.split(/\s+/).filter(Boolean);
-      const base = tokens.find((x) => /[a-z]/i.test(x)) || q;
-      const params = new URLSearchParams({ query: base, page_number: '1', records: '30' });
+      const params = new URLSearchParams({ query: q, page_number: '1', records: '30' });
       if (segment === 'options') {
         params.set('segments', 'FO');
         params.set('instrument_types', 'CE,PE');
