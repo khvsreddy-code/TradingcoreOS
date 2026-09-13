@@ -3,7 +3,9 @@ import express from 'express';
 import path from 'node:path';
 import { brokerRoutes } from './src/server/routes/broker.routes.js';
 import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
+import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
 import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
+import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 
 const app = express();
@@ -40,8 +42,14 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth/broker', brokerRoutes);
 // Broker-specific routes must run before generic adapter routes.
+// Historical routes are deliberately mounted before brokerMarketDataRoutes so
+// the quota-safe implementations take precedence over legacy adapter paths.
+app.use('/api/trading', fyersHistoryRoutes);
 app.use('/api/trading', brokerMarketDataRoutes);
 app.use('/api/trading', upstoxHistoryRoutes);
+// Portfolio snapshots are also mounted before the generic trading route so the
+// serialized/cached implementation is used instead of the old Promise.all fan-out.
+app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
 
 app.use('/api', (req, res) => {
