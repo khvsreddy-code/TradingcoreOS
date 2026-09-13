@@ -229,6 +229,22 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   .tco-watchlist-source-hidden { display: flex !important; }
 }
 
+/* Live terminal: allow every multi-chart layout to consume the full grid cell. */
+.tct-grid,
+.tct-grid > .tct-chart,
+.tct-chartbody,
+.tct-chartbody > div,
+.tct-chartbody .min-h-\[430px\],
+.tct-chartbody .min-h-\[360px\] {
+  min-height: 0 !important;
+}
+.tct-grid { height: 100% !important; }
+.tct-grid > .tct-chart { height: 100% !important; }
+.tct-chartbody { height: 100% !important; min-width: 0; }
+.tct-chartbody > div { height: 100% !important; min-width: 0; }
+.tct-chartbody .min-h-\[430px\] { height: 100% !important; flex: 1 1 auto !important; }
+.tct-chartbody .min-h-\[360px\] { height: 100% !important; }
+
 @media (max-width: 900px) {
   .hero-title { letter-spacing: -.055em; }
   .terminal-shell { border-radius: 16px; }
