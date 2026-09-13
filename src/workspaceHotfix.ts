@@ -82,6 +82,31 @@
     }
   }
 
+  function installRequestCache() {
+    const originalFetch = window.fetch.bind(window);
+    const cache = new Map<string, { expiresAt: number; response: Response }>();
+    const inflight = new Map<string, Promise<Response>>();
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (method !== 'GET' || !url.includes('/api/trading/')) return originalFetch(input, init);
+      const isOptionChain = url.includes('/option-chain');
+      const isInstrumentSearch = url.includes('/instruments/search');
+      if (!isOptionChain && !isInstrumentSearch) return originalFetch(input, init);
+      const ttl = isOptionChain ? 12_000 : 10_000;
+      const cached = cache.get(url);
+      if (cached && cached.expiresAt > Date.now()) return cached.response.clone();
+      const existing = inflight.get(url);
+      if (existing) return (await existing).clone();
+      const request = originalFetch(input, init).then(response => {
+        if (response.ok) cache.set(url, { expiresAt: Date.now() + ttl, response: response.clone() });
+        return response;
+      }).finally(() => inflight.delete(url));
+      inflight.set(url, request);
+      return request;
+    };
+  }
+
   function bindLevelsBridge() {
     document.addEventListener('click', event => {
       const target = event.target as Element | null;
@@ -96,6 +121,7 @@
   }
 
   function install() {
+    installRequestCache();
     ensureWatchlistRail();
     bindLevelsBridge();
     const root = q('#root');
