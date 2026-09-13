@@ -23,7 +23,7 @@ import { LoadingScreen } from './components/common/LoadingScreen';
 import { BrokerRuntimeSwitcher } from './components/brokers/BrokerRuntimeSwitcher';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
-const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminalV2').then(m => ({ default: m.LiveTradingTerminalV2 })));
+const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminalV3').then(m => ({ default: m.LiveTradingTerminalV3 })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(m => ({ default: m.ModelsPage })));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
@@ -48,11 +48,9 @@ function AppContent() {
   if (window.location.pathname.startsWith('/auth/broker-callback')) return <BrokerCallbackPage />;
   if (window.location.pathname === '/privacy') return <LegalPage kind="privacy" />;
   if (window.location.pathname === '/terms') return <LegalPage kind="terms" />;
-
   const { user, loading: authLoading, isAuthenticated, authStep } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   void profile;
-
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [hasConnectedBroker, setHasConnectedBroker] = useState<boolean>(() => tradingCoreRuntime.hasConnectedBroker());
   const [brokerRestoreReady, setBrokerRestoreReady] = useState(!isAuthenticated);
@@ -61,107 +59,17 @@ function AppContent() {
   const currentView = viewFromPath(pathname);
   const protectedEntry = currentView === 'app' || currentView === 'broker-connection';
   const isSystemInitializing = authLoading || (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
-
-  useEffect(() => {
-    const pop = () => setPathname(window.location.pathname);
-    window.addEventListener('popstate', pop);
-    return () => window.removeEventListener('popstate', pop);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (authLoading || !isAuthenticated || !user) {
-      if (!authLoading && !isAuthenticated && !cancelled) setBrokerRestoreReady(true);
-      return;
-    }
-    setBrokerRestoreReady(false);
-    void tradingCoreRuntime.restoreBrokerConnections().finally(() => {
-      if (!cancelled) {
-        setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker());
-        setBrokerRestoreReady(true);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [authLoading, isAuthenticated, user?.id]);
-
-  useEffect(() => {
-    const checkBroker = () => setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker());
-    checkBroker();
-    const a = tradingCoreRuntime.on('BROKER_CONNECTED', checkBroker);
-    const b = tradingCoreRuntime.on('BROKER_DISCONNECTED', checkBroker);
-    return () => { a(); b(); };
-  }, []);
-
-  useEffect(() => {
-    if (authLoading || !brokerRestoreReady) return;
-    const path = pathname;
-    if (isAuthenticated && user) {
-      if (path === '/broker') return;
-      if (path === '/' || isWorkspaceRoute(path)) return;
-      window.history.replaceState({}, '', '/dashboard');
-      setPathname('/dashboard');
-      return;
-    }
-    if (path !== '/' && !path.startsWith('/auth/')) {
-      window.history.replaceState({}, '', '/');
-      setPathname('/');
-    }
-  }, [isAuthenticated, user, pathname, brokerRestoreReady, authLoading]);
-
-  const navigate = (path: '/broker' | '/' | WorkspaceRoute) => {
-    if (window.location.pathname === path) {
-      setPathname(path);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    window.history.pushState({}, '', path);
-    setPathname(path);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const navigateWorkspace = (path: WorkspaceRoute) => {
-    if (path === '/live' && !tradingCoreRuntime.hasConnectedBroker()) {
-      navigate('/broker');
-      return;
-    }
-    navigate(path);
-  };
-
-  const handleOpenAuthModal = () => setIsAuthModalOpen(true);
-  const handleCloseAuthModal = () => setIsAuthModalOpen(false);
-  const handleLaunchPlatform = () => { if (!isAuthenticated) { setIsAuthModalOpen(true); return; } navigate('/dashboard'); };
-  const handleBackToLanding = () => navigate('/dashboard');
-  const handleNavigateFromMenu = (view: string) => { if (view === 'broker-connection') navigate('/broker'); else if (view === 'workspace' || view === 'app') navigate('/dashboard'); else if (view === 'landing') navigate('/'); };
-
-  if (isSystemInitializing) {
-    let loadingMsg = 'Checking Session...'; let subMsg = 'Verifying your TradingCore login';
-    if (authStep === 'connecting') { loadingMsg = 'Connecting...'; subMsg = 'Establishing secure handshake with Google OAuth'; }
-    else if (authStep === 'authenticating') { loadingMsg = 'Authenticating...'; subMsg = 'Verifying identity with Supabase Authentication'; }
-    else if (authStep === 'preparing') { loadingMsg = 'Preparing Workspace...'; subMsg = 'Synchronizing kernel configuration and broker channels'; }
-    else if (protectedEntry && !brokerRestoreReady) { loadingMsg = 'Restoring Broker State...'; subMsg = 'Checking your connected broker sessions securely'; }
-    else if (profileLoading) { loadingMsg = 'Loading Profile...'; subMsg = 'Fetching user preferences and onboarding state'; }
-    return <LoadingScreen message={loadingMsg} submessage={subMsg} onRetry={authLoading ? () => window.location.reload() : undefined} onContinue={!isAuthenticated && !profileLoading ? () => navigate('/') : undefined} />;
-  }
-
-  if (isAuthenticated && user && currentView === 'broker-connection') {
-    return <BrokerConnectionRequiredPage onBack={() => navigate('/dashboard')} onBrokerConnected={() => { setHasConnectedBroker(true); navigate('/dashboard'); }} />;
-  }
-
-  if (currentView === 'app') {
-    const workspacePath: WorkspaceRoute = isWorkspaceRoute(pathname) ? pathname : '/dashboard';
-    return <RouteErrorBoundary onHome={() => navigate('/dashboard')}><Suspense key={workspacePath} fallback={<LoadingScreen message="Loading Workspace..." submessage="Preparing trading module" />}>
-      {workspacePath === '/dashboard' && <DashboardPage onNavigate={navigateWorkspace} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/models' && <ModelsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/automations' && <AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/indicators' && <IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/portfolio' && <PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/profile' && <ProfilePage onNavigate={navigateWorkspace} onBackToLanding={handleBackToLanding} onBroker={() => navigate('/broker')} />}
-      {workspacePath === '/live' && (hasConnectedBroker ? <><BrokerRuntimeSwitcher onConnect={() => navigate('/broker')} /><LiveTradingTerminal /></> : <BrokerConnectionRequiredPage onBack={() => navigate('/dashboard')} onBrokerConnected={() => { setHasConnectedBroker(true); navigate('/live'); }} />)}
-    </Suspense></RouteErrorBoundary>;
-  }
-
-  return <div className="min-h-screen bg-[#090a0f] text-[#f3f4f6] font-sans selection:bg-[#10b981]/30 selection:text-[#10b981] overflow-x-hidden"><Navbar onOpenAuthModal={handleOpenAuthModal} onLaunchPlatform={handleLaunchPlatform} onNavigate={handleNavigateFromMenu} currentView={currentView}/><main className="pt-16"><Hero onLaunch={handleLaunchPlatform}/><WorkspacePreview onLaunch={handleLaunchPlatform}/><BrokerStrip onSelectBroker={handleLaunchPlatform}/><ArchitectureSection/><WhyTradingCore/><FeaturesDeepDive/><HowItWorks onLaunch={handleLaunchPlatform}/><PricingSection onSelectPlan={handleLaunchPlatform}/><FutureModules/><FAQSection/></main><Footer onLaunch={handleLaunchPlatform}/><AuthModalPlaceholder isOpen={isAuthModalOpen} onClose={handleCloseAuthModal} onLaunchWorkspace={handleLaunchPlatform}/></div>;
+  useEffect(() => { const pop=()=>setPathname(window.location.pathname); window.addEventListener('popstate',pop); return()=>window.removeEventListener('popstate',pop); },[]);
+  useEffect(() => { let cancelled=false; if(authLoading||!isAuthenticated||!user){if(!authLoading&&!isAuthenticated&&!cancelled)setBrokerRestoreReady(true);return;} setBrokerRestoreReady(false); void tradingCoreRuntime.restoreBrokerConnections().finally(()=>{if(!cancelled){setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker());setBrokerRestoreReady(true);}}); return()=>{cancelled=true;}; },[authLoading,isAuthenticated,user?.id]);
+  useEffect(() => { const check=()=>setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker()); check(); const a=tradingCoreRuntime.on('BROKER_CONNECTED',check),b=tradingCoreRuntime.on('BROKER_DISCONNECTED',check); return()=>{a();b();}; },[]);
+  useEffect(() => { if(authLoading||!brokerRestoreReady)return; if(isAuthenticated&&user){if(pathname==='/broker'||pathname==='/'||isWorkspaceRoute(pathname))return; window.history.replaceState({},'', '/dashboard');setPathname('/dashboard');return;} if(pathname!=='/'&&!pathname.startsWith('/auth/')){window.history.replaceState({},'', '/');setPathname('/');}},[isAuthenticated,user,pathname,brokerRestoreReady,authLoading]);
+  const navigate=(path:'/broker'|'/'|WorkspaceRoute)=>{if(window.location.pathname===path){setPathname(path);window.scrollTo({top:0,behavior:'smooth'});return;}window.history.pushState({},'',path);setPathname(path);window.dispatchEvent(new PopStateEvent('popstate'));window.scrollTo({top:0,behavior:'smooth'});};
+  const navigateWorkspace=(path:WorkspaceRoute)=>{if(path==='/live'&&!tradingCoreRuntime.hasConnectedBroker()){navigate('/broker');return;}navigate(path);};
+  const handleLaunchPlatform=()=>{if(!isAuthenticated){setIsAuthModalOpen(true);return;}navigate('/dashboard');};
+  const handleNavigateFromMenu=(view:string)=>{if(view==='broker-connection')navigate('/broker');else if(view==='workspace'||view==='app')navigate('/dashboard');else if(view==='landing')navigate('/');};
+  if(isSystemInitializing){let loadingMsg='Checking Session...',subMsg='Verifying your TradingCore login';if(authStep==='connecting'){loadingMsg='Connecting...';subMsg='Establishing secure handshake with Google OAuth';}else if(authStep==='authenticating'){loadingMsg='Authenticating...';subMsg='Verifying identity with Supabase Authentication';}else if(authStep==='preparing'){loadingMsg='Preparing Workspace...';subMsg='Synchronizing kernel configuration and broker channels';}else if(protectedEntry&&!brokerRestoreReady){loadingMsg='Restoring Broker State...';subMsg='Checking your connected broker sessions securely';}else if(profileLoading){loadingMsg='Loading Profile...';subMsg='Fetching user preferences and onboarding state';}return <LoadingScreen message={loadingMsg} submessage={subMsg} onRetry={authLoading?()=>window.location.reload():undefined} onContinue={!isAuthenticated&&!profileLoading?()=>navigate('/'):undefined}/>;}
+  if(isAuthenticated&&user&&currentView==='broker-connection')return <BrokerConnectionRequiredPage onBack={()=>navigate('/dashboard')} onBrokerConnected={()=>{setHasConnectedBroker(true);navigate('/dashboard');}}/>;
+  if(currentView==='app'){const workspacePath:WorkspaceRoute=isWorkspaceRoute(pathname)?pathname:'/dashboard';return <RouteErrorBoundary onHome={()=>navigate('/dashboard')}><Suspense key={workspacePath} fallback={<LoadingScreen message="Loading Workspace..." submessage="Preparing trading module" />}>{workspacePath==='/dashboard'&&<DashboardPage onNavigate={navigateWorkspace} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/models'&&<ModelsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/automations'&&<AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/indicators'&&<IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/portfolio'&&<PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/profile'&&<ProfilePage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/live'&&(hasConnectedBroker?<><BrokerRuntimeSwitcher onConnect={()=>navigate('/broker')}/><LiveTradingTerminal/></>:<BrokerConnectionRequiredPage onBack={()=>navigate('/dashboard')} onBrokerConnected={()=>{setHasConnectedBroker(true);navigate('/live');}}/>)}</Suspense></RouteErrorBoundary>}
+  return <div className="min-h-screen bg-[#090a0f] text-[#f3f4f6] font-sans selection:bg-[#10b981]/30 selection:text-[#10b981] overflow-x-hidden"><Navbar onOpenAuthModal={()=>setIsAuthModalOpen(true)} onLaunchPlatform={handleLaunchPlatform} onNavigate={handleNavigateFromMenu} currentView={currentView}/><main className="pt-16"><Hero onLaunch={handleLaunchPlatform}/><WorkspacePreview onLaunch={handleLaunchPlatform}/><BrokerStrip onSelectBroker={handleLaunchPlatform}/><ArchitectureSection/><WhyTradingCore/><FeaturesDeepDive/><HowItWorks onLaunch={handleLaunchPlatform}/><PricingSection onSelectPlan={handleLaunchPlatform}/><FutureModules/><FAQSection/></main><Footer onLaunch={handleLaunchPlatform}/><AuthModalPlaceholder isOpen={isAuthModalOpen} onClose={()=>setIsAuthModalOpen(false)} onLaunchWorkspace={handleLaunchPlatform}/></div>;
 }
-
 export default function App(){return <AuthProvider><AppContent/></AuthProvider>}
