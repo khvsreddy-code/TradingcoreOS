@@ -127,6 +127,7 @@ const symbolMasterPromises = new Map<string, Promise<SymbolMasterRow[]>>();
 const SYMBOL_MASTER_TTL_MS = 6 * 60 * 60 * 1000;
 const SYMBOL_MASTER_URLS: Record<string, string> = {
   nse_cm: 'https://public.fyers.in/sym_details/NSE_CM_sym_master.json',
+  nse_com: 'https://public.fyers.in/sym_details/NSE_COM_sym_master.json',
   bse_cm: 'https://public.fyers.in/sym_details/BSE_CM_sym_master.json',
   nse_fo: 'https://public.fyers.in/sym_details/NSE_FO_sym_master.json',
   bse_fo: 'https://public.fyers.in/sym_details/BSE_FO_sym_master.json',
@@ -143,17 +144,27 @@ function firstValue(row: any, keys: string[]): string {
 }
 
 function normalizeSymbolMasterRows(payload: any): SymbolMasterRow[] {
-  const raw = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
-  return raw.map((row: any) => {
-    const symbol = firstValue(row, ['symbol', 'fyToken', 'fytoken', 'ticker', 'name']);
-    const description = firstValue(row, ['description', 'company_name', 'companyName', 'display_name', 'trading_symbol']);
-    const exchange = firstValue(row, ['exchange', 'ex_sym', 'exchange_name']);
+  // FYERS' Symbol Master JSON is keyed by the API symbol ticker rather than
+  // returned as a plain array. Supporting both shapes keeps search compatible
+  // with current and legacy master files.
+  const raw: Array<{ key?: string; row: any }> = Array.isArray(payload)
+    ? payload.map((row: any) => ({ row }))
+    : Array.isArray(payload?.data)
+      ? payload.data.map((row: any) => ({ row }))
+      : payload && typeof payload === 'object'
+        ? Object.entries(payload).map(([key, row]) => ({ key, row }))
+        : [];
+
+  return raw.map(({ key, row }) => {
+    const symbol = firstValue(row, ['symbol', 'symTicker', 'fyToken', 'fytoken', 'ticker']) || String(key || '');
+    const description = firstValue(row, ['description', 'exSymName', 'symDetails', 'company_name', 'companyName', 'display_name', 'trading_symbol', 'name']);
+    const exchange = firstValue(row, ['exchange', 'exSym', 'ex_sym', 'exchange_name']);
     const instrumentType = firstValue(row, ['instrument_type', 'instrumentType', 'segment', 'type']);
     const isin = firstValue(row, ['isin', 'ISIN']);
-    const expiry = firstValue(row, ['expiry', 'expiry_date', 'expiryDate']);
-    const strike = firstValue(row, ['strike', 'strike_price', 'strikePrice']);
-    const optionType = firstValue(row, ['option_type', 'optionType']);
-    const lotSize = firstValue(row, ['lot_size', 'lotSize', 'min_lot_size']);
+    const expiry = firstValue(row, ['expiry', 'expiryDate', 'expiry_date']);
+    const strike = firstValue(row, ['strike', 'strikePrice', 'strike_price']);
+    const optionType = firstValue(row, ['option_type', 'optType', 'optionType']);
+    const lotSize = firstValue(row, ['lot_size', 'minLotSize', 'lotSize', 'min_lot_size']);
     const searchable = [symbol, description, exchange, instrumentType, isin, expiry, strike, optionType].join(' ').toLowerCase();
     return { symbol, description, exchange, instrumentType, isin, expiry, strike, optionType, lotSize, searchable };
   }).filter((row: any) => row.symbol);
@@ -184,7 +195,7 @@ function mastersForSegment(segment: string): string[] {
     case 'stocks': return ['nse_cm', 'bse_cm'];
     case 'futures': return ['nse_fo', 'bse_fo', 'mcx_com'];
     case 'options': return ['nse_fo', 'bse_fo'];
-    case 'commodities': return ['mcx_com'];
+    case 'commodities': return ['nse_com', 'mcx_com'];
     case 'currency': return ['nse_cd'];
     default: return Object.keys(SYMBOL_MASTER_URLS);
   }
@@ -236,7 +247,7 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
   const query = String(req.query.q || '').trim().toLowerCase();
   const segment = String(req.query.segment || 'all').toLowerCase();
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 50)));
-  if (query.length < 1) return res.json({ success: true, data: [], total: 0 });
+  if (query.length < 2) return res.json({ success: true, data: [], total: 0, hint: 'Enter at least 2 characters.' });
   try {
     const masters = mastersForSegment(segment);
     const chunks = await Promise.all(masters.map(loadSymbolMaster));
@@ -268,60 +279,98 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
     }));
     return res.json({ success: true, data, total: data.length, source: 'fyers-symbol-master' });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Unable to load FYERS symbol master' });
+    return res.status(502).json({ success: false, error: err?.message || 'Unable to search FYERS instruments' });
   }
 });
 
-brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Response, next) => {
-  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
-  const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
-  const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
-  const interval = String(req.query.interval || '');
-  const requestedLimit = Number(req.query.limit || 25_000);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(25_000, Math.floor(requestedLimit))) : 25_000;
-  if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
-
-  try {
-    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit);
-    if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
-    res.setHeader('Cache-Control', 'private, max-age=15');
-    return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
-  } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `Unable to load Fyers historical candles for ${symbol}` });
-  }
-});
-
-brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: Response, next) => {
-  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
-  const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
-  const symbol = toFyersSymbol(String(req.query.instrument_key || '')); const expiryDate = String(req.query.expiry_date || 'current_week');
-  if (!symbol) return res.status(400).json({ success: false, error: 'instrument_key is required' });
-  try {
-    const adapter = BrokerRegistry.getAdapter('fyers');
-    const data = await adapter.getOptionChain(session.token, symbol, expiryDate);
-    res.setHeader('Cache-Control', 'private, max-age=5');
-    return res.json({ success: true, data });
-  } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Unable to load Fyers option chain' });
-  }
-});
-
-brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: AuthenticatedRequest, res: Response, next) => {
-  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+brokerMarketDataRoutes.get('/:brokerId/stream', async (req: AuthenticatedRequest, res: Response) => {
+  const brokerId = String(req.params.brokerId).toLowerCase();
+  if (brokerId !== 'fyers') return res.status(404).json({ success: false, error: `Live stream is not available for ${brokerId} on this route.` });
   const session = await getFyersSession(req, res); if (!session) return;
-  const symbols = String(req.query.instrument_keys || '').split(',').map(x => toFyersSymbol(x.trim())).filter(Boolean);
-  if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
-  if (symbols.length > 100) return res.status(400).json({ success: false, error: 'Too many market symbols requested' });
+  const raw = String(req.query.symbols || '');
+  const symbols = raw.split(',').map(decodeURIComponent).map(s => s.trim()).filter(Boolean);
+  const depthSymbol = req.query.depth ? decodeURIComponent(String(req.query.depth)) : undefined;
+  if (!symbols.length) return res.status(400).json({ success: false, error: 'At least one symbol is required.' });
   res.status(200);
-  res.setHeader('Content-Type', 'application/x-ndjson');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-  const write = (event: any) => { try { res.write(`${JSON.stringify(event)}\n`); } catch {} };
-  const depthSymbol = toFyersSymbol(String(req.query.depth_symbol || ''));
-  const includeDepth = Boolean(depthSymbol);
-  const depthSymbols = includeDepth ? [depthSymbol] : symbols;
-  const unsubscribe = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, write, includeDepth, depthSymbols);
-  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 12_000);
-  req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  let closed = false;
+  req.on('close', () => { closed = true; stop(); });
+  const stop = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, event => {
+    if (closed) return;
+    try { res.write(`${JSON.stringify(event)}\n`); } catch { closed = true; stop(); }
+  }, Boolean(depthSymbol), depthSymbol ? [depthSymbol] : symbols);
+  const heartbeat = setInterval(() => {
+    if (closed) { clearInterval(heartbeat); return; }
+    try { res.write(`${JSON.stringify({ type: 'heartbeat', at: Date.now() })}\n`); } catch { closed = true; clearInterval(heartbeat); stop(); }
+  }, 15_000);
+  req.on('close', () => clearInterval(heartbeat));
+});
+
+brokerMarketDataRoutes.get('/:brokerId/history', async (req: AuthenticatedRequest, res: Response) => {
+  const brokerId = String(req.params.brokerId).toLowerCase();
+  const symbol = decodeURIComponent(String(req.query.symbol || ''));
+  const interval = String(req.query.interval || '5minute');
+  const limit = Math.max(100, Math.min(25_000, Number(req.query.limit || 10_000)));
+  if (!symbol) return res.status(400).json({ success: false, error: 'Symbol is required.' });
+  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
+  try {
+    if (brokerId === 'fyers') {
+      const fyersSymbol = toFyersSymbol(symbol);
+      const data = await fetchFyersHistoryTarget(session.token, fyersSymbol, interval, limit);
+      return res.json({ success: true, data, source: 'fyers-v3-history', brokerId, symbol: fyersSymbol });
+    }
+    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const data = await adapter.getHistoricalData(session.token, symbol, interval);
+    return res.json({ success: true, data: normalizeCandles(data, limit), source: `${brokerId}-adapter-history`, brokerId, symbol });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || `${brokerId} historical data failed` });
+  }
+});
+
+brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: AuthenticatedRequest, res: Response) => {
+  const brokerId = String(req.params.brokerId).toLowerCase();
+  const symbol = decodeURIComponent(String(req.query.symbol || ''));
+  const expiryDate = String(req.query.expiry || 'current_week');
+  if (!symbol) return res.status(400).json({ success: false, error: 'Underlying symbol is required.' });
+  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
+  try {
+    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const data = await adapter.getOptionChain(session.token, symbol, expiryDate);
+    return res.json({ success: true, data, brokerId, symbol });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || `${brokerId} option chain failed` });
+  }
+});
+
+brokerMarketDataRoutes.get('/:brokerId/quote', async (req: AuthenticatedRequest, res: Response) => {
+  const brokerId = String(req.params.brokerId).toLowerCase();
+  const symbol = decodeURIComponent(String(req.query.symbol || ''));
+  if (!symbol) return res.status(400).json({ success: false, error: 'Symbol is required.' });
+  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
+  try {
+    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const data = await adapter.getQuote(session.token, symbol);
+    return res.json({ success: true, data, brokerId, symbol });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || `${brokerId} quote failed` });
+  }
+});
+
+brokerMarketDataRoutes.get('/:brokerId/depth', async (req: AuthenticatedRequest, res: Response) => {
+  const brokerId = String(req.params.brokerId).toLowerCase();
+  const symbol = decodeURIComponent(String(req.query.symbol || ''));
+  if (!symbol) return res.status(400).json({ success: false, error: 'Symbol is required.' });
+  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
+  try {
+    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const data = await adapter.getDepth(session.token, symbol);
+    return res.json({ success: true, data, brokerId, symbol });
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || `${brokerId} depth failed` });
+  }
 });
