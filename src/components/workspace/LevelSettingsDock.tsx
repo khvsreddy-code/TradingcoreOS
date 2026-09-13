@@ -2,27 +2,99 @@ import { useEffect, useState } from 'react';
 import { Settings2, X } from 'lucide-react';
 import { DEFAULT_DYNAMIC_LEVEL_SETTINGS, DynamicLevelSettings, getDynamicLevelSettings, saveDynamicLevelSettings } from '../../services/marketData/levelSettings';
 
-const Field = ({label,children}:{label:string;children:React.ReactNode}) => <label className="block text-[8px] uppercase tracking-wider text-[#7f8aa3]"><span>{label}</span><div className="mt-1">{children}</div></label>;
-const input='w-full rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#10b981]/60';
-const select='w-full rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#10b981]/60';
-const Toggle=({label,value,onChange}:{label:string;value:boolean;onChange:(v:boolean)=>void})=><button type="button" onClick={()=>onChange(!value)} className="flex w-full items-center justify-between rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[9px] text-[#cbd5e1]"><span>{label}</span><span className={`h-3.5 w-6 rounded-full p-0.5 ${value?'bg-[#10b981]':'bg-[#252b38]'}`}><span className={`block h-2.5 w-2.5 rounded-full bg-white transition-transform ${value?'translate-x-2.5':''}`}/></span></button>;
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <label className="block text-[8px] uppercase tracking-wider text-[#7f8aa3]">
+    <span>{label}</span>
+    <div className="mt-1">{children}</div>
+  </label>
+);
 
-export function LevelSettingsDock(){
- const [open,setOpen]=useState(false);const [s,setS]=useState<DynamicLevelSettings>(()=>getDynamicLevelSettings());
- useEffect(()=>{const h=(e:Event)=>setS((e as CustomEvent<DynamicLevelSettings>).detail||getDynamicLevelSettings());window.addEventListener('tradingcore:level-settings',h);return()=>window.removeEventListener('tradingcore:level-settings',h)},[]);
- const patch=(v:Partial<DynamicLevelSettings>)=>{const next={...s,...v};setS(next);saveDynamicLevelSettings(next);};
- return <div className="fixed z-[85] top-[185px] right-[660px] max-w-[330px] max-[1500px]:right-[360px] max-[900px]:top-[120px] max-[900px]:right-3 font-mono text-[10px]">
-  {!open?<button onClick={()=>setOpen(true)} className={`flex h-8 items-center gap-2 rounded-md border px-3 shadow-2xl backdrop-blur ${s.enabled?'border-[#10b981]/50 bg-[#0b0e15]/95 text-white':'border-[#222636] bg-[#0b0e15]/95 text-[#cbd5e1]'}`}><Settings2 className="h-3.5 w-3.5"/><span>LEVELS</span><span className={`text-[8px] ${s.enabled?'text-[#10b981]':'text-[#64748b]'}`}>{s.enabled?'ON':'OFF'}</span></button>:
-  <div className="w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-[#2a3040] bg-[#0b0e15]/98 shadow-2xl backdrop-blur">
-   <div className="flex items-center justify-between border-b border-[#222636] px-3 py-2.5"><div><div className="text-[9px] uppercase tracking-widest text-[#64748b]">TradingCore Dynamic LVLS</div><div className="mt-0.5 text-xs font-semibold text-white">Price-action support / resistance</div></div><button onClick={()=>setOpen(false)} className="rounded-md p-1 text-[#64748b] hover:text-white"><X className="h-3.5 w-3.5"/></button></div>
-   <div className="max-h-[520px] space-y-3 overflow-y-auto p-3">
-    <Toggle label="Enable Dynamic Levels" value={s.enabled} onChange={v=>patch({enabled:v})}/>
-    <div><div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Level Detection</div><div className="grid grid-cols-2 gap-2"><Field label="Pivot Length"><input className={input} type="number" min="2" max="50" value={s.pivotLength} onChange={e=>patch({pivotLength:Math.max(2,Math.min(50,Number(e.target.value)||10))})}/></Field><Field label="Lookback Bars"><input className={input} type="number" min="50" max="5000" value={s.lookbackPeriod} onChange={e=>patch({lookbackPeriod:Math.max(50,Math.min(5000,Number(e.target.value)||800))})}/></Field><Field label="Max Levels / Side"><input className={input} type="number" min="5" max="75" value={s.maxLevelsPerType} onChange={e=>patch({maxLevelsPerType:Math.max(5,Math.min(75,Number(e.target.value)||30))})}/></Field><Field label="Merge × ATR-14"><input className={input} type="number" min="0.1" max="5" step="0.1" value={s.mergeAtrMultiplier} onChange={e=>patch({mergeAtrMultiplier:Math.max(.1,Math.min(5,Number(e.target.value)||.5))})}/></Field></div><div className="mt-2 space-y-1.5"><Toggle label="Merge Nearby Active Levels" value={s.mergeNearbyLevels} onChange={v=>patch({mergeNearbyLevels:v})}/><Toggle label="Wick Dominance Filter" value={s.wickDominanceFilter} onChange={v=>patch({wickDominanceFilter:v})}/></div></div>
-    <div><div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Breakout & Reversal</div><div className="grid grid-cols-2 gap-2"><Field label="Breakout Confirmation"><select className={select} value={s.breakoutConfirmation} onChange={e=>patch({breakoutConfirmation:e.target.value as DynamicLevelSettings['breakoutConfirmation']})}><option>Close</option><option>Wick</option></select></Field><Field label="Breakout Buffer × ATR"><input className={input} type="number" min="0" max="2" step="0.05" value={s.breakoutAtrBuffer} onChange={e=>patch({breakoutAtrBuffer:Math.max(0,Math.min(2,Number(e.target.value)||0))})}/></Field><Field label="Retest Confirmation"><select className={select} value={s.retestConfirmation} onChange={e=>patch({retestConfirmation:e.target.value as DynamicLevelSettings['retestConfirmation']})}><option>Close</option><option>Touch</option></select></Field></div><div className="mt-2 space-y-1.5"><Toggle label="Show Breakout Signals" value={s.showBreakouts} onChange={v=>patch({showBreakouts:v})}/><Toggle label="Show Confirmed Reversal Levels" value={s.showReversals} onChange={v=>patch({showReversals:v})}/><Toggle label="Show Reversal Failures" value={s.showFailures} onChange={v=>patch({showFailures:v})}/></div></div>
-    <div><div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Display</div><div className="grid grid-cols-2 gap-2"><Field label="Historical Start"><select className={select} value={s.levelStartMode} onChange={e=>patch({levelStartMode:e.target.value as DynamicLevelSettings['levelStartMode']})}><option>Confirmation</option><option>Pivot</option></select></Field><Field label="Event Marker Size"><input className={input} type="number" min="1" max="24" value={s.eventMarkerSize} onChange={e=>patch({eventMarkerSize:Math.max(1,Math.min(24,Number(e.target.value)||4))})}/></Field></div><div className="mt-2 space-y-1.5"><Toggle label="Display as Zones" value={s.displayAsZones} onChange={v=>patch({displayAsZones:v})}/><Toggle label="Show Price Labels" value={s.showLabels} onChange={v=>patch({showLabels:v})}/></div></div>
-    <div className="rounded-md border border-[#252b38] bg-[#0d1119] px-2.5 py-2 text-[8px] leading-4 text-[#64748b]">Levels are confirmed pivot price-action levels. Broken resistance/support can be retested and promoted to R→S / S→R. ATR is used only for spacing and breakout buffers; it does not manufacture directional levels.</div>
-    <button onClick={()=>{saveDynamicLevelSettings(DEFAULT_DYNAMIC_LEVEL_SETTINGS);setS({...DEFAULT_DYNAMIC_LEVEL_SETTINGS});}} className="w-full rounded-md border border-[#252b38] px-2 py-1.5 text-[9px] text-[#94a3b8] hover:border-[#10b981]/50 hover:text-white">Reset Dynamic LVLS defaults</button>
-   </div>
-  </div>}
- </div>;
+const input = 'w-full rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#10b981]/60';
+const select = input;
+
+const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+  <button type="button" onClick={() => onChange(!value)} className="flex w-full items-center justify-between rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[9px] text-[#cbd5e1]">
+    <span>{label}</span>
+    <span className={`h-3.5 w-6 rounded-full p-0.5 ${value ? 'bg-[#10b981]' : 'bg-[#252b38]'}`}>
+      <span className={`block h-2.5 w-2.5 rounded-full bg-white transition-transform ${value ? 'translate-x-2.5' : ''}`} />
+    </span>
+  </button>
+);
+
+export function LevelSettingsDock() {
+  const [open, setOpen] = useState(false);
+  const [s, setS] = useState<DynamicLevelSettings>(() => getDynamicLevelSettings());
+
+  useEffect(() => {
+    const h = (e: Event) => setS((e as CustomEvent<DynamicLevelSettings>).detail || getDynamicLevelSettings());
+    window.addEventListener('tradingcore:level-settings', h);
+    return () => window.removeEventListener('tradingcore:level-settings', h);
+  }, []);
+
+  const patch = (v: Partial<DynamicLevelSettings>) => {
+    const next = { ...s, ...v };
+    setS(next);
+    saveDynamicLevelSettings(next);
+  };
+
+  return (
+    <div className="fixed z-[85] top-[185px] right-[660px] max-w-[330px] max-[1500px]:right-[360px] max-[900px]:top-[120px] max-[900px]:right-3 font-mono text-[10px]">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="flex h-8 items-center gap-2 rounded-md border border-[#222636] bg-[#0b0e15]/95 px-3 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#10b981]/50 hover:text-white">
+          <Settings2 className="h-3.5 w-3.5" />
+          <span>LEVEL SETTINGS</span>
+        </button>
+      ) : (
+        <div className="w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-[#2a3040] bg-[#0b0e15]/98 shadow-2xl backdrop-blur">
+          <div className="flex items-center justify-between border-b border-[#222636] px-3 py-2.5">
+            <div>
+              <div className="text-[9px] uppercase tracking-widest text-[#64748b]">Price Action Feature</div>
+              <div className="mt-0.5 text-xs font-semibold text-white">Support & Resistance Levels</div>
+            </div>
+            <button onClick={() => setOpen(false)} className="rounded-md p-1 text-[#64748b] hover:text-white"><X className="h-3.5 w-3.5" /></button>
+          </div>
+
+          <div className="max-h-[520px] space-y-3 overflow-y-auto p-3">
+            <div className="rounded-md border border-[#252b38] bg-[#0d1119] px-2.5 py-2 text-[8px] leading-4 text-[#64748b]">
+              This is a chart feature, not an indicator. Turn <span className="text-white">Levels</span> on from the chart toolbar to display price-action support and resistance. Use these settings only to control how the feature finds and displays levels.
+            </div>
+
+            <div>
+              <div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Level Detection</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Lookback Bars"><input className={input} type="number" min="50" max="5000" value={s.lookbackPeriod} onChange={e => patch({ lookbackPeriod: Math.max(50, Math.min(5000, Number(e.target.value) || 800)) })} /></Field>
+                <Field label="Pivot Strength"><input className={input} type="number" min="2" max="50" value={s.pivotLength} onChange={e => patch({ pivotLength: Math.max(2, Math.min(50, Number(e.target.value) || 10)) })} /></Field>
+                <Field label="Max Levels / Side"><input className={input} type="number" min="5" max="75" value={s.maxLevelsPerType} onChange={e => patch({ maxLevelsPerType: Math.max(5, Math.min(75, Number(e.target.value) || 30)) })} /></Field>
+                <Field label="Merge Distance × ATR"><input className={input} type="number" min="0.1" max="5" step="0.1" value={s.mergeAtrMultiplier} onChange={e => patch({ mergeAtrMultiplier: Math.max(.1, Math.min(5, Number(e.target.value) || .5)) })} /></Field>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                <Toggle label="Merge Nearby Levels" value={s.mergeNearbyLevels} onChange={v => patch({ mergeNearbyLevels: v })} />
+                <Toggle label="Use Wick-Dominance Filter" value={s.wickDominanceFilter} onChange={v => patch({ wickDominanceFilter: v })} />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Display</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Historical Start"><select className={select} value={s.levelStartMode} onChange={e => patch({ levelStartMode: e.target.value as DynamicLevelSettings['levelStartMode'] })}><option>Confirmation</option><option>Pivot</option></select></Field>
+                <Field label="Level Style"><select className={select} value={s.displayAsZones ? 'Zones' : 'Lines'} onChange={e => patch({ displayAsZones: e.target.value === 'Zones' })}><option>Lines</option><option>Zones</option></select></Field>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                <Toggle label="Show Price Labels" value={s.showLabels} onChange={v => patch({ showLabels: v })} />
+                <Toggle label="Show Breakout / Reversal Events" value={s.showBreakouts || s.showReversals || s.showFailures} onChange={v => patch({ showBreakouts: v, showReversals: v, showFailures: v })} />
+              </div>
+            </div>
+
+            <div className="rounded-md border border-[#252b38] bg-[#0d1119] px-2.5 py-2 text-[8px] leading-4 text-[#64748b]">
+              Levels come from confirmed price pivots and price action. ATR is used for spacing/merging and optional breakout buffering; it does not manufacture directional levels.
+            </div>
+
+            <button onClick={() => { saveDynamicLevelSettings(DEFAULT_DYNAMIC_LEVEL_SETTINGS); setS({ ...DEFAULT_DYNAMIC_LEVEL_SETTINGS }); }} className="w-full rounded-md border border-[#252b38] px-2 py-1.5 text-[9px] text-[#94a3b8] hover:border-[#10b981]/50 hover:text-white">
+              Reset Level Feature Defaults
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
