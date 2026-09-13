@@ -20,6 +20,8 @@ export class TradingCoreRuntime {
   private portfolioSyncPromises = new Map<string, Promise<any>>();
   private portfolioPollTimer?: ReturnType<typeof setInterval>;
   private portfolioPollRefs = 0;
+  private optionChainCache = new Map<string, { expiresAt: number; data: any }>();
+  private optionChainPromises = new Map<string, Promise<any>>();
   private historyCache = new Map<string, { expiresAt: number; data: HistoricalCandle[] }>();
   private routeGeneration = 0;
   private lastTickTime = new Map<string, number>();
@@ -44,17 +46,19 @@ export class TradingCoreRuntime {
 
   public async connectBrokerOAuth(brokerId: string, authCode?: string): Promise<{ success: boolean; error?: string }> {
     const res = await this.brokerMgr.connectOAuth(brokerId, authCode);
-    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
+    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
     return res;
   }
   public async connectBrokerApiKeys(brokerId: string, credentials: any): Promise<{ success: boolean; error?: string }> {
     const res = await this.brokerMgr.connectApiKeys(brokerId, credentials);
-    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'ApiKeys' }); void this.syncPortfolio(brokerId); }
+    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'ApiKeys' }); void this.syncPortfolio(brokerId); }
     return res;
   }
   public async disconnectBroker(brokerId: string): Promise<void> {
     this.routeGeneration += 1;
     this.historyCache.clear();
+    this.optionChainCache.clear();
+    this.optionChainPromises.clear();
     this.lastTickTime.clear();
     this.market.clear();
     brokerMarketDataClient.disconnect(brokerId);
@@ -72,7 +76,12 @@ export class TradingCoreRuntime {
       if (previous !== target) {
         this.routeGeneration += 1;
         this.historyCache.clear();
+        this.optionChainCache.clear();
+        this.optionChainPromises.clear();
         this.lastTickTime.clear();
+        // A broker switch is a hard data-boundary. Never allow a tick, chart
+        // cache entry, or portfolio snapshot from the previous broker to
+        // survive into the newly selected broker.
         this.market.clear();
         if (previous) brokerMarketDataClient.disconnect(previous);
       }
@@ -97,9 +106,9 @@ export class TradingCoreRuntime {
     this.portfolioSyncPromises.set(targetId, promise);
     return promise;
   }
-  public startPortfolioPolling(intervalMs = 5000): () => void {
+  public startPortfolioPolling(intervalMs = 15000): () => void {
     this.portfolioPollRefs += 1;
-    if (!this.portfolioPollTimer) { void this.syncPortfolio(); this.portfolioPollTimer = setInterval(() => { if (this.brokerMgr.getPrimaryBrokerInfo()?.status === 'Connected') void this.syncPortfolio(); }, Math.max(2500, intervalMs)); }
+    if (!this.portfolioPollTimer) { void this.syncPortfolio(); this.portfolioPollTimer = setInterval(() => { if (this.brokerMgr.getPrimaryBrokerInfo()?.status === 'Connected') void this.syncPortfolio(); }, Math.max(5000, intervalMs)); }
     return () => { this.portfolioPollRefs = Math.max(0, this.portfolioPollRefs - 1); if (this.portfolioPollRefs === 0 && this.portfolioPollTimer) { clearInterval(this.portfolioPollTimer); this.portfolioPollTimer = undefined; } };
   }
   public async placeOrder(order: OrderRequest): Promise<OrderResult> { const result = await this.engine.placeOrder(order); this.emit('ORDER_EXECUTED', result); return result; }
@@ -114,7 +123,21 @@ export class TradingCoreRuntime {
   public async getTradeHistory(): Promise<TradeRecord[]> { return this.engine.getTradeHistory(); }
   public setMarketDataProvider(type: MarketDataProviderType): void { this.currentMarketDataProviderType = type; }
   public getMarketDataProviderType(): MarketDataProviderType { return this.currentMarketDataProviderType; }
-  public async getOptionChain(instrumentKey: string, expiryDate = 'current_week') { const broker = this.brokerMgr.getPrimaryBroker(); if (!broker) throw new Error('Connect a broker before loading option-chain data.'); return broker.getOptionChain(instrumentKey, expiryDate); }
+  public async getOptionChain(instrumentKey: string, expiryDate = 'current_week') {
+    const brokerInfo = this.getPrimaryBrokerInfo();
+    const broker = this.brokerMgr.getPrimaryBroker();
+    if (!broker || !brokerInfo) throw new Error('Connect a broker before loading option-chain data.');
+    const key = `${brokerInfo.brokerId.toLowerCase()}:${instrumentKey}:${expiryDate}`;
+    const cached = this.optionChainCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    const existing = this.optionChainPromises.get(key);
+    if (existing) return existing;
+    const promise = broker.getOptionChain(instrumentKey, expiryDate)
+      .then((data) => { this.optionChainCache.set(key, { data, expiresAt: Date.now() + 10_000 }); return data; })
+      .finally(() => this.optionChainPromises.delete(key));
+    this.optionChainPromises.set(key, promise);
+    return promise;
+  }
   public async getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {
     const brokerInfo = this.getPrimaryBrokerInfo();
     const broker = this.getPrimaryBroker();
@@ -157,6 +180,7 @@ export class TradingCoreRuntime {
         return;
       }
       const relay = (event: MarketFeedEvent) => {
+        // Ignore late frames from a broker socket that was already replaced.
         const activeNow = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
         if (activeNow !== currentBrokerId.toLowerCase()) return;
         if (event.type === 'tick' && event.tick) {
