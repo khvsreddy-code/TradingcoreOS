@@ -4,6 +4,7 @@ import path from 'node:path';
 import { brokerRoutes } from './src/server/routes/broker.routes.js';
 import { instrumentSearchPriorityRoutes } from './src/server/routes/instrument-search-priority.routes.js';
 import { workspaceFixRoutes } from './src/server/routes/workspace-fix.routes.js';
+import { upstoxOptionChainFixRoutes } from './src/server/routes/upstox-option-chain-fix.routes.js';
 import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
 import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
 import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
@@ -46,6 +47,9 @@ app.use('/api/auth/broker', brokerRoutes);
 // The prioritized FYERS search route must run before the broader workspace-fix
 // search route so plain "nifty" ranks NIFTY 50 ahead of FINNIFTY.
 app.use('/api/trading', instrumentSearchPriorityRoutes);
+// The Upstox option-chain expiry fix must run before the broader workspace-fix
+// route so relative expiries are resolved against active contracts locally.
+app.use('/api/trading', upstoxOptionChainFixRoutes);
 // Workspace-fix routes must run before the legacy market-data routes so their
 // improved suggestions and option-chain normalization win deterministically.
 app.use('/api/trading', workspaceFixRoutes);
