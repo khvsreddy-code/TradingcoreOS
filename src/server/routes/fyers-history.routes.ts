@@ -1,0 +1,133 @@
+import { Router, Response } from 'express';
+import { BrokerRepository } from '../storage/BrokerRepository.js';
+import { EncryptionService } from '../encryption/EncryptionService.js';
+import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
+import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+
+/**
+ * Safe FYERS historical-data route.
+ *
+ * The previous implementation walked backwards through many 90-day windows
+ * while requesting up to 25,000 intraday candles. Every History API call counts
+ * against FYERS' request limits, so one chart load could consume a large part
+ * of the minute budget. TradingCore only needs recent intraday structure for
+ * its chart/level engine, so use one broker-safe window instead.
+ */
+export const fyersHistoryRoutes = Router();
+fyersHistoryRoutes.use(requireUser);
+
+const resolutionMap: Record<string, string> = {
+  '1minute': '1',
+  '3minute': '3',
+  '5minute': '5',
+  '15minute': '15',
+  '30minute': '30',
+  '60minute': '60',
+  day: 'D',
+};
+
+function indiaDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
+}
+
+function normalize(rows: any[], limit: number): any[] {
+  const byTime = new Map<number, any>();
+  for (const row of rows || []) {
+    if (!Array.isArray(row) || row.length < 5) continue;
+    const raw = Number(row[0]);
+    const time = raw > 1e12 ? raw : raw * 1000;
+    const values = [Number(row[1]), Number(row[2]), Number(row[3]), Number(row[4])];
+    if (!Number.isFinite(time) || values.some(v => !Number.isFinite(v))) continue;
+    byTime.set(time, {
+      timestamp: new Date(time).toISOString(),
+      open: values[0], high: values[1], low: values[2], close: values[3],
+      volume: Number.isFinite(Number(row[5])) ? Number(row[5]) : 0,
+    });
+  }
+  return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, candle]) => candle).slice(-limit);
+}
+
+const cache = new Map<string, { expiresAt: number; data: any[] }>();
+const inflight = new Map<string, Promise<any[]>>();
+
+fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+
+  const userId = req.tradingCoreUserId!;
+  const session = await BrokerRepository.getSession('fyers', userId);
+  if (!session || session.status !== 'Connected') {
+    res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' });
+    return;
+  }
+
+  const instrumentKey = String(req.query.instrument_key || '').trim();
+  const interval = String(req.query.interval || '').trim();
+  const resolution = resolutionMap[interval] || interval;
+  const requested = Number(req.query.limit || 10_000);
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(10_000, Math.floor(requested))) : 10_000;
+  if (!instrumentKey || !resolution) {
+    res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
+    return;
+  }
+
+  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}`;
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.setHeader('Cache-Control', 'private, max-age=20');
+    res.json({ success: true, data: cached.data, requested: limit, returned: cached.data.length, cached: true });
+    return;
+  }
+
+  const existing = inflight.get(key);
+  if (existing) {
+    try {
+      const data = await existing;
+      res.setHeader('Cache-Control', 'private, max-age=20');
+      res.json({ success: true, data, requested: limit, returned: data.length, cached: true });
+    } catch (error: any) {
+      res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
+    }
+    return;
+  }
+
+  try {
+    const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
+    const task = withBrokerRequestGate('fyers', accessToken, async () => {
+      const now = new Date();
+      // One intraday request is intentionally used. Thirty calendar days gives
+      // enough 1m/3m/5m/15m structure for the current chart without walking
+      // dozens of historical windows and burning the API quota.
+      const lookbackDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 30;
+      const from = new Date(now.getTime() - lookbackDays * 86_400_000);
+      const params = new URLSearchParams({
+        symbol: instrumentKey,
+        resolution,
+        date_format: '1',
+        range_from: indiaDate(from),
+        range_to: indiaDate(now),
+        cont_flag: '1',
+      });
+      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+        headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+      });
+      const text = await response.text();
+      let payload: any;
+      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
+      if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
+        throw new Error(payload?.message || `Fyers history failed (${response.status})`);
+      }
+      const data = normalize(payload?.candles || [], limit);
+      if (data.length < 2) throw new Error(`Fyers returned only ${data.length} valid candle(s) for ${instrumentKey}.`);
+      cache.set(key, { data, expiresAt: Date.now() + 120_000 });
+      return data;
+    });
+    inflight.set(key, task);
+    const data = await task;
+    res.setHeader('Cache-Control', 'private, max-age=20');
+    res.json({ success: true, data, requested: limit, returned: data.length });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
+  } finally {
+    inflight.delete(key);
+  }
+});
