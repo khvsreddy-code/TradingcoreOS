@@ -114,11 +114,25 @@ tradingRoutes.get('/:brokerId/option-chain', injectBrokerSession, async (req: Re
   catch (err: any) { res.status(502).json({ success: false, error: err.message || 'Unable to load option chain' }); }
 });
 
+async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: any) {
+  const gatewayUrl = process.env.FYERS_EXECUTION_GATEWAY_URL?.replace(/\/$/, '');
+  const gatewaySecret = process.env.FYERS_EXECUTION_GATEWAY_SECRET;
+  if (!gatewayUrl || !gatewaySecret) throw new Error('FYERS execution gateway is not configured. Set FYERS_EXECUTION_GATEWAY_URL and FYERS_EXECUTION_GATEWAY_SECRET on the TradingCore server.');
+  const response = await fetch(`${gatewayUrl}/v1/fyers/order`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-tradingcore-gateway-secret': gatewaySecret },
+    body: JSON.stringify({ accessToken, order }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) throw new Error(payload?.error || `FYERS execution gateway returned HTTP ${response.status}`);
+  return payload.data ?? payload;
+}
+
 tradingRoutes.post('/:brokerId/order', injectBrokerSession, async (req: AuthenticatedRequest, res: Response) => {
   const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
   if (!idempotencyKey || idempotencyKey.length > 128) { res.status(400).json({ success: false, error: 'Idempotency-Key header is required for live order placement (1-128 characters).' }); return; }
   const userId = req.tradingCoreUserId!;
-  const brokerId = req.params.brokerId;
+  const brokerId = req.params.brokerId.toLowerCase();
   try {
     const claim = await OrderIdempotencyRepository.claim(userId, brokerId, idempotencyKey, req.body);
     if (!claim.claimed) {
@@ -127,7 +141,9 @@ tradingRoutes.post('/:brokerId/order', injectBrokerSession, async (req: Authenti
       res.status(claim.record?.state === 'completed' ? 200 : 502).json(claim.record?.response ?? { success: false, error: 'Previous order result is unavailable.' }); return;
     }
     try {
-      const data = await (req as any).brokerAdapter.placeOrder((req as any).accessToken, req.body);
+      const data = brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL
+        ? await placeFyersOrderViaFixedIpGateway((req as any).accessToken, req.body)
+        : await (req as any).brokerAdapter.placeOrder((req as any).accessToken, req.body);
       const response = { success: true, data };
       await OrderIdempotencyRepository.complete(userId, brokerId, idempotencyKey, response); res.json(response);
     } catch (err: any) {
