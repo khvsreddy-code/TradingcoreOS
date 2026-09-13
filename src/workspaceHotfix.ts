@@ -93,7 +93,7 @@
       const isOptionChain = url.includes('/option-chain');
       const isInstrumentSearch = url.includes('/instruments/search');
       if (!isOptionChain && !isInstrumentSearch) return originalFetch(input, init);
-      const ttl = isOptionChain ? 12_000 : 10_000;
+      const ttl = isOptionChain ? 30_000 : 10_000;
       const cached = cache.get(url);
       if (cached && cached.expiresAt > Date.now()) return cached.response.clone();
       const existing = inflight.get(url);
@@ -105,6 +105,21 @@
       inflight.set(url, request);
       return request;
     };
+  }
+
+  function bindChartRefreshBridge() {
+    document.addEventListener('click', event => {
+      const target = event.target as Element | null;
+      const button = target?.closest('button');
+      if (!button || button.classList.contains('toolbar-pill')) return;
+      if (!['1m','3m','5m','15m','30m','1H','1D'].includes((button.textContent || '').trim())) return;
+      window.setTimeout(() => {
+        const oi = Array.from(document.querySelectorAll('button.toolbar-pill')).find(x => (x.textContent || '').trim() === 'OI') as HTMLButtonElement | undefined;
+        if (!oi || !oi.classList.contains('toolbar-pill-active')) return;
+        oi.click();
+        window.setTimeout(() => oi.click(), 80);
+      }, 250);
+    }, true);
   }
 
   function bindLevelsBridge() {
@@ -123,6 +138,7 @@
   function install() {
     installRequestCache();
     ensureWatchlistRail();
+    bindChartRefreshBridge();
     bindLevelsBridge();
     const root = q('#root');
     if (!root) return;
