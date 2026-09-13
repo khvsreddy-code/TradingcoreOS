@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { X, RefreshCw } from 'lucide-react';
 import { LiveTradingTerminalV4 } from './LiveTradingTerminalV4';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
@@ -23,7 +23,7 @@ const css = `
 .tc5-rename-modal input{width:100%;box-sizing:border-box;background:#11151f;color:#fff;border:1px solid #252b38;border-radius:6px;padding:8px}
 .tc5-backdrop{position:fixed;inset:0;z-index:500;background:#0007;backdrop-filter:blur(1px)}
 .tc5-window{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(900px,calc(100vw - 32px));height:min(620px,calc(100vh - 110px));min-width:420px;min-height:260px;max-width:calc(100vw - 20px);max-height:calc(100vh - 40px);z-index:510;display:flex;flex-direction:column;overflow:hidden;resize:both;background:#080a0f;color:#e5e7eb;border:1px solid #3a4354;border-radius:10px;box-shadow:0 28px 90px #000e}
-.tc5-head{height:42px;min-height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#0e121a;border-bottom:1px solid #252b38;user-select:none}
+.tc5-head{height:42px;min-height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#0e121a;border-bottom:1px solid #252b38;user-select:none;cursor:grab}.tc5-head:active{cursor:grabbing}
 .tc5-head b{font:700 11px ui-monospace,monospace}.tc5-head small{color:#64748b;font:9px ui-monospace,monospace}.tc5-spacer{flex:1}
 .tc5-head button{display:inline-flex;align-items:center;gap:5px;background:#11151f;color:#cbd5e1;border:1px solid #252b38;border-radius:6px;padding:6px 8px;cursor:pointer}
 .tc5-content{flex:1;min-height:0;overflow:auto;padding:10px}.tc5-card{border:1px solid #252b38;border-radius:8px;background:#090c12;padding:10px}.tc5-card b{display:block;font:700 11px ui-monospace,monospace}.tc5-card small,.tc5-muted{color:#64748b;font-size:9px}
@@ -40,11 +40,12 @@ export function LiveTradingTerminalV5() {
   const [portfolio, setPortfolio] = useState<any>({ positions: [], orders: [], trades: [] });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const windowRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, left: 0, top: 0 });
 
   const sync = async () => { try { setPortfolio(await tradingCoreRuntime.syncPortfolio()); } catch (e: any) { setMessage(e?.message || 'Portfolio sync failed'); } };
   useEffect(() => { void sync(); return tradingCoreRuntime.startPortfolioPolling(15000); }, []);
 
-  // Intercept ONLY the five popup controls. Option Chain and every other terminal control remain untouched.
   useEffect(() => {
     const handler = (e: PointerEvent) => {
       const target = e.target as HTMLElement | null;
@@ -52,9 +53,7 @@ export function LiveTradingTerminalV5() {
       if (!button) return;
       const text = (button.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
       if (!/^(levels|positions|orders|trades|order ticket)$/.test(text)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       setPanel(text === 'order ticket' ? 'ticket' : text as Panel);
     };
     document.addEventListener('pointerdown', handler, true);
@@ -67,22 +66,47 @@ export function LiveTradingTerminalV5() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    if (!panel || !windowRef.current) return;
+    const el = windowRef.current;
+    el.style.left = '50%'; el.style.top = '50%'; el.style.transform = 'translate(-50%,-50%)';
+    dragRef.current = { active: false, startX: 0, startY: 0, left: 0, top: 0 };
+  }, [panel]);
+
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const el = windowRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, left: rect.left, top: rect.top };
+    el.style.transform = 'none';
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+  const dragWindow = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current.active) return;
+    const el = windowRef.current;
+    if (!el) return;
+    const nextLeft = Math.max(0, Math.min(window.innerWidth - 120, dragRef.current.left + e.clientX - dragRef.current.startX));
+    const nextTop = Math.max(58, Math.min(window.innerHeight - 70, dragRef.current.top + e.clientY - dragRef.current.startY));
+    el.style.left = `${nextLeft}px`; el.style.top = `${nextTop}px`;
+  };
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragRef.current.active = false;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+  };
+
   const saveName = () => {
-    const value = draft.trim().slice(0, 40);
-    if (!value) return;
-    setName(value);
-    try { localStorage.setItem('tradingcore_watchlist_name', value); } catch {}
-    setRenameOpen(false);
+    const value = draft.trim().slice(0, 40); if (!value) return;
+    setName(value); try { localStorage.setItem('tradingcore_watchlist_name', value); } catch {} setRenameOpen(false);
   };
 
   const submit = async (side: OrderRequest['side'], symbol: string, extra: any = {}) => {
     setBusy(true); setMessage('');
     try {
       const result = await tradingCoreRuntime.placeOrder({ symbol, instrument_token: symbol, quantity: Math.max(1, num(extra.quantity || 1)), orderType: 'Market', side, product: 'MIS', takeProfit: num(extra.target) || undefined, stopLoss: num(extra.stopLoss) || undefined, trailingStopLoss: num(extra.trailing) || undefined, idempotencyKey: globalThis.crypto?.randomUUID?.() } as any);
-      setMessage(`${result.status || 'submitted'} ${result.orderId || ''}`);
-      await sync();
-    } catch (e: any) { setMessage(e?.message || 'Order failed'); }
-    finally { setBusy(false); }
+      setMessage(`${result.status || 'submitted'} ${result.orderId || ''}`); await sync();
+    } catch (e: any) { setMessage(e?.message || 'Order failed'); } finally { setBusy(false); }
   };
 
   return <>
@@ -95,12 +119,12 @@ export function LiveTradingTerminalV5() {
       <div className="tc5-actions"><button onClick={() => setRenameOpen(false)}>Cancel</button><button onClick={saveName}>Save</button></div>
     </div>}
     {panel && <div className="tc5-backdrop" onPointerDown={e => { if (e.target === e.currentTarget) setPanel(null); }}>
-      <div className="tc5-window" role="dialog" aria-modal="true" onPointerDown={e => e.stopPropagation()}>
-        <div className="tc5-head">
+      <div ref={windowRef} className="tc5-window" role="dialog" aria-modal="true" onPointerDown={e => e.stopPropagation()}>
+        <div className="tc5-head" onPointerDown={startDrag} onPointerMove={dragWindow} onPointerUp={endDrag} onPointerCancel={endDrag}>
           <b>{panel === 'levels' ? 'OS LEVELS' : panel.toUpperCase()}</b>
-          <small>Floating window · resize from bottom-right · ESC to close</small>
+          <small>Drag title bar · resize from bottom-right · ESC to close</small>
           <span className="tc5-spacer" />
-          <button onClick={() => setPanel(null)}><X size={12} /> Close</button>
+          <button onPointerDown={e => e.stopPropagation()} onClick={() => setPanel(null)}><X size={12} /> Close</button>
         </div>
         <div className="tc5-content">
           {panel === 'levels' && <Levels value={levels} onChange={v => { setLevels(v); saveDynamicLevelSettings(v); }} />}
@@ -115,7 +139,7 @@ export function LiveTradingTerminalV5() {
 }
 
 function Levels({ value, onChange }: { value: DynamicLevelSettings; onChange: (v: DynamicLevelSettings) => void }) {
-  const set = (key: keyof DynamicLevelSettings, value: any) => onChange({ ...value, [key]: value });
+  const set = (key: keyof DynamicLevelSettings, next: any) => onChange({ ...value, [key]: next });
   return <div className="tc5-grid">
     <div className="tc5-card"><b>Detection</b><small>Levels are a feature, not an indicator.</small><div className="tc5-fields">
       <div><label>How much back</label><input type="number" value={value.lookbackPeriod} onChange={e => set('lookbackPeriod', num(e.target.value))} /></div>
