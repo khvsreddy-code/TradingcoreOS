@@ -22,7 +22,7 @@ export const defaultIndicators: IndicatorConfig[] = [
  {id:'failed-break',kind:'Failed Breakout',period:5,enabled:false}, {id:'rejection',kind:'Rejection Candles',enabled:false}, {id:'inside',kind:'Inside Bar Breakout',enabled:false},
  {id:'engulf',kind:'Engulfing Patterns',enabled:false}, {id:'pinbars',kind:'Pin Bars',enabled:false}, {id:'nr7',kind:'NR7 Volatility Contraction',enabled:false},
  {id:'developing-day',kind:'Developing Day High/Low',enabled:false}, {id:'vwap-dev',kind:'VWAP Deviation Bands',multiplier:1,enabled:false},
- {id:'avwap',kind:'Anchored VWAP',anchor:'Swing High',enabled:false},
+ ({id:'avwap',kind:'Anchored VWAP',anchor:'Swing High',enabled:false} as IndicatorConfig),
  {id:'cpr-extended',kind:'CPR R1-R5 / S1-S5',enabled:false}, {id:'camarilla',kind:'Camarilla Pivots',enabled:false}, {id:'fib-pivots',kind:'Fibonacci Pivots',enabled:false},
  {id:'weekly-pivots',kind:'Weekly Pivots',enabled:false}, {id:'monthly-pivots',kind:'Monthly Pivots',enabled:false},
 ];
@@ -38,29 +38,13 @@ export const defaultAutomations: AutomationConfig[] = [
  {id:'supertrend-flip',name:'Supertrend flip',description:'Paper signal when Supertrend changes direction.',mode:'Paper',enabled:false,kind:'SUPERTREND_FLIP',period:10},
  {id:'bollinger-breakout',name:'Bollinger breakout',description:'Paper signal when price closes beyond the volatility envelope.',mode:'Paper',enabled:false,kind:'BOLLINGER_BREAKOUT',period:20,multiplier:2},
 ];
-
 function read<T>(key:string, fallback:T):T { try { const x=localStorage.getItem(key); return x?JSON.parse(x):fallback; } catch{return fallback;} }
 let indicatorStateCache: IndicatorConfig[] | null = null;
 const normalizeIndicator=(item: IndicatorConfig): IndicatorConfig => {
-  const style=defaultIndicatorStyle(item.kind);
-  const anchor=(item as IndicatorConfig & {anchor?:string}).anchor;
-  return { ...item, source: item.source || (item.kind === 'VWAP' || item.kind === 'CCI' || item.kind === 'MFI' ? 'hlc3' : 'close'), color: item.color || style.color, lineWidth: item.lineWidth || style.lineWidth, lineStyle: item.lineStyle ?? style.lineStyle, ...(item.kind === 'Anchored VWAP' ? {anchor: anchor || 'Swing High'} : {}) };
+  const style=defaultIndicatorStyle(item.kind); const anchor=(item as IndicatorConfig & {anchor?:string}).anchor;
+  return { ...item, source: item.source || (item.kind === 'VWAP' || item.kind === 'CCI' || item.kind === 'MFI' ? 'hlc3' : 'close'), color: item.color || style.color, lineWidth: item.lineWidth || style.lineWidth, lineStyle: item.lineStyle ?? style.lineStyle, ...(item.kind === 'Anchored VWAP' ? ({anchor: anchor || 'Swing High'} as any) : {}) };
 };
-export const getIndicators=()=>{
-  if (indicatorStateCache) return indicatorStateCache;
-  const stored=read<IndicatorConfig[]|null>(IND,null);
-  const base=stored && stored.length ? stored : defaultIndicators.map((item)=>({...item}));
-  indicatorStateCache = base.map(normalizeIndicator);
-  localStorage.setItem(IND,JSON.stringify(indicatorStateCache));
-  localStorage.setItem(`${IND}:version`,IND_VERSION);
-  return indicatorStateCache;
-};
-export const saveIndicators=(v:IndicatorConfig[])=>{
-  const cache=getIndicators();
-  cache.splice(0,cache.length,...v.map(normalizeIndicator));
-  localStorage.setItem(IND,JSON.stringify(cache));
-  localStorage.setItem(`${IND}:version`,IND_VERSION);
-  window.dispatchEvent(new CustomEvent('tradingcore:indicators',{detail:cache.slice()}));
-};
+export const getIndicators=()=>{ if (indicatorStateCache) return indicatorStateCache; const stored=read<IndicatorConfig[]|null>(IND,null); const base=stored && stored.length ? stored : defaultIndicators.map((item)=>({...item})); indicatorStateCache = base.map(normalizeIndicator); localStorage.setItem(IND,JSON.stringify(indicatorStateCache)); localStorage.setItem(`${IND}:version`,IND_VERSION); return indicatorStateCache; };
+export const saveIndicators=(v:IndicatorConfig[])=>{ const cache=getIndicators(); cache.splice(0,cache.length,...v.map(normalizeIndicator)); localStorage.setItem(IND,JSON.stringify(cache)); localStorage.setItem(`${IND}:version`,IND_VERSION); window.dispatchEvent(new CustomEvent('tradingcore:indicators',{detail:cache.slice()})); };
 export const getAutomations=()=>read<AutomationConfig[]>(AUTO,defaultAutomations);
 export const saveAutomations=(v:AutomationConfig[])=>{localStorage.setItem(AUTO,JSON.stringify(v));window.dispatchEvent(new CustomEvent('tradingcore:automations',{detail:v}));};
