@@ -279,98 +279,60 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
     }));
     return res.json({ success: true, data, total: data.length, source: 'fyers-symbol-master' });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Unable to search FYERS instruments' });
+    return res.status(502).json({ success: false, error: err?.message || 'Unable to load FYERS symbol master' });
   }
 });
 
-brokerMarketDataRoutes.get('/:brokerId/stream', async (req: AuthenticatedRequest, res: Response) => {
-  const brokerId = String(req.params.brokerId).toLowerCase();
-  if (brokerId !== 'fyers') return res.status(404).json({ success: false, error: `Live stream is not available for ${brokerId} on this route.` });
-  const session = await getFyersSession(req, res); if (!session) return;
-  const raw = String(req.query.symbols || '');
-  const symbols = raw.split(',').map(decodeURIComponent).map(s => s.trim()).filter(Boolean);
-  const depthSymbol = req.query.depth ? decodeURIComponent(String(req.query.depth)) : undefined;
-  if (!symbols.length) return res.status(400).json({ success: false, error: 'At least one symbol is required.' });
-  res.status(200);
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders?.();
+brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
+  const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
+  const interval = String(req.query.interval || '');
+  const requestedLimit = Number(req.query.limit || 25_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(25_000, Math.floor(requestedLimit))) : 25_000;
+  if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
-  let closed = false;
-  req.on('close', () => { closed = true; stop(); });
-  const stop = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, event => {
-    if (closed) return;
-    try { res.write(`${JSON.stringify(event)}\n`); } catch { closed = true; stop(); }
-  }, Boolean(depthSymbol), depthSymbol ? [depthSymbol] : symbols);
-  const heartbeat = setInterval(() => {
-    if (closed) { clearInterval(heartbeat); return; }
-    try { res.write(`${JSON.stringify({ type: 'heartbeat', at: Date.now() })}\n`); } catch { closed = true; clearInterval(heartbeat); stop(); }
-  }, 15_000);
-  req.on('close', () => clearInterval(heartbeat));
-});
-
-brokerMarketDataRoutes.get('/:brokerId/history', async (req: AuthenticatedRequest, res: Response) => {
-  const brokerId = String(req.params.brokerId).toLowerCase();
-  const symbol = decodeURIComponent(String(req.query.symbol || ''));
-  const interval = String(req.query.interval || '5minute');
-  const limit = Math.max(100, Math.min(25_000, Number(req.query.limit || 10_000)));
-  if (!symbol) return res.status(400).json({ success: false, error: 'Symbol is required.' });
-  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
   try {
-    if (brokerId === 'fyers') {
-      const fyersSymbol = toFyersSymbol(symbol);
-      const data = await fetchFyersHistoryTarget(session.token, fyersSymbol, interval, limit);
-      return res.json({ success: true, data, source: 'fyers-v3-history', brokerId, symbol: fyersSymbol });
-    }
-    const adapter = BrokerRegistry.getAdapter(brokerId);
-    const data = await adapter.getHistoricalData(session.token, symbol, interval);
-    return res.json({ success: true, data: normalizeCandles(data, limit), source: `${brokerId}-adapter-history`, brokerId, symbol });
+    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit);
+    if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
+    res.setHeader('Cache-Control', 'private, max-age=15');
+    return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `${brokerId} historical data failed` });
+    return res.status(502).json({ success: false, error: err?.message || `Unable to load Fyers historical candles for ${symbol}` });
   }
 });
 
-brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: AuthenticatedRequest, res: Response) => {
-  const brokerId = String(req.params.brokerId).toLowerCase();
-  const symbol = decodeURIComponent(String(req.query.symbol || ''));
-  const expiryDate = String(req.query.expiry || 'current_week');
-  if (!symbol) return res.status(400).json({ success: false, error: 'Underlying symbol is required.' });
-  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
+brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
+  const symbol = toFyersSymbol(String(req.query.instrument_key || '')); const expiryDate = String(req.query.expiry_date || 'current_week');
+  if (!symbol) return res.status(400).json({ success: false, error: 'instrument_key is required' });
   try {
-    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const adapter = BrokerRegistry.getAdapter('fyers');
     const data = await adapter.getOptionChain(session.token, symbol, expiryDate);
-    return res.json({ success: true, data, brokerId, symbol });
+    res.setHeader('Cache-Control', 'private, max-age=5');
+    return res.json({ success: true, data });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `${brokerId} option chain failed` });
+    return res.status(502).json({ success: false, error: err?.message || 'Unable to load Fyers option chain' });
   }
 });
 
-brokerMarketDataRoutes.get('/:brokerId/quote', async (req: AuthenticatedRequest, res: Response) => {
-  const brokerId = String(req.params.brokerId).toLowerCase();
-  const symbol = decodeURIComponent(String(req.query.symbol || ''));
-  if (!symbol) return res.status(400).json({ success: false, error: 'Symbol is required.' });
-  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
-  try {
-    const adapter = BrokerRegistry.getAdapter(brokerId);
-    const data = await adapter.getQuote(session.token, symbol);
-    return res.json({ success: true, data, brokerId, symbol });
-  } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `${brokerId} quote failed` });
-  }
-});
-
-brokerMarketDataRoutes.get('/:brokerId/depth', async (req: AuthenticatedRequest, res: Response) => {
-  const brokerId = String(req.params.brokerId).toLowerCase();
-  const symbol = decodeURIComponent(String(req.query.symbol || ''));
-  if (!symbol) return res.status(400).json({ success: false, error: 'Symbol is required.' });
-  const session = await getBrokerSession(req, res, brokerId); if (!session) return;
-  try {
-    const adapter = BrokerRegistry.getAdapter(brokerId);
-    const data = await adapter.getDepth(session.token, symbol);
-    return res.json({ success: true, data, brokerId, symbol });
-  } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `${brokerId} depth failed` });
-  }
+brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: AuthenticatedRequest, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const session = await getFyersSession(req, res); if (!session) return;
+  const symbols = String(req.query.instrument_keys || '').split(',').map(x => toFyersSymbol(x.trim())).filter(Boolean);
+  if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
+  if (symbols.length > 100) return res.status(400).json({ success: false, error: 'Too many market symbols requested' });
+  res.status(200);
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  const write = (event: any) => { try { res.write(`${JSON.stringify(event)}\n`); } catch {} };
+  const depthSymbol = toFyersSymbol(String(req.query.depth_symbol || ''));
+  const includeDepth = Boolean(depthSymbol);
+  const depthSymbols = includeDepth ? [depthSymbol] : symbols;
+  const unsubscribe = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, write, includeDepth, depthSymbols);
+  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 12_000);
+  req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
 });
