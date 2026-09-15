@@ -7,12 +7,17 @@ import { predict, PredictionModelType, PredictionResult, runPredictionSuite, PRE
 import { getSupabaseClient } from '../services/auth/supabaseClient';
 import { useAuth } from '../auth/hooks/useAuth';
 
-const symbols=[['NSE_INDEX|Nifty 50','NIFTY 50'],['NSE_INDEX|Nifty Bank','BANK NIFTY'],['NSE_INDEX|Nifty Fin Service','FINNIFTY']];
+const symbols=[['NIFTY 50','NIFTY 50'],['BANK NIFTY','BANK NIFTY'],['FINNIFTY','FINNIFTY']];
+const brokerSymbol=(brokerId:string,symbol:string)=>{
+ if(brokerId.toLowerCase()==='fyers'){ return symbol==='NIFTY 50'?'NSE:NIFTY50-INDEX':symbol==='BANK NIFTY'?'NSE:NIFTYBANK-INDEX':'NSE:FINNIFTY-INDEX'; }
+ return symbol==='NIFTY 50'?'NSE_INDEX|Nifty 50':symbol==='BANK NIFTY'?'NSE_INDEX|Nifty Bank':'NSE_INDEX|Nifty Fin Service';
+};
+const brokerInterval=(tf:string)=>tf==='1h'?'60minute':tf==='1D'?'day':`${tf.replace('m','')}minute`;
 const fmtPct=(n:number)=>`${(n*100).toFixed(1)}%`;
 export function PredictionCenterPage({ onNavigate, onBackToLanding, onBroker }: { onNavigate:(path:WorkspaceRoute)=>void; onBackToLanding:()=>void; onBroker?:()=>void }) {
  const {user}=useAuth(); const [symbol,setSymbol]=useState(symbols[0][0]); const [timeframe,setTimeframe]=useState('5m'); const [candles,setCandles]=useState<HistoricalCandle[]>([]); const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [active,setActive]=useState<PredictionModelType>('direction'); const [enabled,setEnabled]=useState(true);
  const results=useMemo(()=>runPredictionSuite(candles,symbol,timeframe),[candles,symbol,timeframe]); const algorithms=useMemo(()=>runAlgorithmEnsemble(candles,symbol,timeframe),[candles,symbol,timeframe]); const current=results.find(x=>x.modelType===active)||results[0];
- const load=async()=>{setLoading(true);setError('');try{const broker=BrokerManager.getInstance().getPrimaryBroker();if(!broker)throw new Error('Connect a broker to generate live predictions.');const data=await broker.getHistoricalData(symbol,timeframe);if(!data.length)throw new Error('No historical candles returned for this symbol/timeframe.');setCandles(data); }catch(e:any){setError(e?.message||'Prediction data unavailable.');}finally{setLoading(false);}};
+ const load=async()=>{setLoading(true);setError('');try{const broker=BrokerManager.getInstance().getPrimaryBroker();if(!broker)throw new Error('Connect a broker to generate live predictions.');const info=BrokerManager.getInstance().getPrimaryBrokerInfo(); const wireSymbol=brokerSymbol(info?.brokerId||'',symbol); const data=await broker.getHistoricalData(wireSymbol,brokerInterval(timeframe));if(!data.length)throw new Error('No historical candles returned for this symbol/timeframe.');setCandles(data); }catch(e:any){setError(e?.message||'Prediction data unavailable.');}finally{setLoading(false);}};
  useEffect(()=>{void load();},[symbol,timeframe]);
  useEffect(()=>{if(!user||!current)return; const save=async()=>{try{const sb=getSupabaseClient();const {data:model}=await sb.from('prediction_models').select('id').eq('slug',`core-${active}`).maybeSingle();await sb.from('prediction_runs').insert({user_id:user.id,model_id:model?.id||null,symbol,exchange:'NSE',timeframe,bullish_probability:current.bullishProbability,neutral_probability:current.neutralProbability,bearish_probability:current.bearishProbability,confidence:current.confidence,predicted_price:current.predictedPrice,lower_bound:current.lowerBound,upper_bound:current.upperBound,market_regime:current.regime,features:current.features,explanation:current.explanation,outcome:'pending'});}catch{/* persistence must never block the terminal */}};void save();},[user,current?.timestamp,active,symbol,timeframe]);
  return <WorkspaceModuleShell active="/models" onNavigate={onNavigate} onBackToLanding={onBackToLanding} onBroker={onBroker}>
