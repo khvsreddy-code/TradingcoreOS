@@ -7,6 +7,7 @@ export type IndicatorKind =
 export type PriceSource = 'open' | 'high' | 'low' | 'close' | 'hl2' | 'hlc3' | 'ohlc4' | 'hlcc4';
 export type IndicatorConfig = {
   id: string; kind: IndicatorKind; period?: number; fast?: number; slow?: number; signal?: number; multiplier?: number; enabled: boolean; smooth?: number; displacement?: number;
+  anchor?: string; targetCount?: number; stopLookback?: number; minStopAtr?: number; maxStopAtr?: number; projectionBars?: number; halfLifeFraction?: number; shockMultiple?: number; baselinePeriod?: number;
   source?: PriceSource; color?: string; signalColor?: string; upperColor?: string; lowerColor?: string; lineWidth?: number; lineStyle?: 0 | 1 | 2;
 };
 export const PRICE_SOURCES: Array<{value: PriceSource; label: string}> = [
@@ -39,6 +40,10 @@ export const INDICATOR_LIBRARY: Array<{ kind: IndicatorKind; description: string
   { kind: 'Dynamic Support/Resistance', description: 'Pivot-derived adaptive support and resistance levels with touch validation.', overlay: true, defaults: { period: 5 } },
   { kind: 'Liquidity Sweeps', description: 'Swing liquidity grabs that breach a prior level and close back inside.', overlay: true, defaults: { period: 5 } },
   { kind: 'Order Blocks', description: 'Recent impulse-origin zones derived from confirmed swing/engulfing structure.', overlay: true, defaults: { period: 5 } },
+  { kind: 'HTF 3-Candle System [Zeiierman]', description: 'Three-candle higher-timeframe structure proxy with sweep, displacement, compression and projected levels.', overlay: true, defaults: { period: 3 } },
+  { kind: 'Trend Target Ribbon [BOSWaves]', description: 'ALMA conviction ribbon with structure-derived stop and up to four R-multiple targets.', overlay: true, defaults: { period: 34, multiplier: 0.65, stopLookback: 12, minStopAtr: 0.75, maxStopAtr: 3, targetCount: 4, projectionBars: 40 } },
+  { kind: 'Volatility Shock Half-Life Monitor', description: 'Event-based volatility shock detector that measures observed decay toward a configurable half-life fraction.', overlay: false, defaults: { period: 8, baselinePeriod: 34, shockMultiple: 2, halfLifeFraction: 0.5 } },
+  { kind: 'Wyckoff [theUltimator5]', description: 'Wyckoff-inspired accumulation/distribution event map with range, spring, SOS, UTAD and weakness cues.', overlay: true, defaults: { period: 20, multiplier: 1.5 } },
   { kind: 'Previous Day Levels', description: 'Previous NSE session high, low and close.', overlay: true, defaults: {} },
   { kind: 'Previous Week Levels', description: 'Previous trading week high, low and close.', overlay: true, defaults: {} },
   { kind: 'Previous Month Levels', description: 'Previous calendar month high, low and close.', overlay: true, defaults: {} },
@@ -131,6 +136,81 @@ export function hma(values:number[],period=20):Array<number|null>{const half=Mat
 function wma(values:number[],period:number){const out:Array<number|null>=[];const den=period*(period+1)/2;for(let i=0;i<values.length;i++){if(i<period-1){out.push(null);continue;}let s=0;for(let j=0;j<period;j++)s+=values[i-j]*(period-j);out.push(s/den);}return out;}
 export function supertrend(c: HistoricalCandle[], period=10, multiplier=3): SupertrendPoint[] { const atrs=atr(c,period); let finalUpper=0,finalLower=0,trend=1; const out:SupertrendPoint[]=[]; for(let i=0;i<c.length;i++){ const a=atrs[i]; if(a==null)continue; const mid=(c[i].high+c[i].low)/2; const upper=mid+multiplier*a,lower=mid-multiplier*a; if(i===period-1){finalUpper=upper;finalLower=lower;} else {const prevUpper=finalUpper,prevLower=finalLower;finalUpper=upper<prevUpper||c[i-1].close>prevUpper?upper:prevUpper;finalLower=lower>prevLower||c[i-1].close<prevLower?lower:prevLower;if(trend===-1&&c[i].close>prevUpper)trend=1;else if(trend===1&&c[i].close<prevLower)trend=-1;} out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),value:trend===1?finalLower:finalUpper,direction:trend as 1|-1}); } return out; }
 export function ichimoku(c: HistoricalCandle[], conversion=9, base=26, displacement=26): IchimokuPoint[] { const mid=(arr:HistoricalCandle[],p:number,i:number)=>{if(i<p-1)return null;const w=arr.slice(i-p+1,i+1);return (Math.max(...w.map(x=>x.high))+Math.min(...w.map(x=>x.low)))/2;};const out:IchimokuPoint[]=[];for(let i=0;i<c.length;i++){const ten=mid(c,conversion,i), kij=mid(c,base,i);if(ten==null||kij==null)continue;const spanA=(ten+kij)/2;const spanB=mid(c,52,i);out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),tenkan:ten,kijun:kij,spanA,spanB:spanB??spanA});}return out; }
+
+
+export type HTF3CandlePoint={time:number;c1High:number;c1Low:number;c2High:number;c2Low:number;c3High:number;c3Low:number;state:string;score:number;breakout:number;invalidation:number};
+export type TrendTargetPoint={time:number;alma:number;edge:number;direction:1|-1|0;conviction:number;entry:number|null;stop:number|null;t1:number|null;t2:number|null;t3:number|null;t4:number|null};
+export type VolShockPoint={time:number;fast:number;baseline:number;shock:number;peak:number;target:number;halfLife:number|null;state:'idle'|'shock'|'reheat'|'half-life'|'window-ended'};
+export type WyckoffEvent={time:number;price:number;label:string;side:'bullish'|'bearish'|'neutral';score:number};
+
+function blockCandles(c:HistoricalCandle[], block:number){
+  const out:HistoricalCandle[]=[];
+  for(let i=0;i<c.length;i+=Math.max(1,block)){
+    const g=c.slice(i,i+Math.max(1,block)); if(!g.length)continue;
+    out.push({timestamp:g[0].timestamp,open:g[0].open,high:Math.max(...g.map(x=>x.high)),low:Math.min(...g.map(x=>x.low)),close:g[g.length-1].close,volume:g.reduce((a,x)=>a+(x.volume||0),0)} as HistoricalCandle);
+  }
+  return out;
+}
+
+export function htf3CandleSystem(c:HistoricalCandle[], block=3):HTF3CandlePoint[]{
+  const h=blockCandles(c,block),out:HTF3CandlePoint[]=[]; if(h.length<3)return out;
+  for(let i=2;i<h.length;i++){
+    const a=h[i-2],b=h[i-1],d=h[i],range=Math.max(1,d.high-d.low),body=Math.abs(d.close-d.open);
+    let score=50, state='NEUTRAL';
+    const sweepUp=d.high>b.high&&d.close<b.high, sweepDown=d.low<b.low&&d.close>b.low;
+    const displacementUp=d.close>b.high&&body/range>.55, displacementDown=d.close<b.low&&body/range>.55;
+    const expansion=range>Math.max(1,a.high-a.low)*1.25, compression=range<Math.max(1,a.high-a.low)*.75;
+    if(sweepDown){score+=25;state='BULLISH SWEEP REVERSAL';}
+    if(sweepUp){score+=25;state='BEARISH SWEEP REVERSAL';}
+    if(displacementUp){score+=25;state='BULLISH DISPLACEMENT';}
+    if(displacementDown){score+=25;state='BEARISH DISPLACEMENT';}
+    if(expansion)score+=10;
+    if(compression)score+=8;
+    if(!state.includes('BEAR')&&!state.includes('BULL'))state=d.close>=b.close?'BULLISH EXPANSION/CONTINUATION':'BEARISH EXPANSION/CONTINUATION';
+    const bullish=state.includes('BULL'), breakout=bullish?Math.max(b.high,d.high):Math.min(b.low,d.low), invalidation=bullish?Math.min(a.low,b.low):Math.max(a.high,b.high);
+    out.push({time:Math.floor(new Date(d.timestamp).getTime()/1000),c1High:a.high,c1Low:a.low,c2High:b.high,c2Low:b.low,c3High:d.high,c3Low:d.low,state,score:Math.min(100,score),breakout,invalidation});
+  }
+  return out;
+}
+
+function alma(values:number[],period:number,offset=.85,sigma=6){
+  const out:Array<number|null>=[]; const m=offset*(period-1),s=period/sigma;
+  for(let i=0;i<values.length;i++){if(i<period-1){out.push(null);continue;}let num=0,den=0;for(let j=0;j<period;j++){const w=Math.exp(-((j-m)*(j-m))/(2*s*s));num+=values[i-period+1+j]*w;den+=w;}out.push(num/den);}
+  return out;
+}
+
+export function trendTargetRibbon(c:HistoricalCandle[], period=34, confirmation=.65, stopLookback=12, minStopAtr=.75, maxStopAtr=3, targetCount=4, projectionBars=40):TrendTargetPoint[]{
+  const vals=sourceValues(c,'close'),a=alma(vals,period),atrv=atr(c,14),out:TrendTargetPoint[]=[]; let dir:1|-1|0=0,plan:{entry:number;stop:number;targets:number[]}|null=null;
+  for(let i=0;i<c.length;i++){
+    if(a[i]==null||atrv[i]==null){continue;} const dev=c.slice(Math.max(0,i-period+1),i+1).map(x=>x.close);const mean=dev.reduce((x,y)=>x+y,0)/dev.length;const sd=Math.sqrt(dev.reduce((x,y)=>x+(y-mean)**2,0)/Math.max(1,dev.length));
+    const slope=(i>=5?(a[i]!-(a[i-5]||a[i]!))/(atrv[i]||1):0), up=slope>.08&&c[i].close>a[i]!+sd*confirmation, down=slope<-.08&&c[i].close<a[i]!-sd*confirmation;
+    const nextDir:1|-1|0=up?1:down?-1:dir; const flip=nextDir!==dir&&nextDir!==0;
+    if(flip){const entry=c[i].close,sw=stopLookback>0?c.slice(Math.max(0,i-stopLookback+1),i+1):[c[i]],raw=nextDir===1?entry-Math.min(...sw.map(x=>x.low)):Math.max(...sw.map(x=>x.high))-entry,risk=Math.min((atrv[i]||raw)*maxStopAtr,Math.max((atrv[i]||raw)*minStopAtr,raw)),stop=nextDir===1?entry-risk:entry+risk;const targets=Array.from({length:Math.max(1,Math.min(4,targetCount))},(_,k)=>nextDir===1?entry+risk*(k+1):entry-risk*(k+1));plan={entry,stop,targets};dir=nextDir;}
+    const edge=a[i]!+sd*confirmation*(dir||1),conv=Math.max(0,Math.min(1,(Math.abs(slope)*2)+(Math.abs(c[i].close-a[i]!)/(Math.max(atrv[i]||1,1))*.25)));
+    out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),alma:a[i]!,edge,direction:dir,conviction:conv,entry:plan?.entry??null,stop:plan?.stop??null,t1:plan?.targets[0]??null,t2:plan?.targets[1]??null,t3:plan?.targets[2]??null,t4:plan?.targets[3]??null});
+  }
+  void projectionBars; return out;
+}
+
+export function volatilityShockHalfLife(c:HistoricalCandle[], period=8, baselinePeriod=34, shockMultiple=2, fraction=.5):VolShockPoint[]{
+  const vals=c.map(x=>Math.log(Math.max(x.close,1)/Math.max(1,c[Math.max(0,c.indexOf(x)-1)]?.close||x.close))); const fastRaw=sma(vals.map(x=>Math.abs(x)),period),baseRaw=sma(vals.map(x=>Math.abs(x)),baselinePeriod);const out:VolShockPoint[]=[];let peak=0,target=0,start=-1,state:VolShockPoint['state']='idle',lastHalf:number|null=null;
+  for(let i=0;i<c.length;i++){const f=fastRaw[i],b=baseRaw[i];if(f==null||b==null)continue;const shock=f>b*shockMultiple;if(shock&&state==='idle'){start=i;peak=f;target=b+(peak-b)*fraction;state='shock';}else if(state!=='idle'){if(f>peak*1.05){peak=f;target=b+(peak-b)*fraction;state='reheat';} if(f<=target){lastHalf=i-start;state='half-life';} else if(i-start>baselinePeriod*3){state='window-ended';}}
+    out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),fast:f,baseline:b,shock:shock?f:null,peak:state==='idle'?0:peak,target,halfLife:state==='half-life'?lastHalf:null,state}); if(state==='half-life'||state==='window-ended'){state='idle';peak=0;target=0;start=-1;}
+  } return out;
+}
+
+export function wyckoffEvents(c:HistoricalCandle[], period=20, volumeMultiple=1.5):WyckoffEvent[]{
+  const out:WyckoffEvent[]=[]; if(c.length<period+3)return out; const vols=c.map(x=>x.volume||0); for(let i=period;i<c.length;i++){const w=c.slice(i-period,i),hi=Math.max(...w.map(x=>x.high)),lo=Math.min(...w.map(x=>x.low)),range=Math.max(1,hi-lo),x=c[i],avgVol=w.reduce((a,z)=>a+(z.volume||0),0)/Math.max(1,w.length),v=(x.volume||0)>avgVol*volumeMultiple,body=Math.abs(x.close-x.open),wide=(x.high-x.low)>range*.45;
+    if(v&&x.low<=lo&&x.close>lo+range*.35)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.low,label:'SC / SPRING CANDIDATE',side:'bullish',score:Math.min(100,60+(x.close-lo)/range*40)});
+    if(v&&x.high>=hi&&x.close<hi-range*.35)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.high,label:'BC / UTAD CANDIDATE',side:'bearish',score:Math.min(100,60+(hi-x.close)/range*40)});
+    if(x.close>hi&&wide)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.close,label:'SOS',side:'bullish',score:75});
+    if(x.close<lo&&wide)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.close,label:'SOW',side:'bearish',score:75});
+    if(!v&&x.low<lo&&x.close>lo)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.low,label:'SPRING',side:'bullish',score:70});
+    if(!v&&x.high>hi&&x.close<hi)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.high,label:'UTAD',side:'bearish',score:70});
+    if(body>0&&x.close>x.open&&x.close>hi-range*.15)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.close,label:'LPS / STRENGTH',side:'bullish',score:55});
+    if(body>0&&x.close<x.open&&x.close<lo+range*.15)out.push({time:Math.floor(new Date(x.timestamp).getTime()/1000),price:x.close,label:'LPSY / WEAKNESS',side:'bearish',score:55});
+  } return out.slice(-40);
+}
 
 function groupedBy(c: HistoricalCandle[], keyFn:(x:HistoricalCandle)=>string){const m=new Map<string,HistoricalCandle[]>();for(const x of c){const k=keyFn(x),a=m.get(k)||[];a.push(x);m.set(k,a);}return m;}
 function istParts(ts:string){const d=new Date(ts),p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d);return {y:Number(p.find(x=>x.type==='year')?.value),m:Number(p.find(x=>x.type==='month')?.value),day:Number(p.find(x=>x.type==='day')?.value),hour:Number(p.find(x=>x.type==='hour')?.value),min:Number(p.find(x=>x.type==='minute')?.value)};}

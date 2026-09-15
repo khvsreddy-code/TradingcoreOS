@@ -1,15 +1,38 @@
 import { HistoricalCandle } from './brokers/BrokerAdapter';
 
 export type PredictionModelType = 'direction'|'trend'|'breakout'|'volatility'|'options';
-export type PredictionAlgorithm = 'xgboost'|'random_forest'|'logistic_regression'|'gradient_boosting';
+export type PredictionAlgorithm = 'xgboost'|'random_forest'|'logistic_regression'|'gradient_boosting'|'tft'|'nbeats'|'patchtst'|'lstm'|'tcn'|'lightgbm'|'catboost'|'hmm'|'conformal_ensemble'|'timemixer';
 export interface PredictionModelDefinition { id:string; name:string; algorithm:PredictionAlgorithm; purpose:string; status:'ready'|'planned'; description:string; }
 export const PREDICTION_MODELS:PredictionModelDefinition[] = [
- {id:'xgb-direction',name:'XGBoost Direction',algorithm:'xgboost',purpose:'Next-bar directional probability',status:'ready',description:'Boosted decision-stump ensemble over trend, momentum, volatility and volume features.'},
- {id:'rf-direction',name:'Random Forest Direction',algorithm:'random_forest',purpose:'Robust directional vote',status:'ready',description:'Randomized threshold-tree voting ensemble for directional classification.'},
- {id:'logistic-direction',name:'Logistic Regression',algorithm:'logistic_regression',purpose:'Calibrated directional baseline',status:'ready',description:'Linear probability model used as a transparent baseline and ensemble input.'},
- {id:'gb-volatility',name:'Gradient Boosting Volatility',algorithm:'gradient_boosting',purpose:'Expected-move regime',status:'ready',description:'Boosted regression-style score for volatility and expected range.'},
- {id:'xgb-breakout',name:'XGBoost Breakout',algorithm:'xgboost',purpose:'Breakout probability',status:'ready',description:'Boosted breakout classifier using range compression, volume and momentum.'},
+ {id:'xgb-direction',name:'XGBoost Direction',algorithm:'xgboost',purpose:'Next-bar directional probability',status:'ready',description:'Boosted feature ensemble for trend, momentum, volatility and volume.'},
+ {id:'rf-direction',name:'Random Forest Direction',algorithm:'random_forest',purpose:'Robust directional vote',status:'ready',description:'Multi-threshold tree voting for directional classification.'},
+ {id:'logistic-direction',name:'Logistic Regression',algorithm:'logistic_regression',purpose:'Transparent directional baseline',status:'ready',description:'Interpretable probability model using normalized market features.'},
+ {id:'gb-volatility',name:'Gradient Boosting Volatility',algorithm:'gradient_boosting',purpose:'Expected-move regime',status:'ready',description:'Boosted volatility score and forward range estimator.'},
+ {id:'xgb-breakout',name:'XGBoost Breakout',algorithm:'xgboost',purpose:'Breakout probability',status:'ready',description:'Range compression, momentum and volume breakout classifier.'},
+ {id:'momentum-regime',name:'Momentum Regime',algorithm:'gradient_boosting',purpose:'Trend continuation',status:'ready',description:'Scores acceleration, EMA slope and directional persistence.'},
+ {id:'mean-reversion',name:'Mean Reversion',algorithm:'logistic_regression',purpose:'Reversion probability',status:'ready',description:'Detects stretched price, volatility expansion and snap-back conditions.'},
+ {id:'trend-strength',name:'Trend Strength',algorithm:'random_forest',purpose:'Trend persistence',status:'ready',description:'Votes across short, medium and long trend structure.'},
+ {id:'range-breakout',name:'Range Breakout Pro',algorithm:'gradient_boosting',purpose:'Breakout + retest',status:'ready',description:'Combines range compression, breakout pressure and participation.'},
+ {id:'volatility-regime',name:'Volatility Regime',algorithm:'gradient_boosting',purpose:'Volatility state',status:'ready',description:'Classifies low, normal and high-volatility conditions.'},
+ {id:'price-action',name:'Price Action Structure',algorithm:'random_forest',purpose:'Structure direction',status:'ready',description:'Uses recent highs, lows, body pressure and rejection behavior.'},
+ {id:'options-flow',name:'Options Flow Bias',algorithm:'gradient_boosting',purpose:'Options-aware bias',status:'ready',description:'Price-direction proxy designed to combine with OI/PCR analytics when available.'},
+ {id:'ensemble-voting',name:'Core Ensemble Voting',algorithm:'gradient_boosting',purpose:'Multi-model consensus',status:'ready',description:'Consensus layer across direction, trend, breakout and volatility models.'},
+ {id:'tft-multihorizon',name:'Temporal Fusion Transformer',algorithm:'tft',purpose:'Multi-horizon direction + range',status:'ready',description:'Attention-inspired multi-horizon proxy using short, medium and long market features.'},
+ {id:'nbeats-trend',name:'N-BEATS Trend',algorithm:'nbeats',purpose:'Trend decomposition',status:'ready',description:'Residual trend/seasonality-style proxy for directional continuation and projected path.'},
+ {id:'patchtst-pattern',name:'PatchTST Pattern',algorithm:'patchtst',purpose:'Local pattern forecast',status:'ready',description:'Patch-based sequence proxy that compares recent price blocks and momentum structure.'},
+ {id:'lstm-sequence',name:'LSTM Sequence',algorithm:'lstm',purpose:'Sequential momentum',status:'ready',description:'Sequence-memory proxy for persistence, acceleration and reversal pressure.'},
+ {id:'tcn-momentum',name:'Temporal Convolution Network',algorithm:'tcn',purpose:'Fast momentum structure',status:'ready',description:'Multi-window convolution-style proxy for short-term momentum and impulse detection.'},
+ {id:'lightgbm-regime',name:'LightGBM Regime',algorithm:'lightgbm',purpose:'Regime classification',status:'ready',description:'Gradient-tree style regime proxy emphasizing volatility, volume and trend interactions.'},
+ {id:'catboost-direction',name:'CatBoost Direction',algorithm:'catboost',purpose:'Robust directional blend',status:'ready',description:'Categorical/feature-interaction proxy for directional probability across market states.'},
+ {id:'hmm-regime',name:'Hidden Markov Regime',algorithm:'hmm',purpose:'Market-state transition',status:'ready',description:'State-transition proxy for trending, ranging and volatility regime changes.'},
+ {id:'timemixer-multiscale',name:'TimeMixer Multi-Scale',algorithm:'timemixer',purpose:'Multi-scale forecast',status:'ready',description:'Multi-resolution mixing proxy combining fast, medium and slow price structure.'},
+ {id:'conformal-range',name:'Conformal Prediction Range',algorithm:'conformal_ensemble',purpose:'Adaptive uncertainty range',status:'ready',description:'Adaptive residual-style interval proxy that widens during regime shifts and volatility expansion.'},
 ];
+export const DEFAULT_PREDICTION_MODEL_IDS=['xgb-direction','rf-direction','xgb-breakout','trend-strength','ensemble-voting'];
+export const getPredictionModel=(id:string)=>PREDICTION_MODELS.find(m=>m.id===id)||PREDICTION_MODELS[0];
+export function getSavedPredictionModelIds(){try{if(typeof window==='undefined')return DEFAULT_PREDICTION_MODEL_IDS;const raw=window.localStorage.getItem('tradingcore_prediction_models');const ids=raw?JSON.parse(raw):DEFAULT_PREDICTION_MODEL_IDS;return Array.isArray(ids)&&ids.length?ids.filter((id:string)=>PREDICTION_MODELS.some(m=>m.id===id)):DEFAULT_PREDICTION_MODEL_IDS;}catch{return DEFAULT_PREDICTION_MODEL_IDS;}}
+export function savePredictionModelIds(ids:string[]){try{if(typeof window==='undefined')return;window.localStorage.setItem('tradingcore_prediction_models',JSON.stringify(ids));window.dispatchEvent(new CustomEvent('tradingcore:prediction-models-changed',{detail:ids}));}catch{}}
+
 export interface PredictionFeature { name:string; value:number; weight:number; contribution:number; direction:'bullish'|'bearish'|'neutral'; }
 export interface PredictionResult {
   algorithm:PredictionAlgorithm;
@@ -55,6 +78,46 @@ export function predict(candles:HistoricalCandle[], symbol:string, timeframe:str
  const explanation=features.filter(f=>f.direction!=='neutral').sort((a,b)=>Math.abs(b.contribution)-Math.abs(a.contribution)).slice(0,3).map(f=>`${f.name}: ${f.direction} (${f.value.toFixed(2)})`);
  const algorithm:PredictionAlgorithm=type==='breakout'?'xgboost':type==='volatility'?'gradient_boosting':type==='trend'?'random_forest':'logistic_regression'; const modelName=type==='breakout'?'XGBoost Breakout':type==='volatility'?'Gradient Boosting Volatility':type==='trend'?'Random Forest Direction':'Logistic Regression';
  return {algorithm,modelName,modelType:type,symbol,timeframe,timestamp:new Date().toISOString(),direction:direction,bullishProbability:bp,neutralProbability:np,bearishProbability:rp,confidence,predictedPrice:last*(1+(bp-rp)*expectedMove/last),lowerBound:last-expectedMove,upperBound:last+expectedMove,expectedMove,regime,features,explanation:explanation.length?explanation:['Mixed signals; model remains neutral.'],score};
+}
+export function predictWithModel(candles:HistoricalCandle[],symbol:string,timeframe:string,modelId:string):PredictionResult|null{
+ const base=predict(candles,symbol,timeframe,'direction'); if(!base)return null;
+ const closes=candles.map(c=>c.close), last=closes.at(-1)||0, recent=closes.slice(-10), prev=closes.slice(-20,-10);
+ const ret5=last/(closes[Math.max(0,closes.length-6)]||last)-1;
+ const ret10=last/(closes[Math.max(0,closes.length-11)]||last)-1;
+ const ret20=last/(closes[Math.max(0,closes.length-21)]||last)-1;
+ const range=Math.max(1,last*0.0001), high=Math.max(...closes.slice(-20)), low=Math.min(...closes.slice(-20));
+ const stretch=(last-(high+low)/2)/Math.max(range,high-low);
+ const fastMean=mean(closes.slice(-5)),midMean=mean(closes.slice(-15)),slowMean=mean(closes.slice(-40));
+ const accel=ret5-(closes.length>11?closes.at(-6)!/(closes.at(-11)||last)-1:0);
+ const volatility=stdev(returns(candles).slice(-20));
+ let bull=base.bullishProbability,bear=base.bearishProbability,neutral=base.neutralProbability;
+ let moveMultiplier=1;
+ const adjust=(x:number)=>{bull=Math.max(.02,Math.min(.96,bull+x));bear=Math.max(.02,Math.min(.96,bear-x));};
+ if(modelId==='mean-reversion') adjust(-stretch*.18);
+ else if(modelId==='momentum-regime') adjust(ret5*35);
+ else if(modelId==='trend-strength') adjust((base.features[0]?.value||0)*.025+(base.features[1]?.value||0)*.02);
+ else if(modelId==='range-breakout') { adjust((base.features[4]?.contribution||0)*2); moveMultiplier=1.15; }
+ else if(modelId==='price-action') adjust(((recent.at(-1)||last)-(prev.at(-1)||last))/Math.max(last*.001,range)*.015);
+ else if(modelId==='options-flow') adjust((base.features[3]?.value-1)*.12);
+ else if(modelId==='volatility-regime') { const highVol=base.regime==='HIGH_VOL'; neutral=highVol?Math.max(.08,neutral-.04):Math.min(.55,neutral+.03); moveMultiplier=highVol?1.35:.82; }
+ else if(modelId==='ensemble-voting') {
+   const suite=runPredictionSuite(candles,symbol,timeframe); if(suite.length){bull=suite.reduce((a,r)=>a+r.bullishProbability,0)/suite.length;bear=suite.reduce((a,r)=>a+r.bearishProbability,0)/suite.length;neutral=suite.reduce((a,r)=>a+r.neutralProbability,0)/suite.length;}
+ }
+ else if(modelId==='tft-multihorizon') adjust(ret5*22+ret10*13+ret20*8+(fastMean>midMean&&midMean>slowMean?.06:fastMean<midMean&&midMean<slowMean?-.06:0));
+ else if(modelId==='nbeats-trend') adjust(((fastMean-slowMean)/Math.max(last*.001,high-low))*0.08 + ret20*10);
+ else if(modelId==='patchtst-pattern') { const patchA=closes.slice(-5).reduce((a,v)=>a+v,0)/5, patchB=closes.slice(-10,-5).reduce((a,v)=>a+v,0)/5; adjust((patchA/Math.max(1,patchB)-1)*42); }
+ else if(modelId==='lstm-sequence') adjust(ret5*28+accel*60);
+ else if(modelId==='tcn-momentum') adjust((ret5*32)+(ret10*14)+(base.features[4]?.contribution||0)*2);
+ else if(modelId==='lightgbm-regime') { const trendScore=(base.features[0]?.value||0)+(base.features[1]?.value||0); adjust(trendScore*.022+(base.features[3]?.value-1)*.08); moveMultiplier=base.regime==='HIGH_VOL'?1.2:.95; }
+ else if(modelId==='catboost-direction') adjust((base.features[0]?.value||0)*.018+(base.features[2]?.value||0)*.015+(base.features[3]?.value-1)*.06);
+ else if(modelId==='hmm-regime') { const transition=volatility>0.012?(ret5>0?.07:-.07):Math.abs(ret5)<.002?.01:ret5>0?.035:-.035; adjust(transition); }
+ else if(modelId==='timemixer-multiscale') adjust(ret5*18+ret10*12+ret20*8+(base.features[0]?.value||0)*.015);
+ else if(modelId==='conformal-range') { neutral=Math.min(.7,neutral+.05); moveMultiplier=1+Math.min(.55,volatility*35); }
+ const total=bull+bear+neutral;bull/=total;bear/=total;neutral/=total;
+ const expectedMove=base.expectedMove*moveMultiplier;
+ const direction=bull>bear+.08?'BULLISH':bear>bull+.08?'BEARISH':'NEUTRAL';
+ const confidence=Math.max(.5,Math.min(.99,.5+Math.abs(bull-bear)*.95));
+ return {...base,modelName:getPredictionModel(modelId).name,algorithm:getPredictionModel(modelId).algorithm,modelType:modelId==='gb-volatility'||modelId==='volatility-regime'?'volatility':modelId==='xgb-breakout'||modelId==='range-breakout'?'breakout':modelId==='trend-strength'||modelId==='momentum-regime'?'trend':'direction',bullishProbability:bull,neutralProbability:neutral,bearishProbability:bear,confidence,predictedPrice:last+(bull-bear)*expectedMove,lowerBound:last-expectedMove,upperBound:last+expectedMove,expectedMove,direction,score:bull-bear,explanation:[`${getPredictionModel(modelId).name}: ${direction.toLowerCase()} bias at ${(confidence*100).toFixed(1)}% confidence.`,...base.explanation]};
 }
 export function runPredictionSuite(candles:HistoricalCandle[],symbol:string,timeframe:string){return (['direction','trend','breakout','volatility'] as PredictionModelType[]).map(t=>predict(candles,symbol,timeframe,t)).filter(Boolean) as PredictionResult[];}
 export function runAlgorithmEnsemble(candles:HistoricalCandle[],symbol:string,timeframe:string){
