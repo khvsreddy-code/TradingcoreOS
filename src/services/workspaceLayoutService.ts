@@ -1,4 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from './auth/supabaseClient';
+import { collectManagedSettings, restoreManagedSettings } from './userSettingsService';
 
 export type WorkspaceSnapshot = {
   version: 1;
@@ -11,9 +12,9 @@ export type WorkspaceSnapshot = {
   focused: number;
   slotKeys: string[];
   chartStates: Record<string, unknown>;
-  settings?: Record<string, unknown>;
   panel?: string | null;
   order?: unknown;
+  settings?: Record<string, unknown>;
 };
 
 export type SavedWorkspaceLayout = WorkspaceSnapshot & { id: string; name: string };
@@ -55,6 +56,42 @@ export function deleteNamedWorkspaceLayout(id: string) {
   const next = listSavedWorkspaceLayouts().filter(x => x.id !== id);
   write(SAVED_KEY, next);
   window.dispatchEvent(new CustomEvent('tradingcore:workspace-library-changed', { detail: next }));
+}
+
+export async function persistNamedWorkspaceLayoutToCloud(userId: string, snapshot: WorkspaceSnapshot): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+  try {
+    const sb = getSupabaseClient();
+    const { error } = await sb.from('workspace_layout_library').upsert({
+      user_id: userId,
+      broker: snapshot.broker,
+      name: snapshot.name || 'TradingCoreOS Layout',
+      snapshot,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,broker,name' });
+    if (error) throw error;
+    return true;
+  } catch (error) { console.warn('Workspace library cloud save failed:', error); return false; }
+}
+
+export async function loadNamedWorkspaceLayoutsFromCloud(userId: string, broker?: string): Promise<SavedWorkspaceLayout[]> {
+  if (!isSupabaseConfigured()) return [];
+  try {
+    const sb = getSupabaseClient();
+    let q = sb.from('workspace_layout_library').select('id,name,broker,snapshot,updated_at').eq('user_id', userId).order('updated_at', { ascending: false });
+    if (broker) q = q.eq('broker', broker);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data || []).map((row: any) => ({ ...(row.snapshot || {}), id: String(row.id), name: row.name })) as SavedWorkspaceLayout[];
+  } catch (error) { console.warn('Workspace library cloud load failed:', error); return []; }
+}
+
+export function snapshotManagedSettings(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
+  return { ...snapshot, settings: collectManagedSettings() };
+}
+
+export function restoreSnapshotManagedSettings(snapshot: WorkspaceSnapshot) {
+  if (snapshot?.settings) restoreManagedSettings(snapshot.settings);
 }
 
 export async function persistWorkspaceToCloud(userId: string, snapshot: WorkspaceSnapshot): Promise<boolean> {

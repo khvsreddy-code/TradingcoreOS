@@ -63,11 +63,3 @@ TRADINGVIEW_PUBLIC_SCRIPTS.push(
  {id:'vp-kerbox',title:'Volume Profile',author:'Kerbox',category:'Volume Profile',url:'https://www.tradingview.com/script/ZzmdOJFC-Volume-Profile/',description:'POC, VAH and VAL levels with visibility controls.',nativeKind:'Pivot Points'},
  {id:'ms-catherine',title:'Market Structure',author:'DrCatherineHalsey',category:'Market Structure',url:'https://www.tradingview.com/script/bxmCNLr6-Market-Structure/',description:'Turning-point market structure levels across configurable resolutions.',nativeKind:'Market Structure'}
 );
-
-
-TRADINGVIEW_PUBLIC_SCRIPTS.push(
- {id:'zeiierman-htf-3-candle',title:'HTF 3-Candle System (Zeiierman)',author:'Zeiierman',category:'Market Structure',url:'https://www.tradingview.com/script/rHOFeLwn-HTF-3-Candle-System-Zeiierman/',description:'Higher-timeframe three-candle structure ranking with sweep, displacement, compression and projected levels.',nativeKind:'HTF 3-Candle System [Zeiierman]'},
- {id:'boswaves-trend-target-ribbon',title:'Trend Target Ribbon [BOSWaves]',author:'BOSWaves',category:'Trend / Position Planning',url:'https://www.tradingview.com/script/tnQ7FvvW-Trend-Target-Ribbon-BOSWaves/',description:'ALMA conviction trend ribbon with structure-derived stop and R-multiple target planning.',nativeKind:'Trend Target Ribbon [BOSWaves]'},
- {id:'vol-shock-half-life',title:'Volatility Shock Half-Life Monitor',author:'BotTradeLab',category:'Volatility',url:'https://www.tradingview.com/script/Hnsqd4yf/',description:'Event-based volatility shock detection and observed decay half-life tracking.',nativeKind:'Volatility Shock Half-Life Monitor'},
- {id:'wyckoff-theultimator5',title:'Wyckoff [theUltimator5]',author:'TheUltimator5',category:'Wyckoff / Market Structure',url:'https://www.tradingview.com/script/tJzKloJn-Wyckoff-theUltimator5/',description:'Wyckoff accumulation/distribution regime and schematic event mapping.',nativeKind:'Wyckoff [theUltimator5]'}
-);

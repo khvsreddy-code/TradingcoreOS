@@ -15,7 +15,7 @@ function clearManagedLocalSettings() {
   remove.forEach(key => { try { localStorage.removeItem(key); } catch { /* ignore */ } });
 }
 
-function collectLocalSettings(): Record<string, unknown> {
+export function collectManagedSettings(): Record<string, unknown> {
   const settings: Record<string, unknown> = {};
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
@@ -29,7 +29,7 @@ function collectLocalSettings(): Record<string, unknown> {
   return settings;
 }
 
-function restoreLocalSettings(settings: Record<string, unknown>) {
+export function restoreManagedSettings(settings: Record<string, unknown>) {
   Object.entries(settings || {}).forEach(([key, value]) => {
     if (!isManagedKey(key)) return;
     try { localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value)); } catch { /* ignore quota/serialization errors */ }
@@ -46,7 +46,7 @@ export const userSettingsService = {
       // Never let a previous signed-in user leak workspace state into another account.
       clearManagedLocalSettings();
       if (!data?.settings) return null;
-      restoreLocalSettings(data.settings as Record<string, unknown>);
+      restoreManagedSettings(data.settings as Record<string, unknown>);
       return data.settings as Record<string, unknown>;
     } catch (error) {
       console.warn('User settings load failed:', error);
@@ -58,7 +58,7 @@ export const userSettingsService = {
     if (!isSupabaseConfigured()) return false;
     try {
       const supabase = getSupabaseClient();
-      const settings = collectLocalSettings();
+      const settings = collectManagedSettings();
       const { error } = await supabase.from('user_settings').upsert({ user_id: userId, settings }, { onConflict: 'user_id' });
       if (error) throw error;
       return true;
@@ -74,7 +74,7 @@ export const userSettingsService = {
     const sync = async () => {
       if (stopped) return;
       try {
-        const current = JSON.stringify(collectLocalSettings());
+        const current = JSON.stringify(collectManagedSettings());
         if (current === last) return;
         if (await this.save(userId)) last = current;
       } catch { /* best effort */ }

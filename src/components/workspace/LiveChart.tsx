@@ -8,13 +8,13 @@ import { getIndicators, saveIndicators, getAutomations, AutomationConfig } from 
 import { buildOIChartAnalytics, OIChartAnalytics } from '../../services/marketData/oiEngine';
 import { Plus, Settings2, Eye, EyeOff, Trash2, RotateCcw, Pencil } from 'lucide-react';
 import { PREDICTION_MODELS, getSavedPredictionModelIds, predictWithModel } from '../../services/predictionEngine';
-import { IndicatorConfig, INDICATOR_LIBRARY, PRICE_SOURCES, defaultIndicatorStyle, series, vwap, bollinger, rsi, macd, supertrend, keltner, donchian, stochastic, ichimoku, pivots, marketStructure, fairValueGaps, dynamicSupportResistance, liquiditySweeps, orderBlocks, indianKeyLevels, cpr, openingRange, swingLevels, gapLevels, previousDayLevels, previousPeriodLevels, gapZones, equalHighLow, liquidityPools, bosChoch, priceActionEvents, nr7, developingDayLevels, vwapDeviationBands, anchoredVwap, extendedCpr, periodPivots, htf3CandleSystem, trendTargetRibbon, volatilityShockHalfLife, wyckoffEvents } from '../../services/marketData/indicatorEngine';
+import { IndicatorConfig, INDICATOR_LIBRARY, PRICE_SOURCES, defaultIndicatorStyle, series, vwap, bollinger, rsi, macd, supertrend, keltner, donchian, stochastic, ichimoku, pivots, marketStructure, fairValueGaps, dynamicSupportResistance, liquiditySweeps, orderBlocks, indianKeyLevels, cpr, openingRange, swingLevels, gapLevels, previousDayLevels, previousPeriodLevels, gapZones, equalHighLow, liquidityPools, bosChoch, priceActionEvents, nr7, developingDayLevels, vwapDeviationBands, anchoredVwap, extendedCpr, periodPivots } from '../../services/marketData/indicatorEngine';
 
 const intervals: Record<string,string> = {'1m':'1minute','3m':'3minute','5m':'5minute','15m':'15minute','30m':'30minute','1H':'60minute','1D':'day'};
 const seconds: Record<string,number> = {'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1H':3600,'1D':86400};
 type Props={instrumentKey:string;brokerId?:string;tick?:NormalizedMarketTick;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number};
 const colors:Record<string,string>={EMA:'#38bdf8',SMA:'#f59e0b',HMA:'#e879f9',VWAP:'#c084fc',ADX:'#22c55e',RSI:'#f59e0b',CCI:'#fb7185',OBV:'#60a5fa',MFI:'#a78bfa',ATR:'#22c55e'};
-const oscillatorKinds=(x:IndicatorConfig[])=>x.some(i=>i.enabled&&['RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Volatility Shock Half-Life Monitor'].includes(i.kind));
+const oscillatorKinds=(x:IndicatorConfig[])=>x.some(i=>i.enabled&&['RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI'].includes(i.kind));
 type DrawingTool='none'|'horizontal'|'trendline'|'vertical'|'fib';
 type DrawingPoint={time:number;price:number};
 type Drawing={id:string;tool:Exclude<DrawingTool,'none'>;points:DrawingPoint[]};
@@ -101,26 +101,6 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    for(const cfg of active){
      if(!chart.current)continue;
      if(['EMA','SMA','HMA','ATR','RSI','ADX','CCI','OBV','MFI','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','Supertrend','Ichimoku Cloud'].includes(cfg.kind))continue;
-     if(cfg.kind==='HTF 3-Candle System [Zeiierman]'){
-       const pts=htf3CandleSystem(data,cfg.period||3).slice(-8); const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       const mk=(key:'breakout'|'invalidation',color:string,style:0|1|2=2)=>{const s=chart.current!.addSeries(LineSeries,{color,lineWidth:1,lineStyle:style,priceLineVisible:false,lastValueVisible:true});s.setData(pts.map(x=>({time:x.time as Time,value:x[key]})));indicatorSeries.current.push(s);};
-       mk('breakout',cfg.color||'#22c55e',0); mk('invalidation',cfg.signalColor||'#ef4444',2); continue;
-     }
-     if(cfg.kind==='Trend Target Ribbon [BOSWaves]'){
-       const pts=trendTargetRibbon(data,cfg.period||34,cfg.multiplier||.65,cfg.stopLookback||12,cfg.minStopAtr||.75,cfg.maxStopAtr||3,cfg.targetCount||4,cfg.projectionBars||40); const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       const add=(key:string,color:string,width=1,style:0|1|2=0)=>{const s=chart.current!.addSeries(LineSeries,{color,lineWidth:width,lineStyle:style,priceLineVisible:false,lastValueVisible:true});s.setData(pts.filter((x:any)=>x[key]!=null).map((x:any)=>({time:x.time as Time,value:x[key]})));indicatorSeries.current.push(s);};
-       add('alma',cfg.color||'#38bdf8',2); add('edge',cfg.upperColor||'#64748b',1,2); add('entry','#e5e7eb',1,1); add('stop','#ef4444',2,2); ['t1','t2','t3','t4'].slice(0,cfg.targetCount||4).forEach((k,i)=>add(k,i===0?'#22c55e':i===1?'#10b981':i===2?'#14b8a6':'#06b6d4',1,1)); continue;
-     }
-     if(cfg.kind==='Volatility Shock Half-Life Monitor'){
-       const pts=volatilityShockHalfLife(data,cfg.period||8,cfg.baselinePeriod||34,cfg.shockMultiple||2,cfg.halfLifeFraction||.5); const target=oscChart.current||chart.current; if(!target)continue;
-       const add=(key:string,color:string,width=1)=>{const s=target.addSeries(LineSeries,{color,lineWidth:width,priceLineVisible:false,lastValueVisible:true});s.setData(pts.map((x:any)=>x[key]==null?null:{time:x.time as Time,value:x[key]}).filter(Boolean) as any);oscSeries.current.push(s);};
-       add('fast',cfg.color||'#f59e0b',2); add('baseline',cfg.signalColor||'#64748b',1); add('target','#22c55e',1); continue;
-     }
-     if(cfg.kind==='Wyckoff [theUltimator5]'){
-       const events=wyckoffEvents(data,cfg.period||20,cfg.multiplier||1.5).slice(-16); const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       for(const e of events){const s=chart.current!.addSeries(LineSeries,{color:e.side==='bullish'?'#22c55e':e.side==='bearish'?'#ef4444':'#94a3b8',lineWidth:2,lineStyle:1,priceLineVisible:false,lastValueVisible:false});s.setData([{time:e.time as Time,value:e.price},{time:end,value:e.price}] as any);indicatorSeries.current.push(s);}
-       continue;
-     }
      if(cfg.kind==='Market Structure'){const ms=marketStructure(data,cfg.period||3);const latest=ms.slice(-6);for(const x of latest){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.type.includes('H')?'#ef4444':'#22c55e'),lineWidth:1,priceLineVisible:true,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time,value:x.price}] as any);indicatorSeries.current.push(s);}continue;}
      if(cfg.kind==='Fair Value Gaps'){const zones=fairValueGaps(data);for(const z of zones.slice(-8)){for(const price of [z.upper,z.lower]){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(z.kind==='bullish'?'#22c55e66':'#ef444466'),lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false});const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;s.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);indicatorSeries.current.push(s);}}continue;}
      if(cfg.kind==='Dynamic Support/Resistance'){const levels=dynamicSupportResistance(data,cfg.period||5).slice(-10);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of levels){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#22c55e':'#ef4444'),lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);indicatorSeries.current.push(s);}continue;}
