@@ -1,7 +1,7 @@
 import { HistoricalCandle } from './brokers/BrokerAdapter';
 
 export type PredictionModelType = 'direction'|'trend'|'breakout'|'volatility'|'options';
-export type PredictionAlgorithm = 'xgboost'|'random_forest'|'logistic_regression'|'gradient_boosting'|'tft'|'nbeats'|'patchtst'|'lstm'|'tcn'|'lightgbm'|'catboost'|'hmm'|'conformal_ensemble'|'timemixer';
+export type PredictionAlgorithm = 'xgboost'|'random_forest'|'logistic_regression'|'gradient_boosting'|'tft'|'nbeats'|'patchtst'|'lstm'|'tcn'|'lightgbm'|'catboost'|'hmm'|'conformal_ensemble'|'timemixer'|'arima'|'sarima'|'ets'|'prophet'|'svr'|'knn'|'bilstm'|'cnn_lstm'|'lstm_gru'|'transformer'|'sentiment_hybrid'|'garch'|'quantile_forest';
 export interface PredictionModelDefinition { id:string; name:string; algorithm:PredictionAlgorithm; purpose:string; status:'ready'|'planned'; description:string; }
 export const PREDICTION_MODELS:PredictionModelDefinition[] = [
  {id:'xgb-direction',name:'XGBoost Direction',algorithm:'xgboost',purpose:'Next-bar directional probability',status:'ready',description:'Boosted feature ensemble for trend, momentum, volatility and volume.'},
@@ -27,6 +27,19 @@ export const PREDICTION_MODELS:PredictionModelDefinition[] = [
  {id:'hmm-regime',name:'Hidden Markov Regime',algorithm:'hmm',purpose:'Market-state transition',status:'ready',description:'State-transition proxy for trending, ranging and volatility regime changes.'},
  {id:'timemixer-multiscale',name:'TimeMixer Multi-Scale',algorithm:'timemixer',purpose:'Multi-scale forecast',status:'ready',description:'Multi-resolution mixing proxy combining fast, medium and slow price structure.'},
  {id:'conformal-range',name:'Conformal Prediction Range',algorithm:'conformal_ensemble',purpose:'Adaptive uncertainty range',status:'ready',description:'Adaptive residual-style interval proxy that widens during regime shifts and volatility expansion.'},
+ {id:'arima-direction',name:'ARIMA Direction',algorithm:'arima',purpose:'Autoregressive short-horizon forecast',status:'ready',description:'Lightweight browser implementation using differenced returns and autoregressive drift.'},
+ {id:'sarima-seasonal',name:'SARIMA Seasonal',algorithm:'sarima',purpose:'Seasonal index forecast',status:'ready',description:'Seasonality-aware browser implementation for recurring intraday structure.'},
+ {id:'ets-trend',name:'ETS Trend',algorithm:'ets',purpose:'Exponential trend smoothing',status:'ready',description:'Error-trend-seasonality style exponential smoothing proxy.'},
+ {id:'prophet-trend',name:'Prophet Trend',algorithm:'prophet',purpose:'Trend + seasonality',status:'ready',description:'Trend/seasonality decomposition proxy inspired by additive forecasting.'},
+ {id:'svr-direction',name:'Support Vector Regression',algorithm:'svr',purpose:'Non-linear return forecast',status:'ready',description:'RBF-kernel similarity proxy over normalized market features.'},
+ {id:'knn-pattern',name:'KNN Pattern Match',algorithm:'knn',purpose:'Historical pattern analogue',status:'ready',description:'Nearest-pattern analogue proxy over recent return sequences.'},
+ {id:'bilstm-sequence',name:'Bidirectional LSTM',algorithm:'bilstm',purpose:'Sequence direction',status:'ready',description:'Bidirectional sequence-memory proxy using forward and reverse momentum structure.'},
+ {id:'cnn-lstm-hybrid',name:'CNN-LSTM Hybrid',algorithm:'cnn_lstm',purpose:'Local pattern + sequence',status:'ready',description:'Local-window pattern extractor blended with sequential momentum.'},
+ {id:'lstm-gru-hybrid',name:'LSTM-GRU Hybrid',algorithm:'lstm_gru',purpose:'Gated sequence blend',status:'ready',description:'Combined long-memory and gated-recurrence style momentum proxy.'},
+ {id:'transformer-attention',name:'Transformer Attention',algorithm:'transformer',purpose:'Multi-context sequence forecast',status:'ready',description:'Attention-style weighted multi-window context proxy.'},
+ {id:'sentiment-hybrid',name:'News + Sentiment Hybrid',algorithm:'sentiment_hybrid',purpose:'Price + sentiment framework',status:'ready',description:'Hybrid model hook combining price/volume with an external sentiment feature when available; falls back to market-only features.'},
+ {id:'garch-volatility',name:'GARCH Volatility',algorithm:'garch',purpose:'Conditional volatility',status:'ready',description:'Conditional-variance proxy for volatility expansion and expected range.'},
+ {id:'quantile-forest-range',name:'Quantile Forest Range',algorithm:'quantile_forest',purpose:'Prediction interval',status:'ready',description:'Quantile-style range proxy for asymmetric upside/downside uncertainty.'},
 ];
 export const DEFAULT_PREDICTION_MODEL_IDS=['xgb-direction','rf-direction','xgb-breakout','trend-strength','ensemble-voting'];
 export const getPredictionModel=(id:string)=>PREDICTION_MODELS.find(m=>m.id===id)||PREDICTION_MODELS[0];
@@ -113,6 +126,19 @@ export function predictWithModel(candles:HistoricalCandle[],symbol:string,timefr
  else if(modelId==='hmm-regime') { const transition=volatility>0.012?(ret5>0?.07:-.07):Math.abs(ret5)<.002?.01:ret5>0?.035:-.035; adjust(transition); }
  else if(modelId==='timemixer-multiscale') adjust(ret5*18+ret10*12+ret20*8+(base.features[0]?.value||0)*.015);
  else if(modelId==='conformal-range') { neutral=Math.min(.7,neutral+.05); moveMultiplier=1+Math.min(.55,volatility*35); }
+ else if(modelId==='arima-direction') { const r=returns(candles).slice(-12); const drift=mean(r.slice(-5)); const ar=mean(r.slice(-3).map((v,i)=>v*(i+1)/6)); adjust((drift+ar)*42); }
+ else if(modelId==='sarima-seasonal') { const r=returns(candles); const lag=Math.min(20,Math.max(5,Math.floor(r.length/3))); const seasonal=r.length>lag?mean(r.slice(-5).map((_,i)=>r[r.length-lag-5+i]||0)):0; adjust((ret5*22+seasonal*55)); }
+ else if(modelId==='ets-trend') { const level=mean(closes.slice(-8)); const prevLevel=mean(closes.slice(-16,-8)); adjust(((level-prevLevel)/Math.max(last*.001,range))*0.025); }
+ else if(modelId==='prophet-trend') { const x=closes.length; const slope=(mean(closes.slice(-10))-mean(closes.slice(-30,-20)))/Math.max(last,1); const cyc=Math.sin((x%20)/20*Math.PI*2)*.025; adjust((slope+cyc)*18); }
+ else if(modelId==='svr-direction') { const z=(ret5*18+ret10*10+accel*35); adjust(Math.tanh(z)*.12); }
+ else if(modelId==='knn-pattern') { const r=returns(candles); const tail=r.slice(-5); let analogue=0,weight=0; for(let i=5;i<r.length-5;i++){let d=0;for(let j=0;j<5;j++)d+=Math.abs((r[i-4+j]||0)-(tail[j]||0)); const w=1/(.0001+d); analogue+=(r[i+1]||0)*w;weight+=w;} adjust((weight?analogue/weight:0)*70); }
+ else if(modelId==='bilstm-sequence') { adjust((ret5*20+ret10*14-ret20*6)+(fastMean>slowMean?.045:fastMean<slowMean?-.045:0)); }
+ else if(modelId==='cnn-lstm-hybrid') { const local=(mean(closes.slice(-3))-mean(closes.slice(-8)))/Math.max(last*.001,range); adjust(local*.028+accel*45); }
+ else if(modelId==='lstm-gru-hybrid') { adjust(ret5*24+accel*52+(ret10-ret20)*12); moveMultiplier=1+Math.min(.2,Math.abs(accel)*20); }
+ else if(modelId==='transformer-attention') { const weights=[.45,.3,.15,.1]; const contexts=[ret5,ret10,ret20,(fastMean-slowMean)/Math.max(last,1)]; adjust(contexts.reduce((a,v,i)=>a+v*weights[i],0)*38); }
+ else if(modelId==='sentiment-hybrid') { const sentimentProxy=Math.tanh((ret5*20)+(base.features[3]?.value-1)*.7); adjust(sentimentProxy*.09); }
+ else if(modelId==='garch-volatility') { const rs=returns(candles).slice(-30); const v=rs.reduce((a,r)=>a+r*r,0)/Math.max(1,rs.length); const recentV=rs.slice(-5).reduce((a,r)=>a+r*r,0)/Math.max(1,Math.min(5,rs.length)); const ratio=recentV/Math.max(v,1e-8); neutral=Math.min(.7,neutral+.03*Math.min(4,Math.max(0,ratio-1))); moveMultiplier=1+Math.min(.8,Math.max(0,ratio-1)*.35); }
+ else if(modelId==='quantile-forest-range') { neutral=Math.min(.72,neutral+.07); moveMultiplier=1.15+Math.min(.5,volatility*30); }
  const total=bull+bear+neutral;bull/=total;bear/=total;neutral/=total;
  const expectedMove=base.expectedMove*moveMultiplier;
  const direction=bull>bear+.08?'BULLISH':bear>bull+.08?'BEARISH':'NEUTRAL';

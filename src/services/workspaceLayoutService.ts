@@ -13,6 +13,7 @@ export type WorkspaceSnapshot = {
   slotKeys: string[];
   chartStates: Record<string, unknown>;
   panel?: string | null;
+  watchlistOpen?: boolean;
   order?: unknown;
   settings?: Record<string, unknown>;
 };
