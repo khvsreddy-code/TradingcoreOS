@@ -10,6 +10,7 @@ import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js'
 import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
 import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
+import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -63,6 +64,7 @@ app.use('/api/trading', upstoxHistoryRoutes);
 // serialized/cached implementation is used instead of the old Promise.all fan-out.
 app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
+app.use('/api/predictions/production', productionPredictionRoutes);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });

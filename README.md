@@ -89,3 +89,9 @@ ENCRYPTION_SECRET=use-a-long-random-secret
 ```
 
 Never commit real credentials or production secrets.
+
+## Production ML engine
+
+TradingCoreOS now contains a separate Python ML service under `ml/`. The production path supports genuine server-side XGBoost and PyTorch LSTM inference, versioned feature schemas, walk-forward evaluation, and a Supabase MLOps registry. The browser prediction engine remains available only for explicitly local models; server models do not silently fall back to browser proxies.
+
+Configure the hosted ML service with `ML_SERVICE_URL` and `ML_SERVICE_SECRET`. See `ml/DEPLOYMENT.md` for training and deployment instructions.
