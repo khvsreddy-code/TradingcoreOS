@@ -45,7 +45,17 @@ export const userSettingsService = {
       if (error) throw error;
       // Never let a previous signed-in user leak workspace state into another account.
       clearManagedLocalSettings();
-      if (!data?.settings) return null;
+      if (!data?.settings) {
+        // Materialize the user's cloud-settings row immediately on first sign-in.
+        // This makes cloud persistence observable even before the first preference change.
+        const emptySettings: Record<string, unknown> = {};
+        const { error: seedError } = await supabase.from('user_settings').upsert(
+          { user_id: userId, settings: emptySettings, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' },
+        );
+        if (seedError) throw seedError;
+        return emptySettings;
+      }
       restoreManagedSettings(data.settings as Record<string, unknown>);
       return data.settings as Record<string, unknown>;
     } catch (error) {

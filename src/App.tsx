@@ -24,7 +24,17 @@ import { BrokerRuntimeSwitcher } from './components/brokers/BrokerRuntimeSwitche
 import { LevelSettingsDock } from './components/workspace/LevelSettingsDock';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
-const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminalV5').then(m => ({ default: m.LiveTradingTerminalV5 })));
+const LiveTradingTerminalV5 = lazy(async () => {
+  try {
+    const m = await import('./LiveTradingTerminalV5');
+    if (!m || typeof m.LiveTradingTerminalV5 !== 'function') throw new Error('Live trading module export is unavailable');
+    return { default: m.LiveTradingTerminalV5 };
+  } catch (error) {
+    console.error('[TradingCore] LiveTradingTerminalV5 module load failed:', error);
+    const fallback = await import('./LiveTradingTerminalV4');
+    return { default: fallback.LiveTradingTerminalV4 };
+  }
+});
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const ModelsPage = lazy(() => import('./pages/PredictionCenterPage').then(m => ({ default: m.PredictionCenterPage })));
 const PredictionCenterPage = lazy(() => import('./pages/PredictionCenterPage').then(m => ({ default: m.PredictionCenterPage })));
@@ -41,6 +51,17 @@ const viewFromPath = (path: string): 'landing' | 'login' | 'app' | 'broker-conne
   path === '/login' ? 'login' :
   (path === '/' || path === '/landing') ? 'landing' :
   isWorkspaceRoute(path) ? 'app' : 'landing';
+
+class LiveModuleBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (!this.state.error) return this.props.children;
+    console.error('[TradingCore] Live V5 module failed; falling back to stable V4 workspace:', this.state.error);
+    return <FallbackLiveWorkspace />;
+  }
+}
+const FallbackLiveWorkspace = React.lazy(() => import('./LiveTradingTerminalV4').then(m => ({ default: m.LiveTradingTerminalV4 })));
 
 class RouteErrorBoundary extends React.Component<{ children: React.ReactNode; onHome: () => void }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -87,7 +108,7 @@ function AppContent() {
     </Suspense>;
   }
   if(isAuthenticated&&user&&currentView==='broker-connection')return <BrokerConnectionRequiredPage onBack={()=>navigate('/dashboard')} onBrokerConnected={()=>{setHasConnectedBroker(true);navigate('/dashboard');}}/>;
-  if(currentView==='app'){const workspacePath:WorkspaceRoute=isWorkspaceRoute(pathname)?pathname:'/dashboard';return <RouteErrorBoundary onHome={()=>navigate('/dashboard')}><Suspense key={workspacePath} fallback={<LoadingScreen message="Loading Workspace..." submessage="Preparing trading module" />}>{workspacePath==='/dashboard'&&<DashboardPage onNavigate={navigateWorkspace} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/models'&&<ModelsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/predictions'&&<PredictionCenterPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/automations'&&<AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/indicators'&&<IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/portfolio'&&<PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/profile'&&<ProfilePage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/live'&&(hasConnectedBroker?<><BrokerRuntimeSwitcher onConnect={()=>navigate('/broker')}/><LevelSettingsDock/><LiveTradingTerminal/></>:<BrokerConnectionRequiredPage onBack={()=>navigate('/dashboard')} onBrokerConnected={()=>{setHasConnectedBroker(true);navigate('/live');}}/>)}</Suspense></RouteErrorBoundary>}
+  if(currentView==='app'){const workspacePath:WorkspaceRoute=isWorkspaceRoute(pathname)?pathname:'/dashboard';return <RouteErrorBoundary onHome={()=>navigate('/dashboard')}><Suspense key={workspacePath} fallback={<LoadingScreen message="Loading Workspace..." submessage="Preparing trading module" />}>{workspacePath==='/dashboard'&&<DashboardPage onNavigate={navigateWorkspace} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/models'&&<ModelsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/predictions'&&<PredictionCenterPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/automations'&&<AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/indicators'&&<IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/portfolio'&&<PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/profile'&&<ProfilePage onNavigate={navigateWorkspace} onBackToLanding={()=>navigate('/dashboard')} onBroker={()=>navigate('/broker')}/>} {workspacePath==='/live'&&(hasConnectedBroker?<><BrokerRuntimeSwitcher onConnect={()=>navigate('/broker')}/><LevelSettingsDock/><LiveModuleBoundary><LiveTradingTerminalV5/></LiveModuleBoundary></>:<BrokerConnectionRequiredPage onBack={()=>navigate('/dashboard')} onBrokerConnected={()=>{setHasConnectedBroker(true);navigate('/live');}}/>)}</Suspense></RouteErrorBoundary>}
   return <div className="min-h-screen bg-[#090a0f] text-[#f3f4f6] font-sans selection:bg-[#10b981]/30 selection:text-[#10b981] overflow-x-hidden"><Navbar onOpenAuthModal={()=>setIsAuthModalOpen(true)} onLaunchPlatform={handleLaunchPlatform} onNavigate={handleNavigateFromMenu} currentView={currentView}/><main className="pt-16"><Hero onLaunch={handleLaunchPlatform}/><WorkspacePreview onLaunch={handleLaunchPlatform}/><BrokerStrip onSelectBroker={handleLaunchPlatform}/><ArchitectureSection/><WhyTradingCore/><FeaturesDeepDive/><HowItWorks onLaunch={handleLaunchPlatform}/><PricingSection onSelectPlan={handleLaunchPlatform}/><FutureModules/><FAQSection/></main><Footer onLaunch={handleLaunchPlatform}/><AuthModalPlaceholder isOpen={isAuthModalOpen} onClose={()=>setIsAuthModalOpen(false)} onLaunchWorkspace={handleLaunchPlatform}/></div>;
 }
 export default function App(){return <AuthProvider><AppContent/></AuthProvider>}
