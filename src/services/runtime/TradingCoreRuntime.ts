@@ -3,6 +3,7 @@ import { tradingEngine, TradingEngine } from '../engine/TradingEngine';
 import { BrokerAdapter, OrderRequest, OrderResult, Position, Holding, AccountFunds, HistoricalCandle, TradeRecord } from '../brokers/BrokerAdapter';
 import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market';
+import { coreEventBus } from '../core/event/eventBus';
 
 export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_EXECUTED' | 'TICK_UPDATE' | 'PORTFOLIO_SYNCED' | 'SESSION_REFRESHED' | 'STATUS_CHANGED';
 export type EventListener = (payload: any) => void;
@@ -159,6 +160,7 @@ export class TradingCoreRuntime {
     }
     const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-25_000);
     if (history.length) this.historyCache.set(key, { data: history, expiresAt: Date.now() + 30_000 });
+    coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
     return history;
   }
   public subscribeTicks(symbols: string[], callback: (tick: any) => void): () => void { return this.subscribeMarketData(symbols, (event) => { if (event.type === 'tick' && event.tick) callback(event.tick); }); }
@@ -170,19 +172,28 @@ export class TradingCoreRuntime {
     const start = async () => {
       if (!initial || initial.status !== 'Connected') {
         listener({ type: 'status', status: 'connecting' });
+        coreEventBus.emit('market.status', { brokerId: initial?.brokerId, status: 'connecting', timestamp: Date.now() });
         try { await this.restoreBrokerConnections(); } catch { /* surfaced below */ }
         if (stopped) return;
         initial = this.getPrimaryBrokerInfo();
       }
       if (!initial || initial.status !== 'Connected') {
         listener({ type: 'error', error: 'Broker session is not ready for live market data. Open Broker Settings and Sync All.' });
+        coreEventBus.emit('market.error', { brokerId: initial?.brokerId, message: 'Broker session is not ready for live market data. Open Broker Settings and Sync All.', timestamp: Date.now() });
         listener({ type: 'status', status: 'disconnected' });
+        coreEventBus.emit('market.status', { brokerId: initial?.brokerId, status: 'disconnected', timestamp: Date.now() });
         return;
       }
       const relay = (event: MarketFeedEvent) => {
         // Ignore late frames from a broker socket that was already replaced.
         const activeNow = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
         if (activeNow !== currentBrokerId.toLowerCase()) return;
+        if (event.type === 'status') {
+          coreEventBus.emit('market.status', { brokerId: currentBrokerId, status: event.status, timestamp: Date.now() });
+        }
+        if (event.type === 'error') {
+          coreEventBus.emit('market.error', { brokerId: currentBrokerId, message: event.error, timestamp: Date.now() });
+        }
         if (event.type === 'tick' && event.tick) {
           const key = String(event.tick.instrumentKey || '');
           const raw = (event.tick as any).timestamp;
@@ -193,6 +204,7 @@ export class TradingCoreRuntime {
           if (key) this.lastTickTime.set(key, timestamp);
           this.market.set(event.tick.instrumentKey, event.tick);
           this.emit('TICK_UPDATE', event.tick);
+          coreEventBus.emit('market.tick', { symbol: String(event.tick.instrumentKey || ''), tick: event.tick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });
         }
         listener(event);
         this.marketListeners.forEach((subscriber) => subscriber(event));

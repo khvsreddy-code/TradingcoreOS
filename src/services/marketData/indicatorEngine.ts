@@ -302,6 +302,17 @@ export function marketStructure(c: HistoricalCandle[], swing=3): Array<{time:num
 export type ZonePoint = { time:number; upper:number; lower:number; kind:'bullish'|'bearish' };
 export function fairValueGaps(c: HistoricalCandle[], _lookback=1): ZonePoint[] { const out:ZonePoint[]=[]; for(let i=2;i<c.length;i++){ if(c[i].low>c[i-2].high) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),upper:c[i].low,lower:c[i-2].high,kind:'bullish'}); if(c[i].high<c[i-2].low) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),upper:c[i-2].low,lower:c[i].high,kind:'bearish'}); } return out.slice(-100); }
 export type SRPoint={time:number;price:number;side:'support'|'resistance'};
+export function classicPivots(c: HistoricalCandle[]): Array<{value:number;label:string}> {
+  if(c.length<2) return [];
+  const key = (ts:string|number) => indiaDate(ts);
+  const sessions = new Map<string, HistoricalCandle[]>();
+  for(const x of c){const k=key(x.timestamp); const a=sessions.get(k)||[]; a.push(x); sessions.set(k,a);}
+  const days=[...sessions.values()]; if(days.length<2) return [];
+  const d=days[days.length-2]; const h=Math.max(...d.map(x=>x.high)); const l=Math.min(...d.map(x=>x.low)); const cl=d[d.length-1].close;
+  const p=(h+l+cl)/3, r=h-l;
+  return [{value:p,label:'P'},{value:p+r,label:'R1'},{value:p+2*r,label:'R2'},{value:p+3*r,label:'R3'},{value:p-r,label:'S1'},{value:p-2*r,label:'S2'},{value:p-3*r,label:'S3'}];
+}
+
 export function dynamicSupportResistance(c: HistoricalCandle[], swing=5): SRPoint[] { const out:SRPoint[]=[]; for(let i=swing;i<c.length-swing;i++){const w=c.slice(i-swing,i+swing+1),hi=Math.max(...w.map(x=>x.high)),lo=Math.min(...w.map(x=>x.low)); if(c[i].high===hi) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,side:'resistance'}); if(c[i].low===lo) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,side:'support'});} return out.slice(-20); }
 export type SweepPoint={time:number;price:number;side:'buy-side'|'sell-side'};
 export function liquiditySweeps(c: HistoricalCandle[], swing=5): SweepPoint[] { const out:SweepPoint[]=[]; for(let i=swing;i<c.length;i++){const prev=c.slice(Math.max(0,i-swing),i),hi=Math.max(...prev.map(x=>x.high)),lo=Math.min(...prev.map(x=>x.low)); if(c[i].high>hi&&c[i].close<hi) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,side:'buy-side'}); if(c[i].low<lo&&c[i].close>lo) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,side:'sell-side'});} return out.slice(-30); }

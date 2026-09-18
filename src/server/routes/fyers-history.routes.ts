@@ -26,6 +26,15 @@ const resolutionMap: Record<string, string> = {
   day: 'D',
 };
 
+function canonicalFyersSymbol(value: string): string {
+  const raw = String(value || '').trim();
+  const n = raw.toLowerCase().replace(/\s+/g, '');
+  if (['nse_index|nifty50','nse_index|nifty50index','nifty','nifty50','nifty50index'].includes(n) || n.includes('nifty50-index')) return 'NSE:NIFTY50-INDEX';
+  if (['nse_index|niftybank','nse_index|banknifty','banknifty','niftybank'].includes(n) || n.includes('niftybank-index')) return 'NSE:NIFTYBANK-INDEX';
+  if (['bse_index|sensex','sensex'].includes(n) || n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
+  return raw;
+}
+
 function indiaDate(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
 }
@@ -93,7 +102,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     return;
   }
 
-  const instrumentKey = String(req.query.instrument_key || '').trim();
+  const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '').trim();
   const resolution = resolutionMap[interval] || interval;
   const requested = Number(req.query.limit || 10_000);

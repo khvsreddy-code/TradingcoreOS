@@ -37,19 +37,35 @@ export function LiveTradingTerminalV4(){
    let next=defaults(broker);
    const saved=loadWorkspace(broker,{broker,layout:'tc4-g1',watch:next,selected:next[0]?.key||'',focused:0,slotKeys:[next[0]?.key||''],chartStates:{}});
    if(Array.isArray(saved.watch)&&saved.watch.length) next=(saved.watch as WatchItem[]).map((x:any)=>normalize(broker,x)).filter((x:any)=>x?.key);
+   const normalizedSelected=normalize(broker,({key:String(saved.selected||next[0]?.key||''),label:String(saved.selected||''),symbol:String(saved.selected||'')} as any)).key;
+   const normalizedSlots=Array.isArray(saved.slotKeys)&&saved.slotKeys.length
+     ? saved.slotKeys.map((raw:any)=>{const hit=next.find(w=>w.key===String(raw));return normalize(broker,hit||({key:String(raw),label:String(raw),symbol:String(raw)} as any)).key;}).filter((k:any)=>k&&next.some(w=>w.key===k))
+     : [];
+   const initialKey=normalizedSelected&&next.some(w=>w.key===normalizedSelected)?normalizedSelected:(next[0]?.key||'');
+   const safeSlots=normalizedSlots.length?normalizedSlots:[initialKey];
    setWatch(next);
-   setSelected(String(saved.selected||next[0]?.key||''));
-   setFocused(Math.max(0,Number(saved.focused)||0));
-   setSlotKeys(Array.isArray(saved.slotKeys)&&saved.slotKeys.length?saved.slotKeys:[next[0]?.key||'']);
+   setSelected(initialKey);
+   setFocused(Math.min(Math.max(0,Number(saved.focused)||0),Math.max(0,safeSlots.length-1)));
+   setSlotKeys(safeSlots);
    setLayout(layouts.some(x=>x[1]===saved.layout)?String(saved.layout):'tc4-g1');
    setTicks({});setAnalytics(null);setPanel((saved as any).panel&&['chain','levels','positions','orders','trades','ticket'].includes(String((saved as any).panel))?(saved as any).panel:null);setWorkspaceHydrated(false);
    let dead=false;
    if(user?.id){void loadWorkspaceFromCloud(user.id,broker).then(cloud=>{
      if(dead||!cloud)return;
-     if(Array.isArray(cloud.watch)&&cloud.watch.length)setWatch((cloud.watch as WatchItem[]).map((x:any)=>normalize(broker,x)).filter((x:any)=>x?.key));
-     if(cloud.selected)setSelected(cloud.selected);
-     if(Number.isFinite(Number(cloud.focused)))setFocused(Math.max(0,Number(cloud.focused)));
-     if(Array.isArray(cloud.slotKeys)&&cloud.slotKeys.length)setSlotKeys(cloud.slotKeys);
+     const cloudWatch=Array.isArray(cloud.watch)&&cloud.watch.length
+       ? (cloud.watch as WatchItem[]).map((x:any)=>normalize(broker,x)).filter((x:any)=>x?.key)
+       : next;
+     const cloudSelectedRaw=String(cloud.selected||cloudWatch[0]?.key||'');
+     const cloudSelected=normalize(broker,({key:cloudSelectedRaw,label:cloudSelectedRaw,symbol:cloudSelectedRaw} as any)).key;
+     const cloudSlots=Array.isArray(cloud.slotKeys)&&cloud.slotKeys.length
+       ? cloud.slotKeys.map((raw:any)=>{const hit=cloudWatch.find(w=>w.key===String(raw));return normalize(broker,hit||({key:String(raw),label:String(raw),symbol:String(raw)} as any)).key;}).filter((k:any)=>k&&cloudWatch.some(w=>w.key===k))
+       : [];
+     const safeCloudSelected=cloudSelected&&cloudWatch.some(w=>w.key===cloudSelected)?cloudSelected:(cloudWatch[0]?.key||'');
+     const safeCloudSlots=cloudSlots.length?cloudSlots:[safeCloudSelected];
+     setWatch(cloudWatch);
+     setSelected(safeCloudSelected);
+     if(Number.isFinite(Number(cloud.focused)))setFocused(Math.min(Math.max(0,Number(cloud.focused)),Math.max(0,safeCloudSlots.length-1)));
+     setSlotKeys(safeCloudSlots);
      if(cloud.layout&&layouts.some(x=>x[1]===cloud.layout))setLayout(cloud.layout);
      if((cloud as any).chartStates)restoreChartStates(broker,(cloud as any).chartStates as Record<string,unknown>);
      restoreSnapshotManagedSettings(cloud);
@@ -78,7 +94,7 @@ export function LiveTradingTerminalV4(){
  const changeLayout=(cls:string,count:number)=>{const fallback=slotKeys[focused]||selectedItem?.key||watch[0]?.key||'';setLayout(cls);setLayoutOpen(false);setFocused(f=>Math.min(f,count-1));setSlotKeys(prev=>Array.from({length:count},(_,i)=>prev[i]||fallback))};
  const snapshotNow=():WorkspaceSnapshot=>snapshotManagedSettings({version:1,savedAt:new Date().toISOString(),broker,layout,watch,selected,focused,slotKeys,chartStates:captureChartStates(broker),panel,watchlistOpen,order});
  const saveNamed=()=>{const name=window.prompt('Save TradingCoreOS layout as:', 'My Trading Layout');if(!name?.trim())return;const item=saveNamedWorkspaceLayout(name,snapshotNow());setSavedLayouts(listSavedWorkspaceLayouts());saveWorkspace(broker,{...snapshotNow(),name:item.name});if(user?.id)void persistNamedWorkspaceLayoutToCloud(user.id,{...snapshotNow(),name:item.name});setLayoutOpen(true);};
- const restoreNamed=(item:WorkspaceSnapshot)=>{if(!item)return;restoreSnapshotManagedSettings(item);restoreChartStates(broker,item.chartStates||{});setLayout(layouts.some(x=>x[1]===item.layout)?item.layout:'tc4-g1');setWatch((item.watch as WatchItem[]).map((x:any)=>normalize(broker,x)).filter((x:any)=>x?.key));setSelected(item.selected||'');setFocused(Math.max(0,Number(item.focused)||0));setSlotKeys(item.slotKeys?.length?item.slotKeys:[]);if((item as any).order)setOrder((item as any).order as any);setWorkspaceRevision(v=>v+1);setPanel((item.panel&&['chain','levels','positions','orders','trades','ticket'].includes(String(item.panel)))?item.panel as any:null);setLayoutOpen(false);};
+ const restoreNamed=(item:WorkspaceSnapshot)=>{if(!item)return;restoreSnapshotManagedSettings(item);restoreChartStates(broker,item.chartStates||{});const restoredWatch=(item.watch as WatchItem[]).map((x:any)=>normalize(broker,x)).filter((x:any)=>x?.key);const safeWatch=restoredWatch.length?restoredWatch:defaults(broker);const rawSelected=String(item.selected||safeWatch[0]?.key||'');const restoredSelected=normalize(broker,({key:rawSelected,label:rawSelected,symbol:rawSelected} as any)).key;const safeSelected=restoredSelected&&safeWatch.some(w=>w.key===restoredSelected)?restoredSelected:safeWatch[0]?.key||'';const restoredSlots=(item.slotKeys||[]).map((raw:any)=>{const hit=safeWatch.find(w=>w.key===String(raw));return normalize(broker,hit||({key:String(raw),label:String(raw),symbol:String(raw)} as any)).key;}).filter((k:any)=>k&&safeWatch.some(w=>w.key===k));setLayout(layouts.some(x=>x[1]===item.layout)?item.layout:'tc4-g1');setWatch(safeWatch);setSelected(safeSelected);setFocused(Math.max(0,Number(item.focused)||0));setSlotKeys(restoredSlots.length?restoredSlots:[safeSelected]);if((item as any).order)setOrder((item as any).order as any);setWorkspaceRevision(v=>v+1);setPanel((item.panel&&['chain','levels','positions','orders','trades','ticket'].includes(String(item.panel)))?item.panel as any:null);setLayoutOpen(false);};
  useEffect(()=>{const fn=()=>setSavedLayouts(listSavedWorkspaceLayouts());window.addEventListener('tradingcore:workspace-library-changed',fn);return()=>window.removeEventListener('tradingcore:workspace-library-changed',fn)},[]);
  useEffect(()=>{const fn=(e:any)=>{const next=String(e?.detail||'').trim();if(next)setWatchlistName(next)};window.addEventListener('tradingcore:watchlist-name-changed',fn);return()=>window.removeEventListener('tradingcore:watchlist-name-changed',fn)},[]);
  const renameWatchlist=()=>{const next=window.prompt('Rename watchlist',watchlistName);if(!next?.trim())return;const value=next.trim().slice(0,40);setWatchlistName(value);try{localStorage.setItem('tradingcore_watchlist_name',value);window.dispatchEvent(new CustomEvent('tradingcore:watchlist-name-changed',{detail:value}))}catch{}};
