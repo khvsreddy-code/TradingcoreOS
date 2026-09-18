@@ -1192,3 +1192,184 @@ Never describe Stage 4 AST/IR as the finished CoreSpirit compiler/runtime.
 5. Historical indexing is backward-looking only; future references must not be introduced into replay/backtesting.
 6. Semantic trading concepts should eventually be canonical primitives shared with the structure engine rather than duplicated inside individual scripts.
 7. Preserve the existing event bus, chart lifecycle, drawing, calculation, symbol handling, sanitization, and AI reliability work when advancing CoreSpirit.
+
+## 34. Stage 5 — Core Chart Workspace Layout + Drawing Rail
+
+### Implemented
+- Core Chart workspace treats the watchlist as a canonical right-side panel.
+- Legacy left-side watchlist injection/cloning is not part of the canonical workspace.
+- Dedicated `src/components/workspace/CoreDrawingToolbar.tsx` provides the Core Chart drawing rail.
+- Drawing tools use the canonical `CORE_DRAWING_TOOLS` semantics.
+- Drawing-tool events can be scoped to the focused chart index.
+- `LiveChart` supports workspace-owned drawing UI via `showEmbeddedDrawingToolbar={false}`.
+- Chart workspace sizing was hardened so chart viewports retain usable height/width.
+
+### Stage 5 still required
+- full pointer hit-testing
+- edit handles and drag/resize geometry
+- magnetic OHLC/structure snapping
+- grouping and z-order
+- advanced measurement semantics
+- complete renderer abstraction for every CoreDrawing kind
+- complete CoreSpirit chronological runtime/compiler
+
+## 35. Stage 6 — Stateful CoreSpirit Runtime + Right Workspace Dock
+
+### Implemented
+- chronological CoreSpirit IR executor at `src/services/coreSpirit/runtime.ts`
+- state persistence across bars for EMA/RSI/ATR/VWAP-style calculations
+- runtime no-lookahead enforcement for historical indexing
+- safe handling of unavailable historical lookback at dataset boundaries
+- dynamic indexing for canonical market series with runtime validation
+- per-bar execution step guard
+- per-bar diagnostic isolation
+- `script.signal` event publication for runtime signals
+- chart-independent CoreSpirit output objects
+- optional alert/webhook intent routing through the existing script event boundary
+- runtime exports from `src/services/coreSpirit/index.ts`
+- `src/components/workspace/WatchlistDock.tsx`
+- right-side vertical workspace rail with watchlist toggle
+- compact TradingView-style watchlist table hierarchy
+- grouped instrument sections
+- selected ticker information panel
+- broker-driven live quote values; missing fields remain `—`
+- top-toolbar Watchlist control removed from the live V4/V5 workspace path
+- workspace-owned left drawing rail retained and embedded LiveChart drawing rails disabled in the workspace
+
+### Stage 6 architecture
+```text
+                         TradingCoreOS
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+       Core Chart Engine                CoreSpirit Engine
+              │                               │
+       ┌──────┼──────┐                  Parser / AST / IR
+       │      │      │                         │
+ Drawing  Chart   Watchlist              Stateful Runtime
+  Rail   Grid     Right Dock                   │
+       │      │      │                         │
+       └──────┴──────┴────── Event/Data Bus ───┘
+                                      │
+                         Signals / Alerts / Validation
+```
+
+### Stage 6 still required
+- complete CoreSpirit type system
+- complete semantic trading primitives
+- optimized IR/bytecode execution format
+- session-aware calculation state
+- explicit MTF confirmed/developing semantics
+- deterministic replay/live runtime conformance
+- full backtest integration
+- Pine reader/parser and Pine → CoreSpirit translation
+- resource/memory quotas beyond the basic execution-step guard
+- real webhook delivery service
+- full CoreDrawing geometry/hit-testing/editing/snapping engine
+- richer watchlist persistence, multiple lists and broker-provided range/news/fundamental data
+
+### Stage 6 anti-drift rules
+1. CoreSpirit runtime execution must remain independent from Core Chart lifecycle/rendering.
+2. Core Chart consumes CoreSpirit output contracts/events; it must not import parser/compiler internals.
+3. Historical indexing is chronological and backward-only.
+4. Missing historical bars return `null`; future bars are never read.
+5. Runtime calculation state must be reproducible in replay/backtest.
+6. Script signals/alerts/webhooks cross the event boundary rather than directly manipulating chart internals.
+7. The right watchlist dock is Core Chart workspace UI, not a CoreSpirit feature.
+8. Do not invent live ticker/range/news values when broker data is unavailable.
+9. Preserve v0.0.19 reliability and symbol-normalization behavior while extending the workspace.
+10. Do not describe the Stage 6 runtime as the finished CoreSpirit language/runtime; compiler completeness, Pine compatibility, replay/backtest integration and semantic trading primitives remain future stages.
+
+## 34. Stage 7 — TradingCore Chart Command Bar + Favorite Symbol UI
+
+Stage 7 refines the Core Chart workspace upper command surface using the supplied TradingView-style reference while preserving TradingCoreOS's existing dark/minimal visual language.
+
+### Implemented
+
+- selected symbol/search control in the upper chart command bar
+- per-symbol favorite star with local persistence
+- add/select symbol shortcut
+- compact timeframe controls: 1m / 3m / 5m / 15m / 30m / 1H / 1D
+- chart-type command surface
+- Indicators command
+- Levels command
+- Option Chain command
+- AI prediction command
+- Layout command
+- Replay command surface
+- Alert command surface
+- Fit chart control
+- Draw command
+- Undo / Redo command surfaces
+- More menu with Positions, Orders, Trades, Order Ticket and refresh actions
+- existing Buy / Sell actions preserved
+
+### Focused-chart routing
+
+The upper toolbar uses targeted workspace events for chart-owned commands:
+
+```text
+Top Command Bar
+      ↓
+Workspace Event
+      ↓
+Focused Core Chart
+```
+
+Implemented event contracts include:
+
+- `TRADINGCORE_SET_TIMEFRAME`
+- `TRADINGCORE_OPEN_INDICATORS`
+- `TRADINGCORE_OPEN_PREDICTIONS`
+
+`LiveChart` ignores targeted commands intended for another chart index. This keeps multi-chart workspaces isolated.
+
+### Favorite symbol
+
+Favorites are stored independently from watchlist membership using:
+
+`tradingcore:favorite:<instrumentKey>`
+
+The favorite star is therefore a symbol-level preference rather than a second watchlist implementation.
+
+### Watchlist placement rule
+
+The watchlist remains exclusively represented by the canonical Stage 6 right-side workspace dock/right rail. The upper symbol control may open the right dock for selection, but there is no duplicate top-toolbar Watchlist button.
+
+### Workspace composition
+
+```text
+                 Core Chart Workspace
+┌─────────────────────────────────────────────────────────────┐
+│ Symbol ★ + │ Timeframes │ Indicators │ Levels │ AI │ ...    │
+├─────────────────────────────────────────────────────────────┤
+│ Draw Rail │                 Charts                  │ Watch  │
+│           │                                          │ list   │
+│           │                                          │ Dock   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Stage 7 implementation truth
+
+Implemented in this stage:
+
+- TradingView-inspired command-bar density and grouping
+- symbol/favorite/add controls
+- timeframe event routing into `LiveChart`
+- Indicators/AI command routing into the focused chart
+- Levels/Option Chain integration with existing workspace panels
+- removal of the top-toolbar Watchlist command in favor of the right-side dock
+- persisted symbol favorite state
+- command-bar More menu
+
+Still not complete:
+
+- full replay UI/runtime integration from the toolbar
+- full alert creation workflow from the toolbar
+- chart-type switching implementation
+- true chart undo/redo history behind the top buttons
+- complete drawing hit-testing/editing/snapping/geometry engine
+
+### Anti-drift rule
+
+The command bar is a **Core Chart UI layer**. It must not import or depend on CoreSpirit parser/compiler/runtime internals. CoreSpirit remains a separate entity connected through the established data/event contracts.

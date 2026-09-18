@@ -30,6 +30,7 @@ export type CoreEventMap = {
   'replay.stopped': { sessionId: string; cursorTime: number };
   'script.signal': { scriptId: string; time: number; type: string; metadata?: Record<string, unknown> };
   'script.alert': { scriptId: string; time: number; payload: Record<string, unknown> };
+  'script.webhook': { scriptId: string; time: number; endpoint?: string; payload: Record<string, unknown> };
   'model.prediction': { modelId: string; symbol: string; timeframe: string; payload: Record<string, unknown> };
   'execution.intent': { source: string; payload: Record<string, unknown> };
 };
