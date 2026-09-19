@@ -108,8 +108,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' });
     return;
   }
-  const requested = Number(req.query.limit || (beforeDate ? 5_000 : 10_000));
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 5_000 : 10_000, Math.floor(requested))) : (beforeDate ? 5_000 : 10_000);
+  const requested = Number(req.query.limit || (beforeDate ? 500 : 500));
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 1000 : 500, Math.floor(requested))) : 500;
   const maxChartHistory = 30_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
@@ -139,31 +139,26 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      // Build history in small, deterministic windows. This mirrors the broker's
-      // known-working date-range pattern instead of relying on one large request.
-      // It is especially important for indexes/active derivatives where FYERS may
-      // return an empty set for a particular combination of range/date format.
-      // Initial chart paint must be cheap: one broker window is enough to render
-      // the chart. Older candles are fetched only by the chart's left-edge
-      // pagination (`before=`). The previous implementation walked up to five
-      // years here, multiplying one chart mount into dozens of FYERS history
-      // requests and eventually surfacing "request limit reached" with no candles.
-      const chunkDays = resolution === 'D' ? 366 : 30;
-      let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      // TradingView-style history pagination. Initial paint asks FYERS for one
+      // bounded recent window only; older pages are requested by the chart with
+      // `before` as the user scrolls left. This prevents a single mount from
+      // consuming the broker request quota.
+      const windowDays = resolution === 'D' ? 5000 : 7;
+      const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      const from = new Date(end.getTime() - windowDays * 86_400_000);
       let data: any[] = [];
       let historyError: any = null;
       let lastAttempt: any = null;
 
-      const requestHistory = async (from: Date, to: Date, dateFormat: '0' | '1', contFlag: 'none' | '0' | '1'): Promise<any[]> => {
+      const requestHistory = async (dateFormat: '0' | '1'): Promise<any[]> => {
         const params = new URLSearchParams({
           symbol: instrumentKey,
           resolution,
           date_format: dateFormat,
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
-          range_to: dateFormat === '0' ? String(Math.floor(to.getTime() / 1000)) : indiaDate(to),
+          range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
         });
-        if (contFlag !== 'none') params.set('cont_flag', contFlag);
-        lastAttempt = { symbol: instrumentKey, resolution, dateFormat, contFlag, from: params.get('range_from'), to: params.get('range_to') };
+        lastAttempt = { symbol: instrumentKey, resolution, dateFormat, from: params.get('range_from'), to: params.get('range_to') };
         const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
           headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
         });
@@ -175,7 +170,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         const brokerStatus = String(payload?.s || '').toLowerCase();
         if (!response.ok || brokerStatus === 'error' || brokerCode === 429) {
           const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
-          err.status = brokerCode === 429 ? 429 : response.status;
+          err.status = brokerCode === 429 || response.status === 429 ? 429 : response.status;
           err.brokerCode = brokerCode;
           err.fyersStatus = payload?.s;
           throw err;
@@ -183,34 +178,17 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         return normalize(payload?.candles || [], limit);
       };
 
-      const derivative = isDerivativeSymbol(instrumentKey);
-      // Keep each browser request bounded to a single broker-safe window. For a
-      // specific derivative, cont_flag=none is the correct first choice; for an
-      // index/equity the same request is also the least expensive path. Only use
-      // the alternate date format/flag if the first request returns no candles.
-      const attempts: Array<'none' | '0' | '1'> = derivative ? ['none', '0', '1'] : ['none', '0'];
-      const formats: Array<'1' | '0'> = ['1', '0'];
-      let loaded = false;
-
-      for (const contFlag of attempts) {
-        for (const dateFormat of formats) {
-          try {
-            const from = new Date(end.getTime() - chunkDays * 86_400_000);
-            const rows = await requestHistory(from, end, dateFormat, contFlag);
-            if (rows.length) {
-              data = normalize(rows, limit);
-              loaded = true;
-              break;
-            }
-          } catch (error: any) {
-            historyError = error;
-            // A broker 429 must stop this request immediately. Retrying alternate
-            // parameter combinations only consumes more quota and cannot repair a
-            // rate-limit response. The shared request gate will pace the next call.
-            if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
-          }
+      // The normal FYERS form is date_format=1. Epoch seconds is a single
+      // fallback only; cont_flag permutations are deliberately not attempted
+      // because they turn one chart request into several broker calls.
+      for (const dateFormat of ['1', '0'] as const) {
+        try {
+          data = await requestHistory(dateFormat);
+          if (data.length) break;
+        } catch (error: any) {
+          historyError = error;
+          if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
         }
-        if (loaded) break;
       }
 
       // Never fabricate historical candles. A quote is useful for the watchlist
