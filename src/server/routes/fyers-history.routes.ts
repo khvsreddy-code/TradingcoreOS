@@ -33,8 +33,30 @@ function canonicalFyersSymbol(value: string): string {
   const n = raw.toLowerCase().replace(/\s+/g, '');
   if (['nse_index|nifty50','nse_index|nifty50index','nifty','nifty50','nifty50index'].includes(n) || n.includes('nifty50-index')) return 'NSE:NIFTY50-INDEX';
   if (['nse_index|niftybank','nse_index|banknifty','banknifty','niftybank'].includes(n) || n.includes('niftybank-index')) return 'NSE:NIFTYBANK-INDEX';
+  if (['nse_index|finnifty','nse_index|niftyfinancialservices'].includes(n) || n.includes('finnifty-index')) return 'NSE:FINNIFTY-INDEX';
+  if (['nse_index|niftymidcapselect','nse_index|midcap'].includes(n) || n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
   if (['bse_index|sensex','sensex'].includes(n) || n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
+
+  // Keep exact FYERS symbols intact, but repair the pipe-form keys that can
+  // survive from the workspace/search layer (e.g. NSE_FO|NIFTY26SEPFUT).
+  const pipe = raw.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
+  if (pipe) return `${pipe[1].toUpperCase()}:${pipe[3]}`;
+
+  // Search results normally provide the exchange-qualified FYERS symbol. If a
+  // persisted watchlist contains only an active NIFTY derivative ticker, add
+  // the NSE prefix rather than sending an invalid bare symbol to History API.
+  if (!raw.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(raw)) {
+    return `NSE:${raw}`;
+  }
   return raw;
+}
+
+function isDerivativeSymbol(symbol: string): boolean {
+  // FYERS active derivative tickers are commonly NSE:NIFTY26SEPFUT or
+  // NSE:NIFTY26000CE (without a hyphen before FUT/CE/PE). The old check only
+  // recognized "-FUT/-CE/-PE", so those contracts were incorrectly sent with
+  // the non-derivative history flag.
+  return /(?:FUT|CE|PE)$/i.test(String(symbol || '').split(':').pop() || '');
 }
 
 function indiaDate(date: Date): string {
@@ -173,12 +195,18 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       }
       if (!candidateEnds.length) candidateEnds.push(requestedEnd);
 
-      const requestHistory = async (end: Date, dateFormat: '0' | '1', contFlag: '0' | '1', windowDays = pageDays): Promise<any[]> => {
-        const from = new Date(end.getTime() - windowDays * 86_400_000);
+      const derivative = isDerivativeSymbol(instrumentKey);
+      // FYERS has historically accepted both cont_flag values for some index
+      // history calls, while active derivatives are commonly queried with 1.
+      // More importantly, a specific FUT/CE/PE contract must never be classified
+      // using the old "-FUT/-CE/-PE" pattern. Try the broker-compatible value
+      // first, then the alternate value before declaring the symbol empty.
+      const contFlags = derivative ? ['1', '0'] as const : ['1', '0'] as const;
+
+      const requestHistory = async (end: Date, dateFormat: '0' | '1', contFlag: '0' | '1'): Promise<any[]> => {
+        const from = new Date(end.getTime() - pageDays * 86_400_000);
         const params = new URLSearchParams({
           symbol: instrumentKey, resolution, date_format: dateFormat,
-          // FYERS treats cont_flag as a continuous-contract switch. Index and
-          // cash-equity history is more reliable with 0; derivatives may need 1.
           cont_flag: contFlag,
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
           range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
@@ -191,7 +219,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         try { payload = JSON.parse(text); }
         catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
         const brokerCode = Number(payload?.code);
-        if (!response.ok || payload?.s === 'error' || brokerCode === 429) {
+        const brokerStatus = String(payload?.s || '').toLowerCase();
+        if (!response.ok || brokerStatus === 'error' || brokerCode === 429) {
           const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
           err.status = brokerCode === 429 ? 429 : response.status;
           err.brokerCode = brokerCode;
@@ -200,31 +229,18 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         return normalize(payload?.candles || [], limit);
       };
 
-      const derivative = /-(?:FUT|CE|PE)$/i.test(instrumentKey);
-      // Try the broker-safe primary combination first, then deliberately vary
-      // only one dimension at a time. This is important because FYERS has
-      // historically returned empty/no_data for otherwise valid symbols when a
-      // date-format or cont_flag combination was accepted syntactically but not
-      // supported for that instrument class. The fallback is still real broker
-      // history; no candles are fabricated.
-      const strategies: Array<{ dateFormat: '0' | '1'; contFlag: '0' | '1'; windowDays: number }> = [
-        { dateFormat: '0', contFlag: derivative ? '1' : '0', windowDays: pageDays },
-        { dateFormat: '1', contFlag: derivative ? '1' : '0', windowDays: pageDays },
-        { dateFormat: '0', contFlag: derivative ? '0' : '1', windowDays: pageDays },
-        { dateFormat: '1', contFlag: derivative ? '0' : '1', windowDays: pageDays },
-        { dateFormat: '0', contFlag: derivative ? '1' : '0', windowDays: Math.min(pageDays, 7) },
-        { dateFormat: '1', contFlag: derivative ? '1' : '0', windowDays: Math.min(pageDays, 7) },
-      ];
-
       for (const end of candidateEnds) {
-        for (const strategy of strategies) {
-          try {
-            data = await requestHistory(end, strategy.dateFormat, strategy.contFlag, strategy.windowDays);
-            if (data.length >= 2) break;
-          } catch (error: any) {
-            historyError = error;
-            if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+        for (const contFlag of contFlags) {
+          for (const dateFormat of ['0', '1'] as const) {
+            try {
+              data = await requestHistory(end, dateFormat, contFlag);
+              if (data.length >= 2) break;
+            } catch (error: any) {
+              historyError = error;
+              if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+            }
           }
+          if (data.length >= 2) break;
         }
         if (data.length >= 2) break;
       }
