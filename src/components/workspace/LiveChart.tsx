@@ -27,9 +27,14 @@ const canonicalInstrumentKey=(brokerId:string,key:string)=>{
  const value=String(key||'').trim();
  if(String(brokerId).toLowerCase()!=='fyers') return value;
  const n=value.toLowerCase().replace(/\s+/g,'');
- if(n==='nse_index|nifty50'||n==='nse_index|nifty50index'||n==='nifty'||n==='nifty50'||n==='nifty50index'||n.includes('nifty50-INDEX'.toLowerCase())) return 'NSE:NIFTY50-INDEX';
- if(n==='nse_index|niftybank'||n==='nse_index|banknifty'||n==='banknifty'||n==='niftybank'||n.includes('niftybank-INDEX'.toLowerCase())) return 'NSE:NIFTYBANK-INDEX';
- if(n==='bse_index|sensex'||n==='sensex'||n.includes('sensex-INDEX'.toLowerCase())) return 'BSE:SENSEX-INDEX';
+ if(n==='nse_index|nifty50'||n==='nse_index|nifty50index'||n==='nifty'||n==='nifty50'||n==='nifty50index'||n.includes('nifty50-index')) return 'NSE:NIFTY50-INDEX';
+ if(n==='nse_index|niftybank'||n==='nse_index|banknifty'||n==='banknifty'||n==='niftybank'||n.includes('niftybank-index')) return 'NSE:NIFTYBANK-INDEX';
+ if(n==='nse_index|finnifty'||n==='nse_index|niftyfinancialservices'||n.includes('finnifty-index')) return 'NSE:FINNIFTY-INDEX';
+ if(n==='nse_index|niftymidcapselect'||n==='nse_index|midcap'||n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
+ if(n==='bse_index|sensex'||n==='sensex'||n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
+ const pipe=value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
+ if(pipe) return `${pipe[1].toUpperCase()}:${pipe[3]}`;
+ if(!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
  return value;
 };
 const seconds: Record<string,number> = {'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1H':3600,'1D':86400};

@@ -40,7 +40,11 @@ function toFyersSymbol(symbol: string): string {
     'nse_index|niftyfinancialservices': 'NSE:FINNIFTY-INDEX', 'nse_index|finnifty': 'NSE:FINNIFTY-INDEX',
     'nse_index|niftymidcapselect': 'NSE:MIDCPNIFTY-INDEX', 'bse_index|sensex': 'BSE:SENSEX-INDEX',
   };
-  return aliases[normalized] || (/^(NSE|BSE|MCX):/i.test(value) ? value : value);
+  if (aliases[normalized]) return aliases[normalized];
+  const pipe = value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
+  if (pipe) return `${pipe[1].toUpperCase()}:${pipe[3]}`;
+  if (!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
+  return value;
 }
 
 const fyersResolution: Record<string,string> = {
