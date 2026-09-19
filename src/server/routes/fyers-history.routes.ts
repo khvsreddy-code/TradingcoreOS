@@ -196,21 +196,25 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       if (!candidateEnds.length) candidateEnds.push(requestedEnd);
 
       const derivative = isDerivativeSymbol(instrumentKey);
-      // FYERS has historically accepted both cont_flag values for some index
-      // history calls, while active derivatives are commonly queried with 1.
-      // More importantly, a specific FUT/CE/PE contract must never be classified
-      // using the old "-FUT/-CE/-PE" pattern. Try the broker-compatible value
-      // first, then the alternate value before declaring the symbol empty.
-      const contFlags = derivative ? ['1', '0'] as const : ['1', '0'] as const;
+      // IMPORTANT: FYERS v3 documents cont_flag as optional and specifically
+      // intended for continuous futures. Sending cont_flag=1 for NIFTY indexes
+      // (and for many specific active CE/PE/FUT contracts) can produce a valid
+      // HTTP response with s="no_data". The previous implementation always
+      // sent cont_flag and therefore could turn otherwise valid NIFTY history
+      // into an empty chart.
+      //
+      // Request order is deliberately: no cont_flag -> cont_flag=0 ->
+      // cont_flag=1. The first request is the normal v3 History API contract.
+      const contFlags: Array<'none' | '0' | '1'> = ['none', '0', '1'];
 
-      const requestHistory = async (end: Date, dateFormat: '0' | '1', contFlag: '0' | '1'): Promise<any[]> => {
+      const requestHistory = async (end: Date, dateFormat: '0' | '1', contFlag: 'none' | '0' | '1'): Promise<any[]> => {
         const from = new Date(end.getTime() - pageDays * 86_400_000);
         const params = new URLSearchParams({
           symbol: instrumentKey, resolution, date_format: dateFormat,
-          cont_flag: contFlag,
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
           range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
         });
+        if (contFlag !== 'none') params.set('cont_flag', contFlag);
         const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
           headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
         });
@@ -231,7 +235,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
       for (const end of candidateEnds) {
         for (const contFlag of contFlags) {
-          for (const dateFormat of ['0', '1'] as const) {
+          for (const dateFormat of ['1', '0'] as const) {
             try {
               data = await requestHistory(end, dateFormat, contFlag);
               if (data.length >= 2) break;
