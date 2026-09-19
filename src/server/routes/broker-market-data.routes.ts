@@ -42,8 +42,16 @@ function toFyersSymbol(symbol: string): string {
   };
   if (aliases[normalized]) return aliases[normalized];
   const pipe = value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
-  if (pipe) return `${pipe[1].toUpperCase()}:${pipe[3]}`;
+  if (pipe) {
+    const exchange = pipe[1].toUpperCase();
+    const segment = pipe[2].toUpperCase();
+    const ticker = pipe[3];
+    if (segment === 'CM' && !/-(EQ|BE|SM|ST)$/i.test(ticker)) return `${exchange}:${ticker}-EQ`;
+    return `${exchange}:${ticker}`;
+  }
   if (!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
+  if (/^NSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
+  if (/^BSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
   return value;
 }
 

@@ -7,8 +7,8 @@ import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 /**
  * Safe FYERS historical-data route.
  *
- * History is loaded in broker-safe date windows. The chart starts with 10,000
- * candles and requests older pages lazily as the user pans left, up to a 30,000
+ * History is loaded in broker-safe date windows. The chart starts with a known-good
+ * initial history page and requests older pages lazily as the user pans left, up to a 30,000
  * candle chart cache. If the broker cannot provide that much, valid history is
  * returned instead of fabricating data. The browser/runtime target is therefore
  * progressive rather than one large first-paint request. If the
@@ -40,14 +40,20 @@ function canonicalFyersSymbol(value: string): string {
   // Keep exact FYERS symbols intact, but repair the pipe-form keys that can
   // survive from the workspace/search layer (e.g. NSE_FO|NIFTY26SEPFUT).
   const pipe = raw.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
-  if (pipe) return `${pipe[1].toUpperCase()}:${pipe[3]}`;
+  if (pipe) {
+    const exchange = pipe[1].toUpperCase();
+    const segment = pipe[2].toUpperCase();
+    const ticker = pipe[3];
+    if (segment === 'CM' && !/-(EQ|BE|SM|ST)$/i.test(ticker)) return `${exchange}:${ticker}-EQ`;
+    return `${exchange}:${ticker}`;
+  }
 
   // Search results normally provide the exchange-qualified FYERS symbol. If a
   // persisted watchlist contains only an active NIFTY derivative ticker, add
   // the NSE prefix rather than sending an invalid bare symbol to History API.
-  if (!raw.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(raw)) {
-    return `NSE:${raw}`;
-  }
+  if (!raw.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(raw)) return `NSE:${raw}`;
+  if (/^NSE:[A-Z0-9&._-]+$/i.test(raw) && !/-[A-Z]+$/i.test(raw)) return `${raw}-EQ`;
+  if (/^BSE:[A-Z0-9&._-]+$/i.test(raw) && !/-[A-Z]+$/i.test(raw)) return `${raw}-EQ`;
   return raw;
 }
 
@@ -78,39 +84,6 @@ function normalize(rows: any[], limit: number): any[] {
     });
   }
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, candle]) => candle).slice(-limit);
-}
-
-/**
- * Some newly listed/far-dated option contracts legitimately have no historical
- * trades yet. In that case the chart should not fail completely: use the
- * broker's last known quote as a single live seed candle. This is explicitly
- * not presented as historical data; subsequent websocket ticks build the live
- * candle normally in the browser.
- */
-async function fallbackQuoteCandle(accessToken: string, symbol: string): Promise<any[]> {
-  const params = new URLSearchParams({ symbols: symbol });
-  const response = await fetch(`https://api-t1.fyers.in/data/quotes?${params.toString()}`, {
-    headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-  });
-  const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch { return []; }
-  if (!response.ok || payload?.s === 'error') return [];
-  const quote = Array.isArray(payload?.d) ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0] : undefined;
-  const value = quote?.v || {};
-  const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
-  if (!Number.isFinite(ltp) || ltp <= 0) return [];
-  const now = new Date();
-  const volume = Number(value.volume ?? value.vol ?? 0);
-  return [{
-    timestamp: now.toISOString(),
-    open: ltp,
-    high: ltp,
-    low: ltp,
-    close: ltp,
-    volume: Number.isFinite(volume) ? volume : 0,
-    liveSeed: true,
-  }];
 }
 
 const cache = new Map<string, { expiresAt: number; data: any[] }>();
@@ -170,8 +143,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // known-working date-range pattern instead of relying on one large request.
       // It is especially important for indexes/active derivatives where FYERS may
       // return an empty set for a particular combination of range/date format.
-      const chunkDays = resolution === 'D' ? 366 : 7;
-      const maxLookbackDays = resolution === 'D' ? 3660 : 180;
+      const chunkDays = resolution === 'D' ? 366 : 90;
+      const maxLookbackDays = resolution === 'D' ? 3660 : 365 * 5;
       let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       let data: any[] = [];
       let historyError: any = null;
@@ -212,20 +185,20 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // futures rather than as a mandatory flag for every derivative request.
       const contFlags: Array<'none' | '0' | '1'> = derivative ? ['none', '0', '1'] : ['none', '0'];
 
-      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < 2; lookedBack += chunkDays) {
+      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < limit; lookedBack += chunkDays) {
         const from = new Date(end.getTime() - chunkDays * 86_400_000);
         for (const contFlag of contFlags) {
           for (const dateFormat of ['1', '0'] as const) {
             try {
               const rows = await requestHistory(from, end, dateFormat, contFlag);
               if (rows.length) data = normalize([...rows, ...data], limit);
-              if (data.length >= 2) break;
+              if (data.length >= limit) break;
             } catch (error: any) {
               historyError = error;
               if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
             }
           }
-          if (data.length >= 2) break;
+          if (data.length >= limit) break;
         }
         end = new Date(from.getTime() - 1000);
       }
@@ -243,36 +216,33 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
               try {
                 const rows = await requestHistory(from, to, dateFormat, contFlag);
                 if (rows.length) data = normalize([...rows, ...data], limit);
-                if (data.length >= 2) break;
+                if (data.length >= limit) break;
               } catch (error: any) {
                 historyError = error;
                 if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
               }
             }
-            if (data.length >= 2) break;
+            if (data.length >= limit) break;
           }
         }
       }
 
-      // A transient History API failure must not turn the price chart into an
-      // empty canvas. For the initial page only, recover from the live quote;
-      // websocket ticks then build the developing candle. No historical candle
-      // is fabricated and backward pagination never uses this fallback.
-      if (data.length < 2 && !beforeDate) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
-        if (seed.length) data = seed;
-      }
-      if (!data.length) {
+      // Never fabricate historical candles. A quote is useful for the watchlist
+      // but it is not historical OHLC and must not be used to make a chart appear
+      // healthy when History API failed.
+      if (data.length < 2) {
         if (beforeDate) return [];
+        console.error('[TradingCore][FYERS history] insufficient', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, lastAttempt, error: historyError?.message || null, brokerCode: historyError?.brokerCode ?? null, fyersStatus: historyError?.fyersStatus ?? null });
         throw historyError || new Error(`Fyers returned no historical candles for ${instrumentKey}.`);
       }
+      console.info('[TradingCore][FYERS history] loaded', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, requested: limit, returned: data.length, oldest: data[0]?.timestamp || null, newest: data[data.length - 1]?.timestamp || null,  });
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
     });
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data, requested: limit, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length && !data[0]?.liveSeed) });
+    res.json({ success: true, data, requested: limit, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length) });
   } catch (error: any) {
     res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles', brokerRateLimited: Number(error?.status) === 429 });
   } finally {

@@ -33,8 +33,10 @@ const canonicalInstrumentKey=(brokerId:string,key:string)=>{
  if(n==='nse_index|niftymidcapselect'||n==='nse_index|midcap'||n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
  if(n==='bse_index|sensex'||n==='sensex'||n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
  const pipe=value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
- if(pipe) return `${pipe[1].toUpperCase()}:${pipe[3]}`;
+ if(pipe){const exchange=pipe[1].toUpperCase(),segment=pipe[2].toUpperCase(),ticker=pipe[3];if(segment==='CM'&&!/-(EQ|BE|SM|ST)$/i.test(ticker))return `${exchange}:${ticker}-EQ`;return `${exchange}:${ticker}`;}
  if(!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
+ if(/^NSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
+ if(/^BSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
  return value;
 };
 const seconds: Record<string,number> = {'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1H':3600,'1D':86400};
@@ -560,24 +562,12 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    previousLogicalRange=c.timeScale().getVisibleLogicalRange?.()||null;historyReady=true;void renderPredictionOverlay(data); if(showOI&&oiAnalytics.current)renderOI(oiAnalytics.current);
  }).catch(e=>{
   if(dead||!lifecycle.current.isCurrent(generation))return;
-  const live=Number(tick?.ltp);
-  if(Number.isFinite(live)&&live>0&&candle.current){
-    const now=Math.floor(Date.now()/1000);
-    const sec=seconds[timeframe]||300;
-    const bucket=Math.floor(now/sec)*sec;
-    const seed=[{timestamp:new Date(bucket*1000).toISOString(),open:live,high:live,low:live,close:live,volume:Number(tick?.volume||0)}];
-    candles.current=seed;
-    calculationEngine.current.reset(seed,resolvedInstrumentKey,timeframe);
-    candle.current.setData([{time:bucket as Time,open:live,high:live,low:live,close:live}]);
-    closeLine.current?.setData([{time:bucket as Time,value:live}] as any);
-    volume.current?.setData([{time:bucket as Time,value:Number(tick?.volume||0)}] as any);
-    publishChartLifecycle('ready');
-    setError('');
-    console.warn('[TradingCore] Historical candles unavailable; chart seeded from live quote.',e);
-  } else {
-    setError(e?.message||'Historical candles unavailable');
-    publishChartLifecycle('error');
-  }
+  candles.current=[];
+  try{candle.current?.setData([]);closeLine.current?.setData([]);volume.current?.setData([]);c.timeScale().fitContent();}catch{}
+  const message=String(e?.message||'Historical candles unavailable');
+  setError(`History unavailable for ${resolvedInstrumentKey} · ${intervals[timeframe]} · ${message}`);
+  publishChartLifecycle('error');
+  console.error('[TradingCore][LiveChart] historical load failed',{brokerId,resolvedInstrumentKey,timeframe,interval:intervals[timeframe],error:e});
  });return()=>{dead=true;historyReady=false;historyRequestInFlight=false;setHistoryLoading(false);try{c.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange)}catch{}publishChartLifecycle('disposed');lifecycle.current.invalidate();analyticsJob.current++;indicatorJob.current++;if(analyticsTimer.current){clearTimeout(analyticsTimer.current);analyticsTimer.current=null;}try{resizeObserver?.disconnect()}catch{} chartUpdateScheduler.current.cancel();try{c.unsubscribeClick(onChartClick)}catch{} try{host.current?.removeEventListener('pointerdown',onPointerDown);host.current?.removeEventListener('pointermove',onPointerMove);host.current?.removeEventListener('pointerup',onPointerUp);host.current?.removeEventListener('pointercancel',onPointerUp)}catch{} try{c.remove()}catch{}try{oscChart.current?.remove()}catch{}try{markerPlugin.current?.detach?.()}catch{}markerPlugin.current=null;workerSeriesMap.current.clear();predictionLines.current=[];predictionJob.current++;drawingSeries.current=[];drawingPoints.current=[];chart.current=undefined;oscChart.current=undefined;candle.current=undefined;closeLine.current=undefined;volume.current=undefined;indicatorSeries.current=[];oscSeries.current=[];markerPlugin.current=null}},[resolvedInstrumentKey,timeframe,brokerId]);
  useEffect(()=>{if(candles.current.length&&chart.current){try{renderStudies(candles.current);requestIndicatorWorker(candles.current);}catch(indicatorError){console.warn('[TradingCore] Indicator update skipped invalid values:',indicatorError);}void renderPredictionOverlay(candles.current);}},[indicators.map(x=>`${x.id}:${x.enabled}:${x.period}:${x.fast}:${x.slow}:${x.signal}:${x.multiplier}:${x.smooth}:${x.source}:${x.color}:${x.signalColor}:${x.upperColor}:${x.lowerColor}:${x.lineWidth}:${x.lineStyle}`).join('|'),predictionModelIds.join('|')]);
  useEffect(()=>{if(!tick?.ltp||!candle.current)return;const p=Number(tick.ltp),sec=seconds[timeframe]||300,rawTs=new Date(tick.lastTradeTimestamp||tick.receivedAt||Date.now()).getTime(),ts=Math.floor((Number.isFinite(rawTs)?rawTs:Date.now())/1000),bucket=Math.floor(ts/sec)*sec;let b=candles.current[candles.current.length-1];const lastBucket=b?Math.floor(Date.parse(b.timestamp)/1000/sec)*sec:undefined;if(lastBucket!=null&&bucket<lastBucket)return;const bucketChanged=!b||lastBucket!==bucket;if(bucketChanged){b={timestamp:new Date(bucket*1000).toISOString(),open:b?.close??p,high:p,low:p,close:p,volume:Number(tick.volume||0)};candles.current=[...candles.current,b]}else{b.high=Math.max(Number(b.high),p);b.low=Math.min(Number(b.low),p);b.close=p;if(tick.volume)b.volume=Number(tick.volume)};candle.current.update({time:bucket as Time,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close)});volume.current?.update({time:bucket as Time,value:Number(b.volume)||0,color:Number(b.close)>=Number(b.open)?'#10b98155':'#ef444455'} as any);calculationEngine.current.updateTick(b, candles.current.length - 1, bucketChanged);
