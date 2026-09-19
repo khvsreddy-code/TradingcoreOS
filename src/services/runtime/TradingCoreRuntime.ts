@@ -140,28 +140,59 @@ export class TradingCoreRuntime {
     return promise;
   }
   public async getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {
-    const brokerInfo = this.getPrimaryBrokerInfo();
-    const broker = this.getPrimaryBroker();
-    const brokerId = brokerInfo?.brokerId?.toLowerCase();
+    // A chart can mount while the authenticated broker session is still being
+    // rehydrated. The old implementation returned [] in that race, which made
+    // the chart permanently initialize without candles. Wait for restoration
+    // before deciding that historical data is unavailable.
+    let brokerInfo = this.getPrimaryBrokerInfo();
+    if ((!brokerInfo || !this.getPrimaryBroker()) && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
+      try { await this.restoreBrokerConnections(); } catch {}
+      brokerInfo = this.getPrimaryBrokerInfo();
+    }
+
+    let broker = this.getPrimaryBroker();
+    let brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
+
     const key = `${brokerId}:${symbol}:${timeframe}:initial-10000`;
     const cached = this.historyCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.data;
-    const generationAtStart = this.routeGeneration;
-    const rows = await broker.getHistoricalData(symbol, timeframe);
-    if (generationAtStart !== this.routeGeneration || this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() !== brokerId) return [];
-    const byTime = new Map<number, HistoricalCandle>();
-    for (const row of rows || []) {
-      const raw = (row as any)?.timestamp;
-      const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
-      const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
-      if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
-      byTime.set(time, row);
+
+    // Do not silently convert a broker switch into an empty history result.
+    // If the active broker changed while the request was in flight, retry once
+    // against the new primary broker.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const generationAtStart = this.routeGeneration;
+      const requestBrokerId = brokerId;
+      const requestBroker = broker;
+      try {
+        const rows = await requestBroker.getHistoricalData(symbol, timeframe);
+        const activeBrokerId = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
+        if (generationAtStart !== this.routeGeneration || activeBrokerId !== requestBrokerId) {
+          brokerInfo = this.getPrimaryBrokerInfo();
+          broker = this.getPrimaryBroker();
+          brokerId = brokerInfo?.brokerId?.toLowerCase();
+          if (attempt === 0 && broker && brokerId) continue;
+          return [];
+        }
+
+        const byTime = new Map<number, HistoricalCandle>();
+        for (const row of rows || []) {
+          const raw = (row as any)?.timestamp;
+          const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
+          const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
+          if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
+          byTime.set(time, row);
+        }
+        const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-30_000);
+        if (history.length) this.historyCache.set(key, { data: history, expiresAt: Date.now() + 30_000 });
+        coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
+        return history;
+      } catch (error) {
+        if (attempt === 1) throw error;
+      }
     }
-    const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-30_000);
-    if (history.length) this.historyCache.set(key, { data: history, expiresAt: Date.now() + 30_000 });
-    coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
-    return history;
+    return [];
   }
 
   public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {

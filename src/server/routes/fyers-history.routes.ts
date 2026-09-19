@@ -144,22 +144,47 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      // One broker-safe window per request. FYERS documents up to 100 days for
-      // minute resolutions and 366 days for day/week/month. Older history is
-      // loaded one page at a time only after the user pans left.
-      const pageDays = resolution === 'D' ? 366 : (resolution === '30' || resolution === '60' ? 90 : 100);
+      // Use a conservative intraday window for the first paint. FYERS history
+      // supports large intraday lookbacks overall, but the per-request window
+      // is the part most likely to be rejected/emptied by broker-side changes.
+      // Thirty calendar days is comfortably inside the safe range and still
+      // gives thousands of 1m/5m candles for an immediate chart. Older data is
+      // fetched with the `before` cursor only when the user pans left.
+      const pageDays = resolution === 'D' ? 366 : 30;
       const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       const from = new Date(end.getTime() - pageDays * 86_400_000);
       const params = new URLSearchParams({ symbol: instrumentKey, resolution, date_format: '1', range_from: indiaDate(from), range_to: indiaDate(end), cont_flag: '1' });
-      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
-      const text = await response.text();
-      let payload: any;
-      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-      const brokerCode = Number(payload?.code);
-      if (!response.ok || payload?.s === 'error' || brokerCode === 429) { const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`); err.status = brokerCode === 429 ? 429 : response.status; err.brokerCode = brokerCode; throw err; }
-      let data = normalize(payload?.candles || [], limit);
-      if (data.length < 2 && !beforeDate) { const seed = await fallbackQuoteCandle(accessToken, instrumentKey); if (seed.length) data = seed; }
-      if (!data.length) { if (beforeDate) return []; throw new Error(`Fyers returned no historical candles for ${instrumentKey}.`); }
+      let data: any[] = [];
+      let historyError: any = null;
+      try {
+        const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
+        const text = await response.text();
+        let payload: any;
+        try { payload = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
+        const brokerCode = Number(payload?.code);
+        if (!response.ok || payload?.s === 'error' || brokerCode === 429) {
+          const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
+          err.status = brokerCode === 429 ? 429 : response.status;
+          err.brokerCode = brokerCode;
+          throw err;
+        }
+        data = normalize(payload?.candles || [], limit);
+      } catch (error: any) {
+        historyError = error;
+      }
+
+      // A transient History API failure must not turn the price chart into an
+      // empty canvas. For the initial page only, recover from the live quote;
+      // websocket ticks then build the developing candle. No historical candle
+      // is fabricated and backward pagination never uses this fallback.
+      if (data.length < 2 && !beforeDate) {
+        const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
+        if (seed.length) data = seed;
+      }
+      if (!data.length) {
+        if (beforeDate) return [];
+        throw historyError || new Error(`Fyers returned no historical candles for ${instrumentKey}.`);
+      }
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
     });
