@@ -166,55 +166,27 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      // Use a conservative intraday window for the first paint. FYERS history
-      // supports large intraday lookbacks overall, but the per-request window
-      // is the part most likely to be rejected/emptied by broker-side changes.
-      // Thirty calendar days is comfortably inside the safe range and still
-      // gives thousands of 1m/5m candles for an immediate chart. Older data is
-      // fetched with the `before` cursor only when the user pans left.
-      const pageDays = resolution === 'D' ? 366 : 30;
-      const requestedEnd = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      // Build history in small, deterministic windows. This mirrors the broker's
+      // known-working date-range pattern instead of relying on one large request.
+      // It is especially important for indexes/active derivatives where FYERS may
+      // return an empty set for a particular combination of range/date format.
+      const chunkDays = resolution === 'D' ? 366 : 7;
+      const maxLookbackDays = resolution === 'D' ? 3660 : 180;
+      let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       let data: any[] = [];
       let historyError: any = null;
+      let lastAttempt: any = null;
 
-      // FYERS accepts both epoch and yyyy-mm-dd history ranges. Prefer epoch
-      // ranges because they are unambiguous around weekends/holidays and then
-      // fall back to the documented date-string form if the broker rejects the
-      // first form. When the market is closed, also probe the previous few
-      // calendar days instead of asking the broker for a range ending on a
-      // Saturday/Sunday/holiday and treating the empty response as "no data".
-      const candidateEnds: Date[] = [];
-      const seenEnds = new Set<string>();
-      for (let offset = 0; offset <= 5; offset += 1) {
-        const end = new Date(requestedEnd.getTime() - offset * 86_400_000);
-        const day = end.getUTCDay();
-        if (!beforeDate && (day === 0 || day === 6)) continue;
-        const key = end.toISOString().slice(0, 10);
-        if (!seenEnds.has(key)) { seenEnds.add(key); candidateEnds.push(end); }
-        if (beforeDate) break;
-      }
-      if (!candidateEnds.length) candidateEnds.push(requestedEnd);
-
-      const derivative = isDerivativeSymbol(instrumentKey);
-      // IMPORTANT: FYERS v3 documents cont_flag as optional and specifically
-      // intended for continuous futures. Sending cont_flag=1 for NIFTY indexes
-      // (and for many specific active CE/PE/FUT contracts) can produce a valid
-      // HTTP response with s="no_data". The previous implementation always
-      // sent cont_flag and therefore could turn otherwise valid NIFTY history
-      // into an empty chart.
-      //
-      // Request order is deliberately: no cont_flag -> cont_flag=0 ->
-      // cont_flag=1. The first request is the normal v3 History API contract.
-      const contFlags: Array<'none' | '0' | '1'> = ['none', '0', '1'];
-
-      const requestHistory = async (end: Date, dateFormat: '0' | '1', contFlag: 'none' | '0' | '1'): Promise<any[]> => {
-        const from = new Date(end.getTime() - pageDays * 86_400_000);
+      const requestHistory = async (from: Date, to: Date, dateFormat: '0' | '1', contFlag: 'none' | '0' | '1'): Promise<any[]> => {
         const params = new URLSearchParams({
-          symbol: instrumentKey, resolution, date_format: dateFormat,
+          symbol: instrumentKey,
+          resolution,
+          date_format: dateFormat,
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
-          range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
+          range_to: dateFormat === '0' ? String(Math.floor(to.getTime() / 1000)) : indiaDate(to),
         });
         if (contFlag !== 'none') params.set('cont_flag', contFlag);
+        lastAttempt = { symbol: instrumentKey, resolution, dateFormat, contFlag, from: params.get('range_from'), to: params.get('range_to') };
         const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
           headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
         });
@@ -228,16 +200,25 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
           const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
           err.status = brokerCode === 429 ? 429 : response.status;
           err.brokerCode = brokerCode;
+          err.fyersStatus = payload?.s;
           throw err;
         }
         return normalize(payload?.candles || [], limit);
       };
 
-      for (const end of candidateEnds) {
+      const derivative = isDerivativeSymbol(instrumentKey);
+      // Specific active FUT/CE/PE contracts are requested without cont_flag first.
+      // cont_flag=1 is only a fallback because FYERS documents it for continuous
+      // futures rather than as a mandatory flag for every derivative request.
+      const contFlags: Array<'none' | '0' | '1'> = derivative ? ['none', '0', '1'] : ['none', '0'];
+
+      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < 2; lookedBack += chunkDays) {
+        const from = new Date(end.getTime() - chunkDays * 86_400_000);
         for (const contFlag of contFlags) {
           for (const dateFormat of ['1', '0'] as const) {
             try {
-              data = await requestHistory(end, dateFormat, contFlag);
+              const rows = await requestHistory(from, end, dateFormat, contFlag);
+              if (rows.length) data = normalize([...rows, ...data], limit);
               if (data.length >= 2) break;
             } catch (error: any) {
               historyError = error;
@@ -246,7 +227,31 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
           }
           if (data.length >= 2) break;
         }
-        if (data.length >= 2) break;
+        end = new Date(from.getTime() - 1000);
+      }
+
+      // One final short probe ending on the last weekday is useful on weekends,
+      // holidays, and after broker-side date-boundary changes.
+      if (data.length < 2 && !beforeDate) {
+        for (let offset = 1; offset <= 5 && data.length < 2; offset += 1) {
+          const to = new Date(Date.now() - offset * 86_400_000);
+          const day = to.getUTCDay();
+          if (day === 0 || day === 6) continue;
+          const from = new Date(to.getTime() - 3 * 86_400_000);
+          for (const contFlag of contFlags) {
+            for (const dateFormat of ['1', '0'] as const) {
+              try {
+                const rows = await requestHistory(from, to, dateFormat, contFlag);
+                if (rows.length) data = normalize([...rows, ...data], limit);
+                if (data.length >= 2) break;
+              } catch (error: any) {
+                historyError = error;
+                if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+              }
+            }
+            if (data.length >= 2) break;
+          }
+        }
       }
 
       // A transient History API failure must not turn the price chart into an
