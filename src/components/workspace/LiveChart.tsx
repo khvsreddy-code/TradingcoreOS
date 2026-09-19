@@ -20,9 +20,9 @@ import { fetchProductionPredictions } from '../../services/productionPredictionS
 import { IndicatorConfig, INDICATOR_LIBRARY, PRICE_SOURCES, defaultIndicatorStyle, series, vwap, bollinger, rsi, macd, supertrend, keltner, donchian, stochastic, ichimoku, pivots, marketStructure, fairValueGaps, dynamicSupportResistance, liquiditySweeps, orderBlocks, indianKeyLevels, cpr, classicPivots, openingRange, swingLevels, gapLevels, previousDayLevels, previousPeriodLevels, gapZones, equalHighLow, liquidityPools, bosChoch, priceActionEvents, nr7, developingDayLevels, vwapDeviationBands, anchoredVwap, extendedCpr, periodPivots, tradingCoreVPriceAction, advancedTradingViewIndicator } from '../../services/marketData/indicatorEngine';
 
 const intervals: Record<string,string> = {'1m':'1minute','3m':'3minute','5m':'5minute','15m':'15minute','30m':'30minute','1H':'60minute','1D':'day'};
-const HISTORY_PAGE_CANDLES=5_000;
+const HISTORY_PAGE_CANDLES=1_500;
 const MAX_HISTORY_CANDLES=30_000;
-const HISTORY_PREFETCH_THRESHOLD=300;
+const HISTORY_PREFETCH_THRESHOLD=500;
 const canonicalInstrumentKey=(brokerId:string,key:string)=>{
  const value=String(key||'').trim();
  if(String(brokerId).toLowerCase()!=='fyers') return value;

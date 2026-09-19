@@ -195,7 +195,7 @@ export class TradingCoreRuntime {
     return [];
   }
 
-  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
+  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 1500): Promise<HistoricalCandle[]> {
     const brokerInfo = this.getPrimaryBrokerInfo();
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
