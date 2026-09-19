@@ -553,7 +553,10 @@ export class FyersAdapter extends BaseBroker {
     const minutesPerCandle = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
     const lookbackDays = resolution === 'D' ? 25000 : Math.min(3650, Math.max(30, Math.ceil((25000 * minutesPerCandle) / (24 * 60)) + 7));
     const from = to - lookbackDays * 86400;
-    const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(instrumentKey)}&resolution=${encodeURIComponent(resolution)}&date_format=0&range_from=${from}&range_to=${to}&cont_flag=1`;
+    // cont_flag=1 is for continuous derivative contracts. Index and cash-equity
+    // history can return no_data when forced through the continuous-contract path.
+    const contFlag = /-(?:FUT|CE|PE)$/i.test(instrumentKey) ? '1' : '0';
+    const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(instrumentKey)}&resolution=${encodeURIComponent(resolution)}&date_format=0&range_from=${from}&range_to=${to}&cont_flag=${contFlag}`;
     const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) } });
     const text = await response.text();
     let data: any;

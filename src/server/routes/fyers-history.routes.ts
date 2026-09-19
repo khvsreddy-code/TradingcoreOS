@@ -173,14 +173,13 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       }
       if (!candidateEnds.length) candidateEnds.push(requestedEnd);
 
-      const requestHistory = async (end: Date, dateFormat: '0' | '1'): Promise<any[]> => {
-        const from = new Date(end.getTime() - pageDays * 86_400_000);
+      const requestHistory = async (end: Date, dateFormat: '0' | '1', contFlag: '0' | '1', windowDays = pageDays): Promise<any[]> => {
+        const from = new Date(end.getTime() - windowDays * 86_400_000);
         const params = new URLSearchParams({
           symbol: instrumentKey, resolution, date_format: dateFormat,
-          // cont_flag is for continuous contracts. FYERS community examples show
-          // index history working with cont_flag=0; using 1 can produce no_data/
-          // invalid-symbol responses for NIFTY even though quotes still work.
-          cont_flag: /-(?:FUT|CE|PE)$/i.test(instrumentKey) ? '1' : '0',
+          // FYERS treats cont_flag as a continuous-contract switch. Index and
+          // cash-equity history is more reliable with 0; derivatives may need 1.
+          cont_flag: contFlag,
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
           range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
         });
@@ -201,10 +200,26 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         return normalize(payload?.candles || [], limit);
       };
 
+      const derivative = /-(?:FUT|CE|PE)$/i.test(instrumentKey);
+      // Try the broker-safe primary combination first, then deliberately vary
+      // only one dimension at a time. This is important because FYERS has
+      // historically returned empty/no_data for otherwise valid symbols when a
+      // date-format or cont_flag combination was accepted syntactically but not
+      // supported for that instrument class. The fallback is still real broker
+      // history; no candles are fabricated.
+      const strategies: Array<{ dateFormat: '0' | '1'; contFlag: '0' | '1'; windowDays: number }> = [
+        { dateFormat: '0', contFlag: derivative ? '1' : '0', windowDays: pageDays },
+        { dateFormat: '1', contFlag: derivative ? '1' : '0', windowDays: pageDays },
+        { dateFormat: '0', contFlag: derivative ? '0' : '1', windowDays: pageDays },
+        { dateFormat: '1', contFlag: derivative ? '0' : '1', windowDays: pageDays },
+        { dateFormat: '0', contFlag: derivative ? '1' : '0', windowDays: Math.min(pageDays, 7) },
+        { dateFormat: '1', contFlag: derivative ? '1' : '0', windowDays: Math.min(pageDays, 7) },
+      ];
+
       for (const end of candidateEnds) {
-        for (const dateFormat of ['0', '1'] as const) {
+        for (const strategy of strategies) {
           try {
-            data = await requestHistory(end, dateFormat);
+            data = await requestHistory(end, strategy.dateFormat, strategy.contFlag, strategy.windowDays);
             if (data.length >= 2) break;
           } catch (error: any) {
             historyError = error;
