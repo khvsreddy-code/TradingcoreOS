@@ -151,16 +151,42 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // gives thousands of 1m/5m candles for an immediate chart. Older data is
       // fetched with the `before` cursor only when the user pans left.
       const pageDays = resolution === 'D' ? 366 : 30;
-      const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
-      const from = new Date(end.getTime() - pageDays * 86_400_000);
-      const params = new URLSearchParams({ symbol: instrumentKey, resolution, date_format: '1', range_from: indiaDate(from), range_to: indiaDate(end), cont_flag: '1' });
+      const requestedEnd = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       let data: any[] = [];
       let historyError: any = null;
-      try {
-        const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
+
+      // FYERS accepts both epoch and yyyy-mm-dd history ranges. Prefer epoch
+      // ranges because they are unambiguous around weekends/holidays and then
+      // fall back to the documented date-string form if the broker rejects the
+      // first form. When the market is closed, also probe the previous few
+      // calendar days instead of asking the broker for a range ending on a
+      // Saturday/Sunday/holiday and treating the empty response as "no data".
+      const candidateEnds: Date[] = [];
+      const seenEnds = new Set<string>();
+      for (let offset = 0; offset <= 5; offset += 1) {
+        const end = new Date(requestedEnd.getTime() - offset * 86_400_000);
+        const day = end.getUTCDay();
+        if (!beforeDate && (day === 0 || day === 6)) continue;
+        const key = end.toISOString().slice(0, 10);
+        if (!seenEnds.has(key)) { seenEnds.add(key); candidateEnds.push(end); }
+        if (beforeDate) break;
+      }
+      if (!candidateEnds.length) candidateEnds.push(requestedEnd);
+
+      const requestHistory = async (end: Date, dateFormat: '0' | '1'): Promise<any[]> => {
+        const from = new Date(end.getTime() - pageDays * 86_400_000);
+        const params = new URLSearchParams({
+          symbol: instrumentKey, resolution, date_format: dateFormat, cont_flag: '1',
+          range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
+          range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
+        });
+        const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+          headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+        });
         const text = await response.text();
         let payload: any;
-        try { payload = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
+        try { payload = JSON.parse(text); }
+        catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
         const brokerCode = Number(payload?.code);
         if (!response.ok || payload?.s === 'error' || brokerCode === 429) {
           const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
@@ -168,9 +194,20 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
           err.brokerCode = brokerCode;
           throw err;
         }
-        data = normalize(payload?.candles || [], limit);
-      } catch (error: any) {
-        historyError = error;
+        return normalize(payload?.candles || [], limit);
+      };
+
+      for (const end of candidateEnds) {
+        for (const dateFormat of ['0', '1'] as const) {
+          try {
+            data = await requestHistory(end, dateFormat);
+            if (data.length >= 2) break;
+          } catch (error: any) {
+            historyError = error;
+            if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+          }
+        }
+        if (data.length >= 2) break;
       }
 
       // A transient History API failure must not turn the price chart into an
