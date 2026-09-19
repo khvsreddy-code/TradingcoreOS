@@ -143,8 +143,12 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // known-working date-range pattern instead of relying on one large request.
       // It is especially important for indexes/active derivatives where FYERS may
       // return an empty set for a particular combination of range/date format.
-      const chunkDays = resolution === 'D' ? 366 : 90;
-      const maxLookbackDays = resolution === 'D' ? 3660 : 365 * 5;
+      // Initial chart paint must be cheap: one broker window is enough to render
+      // the chart. Older candles are fetched only by the chart's left-edge
+      // pagination (`before=`). The previous implementation walked up to five
+      // years here, multiplying one chart mount into dozens of FYERS history
+      // requests and eventually surfacing "request limit reached" with no candles.
+      const chunkDays = resolution === 'D' ? 366 : 30;
       let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       let data: any[] = [];
       let historyError: any = null;
@@ -180,51 +184,33 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       };
 
       const derivative = isDerivativeSymbol(instrumentKey);
-      // Specific active FUT/CE/PE contracts are requested without cont_flag first.
-      // cont_flag=1 is only a fallback because FYERS documents it for continuous
-      // futures rather than as a mandatory flag for every derivative request.
-      const contFlags: Array<'none' | '0' | '1'> = derivative ? ['none', '0', '1'] : ['none', '0'];
+      // Keep each browser request bounded to a single broker-safe window. For a
+      // specific derivative, cont_flag=none is the correct first choice; for an
+      // index/equity the same request is also the least expensive path. Only use
+      // the alternate date format/flag if the first request returns no candles.
+      const attempts: Array<'none' | '0' | '1'> = derivative ? ['none', '0', '1'] : ['none', '0'];
+      const formats: Array<'1' | '0'> = ['1', '0'];
+      let loaded = false;
 
-      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < limit; lookedBack += chunkDays) {
-        const from = new Date(end.getTime() - chunkDays * 86_400_000);
-        for (const contFlag of contFlags) {
-          for (const dateFormat of ['1', '0'] as const) {
-            try {
-              const rows = await requestHistory(from, end, dateFormat, contFlag);
-              if (rows.length) data = normalize([...rows, ...data], limit);
-              if (data.length >= limit) break;
-            } catch (error: any) {
-              historyError = error;
-              if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+      for (const contFlag of attempts) {
+        for (const dateFormat of formats) {
+          try {
+            const from = new Date(end.getTime() - chunkDays * 86_400_000);
+            const rows = await requestHistory(from, end, dateFormat, contFlag);
+            if (rows.length) {
+              data = normalize(rows, limit);
+              loaded = true;
+              break;
             }
-          }
-          if (data.length >= limit) break;
-        }
-        end = new Date(from.getTime() - 1000);
-      }
-
-      // One final short probe ending on the last weekday is useful on weekends,
-      // holidays, and after broker-side date-boundary changes.
-      if (data.length < 2 && !beforeDate) {
-        for (let offset = 1; offset <= 5 && data.length < 2; offset += 1) {
-          const to = new Date(Date.now() - offset * 86_400_000);
-          const day = to.getUTCDay();
-          if (day === 0 || day === 6) continue;
-          const from = new Date(to.getTime() - 3 * 86_400_000);
-          for (const contFlag of contFlags) {
-            for (const dateFormat of ['1', '0'] as const) {
-              try {
-                const rows = await requestHistory(from, to, dateFormat, contFlag);
-                if (rows.length) data = normalize([...rows, ...data], limit);
-                if (data.length >= limit) break;
-              } catch (error: any) {
-                historyError = error;
-                if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
-              }
-            }
-            if (data.length >= limit) break;
+          } catch (error: any) {
+            historyError = error;
+            // A broker 429 must stop this request immediately. Retrying alternate
+            // parameter combinations only consumes more quota and cannot repair a
+            // rate-limit response. The shared request gate will pace the next call.
+            if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
           }
         }
+        if (loaded) break;
       }
 
       // Never fabricate historical candles. A quote is useful for the watchlist

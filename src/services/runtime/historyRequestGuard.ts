@@ -11,6 +11,7 @@ if (!(runtime as any)[installedKey]) {
   const original = runtime.getHistoricalData.bind(runtime);
   const cache = new Map<string, { expiresAt: number; staleUntil: number; data: any[] }>();
   const inFlight = new Map<string, Promise<any[]>>();
+  const rateLimitedUntil = new Map<string, number>();
   let queue: Promise<unknown> = Promise.resolve();
   let lastStartedAt = 0;
 
@@ -32,41 +33,35 @@ if (!(runtime as any)[installedKey]) {
     const now = Date.now();
     const cached = cache.get(key);
     if (cached && cached.expiresAt > now) return Promise.resolve(cached.data);
+    const limitedUntil = rateLimitedUntil.get(key) || 0;
+    if (limitedUntil > now) {
+      if (cached && cached.staleUntil > now) return Promise.resolve(cached.data);
+      return Promise.reject(new Error('Historical data is temporarily rate-limited; please retry shortly.'));
+    }
 
     const existing = inFlight.get(key);
     if (existing) return existing;
 
     const request = schedule(async () => {
-      let lastError: any;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          const data = await original(symbol, timeframe);
-          if (data?.length) cache.set(key, { data, expiresAt: Date.now() + 20_000, staleUntil: Date.now() + 5 * 60_000 });
-          return data || [];
-        } catch (error: any) {
-          lastError = error;
-          const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
-          const text = String(error?.message || error || '').toLowerCase();
-          const limited = status === 429 || /(^|\s)(429|rate[- ]?limit|too many requests|request limit reached)(\s|$)/.test(text);
-
-          if (limited) {
-            // Never immediately hammer the broker after a 429. One delayed retry
-            // is enough to recover transient quota collisions without multiplying
-            // pressure when the broker is genuinely saturated.
-            if (attempt === 0) {
-              await wait(5_000);
-              continue;
-            }
-            const stale = cache.get(key);
-            if (stale && stale.staleUntil > Date.now()) return stale.data;
-            throw error;
-          }
-
-          if (attempt === 2) throw error;
-          await wait(400 * (attempt + 1));
+      try {
+        const data = await original(symbol, timeframe);
+        if (data?.length) cache.set(key, { data, expiresAt: Date.now() + 20_000, staleUntil: Date.now() + 5 * 60_000 });
+        return data || [];
+      } catch (error: any) {
+        const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
+        const text = String(error?.message || error || '').toLowerCase();
+        const limited = status === 429 || /(^|\s)(429|rate[- ]?limit|too many requests|request limit reached)(\s|$)/.test(text);
+        if (limited) {
+          // Do not retry the same history request after a broker 429. The server
+          // route already serializes broker calls; another client-side retry would
+          // simply extend the quota collision. Reuse stale data when available and
+          // suppress duplicate mounts for a short cooldown.
+          rateLimitedUntil.set(key, Date.now() + 15_000);
+          const stale = cache.get(key);
+          if (stale && stale.staleUntil > Date.now()) return stale.data;
         }
+        throw error;
       }
-      throw lastError || new Error('Historical candle request failed');
     }).finally(() => inFlight.delete(key));
 
     inFlight.set(key, request);
