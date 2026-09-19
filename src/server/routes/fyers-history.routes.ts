@@ -143,7 +143,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // bounded recent window only; older pages are requested by the chart with
       // `before` as the user scrolls left. This prevents a single mount from
       // consuming the broker request quota.
-      const windowDays = resolution === 'D' ? 5000 : 7;
+      const windowDays = resolution === 'D' ? 5000 : 30;
       const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       const from = new Date(end.getTime() - windowDays * 86_400_000);
       let data: any[] = [];
