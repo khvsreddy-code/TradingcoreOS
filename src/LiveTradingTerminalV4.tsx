@@ -109,7 +109,46 @@ export function LiveTradingTerminalV4(){
  },[workspaceHydrated,broker,layout,watch,selected,focused,slotKeys,watchlistOpen,user?.id]);
  useEffect(()=>{if(!workspaceHydrated||!broker)return;const id=window.setInterval(()=>{const snapshot=snapshotManagedSettings({version:1,savedAt:new Date().toISOString(),broker,layout,watch,selected,focused,slotKeys,chartStates:captureChartStates(broker),panel,watchlistOpen,order});saveWorkspace(broker,snapshot);if(user?.id)void persistWorkspaceToCloud(user.id,snapshot)},30*60*1000);return()=>window.clearInterval(id)},[workspaceHydrated,broker,layout,watch,selected,focused,slotKeys,watchlistOpen,panel,order,user?.id]);
  useEffect(()=>{const q=query.trim();if(q.length<2){setResults([]);return}let dead=false;const id=setTimeout(async()=>{setSearching(true);try{const r=await searchBrokerInstruments(broker,q,segment,broker==='upstox'?30:60);if(!dead)setResults(r)}catch{if(!dead)setResults([])}finally{if(!dead)setSearching(false)}},220);return()=>{dead=true;clearTimeout(id)}},[query,segment,broker]);
- useEffect(()=>{const keys:string[]=Array.from(new Set(slotKeys.filter(Boolean)));if(!keys.length)return;return tradingCoreRuntime.subscribeMarketData(keys,e=>{if(e.type==='tick'&&e.tick)setTicks(p=>({...p,[e.tick!.instrumentKey]:e.tick!}))},slotKeys[focused])},[slotKeys.join('|'),focused,broker]);
+ useEffect(()=>{
+  const keys:string[]=Array.from(new Set(slotKeys.filter(Boolean)));
+  if(!keys.length)return;
+  return tradingCoreRuntime.subscribeMarketData(keys,e=>{
+    if(e.type!=='tick'||!e.tick)return;
+    const incoming=e.tick as NormalizedMarketTick;
+    const incomingKey=String(incoming.instrumentKey||'');
+    if(!incomingKey)return;
+    // Broker snapshots are partial during reconnects. Merge only defined values
+    // so a temporary packet cannot erase a valid Last/Chg/Chg% and make the
+    // watchlist blink between numbers and dashes. Normalize aliases as well so
+    // a broker symbol variant still lands on the row the user is watching.
+    const normalizedKey=normalize(broker,{key:incomingKey,label:incomingKey,symbol:incomingKey} as WatchItem).key;
+    const mergeTick=(previous:NormalizedMarketTick|undefined,next:NormalizedMarketTick):NormalizedMarketTick=>{
+      const merged={...(previous||{}),...next} as NormalizedMarketTick;
+      const numericFields=['ltp','close','change','changePercent','volume'] as const;
+      for(const field of numericFields){
+        const value=(next as any)[field];
+        if(value==null || (['ltp','close','change','changePercent','volume'].includes(field) && !Number.isFinite(Number(value)))){
+          if(previous && (previous as any)[field]!=null) (merged as any)[field]=(previous as any)[field];
+          else delete (merged as any)[field];
+        }
+      }
+      if(next.bid==null && previous?.bid!=null) merged.bid=previous.bid;
+      if(next.ask==null && previous?.ask!=null) merged.ask=previous.ask;
+      return merged;
+    };
+    setTicks(previous=>{
+      const current=previous[normalizedKey]||previous[incomingKey];
+      const next=mergeTick(current,incoming);
+      if(incomingKey!==normalizedKey){
+        const copy={...previous};
+        delete copy[incomingKey];
+        copy[normalizedKey]=next;
+        return copy;
+      }
+      return {...previous,[normalizedKey]:next};
+    });
+  },slotKeys[focused]);
+},[slotKeys.join('|'),focused,broker]);
  useEffect(()=>{void sync()},[broker]);useEffect(()=>{const id=requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));return()=>cancelAnimationFrame(id)},[layout,slotKeys.join('|')]);
  const sync=async()=>{try{setPortfolio(await tradingCoreRuntime.syncPortfolio())}catch(e:any){setMessage(e?.message||'Portfolio sync failed')}};
  const changeLayout=(cls:string,count:number)=>{const fallback=slotKeys[focused]||selectedItem?.key||watch[0]?.key||'';setLayout(cls);setLayoutOpen(false);setFocused(f=>Math.min(f,count-1));setSlotKeys(prev=>Array.from({length:count},(_,i)=>prev[i]||fallback))};

@@ -176,7 +176,11 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       const requestHistory = async (end: Date, dateFormat: '0' | '1'): Promise<any[]> => {
         const from = new Date(end.getTime() - pageDays * 86_400_000);
         const params = new URLSearchParams({
-          symbol: instrumentKey, resolution, date_format: dateFormat, cont_flag: '1',
+          symbol: instrumentKey, resolution, date_format: dateFormat,
+          // cont_flag is for continuous contracts. FYERS community examples show
+          // index history working with cont_flag=0; using 1 can produce no_data/
+          // invalid-symbol responses for NIFTY even though quotes still work.
+          cont_flag: /-(?:FUT|CE|PE)$/i.test(instrumentKey) ? '1' : '0',
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
           range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
         });

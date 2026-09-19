@@ -537,7 +537,19 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    if(!candle.current||!lifecycle.current.isCurrent(generation))return;
    candle.current!.setData(data.map(x=>({time:Math.floor(Date.parse(x.timestamp)/1000) as Time,open:Number(x.open),high:Number(x.high),low:Number(x.low),close:Number(x.close)})));
    volume.current!.setData(data.map(x=>({time:Math.floor(Date.parse(x.timestamp)/1000) as Time,value:Number.isFinite(Number(x.volume))?Number(x.volume):0,color:Number(x.close)>=Number(x.open)?'#10b98155':'#ef444455'})) as any);
-   try{renderStudies(data);requestIndicatorWorker(data);}catch(indicatorError:any){console.warn('[TradingCore] Indicator render skipped invalid values:',indicatorError);}renderDrawings();publish(data,tick?.ltp||data[data.length-1].close,true);publishChartLifecycle('ready');c.timeScale().fitContent();previousLogicalRange=c.timeScale().getVisibleLogicalRange?.()||null;historyReady=true;void renderPredictionOverlay(data); if(showOI&&oiAnalytics.current)renderOI(oiAnalytics.current);
+   try{renderStudies(data);requestIndicatorWorker(data);}catch(indicatorError:any){console.warn('[TradingCore] Indicator render skipped invalid values:',indicatorError);}renderDrawings();publish(data,tick?.ltp||data[data.length-1].close,true);publishChartLifecycle('ready');
+   // TradingView-style first paint: keep the full history available for indicators
+   // and left-edge pagination, but show a sensible recent window instead of fitting
+   // 10,000 candles into the canvas. For intraday charts this is roughly three
+   // NSE sessions; higher timeframes get a wider logical window.
+   const initialVisibleBars:Record<string,number>={'1m':1125,'3m':375,'5m':225,'15m':75,'30m':45,'1H':36,'1D':30};
+   const visibleBars=Math.min(data.length,initialVisibleBars[timeframe]||60);
+   if(visibleBars>1){
+     ignoreRangeEvents=3;
+     try{c.timeScale().setVisibleLogicalRange({from:Math.max(0,data.length-visibleBars-0.5),to:data.length-0.5+8});}
+     catch{try{c.timeScale().fitContent();}catch{}}
+   }else{try{c.timeScale().fitContent();}catch{}}
+   previousLogicalRange=c.timeScale().getVisibleLogicalRange?.()||null;historyReady=true;void renderPredictionOverlay(data); if(showOI&&oiAnalytics.current)renderOI(oiAnalytics.current);
  }).catch(e=>{
   if(dead||!lifecycle.current.isCurrent(generation))return;
   const live=Number(tick?.ltp);
