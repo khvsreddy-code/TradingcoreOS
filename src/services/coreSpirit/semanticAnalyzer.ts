@@ -3,7 +3,7 @@ export type CoreSpiritDiagnostic = { severity:'error'|'warning'; message:string;
 export type CoreSpiritSemanticResult = { diagnostics:CoreSpiritDiagnostic[]; symbols:Map<string,string>; maxLookback:number };
 
 const seriesNames=new Set(['open','high','low','close','volume','time']);
-const builtins=new Set(['sma','ema','rsi','atr','vwap','highest','lowest','change','plot','marker','line','zone','signal','alert','webhook']);
+const builtins=new Set(['sma','ema','rsi','atr','vwap','highest','lowest','change','crossover','crossunder','nz','max','min','abs','sqrt','pow','plot','marker','line','zone','signal','alert','webhook']);
 
 export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
   const diagnostics:CoreSpiritDiagnostic[]=[]; const symbols=new Map<string,string>(); let maxLookback=0;

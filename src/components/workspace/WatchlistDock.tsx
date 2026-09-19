@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fetchTradingCoreNews, TradingCoreNewsItem } from '../../services/news/newsService';
 import { Bookmark, Bell, CircleDot, Grid3X3, HelpCircle, History, Layers3, MoreHorizontal, Pencil, Plus, Search, X } from 'lucide-react';
 import type { NormalizedMarketTick } from '../../types/market';
 import type { InstrumentSearchSegment, SearchInstrument } from '../../services/marketData/instrumentSearch';
@@ -43,15 +44,36 @@ const sectionFor = (item: WatchlistDockItem) => {
 
 const formatPrice = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const formatNewsTime = (value: string) => {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'recent' : d.toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+
 export function WatchlistDock(props: Props) {
   const { open, onToggle, watch, selected, onSelect, onRemove, onAdd, query, onQueryChange, segment, onSegmentChange, results, searching, ticks, broker } = props;
   const [railActive, setRailActive] = useState('watchlist');
+  const [news, setNews] = useState<TradingCoreNewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
   const selectedItem = watch.find(x => x.key === selected) || watch[0];
   const selectedTick = selectedItem ? ticks[selectedItem.key] : undefined;
 
   useEffect(() => {
     if (open) setRailActive('watchlist');
   }, [open]);
+
+  useEffect(() => {
+    if (!selectedItem) { setNews([]); return; }
+    const controller = new AbortController();
+    let dead = false;
+    setNewsLoading(true);
+    const timer = window.setTimeout(() => {
+      void fetchTradingCoreNews(selectedItem.short || selectedItem.label || selectedItem.key, controller.signal)
+        .then(items => { if (!dead) setNews(items); })
+        .catch(() => { if (!dead) setNews([]); })
+        .finally(() => { if (!dead) setNewsLoading(false); });
+    }, 80);
+    return () => { dead = true; controller.abort(); window.clearTimeout(timer); };
+  }, [selectedItem?.key]);
 
   const groups = useMemo(() => {
     const map = new Map<string, WatchlistDockItem[]>([['INDICES', []], ['FUTURES', []], ['COMMODITIES', []], ['OPTIONS', []]]);
@@ -101,14 +123,28 @@ export function WatchlistDock(props: Props) {
           <div className={`tct-ticker-change ${(selectedTick?.changePercent ?? selectedTick?.change ?? 0) >= 0 ? 'tct-wl-up' : 'tct-wl-down'}`}>{selectedTick?.change == null ? '—' : `${selectedTick.change >= 0 ? '+' : ''}${formatPrice(selectedTick.change)}`} <b>{selectedTick?.changePercent == null ? '—' : `${selectedTick.changePercent >= 0 ? '+' : ''}${Number(selectedTick.changePercent).toFixed(2)}%`}</b></div>
           <div className="tct-market-state"><span className="tct-state-dot"/> Market data live <small>Last update {(selectedTick?.lastTradeTimestamp || selectedTick?.receivedAt) ? new Date(selectedTick.lastTradeTimestamp || selectedTick.receivedAt || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</small></div>
           <div className="tct-range"><div><span>DAY'S RANGE</span><b>—</b><b>—</b></div><div className="tct-range-bar"><i/><em/></div><div><span>52WK RANGE</span><b>—</b><b>—</b></div></div>
-          <div className="tct-news"><b>News</b><span>Live market context</span><small>Broker feed and platform events appear here when available.</small></div>
+          <div className="tct-news">
+            <div className="tct-news-head"><b>News</b><span>GDELT · free</span><button type="button" title="Refresh news" onClick={() => {
+              if (!selectedItem) return;
+              setNewsLoading(true);
+              void fetchTradingCoreNews(selectedItem.short || selectedItem.label || selectedItem.key)
+                .then(setNews).catch(() => setNews([])).finally(() => setNewsLoading(false));
+            }}>{newsLoading ? '…' : '↻'}</button></div>
+            {newsLoading && !news.length ? <small>Loading market news…</small> : news.length ? (
+              <div className="tct-news-list">{news.slice(0, 5).map(item => (
+                <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="tct-news-item">
+                  <b>{item.title}</b><small>{item.source} · {formatNewsTime(item.publishedAt)}</small>
+                </a>
+              ))}</div>
+            ) : <small>No news available for this instrument right now.</small>}
+          </div>
           <div className="tct-performance"><b>Performance</b><div className="tct-performance-grid"><span>Change</span><strong>{selectedTick?.changePercent == null ? '—' : `${Number(selectedTick.changePercent).toFixed(2)}%`}</strong></div></div>
         </section>}
       </section>}
       <nav className="tct-right-rail" aria-label="Workspace tools">
-        {railItems.map(([id, Icon, label]) => <button key={id} className={`tct-right-rail-btn ${railActive === id ? 'active' : ''}`} title={label} aria-label={label} onClick={() => { setRailActive(id); if (id === 'watchlist') onToggle(); }}><Icon size={18} strokeWidth={1.65}/></button>)}
-        <div className="tct-right-rail-spacer"/>
-        <button className="tct-right-rail-btn" title="Workspace menu"><Grid3X3 size={18} strokeWidth={1.65}/></button>
+        <button className={`tct-right-rail-btn ${open ? 'active' : ''}`} title="Watchlist" aria-label="Watchlist" onClick={() => { setRailActive('watchlist'); onToggle(); }}>
+          <Bookmark size={18} strokeWidth={1.65}/>
+        </button>
       </nav>
     </aside>
   );

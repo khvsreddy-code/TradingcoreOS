@@ -194,32 +194,8 @@ export function pivots(c: HistoricalCandle[]): IndicatorPoint[] {
   return [p,p+r,p+2*r,p+3*r,p-r,p-2*r,p-3*r].map((value)=>({time:Math.floor(new Date(c[c.length-1].timestamp).getTime()/1000),value}));
 }
 
-export type TradingCoreVLevel = { time:number; price:number; side:'support'|'resistance'; label:string; score:number; source:'KDE'|'FRACTAL'|'CLUSTER'; touches:number };
-export type TradingCoreVZone = { time:number; startTime:number; upper:number; lower:number; kind:'Demand'|'Supply'; score:number; mitigated:boolean; impulseIndex:number; baseIndex:number };
-export type TradingCoreVResult = { levels:TradingCoreVLevel[]; zones:TradingCoreVZone[]; confluence:{tf:string;levels:TradingCoreVLevel[];zones:TradingCoreVZone[]}[]; atr:number };
-
-function atrValue(c:HistoricalCandle[],period=14){ if(c.length<2)return 0; const trs=c.map((x,i)=>i===0?x.high-x.low:Math.max(x.high-x.low,Math.abs(x.high-c[i-1].close),Math.abs(x.low-c[i-1].close))); const w=trs.slice(-Math.min(period,trs.length)); return w.reduce((a,b)=>a+b,0)/Math.max(1,w.length); }
-function gaussian(u:number){return Math.exp(-0.5*u*u)/Math.sqrt(2*Math.PI);}
-function clusterPrices(points:Array<{price:number;weight:number;source:'KDE'|'FRACTAL'}>,tol:number):TradingCoreVLevel[]{
-  const sorted=[...points].sort((a,b)=>a.price-b.price),clusters:Array<typeof sorted[number][]> = [];
-  for(const p of sorted){const g=clusters.at(-1);if(!g||Math.abs(p.price-g[g.length-1].price)>tol)clusters.push([p]);else g.push(p);}
-  return clusters.map(g=>{const w=g.reduce((a,b)=>a+b.weight,0)||1;const price=g.reduce((a,b)=>a+b.price*b.weight,0)/w;const fract=g.filter(x=>x.source==='FRACTAL').length;return {time:0,price,side:'support' as const,label:`S/R ${Math.round(w*10)/10}`,score:Math.min(1,w/(w+3)),source:fract?'CLUSTER':'KDE',touches:g.length};}).filter(x=>Number.isFinite(x.price));
-}
-function resample(c:HistoricalCandle[],factor:number){if(factor<=1)return c;const out:HistoricalCandle[]=[];for(let i=0;i<c.length;i+=factor){const g=c.slice(i,i+factor);if(!g.length)continue;out.push({timestamp:g[0].timestamp,open:g[0].open,high:Math.max(...g.map(x=>x.high)),low:Math.min(...g.map(x=>x.low)),close:g.at(-1)!.close,volume:g.reduce((a,x)=>a+(x.volume||0),0)});}return out;}
-function tradingCoreVFrame(c:HistoricalCandle[],period=5,multiplier=2,lookback=200):{levels:TradingCoreVLevel[];zones:TradingCoreVZone[];atr:number}{
-  if(c.length<Math.max(20,period*2))return {levels:[],zones:[],atr:0};
-  const a=atrValue(c,14), tol=Math.max(a*0.25,(c.at(-1)!.close||1)*0.0005); const start=Math.max(period,c.length-lookback);
-  const piv:Array<{price:number;weight:number;source:'FRACTAL'}>=[];
-  for(let i=start;i<c.length-period;i++){let hi=true,lo=true;for(let j=1;j<=period;j++){if(c[i].high<c[i-j].high||c[i].high<c[i+j].high)hi=false;if(c[i].low>c[i-j].low||c[i].low>c[i+j].low)lo=false;}if(hi)piv.push({price:c[i].high,weight:1+(c[i].volume||0)/Math.max(1,(c.slice(Math.max(0,i-20),i).reduce((x,y)=>x+(y.volume||0),0)/Math.max(1,Math.min(20,i)))) ,source:'FRACTAL'});if(lo)piv.push({price:c[i].low,weight:1+(c[i].volume||0)/Math.max(1,(c.slice(Math.max(0,i-20),i).reduce((x,y)=>x+(y.volume||0),0)/Math.max(1,Math.min(20,i)))) ,source:'FRACTAL'});}
-  const prices=c.slice(start).flatMap(x=>[{price:x.high,weight:Math.max(1,x.volume||1),source:'KDE' as const},{price:x.low,weight:Math.max(1,x.volume||1),source:'KDE' as const},{price:x.close,weight:Math.max(1,x.volume||1),source:'KDE' as const}]);
-  const lo=Math.min(...prices.map(x=>x.price)),hi=Math.max(...prices.map(x=>x.price)); const gridN=120, bw=Math.max(a*0.45,(hi-lo)/gridN); const kdePeaks:Array<{price:number;weight:number;source:'KDE'}>=[];
-  for(let k=0;k<gridN;k++){const px=lo+(hi-lo)*(k/(gridN-1||1));let den=0;for(const q of prices){den+=Math.min(q.weight,1e6)*gaussian((px-q.price)/bw);} if(k>0&&k<gridN-1){let left=0,right=0;for(const q of prices){const w=Math.min(q.weight,1e6);left+=w*gaussian(((lo+(hi-lo)*((k-1)/(gridN-1)))-q.price)/bw);right+=w*gaussian(((lo+(hi-lo)*((k+1)/(gridN-1)))-q.price)/bw);}if(den>left&&den>=right&&den>0)kdePeaks.push({price:px,weight:den/Math.max(1,prices.length),source:'KDE'});}}
-  const clustered=clusterPrices([...piv,...kdePeaks],tol); const spot=c.at(-1)!.close; const levels=clustered.map(x=>({...x,time:Math.floor(new Date(c.at(-1)!.timestamp).getTime()/1000),side:x.price<=spot?'support':'resistance',label:x.source==='KDE'?'KDE S/R':`S/R · ${x.touches}x`})).sort((a,b)=>Math.abs(a.price-spot)-Math.abs(b.price-spot)).slice(0,18);
-  const zones:TradingCoreVZone[]=[]; const zstart=Math.max(1,start); for(let i=zstart;i<c.length-1;i++){const av=atrValue(c.slice(0,i+1),14);const body=Math.abs(c[i].close-c[i].open);if(av<=0||body<=multiplier*av)continue;const base=c[i-1], impulseBull=c[i].close>c[i].open;const zone:TradingCoreVZone={time:Math.floor(new Date(base.timestamp).getTime()/1000),startTime:Math.floor(new Date(base.timestamp).getTime()/1000),upper:impulseBull?Math.max(base.open,base.close):base.high,lower:impulseBull?base.low:Math.min(base.open,base.close),kind:impulseBull?'Demand':'Supply',score:Math.min(1,body/(multiplier*av))/1,mitigated:false,impulseIndex:i,baseIndex:i-1};
-    for(let j=i+1;j<c.length;j++){if(zone.kind==='Demand'&&c[j].low<=zone.upper){zone.mitigated=true;break;}if(zone.kind==='Supply'&&c[j].high>=zone.lower){zone.mitigated=true;break;}} if(!zone.mitigated)zones.push(zone);
-  }
-  return {levels,zones:zones.slice(-12),atr:a};
-}
+export { tradingCoreVPriceAction } from './structureEngine';
+export type { TradingCoreVLevel, TradingCoreVZone, TradingCoreVStructure } from './structureEngine';
 
 export type AdvancedIndicatorZone = { startTime:number; endTime:number; upper:number; lower:number; label:string; score?:number; side?:'bull'|'bear' };
 export type AdvancedIndicatorResult = { lines: Record<string, IndicatorPoint[]>; zones: AdvancedIndicatorZone[]; markers: Array<{time:number;price:number;label:string;side?:'bull'|'bear'}> };
@@ -286,16 +262,6 @@ export function advancedTradingViewIndicator(c: HistoricalCandle[], kind: Indica
     const zvol=normalized(vol,p); for(let i=1;i<c.length;i++){if(zvol[i]!=null&&zvol[i]>=1.8&&close[i]<c[i].open&&close[i]>low[i]+(high[i]-low[i])*.6)markers.push({time:t[i],price:low[i],label:'Spring?',side:'bull'});if(zvol[i]!=null&&zvol[i]>=1.8&&close[i]>c[i].open&&close[i]<low[i]+(high[i]-low[i])*.4)markers.push({time:t[i],price:high[i],label:'Upthrust?',side:'bear'})}
   }
   return {lines,zones,markers};
-}
-
-export function tradingCoreVPriceAction(c:HistoricalCandle[],period=5,multiplier=2,lookback=200):TradingCoreVResult{
-  const base=tradingCoreVFrame(c,period,multiplier,lookback);
-  const frames=[{tf:'Current',data:c},{tf:'Higher ×3',data:resample(c,3)},{tf:'Higher ×12',data:resample(c,12)}];
-  const confluence=frames.map(f=>({tf:f.tf,...tradingCoreVFrame(f.data,period,multiplier,lookback)}));
-  const tol=Math.max(base.atr*0.25,(c.at(-1)?.close||1)*0.0005);
-  const levels=base.levels.map(l=>{let hits=0;for(const f of confluence.slice(1))if(f.levels.some(x=>Math.abs(x.price-l.price)<=tol))hits++;return {...l,score:Math.min(1,l.score+hits*0.12)};});
-  const zones=base.zones.map(z=>{let hits=0;for(const f of confluence.slice(1))if(f.zones.some(x=>Math.max(z.lower,x.lower)<=Math.min(z.upper,x.upper)))hits++;return {...z,score:Math.min(1,z.score+hits*0.12)};});
-  return {levels,zones,confluence,atr:base.atr};
 }
 
 export function marketStructure(c: HistoricalCandle[], swing=3): Array<{time:number;price:number;type:'HH'|'HL'|'LH'|'LL'}> {const out:Array<{time:number;price:number;type:'HH'|'HL'|'LH'|'LL'}>=[];let lastHigh:number|undefined,lastLow:number|undefined;for(let i=swing;i<c.length-swing;i++){const w=c.slice(i-swing,i+swing+1);const hi=Math.max(...w.map(x=>x.high)),lo=Math.min(...w.map(x=>x.low));if(c[i].high===hi){const type=lastHigh==null?'HH':c[i].high>lastHigh?'HH':'LH';lastHigh=c[i].high;out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,type});}if(c[i].low===lo){const type=lastLow==null?'HL':c[i].low>lastLow?'HL':'LL';lastLow=c[i].low;out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,type});}}return out; }

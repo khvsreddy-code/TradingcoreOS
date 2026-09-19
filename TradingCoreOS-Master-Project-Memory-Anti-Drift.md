@@ -1,7 +1,7 @@
 # TradingCoreOS — Master Project Memory & Anti-Drift Specification
 
 **Status:** Canonical project context  
-**Date:** 2026-09-17  
+**Date:** 2026-09-19  
 **Purpose:** Keep future implementation work aligned with the agreed TradingCoreOS architecture and prevent architectural drift.
 
 ## 1. Project Identity
@@ -1373,3 +1373,67 @@ Still not complete:
 ### Anti-drift rule
 
 The command bar is a **Core Chart UI layer**. It must not import or depend on CoreSpirit parser/compiler/runtime internals. CoreSpirit remains a separate entity connected through the established data/event contracts.
+
+
+## Stage 8 — Chart reliability, news, command bar and crosshair
+
+- LiveChart now has a live-quote recovery seed when broker history fails, while preserving real historical data when available.
+- Added server-proxied GDELT news route and client news service; watchlist ticker detail displays contextual headlines without coupling news failures to chart rendering.
+- Right rail is intentionally minimal: Watchlist is the primary rail control; utility actions move to the top command bar.
+- Top command bar contains symbol/favorite/timeframes and horizontal utility actions including Recent, Object Tree, Alerts, Calendar/Events, Help and Crosshair.
+- Command bar z-index is above the drawing rail so menus/popovers cannot be obscured by the drawing toolbar.
+- Crosshair is chart-index scoped through `TRADINGCORE_CROSSHAIR` and maps to Lightweight Charts normal/hidden crosshair modes.
+- GDELT is the default free news provider; Alpha Vantage can be an optional provider; NewsAPI free tier is development-only and must not be treated as production news infrastructure.
+- Core Chart Engine and CoreSpirit Engine remain separate entities connected through contracts/event bus.
+
+
+## 24. Stage Completion Tracking — 2026-09-18
+
+See `STAGE_STATUS.md` for the canonical current stage checklist.
+
+The latest Stage 8 tree is the primary merge source. Stage 7 is merged only for missing files; Stage 8 wins conflicts because it contains the later reliability/news/crosshair work.
+
+Do not mark a stage complete merely because a UI control, interface, scaffold, or placeholder exists. A stage is complete only when its defined architectural behavior is implemented and validated.
+
+Stages 2, 3, 4, 5, 6, 7, 12 are source/runtime validated; Stage 8 and Stage 9 remain environment-gated until the full application build/browser smoke validation is available. Stage 10 is the next implementation target after that gate.
+
+## 25. Partial Stage Completion Pass — 2026-09-18
+
+Stages 2, 5, 6, 7 and 12 were materially completed at the source/runtime boundary in the latest merged tree. Stage 8 received RAF batching and drawing interaction hardening but remains explicitly gated on a dependency-complete browser build/smoke validation.
+
+Stage 9 now contains the Pine compatibility adapter. The canonical checklist is `STAGE_STATUS.md`.
+
+Validation rule: core TypeScript strict compilation, core self-test, and TSX parser validation passing does not substitute for the full Vite/browser build. Stage 8 must remain gated until that environment-level validation is available.
+
+
+## Stage 9 Implementation Truth — 2026-09-19
+
+Stage 9 implements a fail-closed Pine source compatibility adapter that translates a documented subset into native CoreSpirit AST/IR. It does not embed or reproduce the proprietary Pine runtime. Unsupported strategy/request/function/loop/array/table/ternary constructs are diagnosed rather than silently approximated. CoreSpirit remains the native language.
+
+
+## Stage 10 Implementation Truth — 2026-09-19
+
+Stage 10 is implemented as a canonical quantitative structure engine at:
+
+`src/services/marketData/structureEngine.ts`
+
+### Non-negotiable behavior
+
+1. **Fractal S/R and KDE S/R are inputs to one structure pipeline.** Do not create separate chart-only S/R implementations for TradingCore V.
+2. **Clustering is deterministic and ATR-scaled.** It is a 1D density/contiguous clustering implementation, not a dependency on a Python/scipy runtime.
+3. **Supply/Demand is impulse-based.** The base candle preceding an ATR-qualified impulse defines the initial zone.
+4. **Mitigation is explicit.** A zone touched according to its side is marked mitigated and is excluded from active-zone output.
+5. **MTF confluence uses the same engine.** Higher-timeframe data is deterministically resampled and evaluated with the same structure contract.
+6. **Outputs are structured data.** Chart rendering must consume levels/zones rather than reimplementing detection.
+7. **No unavailable order-flow/options data is fabricated.** Stage 10 remains OHLCV-driven unless a future market-data context supplies additional real inputs.
+8. **Stage 11 must extend this engine rather than introduce a competing Levels/structure implementation.**
+
+### Validation truth
+
+`TRADINGCORE_V_STRUCTURE_TEST=PASS` was achieved with strict TypeScript compilation for the structure engine and deterministic synthetic OHLCV coverage. The complete Vite build and browser performance validation remain blocked by the existing dependency-install timeout.
+
+## Stage 9 + Stage 10 Merge Truth — 2026-09-19
+
+The Stage 9 ZIP was not a complete cumulative tree by itself. It contained the same core tree plus four new Pine compatibility files and six common-file updates, while the Stage 2–8 ZIP contained the full cumulative tree. The merge therefore used the Stage 2–8 tree as the base, applied the Stage 9 compatibility files/changes, and then added Stage 10.
+
+This is the canonical merge rule for the current release. Future stage ZIPs must remain cumulative and must not discard files that are absent from a stage-specific delta.

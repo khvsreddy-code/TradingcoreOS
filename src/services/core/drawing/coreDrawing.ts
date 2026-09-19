@@ -115,3 +115,16 @@ export function normalizeCoreDrawings(inputs: unknown, owner: CoreDrawingOwner =
 export function markDrawingDeleted(drawing: CoreDrawing): CoreDrawing {
   return { ...drawing, lifecycle: 'deleted', updatedAt: Date.now() };
 }
+
+export function cloneCoreDrawing(drawing: CoreDrawing): CoreDrawing {
+  return JSON.parse(JSON.stringify(drawing)) as CoreDrawing;
+}
+
+export function drawingCollection(drawings: CoreDrawing[]): CoreDrawingCollection {
+  return {
+    version: 1,
+    drawings: drawings
+      .filter(d => d.lifecycle !== 'deleted')
+      .map(cloneCoreDrawing),
+  };
+}

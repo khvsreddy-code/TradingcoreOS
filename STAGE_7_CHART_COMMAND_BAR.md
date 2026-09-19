@@ -69,3 +69,7 @@ CoreSpirit does not own chart toolbar state or rendering lifecycle.
 - functional chart-type switching if desired
 - true chart undo/redo history rather than command-surface placeholders
 - continued advanced drawing hit-testing/editing/snapping work
+
+## Completion pass — 2026-09-18
+
+The CoreSpirit output boundary now has an explicit dispatcher for plot series, spatial drawing outputs and script signals/events. Rendering remains owned by Core Chart.

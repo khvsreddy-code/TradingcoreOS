@@ -1,0 +1,67 @@
+{
+  "release": "TradingCoreOS cumulative Stage 10 merge",
+  "updated": "2026-09-19",
+  "inputs": [
+    {
+      "file": "TradingCoreOS-stages-2-8-completed-validation-gated.zip",
+      "role": "cumulative_base",
+      "size_bytes": 636443
+    },
+    {
+      "file": "TradingCoreOS-stage-9-pine-compatibility.zip",
+      "role": "stage_9_delta",
+      "size_bytes": 565334
+    }
+  ],
+  "merge_policy": {
+    "base": "Stage 2-8 cumulative tree",
+    "stage_9": "apply files unique to Stage 9 and its six common-file updates",
+    "conflict_rule": "Stage 9 wins only for files demonstrably changed by the Stage 9 implementation; otherwise preserve cumulative base",
+    "stage_10": "add canonical structure engine and refactor TradingCore V indicator export to use it",
+    "later_stages": "not implemented"
+  },
+  "stage_9_delta": {
+    "unique_files": [
+      "STAGE_9_PINE_COMPATIBILITY.md",
+      "RELEASE_STAGE_9_PINE_COMPATIBILITY.md",
+      "src/services/core/compatibility/pineCompatibility.ts",
+      "src/services/core/compatibility/pineCompatibility.test.ts"
+    ],
+    "common_updates": [
+      "STAGE_STATUS.md",
+      "TradingCoreOS-Master-Project-Memory-Anti-Drift.md",
+      "VALIDATION_REPORT.md",
+      "src/services/coreSpirit/runtime.ts",
+      "src/services/coreSpirit/semanticAnalyzer.ts",
+      "src/services/coreSpirit/standardLibrary.ts"
+    ]
+  },
+  "stage_10_changes": [
+    "STAGE_10_TRADINGCORE_V_PRICE_ACTION.md",
+    "RELEASE_STAGE_10_TRADINGCORE_V_PRICE_ACTION.md",
+    "src/services/marketData/structureEngine.ts",
+    "src/services/marketData/structureEngine.test.ts",
+    "src/services/marketData/indicatorEngine.ts"
+  ],
+  "documentation_updated": [
+    "STAGE_STATUS.md",
+    "TradingCoreOS-Master-Project-Memory-Anti-Drift.md",
+    "STAGE_9_PINE_COMPATIBILITY.md",
+    "STAGE_10_TRADINGCORE_V_PRICE_ACTION.md",
+    "VALIDATION_REPORT.md",
+    "MERGE_MANIFEST.json"
+  ],
+  "validation": {
+    "core_stage_9_pine_test": "PASS",
+    "stage_10_structure_engine_strict_typescript": "PASS",
+    "stage_10_structure_engine_test": "PASS",
+    "full_application_build": "BLOCKED_dependency_install_timeout",
+    "browser_smoke_fps_memory": "NOT_RUN"
+  },
+  "status": {
+    "stage_8": "IMPLEMENTED_ENVIRONMENT_VALIDATION_PENDING",
+    "stage_9": "IMPLEMENTED_ENVIRONMENT_VALIDATION_PENDING",
+    "stage_10": "IMPLEMENTED_ENVIRONMENT_VALIDATION_PENDING",
+    "stage_11": "NOT_STARTED"
+  }
+}

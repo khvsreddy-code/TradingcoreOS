@@ -11,6 +11,7 @@ import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.j
 import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
+import { newsRoutes } from './src/server/routes/news.routes.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -65,6 +66,7 @@ app.use('/api/trading', upstoxHistoryRoutes);
 app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
+app.use('/api', newsRoutes);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });

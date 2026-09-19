@@ -99,3 +99,7 @@ CoreSpirit runtime internals do not become chart lifecycle dependencies.
 - real webhook delivery layer
 - complete CoreDrawing hit-testing/editing/snapping/geometry engine
 - richer watchlist persistence/editing/multiple lists and broker-specific fundamentals/ranges/news
+
+## Completion pass — 2026-09-18
+
+CoreSpirit now has a compile-once/load boundary, incremental `executeBar()` execution and a dedicated worker boundary. The executable IR remains serializable and chart-independent.

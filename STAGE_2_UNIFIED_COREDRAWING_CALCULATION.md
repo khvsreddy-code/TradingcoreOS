@@ -71,3 +71,7 @@ CoreSpirit remains a separate entity. This stage does not import CoreSpirit inte
 - replay/live conformance tests
 - full CoreDrawing renderer/hit-testing/editing
 - CoreSpirit producers for CoreDrawing
+
+## Completion pass — 2026-09-18
+
+The retained drawing store is now connected to the chart drawing workflow. Geometry support includes hit testing, handles, data-coordinate movement and OHLC snapping. This keeps drawing state semantic and independent of chart pixels.
