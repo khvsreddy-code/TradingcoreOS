@@ -136,7 +136,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       res.setHeader('Cache-Control', 'private, max-age=20');
       res.json({ success: true, data, requested: limit, returned: data.length, cached: true });
     } catch (error: any) {
-      res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
+      res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles', brokerRateLimited: Number(error?.status) === 429 });
     }
     return;
   }
@@ -144,64 +144,22 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      // FYERS history is date-range based. Walk backwards through broker-safe
-      // windows until the requested 50k target is reached. Never synthesize
-      // candles; broker availability is the hard ceiling.
-      const chunkDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 90;
-      const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
-      // Initial load can walk backwards to assemble 10k. A lazy page is exactly
-      // one broker-safe window ending before the requested cursor, avoiding the
-      // request-limit burst that caused the blank chart.
-      let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
-      let data: any[] = [];
-      let emptyWindows = 0;
-      const maxWindows = beforeDate ? 1 : Math.ceil(maxLookbackDays / chunkDays);
-
-      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < limit && emptyWindows < 2 && (beforeDate ? lookedBack === 0 : lookedBack < maxWindows * chunkDays); lookedBack += chunkDays) {
-        const from = new Date(end.getTime() - chunkDays * 86_400_000);
-        const params = new URLSearchParams({
-          symbol: instrumentKey,
-          resolution,
-          date_format: '1',
-          range_from: indiaDate(from),
-          range_to: indiaDate(end),
-          cont_flag: '1',
-        });
-        try {
-          const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-            headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-          });
-          const text = await response.text();
-          let payload: any;
-          try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-          if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
-            if (data.length) break;
-            throw new Error(payload?.message || `Fyers history failed (${response.status})`);
-          }
-          const rows = normalize(payload?.candles || [], limit);
-          if (rows.length) {
-            data = normalize([...rows, ...data], limit);
-            emptyWindows = 0;
-          } else {
-            emptyWindows += 1;
-          }
-        } catch (error) {
-          if (!data.length) throw error;
-          emptyWindows += 1;
-        }
-        end = new Date(from.getTime() - 1000);
-      }
-
-      if (data.length < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
-        if (seed.length) data = seed;
-      }
-      if (!data.length) {
-        if (beforeDate) return [];
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
-        if (seed.length) data = seed;
-      }
-      if (!data.length) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
+      // One broker-safe window per request. FYERS documents up to 100 days for
+      // minute resolutions and 366 days for day/week/month. Older history is
+      // loaded one page at a time only after the user pans left.
+      const pageDays = resolution === 'D' ? 366 : (resolution === '30' || resolution === '60' ? 90 : 100);
+      const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      const from = new Date(end.getTime() - pageDays * 86_400_000);
+      const params = new URLSearchParams({ symbol: instrumentKey, resolution, date_format: '1', range_from: indiaDate(from), range_to: indiaDate(end), cont_flag: '1' });
+      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
+      const text = await response.text();
+      let payload: any;
+      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
+      const brokerCode = Number(payload?.code);
+      if (!response.ok || payload?.s === 'error' || brokerCode === 429) { const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`); err.status = response.status || (brokerCode === 429 ? 429 : 502); err.brokerCode = brokerCode; throw err; }
+      let data = normalize(payload?.candles || [], limit);
+      if (data.length < 2 && !beforeDate) { const seed = await fallbackQuoteCandle(accessToken, instrumentKey); if (seed.length) data = seed; }
+      if (!data.length) { if (beforeDate) return []; throw new Error(`Fyers returned no historical candles for ${instrumentKey}.`); }
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
     });
@@ -210,7 +168,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.setHeader('Cache-Control', 'private, max-age=20');
     res.json({ success: true, data, requested: limit, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length && !data[0]?.liveSeed) });
   } catch (error: any) {
-    res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
+    res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles', brokerRateLimited: Number(error?.status) === 429 });
   } finally {
     inflight.delete(key);
   }

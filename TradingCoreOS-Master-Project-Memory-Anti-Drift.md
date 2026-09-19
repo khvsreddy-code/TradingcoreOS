@@ -1492,3 +1492,12 @@ The previous 50,000-candle first-paint target caused broker request-limit failur
 - The chart rendering path continues to use the proven candle-series `setData(...)` + live `update(...)` model used by the earlier TradingCoreOS build.
 
 This progressive 10k → 15k → 20k → 25k → 30k model is now the canonical history-loading contract.
+
+
+## Stage 13 — ML Feature Registry — 2026-09-19
+
+Implemented `src/services/ml/featureRegistry.ts` as the canonical feature contract. Feature definitions are versioned and tagged with domain, required data source and intended horizon. Feature values carry timestamp/timeframe/source/definition-version provenance. OHLCV features are deterministic; options, depth, macro and sentiment features are emitted only when real source data is supplied. Added feature-vector validation and a self-test. This stage does not claim that the 39 registered prediction models are genuinely trained.
+
+### Historical chart reliability correction — 2026-09-19
+
+The progressive 30k history path was corrected to use **one broker-safe history window per request**. FYERS initial intraday history uses a single 100-day window (90 days for 30m/60m, 366 days for daily), and older history is requested one page at a time from the left edge. Upstox uses its documented one-month window for 1–15 minute candles and one-quarter window for >15 minute/hour candles, again one page per request. The browser history guard no longer retries broker rate-limit responses, because repeated 429 retries amplify the limit. HTTP status is preserved across the broker adapter boundary. The chart continues to retain up to 30,000 valid candles and progressively prepends older history.

@@ -42,10 +42,13 @@ if (!(runtime as any)[installedKey]) {
           return data || [];
         } catch (error: any) {
           lastError = error;
+          // Server-side broker pacing owns rate limits. Retrying a broker 429
+          // from the browser multiplies pressure and can blank the chart.
+          const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
           const text = String(error?.message || error || '').toLowerCase();
-          const limited = /rate|limit|too many|request/.test(text);
-          if (!limited || attempt === 2) throw error;
-          await wait(700 * (attempt + 1));
+          const limited = status === 429 || /(^|\s)(429|rate[- ]?limit|too many requests|request limit reached)(\s|$)/.test(text);
+          if (limited || attempt === 2) throw error;
+          await wait(400 * (attempt + 1));
         }
       }
       throw lastError || new Error('Historical candle request failed');

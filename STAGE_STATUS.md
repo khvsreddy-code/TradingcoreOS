@@ -27,7 +27,7 @@
 | 10. TradingCore V Price Action | **IMPLEMENTED — application build gate pending** | Canonical structure engine for fractal/KDE S/R, ATR impulse Supply/Demand zones, mitigation, deterministic 1D clustering and multi-timeframe confluence. Browser build remains pending. |
 | 11. Levels/shared structure engine | **IMPLEMENTED — application build gate pending** | Levels now consume the canonical Stage 10 structure engine; lifecycle state, break/retest/failure events, session/opening anchors and chart analytics are routed through that shared structure boundary. |
 | 12. Deterministic Replay | **DONE** | Stable sorting, invalid-data rejection, step/resume semantics, replay source tagging and event sequencing are implemented and self-tested. |
-| 13. ML Feature Registry | **NOT STARTED** | Held for downstream pass. |
+| 13. ML Feature Registry | **IMPLEMENTED / VALIDATION-GATED** | Canonical versioned feature definitions, provenance-aware extraction, availability gating, and vector validation are implemented; model training/inference is not claimed by this stage. |
 | 14. Model Registry + Artifact Validation | **NOT STARTED** | Held for downstream pass. |
 | 15. Regime Engine | **NOT STARTED** | Held for downstream pass. |
 | 16. Cross-Asset Feature Engine | **NOT STARTED** | Held for downstream pass. |
@@ -107,6 +107,16 @@
 - The existing `LiveChart` TradingCore V path now consumes the shared structure engine through the existing `tradingCoreVPriceAction` export.
 - `structureEngine.test.ts` validates deterministic output, MTF confluence, score bounds and malformed-candle filtering.
 
+### Stage 13 — ML Feature Registry
+
+- Added `src/services/ml/featureRegistry.ts` as the canonical versioned feature contract.
+- Feature definitions carry domain, data requirement, intended horizon, description and version.
+- OHLCV-derived features include returns, EMA distances, RSI, ATR%, range%, volume ratio and breakout distance.
+- Options, order-book, macro and sentiment features are availability-gated; absent external data is represented as unavailable rather than fabricated.
+- Every feature value carries timestamp, timeframe, source and definition version provenance.
+- Added vector validation and `src/services/ml/featureRegistry.test.ts` self-test.
+- This stage does **not** claim that the registered prediction models are genuinely trained; it establishes the shared feature schema needed by future training/inference pipelines.
+
 ### Stage 12 — Deterministic Replay
 - Replay input is validated before entering the bus.
 - Invalid timestamps/OHLC/volume and duplicate timestamps are rejected.
@@ -139,11 +149,12 @@ A complete application build could not be run in this extracted environment beca
 
 ```text
 Stages 2,3,4,5,6,7,9,10,12 → source/runtime validated
+Stage 13                  → feature-registry implementation complete; validation gate pending
 Stages 8,9,10             → full app/browser gate pending
                               ↓
                    FULL APP BUILD + BROWSER SMOKE TEST
                               ↓
-                       START STAGE 11
+                 CONTINUE STAGE 13 → MODEL PIPELINES
 ```
 
 
@@ -154,3 +165,11 @@ Stages 8,9,10             → full app/browser gate pending
 - FYERS and Upstox support a timestamp cursor (`before`) for backward history pages.
 - The chart preserves the user's visible time range after older candles are prepended and displays a non-blocking `Loading more history…` status.
 - Existing live-tick/developing-bar updates remain active after lazy history loads.
+
+
+### Historical chart reliability correction — 2026-09-19
+- Progressive 30k history now uses one broker-safe history window per request.
+- FYERS uses one 100-day intraday page, 90-day 30m/60m page, or 366-day daily page; older data loads one page at a time from the left edge.
+- Upstox uses one documented month/quarter page per request; older data loads only when the user pans backward.
+- The browser history guard no longer retries broker rate-limit responses. HTTP status is preserved across the broker adapter boundary.
+- The chart still retains up to 30,000 valid candles and continues live/developing-bar updates after lazy loads.

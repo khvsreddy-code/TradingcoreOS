@@ -71,7 +71,7 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
       res.setHeader('Cache-Control', 'private, max-age=20');
       res.json({ success: true, data, requested: limit, returned: data.length, cached: true });
     } catch (error: any) {
-      res.status(502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles' });
+      res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles', brokerRateLimited: Number(error?.status) === 429 });
     }
     return;
   }
@@ -79,36 +79,16 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('upstox', accessToken, async () => {
-      // Upstox enforces a maximum date window per historical request. Walk
-      // backwards one broker-safe window at a time until we have 50k candles
-      // (or the broker stops returning older data).
-      let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
-      let all: any[] = [];
-      let emptyWindows = 0;
-      const maxLookbackDays = config.unit === 'days' ? 365 * 250 : 365 * 25;
-      const maxWindows = beforeDate ? 1 : Math.ceil(maxLookbackDays / config.lookbackDays);
-      for (let lookedBack = 0; lookedBack < maxLookbackDays && all.length < limit && emptyWindows < 2 && (beforeDate ? lookedBack === 0 : lookedBack < maxWindows * config.lookbackDays); lookedBack += config.lookbackDays) {
-        const from = new Date(end.getTime() - config.lookbackDays * 86_400_000);
-        const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(end)}/${isoDate(from)}`;
-        try {
-          const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
-          const payload = await response.json();
-          if (!response.ok || payload?.status === 'error') throw new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`);
-          const rows = normalizeCandles(payload?.data?.candles || [], limit);
-          if (rows.length) {
-            all = normalizeCandles([...rows, ...all], limit);
-            emptyWindows = 0;
-          } else {
-            emptyWindows += 1;
-          }
-        } catch (error) {
-          if (!all.length) throw error;
-          emptyWindows += 1;
-        }
-        end = new Date(from.getTime() - 1000);
-      }
-      const candles = normalizeCandles(all, limit);
-      if (candles.length < 2) throw new Error(`Upstox returned only ${candles.length} valid candle(s).`);
+      // V3 allows one month for 1–15m and one quarter for >15m/hour. Keep one
+      // broker-safe window per request; older windows are left-edge pages.
+      const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      const from = new Date(end.getTime() - config.lookbackDays * 86_400_000);
+      const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(end)}/${isoDate(from)}`;
+      const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
+      const payload = await response.json();
+      if (!response.ok || payload?.status === 'error') { const err: any = new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`); err.status = response.status; throw err; }
+      const candles = normalizeCandles(payload?.data?.candles || [], limit);
+      if (candles.length < 2) { if (beforeDate) return []; throw new Error(`Upstox returned only ${candles.length} valid candle(s).`); }
       cache.set(key, { data: candles, expiresAt: Date.now() + 120_000 });
       return candles;
     });
@@ -117,7 +97,7 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
     res.setHeader('Cache-Control', 'private, max-age=20');
     return res.json({ success: true, data: candles, requested: limit, returned: candles.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: candles[0]?.timestamp || null, hasMore: Boolean(candles.length) });
   } catch (error: any) {
-    return res.status(502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles' });
+    return res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles', brokerRateLimited: Number(error?.status) === 429 });
   } finally {
     inflight.delete(key);
   }
