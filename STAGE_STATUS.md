@@ -22,7 +22,7 @@
 | 5. CoreSpirit Compiler | **DONE** | Semantic validation, builtin signatures, arity checking, IR generation, diagnostics and deterministic executable artifacts/checksums are implemented. |
 | 6. Stateful CoreSpirit Runtime | **DONE** | Stateful chronological runtime, incremental bar execution, lookback guards, step quota and worker boundary are implemented. |
 | 7. Plot/Drawing/Alert API | **DONE** | Declarative output contract plus chart-independent plot/drawing/event dispatcher are implemented. |
-| 8. Chart UX/Performance | **IMPLEMENTED — browser build verification pending** | Drawing rail, watchlist, crosshair/lifecycle hardening, worker indicators and RAF batching are present. Browser-level FPS/memory validation still requires a dependency-complete environment. |
+| 8. Chart UX/Performance | **IMPLEMENTED — browser build verification pending** | Drawing rail, watchlist, lifecycle hardening, worker indicators and RAF batching are present. Browser-level FPS/memory validation still requires a dependency-complete environment. |
 | 9. Pine compatibility | **IMPLEMENTED — application build gate pending** | Fail-closed Pine subset translator into native CoreSpirit AST/IR; runtime support for translated crossover/crossunder/math/nz primitives. Browser-level build remains pending. |
 | 10. TradingCore V Price Action | **IMPLEMENTED — application build gate pending** | Canonical structure engine for fractal/KDE S/R, ATR impulse Supply/Demand zones, mitigation, deterministic 1D clustering and multi-timeframe confluence. Browser build remains pending. |
 | 11. Levels/shared structure engine | **NOT STARTED** | Held for downstream pass. |
@@ -64,6 +64,14 @@
 - Plot series are retained as time/value data.
 - Spatial outputs are converted through `CoreDrawingDispatcher`.
 - Signals remain event/data outputs; alerts/webhooks remain event-bus capabilities.
+
+### Chart history target / workspace chrome correction
+- Historical chart loading now targets **50,000 valid candles** instead of 10,000/25,000/one-window subsets.
+- Fyers and Upstox history routes accept a 50,000 target and walk backwards through broker-safe date windows.
+- The browser/runtime retains up to 50,000 normalized candles for chart rendering.
+- No synthetic candles are created to pad the target; broker availability remains the hard ceiling.
+- Removed the duplicate `/live` header navigation strip (`CHARTS / MODELS / AUTOMATIONS / PORTFOLIO / INDICATORS / PROFILE`).
+- Removed the standalone Crosshair item from the embedded drawing rail.
 
 ### Stage 8 — Chart UX/performance
 - RAF-batched worker indicator rendering via `ChartUpdateScheduler`.

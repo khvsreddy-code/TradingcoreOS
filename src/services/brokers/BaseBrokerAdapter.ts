@@ -75,7 +75,7 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async getHistoricalData(symbol: string, _timeframe: string): Promise<HistoricalCandle[]> {
-    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=10000`);
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=50000`);
     const data = await res.json(); if (!data.success) throw new Error(data.error); return data.data;
   }
 

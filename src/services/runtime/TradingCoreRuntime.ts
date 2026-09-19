@@ -144,7 +144,7 @@ export class TradingCoreRuntime {
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
-    const key = `${brokerId}:${symbol}:${timeframe}:25000`;
+    const key = `${brokerId}:${symbol}:${timeframe}:50000`;
     const cached = this.historyCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.data;
     const generationAtStart = this.routeGeneration;
@@ -158,7 +158,7 @@ export class TradingCoreRuntime {
       if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
       byTime.set(time, row);
     }
-    const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-25_000);
+    const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-50_000);
     if (history.length) this.historyCache.set(key, { data: history, expiresAt: Date.now() + 30_000 });
     coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
     return history;

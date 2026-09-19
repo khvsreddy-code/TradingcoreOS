@@ -472,7 +472,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
      const volume=Number(row.volume);
      bySecond.set(time,{timestamp:new Date(time*1000).toISOString(),open,high,low,close,volume:Number.isFinite(volume)?volume:0});
    }
-   data=[...bySecond.values()].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).slice(-25000);
+   data=[...bySecond.values()].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).slice(-50000);
    if(!data.length)throw new Error(`${brokerId.toUpperCase()} returned no valid chart candles`);
    if(dead||!lifecycle.current.isCurrent(generation))return;
    candles.current=data;
@@ -530,8 +530,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
       ['fib','Fib retracement',GitBranch],['fibExtension','Fib extension',GitBranch],['pitchfork','Pitchfork',Triangle],
       ['arrow','Arrow',ArrowUpRight],['priceRange','Price range',Ruler],['dateRange','Date range',Ruler],
       ['brush','Brush',Paintbrush],['highlighter','Highlighter',Highlighter],['text','Text',Type],
-      ['longPosition','Long position',Target],['shortPosition','Short position',Target],['measure','Measure',Ruler],
-      ['crosshair','Crosshair',Crosshair]
+      ['longPosition','Long position',Target],['shortPosition','Short position',Target],['measure','Measure',Ruler]
     ].map(([tool,label,Icon]:any)=><button key={String(tool)} title={String(label)} onClick={()=>selectDrawingTool(tool as DrawingTool)}
       className={`flex h-8 w-8 items-center justify-center rounded ${drawingTool===tool?'bg-[#2563eb]/20 text-[#60a5fa]':'text-[#8c93a6] hover:bg-[#171b27] hover:text-white'}`}><Icon size={15}/></button>)}
     <div className="my-1 h-px w-7 bg-[#222636]"/>

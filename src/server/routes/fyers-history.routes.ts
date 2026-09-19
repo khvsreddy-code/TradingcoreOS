@@ -7,11 +7,10 @@ import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 /**
  * Safe FYERS historical-data route.
  *
- * The previous implementation walked backwards through many 90-day windows
- * while requesting up to 25,000 intraday candles. Every History API call counts
- * against FYERS' request limits, so one chart load could consume a large part
- * of the minute budget. TradingCore only needs recent intraday structure for
- * its chart/level engine, so use one broker-safe window instead.
+ * History is loaded in broker-safe date windows and merged until the chart
+ * target is reached. The browser/runtime target is 50,000 candles; if the
+ * broker or request quota cannot provide that much, the valid available
+ * history is returned instead of fabricating data or blanking the chart.
  */
 export const fyersHistoryRoutes = Router();
 fyersHistoryRoutes.use(requireUser);
@@ -105,8 +104,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '').trim();
   const resolution = resolutionMap[interval] || interval;
-  const requested = Number(req.query.limit || 10_000);
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(10_000, Math.floor(requested))) : 10_000;
+  const requested = Number(req.query.limit || 50_000);
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(50_000, Math.floor(requested))) : 50_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
@@ -135,27 +134,50 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      const now = new Date();
-      const lookbackDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 30;
-      const from = new Date(now.getTime() - lookbackDays * 86_400_000);
-      const params = new URLSearchParams({
-        symbol: instrumentKey,
-        resolution,
-        date_format: '1',
-        range_from: indiaDate(from),
-        range_to: indiaDate(now),
-        cont_flag: '1',
-      });
-      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-        headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-      });
-      const text = await response.text();
-      let payload: any;
-      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-      if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
-        throw new Error(payload?.message || `Fyers history failed (${response.status})`);
+      // FYERS history is date-range based. Walk backwards through broker-safe
+      // windows until the requested 50k target is reached. Never synthesize
+      // candles; broker availability is the hard ceiling.
+      const chunkDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 90;
+      const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
+      let end = new Date();
+      let data: any[] = [];
+      let emptyWindows = 0;
+
+      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < limit && emptyWindows < 2; lookedBack += chunkDays) {
+        const from = new Date(end.getTime() - chunkDays * 86_400_000);
+        const params = new URLSearchParams({
+          symbol: instrumentKey,
+          resolution,
+          date_format: '1',
+          range_from: indiaDate(from),
+          range_to: indiaDate(end),
+          cont_flag: '1',
+        });
+        try {
+          const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+            headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+          });
+          const text = await response.text();
+          let payload: any;
+          try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
+          if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
+            if (data.length) break;
+            throw new Error(payload?.message || `Fyers history failed (${response.status})`);
+          }
+          const rows = normalize(payload?.candles || [], limit);
+          if (rows.length) {
+            data = normalize([...rows, ...data], limit);
+            emptyWindows = 0;
+          } else {
+            emptyWindows += 1;
+          }
+        } catch (error) {
+          if (!data.length) throw error;
+          emptyWindows += 1;
+        }
+        end = new Date(from.getTime() - 1000);
       }
-      let data = normalize(payload?.candles || [], limit);
+
       if (data.length < 2) {
         const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
         if (seed.length) data = seed;

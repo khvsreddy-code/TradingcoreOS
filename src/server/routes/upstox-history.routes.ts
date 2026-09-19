@@ -49,8 +49,8 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
   const interval = String(req.query.interval || '').trim();
   const config = intervalConfig[interval];
   const instrumentKey = String(req.query.instrument_key || '').trim();
-  const requestedLimit = Number(req.query.limit || 10_000);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(10_000, Math.floor(requestedLimit))) : 10_000;
+  const requestedLimit = Number(req.query.limit || 50_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(50_000, Math.floor(requestedLimit))) : 50_000;
   if (!config || !instrumentKey) { res.status(400).json({ success: false, error: 'instrument_key and a supported interval are required' }); return; }
 
   const key = `${userId}:upstox:${instrumentKey}:${interval}:${limit}`;
@@ -75,13 +75,34 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('upstox', accessToken, async () => {
-      const to = new Date();
-      const from = new Date(to.getTime() - config.lookbackDays * 86_400_000);
-      const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(to)}/${isoDate(from)}`;
-      const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
-      const payload = await response.json();
-      if (!response.ok || payload?.status === 'error') throw new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`);
-      const candles = normalizeCandles(payload?.data?.candles || [], limit);
+      // Upstox enforces a maximum date window per historical request. Walk
+      // backwards one broker-safe window at a time until we have 50k candles
+      // (or the broker stops returning older data).
+      let end = new Date();
+      let all: any[] = [];
+      let emptyWindows = 0;
+      const maxLookbackDays = config.unit === 'days' ? 365 * 250 : 365 * 25;
+      for (let lookedBack = 0; lookedBack < maxLookbackDays && all.length < limit && emptyWindows < 2; lookedBack += config.lookbackDays) {
+        const from = new Date(end.getTime() - config.lookbackDays * 86_400_000);
+        const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(end)}/${isoDate(from)}`;
+        try {
+          const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
+          const payload = await response.json();
+          if (!response.ok || payload?.status === 'error') throw new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`);
+          const rows = normalizeCandles(payload?.data?.candles || [], limit);
+          if (rows.length) {
+            all = normalizeCandles([...rows, ...all], limit);
+            emptyWindows = 0;
+          } else {
+            emptyWindows += 1;
+          }
+        } catch (error) {
+          if (!all.length) throw error;
+          emptyWindows += 1;
+        }
+        end = new Date(from.getTime() - 1000);
+      }
+      const candles = normalizeCandles(all, limit);
       if (candles.length < 2) throw new Error(`Upstox returned only ${candles.length} valid candle(s).`);
       cache.set(key, { data: candles, expiresAt: Date.now() + 120_000 });
       return candles;

@@ -45,3 +45,11 @@ Stage 9 is therefore implementation-complete at the source/runtime boundary but 
 ## Release decision
 
 The cumulative Stage 10 tree is **source/runtime implementation complete but environment validation pending**. Stage 11 remains intentionally unimplemented until the full application/browser gate is available.
+
+
+## 2026-09-19 — 50K candle history / workspace chrome correction
+
+- Source-level validation: PASS for the 50,000-candle target propagation across browser adapter, runtime cache/normalization, FYERS history route, and Upstox history route.
+- Workspace chrome validation: PASS; duplicate `/live` header nav injection is removed and the standalone Crosshair drawing-rail button is removed.
+- Full dependency-complete `npm run lint` / `npm run build`: NOT RUN / environment-gated because `npm ci --ignore-scripts` timed out before dependencies were installed.
+- No synthetic candles are introduced; if a broker cannot supply 50,000 valid candles for a timeframe, the available valid history is rendered instead.

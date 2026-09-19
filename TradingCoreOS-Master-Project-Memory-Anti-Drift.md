@@ -83,6 +83,9 @@ Ultimately provide a TradingView-class experience:
 - persistent layouts
 - symbol/timeframe persistence
 - reliable websocket reconnects
+- historical chart target: **50,000 candles per symbol/timeframe** when the connected broker/data source can provide that much history
+- history requests must be broker-window aware and walk backwards across multiple requests rather than silently truncating to a small single-window result
+- never synthesize fake historical candles to reach 50,000; if the broker cannot provide 50,000 valid candles, render the maximum valid history and expose the limitation
 
 ### Failure isolation
 
@@ -559,6 +562,8 @@ Cloud persistence must handle signup/login lifecycle and missing rows robustly.
 - panels open/close without destroying chart space
 - option chain can return to chart context
 - clean layout handling
+- the `/live` workspace must not inject a duplicate `CHARTS / MODELS / AUTOMATIONS / PORTFOLIO / INDICATORS / PROFILE` navigation strip into the page header; workspace commands belong in the existing top command bar
+- do not add a standalone Crosshair button to the drawing rail unless explicitly requested
 
 ### AI panel
 
