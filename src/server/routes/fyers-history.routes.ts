@@ -156,7 +156,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       let payload: any;
       try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
       const brokerCode = Number(payload?.code);
-      if (!response.ok || payload?.s === 'error' || brokerCode === 429) { const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`); err.status = response.status || (brokerCode === 429 ? 429 : 502); err.brokerCode = brokerCode; throw err; }
+      if (!response.ok || payload?.s === 'error' || brokerCode === 429) { const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`); err.status = brokerCode === 429 ? 429 : response.status; err.brokerCode = brokerCode; throw err; }
       let data = normalize(payload?.candles || [], limit);
       if (data.length < 2 && !beforeDate) { const seed = await fallbackQuoteCandle(accessToken, instrumentKey); if (seed.length) data = seed; }
       if (!data.length) { if (beforeDate) return []; throw new Error(`Fyers returned no historical candles for ${instrumentKey}.`); }

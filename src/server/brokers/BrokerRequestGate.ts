@@ -63,7 +63,21 @@ export async function withBrokerRequestGate<T>(broker: 'fyers' | 'upstox', ident
     const startedAt = Date.now();
     state.timestamps.push(startedAt);
     state.nextAvailableAt = startedAt + limit.minIntervalMs;
-    return await task();
+    try {
+      return await task();
+    } catch (error: any) {
+      const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
+      const message = String(error?.message || error || '').toLowerCase();
+      const limited = status === 429 || Number(error?.brokerCode) === 429 || /(^|\s)(429|rate[- ]?limit|too many requests|request limit reached)(\s|$)/.test(message);
+      if (limited) {
+        // A broker 429 is a signal to slow the entire token queue, not just
+        // the request that failed. This prevents the next queued chart/order
+        // call from immediately repeating the same rejected request.
+        const retryAfter = Number(error?.retryAfterMs || 0);
+        state.nextAvailableAt = Math.max(state.nextAvailableAt, Date.now() + Math.max(1_500, Math.min(15_000, retryAfter || 2_500)));
+      }
+      throw error;
+    }
   } finally {
     release();
   }

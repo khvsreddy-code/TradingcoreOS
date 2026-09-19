@@ -86,7 +86,7 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
       const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(end)}/${isoDate(from)}`;
       const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
       const payload = await response.json();
-      if (!response.ok || payload?.status === 'error') { const err: any = new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`); err.status = response.status; throw err; }
+      if (!response.ok || payload?.status === 'error') { const brokerCode = Number(payload?.errors?.[0]?.code || payload?.code || 0); const err: any = new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox historical data failed (${response.status})`); err.status = response.status === 429 || brokerCode === 429 ? 429 : response.status; err.brokerRateLimited = err.status === 429; throw err; }
       const candles = normalizeCandles(payload?.data?.candles || [], limit);
       if (candles.length < 2) { if (beforeDate) return []; throw new Error(`Upstox returned only ${candles.length} valid candle(s).`); }
       cache.set(key, { data: candles, expiresAt: Date.now() + 120_000 });
