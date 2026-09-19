@@ -1,3 +1,5 @@
+# SUPERSEDED BY RELEASE_PROGRESSIVE_HISTORY_30K.md
+
 # RELEASE — 50K Candle History + Workspace Chrome Correction
 
 **Date:** 2026-09-19
@@ -21,3 +23,6 @@
 ## Validation
 - Source edits completed against the supplied Stage 2–10 cumulative ZIP.
 - Full `npm run lint` / `npm run build` could not be completed because dependency installation timed out in the validation environment.
+
+
+This release is retained only as historical documentation. The active chart-history contract is the progressive 10k initial + 5k backward-page + 30k maximum implementation described in RELEASE_PROGRESSIVE_HISTORY_30K.md.

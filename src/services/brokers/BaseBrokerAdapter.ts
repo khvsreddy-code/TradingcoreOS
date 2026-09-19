@@ -75,8 +75,17 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async getHistoricalData(symbol: string, _timeframe: string): Promise<HistoricalCandle[]> {
-    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=50000`);
+    // Initial chart load is intentionally bounded. Older candles are fetched lazily
+    // when the user pans toward the left edge, rather than hammering broker history
+    // endpoints with a 30k request on first paint.
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=10000`);
     const data = await res.json(); if (!data.success) throw new Error(data.error); return data.data;
+  }
+
+  async getHistoricalDataBefore(symbol: string, _timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
+    const safeLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=${safeLimit}&before=${encodeURIComponent(beforeTimestamp)}`);
+    const data = await res.json(); if (!data.success) throw new Error(data.error); return data.data || [];
   }
 
   async placeOrder(order: OrderRequest): Promise<OrderResult> {

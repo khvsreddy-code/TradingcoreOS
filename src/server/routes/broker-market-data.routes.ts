@@ -288,8 +288,8 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
   const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
   const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '');
-  const requestedLimit = Number(req.query.limit || 50_000);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(50_000, Math.floor(requestedLimit))) : 50_000;
+  const requestedLimit = Number(req.query.limit || 10_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(30_000, Math.floor(requestedLimit))) : 10_000;
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {

@@ -83,9 +83,10 @@ Ultimately provide a TradingView-class experience:
 - persistent layouts
 - symbol/timeframe persistence
 - reliable websocket reconnects
-- historical chart target: **50,000 candles per symbol/timeframe** when the connected broker/data source can provide that much history
-- history requests must be broker-window aware and walk backwards across multiple requests rather than silently truncating to a small single-window result
-- never synthesize fake historical candles to reach 50,000; if the broker cannot provide 50,000 valid candles, render the maximum valid history and expose the limitation
+- historical chart capacity: **30,000 candles per symbol/timeframe**, loaded progressively
+- initial history request: **10,000 candles**; older history loads in **5,000-candle pages** when the user pans backward
+- history requests must be broker-window aware and cursor-based so the initial chart does not request the full history target at once
+- never synthesize fake historical candles; if the broker cannot provide 30,000 valid candles, render the maximum valid history and expose the limitation
 
 ### Failure isolation
 
@@ -1442,3 +1443,52 @@ Stage 10 is implemented as a canonical quantitative structure engine at:
 The Stage 9 ZIP was not a complete cumulative tree by itself. It contained the same core tree plus four new Pine compatibility files and six common-file updates, while the Stage 2–8 ZIP contained the full cumulative tree. The merge therefore used the Stage 2–8 tree as the base, applied the Stage 9 compatibility files/changes, and then added Stage 10.
 
 This is the canonical merge rule for the current release. Future stage ZIPs must remain cumulative and must not discard files that are absent from a stage-specific delta.
+
+
+## Stage 11 — Levels / Shared Structure Engine — 2026-09-19
+
+Stage 11 is now implemented in the cumulative tree.
+
+### Canonical rule
+
+Levels must consume the Stage 10 canonical quantitative structure engine. `levelEngine.ts` is a compatibility facade and must not reimplement an independent pivot/S&R detector.
+
+### Implemented
+
+- `src/services/marketData/levelEngine.ts` now delegates to `buildCanonicalLevelAnalytics(...)` in `src/services/marketData/structureEngine.ts`.
+- Canonical structure levels expose an optional source candle index for chronological lifecycle analysis.
+- Levels use the same fractal + volume-weighted KDE + ATR-scaled clustering pipeline as TradingCore V.
+- Session and opening-range anchors remain contextual level sources, but structural levels come from the shared structure engine.
+- Breakout, retest, flip and failure lifecycle events are evaluated chronologically from shared levels.
+- ATR values used by level lifecycle scanning are precomputed once per candle to avoid repeated prefix calculations on large histories.
+- `dynamicSupportResistance()` in `indicatorEngine.ts` now consumes canonical structure output rather than maintaining a second pivot implementation.
+- `ChartAnalytics.structure` exposes the shared structure object to chart/UI/ML consumers.
+- Added `src/services/marketData/levelEngine.test.ts`.
+
+### Validation
+
+- Added deterministic shared-structure Level test: `TRADINGCORE_LEVELS_SHARED_STRUCTURE_TEST=PASS` when executed in a dependency-complete TypeScript environment.
+- Full Vite/browser build remains environment-gated until dependencies can be installed and the browser smoke/FPS/memory pass can run.
+
+### Anti-drift
+
+Do not add another Levels/S&R implementation in `indicatorEngine`, `LiveChart`, CoreSpirit or ML. New structural consumers must use the canonical `structureEngine` contract.
+
+
+## Progressive History Loading / 30k Chart History Fix — 2026-09-19
+
+The previous 50,000-candle first-paint target caused broker request-limit failures and blank charts. The canonical chart-history behavior is now progressive:
+
+- Initial chart request: **10,000 candles**.
+- Lazy history page: **5,000 candles** per backward request.
+- Maximum in-memory chart history: **30,000 candles** per symbol/timeframe.
+- Older history is requested only when the user actively pans/scrolls backward toward the left edge of the loaded dataset.
+- The chart shows a lightweight TradingView-style `Loading more history…` indicator while an older page is being fetched.
+- The current visible time range is restored after older candles are prepended so the user's viewport does not jump.
+- History is normalized, timestamp-deduplicated and merged chronologically before being rendered.
+- Live websocket/developing candles continue to update the newest candle after older pages are loaded.
+- FYERS and Upstox broker routes accept a `before` cursor for backward pages, preventing a single 30k/50k broker request.
+- Broker availability remains the hard ceiling; no synthetic historical candles are generated.
+- The chart rendering path continues to use the proven candle-series `setData(...)` + live `update(...)` model used by the earlier TradingCoreOS build.
+
+This progressive 10k → 15k → 20k → 25k → 30k model is now the canonical history-loading contract.

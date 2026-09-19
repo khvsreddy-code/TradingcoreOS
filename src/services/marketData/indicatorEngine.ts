@@ -1,4 +1,5 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
+import { buildTradingCoreVStructure } from './structureEngine';
 
 export type IndicatorKind =
   | 'EMA' | 'SMA' | 'HMA' | 'VWAP' | 'Bollinger Bands' | 'Keltner Channels' | 'Donchian Channels'
@@ -279,7 +280,21 @@ export function classicPivots(c: HistoricalCandle[]): Array<{value:number;label:
   return [{value:p,label:'P'},{value:p+r,label:'R1'},{value:p+2*r,label:'R2'},{value:p+3*r,label:'R3'},{value:p-r,label:'S1'},{value:p-2*r,label:'S2'},{value:p-3*r,label:'S3'}];
 }
 
-export function dynamicSupportResistance(c: HistoricalCandle[], swing=5): SRPoint[] { const out:SRPoint[]=[]; for(let i=swing;i<c.length-swing;i++){const w=c.slice(i-swing,i+swing+1),hi=Math.max(...w.map(x=>x.high)),lo=Math.min(...w.map(x=>x.low)); if(c[i].high===hi) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,side:'resistance'}); if(c[i].low===lo) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,side:'support'});} return out.slice(-20); }
+export function dynamicSupportResistance(c: HistoricalCandle[], swing=5): SRPoint[] {
+  const structure = buildTradingCoreVStructure(c, {
+    fractalPeriod: Math.max(2, swing),
+    lookback: Math.min(800, Math.max(100, c.length)),
+    maxLevels: 20,
+  });
+  return structure.levels
+    .map(level => ({
+      time: level.time,
+      price: level.price,
+      side: level.side,
+    }))
+    .sort((a, b) => a.price - b.price)
+    .slice(-20);
+}
 export type SweepPoint={time:number;price:number;side:'buy-side'|'sell-side'};
 export function liquiditySweeps(c: HistoricalCandle[], swing=5): SweepPoint[] { const out:SweepPoint[]=[]; for(let i=swing;i<c.length;i++){const prev=c.slice(Math.max(0,i-swing),i),hi=Math.max(...prev.map(x=>x.high)),lo=Math.min(...prev.map(x=>x.low)); if(c[i].high>hi&&c[i].close<hi) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,side:'buy-side'}); if(c[i].low<lo&&c[i].close>lo) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,side:'sell-side'});} return out.slice(-30); }
 export function orderBlocks(c: HistoricalCandle[], _swing=5): ZonePoint[] { const out:ZonePoint[]=[]; for(let i=2;i<c.length;i++){const body=Math.abs(c[i].close-c[i].open),prevBody=Math.abs(c[i-1].close-c[i-1].open); if(body>prevBody*1.8){ const base=c[i-1]; out.push({time:Math.floor(new Date(base.timestamp).getTime()/1000),upper:Math.max(base.open,base.close),lower:Math.min(base.open,base.close),kind:c[i].close>c[i].open?'bullish':'bearish'}); }} return out.slice(-30); }

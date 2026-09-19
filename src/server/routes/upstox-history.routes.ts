@@ -49,11 +49,15 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
   const interval = String(req.query.interval || '').trim();
   const config = intervalConfig[interval];
   const instrumentKey = String(req.query.instrument_key || '').trim();
-  const requestedLimit = Number(req.query.limit || 50_000);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(50_000, Math.floor(requestedLimit))) : 50_000;
+  const beforeRaw = String(req.query.before || '').trim();
+  const beforeDate = beforeRaw ? new Date(beforeRaw) : null;
+  if (beforeRaw && (!beforeDate || !Number.isFinite(beforeDate.getTime()))) { res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' }); return; }
+  const requestedLimit = Number(req.query.limit || (beforeDate ? 5_000 : 10_000));
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(beforeDate ? 5_000 : 10_000, Math.floor(requestedLimit))) : (beforeDate ? 5_000 : 10_000);
+  const maxChartHistory = 30_000;
   if (!config || !instrumentKey) { res.status(400).json({ success: false, error: 'instrument_key and a supported interval are required' }); return; }
 
-  const key = `${userId}:upstox:${instrumentKey}:${interval}:${limit}`;
+  const key = `${userId}:upstox:${instrumentKey}:${interval}:${limit}:${beforeDate?.toISOString() || 'latest'}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader('Cache-Control', 'private, max-age=20');
@@ -78,11 +82,12 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
       // Upstox enforces a maximum date window per historical request. Walk
       // backwards one broker-safe window at a time until we have 50k candles
       // (or the broker stops returning older data).
-      let end = new Date();
+      let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       let all: any[] = [];
       let emptyWindows = 0;
       const maxLookbackDays = config.unit === 'days' ? 365 * 250 : 365 * 25;
-      for (let lookedBack = 0; lookedBack < maxLookbackDays && all.length < limit && emptyWindows < 2; lookedBack += config.lookbackDays) {
+      const maxWindows = beforeDate ? 1 : Math.ceil(maxLookbackDays / config.lookbackDays);
+      for (let lookedBack = 0; lookedBack < maxLookbackDays && all.length < limit && emptyWindows < 2 && (beforeDate ? lookedBack === 0 : lookedBack < maxWindows * config.lookbackDays); lookedBack += config.lookbackDays) {
         const from = new Date(end.getTime() - config.lookbackDays * 86_400_000);
         const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${isoDate(end)}/${isoDate(from)}`;
         try {
@@ -110,7 +115,7 @@ upstoxHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedReques
     inflight.set(key, task);
     const candles = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
+    return res.json({ success: true, data: candles, requested: limit, returned: candles.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: candles[0]?.timestamp || null, hasMore: Boolean(candles.length) });
   } catch (error: any) {
     return res.status(502).json({ success: false, error: error?.message || 'Unable to load Upstox historical candles' });
   } finally {

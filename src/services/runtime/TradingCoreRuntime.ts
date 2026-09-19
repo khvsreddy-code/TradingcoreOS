@@ -144,7 +144,7 @@ export class TradingCoreRuntime {
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
-    const key = `${brokerId}:${symbol}:${timeframe}:50000`;
+    const key = `${brokerId}:${symbol}:${timeframe}:initial-10000`;
     const cached = this.historyCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.data;
     const generationAtStart = this.routeGeneration;
@@ -158,10 +158,30 @@ export class TradingCoreRuntime {
       if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
       byTime.set(time, row);
     }
-    const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-50_000);
+    const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-30_000);
     if (history.length) this.historyCache.set(key, { data: history, expiresAt: Date.now() + 30_000 });
     coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
     return history;
+  }
+
+  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
+    const brokerInfo = this.getPrimaryBrokerInfo();
+    const broker = this.getPrimaryBroker();
+    const brokerId = brokerInfo?.brokerId?.toLowerCase();
+    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
+    const generationAtStart = this.routeGeneration;
+    if (!broker.getHistoricalDataBefore) return [];
+    const rows = await broker.getHistoricalDataBefore(symbol, timeframe, beforeTimestamp, limit);
+    if (generationAtStart !== this.routeGeneration || this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() !== brokerId) return [];
+    const byTime = new Map<number, HistoricalCandle>();
+    for (const row of rows || []) {
+      const raw = (row as any)?.timestamp;
+      const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
+      const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
+      if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
+      byTime.set(time, row);
+    }
+    return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
   }
   public subscribeTicks(symbols: string[], callback: (tick: any) => void): () => void { return this.subscribeMarketData(symbols, (event) => { if (event.type === 'tick' && event.tick) callback(event.tick); }); }
   public subscribeMarketData(instrumentKeys: string[], listener: (event: MarketFeedEvent) => void, depthInstrumentKey?: string): () => void {

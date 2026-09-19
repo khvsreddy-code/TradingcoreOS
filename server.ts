@@ -59,8 +59,8 @@ app.use('/api/trading', workspaceFixRoutes);
 // Historical routes are deliberately mounted before brokerMarketDataRoutes so
 // the quota-safe implementations take precedence over legacy adapter paths.
 app.use('/api/trading', fyersHistoryRoutes);
-app.use('/api/trading', brokerMarketDataRoutes);
 app.use('/api/trading', upstoxHistoryRoutes);
+app.use('/api/trading', brokerMarketDataRoutes);
 // Portfolio snapshots are also mounted before the generic trading route so the
 // serialized/cached implementation is used instead of the old Promise.all fan-out.
 app.use('/api/trading', portfolioSnapshotRoutes);

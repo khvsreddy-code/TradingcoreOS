@@ -127,6 +127,8 @@ export interface BrokerAdapter {
   fetchTradeHistory(): Promise<TradeRecord[]>;
   getMarketData(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>>;
   getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]>;
+  /** Load an older history page ending before the supplied timestamp. */
+  getHistoricalDataBefore?(symbol: string, timeframe: string, beforeTimestamp: string, limit?: number): Promise<HistoricalCandle[]>;
   placeOrder(order: OrderRequest): Promise<OrderResult>;
   modifyOrder(orderId: string, updates: Partial<OrderRequest>): Promise<OrderResult>;
   cancelOrder(orderId: string): Promise<{ success: boolean; message?: string }>;

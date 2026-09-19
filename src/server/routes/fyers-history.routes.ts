@@ -7,8 +7,11 @@ import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 /**
  * Safe FYERS historical-data route.
  *
- * History is loaded in broker-safe date windows and merged until the chart
- * target is reached. The browser/runtime target is 50,000 candles; if the
+ * History is loaded in broker-safe date windows. The chart starts with 10,000
+ * candles and requests older pages lazily as the user pans left, up to a 30,000
+ * candle chart cache. If the broker cannot provide that much, valid history is
+ * returned instead of fabricating data. The browser/runtime target is therefore
+ * progressive rather than one large first-paint request. If the
  * broker or request quota cannot provide that much, the valid available
  * history is returned instead of fabricating data or blanking the chart.
  */
@@ -104,14 +107,21 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '').trim();
   const resolution = resolutionMap[interval] || interval;
-  const requested = Number(req.query.limit || 50_000);
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(50_000, Math.floor(requested))) : 50_000;
+  const beforeRaw = String(req.query.before || '').trim();
+  const beforeDate = beforeRaw ? new Date(beforeRaw) : null;
+  if (beforeRaw && (!beforeDate || !Number.isFinite(beforeDate.getTime()))) {
+    res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' });
+    return;
+  }
+  const requested = Number(req.query.limit || (beforeDate ? 5_000 : 10_000));
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 5_000 : 10_000, Math.floor(requested))) : (beforeDate ? 5_000 : 10_000);
+  const maxChartHistory = 30_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
   }
 
-  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}`;
+  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}:${beforeDate?.toISOString() || 'latest'}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader('Cache-Control', 'private, max-age=20');
@@ -139,11 +149,15 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // candles; broker availability is the hard ceiling.
       const chunkDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 90;
       const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
-      let end = new Date();
+      // Initial load can walk backwards to assemble 10k. A lazy page is exactly
+      // one broker-safe window ending before the requested cursor, avoiding the
+      // request-limit burst that caused the blank chart.
+      let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
       let data: any[] = [];
       let emptyWindows = 0;
+      const maxWindows = beforeDate ? 1 : Math.ceil(maxLookbackDays / chunkDays);
 
-      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < limit && emptyWindows < 2; lookedBack += chunkDays) {
+      for (let lookedBack = 0; lookedBack < maxLookbackDays && data.length < limit && emptyWindows < 2 && (beforeDate ? lookedBack === 0 : lookedBack < maxWindows * chunkDays); lookedBack += chunkDays) {
         const from = new Date(end.getTime() - chunkDays * 86_400_000);
         const params = new URLSearchParams({
           symbol: instrumentKey,
@@ -182,6 +196,11 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
         if (seed.length) data = seed;
       }
+      if (!data.length) {
+        if (beforeDate) return [];
+        const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
+        if (seed.length) data = seed;
+      }
       if (!data.length) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
@@ -189,7 +208,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data, requested: limit, returned: data.length, liveSeed: data.length === 1 && data[0]?.liveSeed === true });
+    res.json({ success: true, data, requested: limit, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length && !data[0]?.liveSeed) });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
   } finally {
