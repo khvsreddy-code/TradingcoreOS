@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Code2, Play, Save, RotateCcw, CheckCircle2, AlertTriangle, BookOpen, Zap } from 'lucide-react';
 import { WorkspaceModuleShell, ModuleHeader, Panel, WorkspaceRoute } from '../components/workspace/WorkspaceModuleShell';
 import { compileCoreSpirit } from '../services/coreSpirit';
+import { loadEditorScript, saveEditorScript } from '../services/coreSpirit/cloudPersistence';
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
@@ -34,13 +35,28 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [source, setSource] = useState(() => localStorage.getItem('tradingcore:corespirit:editor') || DEFAULT_SOURCE);
   const [diagnostics, setDiagnostics] = useState<Array<{ severity: string; message: string; line?: number }>>([]);
   const [compiled, setCompiled] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<'local' | 'loading' | 'saved' | 'error'>('local');
+  const [cloudScriptId, setCloudScriptId] = useState<string | null>(null);
+  const [lastCompile, setLastCompile] = useState<any>(null);
   const lines = useMemo(() => Array.from({ length: lineCount(source) }, (_, i) => i + 1), [source]);
+
+  useEffect(() => {
+    let active = true;
+    loadEditorScript().then((script) => {
+      if (!active || !script) return;
+      setSource(script.source || DEFAULT_SOURCE);
+      setCloudScriptId(script.id);
+      setCloudStatus('saved');
+    }).catch(() => { if (active) setCloudStatus('local'); });
+    return () => { active = false; };
+  }, []);
 
   const compile = () => {
     try {
       const result = compileCoreSpirit(source, 'editor-preview');
       const next = (result.diagnostics || []).map((d: any) => ({ severity: String(d.severity || 'error'), message: String(d.message || d), line: d.line }));
       setDiagnostics(next);
+      setLastCompile(result);
       setCompiled(Boolean(result.ir && !next.some(x => x.severity === 'error')));
     } catch (error: any) {
       setDiagnostics([{ severity: 'error', message: String(error?.message || error) }]);
@@ -48,9 +64,18 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     }
   };
 
-  const save = () => {
+  const save = async () => {
     localStorage.setItem('tradingcore:corespirit:editor', source);
-    setDiagnostics([{ severity: 'info', message: 'Saved locally. Cloud script storage will be added to the CoreSpirit workspace layer.' }]);
+    setCloudStatus('loading');
+    try {
+      const result = await saveEditorScript(source, lastCompile || undefined);
+      setCloudScriptId(result.script.id);
+      setCloudStatus('saved');
+      setDiagnostics([{ severity: 'info', message: `Saved CoreSpirit v${result.version.version} to cloud.` }]);
+    } catch (error: any) {
+      setCloudStatus('error');
+      setDiagnostics([{ severity: 'info', message: `Saved locally. Cloud save unavailable: ${String(error?.message || error)}` }]);
+    }
   };
 
   return <WorkspaceModuleShell active="/corespirit" onNavigate={onNavigate} onBackToLanding={onBackToLanding} onBroker={onBroker}>
@@ -61,7 +86,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
           <div className="w-12 shrink-0 select-none overflow-hidden border-r border-[#1b1f2a] bg-[#0a0c12] py-3 text-right text-[#475569]">{lines.map(n => <div key={n} className="h-[20px] pr-3 leading-[20px]">{n}</div>)}</div>
           <textarea value={source} onChange={e => { setSource(e.target.value); setCompiled(false); }} spellCheck={false} className="h-full min-w-0 flex-1 resize-none bg-transparent p-3 leading-[20px] text-[#dbe4ee] outline-none" aria-label="CoreSpirit source editor" />
         </div>
-        <div className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#10b981]/30 text-[#10b981]' : 'border-[#303747] text-[#64748b]'}`}>{compiled ? 'COMPILED' : 'EDITING'}</span><span className="text-[#475569]">CoreSpirit compiler / IR</span></div>
+        <div className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#10b981]/30 text-[#10b981]' : 'border-[#303747] text-[#64748b]'}`}>{compiled ? 'COMPILED' : 'EDITING'}</span><span className="text-[#475569]">CoreSpirit compiler / IR</span><span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#10b981]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[#64748b]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
         {diagnostics.length > 0 && <div className="mt-3 space-y-1 rounded-lg border border-[#222636] bg-[#090b11] p-3">{diagnostics.map((d, i) => <div key={i} className="flex gap-2 text-[10px] leading-5"><span className={d.severity === 'error' ? 'text-[#ef4444]' : 'text-[#10b981]'}>{d.severity === 'error' ? <AlertTriangle className="mt-0.5 h-3 w-3"/> : <CheckCircle2 className="mt-0.5 h-3 w-3"/>}</span><span className="text-[#94a3b8]">{d.line ? `Line ${d.line}: ` : ''}{d.message}</span></div>)}</div>}
       </Panel>
 

@@ -1026,3 +1026,21 @@ The source changes were made against the v13 archive. A full TypeScript/Vite pro
 - [ ] Run automated rapid-switch stress against a connected broker and record p50/p95 switch-to-paint telemetry.
 - [ ] CoreSpirit type inference/series semantics, arrays/maps, `once`, methods/objects and richer inputs.
 - [ ] Side-by-side coder autocomplete/formatter/hot reload.
+
+## TradingCoreOS v17 — Supabase CoreSpirit persistence
+
+### Completed
+- Added cloud persistence service for CoreSpirit scripts.
+- Added versioned source + compiled IR persistence.
+- Added SHA-256 source hashes and compiler version metadata.
+- Added editor cloud-load on startup when authenticated.
+- Added cloud save with localStorage fallback when unauthenticated/unavailable.
+- Added execution-run persistence API for future chart/alert/backtest/automation integration.
+- Reused existing Supabase CoreSpirit tables instead of duplicating schema.
+
+### Next
+- Connect deployments to actual chart/alert/automation lifecycle.
+- Persist compile/execution runs from the worker/runtime without blocking chart paint.
+- Add CoreSpirit script list/version browser.
+- Add Supabase Realtime only for low-frequency deployment/run status.
+- Add Storage-backed model/artifact integration where useful.
