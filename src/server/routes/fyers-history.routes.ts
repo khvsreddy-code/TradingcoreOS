@@ -74,10 +74,18 @@ function indiaDate(date: Date): string {
 // no_data for a weekend endpoint even though the preceding session has data.
 // Resolve the end date to the latest completed Indian market weekday.
 function latestTradingDate(date: Date): Date {
+  // Walk backwards until the date is actually a Monday-Friday trading weekday.
+  // A single -1 day adjustment is wrong on Sunday (it lands on Saturday), which
+  // was the remaining reason NIFTY50 could return no_data while another index
+  // appeared healthy from cache/series behaviour. Keep this calendar-only;
+  // exchange holidays are handled by the broker returning the available candles.
   const d = new Date(date);
-  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' }).format(d);
-  if (weekday === 'Sun') d.setUTCDate(d.getUTCDate() - 1);
-  else if (weekday === 'Sat') d.setUTCDate(d.getUTCDate() - 1);
+  const weekdayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' });
+  for (let i = 0; i < 7; i += 1) {
+    const weekday = weekdayFormatter.format(d);
+    if (weekday !== 'Sat' && weekday !== 'Sun') return d;
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
   return d;
 }
 
