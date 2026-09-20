@@ -25,7 +25,7 @@ import { IndicatorConfig, INDICATOR_LIBRARY, PRICE_SOURCES, defaultIndicatorStyl
 
 const intervals: Record<string,string> = {'1m':'1minute','3m':'3minute','5m':'5minute','15m':'15minute','30m':'30minute','1H':'60minute','1D':'day'};
 const HISTORY_TARGET_CANDLES=25_000;
-const historyPageCandles=(tf:string)=>({'1m':30000,'3m':15000,'5m':10000,'15m':10000,'30m':6000,'1H':3000,'1D':500}[tf]||5000);
+const historyPageCandles=(tf:string)=>({'1m':30000,'3m':20000,'5m':15000,'15m':12000,'30m':8000,'1H':6000,'1D':5000}[tf]||8000);
 const MAX_HISTORY_CANDLES=50_000;
 const HISTORY_PREFETCH_THRESHOLD=1_000;
 const canonicalInstrumentKey=(brokerId:string,key:string)=>{
@@ -563,7 +563,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
  const extendHistoryInBackground=async()=>{
    if(dead||!historyReady||candles.current.length>=HISTORY_TARGET_CANDLES||historyRequestInFlight)return;
    let guard=0;
-   while(!dead&&lifecycle.current.isCurrent(generation)&&candles.current.length<HISTORY_TARGET_CANDLES&&guard<24){
+   while(!dead&&lifecycle.current.isCurrent(generation)&&candles.current.length<HISTORY_TARGET_CANDLES&&guard<48){
      guard+=1;
      const oldest=candles.current[0];
      if(!oldest?.timestamp)break;

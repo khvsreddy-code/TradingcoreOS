@@ -1,14 +1,14 @@
 export type CoreSpiritTokenType =
   | 'identifier' | 'number' | 'string' | 'true' | 'false' | 'null'
-  | 'let' | 'if' | 'else' | 'and' | 'or'
+  | 'let' | 'if' | 'else' | 'type' | 'and' | 'or'
   | 'plus' | 'minus' | 'star' | 'slash' | 'percent' | 'bang'
   | 'equal' | 'equalEqual' | 'bangEqual' | 'less' | 'lessEqual' | 'greater' | 'greaterEqual'
   | 'leftParen' | 'rightParen' | 'leftBracket' | 'rightBracket' | 'leftBrace' | 'rightBrace'
-  | 'comma' | 'semicolon' | 'eof';
+  | 'comma' | 'semicolon' | 'colon' | 'dot' | 'eof';
 
 export type CoreSpiritToken = { type: CoreSpiritTokenType; lexeme: string; value?: string | number | boolean | null; offset: number; line: number; column: number };
 
-const keywords: Record<string, CoreSpiritTokenType> = { let: 'let', if: 'if', else: 'else', true: 'true', false: 'false', null: 'null', and: 'and', or: 'or' };
+const keywords: Record<string, CoreSpiritTokenType> = { let: 'let', if: 'if', else: 'else', type: 'type', true: 'true', false: 'false', null: 'null', and: 'and', or: 'or' };
 
 export class CoreSpiritLexer {
   private i = 0; private line = 1; private column = 1;
@@ -33,7 +33,7 @@ export class CoreSpiritLexer {
   private identifier(): CoreSpiritToken { const s=this.pos(); while(/[A-Za-z0-9_]/.test(this.peek())) this.advance(); const lex=this.source.slice(s.offset,this.i); const type=keywords[lex]??'identifier'; const value=type==='true'?true:type==='false'?false:type==='null'?null:undefined; return {...s,type,lexeme:lex,value}; }
   private number(): CoreSpiritToken { const s=this.pos(); if(this.peek()==='0'&&(this.peek(1)==='x'||this.peek(1)==='X')){this.advance();this.advance();while(/[0-9a-fA-F]/.test(this.peek()))this.advance();}else{while(/[0-9]/.test(this.peek()))this.advance();if(this.peek()==='.'&&/[0-9]/.test(this.peek(1))){this.advance();while(/[0-9]/.test(this.peek()))this.advance();}if(this.peek().toLowerCase()==='e'){this.advance();if(this.peek()==='+'||this.peek()==='-')this.advance();while(/[0-9]/.test(this.peek()))this.advance();}} const lex=this.source.slice(s.offset,this.i); const value=Number(lex); if(!Number.isFinite(value)) throw new CoreSpiritSyntaxError('Invalid number',s); return {...s,type:'number',lexeme:lex,value}; }
   private string(): CoreSpiritToken { const s=this.pos(); const quote=this.advance(); let value=''; while(!this.atEnd()&&this.peek()!==quote){ if(this.peek()==='\\'){this.advance(); const e=this.advance(); value+=e==='n'?'\n':e==='r'?'\r':e==='t'?'\t':e; } else value+=this.advance(); } if(this.atEnd()) throw new CoreSpiritSyntaxError('Unterminated string',s); this.advance(); return {...s,type:'string',lexeme:this.source.slice(s.offset,this.i),value}; }
-  private symbol(): CoreSpiritToken { const s=this.pos(); const c=this.advance(); const two=c+this.peek(); const pairs:Record<string,CoreSpiritTokenType>={'==':'equalEqual','!=':'bangEqual','<=':'lessEqual','>=':'greaterEqual'}; if(pairs[two]){this.advance();return {...s,type:pairs[two],lexeme:two};} const one:Record<string,CoreSpiritTokenType>={'+':'plus','-':'minus','*':'star','/':'slash','%':'percent','!':'bang','=':'equal','<':'less','>':'greater','(':'leftParen',')':'rightParen','[':'leftBracket',']':'rightBracket','{':'leftBrace','}':'rightBrace',',':'comma',';':'semicolon'}; const type=one[c]; if(!type) throw new CoreSpiritSyntaxError(`Unexpected character '${c}'`,s); return {...s,type,lexeme:c}; }
+  private symbol(): CoreSpiritToken { const s=this.pos(); const c=this.advance(); const two=c+this.peek(); const pairs:Record<string,CoreSpiritTokenType>={'==':'equalEqual','!=':'bangEqual','<=':'lessEqual','>=':'greaterEqual'}; if(pairs[two]){this.advance();return {...s,type:pairs[two],lexeme:two};} const one:Record<string,CoreSpiritTokenType>={'+':'plus','-':'minus','*':'star','/':'slash','%':'percent','!':'bang','=':'equal','<':'less','>':'greater','(':'leftParen',')':'rightParen','[':'leftBracket',']':'rightBracket','{':'leftBrace','}':'rightBrace',',':'comma',';':'semicolon',':':'colon','.':'dot'}; const type=one[c]; if(!type) throw new CoreSpiritSyntaxError(`Unexpected character '${c}'`,s); return {...s,type,lexeme:c}; }
   private skipLineComment(){while(!this.atEnd()&&this.peek()!=='\n')this.advance();}
   private skipBlockComment(){const start=this.pos();this.advance();this.advance();while(!this.atEnd()){if(this.peek()==='*'&&this.peek(1)==='/'){this.advance();this.advance();return;}this.advance();}throw new CoreSpiritSyntaxError('Unterminated block comment',start);}
   private advanceWhitespace(){this.advance();}

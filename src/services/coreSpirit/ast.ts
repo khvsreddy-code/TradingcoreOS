@@ -11,7 +11,9 @@ export type CoreSpiritAstNode =
   | CoreSpiritUnaryNode
   | CoreSpiritBinaryNode
   | CoreSpiritCallNode
-  | CoreSpiritIndexNode;
+  | CoreSpiritIndexNode
+  | CoreSpiritMemberNode
+  | CoreSpiritTypeDeclarationNode;
 
 export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritLetNode = { type: 'let'; name: string; expression: CoreSpiritAstNode; span?: CoreSpiritSpan };
@@ -23,6 +25,9 @@ export type CoreSpiritUnaryNode = { type: 'unary'; operator: '-' | '!' | '+'; op
 export type CoreSpiritBinaryNode = { type: 'binary'; operator: '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '<=' | '>' | '>=' | 'and' | 'or'; left: CoreSpiritAstNode; right: CoreSpiritAstNode; span?: CoreSpiritSpan };
 export type CoreSpiritCallNode = { type: 'call'; name: string; args: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritIndexNode = { type: 'index'; target: CoreSpiritAstNode; index: CoreSpiritAstNode; span?: CoreSpiritSpan };
+export type CoreSpiritMemberNode = { type: 'member'; target: CoreSpiritAstNode; member: string; span?: CoreSpiritSpan };
+export type CoreSpiritTypeField = { name: string; typeName: string; span?: CoreSpiritSpan };
+export type CoreSpiritTypeDeclarationNode = { type: 'typeDeclaration'; name: string; fields: CoreSpiritTypeField[]; span?: CoreSpiritSpan };
 
 export type CoreSpiritSpan = { start: number; end: number; line: number; column: number };
 

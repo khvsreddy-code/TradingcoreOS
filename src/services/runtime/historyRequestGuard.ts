@@ -18,6 +18,7 @@ type SharedRequest = {
   promise: Promise<any[]>;
   consumers: number;
   settled: boolean;
+  abortTimer?: ReturnType<typeof setTimeout>;
 };
 
 if (!(runtime as any)[installedKey]) {
@@ -47,12 +48,24 @@ if (!(runtime as any)[installedKey]) {
 
   const withConsumer = (shared: SharedRequest, callerSignal?: AbortSignal): Promise<any[]> => {
     shared.consumers += 1;
+    if (shared.abortTimer) { clearTimeout(shared.abortTimer); shared.abortTimer = undefined; }
     let released = false;
     const release = () => {
       if (released) return;
       released = true;
       shared.consumers = Math.max(0, shared.consumers - 1);
-      if (!shared.settled && shared.consumers === 0) shared.controller.abort();
+      if (!shared.settled && shared.consumers === 0 && !shared.abortTimer) {
+        // Keep the underlying history request alive briefly after the last
+        // chart waiter leaves. Rapid symbol/timeframe switches commonly
+        // return to the same dataset within a few hundred milliseconds;
+        // aborting immediately throws away a nearly-complete broker response
+        // and recreates the exact blank-chart behavior the legacy runtime did
+        // not have.
+        shared.abortTimer = setTimeout(() => {
+          shared.abortTimer = undefined;
+          if (!shared.settled && shared.consumers === 0) shared.controller.abort();
+        }, 1800);
+      }
     };
     if (callerSignal?.aborted) {
       release();
@@ -122,6 +135,7 @@ if (!(runtime as any)[installedKey]) {
 
     shared.promise = request.finally(() => {
       shared.settled = true;
+      if (shared.abortTimer) { clearTimeout(shared.abortTimer); shared.abortTimer = undefined; }
       if (inFlight.get(key) === shared) inFlight.delete(key);
     });
     inFlight.set(key, shared);

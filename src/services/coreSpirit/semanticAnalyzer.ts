@@ -12,6 +12,7 @@ const comparisonOps=new Set(['==','!=','<','<=','>','>=']);
 export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
   const diagnostics:CoreSpiritDiagnostic[]=[];
   const symbols=new Map<string,CoreSpiritType>();
+  const udts=new Map<string,CoreSpiritUdt>();
   let maxLookback=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code});
 
@@ -25,6 +26,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
         if (seriesNames.has(n.name)) return 'series<number>';
         if (n.name==='na') return 'null';
         return scope.get(n.name) || 'unknown';
+      case 'member': {
+        const target=infer(n.target,scope);
+        if(!target.startsWith('udt:')) { report(n,`'${target}' has no fields`,'TYPE_MEMBER_TARGET'); return 'unknown'; }
+        const udt=udts.get(target.slice(4)); const field=udt?.fields.find(f=>f.name===n.member);
+        if(!field) report(n,`Type '${target.slice(4)}' has no member '${n.member}'`,'UNKNOWN_MEMBER');
+        return field?.type || 'unknown';
+      }
       case 'index': {
         const target=infer(n.target,scope); return target.startsWith('series<') ? target.slice(7,-1) as CoreSpiritType : target;
       }
@@ -89,6 +97,12 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
   const visit=(n:CoreSpiritAstNode, scope=new Map(symbols))=>{
     switch(n.type){
       case 'program': n.body.forEach(x=>visit(x,scope)); break;
+      case 'typeDeclaration': {
+        if(udts.has(n.name)) report(n,`Type '${n.name}' is already declared`,'DUPLICATE_TYPE');
+        const fields=n.fields.map(f=>({name:f.name,type:mapDeclaredType(f.typeName)}));
+        udts.set(n.name,{name:n.name,fields});
+        break;
+      }
       case 'let':
         if(symbols.has(n.name)) report(n,`Variable '${n.name}' is already declared`,'DUPLICATE_VARIABLE');
         const type=infer(n.expression,scope); visit(n.expression,scope); symbols.set(n.name,type); scope.set(n.name,type); break;
@@ -99,6 +113,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
         n.thenBranch.forEach(x=>visit(x,new Map(scope))); n.elseBranch?.forEach(x=>visit(x,new Map(scope))); break;
       }
       case 'identifier': if(!scope.has(n.name)&&!seriesNames.has(n.name)&&!specialIdentifiers.has(n.name)) report(n,`Unknown identifier '${n.name}'`,'UNKNOWN_IDENTIFIER'); break;
+      case 'member': {
+        const target=infer(n.target,scope);
+        if(!target.startsWith('udt:')) { report(n,`'${target}' has no fields`,'TYPE_MEMBER_TARGET'); return 'unknown'; }
+        const udt=udts.get(target.slice(4)); const field=udt?.fields.find(f=>f.name===n.member);
+        if(!field) report(n,`Type '${target.slice(4)}' has no member '${n.member}'`,'UNKNOWN_MEMBER');
+        return field?.type || 'unknown';
+      }
       case 'index': {
         visit(n.target,scope); visit(n.index,scope); const constantIndex=constantNumber(n.index);
         if(constantIndex!==undefined&&Number.isInteger(constantIndex)){
@@ -114,8 +135,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
       default: break;
     }
   };
+  const mapDeclaredType=(name:string):CoreSpiritType=>{
+    if(name==='number'||name==='float'||name==='int') return 'number';
+    if(name==='bool'||name==='boolean') return 'boolean';
+    if(name==='string') return 'string';
+    if(name==='null'||name==='na') return 'null';
+    if(name.startsWith('array<')) return name as CoreSpiritType;
+    return `udt:${name}`;
+  };
   const visitCall=(n:Extract<CoreSpiritAstNode,{type:'call'}>,scope:Map<string,CoreSpiritType>)=>{n.args.forEach(x=>visit(x,scope));infer(n,scope);};
   const constantNumber=(n:CoreSpiritAstNode):number|undefined=>{if(n.type==='number')return n.value as number;if(n.type==='unary'){const v=constantNumber(n.operand);if(v===undefined)return undefined;if(n.operator==='-')return -v;if(n.operator==='+')return v;}return undefined;};
   visit(ast);
-  return {diagnostics,symbols,maxLookback};
+  return {diagnostics,symbols,udts,maxLookback};
 }

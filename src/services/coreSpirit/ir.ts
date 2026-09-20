@@ -14,4 +14,6 @@ export type CoreSpiritIrInstruction =
   | { op:'jump'; target:number }
   | { op:'emit'; kind:'plot'|'marker'|'label'|'labelAt'|'line'|'zone'|'box'|'band'|'fill'|'gradient'|'arrow'|'shape'|'heatmap'|'polyline'|'hline'|'bg'|'barcolor'|'table'|'signal'|'entry'|'exit'|'alert'|'webhook'; args:string[]; outputId?:string };
 export type CoreSpiritIrBlock = { instructions:CoreSpiritIrInstruction[] };
-export type CoreSpiritIrProgram = { version:1; sourceId:string; entry:CoreSpiritIrBlock; locals:string[]; maxLookback:number; diagnostics:string[] };
+export type CoreSpiritSourceMapEntry = { instruction:number; start:number; end:number; line:number; column:number; kind:string };
+export type CoreSpiritSourceMap = { version:1; sourceId:string; entries:CoreSpiritSourceMapEntry[] };
+export type CoreSpiritIrProgram = { version:1; sourceId:string; entry:CoreSpiritIrBlock; locals:string[]; maxLookback:number; diagnostics:string[]; sourceMap:CoreSpiritSourceMap };

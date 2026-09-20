@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, Play, Save, RotateCcw, CheckCircle2, AlertTriangle, BookOpen, Zap } from 'lucide-react';
 import { WorkspaceModuleShell, ModuleHeader, Panel, WorkspaceRoute } from '../components/workspace/WorkspaceModuleShell';
-import { CoreSpiritEditorModel } from '../services/coreSpirit';
+import { CoreSpiritEditorModel, mountCoreSpiritMonaco, type CoreSpiritMonacoAdapter } from '../services/coreSpirit';
 import { coreSpiritChartRegistry } from '../services/coreSpirit/chartRegistry';
 import { loadEditorScript, saveEditorScript, saveExecutionRun } from '../services/coreSpirit/cloudPersistence';
 
@@ -60,6 +60,10 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [editorVersion, setEditorVersion] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [showCompletions, setShowCompletions] = useState(false);
+  const [useMonaco, setUseMonaco] = useState(true);
+  const [monacoStatus, setMonacoStatus] = useState<'loading'|'ready'|'fallback'>('loading');
+  const monacoRef = useRef<HTMLDivElement | null>(null);
+  const monacoAdapterRef = useRef<CoreSpiritMonacoAdapter | null>(null);
   const [completionIndex, setCompletionIndex] = useState(0);
   const lines = useMemo(() => Array.from({ length: lineCount(source) }, (_, i) => i + 1), [source]);
   const editorSnapshot = editorModel.getSnapshot();
@@ -81,6 +85,16 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     }).catch(() => { if (active) setCloudStatus('local'); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active=true;
+    if (!useMonaco || !monacoRef.current) { monacoAdapterRef.current?.dispose(); monacoAdapterRef.current=null; if(active) setMonacoStatus('fallback'); return; }
+    setMonacoStatus('loading');
+    mountCoreSpiritMonaco(monacoRef.current, editorModel, (next)=>{ if(!active)return; editorModel.updateSource(next); setSource(next); setCompiled(false); setEditorVersion(v=>v+1); })
+      .then(adapter=>{ if(!active){adapter.dispose();return;} monacoAdapterRef.current=adapter; setMonacoStatus('ready'); })
+      .catch(()=>{ if(active)setMonacoStatus('fallback'); });
+    return ()=>{active=false;monacoAdapterRef.current?.dispose();monacoAdapterRef.current=null;};
+  }, [useMonaco, editorModel]);
 
   const compile = () => {
     try {
@@ -129,12 +143,13 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   };
 
   return <WorkspaceModuleShell active="/corespirit" onNavigate={onNavigate} onBackToLanding={onBackToLanding} onBroker={onBroker}>
-    <ModuleHeader eyebrow="CoreSpirit IDE" title="CoreSpirit Coder" description="A TradingView-style script workspace for TradingCoreOS. CoreSpirit is intentionally simpler than Pine and is being extended for webhooks, models, custom drawings, multi-symbol data and realtime automation." action={<div className="flex flex-wrap gap-2"><button onClick={save} className="premium-button"><Save className="w-4 h-4"/> Save</button><button onClick={compile} className="premium-button premium-button-primary"><Play className="w-4 h-4"/> Compile</button><button onClick={runOnChart} className="premium-button"><Zap className="w-4 h-4"/> Run on chart</button></div>} />
+    <ModuleHeader eyebrow="CoreSpirit IDE" title="CoreSpirit Coder" description="A TradingView-style script workspace for TradingCoreOS. CoreSpirit is intentionally simpler than Pine and is being extended for webhooks, models, custom drawings, multi-symbol data and realtime automation." action={<div className="flex flex-wrap gap-2"><button onClick={()=>setUseMonaco(v=>!v)} className="premium-button"><Code2 className="w-4 h-4"/>{useMonaco && monacoStatus==='ready' ? 'Classic Editor' : 'Monaco Editor'}</button><button onClick={save} className="premium-button"><Save className="w-4 h-4"/> Save</button><button onClick={compile} className="premium-button premium-button-primary"><Play className="w-4 h-4"/> Compile</button><button onClick={runOnChart} className="premium-button"><Zap className="w-4 h-4"/> Run on chart</button></div>} />
     <main className="grid min-h-[calc(100vh-170px)] gap-4 p-4 md:p-6 xl:grid-cols-[1fr_300px]">
       <Panel title="SCRIPT EDITOR" subtitle="CoreSpirit source • compile first, execute on the active chart in the next editor milestone" className="min-h-[650px] overflow-hidden">
         <div className="flex h-[610px] overflow-hidden rounded-lg border border-[#222636] bg-[#07090e] font-mono text-[12px]">
           <div className="w-12 shrink-0 select-none overflow-hidden border-r border-[#1b1f2a] bg-[#0a0c12] py-3 text-right text-[#475569]">{lines.map(n => <div key={n} className="h-[20px] pr-3 leading-[20px]">{n}</div>)}</div>
           <div className="relative min-w-0 flex-1 overflow-hidden">
+            <div ref={monacoRef} className={`absolute inset-0 z-30 ${useMonaco && monacoStatus !== 'fallback' ? 'block' : 'hidden'}`} />
             <pre ref={highlightRef} aria-hidden className="pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 leading-[20px] text-[#dbe4ee]">{highlighted.map((line,i)=><div key={i} className="h-[20px]">{line}</div>)}</pre>
             <textarea
               ref={editorRef}
@@ -160,7 +175,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
             {showCompletions && completionItems.length > 0 && <div className="absolute left-4 top-14 z-20 w-72 overflow-hidden rounded-lg border border-[#303747] bg-[#0b0f17]/95 shadow-2xl backdrop-blur">{completionItems.map((item,i)=><button key={item.label} onMouseDown={e=>{e.preventDefault(); const ta=editorRef.current; if(!ta)return; const start=ta.selectionStart-(completionState.prefix?.length||0); const snap=editorModel.applyEdit({start,end:ta.selectionStart,text:item.label}); setSource(snap.source); setEditorVersion(v=>v+1); setShowCompletions(false); requestAnimationFrame(()=>{const pos=start+item.label.length; ta.focus(); ta.setSelectionRange(pos,pos);});}} className={`block w-full px-3 py-2 text-left text-[10px] ${i===completionIndex?'bg-[#10b981]/15 text-[#f8fafc]':'text-[#94a3b8]'} hover:bg-[#10b981]/10`}><span className="mr-2 text-[#60a5fa]">{item.kind}</span>{item.label}<span className="ml-2 text-[#475569]">{item.detail}</span></button>)}</div>}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#10b981]/30 text-[#10b981]' : 'border-[#303747] text-[#64748b]'}`}>{compiled ? 'COMPILED' : 'EDITING'}</span><span className="text-[#475569]">CoreSpirit compiler / IR</span><span className="ml-2 text-[#94a3b8]">{runStatus}</span><span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#10b981]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[#64748b]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
+        <div className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#10b981]/30 text-[#10b981]' : 'border-[#303747] text-[#64748b]'}`}>{compiled ? 'COMPILED' : 'EDITING'}</span><span className="text-[#475569]">CoreSpirit compiler / IR</span><span className="text-[#64748b]">{useMonaco ? `Monaco ${monacoStatus}` : 'Classic editor'}</span><span className="ml-2 text-[#94a3b8]">{runStatus}</span><span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#10b981]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[#64748b]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
         {diagnostics.length > 0 && <div className="mt-3 space-y-2 rounded-lg border border-[#222636] bg-[#090b11] p-3">{diagnostics.map((d, i) => { const actions=editorModel.codeActions({message:d.message,line:d.line||1,column:1,severity:d.severity==='error'?'error':'warning'}); return <div key={i} className="rounded-md border border-transparent px-1 py-1 hover:border-[#222636]"><div className="flex gap-2 text-[10px] leading-5"><span className={d.severity === 'error' ? 'text-[#ef4444]' : 'text-[#10b981]'}>{d.severity === 'error' ? <AlertTriangle className="mt-0.5 h-3 w-3"/> : <CheckCircle2 className="mt-0.5 h-3 w-3"/>}</span><span className="text-[#94a3b8]">{d.line ? `Line ${d.line}: ` : ''}{d.message}</span></div>{actions.map(a=><button key={a.title} onClick={()=>{ if(!a.edit)return; const snap=editorModel.applyEdit(a.edit); setSource(snap.source); setEditorVersion(v=>v+1); setCompiled(false); }} className="ml-5 mt-1 text-[9px] text-[#60a5fa] hover:text-[#93c5fd]">{a.title}</button>)}</div>})}</div>}
       </Panel>
 

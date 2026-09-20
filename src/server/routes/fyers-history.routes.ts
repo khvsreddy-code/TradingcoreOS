@@ -111,6 +111,89 @@ function normalize(rows: any[], limit: number): any[] {
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, candle]) => candle).slice(-limit);
 }
 
+
+/**
+ * Build a full history target using broker-safe windows, matching the old
+ * TradingCore behavior that produced a dense first paint. The key difference
+ * from v31 is that the window size is chosen from the requested candle count;
+ * we do not cap every intraday timeframe to one 100-day page. This prevents
+ * higher timeframes (15m/30m/1H) from silently receiving only a fraction of
+ * the requested history.
+ */
+async function fetchFyersHistoryTarget(
+  accessToken: string,
+  symbol: string,
+  resolution: string,
+  target: number,
+  beforeDate?: Date | null,
+  signal?: AbortSignal,
+): Promise<any[]> {
+  const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
+  const maxWindowDays = resolution === 'D' ? 366 : 100;
+  const candleMinutesPerTradingDay = resolution === 'D' ? 1440 : 375;
+  const estimatedTradingDays = Math.max(1, Math.ceil((target * resolutionMinutes) / candleMinutesPerTradingDay));
+  // Use the largest safe broker window whenever possible. This reproduces the
+  // old target-building behavior while avoiding dozens of tiny requests.
+  const windowDays = Math.min(maxWindowDays, Math.max(2, Math.ceil(estimatedTradingDays * 1.15)));
+  const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
+  let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+  let all: any[] = [];
+  let emptyWindows = 0;
+  const maxPages = Math.max(2, Math.ceil(maxLookbackDays / Math.max(1, windowDays)) + 1);
+
+  for (let page = 0; page < maxPages && all.length < target && emptyWindows < 2; page += 1) {
+    if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
+    end = latestTradingDate(end);
+    const from = new Date(end.getTime() - windowDays * 86_400_000);
+    let pageRows: any[] = [];
+    let pageError: any = null;
+    const isNifty50 = symbol === 'NSE:NIFTY50-INDEX';
+    const formats: Array<'0' | '1'> = isNifty50 ? ['0', '1'] : ['1', '0'];
+
+    for (const dateFormat of formats) {
+      try {
+        const params = new URLSearchParams({
+          symbol,
+          resolution,
+          cont_flag: '1',
+          date_format: dateFormat,
+          range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
+          range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
+        });
+        const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+          signal,
+          headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+        });
+        const text = await response.text();
+        let payload: any;
+        try { payload = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
+        const code = Number(payload?.code);
+        if (!response.ok || String(payload?.s || '').toLowerCase() === 'error' || code === 429) {
+          const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
+          err.status = code === 429 || response.status === 429 ? 429 : response.status;
+          throw err;
+        }
+        pageRows = normalize(payload?.candles || [], target);
+        if (pageRows.length) break;
+      } catch (error: any) {
+        pageError = error;
+        if (Number(error?.status) === 429) throw error;
+      }
+    }
+
+    if (pageRows.length) {
+      all = normalize([...pageRows, ...all], target);
+      emptyWindows = 0;
+    } else {
+      if (pageError && all.length === 0) throw pageError;
+      emptyWindows += 1;
+    }
+    end = new Date(from.getTime() - 1000);
+  }
+
+  return normalize(all, target);
+}
+
 const cache = new Map<string, { expiresAt: number; data: any[] }>();
 const inflight = new Map<string, Promise<any[]>>();
 
@@ -169,90 +252,16 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
-      // First paint uses the largest broker-safe window: FYERS documents up to 100 calendar
-      // days per intraday History request and 366 days for daily candles. The client
-      // can then extend toward the 25k target in the background without blocking paint.
-      const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
-      // Size each progressive page so the broker response is close to the requested
-      // candle count instead of slicing a large 100-day response and skipping the
-      // candles that were trimmed from its front. FYERS caps intraday requests at
-      // 100 calendar days, so the computed range is capped there.
-      const estimatedTradingDays = resolution === 'D'
-        ? 366
-        : Math.max(1, Math.ceil((limit * resolutionMinutes) / 375));
-      const windowDays = resolution === 'D' ? 366 : Math.min(100, Math.max(2, Math.ceil(estimatedTradingDays * 1.5)));
-      // Anchor history to a completed Indian trading date. This is especially
-      // important on weekends/holidays: the current wall-clock date can be a
-      // non-trading day and FYERS has returned no_data for some index series
-      // when range_to is such a day.
-      const rawEnd = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
-      const end = latestTradingDate(rawEnd);
-      if (beforeDate && indiaDate(end) >= indiaDate(new Date(beforeDate.getTime()))) {
-        end.setTime(previousTradingDate(new Date(beforeDate.getTime())).getTime());
-      }
-      const from = new Date(end.getTime() - windowDays * 86_400_000);
-      let data: any[] = [];
-      let historyError: any = null;
-      let lastAttempt: any = null;
-
-      const requestHistory = async (dateFormat: '0' | '1'): Promise<any[]> => {
-        const params = new URLSearchParams({
-          symbol: instrumentKey,
-          resolution,
-          cont_flag: '1',
-          date_format: dateFormat,
-          range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
-          range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
-        });
-        lastAttempt = { symbol: instrumentKey, resolution, dateFormat, from: params.get('range_from'), to: params.get('range_to') };
-        const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-          signal,
-          headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-        });
-        const text = await response.text();
-        let payload: any;
-        try { payload = JSON.parse(text); }
-        catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
-        const brokerCode = Number(payload?.code);
-        const brokerStatus = String(payload?.s || '').toLowerCase();
-        if (!response.ok || brokerStatus === 'error' || brokerCode === 429) {
-          const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
-          err.status = brokerCode === 429 || response.status === 429 ? 429 : response.status;
-          err.brokerCode = brokerCode;
-          err.fyersStatus = payload?.s;
-          throw err;
-        }
-        return normalize(payload?.candles || [], limit);
-      };
-
-      // FYERS has had symbol-specific inconsistencies for NIFTY50-INDEX:
-      // date_format=1 has intermittently returned s=no_data while the same
-      // bounded range works with epoch seconds. Use epoch first for NIFTY50,
-      // and the normal yyyy-mm-dd form for other symbols. Do not rotate through
-      // cont_flag variants here: that multiplies broker calls and was the cause
-      // of the request-limit failures seen while switching charts.
-      const isNifty50 = instrumentKey === 'NSE:NIFTY50-INDEX';
-      const formats: Array<'0' | '1'> = isNifty50 ? ['0', '1'] : ['1', '0'];
-      for (const dateFormat of formats) {
-        try {
-          data = await requestHistory(dateFormat);
-          if (data.length) break;
-        } catch (error: any) {
-          historyError = error;
-          if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
-        }
-      }
-
-      // Do not make a third broker request here. If both supported date
-      // encodings return no candles, surface the broker result. This keeps a
-      // ticker switch from turning into a history-request storm.
-      // Never fabricate historical candles. A quote is useful for the watchlist
-      // but it is not historical OHLC and must not be used to make a chart appear
-      // healthy when History API failed.
+      const requestedTarget = Math.max(2, Math.min(beforeDate ? limit : initialHistoryTarget, 50_000));
+      // v31's one-window strategy made higher timeframes look as if history had
+      // disappeared: 100 calendar days only contains ~2.5k 15m candles and ~625
+      // 1H candles. v31 restores target-based history construction. The browser
+      // can still paint a cached dataset immediately; a cold request now returns
+      // the dense target just like the older, proven implementation.
+      data = await fetchFyersHistoryTarget(accessToken, instrumentKey, resolution, requestedTarget, beforeDate, signal);
       if (data.length < 2) {
         if (beforeDate) return [];
-        console.error('[TradingCore][FYERS history] insufficient', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, lastAttempt, error: historyError?.message || null, brokerCode: historyError?.brokerCode ?? null, fyersStatus: historyError?.fyersStatus ?? null });
-        throw historyError || new Error(`Fyers returned no historical candles for ${instrumentKey}.`);
+        throw new Error(`Fyers returned only ${data.length} candle(s) for ${instrumentKey}.`);
       }
       console.info('[TradingCore][FYERS history] loaded', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, requested: limit, target: beforeDate ? null : initialHistoryTarget, returned: data.length, oldest: data[0]?.timestamp || null, newest: data[data.length - 1]?.timestamp || null,  });
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });

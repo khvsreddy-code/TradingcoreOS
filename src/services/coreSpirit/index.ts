@@ -16,3 +16,7 @@ export * from './editorModel';
 export * from './dataCache';
 export * from './timeframeAlignment';
 export * from './footprintScene';
+
+export * from './incrementalAst';
+export * from './hotReload';
+export * from './monacoAdapter';

@@ -17,7 +17,22 @@ export class CoreSpiritParser {
     }
     return {ast:{type:'program',body},diagnostics};
   }
-  private statement():CoreSpiritAstNode { if(this.match('let')) return this.letStatement(); if(this.match('if')) return this.ifStatement(); const expression=this.expression(); this.match('semicolon'); return {type:'expressionStatement',expression,span:this.span(expression)}; }
+  private statement():CoreSpiritAstNode { if(this.match('type')) return this.typeDeclaration(); if(this.match('let')) return this.letStatement(); if(this.match('if')) return this.ifStatement(); const expression=this.expression(); this.match('semicolon'); return {type:'expressionStatement',expression,span:this.span(expression)}; }
+  private typeDeclaration():CoreSpiritAstNode {
+    const start=this.previous();
+    const name=this.consume('identifier','Expected type name');
+    this.consume('leftBrace','Expected { after type name');
+    const fields:any[]=[];
+    while(!this.check('rightBrace')&&!this.check('eof')) {
+      const field=this.consume('identifier','Expected field name');
+      this.consume('colon','Expected : after field name');
+      const typeName=this.consume('identifier','Expected field type');
+      this.match('semicolon');
+      fields.push({name:field.lexeme,typeName:typeName.lexeme,span:this.makeSpan(field,typeName)});
+    }
+    const end=this.consume('rightBrace','Expected } after type declaration');
+    return {type:'typeDeclaration',name:name.lexeme,fields,span:this.makeSpan(start,end)} as any;
+  }
   private letStatement():CoreSpiritAstNode { const name=this.consume('identifier','Expected variable name'); this.consume('equal','Expected = after variable name'); const expression=this.expression(); this.match('semicolon'); return {type:'let',name:name.lexeme,expression,span:this.makeSpan(name,this.previous())}; }
   private ifStatement():CoreSpiritAstNode { const start=this.previous(); this.consume('leftParen','Expected ( after if'); const condition=this.expression(); this.consume('rightParen','Expected ) after condition'); const thenBranch=this.block(); let elseBranch:CoreSpiritAstNode[]|undefined; if(this.match('else')) elseBranch=this.block(); return {type:'if',condition,thenBranch,elseBranch,span:this.makeSpan(start,this.previous())}; }
   private block():CoreSpiritAstNode[]{this.consume('leftBrace','Expected {'); const body:CoreSpiritAstNode[]=[]; while(!this.check('rightBrace')&&!this.check('eof'))body.push(this.statement()); this.consume('rightBrace','Expected }'); return body;}
@@ -29,7 +44,7 @@ export class CoreSpiritParser {
   private term(){let e=this.factor();while(this.match('plus','minus'))e=this.binary(e,this.previous().lexeme,this.factor());return e;}
   private factor(){let e=this.unary();while(this.match('star','slash','percent'))e=this.binary(e,this.previous().lexeme,this.unary());return e;}
   private unary():CoreSpiritAstNode {if(this.match('bang','minus','plus')){const op=this.previous();return {type:'unary',operator:op.lexeme as '!'|'+'|'-',operand:this.unary(),span:this.makeSpan(op,this.previous())};}return this.postfix();}
-  private postfix():CoreSpiritAstNode {let e=this.primary();while(true){if(this.match('leftBracket')){const idx=this.expression();const end=this.consume('rightBracket','Expected ]');e={type:'index',target:e,index:idx,span:this.makeSpanFrom(e,end)};}else if(this.match('leftParen')){const args:CoreSpiritAstNode[]=[];if(!this.check('rightParen')){do{args.push(this.expression());}while(this.match('comma'));}const end=this.consume('rightParen','Expected )');if(e.type!=='identifier')throw this.error('Only named functions can be called');e={type:'call',name:e.name,args,span:this.makeSpanFrom(e,end)};}else break;}return e;}
+  private postfix():CoreSpiritAstNode {let e=this.primary();while(true){if(this.match('leftBracket')){const idx=this.expression();const end=this.consume('rightBracket','Expected ]');e={type:'index',target:e,index:idx,span:this.makeSpanFrom(e,end)};}else if(this.match('dot')){ const member=this.consume('identifier','Expected member name after .'); e={type:'member',target:e,member:member.lexeme,span:this.makeSpanFrom(e,member)}; }else if(this.match('leftParen')){const args:CoreSpiritAstNode[]=[];if(!this.check('rightParen')){do{args.push(this.expression());}while(this.match('comma'));}const end=this.consume('rightParen','Expected )');if(e.type!=='identifier')throw this.error('Only named functions can be called');e={type:'call',name:e.name,args,span:this.makeSpanFrom(e,end)};}else break;}return e;}
   private primary():CoreSpiritAstNode {if(this.match('number'))return {type:'number',value:this.previous().value as number,span:this.tokenSpan(this.previous())};if(this.match('string'))return {type:'string',value:this.previous().value as string,span:this.tokenSpan(this.previous())};if(this.match('true','false'))return {type:'boolean',value:this.previous().value as boolean,span:this.tokenSpan(this.previous())};if(this.match('null'))return {type:'null',value:null,span:this.tokenSpan(this.previous())};if(this.match('identifier'))return {type:'identifier',name:this.previous().lexeme,span:this.tokenSpan(this.previous())};if(this.match('leftParen')){const e=this.expression();this.consume('rightParen','Expected )');return e;}throw this.error('Expected expression');}
   private binary(left:CoreSpiritAstNode,operator:string,right:CoreSpiritAstNode):CoreSpiritAstNode{return {type:'binary',operator:operator as any,left,right,span:this.makeSpanFrom(left,right)};}
   private synchronize(){ while(!this.check('eof')){ if(this.match('semicolon')) return; if(this.check('rightBrace')) return; this.advance(); } }

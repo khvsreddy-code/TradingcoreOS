@@ -10,6 +10,8 @@ export class CoreSpiritCompiler {
     const semantic = analyzeCoreSpirit(ast);
     if (semantic.diagnostics.some(d => d.severity === 'error')) return { diagnostics: semantic.diagnostics };
     const instructions: CoreSpiritIrInstruction[] = [];
+    const sourceMapEntries: Array<{instruction:number;start:number;end:number;line:number;column:number;kind:string}> = [];
+    const mark=(n:CoreSpiritAstNode,before:number)=>{ if(n.span && instructions.length>before) sourceMapEntries.push({instruction:instructions.length-1,start:n.span.start,end:n.span.end,line:n.span.line,column:n.span.column,kind:n.type}); };
     const locals: string[] = [];
     let temp = 0;
 
@@ -35,6 +37,8 @@ export class CoreSpiritCompiler {
           if(['plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','signal','entry','exit','alert','webhook'].includes(n.name)) instructions.push({op:'emit',kind:n.name as any,args:[dest,...args],outputId:`${n.name}:${n.span?.start ?? temp}`});
           return dest;
         }
+        case 'member': throw new Error(`Member access '${n.member}' is not executable yet; use it in the type-aware editor or model layer.`);
+        case 'typeDeclaration': return;
         case 'index': {
           const target=expr(n.target), index=expr(n.index), dest=`t${temp++}`;
           if(n.target.type==='identifier'&&n.index.type==='number'&&typeof n.index.value==='number'&&Number.isInteger(n.index.value)) instructions.push({op:'loadSeries',dest,name:n.target.name,offset:n.index.value});
@@ -63,7 +67,7 @@ export class CoreSpiritCompiler {
     };
     try {
       stmt(ast);
-      const ir:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[]};
+      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const ir:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries}};
       return {ir,diagnostics:semantic.diagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {
       return {diagnostics:[...semantic.diagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};

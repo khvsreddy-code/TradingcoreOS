@@ -1,4 +1,5 @@
 import { compileCoreSpirit } from './coreSpiritPipeline';
+import { CoreSpiritIncrementalAst } from './incrementalAst';
 import { getCoreSpiritEditorSnapshot, getCoreSpiritHover, getCoreSpiritCompletionContext, getCoreSpiritDefinitionAt, getCoreSpiritCodeActions, type CoreSpiritCompletion, type CoreSpiritEditorDiagnostic, type CoreSpiritSemanticToken, type CoreSpiritDefinition, type CoreSpiritCodeAction, type CoreSpiritFoldingRange } from './languageService';
 
 export type CoreSpiritSymbol = {
@@ -32,6 +33,7 @@ export class CoreSpiritEditorModel {
   private lastCompile: ReturnType<typeof compileCoreSpirit> | null = null;
   private undoStack: string[] = [];
   private redoStack: string[] = [];
+  private readonly incrementalAst = new CoreSpiritIncrementalAst();
 
   constructor(source = '') {
     this.source = source;
@@ -46,8 +48,9 @@ export class CoreSpiritEditorModel {
     if (source === this.source && !completionPrefix) return this.snapshot;
     this.undoStack.push(this.source); if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack = [];
-    this.source = source;
+    const old=this.source; this.source = source;
     this.version += 1;
+    const change={start:0,end:old.length,text:source}; this.incrementalAst.update(source,change);
     this.snapshot = this.compute(completionPrefix);
     return this.snapshot;
   }

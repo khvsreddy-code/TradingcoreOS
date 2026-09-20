@@ -331,3 +331,47 @@ The editor UI is now an adapter over the language service rather than the langua
 - Real Monaco/CodeMirror adapter.
 - Type inference and member completion for UDT/collection/model objects.
 - Library/package system inspired by Pine libraries, but with CoreSpirit's simpler source model and stronger runtime capabilities. Pine libraries can export functions, UDTs, methods and enums; this is now tracked as a future CoreSpirit module/package capability. citeturn0search0turn0search6
+
+
+## TradingCoreOS v31 — Stage 4 CoreSpirit Coder completion
+
+This pass completed the remaining Stage 4 items requested before moving to Stage 5. The editor is no longer limited to a textarea-oriented language-service boundary: a real Monaco adapter is available, while the existing lightweight editor remains a fallback. The language layer now has structural AST reuse, type inference, user-defined type declarations, member-aware completion, transactional hot reload, runtime checkpoints, and compiler source maps.
+
+### Completed
+
+- Monaco editor adapter with contextual completions and hover integration.
+- Incremental AST structural reuse for unchanged nodes.
+- Type inference for primitives, series and UDT references.
+- `type Name { field: type }` declarations.
+- Member completion for UDT fields.
+- Compile/validate/checkpoint/atomic-swap hot reload controller.
+- Runtime checkpoint export/restore.
+- IR-to-source source maps.
+- v31 regression contract.
+
+### Design decisions
+
+- Monaco is an adapter, not the language implementation.
+- Failed or obsolete compilations cannot replace the active runtime.
+- Source maps live in the deterministic IR so later replay/live diagnostics can share the same mapping.
+- State migration is conservative; incompatible type changes remain a later explicit migration policy rather than silently corrupting runtime state.
+
+## TradingCoreOS v31 — Chart data regression repair
+
+The v30 chart engine had a deliberate optimization that unintentionally changed the visible history contract. FYERS history was restricted to a single ~100-day intraday window on the first request, with the rest delegated to browser-side background paging. Because candle density decreases as timeframe increases, switching from 5m to 15m/30m/1H appeared to reduce history dramatically. This was a regression relative to the older TradingCoreOS implementation.
+
+### Repaired
+
+- Restored target-based FYERS history accumulation using broker-safe windows.
+- Kept the 25,000-candle dense target and 50,000-candle client maximum.
+- Kept `cont_flag=1`.
+- Kept NIFTY50 epoch/date-format fallback.
+- Kept canonical NIFTY/BANKNIFTY/SENSEX/F&O symbol handling.
+- Kept shared broker request gating and cache/in-flight deduplication.
+- Increased background page sizes and guard capacity for higher timeframes.
+- Added an 1.8-second abort grace period to the shared history request guard, allowing rapid switches to reattach to an in-flight request rather than throwing away the response.
+- Preserved generation checks so stale data cannot paint the wrong symbol/timeframe.
+
+### Resulting data contract
+
+A cold chart load now attempts to return up to 25k valid candles for the selected symbol/timeframe rather than letting a fixed calendar window silently determine candle count. If the broker has less history, the available valid history is returned. No synthetic historical candles are fabricated.

@@ -1167,7 +1167,7 @@ Keep complexity inside the compiler/runtime. Users should not have to learn Pine
 - [ ] Preserve old valid chart data until the replacement dataset has passed validation.
 
 ## After Stage 3
-- [ ] Stage 4: full TradingView-style CoreSpirit Coder — syntax highlighting, autocomplete, diagnostics, formatter, side-by-side chart, run/stop, script management.
+- [x] Stage 4: full CoreSpirit Coder foundation — real Monaco adapter, semantic tooling, incremental AST, type inference, UDT completion, transactional reload, source maps.
 - [ ] Stage 5: realtime execution + true hot reload.
 - [ ] Stage 6: multi-symbol / multi-timeframe data alignment.
 - [ ] Stage 7: events / alerts / webhooks.
@@ -1470,7 +1470,7 @@ Design rule: one small visual call should be enough for common chart intent. Adv
 | Stage 1.5 Language simplicity | 🟢 | Friendly syntax normalization + typed semantic foundation |
 | Stage 2 Indicator kernel | 🟢 | Canonical stateful kernel + memoization + warm-up semantics |
 | Stage 3 Chart/output lifecycle | 🟢 | Stable visual objects, rich scene primitives, output isolation |
-| **Stage 4 CoreSpirit Coder** | **🟠 ACTIVE v27** | DOM-free language service, incremental editor model, diagnostics, tokens, symbols, formatter, cached compile |
+| **Stage 4 CoreSpirit Coder** | **🟢 COMPLETE v31** | Monaco adapter, incremental AST reuse, type inference/UDTs, member completion, transactional hot reload, runtime checkpoints, source maps |
 | Stage 5 Realtime + hot reload | ⬜ | Tick execution foundation exists; atomic incremental reload remains |
 | Stage 6 Multi-symbol / multi-timeframe | 🟠 foundation | Host data resolver + v27 request planner; alignment engine remains |
 | Stage 7 Events / webhooks | 🟠 foundation | signal/entry/exit/alert/webhook intents exist; event router remains |
@@ -1547,3 +1547,36 @@ Design rule: one small visual call should be enough for common chart intent. Adv
 - [ ] Transactional compile/validate/swap hot reload.
 - [ ] Source maps from normalized CoreSpirit syntax to original editor positions.
 - [ ] Rich type inference/member completion for future UDTs, collections and model objects.
+
+
+## TradingCoreOS v31 — Stage 4 completion pass
+
+- [x] Real Monaco editor adapter with graceful fallback.
+- [x] Incremental AST structural reuse.
+- [x] CoreSpirit type inference foundation.
+- [x] User-defined type declarations and semantic field model.
+- [x] Member-aware UDT completion.
+- [x] Transactional compile → validate → checkpoint → atomic runtime swap.
+- [x] Runtime checkpoint export/restore.
+- [x] IR source maps back to CoreSpirit source spans.
+- [x] Stage 4 v31 regression contract.
+- [ ] Local bundled Monaco/LSP transport.
+- [ ] Advanced generic/collection inference.
+- [ ] Hot-reload state migration for incompatible type changes.
+
+## TradingCoreOS v31 — Chart history regression repair
+
+- [x] Restore the proven target-based FYERS history loader from the older TradingCoreOS implementation.
+- [x] Stop using a single 100-calendar-day initial window as the effective history ceiling for higher timeframes.
+- [x] Build history backward in broker-safe windows until the requested 25k target is reached or the broker has no older data.
+- [x] Preserve `cont_flag=1`, NIFTY50 epoch/date-format fallback, canonical index/F&O symbol normalization, and request gating.
+- [x] Keep 50k as the in-memory chart maximum while using 25k as the default dense history target.
+- [x] Increase older-page sizes for partial histories and allow enough background pages to reach 25k on higher timeframes.
+- [x] Add an 1.8s shared-request grace period so rapid symbol/timeframe switching does not abort an almost-complete history request.
+- [x] Keep cache/in-flight deduplication so rapid switching can reuse a completed or still-running dataset.
+- [x] Preserve atomic chart lifecycle guards so stale responses cannot overwrite the active symbol/timeframe.
+- [x] Validate changed history/chart TypeScript/TSX files with the installed TypeScript transpiler.
+
+### Exact regression identified
+
+v30 replaced the older target-based history construction with one broker-safe 100-day initial request and relied on client-side background paging. That made the apparent history size depend on timeframe: approximately 2,500 15-minute candles and ~625 1-hour candles can fit in 100 calendar days. The older implementation instead accumulated multiple broker-safe windows until the 25k target was reached. v31 restores that behavior while retaining the newer symbol normalization, cache, request gate, lifecycle guards, and 50k memory ceiling.

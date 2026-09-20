@@ -191,6 +191,34 @@ export class CoreSpiritRuntime {
   getExecutionContext(): CoreSpiritExecutionContext { return { ...this.executionContext }; }
   getLoadedProgramId(): string | undefined { return this.loadedProgramId; }
   getLoadedIr(): CoreSpiritIrProgram | undefined { return this.compiledIr; }
+  loadIr(ir: CoreSpiritIrProgram): void {
+    this.compiledIr = ir;
+    this.loadedProgramId = ir.sourceId;
+    this.stateHistoryLimit = Math.min(this.maxHistoryBars, Math.max(this.stateHistoryLimit, ir.maxLookback + 32));
+  }
+
+  exportCheckpoint() {
+    return {
+      state: this.getState(),
+      history: (this as any).history.map((x:any)=>({ ...x })),
+      crossState: cloneCrossMap((this as any).crossState),
+      committedSeriesState: cloneNumberMap((this as any).committedSeriesState),
+      committedLocalSeries: cloneValueMap((this as any).committedLocalSeries),
+      committedCrossState: cloneCrossMap((this as any).committedCrossState),
+    };
+  }
+
+  restoreCheckpoint(checkpoint: { state: CoreSpiritRuntimeState; history:any[]; crossState:Record<string,{a:number;b:number}>; committedSeriesState:Record<string,number[]>; committedLocalSeries:Record<string,Array<number|boolean|string|null>>; committedCrossState:Record<string,{a:number;b:number}> }): boolean {
+    try {
+      this.state = { ...checkpoint.state, locals:{...checkpoint.state.locals}, seriesState:cloneNumberMap(checkpoint.state.seriesState), localSeries:cloneValueMap(checkpoint.state.localSeries) };
+      (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
+      (this as any).crossState = cloneCrossMap(checkpoint.crossState);
+      (this as any).committedSeriesState = cloneNumberMap(checkpoint.committedSeriesState);
+      (this as any).committedLocalSeries = cloneValueMap(checkpoint.committedLocalSeries);
+      (this as any).committedCrossState = cloneCrossMap(checkpoint.committedCrossState);
+      return true;
+    } catch { return false; }
+  }
 
   private executeBlock(instructions: CoreSpiritIrInstruction[], bar: HistoricalCandle, bars: HistoricalCandle[], barIndex: number, outputs: CoreSpiritObject[], diagnostics: string[]): void {
     const values = new Map<string, unknown>(); let pc = 0; let steps = 0;
