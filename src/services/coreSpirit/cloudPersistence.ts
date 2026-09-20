@@ -27,7 +27,7 @@ export type CoreSpiritScriptVersion = {
 };
 
 const SCRIPT_ID_KEY = 'tradingcore:corespirit:editor-script-id';
-const COMPILER_VERSION = 'corespirit-v17';
+const COMPILER_VERSION = 'corespirit-v26';
 
 async function hashSource(source: string) {
   const bytes = new TextEncoder().encode(source);

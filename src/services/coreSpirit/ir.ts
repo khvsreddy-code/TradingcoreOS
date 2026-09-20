@@ -7,11 +7,11 @@ export type CoreSpiritIrInstruction =
   | { op:'move'; dest:string; source:string }
   | { op:'unary'; dest:string; operator:'!'|'+'|'-'; operand:string }
   | { op:'binary'; dest:string; operator:string; left:string; right:string }
-  | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[] }
+  | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[]; callId?:string }
   | { op:'index'; dest:string; target:string; index:string; seriesName?:string }
   | { op:'setLocal'; name:string; source:string; series?: boolean }
   | { op:'jumpIfFalse'; condition:string; target:number }
   | { op:'jump'; target:number }
-  | { op:'emit'; kind:'plot'|'marker'|'line'|'zone'|'signal'|'alert'|'webhook'; args:string[] };
+  | { op:'emit'; kind:'plot'|'marker'|'label'|'labelAt'|'line'|'zone'|'box'|'band'|'fill'|'gradient'|'arrow'|'shape'|'heatmap'|'polyline'|'hline'|'bg'|'barcolor'|'table'|'signal'|'entry'|'exit'|'alert'|'webhook'; args:string[]; outputId?:string };
 export type CoreSpiritIrBlock = { instructions:CoreSpiritIrInstruction[] };
 export type CoreSpiritIrProgram = { version:1; sourceId:string; entry:CoreSpiritIrBlock; locals:string[]; maxLookback:number; diagnostics:string[] };

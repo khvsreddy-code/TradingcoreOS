@@ -31,8 +31,8 @@ export class CoreSpiritCompiler {
         case 'call': {
           const args=n.args.map(expr),dest=`t${temp++}`;
           const seriesArgs=n.args.filter(a=>a.type==='identifier'&&['open','high','low','close','volume','time'].includes(a.name)).map(a=>(a as any).name);
-          instructions.push({op:'call',dest,name:n.name,args,seriesArgs});
-          if(['plot','marker','line','zone','signal','alert','webhook'].includes(n.name)) instructions.push({op:'emit',kind:n.name as any,args:[dest,...args]});
+          instructions.push({op:'call',dest,name:n.name,args,seriesArgs,callId:`${n.name}:${n.span?.start ?? temp}`});
+          if(['plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','signal','entry','exit','alert','webhook'].includes(n.name)) instructions.push({op:'emit',kind:n.name as any,args:[dest,...args],outputId:`${n.name}:${n.span?.start ?? temp}`});
           return dest;
         }
         case 'index': {

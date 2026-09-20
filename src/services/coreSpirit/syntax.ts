@@ -40,8 +40,17 @@ export function normalizeCoreSpiritSource(source: string): string {
     const assignment = raw.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
     if (assignment && !/^\s*(if|let|plot|signal|indicator|input)\b/.test(raw)) raw = `${assignment[1]}let ${assignment[2]} = ${assignment[3]}`;
 
-    const ifMatch = raw.match(/^(\s*)if\s+(.+?)(\s*\{)?\s*$/);
-    if (ifMatch && !ifMatch[2].startsWith('(')) raw = `${ifMatch[1]}if (${ifMatch[2].replace(/\s*\{$/, '')})${ifMatch[3] ? ' {' : ''}`;
+    // Normalize both multiline blocks and compact one-line blocks. The latter keeps
+    // CoreSpirit pleasant to type without teaching the parser a second block grammar.
+    const inlineIf = raw.match(/^(\s*)if\s+(.+?)\s*\{\s*(.*?)\s*\}\s*$/);
+    if (inlineIf) {
+      const condition = inlineIf[2].trim();
+      const body = inlineIf[3].trim();
+      raw = `${inlineIf[1]}if (${condition}) {\n${inlineIf[1]}  ${body}\n${inlineIf[1]}}`;
+    } else {
+      const ifMatch = raw.match(/^(\s*)if\s+(.+?)\s*\{\s*$/);
+      if (ifMatch && !ifMatch[2].startsWith('(')) raw = `${ifMatch[1]}if (${ifMatch[2].trim()}) {`;
+    }
 
     // Friendly plot/signal forms and optional names.
     const plotBare = raw.match(/^(\s*)plot\s+(.+?)\s*;?$/);

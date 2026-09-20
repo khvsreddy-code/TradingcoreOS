@@ -18,6 +18,9 @@ import { buildOIChartAnalytics, OIChartAnalytics } from '../../services/marketDa
 import { Plus, Settings2, Eye, EyeOff, Trash2, RotateCcw, Pencil, Search, Check, X, Crosshair, Minus, ArrowUpRight, MoveHorizontal, MoveVertical, Square, Circle, Ruler, Type, MousePointer2, Eraser, Paintbrush, Highlighter, Waves, GitBranch, Triangle, BoxSelect, Target, Undo2 } from 'lucide-react';
 import { PREDICTION_MODELS, getSavedPredictionModelIds, predictWithModel } from '../../services/predictionEngine';
 import { fetchProductionPredictions } from '../../services/productionPredictionService';
+import { coreSpiritChartRegistry } from '../../services/coreSpirit/chartRegistry';
+import { CoreSpiritChartOutputController } from '../../services/coreSpirit/chartOutputController';
+import { runCoreSpiritInWorker } from '../../services/coreSpirit/chartRunner';
 import { IndicatorConfig, INDICATOR_LIBRARY, PRICE_SOURCES, defaultIndicatorStyle, series, vwap, bollinger, rsi, macd, supertrend, keltner, donchian, stochastic, ichimoku, pivots, marketStructure, fairValueGaps, dynamicSupportResistance, liquiditySweeps, orderBlocks, indianKeyLevels, cpr, classicPivots, openingRange, swingLevels, gapLevels, previousDayLevels, previousPeriodLevels, gapZones, equalHighLow, liquidityPools, bosChoch, priceActionEvents, nr7, developingDayLevels, vwapDeviationBands, anchoredVwap, extendedCpr, periodPivots, tradingCoreVPriceAction, advancedTradingViewIndicator } from '../../services/marketData/indicatorEngine';
 
 const intervals: Record<string,string> = {'1m':'1minute','3m':'3minute','5m':'5minute','15m':'15minute','30m':'30minute','1H':'60minute','1D':'day'};
@@ -94,6 +97,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
  const host=useRef<HTMLDivElement>(null),oscHost=useRef<HTMLDivElement>(null); const chart=useRef<IChartApi>(); const oscChart=useRef<IChartApi>(); const candle=useRef<ISeriesApi<'Candlestick'>>(); const closeLine=useRef<ISeriesApi<'Line'>>(); const volume=useRef<ISeriesApi<'Histogram'>>(); const indicatorSeries=useRef<ISeriesApi<'Line'>[]>([]);
  const markerPlugin=useRef<any>(null); const oscSeries=useRef<ISeriesApi<'Line'>[]>([]); const candles=useRef<HistoricalCandle[]>([]);
  const lifecycle=useRef(new ChartLifecycle()); const chartUpdateScheduler=useRef(new ChartUpdateScheduler()); const chartId=useRef(`chart-${Math.random().toString(36).slice(2,10)}`); const analyticsWorker=useRef<Worker>(); const indicatorWorker=useRef<Worker>(); const analyticsJob=useRef(0); const indicatorJob=useRef(0); const calculationEngine=useRef(new RealtimeCalculationEngine()); const workerSeriesMap=useRef(new Map<string, Array<ISeriesApi<'Line'>|ISeriesApi<'Histogram'>>>());
+ const coreSpiritOutput=useRef<CoreSpiritChartOutputController>(); const coreSpiritRunId=useRef(0);
  const historyPaintedRef=useRef(false); const historyRequestIdRef=useRef(0); const switchStartedAtRef=useRef(performance.now());
  const persistedChart=loadChartState(brokerId,resolvedInstrumentKey); const [selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null); const [timeframe,setTimeframe]=useState(persistedChart.timeframe),[drawingTool,setDrawingTool]=useState<DrawingTool>('none'),[showDrawingMenu,setShowDrawingMenu]=useState(false),[crosshairVisible,setCrosshairVisible]=useState(true),[showLevels,setShowLevels]=useState(persistedChart.showLevels??false),[showVolume,setShowVolume]=useState(persistedChart.showVolume??false),[showOI,setShowOI]=useState(persistedChart.showOI??false),[showDepth,setShowDepth]=useState(persistedChart.showDepth??false),[showIndicatorMenu,setShowIndicatorMenu]=useState(false),[showPredictionMenu,setShowPredictionMenu]=useState(false),[editingIndicator,setEditingIndicator]=useState<string|null>(null),[indicators,setIndicators]=useState<IndicatorConfig[]>(getIndicators),[automations,setAutomations]=useState<AutomationConfig[]>(getAutomations),[predictionModelIds,setPredictionModelIds]=useState<string[]>(getSavedPredictionModelIds()),[predictionQuery,setPredictionQuery]=useState(''),[chartType,setChartType]=useState<'candlestick'|'line'>('candlestick'),[error,setError]=useState(''),[historyLoading,setHistoryLoading]=useState(false);
  useEffect(()=>{if(levelsRequest==null)return;setShowLevels(true);},[levelsRequest]); const drawingToolRef=useRef<DrawingTool>('none'); const drawingPoints=useRef<DrawingPoint[]>([]);
@@ -111,6 +115,32 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
  }, [chartIndex]);
  const drawingStore=useRef(new CoreDrawingStore(persistedChart.drawings)); const drawingDrag=useRef<{id:string;index:number}|null>(null); const drawings=useRef<Drawing[]>(drawingStore.current.list() as Drawing[]); const drawingSeries=useRef<ISeriesApi<'Line'>[]>([]); const analytics=useRef<ChartAnalytics|null>(null); const oiAnalytics=useRef<OIChartAnalytics|null>(null); const oiChainRef=useRef<{signature:string;chain:any}>(); const oiLines=useRef<any[]>([]); const predictionLines=useRef<any[]>([]); const predictionJob=useRef(0); const analyticsTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  useEffect(()=>{const a=(e:Event)=>setIndicators((e as CustomEvent<IndicatorConfig[]>).detail||getIndicators());const b=(e:Event)=>setAutomations((e as CustomEvent<AutomationConfig[]>).detail||getAutomations());const c=(e:Event)=>setPredictionModelIds((e as CustomEvent<string[]>).detail||getSavedPredictionModelIds());window.addEventListener('tradingcore:indicators',a);window.addEventListener('tradingcore:automations',b);window.addEventListener('tradingcore:prediction-models-changed',c);return()=>{window.removeEventListener('tradingcore:indicators',a);window.removeEventListener('tradingcore:automations',b);window.removeEventListener('tradingcore:prediction-models-changed',c)}},[]);
+ useEffect(()=>{
+   const unregister=coreSpiritChartRegistry.register({
+     chartId: chartId.current,
+     symbol: resolvedInstrumentKey,
+     timeframe,
+     run: async (source:string, sourceId='coreSpirit-editor') => {
+       const runId=++coreSpiritRunId.current;
+       const bars=[...candles.current];
+       if(!bars.length) throw new Error('Chart has no candles yet; wait for the first history paint.');
+       publishChartLifecycle('updating');
+       try {
+         const result=await runCoreSpiritInWorker(source,bars,sourceId);
+         if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored']};
+         coreSpiritOutput.current?.reset();
+         coreSpiritOutput.current?.applyObjects(result.outputs);
+         coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:Date.now(),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
+         publishChartLifecycle('ready');
+         return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics};
+       } catch(error) {
+         publishChartLifecycle('error');
+         throw error;
+       }
+     },
+   });
+   return ()=>{unregister();coreSpiritRunId.current++;coreSpiritOutput.current?.reset();};
+ },[brokerId,resolvedInstrumentKey,timeframe]);
  useEffect(()=>{saveChartState(brokerId,resolvedInstrumentKey,{version:2,timeframe,drawings:drawings.current,showLevels,showVolume,showOI,showDepth});},[timeframe,showLevels,showVolume,showOI,showDepth,brokerId,resolvedInstrumentKey]);
  const publishDrawing=(event:'drawing.created'|'drawing.updated',drawing:CoreDrawing)=>{coreEventBus.emit(event,{drawing:drawing as unknown as Record<string,unknown>});};
  const publishChartLifecycle=(state:'ready'|'loading'|'updating'|'error'|'recovering'|'disposed')=>{coreEventBus.emit('chart.lifecycle',{chartId:chartId.current,state,timestamp:Date.now()});};
@@ -435,6 +465,10 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
  useEffect(()=>{if(candles.current.length&&chart.current)renderDrawings();},[selectedDrawingId]);
  useEffect(()=>{if(!host.current)return;const generation=lifecycle.current.begin();let dead=false;setError('');historyPaintedRef.current=false;switchStartedAtRef.current=performance.now();let c=chart.current;
  if(!c){c=createChart(host.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:'#0b0e15'},textColor:'#8c93a6',fontFamily:'JetBrains Mono, monospace',fontSize:10},grid:{vertLines:{color:'#171b27'},horzLines:{color:'#171b27'}},crosshair:{mode:crosshairVisible?0:2},rightPriceScale:{borderColor:'#252b3a',scaleMargins:{top:.08,bottom:.2}},timeScale:{borderColor:'#252b3a',timeVisible:true,secondsVisible:false,rightOffset:8,barSpacing:8,minBarSpacing:3},watermark:{visible:true,fontSize:28,horzAlign:'center',vertAlign:'center',color:'#ffffff08',text:'TRADINGCORE'}});chart.current=c;candle.current=c.addSeries(CandlestickSeries,{upColor:'#10b981',downColor:'#ef4444',borderUpColor:'#10b981',borderDownColor:'#ef4444',wickUpColor:'#10b981',wickDownColor:'#ef4444'});closeLine.current=c.addSeries(LineSeries,{color:'#38bdf8',lineWidth:2,priceLineVisible:false,lastValueVisible:true,visible:chartType==='line'});volume.current=c.addSeries(HistogramSeries,{priceFormat:{type:'volume'},priceScaleId:'volume'});volume.current.priceScale().applyOptions({scaleMargins:{top:.84,bottom:0}});}else{c.applyOptions({autoSize:true,crosshair:{mode:crosshairVisible?0:2}});closeLine.current?.applyOptions({visible:chartType==='line'});}
+ coreSpiritOutput.current = coreSpiritOutput.current || new CoreSpiritChartOutputController(c, candle.current, host.current || undefined);
+ coreSpiritOutput.current.setHost(host.current!);
+ coreSpiritOutput.current.setCandleSeries(candle.current!);
+ coreSpiritOutput.current.reset();
 
  const coordinateAdapter=()=>({
    timeToX:(time:number)=>Number((c.timeScale() as any).timeToCoordinate?.(time as any)),
@@ -443,6 +477,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    yToPrice:(y:number)=>{const v=(candle.current as any)?.coordinateToPrice?.(y);return v==null?null:Number(v);},
  });
  const onPointerDown=(event:PointerEvent)=>{
+   coreSpiritChartRegistry.activate(chartId.current);
    if(drawingToolRef.current!=='none'||!candle.current)return;
    const rect=host.current?.getBoundingClientRect(); if(!rect)return;
    const cursor={x:event.clientX-rect.left,y:event.clientY-rect.top};

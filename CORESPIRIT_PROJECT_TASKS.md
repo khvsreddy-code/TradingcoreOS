@@ -2,8 +2,8 @@
 
 **Project direction:** Build CoreSpirit as TradingCoreOS's own trading-native scripting language and runtime. CoreSpirit is **not** intended to be a Pine clone. Pine compatibility remains an import/translation layer only.
 
-**Current source baseline:** TradingCoreOS v16 (built from v15)
-**Current workstream:** staged CoreSpirit language/runtime + TradingView-quality chart reliability + canonical indicator kernel + coder
+**Current source baseline:** TradingCoreOS v27 (built from v25)
+**Current workstream:** staged CoreSpirit language/runtime + TradingView-quality chart reliability + canonical indicator kernel + coder; Stages 1–3 deep-audited through v26; richer market data, intrabar execution and footprint access deepened
 **Updated:** 2026-09-20
 
 ---
@@ -65,7 +65,38 @@ There must not be separate indicator semantics for native indicators and transla
 
 ---
 
-## 3. Existing CoreSpirit foundation — DONE
+## 3. Existing CoreSpirit foundation — VERIFIED + DEEPENED IN V19
+
+Stage 1 was re-audited from the v18 source instead of being assumed complete. The audit found that the main execution path was sound, but several foundation contracts needed to be made explicit. v19 addresses the highest-value gaps without moving Stage 2 semantics into the runtime foundation.
+
+### Stage 1 verification checklist
+- [x] Lexer/token positions and deterministic tokenization
+- [x] Line comments
+- [x] Block comments with unterminated-comment diagnostics
+- [x] Parser → AST pipeline
+- [x] Semantic unknown-identifier/function guards
+- [x] AST → deterministic IR compilation
+- [x] Executable artifact checksum/shape validation
+- [x] Chronological bar execution
+- [x] Stateful series/local history
+- [x] Historical warm-up / `null` propagation foundation
+- [x] Realtime same-bar rollback and confirmed-bar commit
+- [x] Per-bar execution step quota
+- [x] Worker execution boundary
+- [x] Main-thread output contract separated from VM
+- [x] Cooperative execution cancellation via `AbortSignal`
+- [x] Configurable runtime timezone instead of hard-coded session timezone
+- [x] Configurable state-history retention with 2048 default floor
+- [x] Dependency-free Stage 1 foundation self-test
+
+### Stage 1 remaining hardening (not yet marked complete)
+- [ ] Structured multi-diagnostic parser recovery
+- [ ] Formal type lattice (`scalar`, `series`, `bool`, `number`, `string`, `na`)
+- [ ] Explicit execution-context object shared by live/replay/backtest
+- [ ] Deterministic random/clock policy (if randomness is introduced)
+- [ ] Formal memory quotas per script
+- [ ] Versioned VM compatibility contract
+
 
 - Lexer
 - Parser
@@ -86,6 +117,234 @@ There must not be separate indicator semantics for native indicators and transla
 Relevant source area: `src/services/coreSpirit/`
 
 ---
+
+## 3.5 Stage 1–3 deep audit — TradingCoreOS v20
+
+**Goal:** Do not advance the roadmap merely because a stage has a green checkbox. Re-audit the runtime, language semantics, indicator kernel and chart-output boundary before Stage 4/5.
+
+### Stage 1 — Runtime foundation: deepened
+- [x] Structured parser recovery with multiple syntax diagnostics and source spans.
+- [x] Formal core type lattice for number/boolean/string/null and series-qualified values.
+- [x] Builtin signature/argument-count validation during semantic analysis.
+- [x] Type validation for arithmetic, logical operators, `if`, indexing, indicators and outputs.
+- [x] Shared execution-context contract with mode/symbol/timeframe/timezone/run id.
+- [x] History/output/step quotas are explicit runtime controls.
+- [x] Chronological and finite OHLCV bar validation.
+- [x] Bounded runtime history to prevent accidental unbounded memory growth.
+- [x] Versioned IR call identities for stateful builtins.
+- [x] Cooperative cancellation retained.
+- [ ] Deterministic random/clock policy (only needed when those capabilities are introduced).
+- [ ] Full VM compatibility/migration contract across persisted artifacts.
+
+### Stage 1.5 — Language simplicity: deepened
+- [x] Friendly syntax continues to lower into one deterministic core grammar.
+- [x] Syntax errors preserve source line/column/range information.
+- [x] Parser can recover after statement-level errors instead of stopping at the first error.
+- [x] Surface language now receives type-aware diagnostics rather than only unknown-name errors.
+- [ ] Metadata/input syntax needs a proper AST representation instead of line-based normalization.
+
+### Stage 2 — Indicator kernel: deepened
+- [x] Pure indicator math module created for shared deterministic calculations.
+- [x] SMA/highest/lowest/EMA seed/true-range/RSI math extracted behind a testable kernel boundary.
+- [x] Stateful indicator calls are memoized per bar so calling the same EMA/RSI/ATR/VWAP twice does not advance state twice.
+- [x] Stateful cross detection now uses stable compiled call identities; it no longer changes identity every bar.
+- [x] Lookback retention expands to cover compiled lookback requirements.
+- [x] Warm-up returns explicit `null` instead of manufacturing values from incomplete history.
+- [ ] Full indicator catalog and exact reference-value conformance suite.
+- [ ] Session/calendar-aware VWAP and exchange-specific sessions.
+- [ ] Higher-order/series-expression arguments such as `ema(close[1], 20)` without semantic ambiguity.
+
+### Stage 3 — Chart/output lifecycle: deepened
+- [x] Stable per-output IDs originate in compiled source locations rather than per-run ordinals.
+- [x] `null` plot values are rendered as chart whitespace instead of invalid numeric points.
+- [x] Per-bar output quota protects the renderer from pathological scripts.
+- [x] Script outputs remain isolated from native chart series/drawings.
+- [x] Worker execution + stale-run guard remains the chart boundary.
+- [ ] Transactional renderer swap for richer primitives/panes.
+- [ ] Native box/zone/polyline lifecycle rather than line-series approximation.
+- [ ] Output format/precision/pane metadata contract.
+- [ ] Realtime incremental output frames (Stage 5).
+
+### Deep-audit regression contracts
+- [x] Stage 1 foundation contract retained.
+- [x] Stage 1–3 deep contract added: type diagnostics, duplicate stateful indicator calls, stable plot identities, warm-up behavior and execution context.
+- [ ] Browser integration stress run with real Lightweight Charts dependencies.
+- [ ] Broker-connected realtime conformance run.
+
+
+## 3.7 Stage 1–3 visual system deep pass — TradingCoreOS v22
+
+The goal of v22 is to make CoreSpirit a genuinely expressive chart language rather than a collection of line plots. The design borrows the *capabilities* users expect from modern chart scripting while keeping CoreSpirit's own simpler surface syntax and a renderer-independent output model.
+
+### Stage 1 — runtime/output contract
+- [x] Rich visual intents are data-only and renderer-independent.
+- [x] Visual output quotas cover boxes, bands, arrows and symbols.
+- [x] High-cardinality visuals are batched by the dispatcher instead of creating one chart series per object.
+- [x] Visual identities are deterministic from source location/output identity.
+- [ ] Persistent VM artifact migration/version compatibility remains open.
+
+### Stage 1.5 — language simplicity
+- [x] `box(left, right, top, bottom, fill, border, opacity, pattern)`
+- [x] `band(top, bottom, color, opacity)` for per-bar filled ranges
+- [x] `fill(top, bottom, color, opacity)` as the simpler visual alias for band shading
+- [x] `gradient(top, bottom, topColor, bottomColor, opacity)`
+- [x] `arrow(time1, price1, time2, price2, color, width)`
+- [x] `shape(price, symbol, color, size, text)`
+- [x] `heatmap(price, intensity, color, size, text)` for footprint-style per-price cells
+- [x] `zone(...)` now supports fill opacity and simple patterns.
+- [ ] Array literals / arbitrary polylines are intentionally deferred until the grammar gains a clean collection model.
+
+### Stage 2 — indicator/visual composition
+- [x] Bands can consume indicator series directly, enabling volatility envelopes, oscillator zones and model uncertainty regions.
+- [x] Visual primitives are independent of indicator math, so the same calculations can feed chart, replay and model pipelines.
+- [ ] Full indicator reference-value corpus and exchange-session engine remain open.
+
+### Stage 3 — chart/output lifecycle
+- [x] Added a single high-performance canvas overlay for boxes, filled zones, gradients, bands, arrows, patterns and symbols.
+- [x] Added solid/hatch/dot/stripe fills.
+- [x] Added gradient band rendering.
+- [x] Added arrows with vector heads.
+- [x] Added symbols: circle, square, diamond, triangle up/down, arrow up/down, cross and star.
+- [x] Added text-capable symbol overlays.
+- [x] Rich visuals use chart time/price coordinates, so zoom, pan and resize remain data-anchored.
+- [x] High-cardinality bands are sampled before canvas rendering to avoid blocking the UI on large histories.
+- [ ] Multi-pane visual routing.
+- [ ] True 3D/interactive tables and object editing.
+- [ ] Realtime incremental frames/hot reload (Stage 5).
+
+### Visual design direction
+CoreSpirit should eventually support three levels of plotting:
+1. **Simple:** `plot`, `label`, `shape`, `signal`.
+2. **Analytical:** `band`, `gradient`, `zone`, `box`, `arrow`.
+3. **Advanced:** paths/polylines, heatmaps, tables, custom panels, model uncertainty surfaces and interactive objects.
+
+The advanced layer must remain declarative. A script should describe *what* is being visualized; the renderer decides how to draw it efficiently. This is important for the future model/AI and automation stages.
+
+## 3.6 Stage 1–3 visual/runtime deep pass — TradingCoreOS v21
+
+### Stage 1 — Runtime foundation
+- [x] Stable execution/output identities retained across repeated runs.
+- [x] Output quota now applies to rich visual objects as well as plots/signals.
+- [x] Rich output contracts are data-only; renderer remains outside the VM.
+- [x] Label placement is data-price based and therefore usable in historical/replay/realtime modes.
+- [ ] Full deterministic clock/random policy remains deferred until those capabilities are introduced.
+
+### Stage 1.5 — Language simplicity
+- [x] Added concise `label(...)` and `labelAt(...)` primitives without requiring chart API knowledge.
+- [x] Added customizable plot arguments: color, width, line style and title.
+- [x] Friendly surface syntax continues to lower to one core execution model.
+- [ ] Proper metadata/input AST remains a future language-grammar pass.
+
+### Stage 2 — Indicator kernel
+- [x] Added standard deviation, WMA, stochastic and Bollinger math to the shared pure kernel.
+- [x] Indicator math remains chart-independent and testable.
+- [ ] Full exchange/session-aware conformance remains open.
+- [ ] Reference-value corpus across the full catalog remains open.
+
+### Stage 3 — Chart/output lifecycle
+- [x] Added rich CoreSpirit labels with above/below/in-bar/arbitrary-price placement.
+- [x] Added customizable label background, text color, size and shape.
+- [x] Added stable transactional-ish plot/drawing reconciliation: existing owned series are updated instead of destroyed every frame.
+- [x] Added stable line/zone IDs and incremental lifecycle.
+- [x] Added plot visual metadata (color, width, line style, title).
+- [x] Added a dedicated CoreSpirit HTML overlay layer for arbitrary-price labels.
+- [ ] Full pane routing and native geometric primitives remain open.
+- [ ] Realtime incremental output frames remain Stage 5.
+
+
+### Stage 3 visualization examples
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+plot(fast, "#22c55e", 2, 0, "Fast EMA")
+plot(slow, "#ef4444", 2, 2, "Slow EMA")
+
+if fast crossesAbove slow {
+    label("BUY", "below", "#16a34a", "#ffffff", 12, "pill")
+}
+
+if fast crossesBelow slow {
+    label("SELL", "above", "#dc2626", "#ffffff", 12, "pill")
+}
+
+labelAt(high + 10, "Resistance", "price", "#111827", "#ffffff", 11, "box")
+```
+
+`label(...)` anchors to the current candle's high/low depending on position. `labelAt(...)` anchors to an explicit price so CoreSpirit can place annotations in empty chart space as well as above/below candles.
+
+
+## 3.8 Stage 1–3 visual scene-graph deep pass — TradingCoreOS v23
+
+**Goal:** move from a collection of rich drawing calls toward a real chart-visual scene graph: persistent objects, per-bar visuals, screen-space panels and renderer-safe reconciliation. This pass is explicitly informed by the capabilities highlighted in TradingView/Pine's visual system and recent release notes, but CoreSpirit keeps its own smaller syntax and renderer-independent contract.
+
+### Stage 1 — runtime/output contract
+- [x] Added renderer-independent `polyline`, `hline`, `background`, `barcolor`, and `table` output objects.
+- [x] Added deterministic IDs for persistent visual objects so repeated execution can reconcile/update rather than blindly accumulate.
+- [x] Kept high-cardinality per-bar visuals (`band`, `shape`, background tint, bar tint) append-oriented while persistent objects are upsert-oriented.
+- [x] Extended label style metadata with font style/text alignment.
+
+### Stage 1.5 — language simplicity
+- [x] `polyline(time1, price1, time2, price2, ..., color, width, pattern)`
+- [x] `hline(price, color, width, style)`
+- [x] `bg(color, opacity)`
+- [x] `barcolor(color, opacity)`
+- [x] `table(position, row, column, text, background, color, size)`
+- [x] Labels can request weight/style without exposing DOM/CSS APIs.
+
+### Stage 2 — indicator/visual composition
+- [x] Any indicator/model output can feed the new visual primitives because visuals remain downstream of calculated values.
+- [x] Persistent zones/boxes/lines can be updated from changing indicator state instead of generating a new object every bar.
+- [ ] Footprint/volume-row data model inspired by modern chart scripting remains a future Stage 2/6 capability.
+
+### Stage 3 — chart/output lifecycle
+- [x] Added polyline rendering on the single canvas overlay.
+- [x] Added horizontal levels without creating one Lightweight Charts series per level.
+- [x] Added chart background and bar-tint layers.
+- [x] Added screen-space table panels with 3x3 anchor positions and grid cells.
+- [x] Added label font-style handling.
+- [x] Added persistent visual upsert behavior in the dispatcher.
+- [ ] Multi-pane routing and shared pane-scale contracts.
+- [ ] Interactive script-owned drawing handles/editor.
+- [ ] Realtime incremental visual frames/hot reload (Stage 5).
+
+### Visual capability study — lessons from Pine release notes
+TradingView's recent releases show a recurring pattern: visual expressiveness grows by adding composable drawing objects, better text formatting, gradients, editor ergonomics, data structures, and more granular execution/data access. Recent notes include UDT-aware binary search, historical tick calculation controls, multiline strings, and typographic text formatting; the visual docs expose lines, boxes, polylines, fills, labels and tables as distinct drawing concepts. CoreSpirit should use these as a capability checklist, not as a syntax-copying target.
+
+**CoreSpirit direction beyond Pine:** one stable scene graph shared by historical/realtime/replay/model outputs, plus direct model/webhook/event outputs. That lets the same visual object be generated by an indicator, a prediction model, a replay engine, or an automation rule without changing the chart renderer.
+
+
+## 3.9 Stage 1–3 + rich-data deep pass — TradingCoreOS v26
+
+The v26 pass goes below the surface-level Pine feature checklist. The goal is to make market data a first-class, cacheable execution input while keeping CoreSpirit deterministic and host-controlled. TradingView's current docs show three important pressure points: dynamic data requests, all-intrabar access, and footprint data; v26 treats those as architectural contracts rather than isolated built-ins. citeturn0search0turn0search3turn0search5
+
+### Stage 1 — Runtime foundation
+- [x] Per-bar data memoization so repeated external/market reads do not repeatedly hit a host resolver.
+- [x] Historical-tick execution API sharing the same VM instead of a second calculation engine.
+- [x] Explicit `historicalTick` execution mode path.
+- [x] Richer host capability boundary for quote/depth/intrabar/footprint data.
+- [ ] Persistent VM artifact migration/version contract remains open.
+
+### Stage 1.5 — Language/editor ergonomics
+- [x] Hover information for built-ins and market series.
+- [x] Semantic-token extraction for the coder.
+- [x] Cached editor snapshots combining diagnostics, completions, formatting and tokens.
+- [x] Richer market-data vocabulary without forcing users to learn provider APIs.
+- [ ] Incremental parser/AST reuse remains open.
+
+### Stage 2 — Indicator/data kernel
+- [x] Quote primitives: `bid()`, `ask()`, `spread()`, `mid()`.
+- [x] Intrabar aggregations: `intrabarCount()`, `intrabarSum()`, `intrabarHigh()`, `intrabarLow()`, `intrabarDelta()`.
+- [x] Footprint row access: `footprintRowPrice()`, `footprintRowBuy()`, `footprintRowSell()`, `footprintRowDelta()`, `footprintRowImbalance()`.
+- [x] Batched request capability (`requestBatch`) for host-side request coalescing.
+- [ ] Full session/calendar engine and reference-value corpus remain open.
+
+### Stage 3 — chart/output lifecycle
+- [x] Data-driven outputs can now be generated from granular quote/intrabar/footprint calculations without changing the renderer contract.
+- [ ] Native footprint-map scene object with viewport-aware row virtualization remains open.
+- [ ] Multi-pane routing/shared pane scale remains open.
+
+### v26 design rule
+**Do not make CoreSpirit simpler by throwing away capability. Make it simpler by moving complexity into the runtime and host adapters.** A user should be able to express a multi-source, footprint-aware calculation in a few lines while the host handles caching, alignment, freshness, provider differences and transport.
 
 ## 4. Current iteration — DONE / STARTED
 
@@ -126,11 +385,11 @@ Transport-level cancellation is now wired through the browser/runtime/broker ada
 
 # 5. CoreSpirit v1 build plan
 
-# 5. Pine release-notes research → CoreSpirit design decisions
+# 6. Pine release-notes research → CoreSpirit design decisions
 
 **Source reviewed:** TradingView Pine Script release notes across the current 2026 entries and historical releases. We are using the useful language, runtime, editor, visualization and strategy ideas as design input—not cloning Pine or inheriting its limitations. citeturn0view0
 
-## 5.1 Adopt the useful ideas
+## 6.1 Adopt the useful ideas
 
 ### Language/runtime
 - [ ] `once`-style one-time execution for initialization. citeturn0view0
@@ -177,7 +436,7 @@ Transport-level cancellation is now wired through the browser/runtime/broker ada
 - [ ] Separate order-fill assumptions, delay, leverage and simulation properties from script logic. citeturn0view0
 - [ ] Strategy analytics: profit %, drawdown %, runup %, capital held and per-trade metrics. citeturn2view1turn1view0
 
-## 5.2 Deliberately improve on Pine
+## 6.2 Deliberately improve on Pine
 - [ ] Native async webhooks with retries/status.
 - [ ] Native model/AI calls with caching, timeouts, cost/rate controls and feature preparation.
 - [ ] Native HTTP/data connectors with capability permissions and secret isolation.
@@ -191,14 +450,14 @@ Transport-level cancellation is now wired through the browser/runtime/broker ada
 - [ ] Better diagnostics: source location, type, runtime context and suggested fix.
 - [ ] Pine import/translation layer only; Pine must not define CoreSpirit's internal architecture.
 
-## 5.3 Do NOT copy blindly
+## 6.3 Do NOT copy blindly
 - [ ] Do not reproduce Pine's limitations for compatibility's sake.
 - [ ] Do not make external/model requests block the synchronous bar engine.
 - [ ] Do not allow scripts to bypass sandbox or permission boundaries.
 - [ ] Do not maintain separate indicator semantics for native, CoreSpirit and imported Pine scripts.
 - [ ] Do not copy Pine's UI limitations where web-native UI can be better.
 
-## 5.4 New implementation priority
+## 6.4 New implementation priority
 **P0 runtime correctness:** series, `na`, state, realtime rollback/commit, sessions, timeframes, deterministic execution.
 
 **P1 coder:** side-by-side editor, autocomplete, diagnostics, formatter, hot reload, inputs, profiler.
@@ -213,7 +472,7 @@ Transport-level cancellation is now wired through the browser/runtime/broker ada
 
 **P6 Pine bridge:** expand import coverage as CoreSpirit itself becomes stronger.
 
-## 5.5 CoreSpirit design targets
+## 6.5 CoreSpirit design targets
 
 ```corespirit
 indicator "Adaptive Trend" {
@@ -1044,3 +1303,247 @@ The source changes were made against the v13 archive. A full TypeScript/Vite pro
 - Add CoreSpirit script list/version browser.
 - Add Supabase Realtime only for low-frequency deployment/run status.
 - Add Storage-backed model/artifact integration where useful.
+
+
+# 6. Stage tracker — TradingCoreOS v18
+
+| Stage | Status | v25 work |
+|---|---|---|
+| Stage 1 Runtime foundation | 🟢 deepened v25 | Rich visual output contracts, quotas and renderer-independent objects; VM migration remains open |
+| Stage 1.5 Language simplicity | 🟢 deepened v25 | Concise visual primitives: box/band/gradient/arrow/shape plus labels and zones |
+| Stage 2 Indicator kernel | 🟢 deepened v25 | Indicator-to-visual composition via bands/gradients; full reference corpus remains open |
+| **Stage 3 Chart/output lifecycle** | **🟢 deepened v25** | **Canvas scene graph, persistent visual reconciliation, labels, boxes, zones, polylines, levels, gradients, patterns, tables, background/bar tint** |
+| Stage 4 CoreSpirit Coder | 🟢 foundation deepened v25 | Editor exists; completions/signatures/formatter/structured diagnostics added; incremental AST reuse remains open |
+| Stage 5 Realtime + hot reload | 🟠 foundation v25 | Tick execution + explicit execution policy added; true incremental hot reload remains open |
+| Stage 6 Multi-symbol / multi-timeframe | 🟠 foundation v25 | Host-only request/lowerTf capability boundary added; real alignment/cache layer remains open |
+| Stage 7 Events / webhooks | 🟢 foundation | `entry()` / `exit()` produce broker-neutral execution intents and reuse the typed event bus; durable automation remains open |
+| Stage 8 Models / AI | 🟢 CoreSpirit-native prediction foundation | `score()` / `predict()` / probability transforms let users build custom deterministic prediction formulas directly in CoreSpirit; training/remote model adapters remain open |
+| Stage 9 Replay / backtesting | ⬜ | Same VM with replay/backtest execution modes |
+| Stage 10 Objects / collections | ⬜ | Arrays, maps, objects, methods |
+| Stage 11 Pine import | ⬜ | Compatibility translator into CoreSpirit |
+| Stage 12 Production hardening | ⬜ | Sandboxing, quotas, versioning, observability, failure recovery |
+
+## 6.1 Stage 3 implementation details
+
+- [x] `CoreSpiritChartOutputController` owns script-created chart series/markers and cleans them atomically.
+- [x] Stable `seriesId` is emitted by the runtime so multiple `plot` calls no longer overwrite one another.
+- [x] Historical CoreSpirit execution runs in a dedicated worker when supported.
+- [x] Active chart registry lets the coder target the chart the user last interacted with.
+- [x] Coder now has **Run on chart**.
+- [x] Stale CoreSpirit executions are ignored after a newer run/chart lifecycle.
+- [x] Plot, signal, line and zone outputs have a renderer boundary.
+- [x] Chart lifecycle emits `updating`/`ready` around CoreSpirit execution.
+- [x] Chart execution metadata can be persisted through `corespirit_execution_runs`.
+- [ ] Realtime bar-by-bar CoreSpirit output updates — Stage 5.
+- [ ] True hot reload without full historical re-execution — Stage 5.
+- [x] Rich script-owned chart primitives/fills/gradients/patterns/symbols/arrows via a single canvas overlay.
+- [ ] Multi-pane routing and native pane scale contracts — Stage 3.x.
+- [ ] Realtime incremental/hot-reload visual frames — Stage 5.
+
+## 6.3 CoreSpirit v24 — model + automation foundation
+
+- [x] Added `exp`, `log`, `tanh`, `clamp`, `sigmoid`, and `probability` math primitives.
+- [x] Added `score(bias, feature, weight, ...)` for transparent custom model scoring.
+- [x] Added `predict(bias, feature, weight, ...)` for logistic probability output in `[0,1]`.
+- [x] Added `entry(condition, side, confidence, stop, target, tag)` as a broker-neutral execution intent.
+- [x] Added `exit(condition, tag)` as a broker-neutral flatten intent.
+- [x] Execution intents flow through the typed `execution.intent` event boundary rather than directly touching a broker.
+- [x] Chart output dispatcher can visualize execution intents as entry/exit markers while preserving the original intent object for automation.
+- [x] Added a model/automation compiler/runtime contract test.
+- [ ] Add first-class feature sets, reusable model declarations and model versioning.
+- [ ] Add historical walk-forward training primitives that explicitly prevent lookahead.
+- [ ] Add model metrics (precision/recall, calibration, drawdown-aware scoring) and replay/backtest integration.
+- [ ] Add permissioned webhook templates and automation deployment lifecycle.
+
+### v24 design principle
+CoreSpirit should allow a user to express a useful prediction/entry model without leaving the language, while keeping actual broker execution outside the deterministic VM. A script computes features -> score/probability -> decision -> execution intent; the execution layer decides whether and how an intent may be sent.
+
+Example:
+
+```corespirit
+trend = ema(close, 50)
+momentum = change(close, 5)
+prob = predict(-1.1, momentum, 0.30, rsi(close, 14), 0.018, close - trend, 0.002)
+
+plot(prob, "#a78bfa", 2, 0, "Model probability")
+
+if prob > 0.72 {
+  entry(true, "long", prob, close - atr(14), close + atr(14) * 2, "trend-momentum-long")
+}
+```
+
+The formula is intentionally inspectable. A future `model { ... }` syntax can compile to the same IR rather than creating a second execution system.
+
+
+## 6.4 CoreSpirit v25 — richer data, granular execution, footprint + coder ergonomics
+
+- [x] Added a host-only `CoreSpiritDataResolver` capability boundary for cross-symbol/timeframe requests, lower-timeframe snapshots, depth imbalance and footprint data.
+- [x] Added `request(symbol, timeframe, field, offset)` and `lowerTf(timeframe, field)` primitives. Async/network work remains outside the VM; unresolved async calls return null until the host prefetches a snapshot.
+- [x] Added footprint primitives: `footprintDelta`, `footprintBuy`, `footprintSell`, `footprintPoc`, `footprintVah`, `footprintVal`, `footprintRows`.
+- [x] Added provider-neutral footprint row/bar contracts so future Fyers/Upstox adapters can normalize actual footprint sources without changing the language.
+- [x] Added `executeTick()` for granular realtime tick execution while preserving the VM's socket-free boundary.
+- [x] Added execution-policy metadata (`onEveryTick`, `onOrderFill`, `onBarClose`, `onHistoricalTicks`) to the execution context.
+- [x] Added a lightweight CoreSpirit editor language service with completions, signatures, formatter and structured diagnostics.
+- [x] Added v25 data/execution/editor contract tests.
+- [ ] Connect real lower-timeframe aggregation and depth snapshots to the resolver.
+- [ ] Build a real footprint adapter from broker/feed data rather than synthetic/test snapshots.
+- [ ] Add tick/event replay persistence and deterministic historical-tick backtesting.
+- [ ] Add incremental compiler/AST reuse for sub-100ms hot reload.
+
+## 6.5 Version rule
+
+Every modified project archive increments by exactly one: v17 → v18 → v19 … . The master task file remains the single project task tracker; avoid creating redundant task Markdown files.
+# CoreSpirit surface syntax cases — v16
+
+These cases are compiler-contract examples. They must normalize to the existing core AST without losing executable statements.
+
+```corespirit
+indicator("Trend") {
+  overlay: true
+  input length = int(20, min: 1)
+}
+fast = ema(close, length)
+slow = ema(close, length * 2)
+plot fast
+if fast crossesAbove slow {
+  signal "BUY"
+}
+```
+
+Expected properties:
+- `indicator` wrapper is metadata only.
+- `overlay:` is not sent to the VM.
+- `input length` becomes a deterministic declaration.
+- assignment becomes `let`.
+- `crossesAbove` becomes `crossover`.
+- `plot fast` becomes `plot(fast)`.
+- `signal "BUY"` becomes `signal("BUY")`.
+
+
+# CoreSpirit rich visual syntax — v22
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+
+plot(fast, "#22c55e", 2, 0, "Fast")
+plot(slow, "#ef4444", 2, 0, "Slow")
+
+band(fast + atr(14), fast - atr(14), "#38bdf8", 0.10)
+gradient(highest(close, 20), lowest(close, 20), "#22c55e", "#8b5cf6", 0.08)
+
+if crossover(fast, slow) {
+  shape(low, "arrowUp", "#22c55e", 10, "BUY")
+  label("BUY", "below", "#16a34a", "#fff", 12, "pill")
+}
+
+box(time[20], time, highest(high, 20), lowest(low, 20), "#2563eb", "#60a5fa", 0.10, "hatch")
+arrow(time[10], low[10], time, high, "#f59e0b", 2)
+```
+
+Design rule: one small visual call should be enough for common chart intent. Advanced visuals should compose from these primitives rather than force users to learn a renderer API.
+
+
+## 6.5 CoreSpirit v26 — rich market-data deepening
+
+- [x] Quote snapshot primitives: bid/ask/spread/mid.
+- [x] Per-bar host-data memoization to avoid duplicate resolver work.
+- [x] Batched cross-symbol/timeframe request capability.
+- [x] Structured intrabar host contract plus scalar aggregation primitives.
+- [x] Footprint row-level access, not only POC/VA/delta summaries.
+- [x] Historical tick sequence execution through the same VM.
+- [x] Editor hover metadata, semantic tokens and cached editor snapshots.
+- [x] Version contract bumped to CoreSpirit v26; compiler persistence version bumped to `corespirit-v26`.
+- [ ] Real feed-backed footprint adapter and exchange-specific aggressor semantics.
+- [ ] True lower-TF alignment/cache planner across multiple symbols/scripts.
+- [ ] Native viewport-aware footprint scene graph and row virtualization.
+- [ ] Incremental AST reuse / true hot reload.
+
+**Next deep work:** build the data planner + native footprint scene graph before moving to the `model {}` / `features {}` syntax layer. This keeps the eventual model language capable of consuming the same rich data without creating a second data engine.
+
+
+## 7.1 Current status — TradingCoreOS v27
+
+| Stage | Status | Current depth |
+|---|---|---|
+| Stage 1 Runtime foundation | 🟢 | Deep-audited through v27; deterministic VM, state, cancellation, execution modes, host-controlled data boundary |
+| Stage 1.5 Language simplicity | 🟢 | Friendly syntax normalization + typed semantic foundation |
+| Stage 2 Indicator kernel | 🟢 | Canonical stateful kernel + memoization + warm-up semantics |
+| Stage 3 Chart/output lifecycle | 🟢 | Stable visual objects, rich scene primitives, output isolation |
+| **Stage 4 CoreSpirit Coder** | **🟠 ACTIVE v27** | DOM-free language service, incremental editor model, diagnostics, tokens, symbols, formatter, cached compile |
+| Stage 5 Realtime + hot reload | ⬜ | Tick execution foundation exists; atomic incremental reload remains |
+| Stage 6 Multi-symbol / multi-timeframe | 🟠 foundation | Host data resolver + v27 request planner; alignment engine remains |
+| Stage 7 Events / webhooks | 🟠 foundation | signal/entry/exit/alert/webhook intents exist; event router remains |
+| Stage 8 Models / AI | 🟠 foundation | predict/score + model runtime boundary exists; first-class models remain |
+| Stage 9 Replay / backtesting | ⬜ | Runtime modes exist; replay engine remains |
+| Stage 10 Objects / collections | ⬜ | Visual objects exist; language collections remain |
+| Stage 11 Pine import | ⬜ | Surface normalizer foundation only |
+| Stage 12 Production hardening | ⬜ | Quotas/security/telemetry remain |
+
+### v27 completed work
+- [x] Data request planning and deduplication before host resolution.
+- [x] Batch resolver path with per-request fallback.
+- [x] Reusable DOM-free editor model.
+- [x] Incremental source edit API and editor versioning.
+- [x] Symbol outline extraction.
+- [x] Cached compilation inside editor model.
+- [x] v27 contract test.
+- [x] History file updated.
+
+### Stage 4 next deep tasks
+- [ ] Replace textarea-only editing with an editor adapter capable of syntax highlighting while preserving the CoreSpirit language service.
+- [ ] Add completion context (member/call/argument/property) rather than prefix-only completion.
+- [ ] Add quick fixes and diagnostic code actions.
+- [ ] Add document outline/folding ranges and go-to-definition.
+- [ ] Add incremental parse/AST reuse for large scripts.
+- [ ] Add editor-to-chart execution state with cancel/replace semantics.
+
+### Data engine next deep tasks
+- [ ] Align higher/lower timeframe series without lookahead leakage.
+- [ ] Explicit confirmed/developing data policy for every request.
+- [ ] Shared cross-script request cache.
+- [ ] Real footprint row scene graph + viewport virtualization.
+- [ ] Native broker/depth adapters with feed-quality metadata.
+
+
+## v28 — Data Engine + Footprint Scene Graph deep pass
+**Base:** v27
+
+### Implemented
+- [x] Added explicit data states: historical, confirmed, developing, realtime.
+- [x] Extended data snapshots with receive time and revision metadata.
+- [x] Added bounded shared CoreSpiritDataCache for cross-script/host-side reuse.
+- [x] Added cache-aware request-plan resolution; VM remains network-free.
+- [x] Added deterministic higher-timeframe snapshot alignment without leading-value invention.
+- [x] Added lower-timeframe/intrabar grouping contract for parent-bar execution.
+- [x] Added footprint scene normalization with per-row intensity and buy/sell/balanced classification.
+- [x] Added native footprint visual object and canvas renderer path.
+- [x] Added v28 deep contract tests for cache, alignment, intrabar grouping and footprint rendering data.
+- [x] Continued Stage 4 editor/data architecture without coupling the editor model to the DOM.
+
+### Remaining deep gaps
+- [ ] Feed-native footprint data adapters for each broker/provider.
+- [ ] Exact session/calendar-aware HTF/LTF alignment.
+- [ ] Historical tick persistence and deterministic replay from captured feed data.
+- [ ] Multi-pane scene graph with independent price scales.
+- [ ] Viewport culling/virtualization for footprint rows beyond the visible range.
+- [ ] Incremental hot-reload frames and transactional visual swaps.
+- [ ] First-class `features {}` / `model {}` compiler lowering.
+
+
+## TradingCoreOS v29 — Stage 4 CoreSpirit Coder deep pass
+
+- [x] Context-aware completion modes (global/call/argument/member).
+- [x] Definition metadata and definition-at-cursor lookup.
+- [x] Folding-range extraction from block structure.
+- [x] Deterministic quick-fix/code-action API.
+- [x] Bounded undo/redo in the DOM-free editor model.
+- [x] Versioned editor edits and cached compilation retained.
+- [x] Synchronized syntax-highlight textarea adapter in the CoreSpirit Coder page.
+- [x] Ctrl/Cmd+S save, Ctrl/Cmd+Enter run, Ctrl/Cmd+Z/Y editor actions.
+- [x] v29 contract tests and coder contract document.
+- [ ] Incremental AST reuse rather than full parse on every edit.
+- [ ] True Monaco/CodeMirror adapter with diagnostics decorations and folding UI.
+- [ ] Transactional compile/validate/swap hot reload.
+- [ ] Source maps from normalized CoreSpirit syntax to original editor positions.
+- [ ] Rich type inference/member completion for future UDTs, collections and model objects.
