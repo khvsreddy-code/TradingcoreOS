@@ -2,8 +2,8 @@
 
 **Project direction:** Build CoreSpirit as TradingCoreOS's own trading-native scripting language and runtime. CoreSpirit is **not** intended to be a Pine clone. Pine compatibility remains an import/translation layer only.
 
-**Current source baseline:** merged NIFTY/history-fix archive (v9)
-**Current workstream:** CoreSpirit language + TradingView-style coder + chart reliability + indicator/runtime correctness
+**Current source baseline:** TradingCoreOS v16 (built from v15)
+**Current workstream:** staged CoreSpirit language/runtime + TradingView-quality chart reliability + canonical indicator kernel + coder
 **Updated:** 2026-09-20
 
 ---
@@ -110,7 +110,7 @@ Source:
 - `src/App.tsx`
 - `src/components/workspace/WorkspaceModuleShell.tsx`
 
-### 4.2 Chart history lifecycle hardening — STARTED
+### 4.2 Chart history lifecycle hardening — COMPLETED IN V13
 
 Added an abort-aware chart history lifecycle boundary:
 
@@ -120,7 +120,7 @@ Added an abort-aware chart history lifecycle boundary:
 - history guard accepts an optional abort signal
 - runtime checks cancellation before/after broker history retrieval
 
-Important limitation: current broker adapter interfaces do not yet pass `AbortSignal` into the underlying HTTP request. The current layer therefore prevents stale results and queued work from affecting the chart, while true transport-level cancellation must be added to the broker HTTP adapters next.
+Transport-level cancellation is now wired through the browser/runtime/broker adapter and FYERS server history route. Shared requests use consumer-aware cancellation so one chart switch does not cancel another chart that is still waiting for the same dataset.
 
 ---
 
@@ -834,3 +834,195 @@ First Stage 2 targets:
 - [ ] session-aware VWAP
 - [ ] deterministic warm-up and `na` rules for every function
 - [ ] golden-vector tests
+
+---
+
+# 6. Build log — v13 / 2026-09-20
+
+## 6.1 Chart reliability hardening — DONE for this iteration
+
+### Fixed architectural failure found in v12
+- [x] History request deduplication no longer shares the first caller's `AbortSignal`.
+- [x] Each chart is now a consumer of a shared history request.
+- [x] A symbol switch cancels only that chart's waiter.
+- [x] The underlying request is aborted only when the last consumer leaves.
+- [x] Broker history HTTP requests now receive `AbortSignal` through the browser → runtime → adapter chain.
+- [x] FYERS server history requests now abort their upstream FYERS fetch when the client disconnects.
+- [x] Broker request-gate waits are abort-aware.
+- [x] Chart cleanup now actually calls `historyAbortController.abort()`.
+- [x] 429 requests remain terminal rather than multiplying retries.
+- [x] Historical results remain generation-checked before chart paint.
+
+### Why this matters
+The previous v12 guard could deduplicate NIFTY history for multiple callers while tying the shared promise to the first caller's abort signal. A rapid symbol switch could therefore abort the shared request and make later consumers receive `AbortError`, producing an empty chart even though the broker could have returned data. v13 separates **request ownership** from **consumer cancellation**.
+
+## 6.2 CoreSpirit language simplicity — DONE for this iteration
+
+### Surface syntax now accepted
+- [x] `indicator("Name") { ... }` declaration is recognized as script metadata and removed from executable syntax for the current compiler stage.
+- [x] `fast = ema(close, 20)` lowers to the compact core declaration form.
+- [x] `if fast crossesAbove slow { ... }` lowers to `crossover(fast, slow)`.
+- [x] `if fast crossesBelow slow { ... }` lowers to `crossunder(fast, slow)`.
+- [x] `plot fast` lowers to `plot(fast)`.
+- [x] `signal "BUY"` lowers to `signal("BUY")`.
+- [x] `plot(x, name = "...")` accepts the common human-readable form and lowers to the core plot call.
+- [x] Existing explicit CoreSpirit syntax remains valid.
+
+### Design rule
+Keep complexity inside the compiler/runtime. Users should not have to learn Pine's internal qualifier machinery merely to write normal trading scripts. CoreSpirit will infer internal series/state information wherever possible.
+
+## 6.3 Stage 2 indicator kernel — DONE for this iteration
+
+- [x] Added canonical deterministic indicator math module: `src/services/marketData/coreIndicatorKernel.ts`.
+- [x] SMA warm-up is explicit.
+- [x] EMA uses a complete-window SMA seed, then recursive updates.
+- [x] Wilder/RMA smoothing has an explicit SMA seed.
+- [x] ATR uses true range + Wilder/RMA semantics and warm-up.
+- [x] RSI uses Wilder averages and handles zero-loss/zero-gain edge cases (`100`/`50`) instead of returning `99.01`-style artifacts.
+- [x] Native indicator engine now imports the canonical SMA/EMA/RMA/ATR/true-range implementations instead of maintaining duplicate implementations.
+- [x] HMA no longer feeds synthetic zeroes into the final WMA warm-up.
+- [x] Stochastic no longer treats unavailable early `%K` values as zero during smoothing.
+- [x] MFI zero-negative-flow behavior is corrected (`100` when positive flow exists, `50` when both are zero).
+- [x] CoreSpirit runtime RSI zero-loss handling is aligned with the canonical behavior.
+- [x] CoreSpirit runtime ATR now waits for its seed window and uses Wilder smoothing.
+- [x] CoreSpirit runtime VWAP resets by Indian session day instead of carrying cumulative volume across sessions.
+- [x] CoreSpirit `change(source, length)` now compares against the requested historical length rather than always using one bar.
+
+### Validation completed
+- [x] Targeted TypeScript check passes for the modified CoreSpirit + indicator source set when compiled with the repository's CommonJS/Node resolution mode.
+- [x] CoreSpirit language self-test passed: `CORESPIRIT_LANGUAGE_SIMPLICITY=PASS`.
+- [x] Indicator-kernel deterministic vector self-test passed: `CORESPIRIT_STAGE2_KERNEL=PASS`.
+
+### Environment limitation
+- [ ] Full application build still requires the repository dependencies (`node_modules`); the uploaded archive does not contain them. Server-wide TypeScript validation therefore remains a separate deployment/environment task.
+
+---
+
+# 7. v13 next stages
+
+## Immediate next stage — Stage 3: visual/runtime unification
+- [ ] Make CoreSpirit plots first-class chart series with stable plot IDs, names, styles and pane routing.
+- [ ] Atomic replacement of script outputs on hot reload.
+- [ ] Prevent duplicate/stale indicator series after rapid symbol/timeframe/script changes.
+- [ ] Add CoreSpirit output generation IDs to the chart renderer.
+- [ ] Preserve old valid chart data until the replacement dataset has passed validation.
+
+## After Stage 3
+- [ ] Stage 4: full TradingView-style CoreSpirit Coder — syntax highlighting, autocomplete, diagnostics, formatter, side-by-side chart, run/stop, script management.
+- [ ] Stage 5: realtime execution + true hot reload.
+- [ ] Stage 6: multi-symbol / multi-timeframe data alignment.
+- [ ] Stage 7: events / alerts / webhooks.
+- [ ] Stage 8: model/AI runtime interface.
+- [ ] Stage 9: replay/backtesting/strategy execution.
+- [ ] Stage 10: arrays/maps/objects/methods/collections.
+- [ ] Stage 11: Pine import/translation expansion.
+- [ ] Stage 12: security, quotas, profiling and production hardening.
+
+## TradingView-quality chart gate
+A chart stage is not marked complete until it passes rapid-switch tests covering at minimum:
+
+`NIFTY → BANKNIFTY → SENSEX → NIFTY → RELIANCE → NIFTY FUT → NIFTY`
+
+and:
+
+`1m → 3m → 5m → 15m → 1H → 5m`
+
+while verifying:
+- [ ] final selected symbol has candles
+- [ ] final selected timeframe has candles
+- [ ] no old symbol paints into the new chart
+- [ ] no old indicator state paints into the new chart
+- [ ] no shared-request cancellation causes a false empty result
+- [ ] 429s do not create a retry storm
+- [ ] current realtime bar updates without corrupting history
+- [ ] chart remains responsive during rapid changes
+
+TradingView's documented execution model is our reference for the **runtime semantics**: historical bars execute sequentially; realtime bars are recalculated on updates; applicable state is rolled back to the last committed state before the next realtime execution; only the closing execution is committed to the time series. citeturn0search0turn0search5
+
+Lightweight Charts is the renderer foundation; TradingView describes it as supporting streaming realtime updates without page reloads and maintaining responsiveness with large datasets. citeturn0search2
+
+---
+
+# 6. TradingView-quality market-data pass — V14 — COMPLETED / IN PROGRESS
+
+## 6.1 Completed in this pass
+
+- [x] Raised the chart history memory ceiling from 30,000 to **50,000 candles**.
+- [x] Raised the initial history request target from 500 to **25,000 candles** where the broker/date-window permits.
+- [x] FYERS intraday first-load window now uses the broker-safe **100-day** maximum instead of a 30-day window.
+- [x] FYERS daily first-load window uses the documented **366-day** maximum.
+- [x] Added `cont_flag=1` to FYERS History requests.
+- [x] Increased progressive history pages so the client can extend toward 25k without tiny 500-candle pagination.
+- [x] Added timeframe-aware page sizing so large broker windows are not accidentally trimmed in a way that creates history gaps.
+- [x] Added stale-while-refresh history caching: a recently used symbol can paint from memory while its cache refreshes in the background.
+- [x] Removed the browser-side artificial 325 ms history delay. Broker-side request gating remains in place.
+- [x] Added watchlist history warming for the first eight instruments.
+- [x] Added chart history-to-paint and initial-candle-count telemetry through the CoreEventBus.
+- [x] Reworked the FYERS browser market-data client into a shared stream multiplexer so identical watchlist subscriptions share one connection instead of competing controllers.
+- [x] Preserved realtime candle updates from ticks and continued using historical REST data only for history.
+- [x] Kept stale-response/lifecycle protections so an old symbol cannot paint over a newer chart lifecycle.
+
+## 6.2 25k vs 50k decision
+
+**Architecture:** 50,000 is the maximum in-memory chart/history ceiling; 25,000 is the first-load target.
+
+This is intentional. FYERS documents up to 100 calendar days per intraday History API request and 366 days for daily requests. Therefore 25k candles cannot always arrive in one broker response on higher timeframes. The first response is painted immediately, then older pages warm in the background until the 25k target is reached (or valid broker history runs out). 50k remains available for further left-edge expansion.
+
+The browser must never wait for the full 25k/50k target before showing the first valid chart.
+
+## 6.3 Next market-data work
+
+- [ ] Keep the same Lightweight Charts instance across symbol changes instead of destroying/recreating the chart effect.
+- [ ] Add explicit `HistoryStore` metadata: fresh/stale/loading/oldest/newest/live.
+- [ ] Add atomic REST-history + WebSocket reconciliation with duplicate/gap detection.
+- [ ] Add switch-to-paint telemetry in addition to history-to-paint telemetry.
+- [ ] Add watchlist priority prefetch scheduling rather than simple sequential warming.
+- [ ] Stress-test rapid NIFTY → BANKNIFTY → SENSEX → NIFTY FUT → NIFTY option switching.
+- [ ] Verify index and F&O history across 1m/3m/5m/15m/1H/1D with real connected FYERS sessions.
+
+## 6.4 Validation note
+
+The source changes were made against the v13 archive. A full TypeScript/Vite production build could not be completed in this environment because the supplied `node_modules` tree is incomplete (`vite/client` and several type-definition packages are missing) and package installation timed out. This is an environment limitation, not a claim of successful production compilation.
+
+
+## V15 market-data acceleration completed
+- Persistent Lightweight Charts instance across symbol/timeframe lifecycle changes.
+- Dedicated shared HistoryStore with 50k ceiling and timestamp deduplication.
+- REST/live candle reconciliation utility with duplicate, stale, gap, and bucket handling.
+- Watchlist prefetch for up to 8 instruments on the 5-minute baseline.
+- Next: persistent subscription manager across chart slots and full rapid-switch stress test.
+
+
+---
+
+# TradingCoreOS v16 — What has been coded
+
+## Market-data/chart engine
+- [x] Persistent FYERS terminal stream key: chart/watchlist subscribers reuse the terminal stream instead of one socket per symbol-set.
+- [x] Broker stream instrument union: new symbols expand the shared stream; normal chart switching no longer creates a new transport solely because the selected symbol changed.
+- [x] HistoryStore cache-first atomic switch path in LiveChart. Cached candles are painted immediately while the normal runtime request refreshes/revalidates data.
+- [x] `symbol_switch_to_paint_ms` telemetry for cache and network first paint.
+- [x] `history_cache_hit` telemetry.
+- [x] Rapid-switch stress harness (`src/services/marketData/chartSwitchStress.ts`) with a representative NIFTY/BANKNIFTY/SENSEX/F&O sequence.
+- [x] REST/WebSocket reconciliation remains centralized through `HistoryStore.reconcileRealtimeCandle`.
+- [x] 25k target / 50k maximum retained.
+
+## CoreSpirit language simplicity
+- [x] `indicator("Name") { ... }` wrapper is now metadata-only; its executable body is preserved instead of being discarded.
+- [x] Concise assignments: `fast = ema(close, 20)` lower to `let fast = ...`.
+- [x] Concise `if condition { ... }` syntax.
+- [x] `fast crossesAbove slow` / `crossesBelow` syntax.
+- [x] `plot fast` and `signal "BUY"` shorthand.
+- [x] Simple `input length = int(20, min: 1)` surface form lowers to a deterministic declaration; UI metadata remains an editor concern.
+- [x] Editor starter script and syntax reference updated to the simplified language.
+
+## v16 validation notes
+- The source changes are intentionally separated from order execution and external network capabilities.
+- Persistent stream sharing is broker-transport reuse; when the server endpoint requires a changed instrument subscription set, the shared transport reconnects with the union. This is not yet a claim of zero-reconnect FYERS protocol-level dynamic subscription.
+- Full production build still requires the project's dependency installation; no build pass is claimed when dependencies are unavailable.
+
+## Next
+- [ ] Protocol-level dynamic FYERS subscribe/unsubscribe without reconnect where supported.
+- [ ] Run automated rapid-switch stress against a connected broker and record p50/p95 switch-to-paint telemetry.
+- [ ] CoreSpirit type inference/series semantics, arrays/maps, `once`, methods/objects and richer inputs.
+- [ ] Side-by-side coder autocomplete/formatter/hot reload.

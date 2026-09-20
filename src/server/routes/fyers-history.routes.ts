@@ -8,8 +8,7 @@ import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
  * Safe FYERS historical-data route.
  *
  * History is loaded in broker-safe date windows. The chart starts with a known-good
- * initial history page and requests older pages lazily as the user pans left, up to a 30,000
- * candle chart cache. If the broker cannot provide that much, valid history is
+ * initial history page and requests older pages lazily as the user pans left, up to a 50,000-candle chart cache, with a 25,000-candle first-load target where the broker's date-window rules permit. If the broker cannot provide that much, valid history is
  * returned instead of fabricating data. The browser/runtime target is therefore
  * progressive rather than one large first-paint request. If the
  * broker or request quota cannot provide that much, the valid available
@@ -124,6 +123,10 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' });
     return;
   }
+  const requestAbort = new AbortController();
+  const abortIfClientLeaves = () => { if (!res.writableEnded) requestAbort.abort(); };
+  req.once('aborted', abortIfClientLeaves);
+  req.once('close', abortIfClientLeaves);
 
   const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '').trim();
@@ -135,8 +138,9 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     return;
   }
   const requested = Number(req.query.limit || (beforeDate ? 500 : 500));
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 1000 : 500, Math.floor(requested))) : 500;
-  const maxChartHistory = 30_000;
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested))) : 500;
+  const maxChartHistory = 50_000;
+  const initialHistoryTarget = 25_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
@@ -164,12 +168,19 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      // TradingView-style history pagination. Initial paint asks FYERS for one
-      // bounded recent window only; older pages are requested by the chart with
-      // `before` as the user scrolls left. This prevents a single mount from
-      // consuming the broker request quota.
-      const windowDays = resolution === 'D' ? 5000 : 30;
+    const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
+      // First paint uses the largest broker-safe window: FYERS documents up to 100 calendar
+      // days per intraday History request and 366 days for daily candles. The client
+      // can then extend toward the 25k target in the background without blocking paint.
+      const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
+      // Size each progressive page so the broker response is close to the requested
+      // candle count instead of slicing a large 100-day response and skipping the
+      // candles that were trimmed from its front. FYERS caps intraday requests at
+      // 100 calendar days, so the computed range is capped there.
+      const estimatedTradingDays = resolution === 'D'
+        ? 366
+        : Math.max(1, Math.ceil((limit * resolutionMinutes) / 375));
+      const windowDays = resolution === 'D' ? 366 : Math.min(100, Math.max(2, Math.ceil(estimatedTradingDays * 1.5)));
       // Anchor history to a completed Indian trading date. This is especially
       // important on weekends/holidays: the current wall-clock date can be a
       // non-trading day and FYERS has returned no_data for some index series
@@ -188,12 +199,14 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         const params = new URLSearchParams({
           symbol: instrumentKey,
           resolution,
+          cont_flag: '1',
           date_format: dateFormat,
           range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
           range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
         });
         lastAttempt = { symbol: instrumentKey, resolution, dateFormat, from: params.get('range_from'), to: params.get('range_to') };
         const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+          signal,
           headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
         });
         const text = await response.text();
@@ -241,17 +254,19 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         console.error('[TradingCore][FYERS history] insufficient', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, lastAttempt, error: historyError?.message || null, brokerCode: historyError?.brokerCode ?? null, fyersStatus: historyError?.fyersStatus ?? null });
         throw historyError || new Error(`Fyers returned no historical candles for ${instrumentKey}.`);
       }
-      console.info('[TradingCore][FYERS history] loaded', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, requested: limit, returned: data.length, oldest: data[0]?.timestamp || null, newest: data[data.length - 1]?.timestamp || null,  });
+      console.info('[TradingCore][FYERS history] loaded', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, requested: limit, target: beforeDate ? null : initialHistoryTarget, returned: data.length, oldest: data[0]?.timestamp || null, newest: data[data.length - 1]?.timestamp || null,  });
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    });
+    }, requestAbort.signal);
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data, requested: limit, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length) });
+    res.json({ success: true, data, requested: limit, target: beforeDate ? null : initialHistoryTarget, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length) });
   } catch (error: any) {
     res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles', brokerRateLimited: Number(error?.status) === 429 });
   } finally {
     inflight.delete(key);
+    req.removeListener('aborted', abortIfClientLeaves);
+    req.removeListener('close', abortIfClientLeaves);
   }
 });

@@ -176,9 +176,9 @@ export class TradingEngine {
     return this.activeBrokerAdapter.fetchTradeHistory();
   }
 
-  public async getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {
+  public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal): Promise<HistoricalCandle[]> {
     if (this.activeBrokerAdapter) {
-      return this.activeBrokerAdapter.getHistoricalData(symbol, timeframe);
+      return this.activeBrokerAdapter.getHistoricalData(symbol, timeframe, signal);
     }
     // Fallback if no active broker
     return [];

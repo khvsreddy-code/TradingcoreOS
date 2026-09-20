@@ -32,8 +32,14 @@ function getState(key: string): QueueState {
   return state;
 }
 
-function sleep(ms: number): Promise<void> {
-  return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }));
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+    const onAbort = () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' })); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /**
@@ -41,7 +47,7 @@ function sleep(ms: number): Promise<void> {
  * margin below documented per-minute limits. This is especially important on
  * Vercel, where multiple React effects can otherwise fan out simultaneously.
  */
-export async function withBrokerRequestGate<T>(broker: 'fyers' | 'upstox', identity: string, task: () => Promise<T>): Promise<T> {
+export async function withBrokerRequestGate<T>(broker: 'fyers' | 'upstox', identity: string, task: (signal?: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
   const key = `${broker}:${identity}`;
   const state = getState(key);
   const limit = LIMITS[broker];
@@ -52,19 +58,21 @@ export async function withBrokerRequestGate<T>(broker: 'fyers' | 'upstox', ident
   state.tail = previous.then(() => turn);
   await previous;
 
+  if (signal?.aborted) { release(); throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }); }
+
   try {
     const now = Date.now();
     state.timestamps = state.timestamps.filter(ts => now - ts < 60_000);
     const oldest = state.timestamps[0];
     const minuteWait = state.timestamps.length >= limit.maxPerMinute && oldest ? 60_000 - (now - oldest) + 25 : 0;
     const spacingWait = Math.max(0, state.nextAvailableAt - now);
-    await sleep(Math.max(minuteWait, spacingWait));
+    await sleep(Math.max(minuteWait, spacingWait), signal);
 
     const startedAt = Date.now();
     state.timestamps.push(startedAt);
     state.nextAvailableAt = startedAt + limit.minIntervalMs;
     try {
-      return await task();
+      return await task(signal);
     } catch (error: any) {
       const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
       const message = String(error?.message || error || '').toLowerCase();

@@ -58,7 +58,20 @@ export function LiveTradingTerminal(){
  useEffect(()=>{if(!selected||!watch.some(x=>x.key===selected))setSelected(watch[0]?.key||'')},[watch,selected]);
  useEffect(()=>{try{localStorage.setItem(`tradingcore_terminal_watch_${broker}`,JSON.stringify(watch))}catch{}},[watch,broker]);
  useEffect(()=>{const q=query.trim();if(q.length<2){setResults([]);return}let dead=false;const t=setTimeout(async()=>{setSearching(true);try{const r=await searchBrokerInstruments(broker,q,segment,broker==='upstox'?30:60);if(!dead)setResults(r)}catch{if(!dead)setResults([])}finally{if(!dead)setSearching(false)}},180);return()=>{dead=true;clearTimeout(t)}},[query,segment,broker]);
- useEffect(()=>{const keys=watch.map(x=>x.key).filter(Boolean);if(!keys.length)return tradingCoreRuntime.subscribeMarketData(keys,e=>{if(e.type==='tick'&&e.tick)setTicks(p=>({...p,[e.tick!.instrumentKey]:e.tick!}))},selected)},[watch.map(x=>x.key).join('|'),selected,broker]);
+ useEffect(()=>{const keys=watch.map(x=>x.key).filter(Boolean);if(!keys.length)return tradingCoreRuntime.subscribeMarketData(keys,e=>{if(e.type==='tick'&&e.tick)setTicks(p=>({...p,[e.tick!.instrumentKey]:e.tick!}))},selected)},[watch.map(x=>x.key).join('|'),broker]);
+ useEffect(()=>{
+   const keys=watch.map(x=>x.key).filter(Boolean).slice(0,8);
+   if(!keys.length)return;
+   let cancelled=false;
+   const warm=async()=>{
+     for(const key of keys){
+       if(cancelled)break;
+       try{await tradingCoreRuntime.getHistoricalData(key,'5minute');}catch{}
+     }
+   };
+   void warm();
+   return()=>{cancelled=true;};
+ },[watch.map(x=>x.key).join('|'),broker]);
  useEffect(()=>{
   if(panel!=='chain') return;
   const u=underlying(watch.find(x=>x.key===selected),broker); if(!u) return;

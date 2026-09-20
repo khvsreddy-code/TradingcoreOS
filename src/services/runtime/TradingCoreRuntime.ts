@@ -4,6 +4,7 @@ import { BrokerAdapter, OrderRequest, OrderResult, Position, Holding, AccountFun
 import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market';
 import { coreEventBus } from '../core/event/eventBus';
+import { historyStore } from '../marketData/HistoryStore';
 
 export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_EXECUTED' | 'TICK_UPDATE' | 'PORTFOLIO_SYNCED' | 'SESSION_REFRESHED' | 'STATUS_CHANGED';
 export type EventListener = (payload: any) => void;
@@ -47,17 +48,17 @@ export class TradingCoreRuntime {
 
   public async connectBrokerOAuth(brokerId: string, authCode?: string): Promise<{ success: boolean; error?: string }> {
     const res = await this.brokerMgr.connectOAuth(brokerId, authCode);
-    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
+    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); historyStore.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
     return res;
   }
   public async connectBrokerApiKeys(brokerId: string, credentials: any): Promise<{ success: boolean; error?: string }> {
     const res = await this.brokerMgr.connectApiKeys(brokerId, credentials);
-    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'ApiKeys' }); void this.syncPortfolio(brokerId); }
+    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); historyStore.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'ApiKeys' }); void this.syncPortfolio(brokerId); }
     return res;
   }
   public async disconnectBroker(brokerId: string): Promise<void> {
     this.routeGeneration += 1;
-    this.historyCache.clear();
+    this.historyCache.clear(); historyStore.clear();
     this.optionChainCache.clear();
     this.optionChainPromises.clear();
     this.lastTickTime.clear();
@@ -76,7 +77,7 @@ export class TradingCoreRuntime {
       this.engine.switchActiveBroker(brokerId);
       if (previous !== target) {
         this.routeGeneration += 1;
-        this.historyCache.clear();
+        this.historyCache.clear(); historyStore.clear();
         this.optionChainCache.clear();
         this.optionChainPromises.clear();
         this.lastTickTime.clear();
@@ -155,9 +156,11 @@ export class TradingCoreRuntime {
     let brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
 
-    const key = `${brokerId}:${symbol}:${timeframe}:initial-500-tradingview-pagination-v12`;
+    const key = `${brokerId}:${symbol}:${timeframe}:initial-25000-progressive-v14`;
+    const storeCached = historyStore.get(brokerId, symbol, timeframe);
+    if (storeCached?.length) return storeCached;
     const cached = this.historyCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    if (cached && cached.expiresAt > Date.now()) return historyStore.set(brokerId, symbol, timeframe, cached.data);
 
     // Do not silently convert a broker switch into an empty history result.
     // If the active broker changed while the request was in flight, retry once
@@ -168,7 +171,7 @@ export class TradingCoreRuntime {
       const requestBroker = broker;
       try {
         if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
-        const rows = await requestBroker.getHistoricalData(symbol, timeframe);
+        const rows = await requestBroker.getHistoricalData(symbol, timeframe, signal);
         if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
         const activeBrokerId = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
         if (generationAtStart !== this.routeGeneration || activeBrokerId !== requestBrokerId) {
@@ -187,8 +190,8 @@ export class TradingCoreRuntime {
           if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
           byTime.set(time, row);
         }
-        const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-30_000);
-        if (history.length) this.historyCache.set(key, { data: history, expiresAt: Date.now() + 30_000 });
+        const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-50_000);
+        if (history.length) { historyStore.set(brokerId, symbol, timeframe, history); this.historyCache.set(key, { data: history, expiresAt: Date.now() + 120_000 }); }
         coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
         return history;
       } catch (error) {
@@ -198,7 +201,15 @@ export class TradingCoreRuntime {
     return [];
   }
 
-  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 1500): Promise<HistoricalCandle[]> {
+  public async prefetchHistoricalData(symbols: string[], timeframe: string): Promise<void> {
+    const brokerInfo = this.getPrimaryBrokerInfo();
+    const brokerId = brokerInfo?.brokerId?.toLowerCase();
+    if (!brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return;
+    const unique = [...new Set(symbols.map(String).filter(Boolean))].slice(0, 8);
+    await Promise.all(unique.map(async symbol => { if (historyStore.get(brokerId, symbol, timeframe)?.length) return; try { await this.getHistoricalData(symbol, timeframe); } catch {} }));
+  }
+
+  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
     const brokerInfo = this.getPrimaryBrokerInfo();
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();

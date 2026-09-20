@@ -21,6 +21,7 @@ export type CoreEventMap = {
   'drawing.deleted': { id: string; owner: string; timestamp: number; sequence?: number };
   'drawing.cleared': { owner: string; timestamp: number; sequence?: number };
   'chart.lifecycle': { chartId: string; state: 'ready' | 'loading' | 'updating' | 'error' | 'recovering' | 'disposed'; timestamp: number; sequence?: number };
+  'chart.telemetry': { chartId: string; symbol: string; timeframe: string; metric: 'history_to_paint_ms' | 'initial_candle_count' | 'switch_to_paint_ms' | 'history_cache_hit'; value: number; timestamp: number; sequence?: number };
 };
 
 export type CoreEventName = keyof CoreEventMap;

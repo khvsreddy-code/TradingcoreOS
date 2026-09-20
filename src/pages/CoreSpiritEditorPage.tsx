@@ -5,22 +5,21 @@ import { compileCoreSpirit } from '../services/coreSpirit';
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
+    input length = int(20, min: 1)
 }
 
-fast = ema(close, 20)
-slow = ema(close, 50)
-bull = crossover(fast, slow)
-bear = crossunder(fast, slow)
+fast = ema(close, length)
+slow = ema(close, length * 2)
 
-plot(fast, name = "Fast EMA")
-plot(slow, name = "Slow EMA")
+plot fast
+plot slow
 
-if bull {
-    signal("BUY")
+if fast crossesAbove slow {
+    signal "BUY"
 }
 
-if bear {
-    signal("SELL")
+if fast crossesBelow slow {
+    signal "SELL"
 }`;
 
 const EXAMPLES: Array<[string, string]> = [
@@ -68,7 +67,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
 
       <div className="space-y-4">
         <Panel title="EXAMPLES" subtitle="Starter CoreSpirit scripts"><div className="space-y-2">{EXAMPLES.map(([name, code]) => <button key={name} onClick={() => { setSource(code); setDiagnostics([]); setCompiled(false); }} className="flex w-full items-center gap-2 rounded-lg border border-[#222636] bg-[#090b11] p-3 text-left hover:border-[#10b981]/40"><BookOpen className="h-4 w-4 text-[#10b981]"/><span className="text-[10px] font-mono text-[#cbd5e1]">{name}</span></button>)}</div></Panel>
-        <Panel title="CORESPIRIT ROADMAP" subtitle="The editor will grow with the runtime"><div className="space-y-2 text-[10px] leading-5 text-[#7e889d]"><div><Zap className="mr-2 inline h-3 w-3 text-[#10b981]"/>Compile + diagnostics <b className="text-[#10b981]">ACTIVE</b></div><div>• Run on active chart</div><div>• Syntax highlighting / autocomplete</div><div>• Inputs with instant hot reload</div><div>• Plot / line / box / zone controls</div><div>• Webhooks + event handlers</div><div>• Models / feature calls</div><div>• Multi-symbol / multi-timeframe requests</div><div>• Replay / backtest / live execution modes</div></div></Panel>
+        <Panel title="CORESPIRIT SYNTAX" subtitle="The concise surface language lowers to the deterministic core"><div className="mb-3 rounded-lg border border-[#222636] bg-[#090b11] p-3 font-mono text-[9px] leading-4 text-[#94a3b8]">fast = ema(close, 20)<br/>plot fast<br/>if fast crossesAbove slow {'{'} ... {'}'}<br/>input length = int(20, min: 1)</div></Panel><Panel title="CORESPIRIT ROADMAP" subtitle="The editor will grow with the runtime"><div className="space-y-2 text-[10px] leading-5 text-[#7e889d]"><div><Zap className="mr-2 inline h-3 w-3 text-[#10b981]"/>Compile + diagnostics <b className="text-[#10b981]">ACTIVE</b></div><div>• Run on active chart</div><div>• Syntax highlighting / autocomplete</div><div>• Inputs with instant hot reload</div><div>• Plot / line / box / zone controls</div><div>• Webhooks + event handlers</div><div>• Models / feature calls</div><div>• Multi-symbol / multi-timeframe requests</div><div>• Replay / backtest / live execution modes</div></div></Panel>
         <Panel title="RESET"><button onClick={() => { setSource(DEFAULT_SOURCE); setDiagnostics([]); setCompiled(false); }} className="premium-button w-full"><RotateCcw className="h-4 w-4"/> Reset starter script</button></Panel>
       </div>
     </main>
