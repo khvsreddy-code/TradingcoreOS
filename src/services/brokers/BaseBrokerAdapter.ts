@@ -78,7 +78,7 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
     // Initial chart load is intentionally bounded. Older candles are fetched lazily
     // when the user pans toward the left edge, rather than hammering broker history
     // endpoints with a 30k request on first paint.
-    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=25000`, { signal });
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=20000`, { signal });
     const data = await res.json(); if (!data.success) { const error: any = new Error(data.error || `Historical data request failed (${res.status})`); error.status = res.status; error.brokerRateLimited = Boolean(data.brokerRateLimited); throw error; } return data.data;
   }
 

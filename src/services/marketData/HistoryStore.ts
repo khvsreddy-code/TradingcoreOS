@@ -14,14 +14,14 @@ export class HistoryStore {
     return b.data;
   }
   getStale(broker: string, symbol: string, timeframe: string): HistoricalCandle[] | undefined { return this.buckets.get(this.key(broker, symbol, timeframe))?.data; }
-  set(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 25_000) {
+  set(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 20_000) {
     const data = this.merge([], rows).slice(-this.maxCandles);
     if (!data.length) return data;
     const times = data.map(x => Date.parse(x.timestamp)).filter(Number.isFinite);
     this.buckets.set(this.key(broker, symbol, timeframe), { data, updatedAt: Date.now(), oldestAt: Math.min(...times), newestAt: Math.max(...times), target });
     return data;
   }
-  mergeInto(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 25_000) {
+  mergeInto(broker: string, symbol: string, timeframe: string, rows: HistoricalCandle[], target = 20_000) {
     const current = this.getStale(broker, symbol, timeframe) || [];
     return this.set(broker, symbol, timeframe, this.merge(current, rows), target);
   }

@@ -1580,3 +1580,21 @@ Design rule: one small visual call should be enough for common chart intent. Adv
 ### Exact regression identified
 
 v30 replaced the older target-based history construction with one broker-safe 100-day initial request and relied on client-side background paging. That made the apparent history size depend on timeframe: approximately 2,500 15-minute candles and ~625 1-hour candles can fit in 100 calendar days. The older implementation instead accumulated multiple broker-safe windows until the 25k target was reached. v31 restores that behavior while retaining the newer symbol normalization, cache, request gate, lifecycle guards, and 50k memory ceiling.
+
+
+## v32 — legacy chart history method restored
+- Exact legacy FYERS timeframe window geometry restored.
+- Target increased to 20,000 candles per timeframe.
+- Multiple broker-valid windows are merged chronologically until target or broker history exhaustion.
+- Newer cache, deduplication, abort grace, symbol normalization and switching protections retained.
+- No synthetic candles when broker history is unavailable.
+
+
+## TradingCoreOS v32 — exact legacy chart history method + 20k target
+- [x] Restore the proven legacy FYERS timeframe-specific request-window geometry.
+- [x] Repeat that same broker-valid window backwards and chronologically merge/deduplicate until 20,000 candles are available.
+- [x] Keep broker request limits/date-window constraints intact.
+- [x] Keep cache, deduplication, symbol normalization, rapid-switch abort grace and stale-result protections.
+- [x] Use whatever valid history the broker actually provides when 20,000 is unavailable; never synthesize historical candles.
+- [x] Set chart/history-store initial target to 20,000 across timeframes.
+- [x] Keep the 50,000 resident-history ceiling where supported by the existing runtime.

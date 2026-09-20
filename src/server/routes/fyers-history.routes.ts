@@ -128,67 +128,94 @@ async function fetchFyersHistoryTarget(
   beforeDate?: Date | null,
   signal?: AbortSignal,
 ): Promise<any[]> {
-  const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
-  const maxWindowDays = resolution === 'D' ? 366 : 100;
-  const candleMinutesPerTradingDay = resolution === 'D' ? 1440 : 375;
-  const estimatedTradingDays = Math.max(1, Math.ceil((target * resolutionMinutes) / candleMinutesPerTradingDay));
-  // Use the largest safe broker window whenever possible. This reproduces the
-  // old target-building behavior while avoiding dozens of tiny requests.
-  const windowDays = Math.min(maxWindowDays, Math.max(2, Math.ceil(estimatedTradingDays * 1.15)));
-  const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
+  // Keep the proven legacy TradingCore request geometry. The old build used a
+  // broker-safe calendar window selected by timeframe; v32 intentionally keeps
+  // that geometry and only repeats the same valid window backwards until the
+  // requested candle target is reached.
+  const legacyWindowDays = resolution === 'D'
+    ? 3650
+    : resolution === '30' || resolution === '60'
+      ? 90
+      : 30;
+
+  const maxPages = resolution === 'D'
+    ? 4
+    : Math.max(2, Math.ceil(target / 500));
+
   let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
   let all: any[] = [];
-  let emptyWindows = 0;
-  const maxPages = Math.max(2, Math.ceil(maxLookbackDays / Math.max(1, windowDays)) + 1);
 
-  for (let page = 0; page < maxPages && all.length < target && emptyWindows < 2; page += 1) {
+  for (let page = 0; page < maxPages && all.length < target; page += 1) {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
+
     end = latestTradingDate(end);
-    const from = new Date(end.getTime() - windowDays * 86_400_000);
-    let pageRows: any[] = [];
-    let pageError: any = null;
+    const from = new Date(end.getTime() - legacyWindowDays * 86_400_000);
     const isNifty50 = symbol === 'NSE:NIFTY50-INDEX';
-    const formats: Array<'0' | '1'> = isNifty50 ? ['0', '1'] : ['1', '0'];
+    const formats: Array<'1' | '0'> = isNifty50 ? ['1', '0'] : ['1', '0'];
+    let pageRows: any[] = [];
+    let lastError: any = null;
 
     for (const dateFormat of formats) {
       try {
         const params = new URLSearchParams({
           symbol,
           resolution,
-          cont_flag: '1',
           date_format: dateFormat,
-          range_from: dateFormat === '0' ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from),
-          range_to: dateFormat === '0' ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end),
+          range_from: dateFormat === '0'
+            ? String(Math.floor(from.getTime() / 1000))
+            : indiaDate(from),
+          range_to: dateFormat === '0'
+            ? String(Math.floor(end.getTime() / 1000))
+            : indiaDate(end),
+          cont_flag: '1',
         });
+
         const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
           signal,
-          headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+          headers: {
+            Accept: 'application/json',
+            Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}`,
+          },
         });
         const text = await response.text();
         let payload: any;
-        try { payload = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          throw Object.assign(
+            new Error(`Fyers history returned a non-JSON response (${response.status})`),
+            { status: response.status },
+          );
+        }
+
         const code = Number(payload?.code);
         if (!response.ok || String(payload?.s || '').toLowerCase() === 'error' || code === 429) {
-          const err: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
-          err.status = code === 429 || response.status === 429 ? 429 : response.status;
-          throw err;
+          const error: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
+          error.status = code === 429 || response.status === 429 ? 429 : response.status;
+          throw error;
         }
+
         pageRows = normalize(payload?.candles || [], target);
         if (pageRows.length) break;
       } catch (error: any) {
-        pageError = error;
-        if (Number(error?.status) === 429) throw error;
+        lastError = error;
+        if (error?.name === 'AbortError' || Number(error?.status) === 429) throw error;
       }
     }
 
     if (pageRows.length) {
       all = normalize([...pageRows, ...all], target);
-      emptyWindows = 0;
-    } else {
-      if (pageError && all.length === 0) throw pageError;
-      emptyWindows += 1;
+    } else if (!all.length && lastError) {
+      throw lastError;
     }
+
+    // The next page ends immediately before this page. This preserves the old
+    // chronological merge behavior while preventing duplicate boundary candles.
     end = new Date(from.getTime() - 1000);
+
+    // If the broker returned less than a full window, it may be at the oldest
+    // available history. One empty page after real data is enough to stop.
+    if (pageRows.length === 0) break;
   }
 
   return normalize(all, target);
@@ -221,9 +248,9 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     return;
   }
   const requested = Number(req.query.limit || (beforeDate ? 500 : 500));
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested))) : 500;
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 30000 : 20000, Math.floor(requested))) : 500;
   const maxChartHistory = 50_000;
-  const initialHistoryTarget = 25_000;
+  const initialHistoryTarget = 20_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
