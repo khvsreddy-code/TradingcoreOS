@@ -40,19 +40,7 @@ function toFyersSymbol(symbol: string): string {
     'nse_index|niftyfinancialservices': 'NSE:FINNIFTY-INDEX', 'nse_index|finnifty': 'NSE:FINNIFTY-INDEX',
     'nse_index|niftymidcapselect': 'NSE:MIDCPNIFTY-INDEX', 'bse_index|sensex': 'BSE:SENSEX-INDEX',
   };
-  if (aliases[normalized]) return aliases[normalized];
-  const pipe = value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
-  if (pipe) {
-    const exchange = pipe[1].toUpperCase();
-    const segment = pipe[2].toUpperCase();
-    const ticker = pipe[3];
-    if (segment === 'CM' && !/-(EQ|BE|SM|ST)$/i.test(ticker)) return `${exchange}:${ticker}-EQ`;
-    return `${exchange}:${ticker}`;
-  }
-  if (!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
-  if (/^NSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
-  if (/^BSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
-  return value;
+  return aliases[normalized] || (/^(NSE|BSE|MCX):/i.test(value) ? value : value);
 }
 
 const fyersResolution: Record<string,string> = {
@@ -81,21 +69,15 @@ function normalizeCandles(rows: any[], limit: number): any[] {
 }
 
 async function requestFyersHistory(accessToken: string, symbol: string, resolution: string, from: string, to: string): Promise<any[]> {
-  const query = new URLSearchParams({ date_format: '1', range_from: from, range_to: to });
+  const query = new URLSearchParams({ date_format: '1', range_from: from, range_to: to, cont_flag: '1' });
   const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(symbol)}&resolution=${encodeURIComponent(resolution)}&${query.toString()}`;
   const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
   const text = await response.text();
   let payload: any;
   try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-  if (!response.ok || payload?.s === 'error') {
-    const error: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
-    error.status = Number(payload?.code) === 429 || response.status === 429 ? 429 : response.status;
-    error.brokerCode = Number(payload?.code);
-    throw error;
-  }
+  if (!response.ok || payload?.s === 'error') throw new Error(payload?.message || `Fyers history failed (${response.status})`);
   return mapFyersCandles(payload?.candles || []);
 }
-
 
 /**
  * Build history backwards in broker-safe date windows. The previous
@@ -306,8 +288,8 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
   const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
   const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '');
-  const requestedLimit = Number(req.query.limit || 10_000);
-  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(30_000, Math.floor(requestedLimit))) : 10_000;
+  const requestedLimit = Number(req.query.limit || 25_000);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(25_000, Math.floor(requestedLimit))) : 25_000;
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {

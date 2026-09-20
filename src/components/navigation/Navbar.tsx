@@ -96,7 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <>
               <button
-                onClick={() => onNavigate?.('login')}
+                onClick={onOpenAuthModal}
                 className="rounded-lg border border-white/[0.08] bg-white/[0.025] px-4 py-2 text-sm font-medium text-[#e5e7eb] transition-all hover:border-white/[0.15] hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]" 
               >
                 Sign In
@@ -180,7 +180,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <button
                       onClick={() => {
                         closeMobileMenu();
-                        onNavigate?.('login');
+                        onOpenAuthModal();
                       }}
                       className="w-full rounded-lg border border-[#222636] bg-[#11131c] py-2.5 text-sm font-medium text-[#f3f4f6] transition-colors hover:bg-[#181b28]"
                     >

@@ -4,116 +4,15 @@ import { upstoxMarketDataClient } from './UpstoxMarketDataClient';
 
 type Listener = (event: MarketFeedEvent) => void;
 
-type FyersStream = {
-  streamKey: string;
-  instrumentKeys: string[];
-  depthInstrumentKey?: string;
-  listeners: Set<Listener>;
-  controller?: AbortController;
-  reconnectTimer?: number;
-  pollTimer?: number;
-  attempt: number;
-  generation: number;
-  stopped: boolean;
-  lastTickAt: Map<string, number>;
-};
-
 /**
- * Browser-side market-data multiplexer.
- *
- * One FYERS stream is shared by all charts/subscribers using the same symbol set.
- * A watchlist/chart switch therefore does not tear down and recreate the socket.
- * The broker feed remains the single source of live ticks.
+ * Browser-side transport selector. The connected broker is the sole source of
+ * live ticks; no Upstox fallback is allowed when FYERS is the primary broker.
  */
-export class BrokerMarketDataClient {
-  private streams = new Map<string, FyersStream>();
-
-  private emit(stream: FyersStream, event: MarketFeedEvent): void {
-    stream.listeners.forEach(listener => {
-      try { listener(event); } catch { /* one chart must not break other subscribers */ }
-    });
-  }
-
-  private async connectFyers(stream: FyersStream): Promise<void> {
-    if (stream.stopped) return;
-    stream.controller?.abort();
-    const controller = new AbortController();
-    stream.controller = controller;
-    const generation = ++stream.generation;
-    this.emit(stream, { type: 'status', status: stream.attempt ? 'reconnecting' : 'connecting' });
-
-    try {
-      const response = await tradingApi(`/api/trading/fyers/market-stream?instrument_keys=${encodeURIComponent(stream.instrumentKeys.join(','))}${stream.depthInstrumentKey ? `&depth_symbol=${encodeURIComponent(stream.depthInstrumentKey)}` : ''}`, { signal: controller.signal });
-      if (!response.ok || !response.body) {
-        let message = `FYERS market stream failed (${response.status})`;
-        try { const payload = await readTradingApiJson<any>(response.clone()); message = payload?.error || message; } catch (parseError: any) { message = parseError?.message || message; }
-        throw new Error(message);
-      }
-      if (stream.stopped || generation !== stream.generation || controller.signal.aborted) return;
-      stream.attempt = 0;
-      this.emit(stream, { type: 'status', status: 'connected' });
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let remainder = '';
-      while (!controller.signal.aborted && !stream.stopped) {
-        const chunk = await reader.read();
-        if (chunk.done) throw new Error('FYERS market stream ended');
-        const lines = (remainder + decoder.decode(chunk.value, { stream: true })).split('\n');
-        remainder = lines.pop() || '';
-        for (const line of lines.filter(Boolean)) {
-          try {
-            const event = JSON.parse(line) as MarketFeedEvent;
-            if (event.type === 'tick' && event.tick) stream.lastTickAt.set(String(event.tick.instrumentKey), Date.now());
-            this.emit(stream, event);
-          } catch { /* ignore malformed keep-alive frames */ }
-        }
-      }
-    } catch (error: any) {
-      if (!stream.stopped && !controller.signal.aborted && generation === stream.generation) {
-        stream.attempt += 1;
-        this.emit(stream, { type: 'status', status: 'reconnecting' });
-        this.emit(stream, { type: 'error', error: error?.message || 'Unable to connect to FYERS market feed' });
-        const delay = Math.min(10_000, 500 * 2 ** Math.min(stream.attempt, 5));
-        stream.reconnectTimer = window.setTimeout(() => void this.connectFyers(stream), delay);
-      }
-    }
-  }
-
-  private async pollQuotes(stream: FyersStream): Promise<void> {
-    if (stream.stopped) return;
-    const keys = stream.instrumentKeys;
-    const now = Date.now();
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 4500);
-    if (stale) {
-      try {
-        const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`);
-        if (response.ok) {
-          const payload = await readTradingApiJson<any>(response);
-          const rows = payload?.data || {};
-          for (const [key, quote] of Object.entries(rows)) {
-            const q: any = quote || {};
-            const ltp = Number(q.ltp);
-            if (!Number.isFinite(ltp)) continue;
-            const tick: any = {
-              instrumentKey: String(key),
-              ltp,
-              close: Number(q.close ?? q.prevClose ?? 0) || undefined,
-              change: Number(q.change ?? 0) || undefined,
-              changePercent: Number(q.changePercent ?? q.chg ?? 0) || undefined,
-              volume: Number(q.volume ?? 0) || 0,
-              bid: Number.isFinite(Number(q.bid)) ? [{ price: Number(q.bid), quantity: 0 }] : undefined,
-              ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
-              receivedAt: new Date().toISOString(),
-              lastTradeTimestamp: q.timestamp || new Date().toISOString(),
-            };
-            stream.lastTickAt.set(String(key), Date.now());
-            this.emit(stream, { type: 'tick', tick });
-          }
-        }
-      } catch { /* websocket remains primary; retry on the next stale interval */ }
-    }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 3000);
-  }
+class BrokerMarketDataClient {
+  private controllers = new Map<string, AbortController>();
+  private reconnectTimers = new Map<string, number>();
+  private refCounts = new Map<string, number>();
+  private generations = new Map<string, number>();
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
     const id = brokerId.toLowerCase();
@@ -123,52 +22,68 @@ export class BrokerMarketDataClient {
       return () => {};
     }
 
-    const normalizedKeys = [...new Set(instrumentKeys.map(String).filter(Boolean))].sort();
-    // A broker stream is persistent at terminal scope. Its instrument set is
-    // expanded when another chart/watchlist needs a symbol; normal chart switches
-    // therefore reuse the same transport instead of opening a new socket.
-    const streamKey = `${id}:terminal`;
-    let stream = this.streams.get(streamKey);
-    if (!stream) {
-      stream = {
-        streamKey,
-        instrumentKeys: normalizedKeys,
-        depthInstrumentKey,
-        listeners: new Set(),
-        attempt: 0,
-        generation: 0,
-        stopped: false,
-        lastTickAt: new Map(),
-      };
-      this.streams.set(streamKey, stream);
-      void this.connectFyers(stream);
-      void this.pollQuotes(stream);
-    } else {
-      const union = [...new Set([...stream.instrumentKeys, ...normalizedKeys])].sort();
-      const changed = union.join(',') !== stream.instrumentKeys.join(',');
-      if (changed) { stream.instrumentKeys = union; void this.connectFyers(stream); }
-      if (depthInstrumentKey && stream.depthInstrumentKey !== depthInstrumentKey) {
-      // Depth is tied to the same transport in our server route. Reconnect only
-      // when the actual depth symbol changes; normal chart switching stays hot.
-      stream.depthInstrumentKey = depthInstrumentKey;
-        void this.connectFyers(stream);
-      }
-    }
-
-    stream.listeners.add(listener);
-    listener({ type: 'status', status: stream.controller && !stream.controller.signal.aborted ? 'connected' : 'connecting' });
+    const streamKey = `${id}:${[...instrumentKeys].sort().join(',')}`;
+    this.refCounts.set(streamKey, (this.refCounts.get(streamKey) || 0) + 1);
     let stopped = false;
-    return () => {
+    let attempt = 0;
+    const generation = (this.generations.get(streamKey) || 0) + 1;
+    this.generations.set(streamKey, generation);
+
+    const connect = async () => {
       if (stopped) return;
+      this.controllers.get(streamKey)?.abort();
+      const controller = new AbortController();
+      this.controllers.set(streamKey, controller);
+      listener({ type: 'status', status: attempt ? 'reconnecting' : 'connecting' });
+
+      try {
+        const response = await tradingApi(`/api/trading/fyers/market-stream?instrument_keys=${encodeURIComponent(instrumentKeys.join(','))}${depthInstrumentKey ? `&depth_symbol=${encodeURIComponent(depthInstrumentKey)}` : ''}`, { signal: controller.signal });
+        if (!response.ok || !response.body) {
+          let message = `FYERS market stream failed (${response.status})`;
+          try { const payload = await readTradingApiJson<any>(response.clone()); message = payload?.error || message; } catch (parseError: any) { message = parseError?.message || message; }
+          throw new Error(message);
+        }
+        if (generation !== (this.generations.get(streamKey) || 0) || controller.signal.aborted) return;
+        attempt = 0;
+        listener({ type: 'status', status: 'connected' });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let remainder = '';
+        while (!controller.signal.aborted) {
+          const chunk = await reader.read();
+          if (chunk.done) throw new Error('FYERS market stream ended');
+          const lines = (remainder + decoder.decode(chunk.value, { stream: true })).split('\n');
+          remainder = lines.pop() || '';
+          for (const line of lines.filter(Boolean)) {
+            try { listener(JSON.parse(line) as MarketFeedEvent); } catch { /* ignore malformed keep-alive */ }
+          }
+        }
+      } catch (error: any) {
+        if (!stopped && !controller.signal.aborted && generation === (this.generations.get(streamKey) || 0)) {
+          attempt += 1;
+          listener({ type: 'status', status: 'reconnecting' });
+          listener({ type: 'error', error: error?.message || 'Unable to connect to FYERS market feed' });
+          const delay = Math.min(10_000, 500 * 2 ** Math.min(attempt, 5));
+          const timer = window.setTimeout(() => void connect(), delay);
+          this.reconnectTimers.set(streamKey, timer);
+        }
+      }
+    };
+
+    void connect();
+    return () => {
       stopped = true;
-      stream!.listeners.delete(listener);
-      if (stream!.listeners.size > 0) return;
-      stream!.stopped = true;
-      stream!.generation += 1;
-      stream!.controller?.abort();
-      if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
-      if (stream!.reconnectTimer) window.clearTimeout(stream!.reconnectTimer);
-      this.streams.delete(streamKey);
+      const remaining = Math.max(0, (this.refCounts.get(streamKey) || 1) - 1);
+      this.refCounts.set(streamKey, remaining);
+      if (remaining === 0) {
+        this.controllers.get(streamKey)?.abort();
+        this.controllers.delete(streamKey);
+        const timer = this.reconnectTimers.get(streamKey);
+        if (timer) window.clearTimeout(timer);
+        this.reconnectTimers.delete(streamKey);
+        this.refCounts.delete(streamKey);
+        this.generations.delete(streamKey);
+      }
     };
   }
 
@@ -178,14 +93,8 @@ export class BrokerMarketDataClient {
       upstoxMarketDataClient.disconnect();
       return;
     }
-    for (const [key, stream] of this.streams) {
-      if (!key.startsWith(`${id}:`)) continue;
-      stream.stopped = true;
-      stream.generation += 1;
-      stream.controller?.abort();
-      if (stream.pollTimer) window.clearTimeout(stream.pollTimer);
-      if (stream.reconnectTimer) window.clearTimeout(stream.reconnectTimer);
-      this.streams.delete(key);
+    for (const [key, controller] of this.controllers) {
+      if (key.startsWith(`${id}:`)) controller.abort();
     }
   }
 }

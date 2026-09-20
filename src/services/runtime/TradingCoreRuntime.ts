@@ -135,36 +135,26 @@ export class TradingCoreRuntime {
     const existing = this.optionChainPromises.get(key);
     if (existing) return existing;
     const promise = broker.getOptionChain(instrumentKey, expiryDate)
-      .then((data) => { this.optionChainCache.set(key, { data, expiresAt: Date.now() + 3_000 }); return data; })
+      .then((data) => { this.optionChainCache.set(key, { data, expiresAt: Date.now() + 10_000 }); return data; })
       .finally(() => this.optionChainPromises.delete(key));
     this.optionChainPromises.set(key, promise);
     return promise;
   }
   public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal): Promise<HistoricalCandle[]> {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
-    // A chart can mount while the authenticated broker session is still being
-    // rehydrated. The old implementation returned [] in that race, which made
-    // the chart permanently initialize without candles. Wait for restoration
-    // before deciding that historical data is unavailable.
     let brokerInfo = this.getPrimaryBrokerInfo();
     if ((!brokerInfo || !this.getPrimaryBroker()) && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
       try { await this.restoreBrokerConnections(); } catch {}
       brokerInfo = this.getPrimaryBrokerInfo();
     }
-
     let broker = this.getPrimaryBroker();
     let brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
-
     const key = `${brokerId}:${symbol}:${timeframe}:initial-20000-legacy-window-v32`;
     const storeCached = historyStore.get(brokerId, symbol, timeframe);
     if (storeCached?.length) return storeCached;
     const cached = this.historyCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return historyStore.set(brokerId, symbol, timeframe, cached.data);
-
-    // Do not silently convert a broker switch into an empty history result.
-    // If the active broker changed while the request was in flight, retry once
-    // against the new primary broker.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const generationAtStart = this.routeGeneration;
       const requestBrokerId = brokerId;
@@ -175,13 +165,10 @@ export class TradingCoreRuntime {
         if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
         const activeBrokerId = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
         if (generationAtStart !== this.routeGeneration || activeBrokerId !== requestBrokerId) {
-          brokerInfo = this.getPrimaryBrokerInfo();
-          broker = this.getPrimaryBroker();
-          brokerId = brokerInfo?.brokerId?.toLowerCase();
+          brokerInfo = this.getPrimaryBrokerInfo(); broker = this.getPrimaryBroker(); brokerId = brokerInfo?.brokerId?.toLowerCase();
           if (attempt === 0 && broker && brokerId) continue;
           return [];
         }
-
         const byTime = new Map<number, HistoricalCandle>();
         for (const row of rows || []) {
           const raw = (row as any)?.timestamp;
@@ -194,39 +181,26 @@ export class TradingCoreRuntime {
         if (history.length) { historyStore.set(brokerId, symbol, timeframe, history); this.historyCache.set(key, { data: history, expiresAt: Date.now() + 120_000 }); }
         coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
         return history;
-      } catch (error) {
-        if (attempt === 1) throw error;
-      }
+      } catch (error) { if (attempt === 1) throw error; }
     }
     return [];
   }
 
   public async prefetchHistoricalData(symbols: string[], timeframe: string): Promise<void> {
-    const brokerInfo = this.getPrimaryBrokerInfo();
-    const brokerId = brokerInfo?.brokerId?.toLowerCase();
+    const brokerInfo = this.getPrimaryBrokerInfo(); const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return;
     const unique = [...new Set(symbols.map(String).filter(Boolean))].slice(0, 8);
     await Promise.all(unique.map(async symbol => { if (historyStore.get(brokerId, symbol, timeframe)?.length) return; try { await this.getHistoricalData(symbol, timeframe); } catch {} }));
   }
 
   public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
-    const brokerInfo = this.getPrimaryBrokerInfo();
-    const broker = this.getPrimaryBroker();
-    const brokerId = brokerInfo?.brokerId?.toLowerCase();
-    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
-    const generationAtStart = this.routeGeneration;
-    if (!broker.getHistoricalDataBefore) return [];
-    const rows = await broker.getHistoricalDataBefore(symbol, timeframe, beforeTimestamp, limit);
+    const brokerInfo = this.getPrimaryBrokerInfo(); const broker = this.getPrimaryBroker(); const brokerId = brokerInfo?.brokerId?.toLowerCase();
+    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER' || !broker.getHistoricalDataBefore) return [];
+    const generationAtStart = this.routeGeneration; const rows = await broker.getHistoricalDataBefore(symbol, timeframe, beforeTimestamp, limit);
     if (generationAtStart !== this.routeGeneration || this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() !== brokerId) return [];
     const byTime = new Map<number, HistoricalCandle>();
-    for (const row of rows || []) {
-      const raw = (row as any)?.timestamp;
-      const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
-      const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
-      if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
-      byTime.set(time, row);
-    }
-    return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
+    for (const row of rows || []) { const raw = (row as any)?.timestamp; const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw)); const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0; if (!time || ![row.open,row.high,row.low,row.close].every(v=>Number.isFinite(Number(v)))) continue; byTime.set(time,row); }
+    return [...byTime.entries()].sort((a,b)=>a[0]-b[0]).map(([,row])=>row);
   }
   public subscribeTicks(symbols: string[], callback: (tick: any) => void): () => void { return this.subscribeMarketData(symbols, (event) => { if (event.type === 'tick' && event.tick) callback(event.tick); }); }
   public subscribeMarketData(instrumentKeys: string[], listener: (event: MarketFeedEvent) => void, depthInstrumentKey?: string): () => void {
@@ -237,28 +211,19 @@ export class TradingCoreRuntime {
     const start = async () => {
       if (!initial || initial.status !== 'Connected') {
         listener({ type: 'status', status: 'connecting' });
-        coreEventBus.emit('market.status', { brokerId: initial?.brokerId, status: 'connecting', timestamp: Date.now() });
         try { await this.restoreBrokerConnections(); } catch { /* surfaced below */ }
         if (stopped) return;
         initial = this.getPrimaryBrokerInfo();
       }
       if (!initial || initial.status !== 'Connected') {
         listener({ type: 'error', error: 'Broker session is not ready for live market data. Open Broker Settings and Sync All.' });
-        coreEventBus.emit('market.error', { brokerId: initial?.brokerId, message: 'Broker session is not ready for live market data. Open Broker Settings and Sync All.', timestamp: Date.now() });
         listener({ type: 'status', status: 'disconnected' });
-        coreEventBus.emit('market.status', { brokerId: initial?.brokerId, status: 'disconnected', timestamp: Date.now() });
         return;
       }
       const relay = (event: MarketFeedEvent) => {
         // Ignore late frames from a broker socket that was already replaced.
         const activeNow = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
         if (activeNow !== currentBrokerId.toLowerCase()) return;
-        if (event.type === 'status') {
-          coreEventBus.emit('market.status', { brokerId: currentBrokerId, status: event.status, timestamp: Date.now() });
-        }
-        if (event.type === 'error') {
-          coreEventBus.emit('market.error', { brokerId: currentBrokerId, message: event.error, timestamp: Date.now() });
-        }
         if (event.type === 'tick' && event.tick) {
           const key = String(event.tick.instrumentKey || '');
           const raw = (event.tick as any).timestamp;
@@ -269,7 +234,6 @@ export class TradingCoreRuntime {
           if (key) this.lastTickTime.set(key, timestamp);
           this.market.set(event.tick.instrumentKey, event.tick);
           this.emit('TICK_UPDATE', event.tick);
-          coreEventBus.emit('market.tick', { symbol: String(event.tick.instrumentKey || ''), tick: event.tick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });
         }
         listener(event);
         this.marketListeners.forEach((subscriber) => subscriber(event));

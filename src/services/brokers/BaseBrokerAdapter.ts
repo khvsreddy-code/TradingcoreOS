@@ -75,15 +75,12 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async getHistoricalData(symbol: string, _timeframe: string, signal?: AbortSignal): Promise<HistoricalCandle[]> {
-    // Initial chart load is intentionally bounded. Older candles are fetched lazily
-    // when the user pans toward the left edge, rather than hammering broker history
-    // endpoints with a 30k request on first paint.
     const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=20000`, { signal });
-    const data = await res.json(); if (!data.success) { const error: any = new Error(data.error || `Historical data request failed (${res.status})`); error.status = res.status; error.brokerRateLimited = Boolean(data.brokerRateLimited); throw error; } return data.data;
+    const data = await res.json(); if (!data.success) { const error: any = new Error(data.error || `Historical data request failed (${res.status})`); error.status = res.status; error.brokerRateLimited = Boolean(data.brokerRateLimited); throw error; } return data.data || [];
   }
 
-  async getHistoricalDataBefore(symbol: string, _timeframe: string, beforeTimestamp: string, limit = 500, signal?: AbortSignal): Promise<HistoricalCandle[]> {
-    const safeLimit = Math.max(100, Math.min(30000, Math.floor(Number(limit) || 5000)));
+  async getHistoricalDataBefore(symbol: string, _timeframe: string, beforeTimestamp: string, limit = 5000, signal?: AbortSignal): Promise<HistoricalCandle[]> {
+    const safeLimit = Math.max(100, Math.min(20000, Number(limit) || 5000));
     const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=${safeLimit}&before=${encodeURIComponent(beforeTimestamp)}`, { signal });
     const data = await res.json(); if (!data.success) { const error: any = new Error(data.error || `Historical data request failed (${res.status})`); error.status = res.status; error.brokerRateLimited = Boolean(data.brokerRateLimited); throw error; } return data.data || [];
   }

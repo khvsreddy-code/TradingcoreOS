@@ -1,31 +1,41 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
-import {
-  buildCanonicalLevelAnalytics,
-  CanonicalChartAnalytics,
-  CanonicalCoreLevel,
-  CanonicalLevelEvent,
-} from './structureEngine';
+import { DynamicLevelSettings, getDynamicLevelSettings } from './levelSettings';
 
 export type CoreLevelState = 'ACTIVE' | 'TESTING' | 'BROKEN' | 'RETESTED' | 'FAILED';
-export type CoreLevelSource =
-  | 'SWING'
-  | 'SESSION'
-  | 'OPENING_RANGE'
-  | 'EQUAL_HL'
-  | 'PREVIOUS_CLOSE'
-  | 'STRUCTURE';
-export type CoreLevel = CanonicalCoreLevel;
-export type LevelEvent = CanonicalLevelEvent;
-export type ChartAnalytics = CanonicalChartAnalytics;
+export type CoreLevelSource = 'SWING' | 'SESSION' | 'OPENING_RANGE' | 'EQUAL_HL' | 'PREVIOUS_CLOSE';
+export interface CoreLevel { side:'support'|'resistance'; price:number; structural:number; state:CoreLevelState; distance:number; tests:number; source:CoreLevelSource; reactionAtr:number; rejectionRatio:number; volumeRatio:number; pivotIndex?:number; confirmationIndex?:number; breakoutIndex?:number; zoneTop?:number; zoneBottom?:number; flipped?:boolean; }
+export interface LevelEvent { type:'BREAKOUT'|'RESISTANCE_TO_SUPPORT'|'SUPPORT_TO_RESISTANCE'|'SUPPORT_FAILURE'|'RESISTANCE_FAILURE'; price:number; index:number; side:'support'|'resistance'; }
+export interface ChartAnalytics { vwap:number; atr:number; previousHigh:number; previousLow:number; openingHigh:number; openingLow:number; dayHigh:number; dayLow:number; support:CoreLevel[]; resistance:CoreLevel[]; bias:'BULLISH'|'BEARISH'|'RANGE'; events?:LevelEvent[]; }
 
-/**
- * Levels is a compatibility facade over the canonical quantitative structure
- * engine. It intentionally contains no independent pivot/S&R implementation.
- */
-export function buildChartAnalytics(
-  candles: HistoricalCandle[],
-  spot: number,
-  overrides?: Partial<import('./levelSettings').DynamicLevelSettings>,
-): ChartAnalytics {
-  return buildCanonicalLevelAnalytics(candles, spot, overrides);
+type Level = { pivotIndex:number; confirmationIndex:number; price:number; zoneTop:number; zoneBottom:number; state:0|1|2; breakoutIndex:number|null; side:'support'|'resistance'; tests:number; source:CoreLevelSource; };
+type Flip = { price:number; zoneTop:number; zoneBottom:number; originalIndex:number; breakoutIndex:number; isSupport:boolean; state:'ACTIVE'|'FAILED'; };
+const ACTIVE=0, BROKEN=1, RETESTED=2;
+const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
+const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n));
+const round=(n:number)=>Math.round(n*100)/100;
+
+function atr14(c:HistoricalCandle[]){if(c.length<2)return 0;const tr=c.map((x,i)=>i?Math.max(x.high-x.low,Math.abs(x.high-c[i-1].close),Math.abs(x.low-c[i-1].close)):Math.max(0,x.high-x.low));const p=Math.min(14,tr.length);let v=tr.slice(0,p).reduce((a,b)=>a+b,0)/Math.max(1,p);for(let i=p;i<tr.length;i++)v=((v*(p-1))+tr[i])/p;return v;}
+function dayKey(ts:string){return new Date(ts).toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'});}
+function sessionBuckets(c:HistoricalCandle[]){const m=new Map<string,HistoricalCandle[]>();for(const x of c){const k=dayKey(x.timestamp);const a=m.get(k)||[];a.push(x);m.set(k,a);}return [...m.values()].sort((a,b)=>new Date(a[0].timestamp).getTime()-new Date(b[0].timestamp).getTime());}
+function pivot(c:HistoricalCandle[],i:number,p:number,side:'support'|'resistance'){if(i<p||i+p>=c.length)return false;const x=c[i];for(let j=1;j<=p;j++){if(side==='support'?(x.low>c[i-j].low||x.low>c[i+j].low):(x.high<c[i-j].high||x.high<c[i+j].high))return false;}return true;}
+function wickOk(c:HistoricalCandle,side:'support'|'resistance'){const up=c.high-Math.max(c.open,c.close),lo=Math.min(c.open,c.close)-c.low,body=Math.abs(c.close-c.open),own=side==='resistance'?up:lo,opp=side==='resistance'?lo:up;return own>body&&own>opp;}
+function rejection(c:HistoricalCandle,side:'support'|'resistance'){const range=Math.max(c.high-c.low,Number.EPSILON),body=Math.abs(c.close-c.open),wick=side==='support'?Math.min(c.open,c.close)-c.low:c.high-Math.max(c.open,c.close);return clamp((wick/range)*(wick>body?1:.5),0,1);}
+function avgVol(c:HistoricalCandle[],i:number,p=20){const a=c.slice(Math.max(0,i-p+1),i+1).map(x=>Math.max(0,x.volume||0)).filter(Boolean);return a.length?a.reduce((x,y)=>x+y,0)/a.length:0;}
+function reaction(c:HistoricalCandle[],i:number,side:'support'|'resistance',atr:number){if(!atr)return 0;let e=0;for(let j=i+1;j<=Math.min(c.length-1,i+8);j++)e=Math.max(e,side==='support'?c[j].high-c[i].low:c[i].high-c[j].low);return clamp(e/atr,0,5);}
+function addAnchor(levels:Level[],price:number|undefined,side:'support'|'resistance',source:CoreLevelSource,c:HistoricalCandle[],atr:number,settings:DynamicLevelSettings){if(!finite(price)||!c.length)return;const idx=c.length-1;if(settings.mergeNearbyLevels&&levels.some(x=>x.side===side&&x.state===ACTIVE&&Math.abs(x.price-price)<=atr*settings.mergeAtrMultiplier))return;levels.push({pivotIndex:idx,confirmationIndex:idx,price,zoneTop:side==='resistance'?price:Math.min(c[idx].open,c[idx].close),zoneBottom:side==='support'?price:Math.max(c[idx].open,c[idx].close),state:ACTIVE,breakoutIndex:null,side,tests:1,source});}
+
+function replay(c:HistoricalCandle[],settings:DynamicLevelSettings){const levels:Level[]=[];const flips:Flip[]=[];const events:LevelEvent[]=[];const atr=Math.max(atr14(c),(c[c.length-1]?.close||1)*.0002,Number.EPSILON);const start=Math.max(0,c.length-settings.lookbackPeriod);
+for(let i=start;i<c.length-settings.pivotLength;i++){for(const side of ['support','resistance'] as const){if(!pivot(c,i,settings.pivotLength,side))continue;const pc=c[i];if(settings.wickDominanceFilter&&!wickOk(pc,side))continue;const price=side==='support'?pc.low:pc.high;if(settings.mergeNearbyLevels&&levels.some(x=>x.side===side&&x.state===ACTIVE&&Math.abs(x.price-price)<=atr*settings.mergeAtrMultiplier))continue;levels.push({pivotIndex:i,confirmationIndex:i+settings.pivotLength,price,zoneTop:side==='resistance'?price:Math.min(pc.open,pc.close),zoneBottom:side==='support'?price:Math.max(pc.open,pc.close),state:ACTIVE,breakoutIndex:null,side,tests:1,source:'SWING'});const same=levels.filter(x=>x.side===side);if(same.length>settings.maxLevelsPerType){const oldest=[...same].sort((a,b)=>a.pivotIndex-b.pivotIndex)[0];levels.splice(levels.indexOf(oldest),1);}}}
+const ss=sessionBuckets(c),cur=ss[ss.length-1]||c,prev=ss[ss.length-2]||[],open=cur.slice(0,Math.min(3,cur.length));addAnchor(prev.length?Math.min(...prev.map(x=>x.low)):undefined,'support','SESSION',c,atr,settings);addAnchor(prev.length?Math.max(...prev.map(x=>x.high)):undefined,'resistance','SESSION',c,atr,settings);addAnchor(open.length?Math.min(...open.map(x=>x.low)):undefined,'support','OPENING_RANGE',c,atr,settings);addAnchor(open.length?Math.max(...open.map(x=>x.high)):undefined,'resistance','OPENING_RANGE',c,atr,settings);
+for(const l of levels){for(let i=l.confirmationIndex;i<c.length;i++){const x=c[i],buf=atr14(c.slice(0,i+1))*settings.breakoutAtrBuffer,breakLevel=l.side==='resistance'?l.zoneTop+buf:l.zoneBottom-buf;if(l.state===ACTIVE){const crossed=settings.breakoutConfirmation==='Close'?(l.side==='resistance'?x.close>breakLevel:x.close<breakLevel):(l.side==='resistance'?x.high>breakLevel:x.low<breakLevel);if(crossed){l.state=BROKEN;l.breakoutIndex=i;if(settings.showBreakouts)events.push({type:'BREAKOUT',price:l.price,index:i,side:l.side});}}else if(l.state===BROKEN&&settings.showReversals&&i>(l.breakoutIndex??-1)){const touched=x.high>=l.zoneBottom&&x.low<=l.zoneTop;const held=settings.retestConfirmation==='Touch'||(l.side==='resistance'?x.close>=l.zoneTop:x.close<=l.zoneBottom);if(touched&&held){l.state=RETESTED;flips.push({price:l.price,zoneTop:l.zoneTop,zoneBottom:l.zoneBottom,originalIndex:l.pivotIndex,breakoutIndex:l.breakoutIndex??i,isSupport:l.side==='resistance',state:'ACTIVE'});events.push({type:l.side==='resistance'?'RESISTANCE_TO_SUPPORT':'SUPPORT_TO_RESISTANCE',price:l.price,index:i,side:l.side==='resistance'?'support':'resistance'});break;}}}}
+if(settings.showFailures)for(const f of flips){for(let i=f.breakoutIndex+1;i<c.length;i++){const failed=f.isSupport?c[i].close<f.zoneBottom:c[i].close>f.zoneTop;if(failed){f.state='FAILED';events.push({type:f.isSupport?'SUPPORT_FAILURE':'RESISTANCE_FAILURE',price:f.price,index:i,side:f.isSupport?'support':'resistance'});break;}}}
+return {levels,flips,events,atr};}
+
+export function buildChartAnalytics(candles:HistoricalCandle[],spot:number,overrides?:Partial<DynamicLevelSettings>):ChartAnalytics{
+const settings={...getDynamicLevelSettings(),...overrides};
+if(!candles.length||!finite(spot))return{vwap:0,atr:0,previousHigh:0,previousLow:0,openingHigh:0,openingLow:0,dayHigh:0,dayLow:0,support:[],resistance:[],bias:'RANGE',events:[]};
+const ss=sessionBuckets(candles),cur=ss[ss.length-1]||candles,prev=ss[ss.length-2]||[],opening=cur.slice(0,Math.min(3,cur.length));const dayHigh=Math.max(...cur.map(x=>x.high),spot),dayLow=Math.min(...cur.map(x=>x.low),spot),previousHigh=prev.length?Math.max(...prev.map(x=>x.high)):dayHigh,previousLow=prev.length?Math.min(...prev.map(x=>x.low)):dayLow,openingHigh=opening.length?Math.max(...opening.map(x=>x.high)):dayHigh,openingLow=opening.length?Math.min(...opening.map(x=>x.low)):dayLow;let pv=0,vv=0;for(const x of cur){const v=Math.max(0,x.volume||0);pv+=((x.high+x.low+x.close)/3)*v;vv+=v;}const vwap=vv?pv/vv:cur[cur.length-1]?.close||spot,atr=atr14(candles);if(!settings.enabled)return{vwap,atr,previousHigh,previousLow,openingHigh,openingLow,dayHigh,dayLow,support:[],resistance:[],bias:'RANGE',events:[]};
+const {levels,flips,events}=replay(candles,settings),safeAtr=Math.max(atr,spot*.0002,Number.EPSILON);const core=(l:Level,side:'support'|'resistance'):CoreLevel=>{const d=Math.abs(spot-l.price);const test=d<=safeAtr*.3;return{side,price:round(l.price),structural:l.tests,state:l.state===RETESTED?'RETESTED':l.state===BROKEN?'BROKEN':test?'TESTING':'ACTIVE',distance:round(d),tests:l.tests,source:l.source,reactionAtr:round(reaction(candles,l.pivotIndex,side,safeAtr)),rejectionRatio:round(rejection(candles[l.pivotIndex],side)),volumeRatio:round((candles[l.pivotIndex].volume||0)/Math.max(1,avgVol(candles,l.pivotIndex))),pivotIndex:l.pivotIndex,confirmationIndex:l.confirmationIndex,breakoutIndex:l.breakoutIndex??undefined,zoneTop:l.zoneTop,zoneBottom:l.zoneBottom};};
+const flipCore=flips.filter(x=>x.state==='ACTIVE').map(x=>({side:x.isSupport?'support' as const:'resistance' as const,price:round(x.price),structural:1,state:'RETESTED' as const,distance:round(Math.abs(spot-x.price)),tests:1,source:'SWING' as CoreLevelSource,reactionAtr:0,rejectionRatio:0,volumeRatio:0,breakoutIndex:x.breakoutIndex,zoneTop:x.zoneTop,zoneBottom:x.zoneBottom,flipped:true}));
+const support=[...levels.filter(x=>x.side==='support'&&x.state!==BROKEN).map(x=>core(x,'support')),...flipCore.filter(x=>x.side==='support')].filter(x=>x.price<spot).sort((a,b)=>b.price-a.price).slice(0,settings.maxLevelsPerType);const resistance=[...levels.filter(x=>x.side==='resistance'&&x.state!==BROKEN).map(x=>core(x,'resistance')),...flipCore.filter(x=>x.side==='resistance')].filter(x=>x.price>spot).sort((a,b)=>a.price-b.price).slice(0,settings.maxLevelsPerType);const last=candles[candles.length-1];const bullish=!!support[0]&&last.close>support[0].price&&last.close>=vwap,bearish=!!resistance[0]&&last.close<resistance[0].price&&last.close<=vwap;return{vwap,atr,previousHigh,previousLow,openingHigh,openingLow,dayHigh,dayLow,support,resistance,bias:bullish&&!bearish?'BULLISH':bearish&&!bullish?'BEARISH':'RANGE',events};
 }

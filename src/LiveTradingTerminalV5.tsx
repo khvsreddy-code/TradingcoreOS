@@ -33,7 +33,7 @@ export function LiveTradingTerminalV5() {
   const [panel, setPanel] = useState<Panel>(null);
   const [ticketPinned, setTicketPinned] = useState(() => { try { return localStorage.getItem('tradingcore_ticket_pinned') === '1'; } catch { return false; } });
   const [renameOpen, setRenameOpen] = useState(false);
-  const [name, setName] = useState(() => { try { return localStorage.getItem('tradingcore_watchlist_name') || 'My First Watchlist'; } catch { return 'My First Watchlist'; } });
+  const [name, setName] = useState(() => { try { return localStorage.getItem('tradingcore_watchlist_name') || 'Main Watchlist'; } catch { return 'Main Watchlist'; } });
   const [draft, setDraft] = useState(name);
   const [levels, setLevels] = useState<DynamicLevelSettings>(() => getDynamicLevelSettings());
   const [portfolio, setPortfolio] = useState<any>({ positions: [], orders: [], trades: [] });
@@ -101,7 +101,7 @@ export function LiveTradingTerminalV5() {
 
   const saveName = () => {
     const value = draft.trim().slice(0, 40); if (!value) return;
-    setName(value); try { localStorage.setItem('tradingcore_watchlist_name', value); window.dispatchEvent(new CustomEvent('tradingcore:watchlist-name-changed',{detail:value})); } catch {} setRenameOpen(false);
+    setName(value); try { localStorage.setItem('tradingcore_watchlist_name', value); } catch {} setRenameOpen(false);
   };
 
   const submit = async (side: OrderRequest['side'], symbol: string, extra: any = {}) => {
@@ -136,6 +136,8 @@ export function LiveTradingTerminalV5() {
   return <>
     <style>{css}</style>
     <LiveTradingTerminalV4 />
+    <button className="tc5-rename" onClick={() => { setDraft(name); setRenameOpen(true); }}>{name} ✎</button>
+    {renameOpen && <div className="tc5-rename-modal"><b>RENAME WATCHLIST</b><div style={{ marginTop: 8 }}><input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setRenameOpen(false); }} /></div><div className="tc5-actions"><button onClick={() => setRenameOpen(false)}>Cancel</button><button onClick={saveName}>Save</button></div></div>}
 
     {panel && panel !== 'ticket' && <div className="tc5-backdrop" onPointerDown={e => { if (e.target === e.currentTarget) setPanel(null); }}><div ref={windowRef} className="tc5-window" role="dialog" aria-modal="false" onPointerDown={e => e.stopPropagation()}>
       <div className="tc5-head" onPointerDown={e => startDrag(e, 'panel')} onPointerMove={dragWindow} onPointerUp={endDrag} onPointerCancel={endDrag}><b>{panel === 'levels' ? 'OS LEVELS' : panel.toUpperCase()}</b><small>Drag title bar · resize from bottom-right · ESC to close</small><span className="tc5-spacer" /><button onPointerDown={e => e.stopPropagation()} onClick={() => setPanel(null)}><X size={12} /> Close</button></div>

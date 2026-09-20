@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
-import { withBrokerRequestGate } from '../BrokerRequestGate.js';
 
 export class UpstoxAdapter extends BaseBroker {
   readonly brokerId = 'upstox';
@@ -405,38 +404,25 @@ export class FyersAdapter extends BaseBroker {
   }
 
   private async fyersFetch(path: string, accessToken: string, options: RequestInit = {}): Promise<any> {
-    // FYERS rate limits are account-wide across REST endpoints, not just the
-    // history endpoint. Route every ordinary FYERS REST call through the same
-    // per-token gate so portfolio polling, quotes, options and order activity
-    // cannot consume the history budget behind the chart's back.
-    return withBrokerRequestGate('fyers', accessToken, async () => {
-      const response = await fetch(`https://api-t1.fyers.in/api/v3${path}`, {
-        ...options,
-        headers: {
-          Accept: 'application/json',
-          Authorization: this.authorization(accessToken),
-          'Content-Type': 'application/json',
-          version: '3',
-          ...(options.headers || {}),
-        },
-      });
-      const text = await response.text();
-      let data: any;
-      try { data = JSON.parse(text); }
-      catch {
-        const error: any = new Error(`Fyers returned a non-JSON response (${response.status})`);
-        error.status = response.status;
-        throw error;
-      }
-
-      if (!response.ok || data?.s === 'error' || (typeof data?.code === 'number' && data.code < 0)) {
-        const error: any = new Error(data?.message || `Fyers API error (${response.status})`);
-        error.status = response.status || (Number(data?.code) === 429 ? 429 : 0);
-        error.brokerRateLimited = error.status === 429 || Number(data?.code) === 429;
-        throw error;
-      }
-      return data;
+    const response = await fetch(`https://api-t1.fyers.in/api/v3${path}`, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        Authorization: this.authorization(accessToken),
+        'Content-Type': 'application/json',
+        version: '3',
+        ...(options.headers || {}),
+      },
     });
+    const text = await response.text();
+    let data: any;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`Fyers returned a non-JSON response (${response.status})`); }
+
+    if (!response.ok || data?.s === 'error' || (typeof data?.code === 'number' && data.code < 0)) {
+      throw new Error(data?.message || `Fyers API error (${response.status})`);
+    }
+    return data;
   }
 
   async getProfile(accessToken: string): Promise<any> {
@@ -518,29 +504,18 @@ export class FyersAdapter extends BaseBroker {
   }
 
   async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<any> {
-    return withBrokerRequestGate('fyers', accessToken, async () => {
-      const query = encodeURIComponent(instrumentKeys.join(','));
-      const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${query}`, {
-        headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
-      });
-      const text = await response.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        const error: any = new Error(`Fyers quotes returned a non-JSON response (${response.status})`);
-        error.status = response.status;
-        throw error;
-      }
-      if (!response.ok || data?.s === 'error') {
-        const error: any = new Error(data?.message || `Fyers quotes failed (${response.status})`);
-        error.status = response.status;
-        error.brokerRateLimited = response.status === 429 || Number(data?.code) === 429;
-        throw error;
-      }
-      return Object.fromEntries((data?.d || []).map((q: any) => [
-        q.n || q.v?.symbol,
-        { ltp: Number(q.v?.lp || 0), chg: String(q.v?.chp ?? q.v?.ch ?? 0), volume: Number(q.v?.volume ?? 0), bid: Number(q.v?.bid ?? 0), ask: Number(q.v?.ask ?? 0), timestamp: new Date().toISOString() },
-      ]));
+    const query = encodeURIComponent(instrumentKeys.join(','));
+    const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${query}`, {
+      headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
     });
+    const text = await response.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { throw new Error(`Fyers quotes returned a non-JSON response (${response.status})`); }
+    if (!response.ok || data?.s === 'error') throw new Error(data?.message || `Fyers quotes failed (${response.status})`);
+    return Object.fromEntries((data?.d || []).map((q: any) => [
+      q.n || q.v?.symbol,
+      { ltp: Number(q.v?.lp || 0), chg: String(q.v?.chp ?? q.v?.ch ?? 0), volume: Number(q.v?.volume ?? 0), bid: Number(q.v?.bid ?? 0), ask: Number(q.v?.ask ?? 0), timestamp: new Date().toISOString() },
+    ]));
   }
 
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
@@ -569,22 +544,13 @@ export class FyersAdapter extends BaseBroker {
     // 3–7 strike OI support/resistance without downloading the full chain.
     const params = new URLSearchParams({ symbol: instrumentKey, strikecount: '7' });
     if (expiryDate && expiryDate !== 'current_week' && /^\d+$/.test(expiryDate)) params.set('timestamp', expiryDate);
-    const response = await withBrokerRequestGate('fyers', accessToken, () => fetch(`https://api-t1.fyers.in/data/options-chain-v3?${params.toString()}`, {
+    const response = await fetch(`https://api-t1.fyers.in/data/options-chain-v3?${params.toString()}`, {
       headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) },
-    }));
+    });
     const text = await response.text();
     let payload: any;
-    try { payload = JSON.parse(text); } catch {
-      const error: any = new Error(`Fyers option-chain returned a non-JSON response (${response.status})`);
-      error.status = response.status;
-      throw error;
-    }
-    if (!response.ok || payload?.s === 'error') {
-      const error: any = new Error(payload?.message || `Fyers option-chain failed (${response.status})`);
-      error.status = response.status;
-      error.brokerRateLimited = response.status === 429 || Number(payload?.code) === 429;
-      throw error;
-    }
+    try { payload = JSON.parse(text); } catch { throw new Error(`Fyers option-chain returned a non-JSON response (${response.status})`); }
+    if (!response.ok || payload?.s === 'error') throw new Error(payload?.message || `Fyers option-chain failed (${response.status})`);
 
     const data = payload?.data || {};
     const rows = Array.isArray(data?.optionsChain) ? data.optionsChain : [];
