@@ -69,6 +69,24 @@ function indiaDate(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
 }
 
+// FYERS History accepts calendar dates. Do not send a weekend/future calendar
+// day as range_to for an intraday index request: some index series return
+// no_data for a weekend endpoint even though the preceding session has data.
+// Resolve the end date to the latest completed Indian market weekday.
+function latestTradingDate(date: Date): Date {
+  const d = new Date(date);
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' }).format(d);
+  if (weekday === 'Sun') d.setUTCDate(d.getUTCDate() - 1);
+  else if (weekday === 'Sat') d.setUTCDate(d.getUTCDate() - 1);
+  return d;
+}
+
+function previousTradingDate(date: Date): Date {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return latestTradingDate(d);
+}
+
 function normalize(rows: any[], limit: number): any[] {
   const byTime = new Map<number, any>();
   for (const row of rows || []) {
@@ -144,7 +162,15 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // `before` as the user scrolls left. This prevents a single mount from
       // consuming the broker request quota.
       const windowDays = resolution === 'D' ? 5000 : 30;
-      const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      // Anchor history to a completed Indian trading date. This is especially
+      // important on weekends/holidays: the current wall-clock date can be a
+      // non-trading day and FYERS has returned no_data for some index series
+      // when range_to is such a day.
+      const rawEnd = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+      const end = latestTradingDate(rawEnd);
+      if (beforeDate && indiaDate(end) >= indiaDate(new Date(beforeDate.getTime()))) {
+        end.setTime(previousTradingDate(new Date(beforeDate.getTime())).getTime());
+      }
       const from = new Date(end.getTime() - windowDays * 86_400_000);
       let data: any[] = [];
       let historyError: any = null;
@@ -188,6 +214,29 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         } catch (error: any) {
           historyError = error;
           if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+        }
+      }
+
+      // Some FYERS index responses can report no_data for a calendar range
+      // ending on a non-trading day. Make exactly one bounded retry against the
+      // preceding completed trading day before declaring the page unavailable.
+      // This retry is still inside the broker request gate and is only reached
+      // when the first request returned no candles, not on successful pages.
+      if (!data.length && !beforeDate) {
+        const retryEnd = previousTradingDate(end);
+        const retryFrom = new Date(retryEnd.getTime() - windowDays * 86_400_000);
+        const savedEnd = end.getTime();
+        const savedFrom = from.getTime();
+        end.setTime(retryEnd.getTime());
+        from.setTime(retryFrom.getTime());
+        try {
+          data = await requestHistory('1');
+        } catch (error: any) {
+          historyError = error;
+          if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
+        } finally {
+          end.setTime(savedEnd);
+          from.setTime(savedFrom);
         }
       }
 

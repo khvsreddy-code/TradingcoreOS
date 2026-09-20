@@ -81,29 +81,21 @@ function normalizeCandles(rows: any[], limit: number): any[] {
 }
 
 async function requestFyersHistory(accessToken: string, symbol: string, resolution: string, from: string, to: string): Promise<any[]> {
-  // Keep this legacy route compatible with the authoritative history route:
-  // cont_flag is optional in FYERS v3 and must not be forced to 1 for indexes
-  // or specific active derivatives.
-  const attempts: Array<'none' | '0' | '1'> = ['none', '0', '1'];
-  let lastError: Error | null = null;
-  for (const contFlag of attempts) {
-    const query = new URLSearchParams({ date_format: '1', range_from: from, range_to: to });
-    if (contFlag !== 'none') query.set('cont_flag', contFlag);
-    const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(symbol)}&resolution=${encodeURIComponent(resolution)}&${query.toString()}`;
-    const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
-    const text = await response.text();
-    let payload: any;
-    try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-    if (!response.ok || payload?.s === 'error') {
-      lastError = new Error(payload?.message || `Fyers history failed (${response.status})`);
-      continue;
-    }
-    const candles = mapFyersCandles(payload?.candles || []);
-    if (candles.length) return candles;
+  const query = new URLSearchParams({ date_format: '1', range_from: from, range_to: to });
+  const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(symbol)}&resolution=${encodeURIComponent(resolution)}&${query.toString()}`;
+  const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
+  const text = await response.text();
+  let payload: any;
+  try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
+  if (!response.ok || payload?.s === 'error') {
+    const error: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
+    error.status = Number(payload?.code) === 429 || response.status === 429 ? 429 : response.status;
+    error.brokerCode = Number(payload?.code);
+    throw error;
   }
-  if (lastError) throw lastError;
-  return [];
+  return mapFyersCandles(payload?.candles || []);
 }
+
 
 /**
  * Build history backwards in broker-safe date windows. The previous

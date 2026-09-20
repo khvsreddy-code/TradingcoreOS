@@ -193,6 +193,12 @@ function normalizeFyersUnderlying(key: string): string {
   if (upper.includes('FINNIFTY')) return 'NSE:FINNIFTY-INDEX';
   if (upper.includes('MIDCPNIFTY')) return 'NSE:MIDCPNIFTY-INDEX';
   if (upper === 'BSE_INDEX|SENSEX' || upper === 'BSE:SENSEX-INDEX') return 'BSE:SENSEX-INDEX';
+  // FYERS option-chain accepts the underlying cash symbol for stock F&O names.
+  // Normalize common search/watchlist aliases so a stock selected as RELIANCE
+  // still resolves to the broker's canonical NSE:RELIANCE-EQ symbol.
+  if (!upper.includes(':') && /^[A-Z0-9&.-]+$/.test(upper)) return `NSE:${upper}-EQ`;
+  if (/^NSE:[A-Z0-9&.-]+$/.test(upper) && !upper.endsWith('-EQ') && !upper.endsWith('-INDEX')) return `${upper}-EQ`;
+  if (/^BSE:[A-Z0-9&.-]+$/.test(upper) && !upper.endsWith('-EQ') && !upper.endsWith('-INDEX')) return `${upper}-EQ`;
   return value;
 }
 
