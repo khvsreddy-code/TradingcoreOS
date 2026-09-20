@@ -9,7 +9,7 @@ export type CoreSpiritIrInstruction =
   | { op:'binary'; dest:string; operator:string; left:string; right:string }
   | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[] }
   | { op:'index'; dest:string; target:string; index:string; seriesName?:string }
-  | { op:'setLocal'; name:string; source:string }
+  | { op:'setLocal'; name:string; source:string; series?: boolean }
   | { op:'jumpIfFalse'; condition:string; target:number }
   | { op:'jump'; target:number }
   | { op:'emit'; kind:'plot'|'marker'|'line'|'zone'|'signal'|'alert'|'webhook'; args:string[] };

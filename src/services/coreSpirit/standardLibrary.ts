@@ -19,6 +19,7 @@ export const CORE_SPIRIT_STDLIB: readonly CoreSpiritBuiltin[] = [
   { name:'crossover', minArgs:2, maxArgs:2, returnType:'boolean', pure:true },
   { name:'crossunder', minArgs:2, maxArgs:2, returnType:'boolean', pure:true },
   { name:'nz', minArgs:1, maxArgs:2, returnType:'number', pure:true },
+  { name:'isNa', minArgs:1, maxArgs:1, returnType:'boolean', pure:true },
   { name:'max', minArgs:2, maxArgs:2, returnType:'number', pure:true },
   { name:'min', minArgs:2, maxArgs:2, returnType:'number', pure:true },
   { name:'abs', minArgs:1, maxArgs:1, returnType:'number', pure:true },

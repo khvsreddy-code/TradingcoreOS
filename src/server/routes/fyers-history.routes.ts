@@ -212,10 +212,15 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         return normalize(payload?.candles || [], limit);
       };
 
-      // The normal FYERS form is date_format=1. Epoch seconds is a single
-      // fallback only; cont_flag permutations are deliberately not attempted
-      // because they turn one chart request into several broker calls.
-      for (const dateFormat of ['1', '0'] as const) {
+      // FYERS has had symbol-specific inconsistencies for NIFTY50-INDEX:
+      // date_format=1 has intermittently returned s=no_data while the same
+      // bounded range works with epoch seconds. Use epoch first for NIFTY50,
+      // and the normal yyyy-mm-dd form for other symbols. Do not rotate through
+      // cont_flag variants here: that multiplies broker calls and was the cause
+      // of the request-limit failures seen while switching charts.
+      const isNifty50 = instrumentKey === 'NSE:NIFTY50-INDEX';
+      const formats: Array<'0' | '1'> = isNifty50 ? ['0', '1'] : ['1', '0'];
+      for (const dateFormat of formats) {
         try {
           data = await requestHistory(dateFormat);
           if (data.length) break;
@@ -225,29 +230,9 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         }
       }
 
-      // Some FYERS index responses can report no_data for a calendar range
-      // ending on a non-trading day. Make exactly one bounded retry against the
-      // preceding completed trading day before declaring the page unavailable.
-      // This retry is still inside the broker request gate and is only reached
-      // when the first request returned no candles, not on successful pages.
-      if (!data.length && !beforeDate) {
-        const retryEnd = previousTradingDate(end);
-        const retryFrom = new Date(retryEnd.getTime() - windowDays * 86_400_000);
-        const savedEnd = end.getTime();
-        const savedFrom = from.getTime();
-        end.setTime(retryEnd.getTime());
-        from.setTime(retryFrom.getTime());
-        try {
-          data = await requestHistory('1');
-        } catch (error: any) {
-          historyError = error;
-          if (Number(error?.status) === 429 || Number(error?.brokerCode) === 429) throw error;
-        } finally {
-          end.setTime(savedEnd);
-          from.setTime(savedFrom);
-        }
-      }
-
+      // Do not make a third broker request here. If both supported date
+      // encodings return no candles, surface the broker result. This keeps a
+      // ticker switch from turning into a history-request storm.
       // Never fabricate historical candles. A quote is useful for the watchlist
       // but it is not historical OHLC and must not be used to make a chart appear
       // healthy when History API failed.

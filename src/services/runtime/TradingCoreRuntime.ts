@@ -139,7 +139,8 @@ export class TradingCoreRuntime {
     this.optionChainPromises.set(key, promise);
     return promise;
   }
-  public async getHistoricalData(symbol: string, timeframe: string): Promise<HistoricalCandle[]> {
+  public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal): Promise<HistoricalCandle[]> {
+    if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
     // A chart can mount while the authenticated broker session is still being
     // rehydrated. The old implementation returned [] in that race, which made
     // the chart permanently initialize without candles. Wait for restoration
@@ -166,7 +167,9 @@ export class TradingCoreRuntime {
       const requestBrokerId = brokerId;
       const requestBroker = broker;
       try {
+        if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
         const rows = await requestBroker.getHistoricalData(symbol, timeframe);
+        if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
         const activeBrokerId = this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
         if (generationAtStart !== this.routeGeneration || activeBrokerId !== requestBrokerId) {
           brokerInfo = this.getPrimaryBrokerInfo();

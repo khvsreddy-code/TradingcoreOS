@@ -4,6 +4,16 @@ import { CoreSpiritAst } from './ast';
 export type CoreSpiritValue = number | boolean | string | null;
 export type CoreSpiritSeries = Array<CoreSpiritValue>;
 
+/** Runtime bar-state flags exposed to the execution engine. */
+export type CoreSpiritBarState = {
+  index: number;
+  time: number;
+  isFirst: boolean;
+  isLast: boolean;
+  isRealtime: boolean;
+  isConfirmed: boolean;
+};
+
 /** Shared output contract. Rendering remains owned by Core Chart. */
 export type CoreSpiritObject =
   | { kind: 'series'; time: number; value: number | null; name?: string }

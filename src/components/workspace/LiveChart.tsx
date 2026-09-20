@@ -473,6 +473,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
  resizeObserver?.observe(host.current);
  let historyReady=false;
  let historyRequestInFlight=false;
+ const historyAbortController = new AbortController();
  let previousLogicalRange:any=null;
  let ignoreRangeEvents=0;
  const normalizeHistory=(rows:HistoricalCandle[])=>{
@@ -527,7 +528,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    if(historyReady&&movingBackward&&Number(range.from)<=HISTORY_PREFETCH_THRESHOLD)void loadOlderHistory();
  };
  c.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange);
- tradingCoreRuntime.getHistoricalData(resolvedInstrumentKey,intervals[timeframe]).then(data=>{
+ tradingCoreRuntime.getHistoricalData(resolvedInstrumentKey,intervals[timeframe],historyAbortController.signal).then(data=>{
    if(dead||!lifecycle.current.isCurrent(generation))return;
    if(!data.length)throw new Error('No historical candles available');
    const bySecond=new Map<number,HistoricalCandle>();
@@ -564,7 +565,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    }else{try{c.timeScale().fitContent();}catch{}}
    previousLogicalRange=c.timeScale().getVisibleLogicalRange?.()||null;historyReady=true;void renderPredictionOverlay(data); if(showOI&&oiAnalytics.current)renderOI(oiAnalytics.current);
  }).catch(e=>{
-  if(dead||!lifecycle.current.isCurrent(generation))return;
+  if(dead||!lifecycle.current.isCurrent(generation)||String(e?.name||'')==='AbortError')return;
   if(historyPaintedRef.current&&candles.current.length){
     console.warn('[TradingCore][LiveChart] late history failure; retaining painted candles',{brokerId,resolvedInstrumentKey,timeframe,error:e});
     publishChartLifecycle('ready');

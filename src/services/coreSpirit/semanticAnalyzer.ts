@@ -3,7 +3,8 @@ export type CoreSpiritDiagnostic = { severity:'error'|'warning'; message:string;
 export type CoreSpiritSemanticResult = { diagnostics:CoreSpiritDiagnostic[]; symbols:Map<string,string>; maxLookback:number };
 
 const seriesNames=new Set(['open','high','low','close','volume','time']);
-const builtins=new Set(['sma','ema','rsi','atr','vwap','highest','lowest','change','crossover','crossunder','nz','max','min','abs','sqrt','pow','plot','marker','line','zone','signal','alert','webhook']);
+const specialIdentifiers=new Set(['na']);
+const builtins=new Set(['sma','ema','rsi','atr','vwap','highest','lowest','change','crossover','crossunder','nz','isNa','max','min','abs','sqrt','pow','plot','marker','line','zone','signal','alert','webhook']);
 
 export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
   const diagnostics:CoreSpiritDiagnostic[]=[]; const symbols=new Map<string,string>(); let maxLookback=0;
@@ -13,7 +14,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
       case 'let': if(symbols.has(n.name)) diagnostics.push({severity:'error',message:`Variable '${n.name}' is already declared`,line:n.span?.line,column:n.span?.column}); visit(n.expression,scope); symbols.set(n.name,infer(n.expression)); scope.add(n.name); break;
       case 'expressionStatement': visit(n.expression,scope); break;
       case 'if': visit(n.condition,scope); n.thenBranch.forEach(x=>visit(x,new Set(scope))); n.elseBranch?.forEach(x=>visit(x,new Set(scope))); break;
-      case 'identifier': if(!scope.has(n.name)&&!seriesNames.has(n.name)) diagnostics.push({severity:'error',message:`Unknown identifier '${n.name}'`,line:n.span?.line,column:n.span?.column}); break;
+      case 'identifier': if(!scope.has(n.name)&&!seriesNames.has(n.name)&&!specialIdentifiers.has(n.name)) diagnostics.push({severity:'error',message:`Unknown identifier '${n.name}'`,line:n.span?.line,column:n.span?.column}); break;
       case 'index': { visit(n.target,scope); visit(n.index,scope); const constantIndex=constantNumber(n.index); if(constantIndex!==undefined&&Number.isInteger(constantIndex)){if(constantIndex<0)diagnostics.push({severity:'error',message:'Future indexing is not allowed; index must be >= 0',line:n.span?.line,column:n.span?.column}); else maxLookback=Math.max(maxLookback,constantIndex);} break; }
       case 'call': if(!builtins.has(n.name))diagnostics.push({severity:'error',message:`Unknown function '${n.name}'`,line:n.span?.line,column:n.span?.column}); n.args.forEach(x=>visit(x,scope)); break;
       case 'unary': visit(n.operand,scope); break;

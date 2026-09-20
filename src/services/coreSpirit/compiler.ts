@@ -22,6 +22,7 @@ export class CoreSpiritCompiler {
         case 'identifier': {
           const dest = `t${temp++}`;
           if (['open','high','low','close','volume','time'].includes(n.name)) instructions.push({ op:'loadSeries', dest, name:n.name, offset:0 });
+          else if (n.name === 'na') instructions.push({ op:'const', dest, value:null });
           else instructions.push({ op:'move', dest, source:n.name });
           return dest;
         }
@@ -38,6 +39,7 @@ export class CoreSpiritCompiler {
           const target=expr(n.target), index=expr(n.index), dest=`t${temp++}`;
           if(n.target.type==='identifier'&&n.index.type==='number'&&typeof n.index.value==='number'&&Number.isInteger(n.index.value)) instructions.push({op:'loadSeries',dest,name:n.target.name,offset:n.index.value});
           else if(n.target.type==='identifier'&&['open','high','low','close','volume','time'].includes(n.target.name)) instructions.push({op:'index',dest,target,index,seriesName:n.target.name});
+          else if(n.target.type==='identifier') instructions.push({op:'index',dest,target,index,seriesName:n.target.name});
           else instructions.push({op:'index',dest,target,index});
           return dest;
         }
@@ -47,7 +49,7 @@ export class CoreSpiritCompiler {
     const stmt=(n:CoreSpiritAstNode):void=>{
       switch(n.type){
         case 'program': n.body.forEach(stmt); break;
-        case 'let': { const source=expr(n.expression); instructions.push({op:'setLocal',name:n.name,source}); if(!locals.includes(n.name))locals.push(n.name); break; }
+        case 'let': { const source=expr(n.expression); instructions.push({op:'setLocal',name:n.name,source,series:true}); if(!locals.includes(n.name))locals.push(n.name); break; }
         case 'expressionStatement': expr(n.expression); break;
         case 'if': {
           const condition=expr(n.condition), jumpFalse=instructions.length; instructions.push({op:'jumpIfFalse',condition,target:-1});
