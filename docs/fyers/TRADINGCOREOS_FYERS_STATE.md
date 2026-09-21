@@ -3,7 +3,7 @@
 Last updated: 2026-09-21
 
 ## Current stage
-**v32.5 — multi-user FYERS history deadlock fix**
+**v32.6 — FYERS first-paint history window fix**
 
 ## UI status
 **FROZEN.** FYERS work must not change React layout, styling, chart appearance, navigation, or user-facing component structure unless explicitly requested.
@@ -48,3 +48,5 @@ The production deployment was using a history route that acquired the FYERS requ
 - Live WebSocket requires authenticated runtime smoke test.
 - Candle recovery requires a non-empty production history response.
 - Multi-user safety requires user-isolated session/cache testing.
+
+- v32.6: first-paint history target is now one FYERS history window; older candles remain lazy/background.
