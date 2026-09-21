@@ -58,3 +58,9 @@ The production deployment was using a history route that acquired the FYERS requ
 - v32.7 switches intraday history to epoch-second ranges and keeps the range end before the current/resolution candle, while keeping each window below the official 100-day limit. citeturn4search0
 - UI remains frozen.
 - Runtime verification is pending the new deployment.
+
+
+## v32.8 deep audit
+- `LiveChart.tsx` was inspected through the complete history-to-render path. It calls `getHistoricalData`, normalizes valid OHLC rows, then calls `CandlestickSeries.setData`; no renderer-side condition explains the blank chart when history is empty.
+- Production runtime evidence shows the history API itself is returning zero rows.
+- v32.8 uses completed-day yyyy-mm-dd backfill ranges and records raw FYERS response metadata for definitive diagnosis.
