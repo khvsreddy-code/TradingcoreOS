@@ -141,9 +141,11 @@ async function fetchFyersHistoryTarget(
         nextTime: payload?.nextTime ?? null,
       });
 
-      // FYERS can return a successful HTTP response with s=no_data and no
-      // broker error code. Keep that distinct from transport/auth failures so
-      // the route can safely walk to the preceding window.
+      // FYERS can return a successful response with s=no_data once the
+      // requested range reaches the beginning of available history. That is
+      // not a transport/auth failure and MUST NOT discard candles already
+      // collected from newer windows. Stop the backfill and return the partial
+      // history; the caller only needs a non-empty completed range to paint.
       if (!pageRows.length && String(payload?.s || '').toLowerCase() === 'no_data') {
         console.warn('[TradingCore][FYERS history] broker returned no_data', {
           symbol,
@@ -152,7 +154,9 @@ async function fetchFyersHistoryTarget(
           rangeFrom,
           rangeTo,
           nextTime: payload?.nextTime ?? null,
+          accumulatedCandles: all.length,
         });
+        if (all.length > 0) break;
       }
     } catch (error: any) {
       pageError = error;
