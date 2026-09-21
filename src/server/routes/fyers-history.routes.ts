@@ -118,11 +118,28 @@ async function fetchFyersHistoryTarget(
     try {
       const client = new FyersApiClient(accessToken);
       const service = new FyersMarketDataService(client);
-      const dateFormat = isIntraday ? '0' : '1';
-      const rangeFrom = isIntraday ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from);
-      const rangeTo = isIntraday ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end);
+      // FYERS documents yyyy-mm-dd ranges as the canonical History API form.
+      // Backfill ends on the last completed trading day; the live tick path
+      // builds today's in-progress candle separately.
+      const dateFormat = '1';
+      const rangeFrom = indiaDate(from);
+      let rangeEnd = new Date(end);
+      if (isIntraday) {
+        rangeEnd = new Date(rangeEnd.getTime() - 86_400_000);
+        rangeEnd = latestTradingDate(rangeEnd);
+      }
+      const rangeTo = indiaDate(rangeEnd);
       const payload = await service.history(symbol, resolution, rangeFrom, rangeTo, { dateFormat, signal });
       pageRows = normalize(payload?.candles || [], target);
+
+      console.info('[TradingCore][FYERS history] broker response', {
+        symbol, resolution, dateFormat, rangeFrom, rangeTo,
+        status: payload?.s ?? null,
+        code: payload?.code ?? null,
+        message: payload?.message ?? null,
+        candleCount: Array.isArray(payload?.candles) ? payload.candles.length : 0,
+        nextTime: payload?.nextTime ?? null,
+      });
 
       // FYERS can return a successful HTTP response with s=no_data and no
       // broker error code. Keep that distinct from transport/auth failures so
