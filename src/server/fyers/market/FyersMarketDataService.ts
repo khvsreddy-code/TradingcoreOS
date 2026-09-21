@@ -3,11 +3,11 @@ import { FyersApiClient } from '../core/FyersApiClient.js';
 export class FyersMarketDataService {
   constructor(private readonly client: FyersApiClient) {}
 
-  history(symbol: string, resolution: string, rangeFrom: string, rangeTo: string, options: { oi?: boolean; continuous?: boolean; signal?: AbortSignal } = {}) {
+  history(symbol: string, resolution: string, rangeFrom: string, rangeTo: string, options: { oi?: boolean; continuous?: boolean; dateFormat?: '0' | '1'; signal?: AbortSignal } = {}) {
     return this.client.dataGet('/history', {
       symbol,
       resolution,
-      date_format: '1',
+      date_format: options.dateFormat ?? '1',
       range_from: rangeFrom,
       range_to: rangeTo,
       oi_flag: options.oi ? 1 : undefined,
