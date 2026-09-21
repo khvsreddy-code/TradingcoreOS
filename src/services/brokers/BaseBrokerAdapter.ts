@@ -75,11 +75,10 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async getHistoricalData(symbol: string, _timeframe: string, signal?: AbortSignal): Promise<HistoricalCandle[]> {
-    // FYERS initial history intentionally uses the proven legacy one-window
-    // request. Older candles are fetched lazily by the chart's left-edge pager.
-    // Do not turn this into a large multi-request target fetch: that can exhaust
-    // the broker history request quota when multiple watchlist symbols are active.
-    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=10000`, { signal });
+    // Initial chart load is intentionally bounded. Older candles are fetched lazily
+    // when the user pans toward the left edge, rather than hammering broker history
+    // endpoints with a 30k request on first paint.
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(_timeframe)}&limit=25000`, { signal });
     const data = await res.json(); if (!data.success) { const error: any = new Error(data.error || `Historical data request failed (${res.status})`); error.status = res.status; error.brokerRateLimited = Boolean(data.brokerRateLimited); throw error; } return data.data;
   }
 

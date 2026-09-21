@@ -1,0 +1,18 @@
+import { Router, Response } from 'express';
+import { BrokerRepository } from '../storage/BrokerRepository.js';
+import { EncryptionService } from '../encryption/EncryptionService.js';
+import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
+import { FyersOrderStreamTransport } from '../fyers/trading/FyersOrderStreamTransport.js';
+
+export const fyersOrderStreamRoutes = Router();
+fyersOrderStreamRoutes.use(requireUser);
+fyersOrderStreamRoutes.get('/:brokerId/order-stream', async (req: AuthenticatedRequest, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const userId=req.tradingCoreUserId!; const session=await BrokerRepository.getSession('fyers',userId);
+  if(!session||session.status!=='Connected')return res.status(401).json({success:false,error:'Fyers is not connected for this account.'});
+  let token:string; try{token=EncryptionService.decrypt(session.accessTokenEncrypted)}catch{return res.status(500).json({success:false,error:'Unable to decrypt the Fyers session.'});}
+  res.status(200); res.setHeader('Content-Type','application/x-ndjson'); res.setHeader('Cache-Control','no-cache, no-transform'); res.setHeader('Connection','keep-alive'); res.flushHeaders();
+  const write=(event:any)=>{try{res.write(`${JSON.stringify(event)}\n`)}catch{}};
+  const unsubscribe=FyersOrderStreamTransport.subscribe(userId,token,write); const heartbeat=setInterval(()=>write({type:'status',status:'connected'}),12000);
+  req.on('close',()=>{clearInterval(heartbeat);unsubscribe();});
+});

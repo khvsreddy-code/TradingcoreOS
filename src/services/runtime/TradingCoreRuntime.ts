@@ -156,7 +156,7 @@ export class TradingCoreRuntime {
     let brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
 
-    const key = `${brokerId}:${symbol}:${timeframe}:initial-20000-legacy-window-v32`;
+    const key = `${brokerId}:${symbol}:${timeframe}:initial-25000-progressive-v14`;
     const storeCached = historyStore.get(brokerId, symbol, timeframe);
     if (storeCached?.length) return storeCached;
     const cached = this.historyCache.get(key);

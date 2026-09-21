@@ -14,10 +14,7 @@ interface Session {
   connectGeneration: number;
   depthSymbols: Set<string>;
   reconnectTimer?: ReturnType<typeof setTimeout>;
-  pollTimer?: ReturnType<typeof setTimeout>;
-  fallbackInFlight: boolean;
-  fallbackFailureCount: number;
-  usingQuoteFallback: boolean;
+  pingTimer?: ReturnType<typeof setInterval>;
 }
 
 /**
@@ -39,10 +36,6 @@ export class FyersMarketDataTransport {
         includeDepth: false,
         connectGeneration: 0,
         depthSymbols: new Set(),
-        pollTimer: undefined,
-        fallbackInFlight: false,
-        fallbackFailureCount: 0,
-        usingQuoteFallback: false,
       };
       this.sessions.set(userId, session);
     }
@@ -70,8 +63,8 @@ export class FyersMarketDataTransport {
     if (!session) return;
     session.closing = true;
     clearTimeout(session.reconnectTimer);
-    if (session.pollTimer) clearTimeout(session.pollTimer);
-    session.pollTimer = undefined;
+    if (session.pingTimer) clearInterval(session.pingTimer);
+    session.pingTimer = undefined;
     session.socket?.close();
     this.sessions.delete(userId);
   }
@@ -112,12 +105,12 @@ export class FyersMarketDataTransport {
         return;
       }
       session.reconnectAttempt = 0;
-      session.usingQuoteFallback = false;
-      session.fallbackFailureCount = 0;
-      if (session.pollTimer) clearTimeout(session.pollTimer);
-      session.pollTimer = undefined;
       this.emit(session, { type: 'status', status: 'connected' });
       this.sendSubscribe(session, [...session.instruments], session.includeDepth, depthSymbols);
+      if (session.pingTimer) clearInterval(session.pingTimer);
+      session.pingTimer = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) { try { socket.send('ping'); } catch {} }
+      }, 10_000);
     });
 
     socket.on('message', (message) => {
@@ -133,19 +126,14 @@ export class FyersMarketDataTransport {
     socket.on('error', (error) => {
       if (generation !== session.connectGeneration || session.closing) return;
       const message = error instanceof Error ? error.message : 'FYERS market socket error';
-      // FYERS v3 has changed its data-socket handshake over time. The legacy
-      // endpoint can answer with HTTP 500; do not leave the user in an endless
-      // reconnect loop. Fall back to the authenticated Quotes API instead.
-      if (/Unexpected server response:\s*5\d\d/i.test(message)) {
-        this.startQuoteFallback(session);
-      } else {
-        this.emit(session, { type: 'error', error: message });
-      }
+      this.emit(session, { type: 'error', error: message });
     });
 
     socket.on('close', (code, reason) => {
       if (generation !== session.connectGeneration) return;
       session.socket = undefined;
+      if (session.pingTimer) clearInterval(session.pingTimer);
+      session.pingTimer = undefined;
       if (session.closing) return;
       const detail = reason?.toString?.() || '';
       if (code === 1008 || code === 4001) {
@@ -153,76 +141,8 @@ export class FyersMarketDataTransport {
         this.emit(session, { type: 'status', status: 'authentication_failed' });
         return;
       }
-      this.startQuoteFallback(session);
       this.scheduleReconnect(userId, session, session.includeDepth);
     });
-  }
-
-  private static startQuoteFallback(session: Session): void {
-    if (session.closing || session.usingQuoteFallback || !session.instruments.size) return;
-    session.usingQuoteFallback = true;
-    session.fallbackFailureCount = 0;
-    if (session.pollTimer) clearTimeout(session.pollTimer);
-
-    const schedule = (delayMs: number) => {
-      if (session.closing || !session.usingQuoteFallback || !session.instruments.size) return;
-      if (session.pollTimer) clearTimeout(session.pollTimer);
-      session.pollTimer = setTimeout(() => void poll(), delayMs);
-    };
-
-    const poll = async () => {
-      if (session.closing || !session.instruments.size || !session.usingQuoteFallback || session.fallbackInFlight) return;
-      session.fallbackInFlight = true;
-      try {
-        const symbols = [...session.instruments].join(',');
-        const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${encodeURIComponent(symbols)}`, {
-          headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${session.accessToken}`, version: '3' },
-        });
-        const text = await response.text();
-        let payload: any;
-        try { payload = JSON.parse(text); } catch { throw new Error(`FYERS quote fallback returned non-JSON (${response.status})`); }
-        if (!response.ok || payload?.s === 'error') throw new Error(payload?.message || `FYERS quote fallback failed (${response.status})`);
-
-        let emitted = false;
-        for (const quote of payload?.d || []) {
-          const v = quote?.v || {};
-          const tick = normalizeFyersTick({
-            symbol: quote?.n || v?.symbol,
-            ltp: v?.lp,
-            prev_close_price: v?.prev_close_price,
-            ch: v?.ch,
-            chp: v?.chp,
-            vol_traded_today: v?.volume,
-            last_traded_time: v?.tt || v?.last_traded_time || Math.floor(Date.now() / 1000),
-            bid_price: v?.bid,
-            ask_price: v?.ask,
-            bid_size: v?.bid_size,
-            ask_size: v?.ask_size,
-          });
-          if (tick) { this.emit(session, { type: 'tick', tick }); emitted = true; }
-        }
-        session.fallbackFailureCount = 0;
-        if (emitted) this.emit(session, { type: 'status', status: 'connected' });
-        // Quotes are a resilience fallback, not the primary live feed. Polling
-        // every second was causing avoidable FYERS rate-limit exhaustion during
-        // websocket outages. Keep a modest 3s cadence and let websocket recovery
-        // take over immediately when it succeeds.
-        schedule(3000);
-      } catch (error: any) {
-        if (!session.closing) {
-          session.fallbackFailureCount += 1;
-          const message = error?.message || 'FYERS live quote fallback failed';
-          this.emit(session, { type: 'status', status: 'reconnecting' });
-          this.emit(session, { type: 'error', error: message });
-          const backoff = Math.min(15000, 3000 * 2 ** Math.min(session.fallbackFailureCount - 1, 3));
-          schedule(backoff);
-        }
-      } finally {
-        session.fallbackInFlight = false;
-      }
-    };
-
-    void poll();
   }
 
   private static scheduleReconnect(userId: string, session: Session, includeDepth = false): void {
@@ -257,6 +177,9 @@ function normalizeFyersTick(payload: any): NormalizedMarketTick | null {
   return {
     instrumentKey: String(payload.symbol),
     ltp: Number.isFinite(ltp) ? ltp : undefined,
+    open: Number.isFinite(Number(payload.open_price)) ? Number(payload.open_price) : undefined,
+    high: Number.isFinite(Number(payload.high_price)) ? Number(payload.high_price) : undefined,
+    low: Number.isFinite(Number(payload.low_price)) ? Number(payload.low_price) : undefined,
     close: Number.isFinite(prevClose) ? prevClose : undefined,
     change: Number.isFinite(Number(payload.ch)) ? Number(payload.ch) : (Number.isFinite(ltp) && Number.isFinite(prevClose) ? ltp - prevClose : undefined),
     changePercent: Number.isFinite(Number(payload.chp)) ? Number(payload.chp) : undefined,

@@ -3,14 +3,18 @@ import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
+import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
 
 /**
  * Safe FYERS historical-data route.
  *
- * History uses the proven legacy one-window first load. The chart receives one
- * broker-safe FYERS History response and requests older pages lazily only when
- * the user pans left. This avoids turning one chart switch into dozens of broker
- * History API calls and keeps the 50,000-candle resident chart ceiling.
+ * History is loaded in broker-safe date windows. The chart starts with a known-good
+ * initial history page and requests older pages lazily as the user pans left, up to a 50,000-candle chart cache, with a 25,000-candle first-load target where the broker's date-window rules permit. If the broker cannot provide that much, valid history is
+ * returned instead of fabricating data. The browser/runtime target is therefore
+ * progressive rather than one large first-paint request. If the
+ * broker or request quota cannot provide that much, the valid available
+ * history is returned instead of fabricating data or blanking the chart.
  */
 export const fyersHistoryRoutes = Router();
 fyersHistoryRoutes.use(requireUser);
@@ -126,83 +130,46 @@ async function fetchFyersHistoryTarget(
   beforeDate?: Date | null,
   signal?: AbortSignal,
 ): Promise<any[]> {
-  /**
-   * IMPORTANT:
-   * The proven legacy TradingCore implementation made ONE FYERS History API
-   * request per initial chart load. V32 accidentally turned a 20,000-candle
-   * target into up to 40 sequential broker requests (and up to 80 when the
-   * date-format retry path was exercised). With watchlist prefetching this
-   * multiplied across symbols and eventually produced FYERS "request limit
-   * reached", leaving the chart empty.
-   *
-   * Keep the legacy broker geometry for the initial page:
-   *   1m/3m/5m/15m -> 30 calendar days
-   *   30m/1H       -> 90 calendar days
-   *   1D           -> 3650 calendar days
-   *
-   * This intentionally does NOT try to manufacture a 20k-candle first page.
-   * Older candles can still be fetched through the existing `before=` paging
-   * path when the user actually scrolls left.
-   */
-  const legacyWindowDays = resolution === 'D'
-    ? 3650
-    : resolution === '30' || resolution === '60'
-      ? 90
-      : 30;
+  const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
+  const maxWindowDays = resolution === 'D' ? 366 : 100;
+  const candleMinutesPerTradingDay = resolution === 'D' ? 1440 : 375;
+  const estimatedTradingDays = Math.max(1, Math.ceil((target * resolutionMinutes) / candleMinutesPerTradingDay));
+  // Use the largest safe broker window whenever possible. This reproduces the
+  // old target-building behavior while avoiding dozens of tiny requests.
+  const windowDays = Math.min(maxWindowDays, Math.max(2, Math.ceil(estimatedTradingDays * 1.15)));
+  const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
+  let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+  let all: any[] = [];
+  let emptyWindows = 0;
+  const maxPages = Math.max(2, Math.ceil(maxLookbackDays / Math.max(1, windowDays)) + 1);
 
-  if (signal?.aborted) {
-    throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
+  for (let page = 0; page < maxPages && all.length < target && emptyWindows < 2; page += 1) {
+    if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
+    end = latestTradingDate(end);
+    const from = new Date(end.getTime() - windowDays * 86_400_000);
+    let pageRows: any[] = [];
+    let pageError: any = null;
+    try {
+      const client = new FyersApiClient(accessToken);
+      const service = new FyersMarketDataService(client);
+      const payload = await service.history(symbol, resolution, indiaDate(from), indiaDate(end), { signal });
+      pageRows = normalize(payload?.candles || [], target);
+    } catch (error: any) {
+      pageError = error;
+      if (Number(error?.status) === 429 || Number(error?.status) === 401 || Number(error?.brokerCode) < 0) throw error;
+    }
+
+    if (pageRows.length) {
+      all = normalize([...pageRows, ...all], target);
+      emptyWindows = 0;
+    } else {
+      if (pageError && all.length === 0) throw pageError;
+      emptyWindows += 1;
+    }
+    end = new Date(from.getTime() - 1000);
   }
 
-  // For a paged request, start immediately before the oldest already-loaded
-  // candle. For the initial request, use the latest completed weekday. This is
-  // the same single-window geometry used by the old working version.
-  const rawEnd = beforeDate
-    ? new Date(beforeDate.getTime() - 1000)
-    : new Date();
-  const end = latestTradingDate(rawEnd);
-  const from = new Date(end.getTime() - legacyWindowDays * 86_400_000);
-
-  const params = new URLSearchParams({
-    symbol,
-    resolution,
-    date_format: '1',
-    range_from: indiaDate(from),
-    range_to: indiaDate(end),
-    cont_flag: '1',
-  });
-
-  const response = await fetch(
-    `https://api-t1.fyers.in/data/history?${params.toString()}`,
-    {
-      signal,
-      headers: {
-        Accept: 'application/json',
-        Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}`,
-      },
-    },
-  );
-
-  const text = await response.text();
-  let payload: any;
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    throw Object.assign(
-      new Error(`Fyers history returned a non-JSON response (${response.status})`),
-      { status: response.status },
-    );
-  }
-
-  const code = Number(payload?.code);
-  if (!response.ok || String(payload?.s || '').toLowerCase() === 'error' || code === 429) {
-    const error: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
-    error.status = code === 429 || response.status === 429 ? 429 : response.status;
-    error.brokerCode = code;
-    throw error;
-  }
-
-  return normalize(payload?.candles || [], Math.max(2, target));
+  return normalize(all, target);
 }
 
 const cache = new Map<string, { expiresAt: number; data: any[] }>();
@@ -220,7 +187,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   const requestAbort = new AbortController();
   const abortIfClientLeaves = () => { if (!res.writableEnded) requestAbort.abort(); };
   req.once('aborted', abortIfClientLeaves);
-  req.once('close', abortIfClientLeaves);
+  res.once('close', abortIfClientLeaves);
 
   const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || ''));
   const interval = String(req.query.interval || '').trim();
@@ -231,10 +198,10 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' });
     return;
   }
-  const requested = Number(req.query.limit || (beforeDate ? 500 : 10_000));
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 30_000 : 10_000, Math.floor(requested))) : (beforeDate ? 500 : 10_000);
+  const requested = Number(req.query.limit || (beforeDate ? 500 : 500));
+  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested))) : 500;
   const maxChartHistory = 50_000;
-  const initialHistoryTarget = 10_000;
+  const initialHistoryTarget = 25_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
@@ -269,7 +236,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       // 1H candles. v31 restores target-based history construction. The browser
       // can still paint a cached dataset immediately; a cold request now returns
       // the dense target just like the older, proven implementation.
-      data = await fetchFyersHistoryTarget(accessToken, instrumentKey, resolution, requestedTarget, beforeDate, signal);
+      const data = await fetchFyersHistoryTarget(accessToken, instrumentKey, resolution, requestedTarget, beforeDate, signal);
       if (data.length < 2) {
         if (beforeDate) return [];
         throw new Error(`Fyers returned only ${data.length} candle(s) for ${instrumentKey}.`);
@@ -287,6 +254,6 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   } finally {
     inflight.delete(key);
     req.removeListener('aborted', abortIfClientLeaves);
-    req.removeListener('close', abortIfClientLeaves);
+    res.removeListener('close', abortIfClientLeaves);
   }
 });

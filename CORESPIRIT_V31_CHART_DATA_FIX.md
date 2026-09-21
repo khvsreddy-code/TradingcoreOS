@@ -37,10 +37,3 @@ The goal is now:
 **partial broker history → valid available candles → no fabricated candles**
 
 The loader must not sacrifice data density merely because the chart timeframe is higher.
-
-
-## v32 exact legacy history method
-
-The proven legacy FYERS history geometry from `TradingcoreOS-4ed40e0d0486b524bd3026299d74f7aba9d78462` is restored: timeframe-specific broker-safe windows are requested and chronologically merged until a 20,000-candle target is reached or the broker runs out of history. The newer deduplication/cache/rapid-switch protections remain around the transport.
-
-Targets are 20,000 candles on every timeframe, subject to broker availability and valid date-window limits. No synthetic history is created.

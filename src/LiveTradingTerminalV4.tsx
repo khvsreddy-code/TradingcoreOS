@@ -98,7 +98,7 @@ export function LiveTradingTerminalV4(){
    return()=>{dead=true};
  },[broker,user?.id]);
  useEffect(()=>{try{localStorage.setItem(`tradingcore_terminal_watch_${broker}`,JSON.stringify(watch))}catch{}},[watch,broker]);
- /* Historical candles are loaded on-demand by LiveChart. Legacy behavior intentionally avoids watchlist-wide history fan-out. */
+ useEffect(()=>{if(!workspaceHydrated||!broker||!watch.length)return;const keys=watch.map(x=>x.key).filter(Boolean).slice(0,8);const timer=window.setTimeout(()=>{void tradingCoreRuntime.prefetchHistoricalData(keys,'5minute');},250);return()=>window.clearTimeout(timer)},[workspaceHydrated,broker,watch.map(x=>x.key).join('|')]);
  useEffect(()=>{
    if(!workspaceHydrated||!broker||!watch.length)return;
    const timer=window.setTimeout(()=>{

@@ -375,30 +375,3 @@ The v30 chart engine had a deliberate optimization that unintentionally changed 
 ### Resulting data contract
 
 A cold chart load now attempts to return up to 25k valid candles for the selected symbol/timeframe rather than letting a fixed calendar window silently determine candle count. If the broker has less history, the available valid history is returned. No synthetic historical candles are fabricated.
-
-
-## v32 — legacy chart history method restored
-- Exact legacy FYERS timeframe window geometry restored.
-- Target increased to 20,000 candles per timeframe.
-- Multiple broker-valid windows are merged chronologically until target or broker history exhaustion.
-- Newer cache, deduplication, abort grace, symbol normalization and switching protections retained.
-- No synthetic candles when broker history is unavailable.
-
-
-## TradingCoreOS v32 — exact legacy chart history method + 20k target
-- [x] Restore the proven legacy FYERS timeframe-specific request-window geometry.
-- [x] Repeat that same broker-valid window backwards and chronologically merge/deduplicate until 20,000 candles are available.
-- [x] Keep broker request limits/date-window constraints intact.
-- [x] Keep cache, deduplication, symbol normalization, rapid-switch abort grace and stale-result protections.
-- [x] Use whatever valid history the broker actually provides when 20,000 is unavailable; never synthesize historical candles.
-- [x] Set chart/history-store initial target to 20,000 across timeframes.
-- [x] Keep the 50,000 resident-history ceiling where supported by the existing runtime.
-
-
-## v32 hotfix — FYERS request-limit / blank-chart fix
-- [x] Restore the legacy **single History API request** for the initial FYERS chart page.
-- [x] Keep the legacy 30/90/3650-day request geometry by timeframe.
-- [x] Keep `cont_flag=1` and the existing chronological normalization.
-- [x] Remove v32 watchlist-wide historical prefetch; chart history is loaded on demand.
-- [x] Keep `before=` pagination for deliberate left-edge history expansion.
-- [x] Prevent a 20,000-candle target from turning one chart switch into dozens of FYERS History calls.

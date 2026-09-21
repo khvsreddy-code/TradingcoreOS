@@ -13,7 +13,7 @@ const LIMITS: Record<string, BrokerLimit> = {
   // FYERS currently documents 10 req/s and 200 req/min on Standard,
   // 10 req/s and 600 req/min on Prime. Use the Standard ceiling globally so
   // TradingCore remains safe regardless of the user's subscription.
-  fyers: { minIntervalMs: 325, maxPerMinute: 180 },
+  fyers: { minIntervalMs: 300, maxPerMinute: 190 },
   // Upstox documents 50 req/s and 500 req/min for standard APIs and
   // 10 req/s for the combined order APIs. The shared REST gate uses the
   // conservative 450/min standard-api budget; order endpoints have an

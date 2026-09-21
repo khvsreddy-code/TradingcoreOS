@@ -24,8 +24,8 @@ import { runCoreSpiritInWorker } from '../../services/coreSpirit/chartRunner';
 import { IndicatorConfig, INDICATOR_LIBRARY, PRICE_SOURCES, defaultIndicatorStyle, series, vwap, bollinger, rsi, macd, supertrend, keltner, donchian, stochastic, ichimoku, pivots, marketStructure, fairValueGaps, dynamicSupportResistance, liquiditySweeps, orderBlocks, indianKeyLevels, cpr, classicPivots, openingRange, swingLevels, gapLevels, previousDayLevels, previousPeriodLevels, gapZones, equalHighLow, liquidityPools, bosChoch, priceActionEvents, nr7, developingDayLevels, vwapDeviationBands, anchoredVwap, extendedCpr, periodPivots, tradingCoreVPriceAction, advancedTradingViewIndicator } from '../../services/marketData/indicatorEngine';
 
 const intervals: Record<string,string> = {'1m':'1minute','3m':'3minute','5m':'5minute','15m':'15minute','30m':'30minute','1H':'60minute','1D':'day'};
-const HISTORY_TARGET_CANDLES=20_000;
-const historyPageCandles=(tf:string)=>({'1m':20000,'3m':20000,'5m':20000,'15m':20000,'30m':20000,'1H':20000,'1D':20000}[tf]||20000);
+const HISTORY_TARGET_CANDLES=25_000;
+const historyPageCandles=(tf:string)=>({'1m':30000,'3m':20000,'5m':15000,'15m':12000,'30m':8000,'1H':6000,'1D':5000}[tf]||8000);
 const MAX_HISTORY_CANDLES=50_000;
 const HISTORY_PREFETCH_THRESHOLD=1_000;
 const canonicalInstrumentKey=(brokerId:string,key:string)=>{
