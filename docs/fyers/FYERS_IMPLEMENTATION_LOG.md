@@ -144,3 +144,23 @@
 
 ### Commit
 - `fb0cf18c4f4739a7fee58ae30f81e69696765e29`
+
+## v32.9 — Actual 502 root cause and fix (2026-09-21)
+
+### Runtime evidence
+- Deployment dpl_BAUJ5uDi9EwiZixDwt8nnMAG8xVE is READY on commit fb0cf18c4f4739a7fee58ae30f81e69696765e29.
+- Production logs at 11:37–11:38 UTC show FYERS History returning status: ok, code: 200, and thousands of candles for current and historical windows, including 5m NIFTY 50 ranges with candle counts such as 5104, 4800, 5100 and 5250.
+- The same request eventually walked back to ranges before FYERS's documented available history and received status: no_data, then the route returned 502 with Fyers returned only 0 candle(s).
+- This proves the upstream history API is returning valid candles. The immediate blank-chart cause is the route discarding/failing the accumulated valid data when the backfill reaches an unavailable historical boundary.
+
+### Fix
+- In fyers-history.routes.ts, when FYERS returns s=no_data after valid candles have already been accumulated, stop the backfill and return the accumulated candles.
+- A true zero-candle initial response still remains an error, so authentication/permission failures are not hidden.
+- UI remains unchanged.
+
+### Commit
+- 62055b6f988204a90dc5f75d497d3ea9c8289c3d
+
+### Verification state
+- Source fix committed to main.
+- Vercel deployment/runtime verification pending.
