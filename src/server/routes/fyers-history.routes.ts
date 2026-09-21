@@ -92,27 +92,51 @@ async function fetchFyersHistoryTarget(
   signal?: AbortSignal,
 ): Promise<any[]> {
   const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
-  const maxWindowDays = resolution === 'D' ? 366 : 100;
+  // Keep intraday windows below FYERS' hard 100-day boundary. For intraday
+  // history we use epoch timestamps so range_to can be placed before the
+  // current/resolution candle instead of truncating it to midnight.
+  const maxWindowDays = resolution === 'D' ? 366 : 99;
   const candleMinutesPerTradingDay = resolution === 'D' ? 1440 : 375;
   const estimatedTradingDays = Math.max(1, Math.ceil((target * resolutionMinutes) / candleMinutesPerTradingDay));
   const windowDays = Math.min(maxWindowDays, Math.max(2, Math.ceil(estimatedTradingDays * 1.15)));
   const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
-  let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+  const isIntraday = resolution !== 'D';
+  const completedBoundaryMs = Math.max(60_000, resolutionMinutes * 60_000);
+  let end = beforeDate
+    ? new Date(beforeDate.getTime() - 1000)
+    : new Date(Date.now() - completedBoundaryMs - 1000);
   let all: any[] = [];
   let emptyWindows = 0;
   const maxPages = Math.max(2, Math.ceil(maxLookbackDays / Math.max(1, windowDays)) + 1);
 
   for (let page = 0; page < maxPages && all.length < target && emptyWindows < 2; page += 1) {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
-    end = latestTradingDate(end);
+    if (!isIntraday) end = latestTradingDate(end);
     const from = new Date(end.getTime() - windowDays * 86_400_000);
     let pageRows: any[] = [];
     let pageError: any = null;
     try {
       const client = new FyersApiClient(accessToken);
       const service = new FyersMarketDataService(client);
-      const payload = await service.history(symbol, resolution, indiaDate(from), indiaDate(end), { signal });
+      const dateFormat = isIntraday ? '0' : '1';
+      const rangeFrom = isIntraday ? String(Math.floor(from.getTime() / 1000)) : indiaDate(from);
+      const rangeTo = isIntraday ? String(Math.floor(end.getTime() / 1000)) : indiaDate(end);
+      const payload = await service.history(symbol, resolution, rangeFrom, rangeTo, { dateFormat, signal });
       pageRows = normalize(payload?.candles || [], target);
+
+      // FYERS can return a successful HTTP response with s=no_data and no
+      // broker error code. Keep that distinct from transport/auth failures so
+      // the route can safely walk to the preceding window.
+      if (!pageRows.length && String(payload?.s || '').toLowerCase() === 'no_data') {
+        console.warn('[TradingCore][FYERS history] broker returned no_data', {
+          symbol,
+          resolution,
+          dateFormat,
+          rangeFrom,
+          rangeTo,
+          nextTime: payload?.nextTime ?? null,
+        });
+      }
     } catch (error: any) {
       pageError = error;
       if (Number(error?.status) === 429 || Number(error?.status) === 401 || Number(error?.brokerCode) < 0) throw error;
