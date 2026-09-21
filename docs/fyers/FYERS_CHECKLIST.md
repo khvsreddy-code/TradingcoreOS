@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-21
 
-Current implementation stage: **v32.5 — multi-user FYERS history deadlock fix**
+Current implementation stage: **v32.6 — FYERS first-paint history window fix**
 
 Legend: `[x]` implemented in source, `[~]` implemented but runtime verification pending, `[ ]` not implemented.
 
@@ -89,3 +89,6 @@ Legend: `[x]` implemented in source, `[~]` implemented but runtime verification 
 - This creates a self-deadlock for the history request.
 - Fix committed to `main` as `111085cb6d399c0242c8a96797f0c95b9dbcc561`.
 - Runtime verification is intentionally still pending until the new deployment serves candles.
+
+- [x] Initial history target bounded to one FYERS minute-history window per timeframe
+- [~] Structured history failure logging added; runtime cause verification pending
