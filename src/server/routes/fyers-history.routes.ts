@@ -2,7 +2,6 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
 
@@ -10,11 +9,10 @@ import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.j
  * Safe FYERS historical-data route.
  *
  * History is loaded in broker-safe date windows. The chart starts with a known-good
- * initial history page and requests older pages lazily as the user pans left, up to a 50,000-candle chart cache, with a 25,000-candle first-load target where the broker's date-window rules permit. If the broker cannot provide that much, valid history is
- * returned instead of fabricating data. The browser/runtime target is therefore
- * progressive rather than one large first-paint request. If the
- * broker or request quota cannot provide that much, the valid available
- * history is returned instead of fabricating data or blanking the chart.
+ * initial history page and requests older pages lazily as the user pans left, up to a
+ * 50,000-candle chart cache. Broker scheduling is owned exclusively by FyersApiClient.
+ * The route is scoped to the authenticated TradingCore/Supabase user and never shares
+ * broker-session data across users.
  */
 export const fyersHistoryRoutes = Router();
 fyersHistoryRoutes.use(requireUser);
@@ -38,8 +36,6 @@ function canonicalFyersSymbol(value: string): string {
   if (['nse_index|niftymidcapselect','nse_index|midcap'].includes(n) || n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
   if (['bse_index|sensex','sensex'].includes(n) || n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
 
-  // Keep exact FYERS symbols intact, but repair the pipe-form keys that can
-  // survive from the workspace/search layer (e.g. NSE_FO|NIFTY26SEPFUT).
   const pipe = raw.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
   if (pipe) {
     const exchange = pipe[1].toUpperCase();
@@ -49,37 +45,17 @@ function canonicalFyersSymbol(value: string): string {
     return `${exchange}:${ticker}`;
   }
 
-  // Search results normally provide the exchange-qualified FYERS symbol. If a
-  // persisted watchlist contains only an active NIFTY derivative ticker, add
-  // the NSE prefix rather than sending an invalid bare symbol to History API.
   if (!raw.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(raw)) return `NSE:${raw}`;
   if (/^NSE:[A-Z0-9&._-]+$/i.test(raw) && !/-[A-Z]+$/i.test(raw)) return `${raw}-EQ`;
   if (/^BSE:[A-Z0-9&._-]+$/i.test(raw) && !/-[A-Z]+$/i.test(raw)) return `${raw}-EQ`;
   return raw;
 }
 
-function isDerivativeSymbol(symbol: string): boolean {
-  // FYERS active derivative tickers are commonly NSE:NIFTY26SEPFUT or
-  // NSE:NIFTY26000CE (without a hyphen before FUT/CE/PE). The old check only
-  // recognized "-FUT/-CE/-PE", so those contracts were incorrectly sent with
-  // the non-derivative history flag.
-  return /(?:FUT|CE|PE)$/i.test(String(symbol || '').split(':').pop() || '');
-}
-
 function indiaDate(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
 }
 
-// FYERS History accepts calendar dates. Do not send a weekend/future calendar
-// day as range_to for an intraday index request: some index series return
-// no_data for a weekend endpoint even though the preceding session has data.
-// Resolve the end date to the latest completed Indian market weekday.
 function latestTradingDate(date: Date): Date {
-  // Walk backwards until the date is actually a Monday-Friday trading weekday.
-  // A single -1 day adjustment is wrong on Sunday (it lands on Saturday), which
-  // was the remaining reason NIFTY50 could return no_data while another index
-  // appeared healthy from cache/series behaviour. Keep this calendar-only;
-  // exchange holidays are handled by the broker returning the available candles.
   const d = new Date(date);
   const weekdayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' });
   for (let i = 0; i < 7; i += 1) {
@@ -88,12 +64,6 @@ function latestTradingDate(date: Date): Date {
     d.setUTCDate(d.getUTCDate() - 1);
   }
   return d;
-}
-
-function previousTradingDate(date: Date): Date {
-  const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return latestTradingDate(d);
 }
 
 function normalize(rows: any[], limit: number): any[] {
@@ -113,15 +83,6 @@ function normalize(rows: any[], limit: number): any[] {
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, candle]) => candle).slice(-limit);
 }
 
-
-/**
- * Build a full history target using broker-safe windows, matching the old
- * TradingCore behavior that produced a dense first paint. The key difference
- * from v31 is that the window size is chosen from the requested candle count;
- * we do not cap every intraday timeframe to one 100-day page. This prevents
- * higher timeframes (15m/30m/1H) from silently receiving only a fraction of
- * the requested history.
- */
 async function fetchFyersHistoryTarget(
   accessToken: string,
   symbol: string,
@@ -134,8 +95,6 @@ async function fetchFyersHistoryTarget(
   const maxWindowDays = resolution === 'D' ? 366 : 100;
   const candleMinutesPerTradingDay = resolution === 'D' ? 1440 : 375;
   const estimatedTradingDays = Math.max(1, Math.ceil((target * resolutionMinutes) / candleMinutesPerTradingDay));
-  // Use the largest safe broker window whenever possible. This reproduces the
-  // old target-building behavior while avoiding dozens of tiny requests.
   const windowDays = Math.min(maxWindowDays, Math.max(2, Math.ceil(estimatedTradingDays * 1.15)));
   const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
   let end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
@@ -184,6 +143,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' });
     return;
   }
+
   const requestAbort = new AbortController();
   const abortIfClientLeaves = () => { if (!res.writableEnded) requestAbort.abort(); };
   req.once('aborted', abortIfClientLeaves);
@@ -198,15 +158,21 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' });
     return;
   }
-  const requested = Number(req.query.limit || (beforeDate ? 500 : 500));
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested))) : 500;
+
+  const requested = Number(req.query.limit || 500);
+  const limit = Number.isFinite(requested)
+    ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested)))
+    : 500;
   const maxChartHistory = 50_000;
   const initialHistoryTarget = 25_000;
+
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
   }
 
+  // This key is explicitly user-scoped. Broker sessions/tokens are never shared
+  // between TradingCore users, even when multiple users request the same symbol.
   const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}:${beforeDate?.toISOString() || 'latest'}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
@@ -229,28 +195,51 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
+    // IMPORTANT: FyersApiClient owns BrokerRequestGate. The history route MUST NOT
+    // acquire the same gate before calling the client. Doing so deadlocks:
+    // route gate -> client gate -> waits for route gate -> no FYERS request.
+    const task = (async (signal: AbortSignal) => {
       const requestedTarget = Math.max(2, Math.min(beforeDate ? limit : initialHistoryTarget, 50_000));
-      // v31's one-window strategy made higher timeframes look as if history had
-      // disappeared: 100 calendar days only contains ~2.5k 15m candles and ~625
-      // 1H candles. v31 restores target-based history construction. The browser
-      // can still paint a cached dataset immediately; a cold request now returns
-      // the dense target just like the older, proven implementation.
       const data = await fetchFyersHistoryTarget(accessToken, instrumentKey, resolution, requestedTarget, beforeDate, signal);
       if (data.length < 2) {
         if (beforeDate) return [];
         throw new Error(`Fyers returned only ${data.length} candle(s) for ${instrumentKey}.`);
       }
-      console.info('[TradingCore][FYERS history] loaded', { symbol: instrumentKey, resolution, before: beforeDate?.toISOString() || null, requested: limit, target: beforeDate ? null : initialHistoryTarget, returned: data.length, oldest: data[0]?.timestamp || null, newest: data[data.length - 1]?.timestamp || null,  });
+      console.info('[TradingCore][FYERS history] loaded', {
+        userId,
+        symbol: instrumentKey,
+        resolution,
+        before: beforeDate?.toISOString() || null,
+        requested: limit,
+        target: beforeDate ? null : initialHistoryTarget,
+        returned: data.length,
+        oldest: data[0]?.timestamp || null,
+        newest: data[data.length - 1]?.timestamp || null,
+      });
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    }, requestAbort.signal);
+    })(requestAbort.signal);
+
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data, requested: limit, target: beforeDate ? null : initialHistoryTarget, returned: data.length, maxChartHistory, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, hasMore: Boolean(data.length) });
+    res.json({
+      success: true,
+      data,
+      requested: limit,
+      target: beforeDate ? null : initialHistoryTarget,
+      returned: data.length,
+      maxChartHistory,
+      before: beforeDate?.toISOString() || null,
+      oldestTimestamp: data[0]?.timestamp || null,
+      hasMore: Boolean(data.length),
+    });
   } catch (error: any) {
-    res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles', brokerRateLimited: Number(error?.status) === 429 });
+    res.status(Number(error?.status) === 429 ? 429 : 502).json({
+      success: false,
+      error: error?.message || 'Unable to load Fyers historical candles',
+      brokerRateLimited: Number(error?.status) === 429,
+    });
   } finally {
     inflight.delete(key);
     req.removeListener('aborted', abortIfClientLeaves);
