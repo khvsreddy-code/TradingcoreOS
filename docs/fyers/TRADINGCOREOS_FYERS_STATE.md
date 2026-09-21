@@ -64,3 +64,10 @@ The production deployment was using a history route that acquired the FYERS requ
 - `LiveChart.tsx` was inspected through the complete history-to-render path. It calls `getHistoricalData`, normalizes valid OHLC rows, then calls `CandlestickSeries.setData`; no renderer-side condition explains the blank chart when history is empty.
 - Production runtime evidence shows the history API itself is returning zero rows.
 - v32.8 uses completed-day yyyy-mm-dd backfill ranges and records raw FYERS response metadata for definitive diagnosis.
+
+## v32.9 root-cause update
+- Production telemetry changed the diagnosis: FYERS History is **not empty** for the requested NIFTY 50 5m data. It returns thousands of valid candles across multiple 100-day-safe windows.
+- The 502 is generated after the route walks backward into unavailable pre-history and receives FYERS s=no_data; the route then throws instead of returning the valid candles accumulated earlier.
+- Commit 62055b6f988204a90dc5f75d497d3ea9c8289c3d changes no_data handling to terminate the backfill gracefully when accumulated candles exist.
+- UI remains frozen.
+- Production verification is now the only P0 blocker for the candle path.
