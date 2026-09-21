@@ -81,3 +81,21 @@
 - UI remains frozen.
 - Existing `/api/trading/:brokerId/historical` contract remains unchanged.
 - No live-order behavior was changed in this incident fix.
+
+## v32.6 — FYERS first-paint timeout/root-cause fix (2026-09-21)
+
+### Production evidence
+- After v32.5, production `/api/trading/fyers/historical` still returned **502** while `/api/trading/fyers/market-stream`, `/api/trading/fyers/market-data`, `/api/trading/fyers/option-chain`, and broker-session restoration returned 200.
+- The chart therefore was not failing inside Lightweight Charts; the historical transport was failing before candles reached the chart.
+- Source inspection showed the initial 5m request still targeted **25,000 candles**. FYERS permits at most 100 calendar days per minute-history request, so 25,000 5m candles necessarily requires multiple sequential history calls before first paint. This is incompatible with a fast first-paint path and can exhaust the serverless request window/abort the request under queue/network latency.
+- FYERS's official market-data documentation confirms minute resolutions are capped at 100 days/request and that longer ranges must be chunked. citeturn0search0
+
+### Fix
+- Initial history target is now bounded to one FYERS minute-history window per resolution: 1m 25k, 3m 12k, 5m 7k, 15m 2.4k, 30m 1.2k, 1H 600, 2H 300, 4H 180, D 300.
+- Older history remains lazy/background and can still build toward the 50,000-candle chart cache.
+- Added server-side structured FYERS history failure logging (user-scoped, no access token logging) so any upstream FYERS rejection is now directly identifiable.
+- UI remains unchanged.
+
+### Verification state
+- Fix committed to `main` as `8e0d2298c9c3b4aabbbcf35a54c0a5e301e9ea6c`.
+- Runtime verification pending deployment and one chart refresh.
