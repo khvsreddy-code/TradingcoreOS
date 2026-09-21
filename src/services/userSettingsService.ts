@@ -2,12 +2,24 @@ import { getSupabaseClient, isSupabaseConfigured } from './auth/supabaseClient';
 
 const BLOCKED_KEY = /(?:supabase|fyers|upstox).*(?:token|secret|credential|password|private|api[_-]?key)|(?:access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|client[_-]?secret|api[_-]?secret|private[_-]?key|password|credential)/i;
 const INTERNAL_KEYS = new Set(['tc_user_settings_sync']);
+const MANAGED_KEY = /^(tradingcore:|tradingcore_|tc_)/i;
 
-function collectLocalSettings(): Record<string, unknown> {
+function isManagedKey(key: string) { return MANAGED_KEY.test(key) && !INTERNAL_KEYS.has(key) && !BLOCKED_KEY.test(key); }
+
+function clearManagedLocalSettings() {
+  const remove: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && isManagedKey(key)) remove.push(key);
+  }
+  remove.forEach(key => { try { localStorage.removeItem(key); } catch { /* ignore */ } });
+}
+
+export function collectManagedSettings(): Record<string, unknown> {
   const settings: Record<string, unknown> = {};
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
-    if (!key || INTERNAL_KEYS.has(key) || BLOCKED_KEY.test(key)) continue;
+    if (!key || !isManagedKey(key)) continue;
     try {
       const raw = localStorage.getItem(key);
       if (raw == null || raw.length > 200_000) continue;
@@ -17,9 +29,9 @@ function collectLocalSettings(): Record<string, unknown> {
   return settings;
 }
 
-function restoreLocalSettings(settings: Record<string, unknown>) {
+export function restoreManagedSettings(settings: Record<string, unknown>) {
   Object.entries(settings || {}).forEach(([key, value]) => {
-    if (INTERNAL_KEYS.has(key) || BLOCKED_KEY.test(key)) return;
+    if (!isManagedKey(key)) return;
     try { localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value)); } catch { /* ignore quota/serialization errors */ }
   });
 }
@@ -31,8 +43,20 @@ export const userSettingsService = {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.from('user_settings').select('settings').eq('user_id', userId).maybeSingle();
       if (error) throw error;
-      if (!data?.settings) return null;
-      restoreLocalSettings(data.settings as Record<string, unknown>);
+      // Never let a previous signed-in user leak workspace state into another account.
+      clearManagedLocalSettings();
+      if (!data?.settings) {
+        // Materialize the user's cloud-settings row immediately on first sign-in.
+        // This makes cloud persistence observable even before the first preference change.
+        const emptySettings: Record<string, unknown> = {};
+        const { error: seedError } = await supabase.from('user_settings').upsert(
+          { user_id: userId, settings: emptySettings, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' },
+        );
+        if (seedError) throw seedError;
+        return emptySettings;
+      }
+      restoreManagedSettings(data.settings as Record<string, unknown>);
       return data.settings as Record<string, unknown>;
     } catch (error) {
       console.warn('User settings load failed:', error);
@@ -44,7 +68,7 @@ export const userSettingsService = {
     if (!isSupabaseConfigured()) return false;
     try {
       const supabase = getSupabaseClient();
-      const settings = collectLocalSettings();
+      const settings = collectManagedSettings();
       const { error } = await supabase.from('user_settings').upsert({ user_id: userId, settings }, { onConflict: 'user_id' });
       if (error) throw error;
       return true;
@@ -60,7 +84,7 @@ export const userSettingsService = {
     const sync = async () => {
       if (stopped) return;
       try {
-        const current = JSON.stringify(collectLocalSettings());
+        const current = JSON.stringify(collectManagedSettings());
         if (current === last) return;
         if (await this.save(userId)) last = current;
       } catch { /* best effort */ }

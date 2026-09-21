@@ -3,26 +3,6 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 (() => {
   const q = <T extends Element = Element>(s: string, r: ParentNode = document) => r.querySelector<T>(s);
   const qa = <T extends Element = Element>(s: string, r: ParentNode = document) => Array.from(r.querySelectorAll<T>(s));
-  const paths = [
-    ['/live', 'CHARTS'], ['/models', 'MODELS'], ['/automations', 'AUTOMATIONS'],
-    ['/portfolio', 'PORTFOLIO'], ['/indicators', 'INDICATORS'], ['/profile', 'PROFILE'],
-  ] as const;
-
-  function injectChrome() {
-    if (window.location.pathname !== '/live') return;
-    const header = q('body > #root header');
-    if (!header || q('#tco-workspace-nav', header)) return;
-    const nav = document.createElement('div');
-    nav.id = 'tco-workspace-nav';
-    nav.innerHTML = `<div class="tco-nav-inner">${paths.map(([path, label]) => `<button data-tco-nav="${path}" class="tco-nav-btn ${path === '/live' ? 'active' : ''}">${label}</button>`).join('')}</div>`;
-    header.appendChild(nav);
-    qa<HTMLButtonElement>('[data-tco-nav]', nav).forEach(button => button.addEventListener('click', () => {
-      const path = button.dataset.tcoNav!;
-      window.history.pushState({}, '', path);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }));
-  }
-
   const underlyingFor = (label: string) => {
     const n = label.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (n.includes('NIFTY50')) return 'NSE:NIFTY50-INDEX';
@@ -156,11 +136,10 @@ import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
   }
 
   function install() {
-    injectChrome(); renderOrder();
+    renderOrder();
     const root = q('#root'); if (!root) return;
-    const observer = new MutationObserver(() => { injectChrome(); renderOrder(); });
+    const observer = new MutationObserver(() => { renderOrder(); });
     observer.observe(root, { childList: true, subtree: true });
-    window.addEventListener('popstate', () => setTimeout(injectChrome, 50));
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true }); else install();
 })();

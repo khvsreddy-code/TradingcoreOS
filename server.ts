@@ -10,6 +10,8 @@ import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js'
 import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
 import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
+import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
+import { newsRoutes } from './src/server/routes/news.routes.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -57,12 +59,14 @@ app.use('/api/trading', workspaceFixRoutes);
 // Historical routes are deliberately mounted before brokerMarketDataRoutes so
 // the quota-safe implementations take precedence over legacy adapter paths.
 app.use('/api/trading', fyersHistoryRoutes);
-app.use('/api/trading', brokerMarketDataRoutes);
 app.use('/api/trading', upstoxHistoryRoutes);
+app.use('/api/trading', brokerMarketDataRoutes);
 // Portfolio snapshots are also mounted before the generic trading route so the
 // serialized/cached implementation is used instead of the old Promise.all fan-out.
 app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
+app.use('/api/predictions/production', productionPredictionRoutes);
+app.use('/api', newsRoutes);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
