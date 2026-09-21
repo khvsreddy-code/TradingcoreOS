@@ -55,59 +55,48 @@ export class FyersApiClient {
   }
 
   private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown): Promise<T> {
-    const query = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
-    const url = `${base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (signal?.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
-
-      try {
-        // Pace EACH broker attempt, not the entire retry loop. A transient 429/5xx
-        // must not hold the shared FYERS queue hostage while we sleep and retry.
-        const payload = await withBrokerRequestGate('fyers', this.accessToken, async (gateSignal) => {
-          if (gateSignal?.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
+    const execute = async (gateSignal?: AbortSignal): Promise<T> => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
+      const url = `${base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (gateSignal?.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
+        try {
           const response = await fetch(url, {
             method,
             signal: gateSignal,
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-              Authorization: `${this.appId}:${this.accessToken}`,
-            },
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
             body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
           });
-
           const text = await response.text();
-          let parsed: any = null;
-          try { parsed = text ? JSON.parse(text) : null; }
-          catch { throw new FyersApiError(`FYERS returned non-JSON (${response.status})`, response.status); }
-
-          const brokerCode = Number(parsed?.code);
-          const errorState = !response.ok || String(parsed?.s || '').toLowerCase() === 'error';
-          if (!errorState) return parsed as T;
-
-          const status = response.status === 429 || brokerCode === 429 || brokerCode === -429 ? 429 : response.status;
-          throw new FyersApiError(
-            parsed?.message || `FYERS request failed (${status})`,
-            status,
-            Number.isFinite(brokerCode) ? brokerCode : undefined,
-            retryDelay(response),
-            parsed,
-          );
-        }, signal);
-
-        return payload;
-      } catch (error: any) {
-        if (error?.name === 'AbortError') throw error;
-        const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
-        const retryable = isRetryableStatus(status);
-        if (!retryable || attempt === 2) throw error;
-        const delay = Math.min(15_000, Math.max(Number(error?.retryAfterMs || 0), 500 * 2 ** attempt));
-        await sleep(delay, signal);
+          let payload: any = null;
+          try { payload = text ? JSON.parse(text) : null; } catch {
+            throw new FyersApiError(`FYERS returned non-JSON (${response.status})`, response.status);
+          }
+          const brokerCode = Number(payload?.code);
+          const errorState = !response.ok || String(payload?.s || '').toLowerCase() === 'error';
+          if (!errorState) return payload as T;
+          const status = response.status === 429 || brokerCode === 429 ? 429 : response.status;
+          const err = new FyersApiError(payload?.message || `FYERS request failed (${status})`, status, Number.isFinite(brokerCode) ? brokerCode : undefined, retryDelay(response), payload);
+          lastError = err;
+          if (!isRetryableStatus(status) || attempt === 2) throw err;
+          const delay = Math.min(15000, Math.max(err.retryAfterMs || 0, 500 * 2 ** attempt));
+          await sleep(delay, gateSignal);
+        } catch (error: any) {
+          if (error?.name === 'AbortError') throw error;
+          lastError = error;
+          const status = Number(error?.status || 0);
+          if ((!isRetryableStatus(status)) || attempt === 2) throw error;
+          await sleep(Math.min(15000, Math.max(Number(error?.retryAfterMs || 0), 500 * 2 ** attempt)), gateSignal);
+        }
       }
-    }
+      throw lastError || new Error('FYERS request failed');
+    };
 
-    throw new Error('FYERS request failed');
-   }
+    // Every FYERS REST call shares the authenticated-user scheduler. This keeps
+    // history, quotes, option chain, depth and account calls from independently
+    // consuming the same broker quota.
+    return withBrokerRequestGate('fyers', this.accessToken, execute, signal);
+  }
 }

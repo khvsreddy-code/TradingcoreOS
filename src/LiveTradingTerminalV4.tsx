@@ -98,8 +98,8 @@ export function LiveTradingTerminalV4(){
    return()=>{dead=true};
  },[broker,user?.id]);
  useEffect(()=>{try{localStorage.setItem(`tradingcore_terminal_watch_${broker}`,JSON.stringify(watch))}catch{}},[watch,broker]);
- // Historical candles are loaded by the visible chart on demand. Avoid fanning out
- // eight FYERS history requests at startup; that can starve live market-data traffic.
+ // Historical candles are loaded by the visible chart on demand. Do not fan out
+ // eight FYERS history requests at startup; that starves live market-data traffic.
  useEffect(()=>{
    if(!workspaceHydrated||!broker||!watch.length)return;
    const timer=window.setTimeout(()=>{
