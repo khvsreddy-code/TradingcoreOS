@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-21
 
-## Current stage — v32.5 multi-user chart recovery
+## Current stage — v32.6 chart recovery / first-paint fix
 
 ### P0 — restore and verify candles
 1. **DONE:** Confirm actual production source from the deployed GitHub commit, not only local/archive context.
@@ -67,3 +67,8 @@ Last updated: 2026-09-21
 - If 429 occurs, honor broker retry headers and reduce background work.
 - If a new feature requires a UI change, stop and ask the user before changing UI.
 - Never mark runtime functionality as verified from source inspection alone.
+
+### New P0 evidence
+- Production history returned 502 after the deadlock fix.
+- 5m first paint was still asking for 25k candles, requiring multiple FYERS 100-day chunks.
+- v32.6 now keeps first paint within one history window; verify production response next.
