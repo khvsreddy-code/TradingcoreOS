@@ -46,11 +46,15 @@ export class FyersApiClient {
     return this.request<T>(DATA_BASE, path, params, signal);
   }
 
-  async apiGet<T = any>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(API_BASE, path, params, signal);
+  async apiGet<T = any>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal): Promise<T> {
+    return this.request<T>(API_BASE, path, params, signal, 'GET');
   }
 
-  private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal): Promise<T> {
+  async apiPost<T = any>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+    return this.request<T>(API_BASE, path, {}, signal, 'POST', body);
+  }
+
+  private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown): Promise<T> {
     const execute = async (gateSignal?: AbortSignal): Promise<T> => {
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
@@ -60,8 +64,10 @@ export class FyersApiClient {
         if (gateSignal?.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
         try {
           const response = await fetch(url, {
+            method,
             signal: gateSignal,
-            headers: { Accept: 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
+            body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
           });
           const text = await response.text();
           let payload: any = null;

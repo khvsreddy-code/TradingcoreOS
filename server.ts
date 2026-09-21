@@ -9,6 +9,8 @@ import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.r
 import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
 import { fyersMarketRoutes } from './src/server/routes/fyers-market.routes.js';
 import { fyersOrderStreamRoutes } from './src/server/routes/fyers-order-stream.routes.js';
+import { fyersAccountRoutes } from './src/server/routes/fyers-account.routes.js';
+import { fyersSymbolRoutes } from './src/server/routes/fyers-symbol.routes.js';
 import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
 import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
@@ -63,6 +65,8 @@ app.use('/api/trading', workspaceFixRoutes);
 app.use('/api/trading', fyersHistoryRoutes);
 app.use('/api/trading', fyersMarketRoutes);
 app.use('/api/trading', fyersOrderStreamRoutes);
+app.use('/api/trading', fyersAccountRoutes);
+app.use('/api/trading', fyersSymbolRoutes);
 app.use('/api/trading', upstoxHistoryRoutes);
 app.use('/api/trading', brokerMarketDataRoutes);
 // Portfolio snapshots are also mounted before the generic trading route so the

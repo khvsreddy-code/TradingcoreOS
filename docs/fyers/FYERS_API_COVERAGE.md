@@ -56,3 +56,9 @@ Source basis: official FYERS v3 documentation / FYERSDev `fyers-skills` referenc
 - Respect order operation limits separately.
 - Keep chart/history failure isolated from optional analytics/features.
 - Never change UI while completing backend FYERS coverage unless explicitly instructed.
+
+
+## v32.4 additions
+- Account read services: profile, funds, holdings, orders, trades, positions.
+- Multi-order margin preflight.
+- Dedicated daily symbol-master service across all documented exchange segments.

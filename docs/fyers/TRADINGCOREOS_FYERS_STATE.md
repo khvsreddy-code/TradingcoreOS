@@ -3,7 +3,7 @@
 Last updated: 2026-09-21
 
 ## Current stage
-**v32.3 — FYERS realtime + derivatives backend**
+**v32.4 — FYERS account + symbol infrastructure**
 
 ## UI status
 **FROZEN.** FYERS work must not change React layout, styling, chart appearance, navigation, or user-facing component structure unless explicitly requested.
@@ -25,13 +25,15 @@ Last updated: 2026-09-21
 - Futures Chain backend endpoint added.
 - Expired F&O expiry/contracts/historical endpoints added.
 - Full option-chain response is preserved for future analytics.
+- Dedicated FYERS symbol-master service covers the documented NSE/BSE/MCX masters with daily caching and lookup/search.
+- Shared account service now exposes profile, funds, holdings, orders, trades, positions and multi-order margin preflight through the authenticated FYERS client.
 
 ## Pending — next order
 1. Runtime-smoke-test FYERS market WebSocket SymbolUpdate/DepthUpdate.
 2. Runtime-smoke-test FYERS order WebSocket and reconcile with REST snapshots.
 3. Verify futures-chain and expired-F&O responses against a connected account.
 4. Add option-chain analytics service (expiry selection, PCR/OI/IV/Greeks) without changing UI.
-5. Extract account/trading services: funds, holdings, positions, orders, margin.
+5. Runtime-smoke-test the newly extracted account endpoints and margin preflight.
 6. Add GTT and Smart Order services.
 7. Add reports.
 8. Add screener/price-alert services.

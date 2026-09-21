@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-21
 
-## Current stage — v32.3 realtime + derivatives backend
+## Current stage — v32.4 account + symbol infrastructure
 
 ### P0 — protect the chart
 1. Keep historical route precedence unchanged.
@@ -31,13 +31,15 @@ Last updated: 2026-09-21
 4. Build futures basis analytics.
 
 ### P4 — account/trading
-1. Extract FYERS funds/holdings/positions/orders into shared client services.
-2. Add margin preflight.
-3. Add multi-order / multi-leg.
-4. Add GTT/OCO.
-5. Add Smart Orders / Smart Exit / TP-SL.
-6. Add reports.
-7. Add EDIS only where required and supported.
+1. [DONE] Extract FYERS profile/funds/holdings/positions/orders/trades into shared client services.
+2. [DONE] Add margin preflight endpoint.
+3. Runtime-smoke-test all account endpoints with a connected FYERS account.
+4. Add strict symbol/lot/tick preflight before any future live order path.
+5. Add multi-order / multi-leg.
+6. Add GTT/OCO.
+7. Add Smart Orders / Smart Exit / TP-SL.
+8. Add reports.
+9. Add EDIS only where required and supported.
 
 ### P5 — advanced
 1. Isolate TBT behind a separate service.

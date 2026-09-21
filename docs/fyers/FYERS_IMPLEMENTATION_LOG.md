@@ -1,5 +1,28 @@
 # FYERS Implementation Log
 
+## v32.4 — FYERS account + symbol infrastructure (2026-09-21)
+
+### Completed in this stage
+- Added `FyersAccountService` on the shared authenticated FYERS client.
+- Added read-only Profile, Funds, Holdings, Orders, Trades and Positions routes.
+- Added multi-order margin preflight route; this stage does not enable live order placement.
+- Added dedicated daily FYERS symbol-master service covering NSE_CM, NSE_FO, NSE_CD, NSE_COM, BSE_CM, BSE_FO and MCX_COM.
+- Added authenticated symbol-master search route.
+- Extended the shared FYERS REST client with POST support for future broker operations while keeping the existing GET path unchanged.
+- Updated checklist, TODO and state tracking so v32.4 is the recorded current stage.
+
+### Verification state
+- Changed TypeScript files pass TypeScript transpilation/syntax diagnostics.
+- Full project `tsc --noEmit` remains blocked by the supplied archive dependency set (`vite/client` and related missing type packages).
+- Runtime calls requiring a real FYERS account remain unverified.
+- Symbol-master network smoke test could not be performed from the build container because outbound DNS/network access is unavailable; official FYERS documentation was verified separately via web.
+
+### Safety
+- UI unchanged.
+- No live order placement was introduced.
+- Margin endpoint is preflight/read-only from TradingCoreOS perspective.
+- Existing chart/history route contract and precedence remain unchanged.
+
 ## v32.3 — FYERS realtime + derivatives backend (2026-09-21)
 
 ### Completed in this stage

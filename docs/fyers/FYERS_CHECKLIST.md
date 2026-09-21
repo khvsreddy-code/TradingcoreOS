@@ -2,6 +2,8 @@
 
 Last updated: 2026-09-21
 
+Current implementation stage: **v32.4 — FYERS account + symbol infrastructure**
+
 Legend: `[x]` implemented in source, `[~]` implemented but runtime verification pending, `[ ]` not implemented.
 
 ## Chart-safe market foundation
@@ -11,6 +13,8 @@ Legend: `[x]` implemented in source, `[~]` implemented but runtime verification 
 - [x] 5xx retry/backoff
 - [x] History chunking / normalization / deduplication
 - [x] Daily symbol-master cache/search
+- [x] Dedicated authoritative FYERS symbol-master service (all 7 documented masters)
+- [x] Backend symbol-master search route
 - [x] Quotes REST endpoint
 - [x] 5-level Depth REST endpoint
 - [x] Option Chain v3 raw-preserving endpoint
@@ -31,11 +35,14 @@ Legend: `[x]` implemented in source, `[~]` implemented but runtime verification 
 ## Realtime account/trading
 - [~] FYERS Order WebSocket transport
 - [ ] Order-stream runtime smoke test with connected FYERS account
-- [ ] Funds service extraction
-- [ ] Holdings service extraction
-- [ ] Positions service extraction
-- [ ] Orders service extraction
-- [ ] Margin preflight service
+- [x] Funds service extraction
+- [x] Profile service extraction
+- [x] Holdings service extraction
+- [x] Orders read service extraction
+- [x] Trades read service extraction
+- [x] Positions read service extraction
+- [x] Margin preflight endpoint
+- [ ] Live order placement (intentionally not enabled by this stage)
 - [ ] Multi-order service
 - [ ] Multi-leg order service
 - [ ] GTT/OCO service
