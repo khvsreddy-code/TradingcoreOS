@@ -164,7 +164,23 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested)))
     : 500;
   const maxChartHistory = 50_000;
-  const initialHistoryTarget = 25_000;
+  // FYERS caps minute-history requests at 100 calendar days. Keep the first
+  // paint inside one broker history window; older pages are loaded only after
+  // the chart is visible. This prevents a 5m chart from requiring 4+ serial
+  // FYERS calls before first paint.
+  const initialHistoryTarget = resolution === '1' ? 25_000
+    : resolution === '2' ? 12_000
+    : resolution === '3' ? 12_000
+    : resolution === '5' ? 7_000
+    : resolution === '10' ? 3_500
+    : resolution === '15' ? 2_400
+    : resolution === '20' ? 1_800
+    : resolution === '30' ? 1_200
+    : resolution === '60' ? 600
+    : resolution === '120' ? 300
+    : resolution === '240' ? 180
+    : resolution === 'D' ? 300
+    : 2;
 
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
@@ -235,6 +251,19 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       hasMore: Boolean(data.length),
     });
   } catch (error: any) {
+    console.error('[TradingCore][FYERS history] request failed', {
+      userId,
+      symbol: instrumentKey,
+      resolution,
+      before: beforeDate?.toISOString() || null,
+      requested: limit,
+      initialHistoryTarget,
+      name: error?.name,
+      status: error?.status,
+      brokerCode: error?.brokerCode,
+      message: error?.message,
+      payload: error?.payload,
+    });
     res.status(Number(error?.status) === 429 ? 429 : 502).json({
       success: false,
       error: error?.message || 'Unable to load Fyers historical candles',
