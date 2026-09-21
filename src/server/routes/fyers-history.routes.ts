@@ -92,92 +92,77 @@ async function fetchFyersHistoryTarget(
   signal?: AbortSignal,
 ): Promise<any[]> {
   const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
-  // Keep intraday windows below FYERS' hard 100-day boundary. For intraday
-  // history we use epoch timestamps so range_to can be placed before the
-  // current/resolution candle instead of truncating it to midnight.
+  // FYERS permits minute history for up to 100 days per request and daily
+  // history for up to 366 days. One chart-history request must stay inside one
+  // broker window so the first paint is deterministic and cannot time out while
+  // serially walking years of history. Older data is requested separately using
+  // the chart's "before" cursor.
   const maxWindowDays = resolution === 'D' ? 366 : 99;
   const candleMinutesPerTradingDay = resolution === 'D' ? 1440 : 375;
   const estimatedTradingDays = Math.max(1, Math.ceil((target * resolutionMinutes) / candleMinutesPerTradingDay));
   const windowDays = Math.min(maxWindowDays, Math.max(2, Math.ceil(estimatedTradingDays * 1.15)));
-  const maxLookbackDays = resolution === 'D' ? 365 * 25 : 365 * 10;
   const isIntraday = resolution !== 'D';
   const completedBoundaryMs = Math.max(60_000, resolutionMinutes * 60_000);
-  let end = beforeDate
+  const end = beforeDate
     ? new Date(beforeDate.getTime() - 1000)
     : new Date(Date.now() - completedBoundaryMs - 1000);
-  let all: any[] = [];
-  let emptyWindows = 0;
-  const maxPages = Math.max(2, Math.ceil(maxLookbackDays / Math.max(1, windowDays)) + 1);
 
-  for (let page = 0; page < maxPages && all.length < target && emptyWindows < 2; page += 1) {
-    if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
-    if (!isIntraday) end = latestTradingDate(end);
-    const from = new Date(end.getTime() - windowDays * 86_400_000);
-    let pageRows: any[] = [];
-    let pageError: any = null;
-    try {
-      const client = new FyersApiClient(accessToken);
-      const service = new FyersMarketDataService(client);
-      // FYERS documents yyyy-mm-dd ranges as the canonical History API form.
-      // Backfill ends on the last completed trading day; the live tick path
-      // builds today's in-progress candle separately.
-      const dateFormat = '1';
-      const rangeFrom = indiaDate(from);
-      let rangeEnd = new Date(end);
-      if (isIntraday) {
-        rangeEnd = new Date(rangeEnd.getTime() - 86_400_000);
-        rangeEnd = latestTradingDate(rangeEnd);
-      }
-      const rangeTo = indiaDate(rangeEnd);
-      const payload = await service.history(symbol, resolution, rangeFrom, rangeTo, { dateFormat, signal });
-      const rawCandles = Array.isArray(payload?.candles) ? payload.candles : [];
-      pageRows = normalize(rawCandles, target);
-
-      console.info('[TradingCore][FYERS history] broker response', {
-        rawFirst: rawCandles[0] ?? null,
-        rawLast: rawCandles.length ? rawCandles[rawCandles.length - 1] : null,
-        normalizedCount: pageRows.length,
-        symbol, resolution, dateFormat, rangeFrom, rangeTo,
-        status: payload?.s ?? null,
-        code: payload?.code ?? null,
-        message: payload?.message ?? null,
-        candleCount: Array.isArray(payload?.candles) ? payload.candles.length : 0,
-        nextTime: payload?.nextTime ?? null,
-      });
-
-      // FYERS can return a successful response with s=no_data once the
-      // requested range reaches the beginning of available history. That is
-      // not a transport/auth failure and MUST NOT discard candles already
-      // collected from newer windows. Stop the backfill and return the partial
-      // history; the caller only needs a non-empty completed range to paint.
-      if (!pageRows.length && String(payload?.s || '').toLowerCase() === 'no_data') {
-        console.warn('[TradingCore][FYERS history] broker returned no_data', {
-          symbol,
-          resolution,
-          dateFormat,
-          rangeFrom,
-          rangeTo,
-          nextTime: payload?.nextTime ?? null,
-          accumulatedCandles: all.length,
-        });
-        if (all.length > 0) break;
-      }
-    } catch (error: any) {
-      pageError = error;
-      if (Number(error?.status) === 429 || Number(error?.status) === 401 || Number(error?.brokerCode) < 0) throw error;
-    }
-
-    if (pageRows.length) {
-      all = normalize([...pageRows, ...all], target);
-      emptyWindows = 0;
-    } else {
-      if (pageError && all.length === 0) throw pageError;
-      emptyWindows += 1;
-    }
-    end = new Date(from.getTime() - 1000);
+  if (signal?.aborted) {
+    throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
   }
 
-  return normalize(all, target);
+  const from = new Date(end.getTime() - windowDays * 86_400_000);
+  const dateFormat = '1';
+  const rangeFrom = indiaDate(from);
+  let rangeEnd = new Date(end);
+  if (isIntraday) {
+    rangeEnd = new Date(rangeEnd.getTime() - 86_400_000);
+    rangeEnd = latestTradingDate(rangeEnd);
+  } else {
+    rangeEnd = latestTradingDate(rangeEnd);
+  }
+  const rangeTo = indiaDate(rangeEnd);
+
+  const client = new FyersApiClient(accessToken);
+  const service = new FyersMarketDataService(client);
+  const payload = await service.history(symbol, resolution, rangeFrom, rangeTo, { dateFormat, signal });
+  const rawCandles = Array.isArray(payload?.candles) ? payload.candles : [];
+  const pageRows = normalize(rawCandles, target);
+
+  console.info('[TradingCore][FYERS history] broker response', {
+    rawFirst: rawCandles[0] ?? null,
+    rawLast: rawCandles.length ? rawCandles[rawCandles.length - 1] : null,
+    normalizedCount: pageRows.length,
+    symbol, resolution, dateFormat, rangeFrom, rangeTo,
+    status: payload?.s ?? null,
+    code: payload?.code ?? null,
+    message: payload?.message ?? null,
+    candleCount: rawCandles.length,
+    nextTime: payload?.nextTime ?? null,
+  });
+
+  if (!pageRows.length && String(payload?.s || '').toLowerCase() === 'no_data') {
+    console.warn('[TradingCore][FYERS history] broker returned no_data', {
+      symbol,
+      resolution,
+      dateFormat,
+      rangeFrom,
+      rangeTo,
+      nextTime: payload?.nextTime ?? null,
+      accumulatedCandles: 0,
+    });
+  }
+
+  console.info('[TradingCore][FYERS history] page ready', {
+    symbol,
+    resolution,
+    before: beforeDate?.toISOString() || null,
+    returned: pageRows.length,
+    oldest: pageRows[0]?.timestamp || null,
+    newest: pageRows[pageRows.length - 1]?.timestamp || null,
+  });
+
+  return pageRows;
 }
 
 const cache = new Map<string, { expiresAt: number; data: any[] }>();
