@@ -1,0 +1,53 @@
+name: TradingCoreOS ML training
+
+on:
+  workflow_dispatch:
+    inputs:
+      csv_url:
+        description: 'HTTPS CSV URL containing OHLCV candles'
+        required: true
+        type: string
+      symbol:
+        description: 'TradingCoreOS symbol key'
+        required: true
+        default: 'NIFTY50'
+        type: string
+      timeframe:
+        description: 'Training timeframe'
+        required: true
+        default: '1D'
+        type: string
+      horizon:
+        description: 'Prediction horizon in candles'
+        required: true
+        default: '1'
+        type: string
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ML dependencies
+        run: pip install -r ml/requirements.txt
+      - name: Fetch training data
+        run: curl -L --fail --retry 3 "${{ inputs.csv_url }}" -o /tmp/training.csv
+      - name: Train and evaluate
+        run: python ml/train.py --csv /tmp/training.csv --symbol "${{ inputs.symbol }}" --timeframe "${{ inputs.timeframe }}" --horizon "${{ inputs.horizon }}" --out ml/models
+      - name: Upload model artifact to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradingcoreos-${{ inputs.symbol }}-${{ inputs.timeframe }}
+          path: ml/models/${{ inputs.symbol }}__${{ inputs.timeframe }}/
+      - name: Commit trained artifact metadata
+        run: |
+          git config user.name "TradingCoreOS ML"
+          git config user.email "actions@users.noreply.github.com"
+          git add ml/models/${{ inputs.symbol }}__${{ inputs.timeframe }}/metadata.json
+          git commit -m "ml: record ${{ inputs.symbol }} ${{ inputs.timeframe }} evaluation" || true
+          git push
