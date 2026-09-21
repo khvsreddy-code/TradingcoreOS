@@ -2,22 +2,21 @@
 
 Last updated: 2026-09-21
 
-## Current stage — v32.6 chart recovery / first-paint fix
+## Current stage — v32.7 FYERS intraday epoch-range candle recovery
 
 ### P0 — restore and verify candles
-1. **DONE:** Confirm actual production source from the deployed GitHub commit, not only local/archive context.
-2. **DONE:** Confirm Supabase-backed broker session lookup is keyed by authenticated TradingCore user.
-3. **DONE:** Confirm history cache/in-flight keys include the authenticated user ID.
-4. **DONE:** Remove the outer `withBrokerRequestGate` from the FYERS history route.
-5. **DONE:** Keep `FyersApiClient` as the single owner of the FYERS REST gate.
-6. **NEXT:** Deploy the fix and verify NIFTY 50 candles.
-7. **NEXT:** Verify BANK NIFTY candles.
-8. **NEXT:** Verify 1m/3m/5m/15m/30m/1H/1D switching.
-9. **NEXT:** Verify live candle updates continue after historical candles render.
-10. **NEXT:** Verify left-scroll older-history pagination.
-11. Do not add new FYERS feature work until the candle regression is cleared.
+1. **DONE:** Confirm v32.6 deployed to production.
+2. **DONE:** Capture runtime evidence showing the history route reaches FYERS but receives 0 candles with no broker error.
+3. **DONE:** Change intraday history requests to FYERS epoch-second ranges so range_to is before the current/resolution candle instead of a date-only boundary.
+4. **DONE:** Keep intraday windows below the 100-day broker boundary.
+5. **NEXT:** Deploy and reproduce one authenticated 5m request.
+6. **NEXT:** Verify returned candle count and oldest/newest timestamps in Vercel runtime logs.
+7. **NEXT:** Verify BANK NIFTY, then NIFTY 50, across 1m/3m/5m/15m/30m/1H/1D.
+8. **NEXT:** Verify live candle updates after historical candles render.
+9. **NEXT:** Verify left-scroll older-history pagination.
+10. Do not add new FYERS feature work until candle recovery is cleared.
 
-### Multi-user safety
+## Multi-user safety
 1. Broker sessions must always resolve from `broker_sessions.user_id = req.tradingCoreUserId`.
 2. Never use a global FYERS access token for chart/history/account requests.
 3. History cache and in-flight request keys must include user ID.
