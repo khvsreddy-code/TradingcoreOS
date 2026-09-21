@@ -99,3 +99,10 @@ Legend: `[x]` implemented in source, `[~]` implemented but runtime verification 
 - [x] Intraday FYERS history switched to epoch-second range parameters.
 - [x] Intraday history window reduced to 99 calendar days to stay below the broker cap.
 - [~] Production candle regression verified after v32.7 deployment
+
+
+## v32.8 — history response/range correction
+- [x] Deep code audit traced blank candles to FYERS History returning zero rows before chart paint.
+- [x] Removed intraday epoch-range dependency for backfill; use completed trading-day yyyy-mm-dd ranges.
+- [x] Added broker response telemetry: status/code/message/candleCount/nextTime (no token data).
+- [~] Production verification pending.
