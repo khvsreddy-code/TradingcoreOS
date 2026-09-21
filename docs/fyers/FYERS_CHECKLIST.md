@@ -106,3 +106,9 @@ Legend: `[x]` implemented in source, `[~]` implemented but runtime verification 
 - [x] Removed intraday epoch-range dependency for backfill; use completed trading-day yyyy-mm-dd ranges.
 - [x] Added broker response telemetry: status/code/message/candleCount/nextTime (no token data).
 - [~] Production verification pending.
+
+## v32.9 — successful partial-history termination
+- [x] Production evidence confirms FYERS is returning thousands of valid 5m candles (candleCount 4,800–5,250+ per window).
+- [x] Identified the actual 502 trigger: the backfill continued until FYERS reached pre-availability ranges and returned s=no_data; the route then treated the overall history load as failure instead of returning already accumulated candles.
+- [x] Changed no_data handling to stop backfill and preserve accumulated candles.
+- [~] Production verification after v32.9 deployment pending.
