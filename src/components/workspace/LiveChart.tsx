@@ -661,7 +661,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
      try{c.timeScale().setVisibleLogicalRange({from:Math.max(0,data.length-visibleBars-0.5),to:data.length-0.5+8});}
      catch{try{c.timeScale().fitContent();}catch{}}
    }else{try{c.timeScale().fitContent();}catch{}}
-   previousLogicalRange=c.timeScale().getVisibleLogicalRange?.()||null;historyReady=true;void extendHistoryInBackground();void renderPredictionOverlay(data); if(showOI&&oiAnalytics.current)renderOI(oiAnalytics.current);
+   previousLogicalRange=c.timeScale().getVisibleLogicalRange?.()||null;historyReady=true;void renderPredictionOverlay(data); if(showOI&&oiAnalytics.current)renderOI(oiAnalytics.current);
  }).catch(e=>{
   if(dead||!lifecycle.current.isCurrent(generation)||String(e?.name||'')==='AbortError')return;
   if(historyPaintedRef.current&&candles.current.length){
