@@ -130,9 +130,13 @@ async function fetchFyersHistoryTarget(
       }
       const rangeTo = indiaDate(rangeEnd);
       const payload = await service.history(symbol, resolution, rangeFrom, rangeTo, { dateFormat, signal });
-      pageRows = normalize(payload?.candles || [], target);
+      const rawCandles = Array.isArray(payload?.candles) ? payload.candles : [];
+      pageRows = normalize(rawCandles, target);
 
       console.info('[TradingCore][FYERS history] broker response', {
+        rawFirst: rawCandles[0] ?? null,
+        rawLast: rawCandles.length ? rawCandles[rawCandles.length - 1] : null,
+        normalizedCount: pageRows.length,
         symbol, resolution, dateFormat, rangeFrom, rangeTo,
         status: payload?.s ?? null,
         code: payload?.code ?? null,
