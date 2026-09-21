@@ -82,3 +82,11 @@ Last updated: 2026-09-21
 6. **NEXT:** Verify BANK NIFTY and NIFTY 50, then all supported timeframes.
 7. **NEXT:** Verify today's live candle joins historical data.
 8. **NEXT:** Verify older-history pagination.
+
+## v32.9 — P0 candle recovery
+1. **DONE:** Production telemetry proved FYERS History itself is healthy for current NIFTY 50 5m windows; multiple windows returned thousands of candles.
+2. **DONE:** Pinpointed the 502: the route kept walking backward into unavailable pre-history ranges and ultimately failed the whole request after receiving s=no_data.
+3. **DONE:** Change s=no_data handling so accumulated valid candles are returned instead of discarded.
+4. **NEXT:** Verify production 5m response is 200 with non-zero returned candles.
+5. **NEXT:** Verify BANK NIFTY and remaining core timeframes.
+6. **NEXT:** Verify live candle reconciliation and left-scroll pagination.
