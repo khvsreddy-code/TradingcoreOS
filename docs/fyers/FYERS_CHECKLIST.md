@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-21
 
-Current implementation stage: **v32.6 — FYERS first-paint history window fix**
+Current implementation stage: **v32.7 — FYERS intraday epoch-range candle recovery**
 
 Legend: `[x]` implemented in source, `[~]` implemented but runtime verification pending, `[ ]` not implemented.
 
@@ -92,3 +92,10 @@ Legend: `[x]` implemented in source, `[~]` implemented but runtime verification 
 
 - [x] Initial history target bounded to one FYERS minute-history window per timeframe
 - [~] Structured history failure logging added; runtime cause verification pending
+
+
+## v32.7 evidence
+- [x] Production runtime log captured: history request reaches FYERS and returns 0 candles rather than deadlocking.
+- [x] Intraday FYERS history switched to epoch-second range parameters.
+- [x] Intraday history window reduced to 99 calendar days to stay below the broker cap.
+- [~] Production candle regression verified after v32.7 deployment
