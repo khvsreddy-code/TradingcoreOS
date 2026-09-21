@@ -99,3 +99,29 @@
 ### Verification state
 - Fix committed to `main` as `8e0d2298c9c3b4aabbbcf35a54c0a5e301e9ea6c`.
 - Runtime verification pending deployment and one chart refresh.
+
+
+## v32.7 — FYERS intraday epoch-range candle recovery (2026-09-21)
+
+### Runtime evidence
+- Latest production deployment dpl_Az2EkDPm186eUrEcJAW5oXygJ7CJ is READY and contains the v32.6 main-branch changes.
+- At 11:22:25 UTC, authenticated /api/trading/fyers/historical returned 502 for NSE:NIFTY50-INDEX, resolution 5.
+- The structured log proved the request was not deadlocked and did not receive an HTTP/broker error: FYERS returned a successful response with 0 candles, producing the route error for zero candles.
+- This rules out the chart renderer as the immediate failure and also rules out the earlier nested-gate deadlock as the current cause.
+- Official FYERS v3 documentation defines date_format=0 as epoch seconds and date_format=1 as YYYY-MM-DD; intraday requests are capped at 100 days/request. FYERS documents the completed-candle range requirement. citeturn4search0
+
+### Fix
+- Added dateFormat support to the shared FyersMarketDataService.history method.
+- Changed intraday history requests to use date_format=0 with exact epoch-second range_from/range_to values.
+- The first intraday range now ends at least one full requested resolution before the current time, avoiding a date-only midnight boundary.
+- Intraday page windows are capped at 99 calendar days, safely below the FYERS 100-day limit.
+- Added explicit s=no_data runtime logging with symbol, resolution, date format, range and FYERS nextTime, without logging access tokens.
+- UI remains unchanged.
+
+### Commits
+- 89620b4223063229422eb24dbce933f5f4ec8035 — add FYERS history date-format support.
+- d51803d1f03630a92d61455e142e2fa616bd2289 — use epoch ranges for intraday history.
+
+### Verification state
+- Source fix committed to main.
+- Deployment and runtime candle verification are still pending.
