@@ -3,7 +3,7 @@
 Last updated: 2026-09-21
 
 ## Current stage
-**v32.6 — FYERS first-paint history window fix**
+**v32.7 — FYERS intraday epoch-range candle recovery**
 
 ## UI status
 **FROZEN.** FYERS work must not change React layout, styling, chart appearance, navigation, or user-facing component structure unless explicitly requested.
@@ -50,3 +50,11 @@ The production deployment was using a history route that acquired the FYERS requ
 - Multi-user safety requires user-isolated session/cache testing.
 
 - v32.6: first-paint history target is now one FYERS history window; older candles remain lazy/background.
+
+
+## v32.7 incident update
+- v32.6 is deployed and the history request is executing, but production logs at 11:22:25 UTC showed FYERS returning 0 candles for NSE:NIFTY50-INDEX / 5 without an HTTP error.
+- Therefore the previous deadlock and first-paint multi-page diagnosis are no longer sufficient explanations for the current blank chart.
+- v32.7 switches intraday history to epoch-second ranges and keeps the range end before the current/resolution candle, while keeping each window below the official 100-day limit. citeturn4search0
+- UI remains frozen.
+- Runtime verification is pending the new deployment.
