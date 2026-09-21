@@ -138,7 +138,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
-    res.setHeader('Cache-Control', 'private, max-age=20');
+    res.setHeader('Cache-Control', 'private, no-store');
     res.json({ success: true, data: cached.data, requested: limit, returned: cached.data.length, cached: true });
     return;
   }
@@ -147,7 +147,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   if (existing) {
     try {
       const data = await existing;
-      res.setHeader('Cache-Control', 'private, max-age=20');
+      res.setHeader('Cache-Control', 'private, no-store');
       res.json({ success: true, data, requested: limit, returned: data.length, cached: true });
     } catch (error: any) {
       res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
