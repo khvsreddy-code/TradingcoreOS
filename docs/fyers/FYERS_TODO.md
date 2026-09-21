@@ -2,13 +2,28 @@
 
 Last updated: 2026-09-21
 
-## Current stage — v32.4 account + symbol infrastructure
+## Current stage — v32.5 multi-user chart recovery
 
-### P0 — protect the chart
-1. Keep historical route precedence unchanged.
-2. Keep chart data contract unchanged.
-3. Do not introduce UI changes.
-4. Verify market-stream behavior with a real FYERS session before touching chart consumers.
+### P0 — restore and verify candles
+1. **DONE:** Confirm actual production source from the deployed GitHub commit, not only local/archive context.
+2. **DONE:** Confirm Supabase-backed broker session lookup is keyed by authenticated TradingCore user.
+3. **DONE:** Confirm history cache/in-flight keys include the authenticated user ID.
+4. **DONE:** Remove the outer `withBrokerRequestGate` from the FYERS history route.
+5. **DONE:** Keep `FyersApiClient` as the single owner of the FYERS REST gate.
+6. **NEXT:** Deploy the fix and verify NIFTY 50 candles.
+7. **NEXT:** Verify BANK NIFTY candles.
+8. **NEXT:** Verify 1m/3m/5m/15m/30m/1H/1D switching.
+9. **NEXT:** Verify live candle updates continue after historical candles render.
+10. **NEXT:** Verify left-scroll older-history pagination.
+11. Do not add new FYERS feature work until the candle regression is cleared.
+
+### Multi-user safety
+1. Broker sessions must always resolve from `broker_sessions.user_id = req.tradingCoreUserId`.
+2. Never use a global FYERS access token for chart/history/account requests.
+3. History cache and in-flight request keys must include user ID.
+4. Broker request scheduling must not allow one user's token/session state to be reused by another user.
+5. Keep Supabase as the production broker-session source of truth.
+6. Runtime tests must cover two authenticated users using different FYERS sessions.
 
 ### P1 — realtime
 1. Runtime-smoke-test SymbolUpdate.
@@ -22,24 +37,23 @@ Last updated: 2026-09-21
 2. Verify expired-F&O expiry dates.
 3. Verify expired-F&O contract lookup.
 4. Verify expired-F&O historical candles with OI/Greeks.
-5. Add typed normalization only after observing live payloads; preserve raw payload first.
+5. Preserve raw payload first; add typed normalization after observing live payloads.
 
 ### P3 — analytics
 1. Build expiry resolver from FYERS expiryData.
-2. Build PCR/OI/ΔOI calculations from preserved option-chain data.
+2. Build PCR/OI/ΔOI calculations.
 3. Build IV/Greeks aggregation.
 4. Build futures basis analytics.
 
 ### P4 — account/trading
-1. [DONE] Extract FYERS profile/funds/holdings/positions/orders/trades into shared client services.
-2. [DONE] Add margin preflight endpoint.
-3. Runtime-smoke-test all account endpoints with a connected FYERS account.
-4. Add strict symbol/lot/tick preflight before any future live order path.
-5. Add multi-order / multi-leg.
-6. Add GTT/OCO.
-7. Add Smart Orders / Smart Exit / TP-SL.
-8. Add reports.
-9. Add EDIS only where required and supported.
+1. Runtime-smoke-test profile/funds/holdings/positions/orders/trades.
+2. Runtime-smoke-test margin preflight.
+3. Add strict symbol/lot/tick preflight before any future live order path.
+4. Add multi-order / multi-leg.
+5. Add GTT/OCO.
+6. Add Smart Orders / Smart Exit / TP-SL.
+7. Add reports.
+8. Add EDIS only where required and supported.
 
 ### P5 — advanced
 1. Isolate TBT behind a separate service.
