@@ -125,3 +125,22 @@
 ### Verification state
 - Source fix committed to main.
 - Deployment and runtime candle verification are still pending.
+
+
+## v32.8 — Deep blank-chart audit (2026-09-21)
+
+### Finding
+- Production logs at 11:32 UTC show the authenticated history route returning 502 because FYERS returned zero candles for `NSE:NIFTY50-INDEX` at `D` and previously at `5`.
+- A source audit of `LiveChart.tsx` confirms candle rendering is correctly wired: non-empty normalized history is passed directly to `CandlestickSeries.setData()` and the live tick reconciler only augments that dataset. The blank chart therefore originates upstream of the chart renderer.
+- FYERS official documentation supports `date_format=1` yyyy-mm-dd history ranges and identifies `NSE:NIFTY50-INDEX` as a valid index symbol. citeturn4search0turn1search1
+
+### v32.8 fix
+- Changed history backfill to documented yyyy-mm-dd ranges ending on the last completed trading day instead of relying on epoch-second ranges during the live session.
+- Added broker response telemetry for `s`, `code`, `message`, candle count and `nextTime` without logging tokens.
+- UI unchanged.
+
+### Important unresolved discriminator
+- If v32.8 still returns `candleCount: 0`, the next runtime log will distinguish FYERS `no_data` from an actual permission/auth response. FYERS support has documented cases where historical data requires the Historical Data permission and a regenerated access token; those cases normally return `code: -403`, so we should not assume permissions until the new response telemetry proves it. citeturn3search0turn3search1
+
+### Commit
+- `fb0cf18c4f4739a7fee58ae30f81e69696765e29`
