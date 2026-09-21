@@ -1,5 +1,32 @@
 # FYERS Implementation Log
 
+## v32.5 — Multi-user FYERS history deadlock fix (2026-09-21)
+
+### Incident
+- Production deployment `dpl_6SZGKqjyJtPb6xkt11m7v2JpP4Hu` was built from GitHub commit `529d21be295061f093409dac6a40c4d716e393b8`.
+- The deployed `fyers-history.routes.ts` acquired `withBrokerRequestGate('fyers', accessToken, ...)`.
+- The inner `FyersApiClient` also acquires the same gate before calling FYERS.
+- The outer route task therefore waited for a gate that the inner client could not acquire until the outer task released it.
+- Production symptoms matched this exactly: blank chart with live LTP/stream still working and repeated Vercel 300-second runtime timeouts.
+
+### Multi-user/Supabase verification
+- Production code resolves the FYERS session through `BrokerRepository.getSession('fyers', req.tradingCoreUserId)`.
+- `BrokerRepository` reads the Supabase `broker_sessions` row by both `user_id` and `broker_id`.
+- History cache/in-flight keys include `userId`, preventing cross-user history sharing.
+- The Supabase project connected through the current tool session has the expected `broker_sessions` schema; no session rows were exposed during this diagnostic query. This was treated as a separate environment/configuration observation and not used as evidence to bypass user-scoped session lookup.
+
+### Fix
+- Removed the history route's outer `withBrokerRequestGate` acquisition.
+- Kept `FyersApiClient` as the single FYERS REST scheduler owner.
+- Added explicit user-scoped comments/logging around history requests.
+- Kept UI and chart component contracts unchanged.
+- Fix committed to `main` as `111085cb6d399c0242c8a96797f0c95b9dbcc561`.
+
+### Verification state
+- Source-level fix verified against the actual production main source.
+- Runtime deployment verification is still pending.
+- Do not mark candle recovery complete until production returns a non-empty candle array for an authenticated user.
+
 ## v32.4 — FYERS account + symbol infrastructure (2026-09-21)
 
 ### Completed in this stage
@@ -13,9 +40,9 @@
 
 ### Verification state
 - Changed TypeScript files pass TypeScript transpilation/syntax diagnostics.
-- Full project `tsc --noEmit` remains blocked by the supplied archive dependency set (`vite/client` and related missing type packages).
+- Full project `tsc --noEmit` remains blocked by the supplied archive dependency set.
 - Runtime calls requiring a real FYERS account remain unverified.
-- Symbol-master network smoke test could not be performed from the build container because outbound DNS/network access is unavailable; official FYERS documentation was verified separately via web.
+- Symbol-master network smoke test could not be performed from the build container because outbound DNS/network access is unavailable.
 
 ### Safety
 - UI unchanged.
@@ -38,35 +65,19 @@
 ### Verification state
 - Source-level implementation complete.
 - Runtime WebSocket authentication/smoke testing remains pending.
-- Full TypeScript/build verification remains blocked by incomplete archive dependencies.
 
 ## v32.2 — FYERS backend foundation (2026-09-21)
 
 ### Completed in this stage
 - Added `src/server/fyers/core/FyersApiClient.ts` as the shared authenticated FYERS REST client.
 - Centralized FYERS REST scheduling through the existing per-user `BrokerRequestGate`.
-- Added FYERS 429/5xx retry handling with `Retry-After` / `X-Retry-After-Ms` support.
-- Added `src/server/fyers/market/FyersMarketDataService.ts` for History, Quotes, Depth, Option Chain v3 and Market Status.
-- Moved the active FYERS history implementation onto the shared FYERS client; UI and route contract remain unchanged.
-- Added backend-only FYERS endpoints for Quotes, Depth, Market Status and full Option Chain v3.
-- Option Chain v3 now preserves the complete FYERS payload instead of collapsing it to a small UI-oriented strike subset.
-- Added strikecount (1–50), timestamp and Greeks handling at the backend boundary.
+- Added FYERS 429/5xx retry handling.
+- Added History, Quotes, Depth, Option Chain v3 and Market Status services.
+- Moved the active FYERS history implementation onto the shared FYERS client.
+- Preserved complete option-chain payload.
 - Kept existing symbol-master search and chart route precedence intact.
-
-### Explicitly NOT done yet
-- No React/UI redesign or visual changes.
-- No TBT implementation yet.
-- No FYERS funds/holdings/positions/margin/GTT/smart-order service extraction yet.
-- No screeners/price-alert service extraction yet.
-- No replacement of the existing market-stream transport yet.
-
-### Validation
-- Full project `tsc --noEmit` could not run cleanly because the supplied archive's `node_modules` is incomplete (`vite/client` and `@types/node` are missing).
-- Targeted TypeScript invocation was also blocked by the missing `@types/node` package.
-- Therefore this stage is recorded as **source-level implemented / dependency validation blocked**, not “full build verified”.
 
 ## Safety constraints
 - UI remains frozen.
 - Existing `/api/trading/:brokerId/historical` contract remains unchanged.
-- FYERS route precedence remains before generic broker market routes.
-- No live-order behavior was changed in this stage.
+- No live-order behavior was changed in this incident fix.
