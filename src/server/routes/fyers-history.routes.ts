@@ -2,8 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
-import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
+import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 
 /**
  * Safe FYERS historical-data route.
@@ -91,129 +90,83 @@ async function fetchFyersHistoryTarget(
   beforeDate?: Date | null,
   signal?: AbortSignal,
 ): Promise<any[]> {
-  const resolutionMinutes = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
-  const isIntraday = resolution !== 'D';
-  // FYERS allows up to 100 calendar days for minute history and 366 days for
-  // day history. Keep a safety margin so inclusivity/timezone handling cannot
-  // push a request over the broker's limit.
-  const maxWindowDays = isIntraday ? 99 : 360;
-  const maxLookbackDays = isIntraday ? 365 * 10 : 365 * 25;
-  const oneWindowCapacity = isIntraday
-    ? Math.max(2, Math.floor((maxWindowDays * (375 / resolutionMinutes)) * 0.95))
-    : maxWindowDays;
-  const pageTarget = Math.max(2, Math.min(target, oneWindowCapacity));
+  // Keep the proven legacy transport: one broker-safe history request for
+  // first paint, and one more single window only when older data is requested.
+  const lookbackDays = resolution === 'D' ? 360 : (resolution === '30' || resolution === '60' ? 90 : 30);
+  const end = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
+  const from = new Date(end.getTime() - lookbackDays * 86_400_000);
+  const requestedLimit = Math.max(2, Math.min(10_000, Math.floor(Number(target) || 10_000)));
 
-  // Keep the initial request in the broker's known-good date-range form. For
-  // backfill (where an exact candle boundary matters) use epoch seconds first.
-  // This also gives us a deterministic recovery path for FYERS no_data responses.
-  const initialEnd = beforeDate ? new Date(beforeDate.getTime() - 1000) : new Date();
-  let end = initialEnd;
-  let all: any[] = [];
-  let emptyWindows = 0;
+  return withBrokerRequestGate('fyers', accessToken, async (gateSignal) => {
+    if (gateSignal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
 
-  const maxPages = Math.max(2, Math.ceil(maxLookbackDays / Math.max(1, maxWindowDays)) + 1);
+    const params = new URLSearchParams({
+      symbol,
+      resolution,
+      date_format: '1',
+      range_from: indiaDate(from),
+      range_to: indiaDate(end),
+    });
 
-  for (let page = 0; page < maxPages && all.length < target && emptyWindows < 2; page += 1) {
-    if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
+    const response = await fetch('https://api-t1.fyers.in/data/history?' + params.toString(), {
+      signal: gateSignal,
+      headers: {
+        Accept: 'application/json',
+        Authorization: process.env.FYERS_CLIENT_ID + ':' + accessToken,
+      },
+    });
 
-    const from = new Date(end.getTime() - maxWindowDays * 86_400_000);
-    const rangeFromDate = indiaDate(from);
-    const rangeToDate = indiaDate(end);
-    const rangeFromEpoch = String(Math.floor(from.getTime() / 1000));
-    const rangeToEpoch = String(Math.floor(end.getTime() / 1000));
-
-    const client = new FyersApiClient(accessToken);
-    const service = new FyersMarketDataService(client);
-    let pageRows: any[] = [];
-    let pageError: any = null;
-    let firstPayload: any = null;
-
-    const requestPage = async (dateFormat: '0' | '1') => {
-      const payload = await service.history(
-        symbol,
-        resolution,
-        dateFormat === '1' ? rangeFromDate : rangeFromEpoch,
-        dateFormat === '1' ? rangeToDate : rangeToEpoch,
-        { dateFormat, signal },
-      );
-      const rows = normalize(payload?.candles || [], pageTarget)
-        .filter((row) => !beforeDate || Date.parse(String(row.timestamp)) < beforeDate.getTime())
-        .slice(-pageTarget);
-      return { payload, rows };
-    };
-
+    const text = await response.text();
+    let payload: any;
     try {
-      // Initial load uses the documented yyyy-mm-dd form, matching the legacy
-      // implementation that produced candles reliably in this project. Backfill
-      // uses epoch seconds first so the `before` boundary is exact.
-      const primaryFormat: '0' | '1' = beforeDate ? '0' : '1';
-      const fallbackFormat: '0' | '1' = primaryFormat === '1' ? '0' : '1';
-      const primary = await requestPage(primaryFormat);
-      firstPayload = primary.payload;
-      pageRows = primary.rows;
-
-      // FYERS can legitimately answer HTTP 200 + s=no_data. If the first form
-      // produces no candles, retry the SAME window once with the other documented
-      // date representation before walking to an older window.
-      if (!pageRows.length) {
-        const fallback = await requestPage(fallbackFormat);
-        if (fallback.rows.length) { pageRows = fallback.rows; firstPayload = fallback.payload; }
-        firstPayload = {
-          ...firstPayload,
-          fallbackDateFormat: fallbackFormat,
-          fallbackStatus: fallback.payload?.s ?? null,
-          fallbackCode: fallback.payload?.code ?? null,
-          fallbackMessage: fallback.payload?.message ?? null,
-          fallbackCandleCount: Array.isArray(fallback.payload?.candles) ? fallback.payload.candles.length : 0,
-        };
-      }
-
-      console.info('[TradingCore][FYERS history] broker response', {
-        symbol,
-        resolution,
-        primaryDateFormat: primaryFormat,
-        rangeFrom: rangeFromDate,
-        rangeTo: rangeToDate,
-        epochRangeFrom: rangeFromEpoch,
-        epochRangeTo: rangeToEpoch,
-        status: firstPayload?.s ?? null,
-        code: firstPayload?.code ?? null,
-        message: firstPayload?.message ?? null,
-        candleCount: Array.isArray(firstPayload?.candles) ? firstPayload.candles.length : 0,
-        nextTime: firstPayload?.nextTime ?? null,
-        pageReturned: pageRows.length,
-      });
-
-      if (!pageRows.length && String(firstPayload?.s || '').toLowerCase() === 'no_data') {
-        console.warn('[TradingCore][FYERS history] broker returned no_data after date+epoch retry', {
-          symbol,
-          resolution,
-          rangeFrom: rangeFromDate,
-          rangeTo: rangeToDate,
-          epochRangeFrom: rangeFromEpoch,
-          epochRangeTo: rangeToEpoch,
-          nextTime: firstPayload?.nextTime ?? null,
-        });
-      }
-    } catch (error: any) {
-      pageError = error;
-      if (Number(error?.status) === 429 || Number(error?.status) === 401 || Number(error?.brokerCode) < 0) throw error;
+      payload = JSON.parse(text);
+    } catch {
+      const error: any = new Error('Fyers history returned a non-JSON response (' + response.status + ')');
+      error.status = response.status;
+      throw error;
     }
 
-    if (pageRows.length) {
-      all = normalize([...pageRows, ...all], target);
-      emptyWindows = 0;
+    const brokerCode = Number(payload?.code);
+    if (!response.ok || payload?.s === 'error' || brokerCode === 429) {
+      const error: any = new Error(payload?.message || ('Fyers history failed (' + response.status + ')'));
+      error.status = brokerCode === 429 ? 429 : response.status;
+      error.brokerCode = Number.isFinite(brokerCode) ? brokerCode : undefined;
+      throw error;
+    }
+
+    // Filter a before= response before applying the requested page limit.
+    let data = normalize(payload?.candles || [], 10_000);
+    if (beforeDate) {
+      data = data.filter((row) => Date.parse(String(row.timestamp)) < beforeDate.getTime()).slice(-requestedLimit);
     } else {
-      if (pageError && all.length === 0) throw pageError;
-      emptyWindows += 1;
+      data = data.slice(-requestedLimit);
     }
 
-    // Make the next window contiguous. `before` requests already use an exact
-    // epoch boundary; initial requests simply move back by one second here.
-    end = new Date(from.getTime() - 1000);
-  }
+    if (data.length < 2 && !beforeDate) {
+      const seed = await fallbackQuoteCandle(accessToken, symbol);
+      if (seed.length) data = seed;
+    }
 
-  return normalize(all, target);
+    if (!data.length && !beforeDate) {
+      throw new Error('Fyers returned no historical candles or live quote for ' + symbol + '.');
+    }
+
+    console.info('[TradingCore][FYERS history] loaded', {
+      symbol,
+      resolution,
+      before: beforeDate?.toISOString() || null,
+      rangeFrom: indiaDate(from),
+      rangeTo: indiaDate(end),
+      brokerStatus: payload?.s ?? null,
+      brokerCode: Number.isFinite(brokerCode) ? brokerCode : null,
+      brokerCandleCount: Array.isArray(payload?.candles) ? payload.candles.length : 0,
+      returned: data.length,
+      oldest: data[0]?.timestamp || null,
+      newest: data[data.length - 1]?.timestamp || null,
+    });
+
+    return data;
+  }, signal);
 }
 
 const cache = new Map<string, { expiresAt: number; data: any[] }>();
@@ -244,10 +197,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     ? Math.max(2, Math.min(beforeDate ? 30000 : 25000, Math.floor(requested)))
     : 500;
   const maxChartHistory = 50_000;
-  // FYERS caps minute-history requests at 100 calendar days. Keep the first
-  // paint inside one broker history window; older pages are loaded only after
-  // the chart is visible. This prevents a 5m chart from requiring 4+ serial
-  // FYERS calls before first paint.
+  // First paint is always one broker-safe history request. Older candles are
+  // requested only when the user scrolls toward the left edge.
   const initialHistoryTarget = resolution === '1' ? 20_000
     : resolution === '2' ? 9_000
     : resolution === '3' ? 8_000
@@ -292,9 +243,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    // IMPORTANT: FyersApiClient owns BrokerRequestGate. The history route MUST NOT
-    // acquire the same gate before calling the client. Doing so deadlocks:
-    // route gate -> client gate -> waits for route gate -> no FYERS request.
+    // The history helper owns the single broker-gate acquisition for this request.
     const task = (async () => {
       const requestedTarget = Math.max(2, Math.min(beforeDate ? limit : initialHistoryTarget, 50_000));
       const data = await fetchFyersHistoryTarget(accessToken, instrumentKey, resolution, requestedTarget, beforeDate);
