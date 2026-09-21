@@ -71,3 +71,14 @@ Last updated: 2026-09-21
 - Production history returned 502 after the deadlock fix.
 - 5m first paint was still asking for 25k candles, requiring multiple FYERS 100-day chunks.
 - v32.6 now keeps first paint within one history window; verify production response next.
+
+
+## v32.8 — P0 candle recovery
+1. **DONE:** Audit browser chart path and confirm `LiveChart` paints candles when history rows exist.
+2. **DONE:** Audit runtime path and confirm `/api/trading/fyers/historical` reaches FYERS and returns 0 rows.
+3. **DONE:** Switch backfill to FYERS documented yyyy-mm-dd ranges ending on completed trading days.
+4. **DONE:** Add raw broker-response metadata logging to distinguish `no_data`, permission/auth, and valid empty responses.
+5. **NEXT:** Verify production 5m and 1D requests return candleCount > 0.
+6. **NEXT:** Verify BANK NIFTY and NIFTY 50, then all supported timeframes.
+7. **NEXT:** Verify today's live candle joins historical data.
+8. **NEXT:** Verify older-history pagination.
