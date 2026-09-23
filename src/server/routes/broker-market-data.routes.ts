@@ -342,11 +342,22 @@ brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: Authenticated
   if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
   if (symbols.length > 100) return res.status(400).json({ success: false, error: 'Too many market symbols requested' });
   res.status(200);
-  res.setHeader('Content-Type', 'application/x-ndjson');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  // Low-latency streaming: never let an intermediary buffer live ticks.
+  // FYERS ticks must reach the chart as soon as they arrive.
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.flushHeaders();
-  const write = (event: any) => { try { res.write(`${JSON.stringify(event)}\n`); } catch {} };
+  const write = (event: any) => {
+    try {
+      res.write(`${JSON.stringify(event)}\n`);
+      // Express compression/proxy stacks may expose flush(). Flush every tick.
+      const flush = (res as any).flush;
+      if (typeof flush === 'function') flush.call(res);
+    } catch {}
+  };
   const depthSymbol = toFyersSymbol(String(req.query.depth_symbol || ''));
   const includeDepth = Boolean(depthSymbol);
   const depthSymbols = includeDepth ? [depthSymbol] : symbols;

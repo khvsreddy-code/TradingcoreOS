@@ -83,7 +83,7 @@ export class BrokerMarketDataClient {
     if (stream.stopped) return;
     const keys = stream.instrumentKeys;
     const now = Date.now();
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 4500);
+    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 2200);
     if (stale) {
       try {
         const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`);
@@ -112,7 +112,7 @@ export class BrokerMarketDataClient {
         }
       } catch { /* websocket remains primary; retry on the next stale interval */ }
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 3000);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1500);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
