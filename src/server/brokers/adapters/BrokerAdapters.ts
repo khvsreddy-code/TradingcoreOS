@@ -545,21 +545,28 @@ export class FyersAdapter extends BaseBroker {
 
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
     const resolutionMap: Record<string, string> = {
-      '1minute': '1', '3minute': '3', '5minute': '5', '15minute': '15',
-      '30minute': '30', '60minute': '60', 'day': 'D',
+      '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
+      '15minute': '15', '20minute': '20', '30minute': '30', '60minute': '60',
+      '120minute': '120', '240minute': '240', 'day': 'D', '1day': 'D', 'week': '1W', 'month': '1M',
     };
     const resolution = resolutionMap[interval] || interval;
+    if (!resolution) throw new Error(`Unsupported Fyers history interval: ${interval}`);
     const to = Math.floor(Date.now() / 1000);
-    const minutesPerCandle = resolution === 'D' ? 1440 : Math.max(1, Number(resolution) || 5);
-    const lookbackDays = resolution === 'D' ? 25000 : Math.min(3650, Math.max(30, Math.ceil((25000 * minutesPerCandle) / (24 * 60)) + 7));
+    const minutesPerCandle = /^\d+$/.test(resolution) ? Math.max(1, Number(resolution)) : 1440;
+    const lookbackDays = resolution === 'D' ? 366 : Math.min(100, Math.max(30, Math.ceil((25000 * minutesPerCandle) / 375 * 1.1)));
     const from = to - lookbackDays * 86400;
-    const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(instrumentKey)}&resolution=${encodeURIComponent(resolution)}&date_format=0&range_from=${from}&range_to=${to}&cont_flag=1`;
-    const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) } });
+    const params = new URLSearchParams({ symbol: instrumentKey, resolution, date_format: '0', range_from: String(from), range_to: String(to) });
+    const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) } });
     const text = await response.text();
     let data: any;
-    try { data = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-    if (!response.ok || data?.s === 'error') throw new Error(data?.message || `Fyers history failed (${response.status})`);
-    return (data?.candles || []).map((c: any[]) => ({ timestamp: new Date(Number(c[0]) * 1000).toISOString(), open: c[1], high: c[2], low: c[3], close: c[4], volume: c[5] })).slice(-25000);
+    try { data = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
+    if (!response.ok || data?.s === 'error') {
+      const error: any = new Error(data?.message || `Fyers history failed (${response.status})`);
+      error.status = response.status || (Number(data?.code) === 429 ? 429 : 0);
+      error.brokerCode = Number(data?.code) || undefined;
+      throw error;
+    }
+    return (data?.candles || []).map((c: any[]) => ({ timestamp: new Date(Number(c[0]) * 1000).toISOString(), open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5] || 0) })).slice(-25000);
   }
 
   async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<any> {

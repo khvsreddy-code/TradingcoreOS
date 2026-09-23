@@ -37,10 +37,8 @@ const canonicalInstrumentKey=(brokerId:string,key:string)=>{
  if(n==='nse_index|finnifty'||n==='nse_index|niftyfinancialservices'||n.includes('finnifty-index')) return 'NSE:FINNIFTY-INDEX';
  if(n==='nse_index|niftymidcapselect'||n==='nse_index|midcap'||n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
  if(n==='bse_index|sensex'||n==='sensex'||n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
- const eq=value.match(/^(NSE|BSE)_(EQ|CM)\|(.+)$/i);
- if(eq){const exchange=eq[1].toUpperCase(),ticker=eq[3];return /-(EQ|BE|SM|ST)$/i.test(ticker)?`${exchange}:${ticker}`:`${exchange}:${ticker}-EQ`;}
- const pipe=value.match(/^(NSE|BSE|MCX)_(FO|CD|COM)\|(.+)$/i);
- if(pipe){const exchange=pipe[1].toUpperCase(),ticker=pipe[3];return `${exchange}:${ticker}`;}
+ const pipe=value.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
+ if(pipe){const exchange=pipe[1].toUpperCase(),segment=pipe[2].toUpperCase(),ticker=pipe[3];if(segment==='CM'&&!/-(EQ|BE|SM|ST)$/i.test(ticker))return `${exchange}:${ticker}-EQ`;return `${exchange}:${ticker}`;}
  if(!value.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(value)) return `NSE:${value}`;
  if(/^NSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
  if(/^BSE:[A-Z0-9&._-]+$/i.test(value) && !/-[A-Z]+$/i.test(value)) return `${value}-EQ`;
@@ -183,7 +181,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
    const iw=new Worker(new URL('../../services/marketData/indicator.worker.ts',import.meta.url),{type:'module'});
    analyticsWorker.current=aw; indicatorWorker.current=iw;
    aw.onmessage=(e:MessageEvent<any>)=>{if(!lifecycle.current.isAlive()||e.data?.id!==analyticsJob.current||!e.data?.analytics)return;analytics.current=e.data.analytics;onAnalytics?.(e.data.analytics);window.dispatchEvent(new CustomEvent('tradingcore:chart-analytics',{detail:e.data.analytics}));};
-   iw.onmessage=(e:MessageEvent<any>)=>{if(!lifecycle.current.isAlive()||e.data?.id!==indicatorJob.current||!e.data?.results||!chart.current)return;chartUpdateScheduler.current.schedule(()=>{try{renderWorkerIndicators(e.data.results);}catch(indicatorError){console.warn('[TradingCore] Worker indicator render skipped invalid data:',indicatorError);}});};
+   iw.onmessage=(e:MessageEvent<any>)=>{if(!lifecycle.current.isAlive()||e.data?.id!==indicatorJob.current||!e.data?.results||!chart.current)return;chartUpdateScheduler.current.scheduleLatest('worker-indicators',()=>{try{renderWorkerIndicators(e.data.results);}catch(indicatorError){console.warn('[TradingCore] Worker indicator render skipped invalid data:',indicatorError);}});};
    return()=>{aw.terminate();iw.terminate();chartUpdateScheduler.current.cancel();analyticsWorker.current=undefined;indicatorWorker.current=undefined;};
  },[]);
  const clearChartMarkers=()=>{ try{markerPlugin.current?.setMarkers([]);}catch{} };

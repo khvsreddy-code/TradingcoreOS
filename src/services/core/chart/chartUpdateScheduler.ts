@@ -2,15 +2,34 @@
 export class ChartUpdateScheduler {
   private frame: number | null = null;
   private pending = new Set<() => void>();
+  private keyed = new Map<string, () => void>();
 
   schedule(task: () => void): void {
     this.pending.add(task);
+    this.requestFrame();
+  }
+
+  /** Keep only the newest task for a high-frequency stream (worker/tick UI). */
+  scheduleLatest(key: string, task: () => void): void {
+    const previous = this.keyed.get(key);
+    if (previous) this.pending.delete(previous);
+    this.keyed.set(key, task);
+    this.pending.add(task);
+    this.requestFrame();
+  }
+
+  private requestFrame(): void {
     if (this.frame != null) return;
-    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number;
+    const raf = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number;
+
     this.frame = raf(() => {
       this.frame = null;
       const tasks = [...this.pending];
       this.pending.clear();
+      this.keyed.clear();
+
       for (const run of tasks) {
         try { run(); } catch (error) { console.warn('[TradingCore] batched chart update failed', error); }
       }
@@ -23,5 +42,6 @@ export class ChartUpdateScheduler {
     else clearTimeout(this.frame as unknown as ReturnType<typeof setTimeout>);
     this.frame = null;
     this.pending.clear();
+    this.keyed.clear();
   }
 }

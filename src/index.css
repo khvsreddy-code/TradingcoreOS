@@ -277,3 +277,66 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+
+/* -------------------------------------------------------------------------
+   TradingCoreOS FAST MODE
+   The terminal prioritizes input latency and chart FPS over decorative GPU
+   effects. The mode is enabled by src/main.tsx and does not alter trading
+   calculations, broker traffic, chart data, or functionality.
+   ------------------------------------------------------------------------- */
+html[data-tco-fast="1"] {
+  scroll-behavior: auto;
+  --tco-motion-fast: 90ms;
+}
+
+html[data-tco-fast="1"] *,
+html[data-tco-fast="1"] *::before,
+html[data-tco-fast="1"] *::after {
+  transition-duration: var(--tco-motion-fast) !important;
+  animation-duration: 140ms !important;
+}
+
+html[data-tco-fast="1"] .backdrop-blur,
+html[data-tco-fast="1"] .backdrop-blur-sm,
+html[data-tco-fast="1"] .backdrop-blur-md,
+html[data-tco-fast="1"] .backdrop-blur-lg,
+html[data-tco-fast="1"] .backdrop-blur-xl,
+html[data-tco-fast="1"] .backdrop-blur-2xl,
+html[data-tco-fast="1"] .backdrop-blur-3xl {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-tco-fast="1"] .hero-orb-a,
+html[data-tco-fast="1"] .hero-orb-b,
+html[data-tco-fast="1"] .product-glow {
+  filter: none;
+}
+
+html[data-tco-fast="1"] .terminal-shell {
+  box-shadow: 0 18px 45px rgba(0,0,0,.34);
+}
+
+html[data-tco-fast="1"] .tct-grid,
+html[data-tco-fast="1"] .tct-chart,
+html[data-tco-fast="1"] .tct-chartbody {
+  contain: layout paint style;
+}
+
+html[data-tco-fast="1"] button,
+html[data-tco-fast="1"] a,
+html[data-tco-fast="1"] input,
+html[data-tco-fast="1"] select {
+  touch-action: manipulation;
+}
+
+html[data-tco-fast="1"] .tct-chart canvas {
+  image-rendering: auto;
+}
+
+@media (max-width: 900px) {
+  html[data-tco-fast="1"] .terminal-shell {
+    box-shadow: 0 12px 30px rgba(0,0,0,.28);
+  }
+}
