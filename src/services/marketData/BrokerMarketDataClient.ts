@@ -12,6 +12,8 @@ type FyersStream = {
   controller?: AbortController;
   reconnectTimer?: number;
   pollTimer?: number;
+  watchdogTimer?: number;
+  reconnectCooldownAt?: number;
   attempt: number;
   generation: number;
   stopped: boolean;
@@ -79,14 +81,33 @@ export class BrokerMarketDataClient {
     }
   }
 
+  private startWatchdog(stream: FyersStream): void {
+    if (stream.watchdogTimer) window.clearInterval(stream.watchdogTimer);
+    stream.watchdogTimer = window.setInterval(() => {
+      if (stream.stopped) return;
+      const now = Date.now();
+      const stale = stream.instrumentKeys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 4500);
+      if (!stale || !stream.controller || stream.controller.signal.aborted) return;
+      if (now - (stream.reconnectCooldownAt || 0) < 5000) return;
+
+      // A WebSocket can remain "connected" while no market frames arrive.
+      // Force a fresh HTTP stream instead of waiting for the TCP connection to
+      // fail by itself. The REST quote fallback below remains the fast safety net.
+      stream.reconnectCooldownAt = now;
+      stream.attempt = 0;
+      stream.controller.abort();
+      void this.connectFyers(stream);
+    }, 1000);
+  }
+
   private async pollQuotes(stream: FyersStream): Promise<void> {
     if (stream.stopped) return;
     const keys = stream.instrumentKeys;
     const now = Date.now();
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 2200);
+    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 1200);
     if (stale) {
       try {
-        const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`);
+        const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`, { cache: 'no-store' });
         if (response.ok) {
           const payload = await readTradingApiJson<any>(response);
           const rows = payload?.data || {};
@@ -104,7 +125,13 @@ export class BrokerMarketDataClient {
               bid: Number.isFinite(Number(q.bid)) ? [{ price: Number(q.bid), quantity: 0 }] : undefined,
               ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
               receivedAt: new Date().toISOString(),
-              lastTradeTimestamp: q.timestamp || new Date().toISOString(),
+              lastTradeTimestamp: (() => {
+                const raw = q.timestamp;
+                const numeric = typeof raw === 'number' ? raw : Number(raw);
+                if (Number.isFinite(numeric)) return new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString();
+                const parsed = Date.parse(String(raw || ''));
+                return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
+              })(),
             };
             stream.lastTickAt.set(String(key), Date.now());
             this.emit(stream, { type: 'tick', tick });
@@ -112,7 +139,7 @@ export class BrokerMarketDataClient {
         }
       } catch { /* websocket remains primary; retry on the next stale interval */ }
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1500);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1000);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
@@ -143,6 +170,7 @@ export class BrokerMarketDataClient {
       this.streams.set(streamKey, stream);
       void this.connectFyers(stream);
       void this.pollQuotes(stream);
+      this.startWatchdog(stream);
     } else {
       const union = [...new Set([...stream.instrumentKeys, ...normalizedKeys])].sort();
       const changed = union.join(',') !== stream.instrumentKeys.join(',');
@@ -168,6 +196,7 @@ export class BrokerMarketDataClient {
       stream!.controller?.abort();
       if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
       if (stream!.reconnectTimer) window.clearTimeout(stream!.reconnectTimer);
+      if (stream!.watchdogTimer) window.clearInterval(stream!.watchdogTimer);
       this.streams.delete(streamKey);
     };
   }
@@ -185,6 +214,7 @@ export class BrokerMarketDataClient {
       stream.controller?.abort();
       if (stream.pollTimer) window.clearTimeout(stream.pollTimer);
       if (stream.reconnectTimer) window.clearTimeout(stream.reconnectTimer);
+      if (stream.watchdogTimer) window.clearInterval(stream.watchdogTimer);
       this.streams.delete(key);
     }
   }

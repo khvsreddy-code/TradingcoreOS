@@ -261,8 +261,9 @@ export class TradingCoreRuntime {
         }
         if (event.type === 'tick' && event.tick) {
           const key = String(event.tick.instrumentKey || '');
-          const raw = (event.tick as any).timestamp;
-          const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
+          const raw = (event.tick as any).lastTradeTimestamp ?? (event.tick as any).receivedAt ?? (event.tick as any).timestamp;
+          const numericRaw = typeof raw === 'number' ? raw : Number(raw);
+          const parsed = Number.isFinite(numericRaw) ? (numericRaw > 1e12 ? numericRaw : numericRaw * 1000) : Date.parse(String(raw));
           const timestamp = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : Date.now();
           const previous = this.lastTickTime.get(key) || 0;
           if (key && timestamp < previous) return;
