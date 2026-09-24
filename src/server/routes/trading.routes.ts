@@ -81,8 +81,13 @@ tradingRoutes.get('/:brokerId/portfolio-snapshot', injectBrokerSession, async (r
 tradingRoutes.get('/:brokerId/market-data', injectBrokerSession, async (req: Request, res: Response) => {
   const instrumentKeys = String(req.query.instrument_keys || '').split(',').filter(Boolean);
   if (!instrumentKeys.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
-  try { res.json({ success: true, data: await (req as any).brokerAdapter.getMarketQuotes((req as any).accessToken, instrumentKeys) }); }
-  catch (err: any) { res.status(502).json({ success: false, error: err.message || 'Unable to load market quotes' }); }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, no-transform');
+  try {
+    res.json({ success: true, data: await (req as any).brokerAdapter.getMarketQuotes((req as any).accessToken, instrumentKeys) });
+  } catch (err: any) {
+    const status = Number(err?.status || 0) === 504 || err?.name === 'AbortError' ? 504 : 502;
+    res.status(status).json({ success: false, error: err.message || 'Unable to load market quotes' });
+  }
 });
 
 tradingRoutes.get('/:brokerId/historical', injectBrokerSession, async (req: Request, res: Response) => {
