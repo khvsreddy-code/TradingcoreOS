@@ -9,6 +9,7 @@ interface FeedSession {
   socket?: WebSocket;
   instruments: Set<string>;
   listeners: Set<Listener>;
+  subscriptions: Map<Listener, Set<string>>;
   status: MarketFeedStatus;
   reconnectAttempt: number;
   reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -24,13 +25,14 @@ export class UpstoxMarketDataTransport {
   static subscribe(userId: string, accessToken: string, instrumentKeys: string[], listener: Listener, mode: 'full' | 'full_d30' = 'full'): () => void {
     let session = this.sessions.get(userId);
     if (!session) {
-      session = { instruments: new Set(), listeners: new Set(), status: 'disconnected', reconnectAttempt: 0, accessToken, closing: false, connectGeneration: 0, mode };
+      session = { instruments: new Set(), listeners: new Set(), subscriptions: new Map(), status: 'disconnected', reconnectAttempt: 0, accessToken, closing: false, connectGeneration: 0, mode };
       this.sessions.set(userId, session);
     }
     session.accessToken = accessToken;
     session.mode = mode;
     session.closing = false;
     session.listeners.add(listener);
+    session.subscriptions.set(listener, new Set(instrumentKeys));
     const newKeys = instrumentKeys.filter((key) => !session!.instruments.has(key));
     newKeys.forEach((key) => session!.instruments.add(key));
     if (!session.socket || session.socket.readyState !== WebSocket.OPEN) void this.connect(userId, session);
@@ -43,6 +45,7 @@ export class UpstoxMarketDataTransport {
     const session = this.sessions.get(userId);
     if (!session) return;
     session.listeners.delete(listener);
+    session.subscriptions.delete(listener);
     const noOtherListeners = session.listeners.size === 0;
     if (noOtherListeners) {
       session.closing = true;
@@ -51,7 +54,13 @@ export class UpstoxMarketDataTransport {
       this.sessions.delete(userId);
       return;
     }
-    const removable = keys.filter((key) => session!.instruments.delete(key));
+
+    // Recompute the broker-level symbol union from the remaining consumers.
+    // Do not unsubscribe a symbol that another chart/watchlist still owns.
+    const nextInstruments = new Set<string>();
+    session.subscriptions.forEach((ownedSymbols) => ownedSymbols.forEach((symbol) => nextInstruments.add(symbol)));
+    const removable = [...session.instruments].filter((symbol) => !nextInstruments.has(symbol));
+    session.instruments = nextInstruments;
     if (removable.length && session.socket?.readyState === WebSocket.OPEN) this.sendSubscription(session, 'unsub', removable);
   }
 

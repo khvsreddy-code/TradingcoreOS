@@ -13,6 +13,7 @@ type FyersStream = {
   reconnectTimer?: number;
   pollTimer?: number;
   pollInFlight: boolean;
+  lastQuotePollAt: number;
   watchdogTimer?: number;
   reconnectCooldownAt?: number;
   attempt: number;
@@ -107,8 +108,10 @@ export class BrokerMarketDataClient {
     const now = Date.now();
     // REST is only a safety net. Keep it dormant while the stream is healthy,
     // but recover quickly when the socket is connected yet no ticks arrive.
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 650);
-    if (stale && !stream.pollInFlight) {
+    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 3_000);
+    const canPoll = now - stream.lastQuotePollAt >= 3_000;
+    if (stale && canPoll && !stream.pollInFlight) {
+      stream.lastQuotePollAt = now;
       stream.pollInFlight = true;
       try {
         const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`, { cache: 'no-store' });
@@ -144,7 +147,7 @@ export class BrokerMarketDataClient {
       } catch { /* websocket remains primary; retry on the next stale interval */ }
       finally { stream.pollInFlight = false; }
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 350);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1_000);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
@@ -172,6 +175,7 @@ export class BrokerMarketDataClient {
         stopped: false,
         lastTickAt: new Map(),
         pollInFlight: false,
+        lastQuotePollAt: 0,
       };
       this.streams.set(streamKey, stream);
       void this.connectFyers(stream);

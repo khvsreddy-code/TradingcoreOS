@@ -7,6 +7,8 @@ interface Session {
   socket?: WebSocket;
   instruments: Set<string>;
   listeners: Set<Listener>;
+  subscriptions: Map<Listener, Set<string>>;
+  depthSubscriptions: Map<Listener, Set<string>>;
   accessToken: string;
   closing: boolean;
   reconnectAttempt: number;
@@ -31,6 +33,8 @@ export class FyersMarketDataTransport {
       session = {
         instruments: new Set(),
         listeners: new Set(),
+        subscriptions: new Map(),
+        depthSubscriptions: new Map(),
         accessToken,
         closing: false,
         reconnectAttempt: 0,
@@ -47,6 +51,8 @@ export class FyersMarketDataTransport {
     session.includeDepth = session.includeDepth || includeDepth;
     if (includeDepth) depthSymbols.forEach(symbol => session!.depthSymbols.add(symbol));
     session.listeners.add(listener);
+    session.subscriptions.set(listener, new Set(instrumentKeys));
+    if (includeDepth) session.depthSubscriptions.set(listener, new Set(depthSymbols));
     const newSymbols = instrumentKeys.filter((key) => !session!.instruments.has(key));
     newSymbols.forEach((key) => session!.instruments.add(key));
 
@@ -81,14 +87,27 @@ export class FyersMarketDataTransport {
     const session = this.sessions.get(userId);
     if (!session) return;
     session.listeners.delete(listener);
+    session.subscriptions.delete(listener);
+    session.depthSubscriptions.delete(listener);
     if (!session.listeners.size) {
       this.disconnect(userId);
       return;
     }
-    const removable = symbols.filter((symbol) => session.instruments.delete(symbol));
+
+    // Recompute the broker-level symbol union from the remaining consumers.
+    // A symbol is removed from FYERS only when no active consumer still needs it.
+    const nextInstruments = new Set<string>();
+    session.subscriptions.forEach((ownedSymbols) => ownedSymbols.forEach((symbol) => nextInstruments.add(symbol)));
+    const removable = [...session.instruments].filter((symbol) => !nextInstruments.has(symbol));
+    session.instruments = nextInstruments;
     if (removable.length && session.socket?.readyState === WebSocket.OPEN) {
       try { session.socket.send(JSON.stringify({ symbol: removable, type: 'unsubscribe' })); } catch { /* reconnect path */ }
     }
+
+    const nextDepthSymbols = new Set<string>();
+    session.depthSubscriptions.forEach((ownedSymbols) => ownedSymbols.forEach((symbol) => nextDepthSymbols.add(symbol)));
+    session.depthSymbols = nextDepthSymbols;
+    session.includeDepth = session.depthSymbols.size > 0;
   }
 
   private static async connect(userId: string, session: Session, includeDepth = false, depthSymbols: string[] = [...session.depthSymbols]): Promise<void> {

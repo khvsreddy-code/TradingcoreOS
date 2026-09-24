@@ -58,10 +58,6 @@ function canonicalFyersSymbol(value: string): string {
   return raw;
 }
 
-function indiaDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
-}
-
 function normalize(rows: any[], limit: number): any[] {
   const byTime = new Map<number, any>();
   for (const row of rows || []) {
@@ -128,18 +124,28 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || '').trim());
   const interval = String(req.query.interval || '').trim();
   const resolution = resolutionMap[interval] || interval;
+  const beforeRaw = String(req.query.before || '').trim();
+  const beforeDate = beforeRaw ? new Date(beforeRaw) : null;
+  if (beforeRaw && (!beforeDate || !Number.isFinite(beforeDate.getTime()))) {
+    res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' });
+    return;
+  }
+
   const requested = Number(req.query.limit || 10_000);
-  const limit = Number.isFinite(requested) ? Math.max(2, Math.min(10_000, Math.floor(requested))) : 10_000;
+  const limit = Number.isFinite(requested)
+    ? Math.max(2, Math.min(10_000, Math.floor(requested)))
+    : 10_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
   }
 
-  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}`;
+  const beforeKey = beforeDate ? beforeDate.toISOString() : 'latest';
+  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}:${beforeKey}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data: cached.data, requested: limit, returned: cached.data.length, cached: true });
+    res.json({ success: true, data: cached.data, requested: limit, returned: cached.data.length, cached: true, before: beforeDate?.toISOString() || null });
     return;
   }
 
@@ -148,7 +154,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     try {
       const data = await existing;
       res.setHeader('Cache-Control', 'private, max-age=20');
-      res.json({ success: true, data, requested: limit, returned: data.length, cached: true });
+      res.json({ success: true, data, requested: limit, returned: data.length, cached: true, before: beforeDate?.toISOString() || null });
     } catch (error: any) {
       res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
     }
@@ -158,15 +164,17 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      const now = new Date();
+      const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
       const lookbackDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 30;
-      const from = new Date(now.getTime() - lookbackDays * 86_400_000);
+      const from = new Date(end.getTime() - lookbackDays * 86_400_000);
       const params = new URLSearchParams({
         symbol: instrumentKey,
         resolution,
-        date_format: '1',
-        range_from: indiaDate(from),
-        range_to: indiaDate(now),
+        // Use epoch timestamps for paged history so `before` maps to an exact
+        // candle boundary instead of being truncated to an India calendar date.
+        date_format: '0',
+        range_from: String(Math.floor(from.getTime() / 1000)),
+        range_to: String(Math.floor(end.getTime() / 1000)),
         cont_flag: '1',
       });
       const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
@@ -179,7 +187,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         throw new Error(payload?.message || `Fyers history failed (${response.status})`);
       }
       let data = normalize(payload?.candles || [], limit);
-      if (data.length < 2) {
+      if (!beforeDate && data.length < 2) {
         const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
         if (seed.length) data = seed;
       }
@@ -190,7 +198,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data, requested: limit, returned: data.length, liveSeed: data.length === 1 && data[0]?.liveSeed === true });
+    res.json({ success: true, data, requested: limit, returned: data.length, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, newestTimestamp: data[data.length - 1]?.timestamp || null, liveSeed: data.length === 1 && data[0]?.liveSeed === true });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
   } finally {
