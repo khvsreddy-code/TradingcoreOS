@@ -362,6 +362,16 @@ brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: Authenticated
   const includeDepth = Boolean(depthSymbol);
   const depthSymbols = includeDepth ? [depthSymbol] : symbols;
   const unsubscribe = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, write, includeDepth, depthSymbols);
-  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 12_000);
-  req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+  const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 10_000);
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    clearInterval(heartbeat);
+    unsubscribe();
+  };
+  // The response is the actual streamed resource. Cleaning up from response
+  // close prevents orphaned FYERS subscriptions when Vercel ends a function.
+  res.on('close', cleanup);
+  req.on('close', cleanup);
 });
