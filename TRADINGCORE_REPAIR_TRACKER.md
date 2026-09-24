@@ -161,3 +161,12 @@ The repair pass therefore distinguishes **patched/parser-verified** from **runti
 - Do not mark a defect fixed because a build passes alone.
 - Preserve previously repaired behavior while changing the next layer.
 - Record the exact root cause, code location, fix, and verification state here after every repair.
+
+
+## Repair pass — 2026-09-24 (FYERS feed stall + top toolbar)
+
+- **TC-R09 — FYERS long-lived stream lifecycle**: PATCHED — runtime pending. Browser stream now rotates before the Vercel function ceiling and server listeners clean up on response close. Files: `src/services/marketData/BrokerMarketDataClient.ts`, `src/server/routes/broker-market-data.routes.ts`.
+- **TC-R10 — stale feed fallback request pressure**: PATCHED — runtime pending. REST quote fallback waits for 3s of tick silence and is throttled to one attempt per second per shared stream. File: `src/services/marketData/BrokerMarketDataClient.ts`.
+- **TC-R11 — top toolbar menus disconnected from chart UI**: PATCHED — deployment/runtime pending. AI opens model selection, Indicators opens its chooser, and Draw opens drawing tools even when the embedded chart toolbar is hidden. Files: `src/components/workspace/LiveChart.tsx`, `src/LiveTradingTerminalV4.tsx`.
+- **Validation**: GitHub main updated; Vercel deployment for the toolbar patch was building and the subsequent feed-throttle deployment was queued at last check. No successful production build or connected-FYERS runtime test is claimed yet.
+- **Reliability limitation**: continuous feed is best-effort; no client can guarantee ticks during broker outages, network loss, market closure, expired authorization, or symbol/subscription errors. UI should communicate stale/disconnected status rather than imply fresh prices.
