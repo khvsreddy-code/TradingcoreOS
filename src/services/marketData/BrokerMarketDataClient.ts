@@ -158,7 +158,7 @@ export class BrokerMarketDataClient {
       } catch { /* websocket remains primary; retry on the next stale interval */ }
       finally { stream.pollInFlight = false; }
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1_000);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 350);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
