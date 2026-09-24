@@ -194,10 +194,56 @@ export class UpstoxAdapter extends BaseBroker {
   }
 
   async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<any> {
-    const data = await this.upstoxFetch(`/market-quote/quotes?instrument_key=${encodeURIComponent(instrumentKeys.join(','))}`, accessToken);
-    return Object.fromEntries(Object.entries(data || {}).map(([key, quote]: [string, any]) => [key, { ltp: quote.last_price, chg: quote.net_change, volume: quote.volume, bid: quote.depth?.buy?.[0]?.price, ask: quote.depth?.sell?.[0]?.price, timestamp: new Date().toISOString() }]));
+    if (!instrumentKeys.length) return {};
+    // Chart heartbeat lane: quotes are sampled every few seconds by the browser.
+    // Keep this request independent from the heavier shared REST queue and give
+    // the broker call a hard timeout so one stalled upstream request can never
+    // freeze the chart until Vercel's 300-second function timeout.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2_500);
+    try {
+      const query = encodeURIComponent(instrumentKeys.join(','));
+      const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${query}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
+      });
+      const text = await response.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch {
+        const error: any = new Error(`Fyers quotes returned a non-JSON response (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
+      if (!response.ok || data?.s === 'error') {
+        const error: any = new Error(data?.message || `Fyers quotes failed (${response.status})`);
+        error.status = response.status;
+        error.brokerRateLimited = response.status === 429 || Number(data?.code) === 429;
+        throw error;
+      }
+      return Object.fromEntries((data?.d || []).map((q: any) => [
+        q.n || q.v?.symbol,
+        {
+          ltp: Number(q.v?.lp || 0),
+          chg: String(q.v?.chp ?? q.v?.ch ?? 0),
+          change: Number(q.v?.ch ?? 0),
+          changePercent: Number(q.v?.chp ?? 0),
+          volume: Number(q.v?.volume ?? 0),
+          bid: Number(q.v?.bid ?? 0),
+          ask: Number(q.v?.ask ?? 0),
+          timestamp: new Date().toISOString(),
+        },
+      ]));
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        const timeoutError: any = new Error('Fyers quotes request timed out');
+        timeoutError.status = 504;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
-
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
     // Upstox Historical Candle V3 uses /{unit}/{interval}; do not send the old
     // V2-style `5minute` path. V3 supports minutes 1-300, hours 1-5 and day.
