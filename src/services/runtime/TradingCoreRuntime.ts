@@ -265,9 +265,13 @@ export class TradingCoreRuntime {
           const numericRaw = typeof raw === 'number' ? raw : Number(raw);
           const parsed = Number.isFinite(numericRaw) ? (numericRaw > 1e12 ? numericRaw : numericRaw * 1000) : Date.parse(String(raw));
           const timestamp = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : Date.now();
-          const previous = this.lastTickTime.get(key) || 0;
-          if (key && timestamp < previous) return;
-          if (key) this.lastTickTime.set(key, timestamp);
+          // Never drop a live price solely because the broker's exchange
+          // timestamp is older than the previous packet. FYERS can emit
+          // snapshots/updates with a non-monotonic last-trade timestamp while
+          // the packet itself is fresh. Dropping that packet makes the chart
+          // appear frozen even though the transport is alive. Transport order
+          // is the authoritative order for live UI updates.
+          if (key) this.lastTickTime.set(key, Date.now());
           this.market.set(event.tick.instrumentKey, event.tick);
           this.emit('TICK_UPDATE', event.tick);
           coreEventBus.emit('market.tick', { symbol: String(event.tick.instrumentKey || ''), tick: event.tick as unknown as Record<string, unknown>, brokerId: currentBrokerId, receivedAt: Date.now() });

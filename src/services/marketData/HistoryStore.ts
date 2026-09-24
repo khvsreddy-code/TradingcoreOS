@@ -59,18 +59,27 @@ export function reconcileRealtimeCandle(existing: HistoricalCandle[], tick: { pr
   const last = existing[existing.length - 1];
   const lastTimestamp = last ? normalizeTickTimestampSeconds(last.timestamp) : NaN;
 
+  // A live broker packet can carry a stale last-trade timestamp even though
+  // the packet itself arrived just now. Never let that timestamp prevent the
+  // forming candle from receiving the fresh LTP. For an older timestamp, pin
+  // the update to the current forming candle; for a newer timestamp, advance
+  // normally. This keeps the chart moving while still respecting candle
+  // boundaries.
+  const effectiveTimestamp = Number.isFinite(lastTimestamp)
+    ? Math.max(timestamp, lastTimestamp)
+    : timestamp;
+
   // Align the live bucket to the timestamp grid already used by the broker's
   // historical candles. This matters for NSE 1H/1D candles (for example 09:15
   // session alignment) where UTC epoch-flooring would create a 03:00 bucket.
   const bucket = Number.isFinite(lastTimestamp)
-    ? Math.floor((timestamp - (lastTimestamp % intervalSeconds)) / intervalSeconds) * intervalSeconds + (lastTimestamp % intervalSeconds)
-    : Math.floor(timestamp / intervalSeconds) * intervalSeconds;
+    ? Math.floor((effectiveTimestamp - (lastTimestamp % intervalSeconds)) / intervalSeconds) * intervalSeconds + (lastTimestamp % intervalSeconds)
+    : Math.floor(effectiveTimestamp / intervalSeconds) * intervalSeconds;
 
   const lastBucket = Number.isFinite(lastTimestamp)
     ? Math.floor((lastTimestamp - (lastTimestamp % intervalSeconds)) / intervalSeconds) * intervalSeconds + (lastTimestamp % intervalSeconds)
     : undefined;
 
-  if (lastBucket != null && bucket < lastBucket) return { candles: existing, bucketChanged: false };
   if (lastBucket != null && Math.abs(bucket - lastBucket) > 604800) return { candles: existing, bucketChanged: false };
 
   const next = existing.slice();
