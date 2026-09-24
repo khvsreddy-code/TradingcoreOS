@@ -15,6 +15,7 @@ interface Session {
   depthSymbols: Set<string>;
   reconnectTimer?: ReturnType<typeof setTimeout>;
   pingTimer?: ReturnType<typeof setInterval>;
+  lastTickAt: number;
 }
 
 /**
@@ -36,6 +37,7 @@ export class FyersMarketDataTransport {
         includeDepth: false,
         connectGeneration: 0,
         depthSymbols: new Set(),
+        lastTickAt: 0,
       };
       this.sessions.set(userId, session);
     }
@@ -48,7 +50,13 @@ export class FyersMarketDataTransport {
     const newSymbols = instrumentKeys.filter((key) => !session!.instruments.has(key));
     newSymbols.forEach((key) => session!.instruments.add(key));
 
-    if (!session.socket || session.socket.readyState !== WebSocket.OPEN) {
+    const stale = session.socket?.readyState === WebSocket.OPEN && session.lastTickAt > 0 && Date.now() - session.lastTickAt > 5_000;
+    if (stale) {
+      // A TCP/WebSocket connection can stay OPEN while the broker stops
+      // delivering market frames. A new HTTP subscriber must not simply
+      // attach to that dead socket; force a genuinely fresh broker socket.
+      this.restartSocket(userId, session);
+    } else if (!session.socket || session.socket.readyState !== WebSocket.OPEN) {
       void this.connect(userId, session, session.includeDepth, [...session.depthSymbols]);
     } else if (newSymbols.length) {
       this.sendSubscribe(session, newSymbols, session.includeDepth, [...session.depthSymbols]);
@@ -105,6 +113,8 @@ export class FyersMarketDataTransport {
         return;
       }
       session.reconnectAttempt = 0;
+      // Do not treat the connection handshake itself as market activity.
+      // lastTickAt is updated only by actual symbol updates below.
       this.emit(session, { type: 'status', status: 'connected' });
       this.sendSubscribe(session, [...session.instruments], session.includeDepth, depthSymbols);
       if (session.pingTimer) clearInterval(session.pingTimer);
@@ -117,6 +127,7 @@ export class FyersMarketDataTransport {
       try {
         const payload = JSON.parse(Buffer.isBuffer(message) ? message.toString('utf8') : String(message));
         const tick = normalizeFyersTick(payload);
+        if (tick?.ltp != null) session.lastTickAt = Date.now();
         if (tick) this.emit(session, { type: 'tick', tick });
       } catch {
         // FYERS may emit non-market informational frames. Ignore malformed/non-JSON frames.
@@ -143,6 +154,20 @@ export class FyersMarketDataTransport {
       }
       this.scheduleReconnect(userId, session, session.includeDepth);
     });
+  }
+
+  private static restartSocket(userId: string, session: Session): void {
+    if (session.closing) return;
+    clearTimeout(session.reconnectTimer);
+    if (session.pingTimer) clearInterval(session.pingTimer);
+    session.pingTimer = undefined;
+    const socket = session.socket;
+    session.socket = undefined;
+    session.connectGeneration += 1;
+    try { socket?.close(); } catch {}
+    session.reconnectAttempt = 0;
+    this.emit(session, { type: 'status', status: 'reconnecting' });
+    void this.connect(userId, session, session.includeDepth, [...session.depthSymbols]);
   }
 
   private static scheduleReconnect(userId: string, session: Session, includeDepth = false): void {

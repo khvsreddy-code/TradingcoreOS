@@ -3,10 +3,9 @@ import { X, RefreshCw } from 'lucide-react';
 import { LiveTradingTerminalV4 } from './LiveTradingTerminalV4';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import type { OrderRequest } from './services/brokers/BrokerAdapter';
-import { DynamicLevelSettings, getDynamicLevelSettings, saveDynamicLevelSettings } from './services/marketData/levelSettings';
 import { AdvancedOrderTicket } from './components/workspace/AdvancedOrderTicket';
 
-type Panel = 'levels' | 'positions' | 'orders' | 'trades' | null;
+type Panel = 'positions' | 'orders' | 'trades' | null;
 const num = (v: any) => Number(v ?? 0) || 0;
 const fmt = (v: any) => num(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
@@ -35,7 +34,6 @@ export function LiveTradingTerminalV5() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [name, setName] = useState(() => { try { return localStorage.getItem('tradingcore_watchlist_name') || 'My First Watchlist'; } catch { return 'My First Watchlist'; } });
   const [draft, setDraft] = useState(name);
-  const [levels, setLevels] = useState<DynamicLevelSettings>(() => getDynamicLevelSettings());
   const [portfolio, setPortfolio] = useState<any>({ positions: [], orders: [], trades: [] });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -55,7 +53,7 @@ export function LiveTradingTerminalV5() {
       const controlBar = button.closest('.tc4-toolbar, .tc4-bottom');
       if (!controlBar) return;
       const text = (button.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      if (!/^(levels|positions|orders|trades|order ticket)$/.test(text)) return;
+      if (!/^(positions|orders|trades|order ticket)$/.test(text)) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       if (text === 'order ticket') setPanel('ticket'); else setPanel(text as Panel);
     };
@@ -138,9 +136,8 @@ export function LiveTradingTerminalV5() {
     <LiveTradingTerminalV4 />
 
     {panel && panel !== 'ticket' && <div className="tc5-backdrop" onPointerDown={e => { if (e.target === e.currentTarget) setPanel(null); }}><div ref={windowRef} className="tc5-window" role="dialog" aria-modal="false" onPointerDown={e => e.stopPropagation()}>
-      <div className="tc5-head" onPointerDown={e => startDrag(e, 'panel')} onPointerMove={dragWindow} onPointerUp={endDrag} onPointerCancel={endDrag}><b>{panel === 'levels' ? 'OS LEVELS' : panel.toUpperCase()}</b><small>Drag title bar · resize from bottom-right · ESC to close</small><span className="tc5-spacer" /><button onPointerDown={e => e.stopPropagation()} onClick={() => setPanel(null)}><X size={12} /> Close</button></div>
+      <div className="tc5-head" onPointerDown={e => startDrag(e, 'panel')} onPointerMove={dragWindow} onPointerUp={endDrag} onPointerCancel={endDrag}><b>{panel.toUpperCase()}</b><small>Drag title bar · resize from bottom-right · ESC to close</small><span className="tc5-spacer" /><button onPointerDown={e => e.stopPropagation()} onClick={() => setPanel(null)}><X size={12} /> Close</button></div>
       <div className="tc5-content">
-        {panel === 'levels' && <Levels value={levels} onChange={v => { setLevels(v); saveDynamicLevelSettings(v); }} />}
         {panel === 'positions' && <Portfolio kind="positions" rows={portfolio.positions || []} refresh={sync} />}
         {panel === 'orders' && <Portfolio kind="orders" rows={portfolio.orders || []} refresh={sync} />}
         {panel === 'trades' && <Portfolio kind="trades" rows={portfolio.trades || []} refresh={sync} />}
@@ -149,11 +146,6 @@ export function LiveTradingTerminalV5() {
     {panel === 'ticket' && !ticketPinned && <div className="tc5-backdrop" onPointerDown={e => { if (e.target === e.currentTarget) setPanel(null); }}>{renderTicket(false)}</div>}
     {ticketPinned && renderTicket(true)}
   </>;
-}
-
-function Levels({ value, onChange }: { value: DynamicLevelSettings; onChange: (v: DynamicLevelSettings) => void }) {
-  const set = (key: keyof DynamicLevelSettings, next: any) => onChange({ ...value, [key]: next });
-  return <div className="tc5-grid"><div className="tc5-card"><b>Detection</b><small>Levels are a feature, not an indicator.</small><div className="tc5-fields"><div><label>How much back</label><input type="number" value={value.lookbackPeriod} onChange={e => set('lookbackPeriod', num(e.target.value))} /></div><div><label>Pivot length</label><input type="number" value={value.pivotLength} onChange={e => set('pivotLength', num(e.target.value))} /></div></div></div><div className="tc5-card"><b>Merge / confirmation</b><div className="tc5-fields"><div><label>Merge nearby levels</label><input type="checkbox" checked={value.mergeNearbyLevels} onChange={e => set('mergeNearbyLevels', e.target.checked)} /></div><div><label>Merge distance × ATR</label><input type="number" step=".1" value={value.mergeAtrMultiplier} onChange={e => set('mergeAtrMultiplier', num(e.target.value))} /></div><div><label>Breakout confirmation</label><select value={value.breakoutConfirmation} onChange={e => set('breakoutConfirmation', e.target.value)}><option>Close</option><option>Wick</option></select></div></div></div></div>;
 }
 
 function Portfolio({ kind, rows, refresh }: { kind: 'positions' | 'orders' | 'trades'; rows: any[]; refresh: () => void }) {
