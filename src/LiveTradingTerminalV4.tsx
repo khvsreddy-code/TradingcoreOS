@@ -151,7 +151,7 @@ export function LiveTradingTerminalV4(){
       return {...previous,[normalizedKey]:next};
     });
   },slotKeys[focused]);
-},[slotKeys.join('|'),focused,broker]);
+},[slotKeys.join('|'),broker]);
  useEffect(()=>{void sync()},[broker]);useEffect(()=>{const id=requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));return()=>cancelAnimationFrame(id)},[layout,slotKeys.join('|')]);
  const sync=async()=>{try{setPortfolio(await tradingCoreRuntime.syncPortfolio())}catch(e:any){setMessage(e?.message||'Portfolio sync failed')}};
  const changeLayout=(cls:string,count:number)=>{const fallback=slotKeys[focused]||selectedItem?.key||watch[0]?.key||'';setLayout(cls);setLayoutOpen(false);setFocused(f=>Math.min(f,count-1));setSlotKeys(prev=>Array.from({length:count},(_,i)=>prev[i]||fallback))};
