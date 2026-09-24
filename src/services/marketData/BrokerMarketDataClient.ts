@@ -119,8 +119,8 @@ export class BrokerMarketDataClient {
     const now = Date.now();
     // REST is only a safety net. Keep it dormant while the stream is healthy,
     // but recover quickly when the socket is connected yet no ticks arrive.
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 650);
-    const canPoll = now - stream.lastQuotePollAt >= 350;
+    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 3_000);
+    const canPoll = now - stream.lastQuotePollAt >= 1_000;
     if (stale && canPoll && !stream.pollInFlight) {
       stream.lastQuotePollAt = now;
       stream.pollInFlight = true;
@@ -158,7 +158,7 @@ export class BrokerMarketDataClient {
       } catch { /* websocket remains primary; retry on the next stale interval */ }
       finally { stream.pollInFlight = false; }
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 350);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1_000);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
