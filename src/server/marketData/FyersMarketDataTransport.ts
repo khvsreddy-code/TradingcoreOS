@@ -200,7 +200,7 @@ export class FyersMarketDataTransport {
 
   private static sendSubscribe(session: Session, symbols: string[], includeDepth = false, depthSymbols: string[] = symbols): void {
     if (!symbols.length || session.socket?.readyState !== WebSocket.OPEN) return;
-    session.socket.send(JSON.stringify({ symbol: symbols, type: 'symbolUpdate' }));
+    session.socket.send(JSON.stringify({ symbol: symbols, type: 'SymbolUpdate' }));
     if (includeDepth && depthSymbols.length) session.socket.send(JSON.stringify({ symbol: depthSymbols, type: 'DepthUpdate' }));
   }
 
