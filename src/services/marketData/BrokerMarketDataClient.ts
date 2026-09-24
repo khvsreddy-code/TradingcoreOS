@@ -23,6 +23,8 @@ type FyersStream = {
   refreshTimer?: number;
   quoteController?: AbortController;
   visibilityHandler?: () => void;
+  unsubscribeGraceTimer?: number;
+  lastActivityAt: number;
 };
 
 /**
@@ -39,6 +41,23 @@ export class BrokerMarketDataClient {
     stream.listeners.forEach(listener => {
       try { listener(event); } catch { /* one chart must not break other subscribers */ }
     });
+  }
+
+  private disposeFyersStream(stream: FyersStream): void {
+    stream.stopped = true;
+    stream.generation += 1;
+    stream.controller?.abort();
+    stream.quoteController?.abort();
+    if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
+    if (stream.pollTimer) window.clearTimeout(stream.pollTimer);
+    if (stream.reconnectTimer) window.clearTimeout(stream.reconnectTimer);
+    if (stream.watchdogTimer) window.clearInterval(stream.watchdogTimer);
+    if (stream.unsubscribeGraceTimer) window.clearTimeout(stream.unsubscribeGraceTimer);
+    if (stream.visibilityHandler) {
+      document.removeEventListener('visibilitychange', stream.visibilityHandler);
+      window.removeEventListener('focus', stream.visibilityHandler);
+    }
+    if (this.streams.get(stream.streamKey) === stream) this.streams.delete(stream.streamKey);
   }
 
   private async connectFyers(stream: FyersStream): Promise<void> {
@@ -79,7 +98,11 @@ export class BrokerMarketDataClient {
         for (const line of lines.filter(Boolean)) {
           try {
             const event = JSON.parse(line) as MarketFeedEvent;
-            if (event.type === 'tick' && event.tick) stream.lastTickAt.set(String(event.tick.instrumentKey), Date.now());
+            if (event.type === 'tick' && event.tick) {
+              const now = Date.now();
+              stream.lastTickAt.set(String(event.tick.instrumentKey), now);
+              stream.lastActivityAt = now;
+            }
             this.emit(stream, event);
           } catch { /* ignore malformed keep-alive frames */ }
         }
@@ -101,13 +124,13 @@ export class BrokerMarketDataClient {
     stream.watchdogTimer = window.setInterval(() => {
       if (stream.stopped) return;
       const now = Date.now();
-      const stale = stream.instrumentKeys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 4500);
+      const stale = !stream.lastActivityAt || now - stream.lastActivityAt > 5000;
       if (!stale || !stream.controller || stream.controller.signal.aborted) return;
       if (now - (stream.reconnectCooldownAt || 0) < 5000) return;
 
-      // A WebSocket can remain "connected" while no market frames arrive.
-      // Force a fresh HTTP stream instead of waiting for the TCP connection to
-      // fail by itself. The REST quote fallback below remains the fast safety net.
+      // Restart only when the entire feed has gone quiet. A single instrument
+      // may legitimately have no trades/updates, so one quiet symbol must not
+      // restart the shared terminal feed and interrupt every other chart.
       stream.reconnectCooldownAt = now;
       stream.attempt = 0;
       stream.controller.abort();
@@ -156,7 +179,9 @@ export class BrokerMarketDataClient {
               return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
             })(),
           };
-          stream.lastTickAt.set(String(key), Date.now());
+          const activityAt = Date.now();
+          stream.lastTickAt.set(String(key), activityAt);
+          stream.lastActivityAt = activityAt;
           this.emit(stream, { type: 'tick', tick });
         }
       }
@@ -195,17 +220,15 @@ export class BrokerMarketDataClient {
         lastTickAt: new Map(),
         pollInFlight: false,
         lastQuotePollAt: 0,
+        lastActivityAt: 0,
       };
       this.streams.set(streamKey, stream);
-      void this.connectFyers(stream);
-      void this.pollQuotes(stream);
-      this.startWatchdog(stream);
       const onVisibility = () => {
         if (document.visibilityState !== 'visible' || stream!.stopped) return;
         if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
         stream!.lastQuotePollAt = 0;
         void this.pollQuotes(stream!);
-        const stale = stream!.instrumentKeys.some(key => Date.now() - (stream!.lastTickAt.get(String(key)) || 0) > 5_000);
+        const stale = !stream!.lastActivityAt || Date.now() - stream!.lastActivityAt > 5_000;
         if (stale && !stream!.controller?.signal.aborted) {
           stream!.controller?.abort();
           void this.connectFyers(stream!);
@@ -214,7 +237,16 @@ export class BrokerMarketDataClient {
       stream.visibilityHandler = onVisibility;
       document.addEventListener('visibilitychange', onVisibility);
       window.addEventListener('focus', onVisibility);
+      stream.listeners.add(listener);
+      void this.connectFyers(stream);
+      void this.pollQuotes(stream);
+      this.startWatchdog(stream);
     } else {
+      if (stream.unsubscribeGraceTimer) {
+        window.clearTimeout(stream.unsubscribeGraceTimer);
+        stream.unsubscribeGraceTimer = undefined;
+      }
+      stream.stopped = false;
       const union = [...new Set([...stream.instrumentKeys, ...normalizedKeys])].sort();
       const changed = union.join(',') !== stream.instrumentKeys.join(',');
       if (changed) { stream.instrumentKeys = union; void this.connectFyers(stream); }
@@ -224,9 +256,9 @@ export class BrokerMarketDataClient {
       stream.depthInstrumentKey = depthInstrumentKey;
         void this.connectFyers(stream);
       }
+      stream.listeners.add(listener);
     }
 
-    stream.listeners.add(listener);
     listener({ type: 'status', status: stream.controller && !stream.controller.signal.aborted ? 'connected' : 'connecting' });
     let stopped = false;
     return () => {
@@ -234,17 +266,16 @@ export class BrokerMarketDataClient {
       stopped = true;
       stream!.listeners.delete(listener);
       if (stream!.listeners.size > 0) return;
-      stream!.stopped = true;
-      stream!.generation += 1;
-      stream!.controller?.abort();
-      if (stream!.refreshTimer) window.clearTimeout(stream!.refreshTimer);
-      if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
-      stream!.quoteController?.abort();
-      if (stream!.visibilityHandler) { document.removeEventListener('visibilitychange', stream!.visibilityHandler); window.removeEventListener('focus', stream!.visibilityHandler); }
-      if (stream!.reconnectTimer) window.clearTimeout(stream!.reconnectTimer);
-      if (stream!.refreshTimer) window.clearTimeout(stream!.refreshTimer);
-      if (stream!.watchdogTimer) window.clearInterval(stream!.watchdogTimer);
-      this.streams.delete(streamKey);
+
+      // React/layout transitions can briefly remove the last chart listener.
+      // Keep the terminal-level broker stream alive for a few seconds so a
+      // remount does not tear down and recreate the FYERS transport.
+      if (stream!.unsubscribeGraceTimer) window.clearTimeout(stream!.unsubscribeGraceTimer);
+      stream!.unsubscribeGraceTimer = window.setTimeout(() => {
+        stream!.unsubscribeGraceTimer = undefined;
+        if (stream!.listeners.size > 0 || stream!.stopped) return;
+        this.disposeFyersStream(stream!);
+      }, 4_000);
     };
   }
 
@@ -256,17 +287,7 @@ export class BrokerMarketDataClient {
     }
     for (const [key, stream] of this.streams) {
       if (!key.startsWith(`${id}:`)) continue;
-      stream.stopped = true;
-      stream.generation += 1;
-      stream.controller?.abort();
-      if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
-      if (stream.pollTimer) window.clearTimeout(stream.pollTimer);
-      stream.quoteController?.abort();
-      if (stream.visibilityHandler) { document.removeEventListener('visibilitychange', stream.visibilityHandler); window.removeEventListener('focus', stream.visibilityHandler); }
-      if (stream.reconnectTimer) window.clearTimeout(stream.reconnectTimer);
-      if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
-      if (stream.watchdogTimer) window.clearInterval(stream.watchdogTimer);
-      this.streams.delete(key);
+      this.disposeFyersStream(stream);
     }
   }
 }
