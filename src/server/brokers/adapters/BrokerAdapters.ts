@@ -245,40 +245,96 @@ export class UpstoxAdapter extends BaseBroker {
     }
   }
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
-    // Upstox Historical Candle V3 uses /{unit}/{interval}; do not send the old
-    // V2-style `5minute` path. V3 supports minutes 1-300, hours 1-5 and day.
-    const v3: Record<string, { unit: string; value: string }> = {
-      '1minute': { unit: 'minutes', value: '1' },
-      '3minute': { unit: 'minutes', value: '3' },
-      '5minute': { unit: 'minutes', value: '5' },
-      '15minute': { unit: 'minutes', value: '15' },
-      '30minute': { unit: 'minutes', value: '30' },
-      '60minute': { unit: 'hours', value: '1' },
-      'day': { unit: 'days', value: '1' },
+    const resolutionMap: Record<string, string> = {
+      '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
+      '15minute': '15', '20minute': '20', '30minute': '30', '60minute': '60',
+      '120minute': '120', '240minute': '240', 'day': 'D', '1day': 'D', 'week': '1W', 'month': '1M',
     };
-    const config = v3[interval];
-    if (!config) throw new Error(`Unsupported Upstox V3 interval: ${interval}`);
+    const resolution = resolutionMap[interval] || interval;
+    if (!resolution) throw new Error(`Unsupported Fyers history interval: ${interval}`);
 
-    const toDate = new Date().toISOString().slice(0, 10);
-    // Keep enough history for VWAP, ATR and structural levels. V3 allows
-    // minute/hour history from Jan 2022 with interval-specific retrieval limits.
-    const minutesPerCandle = config.unit === 'minutes' ? Number(config.value) : config.unit === 'hours' ? Number(config.value) * 60 : 1440;
-    // Request enough calendar history to target 25,000 bars; exchanges may impose their own maximum.
-    const lookbackDays = config.unit === 'days' ? 25000 : Math.min(3650, Math.max(30, Math.ceil((25000 * minutesPerCandle) / (24 * 60)) + 7));
-    const fromDate = new Date(Date.now() - lookbackDays * 86400000).toISOString().slice(0, 10);
-    const response = await fetch(
-      `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${config.unit}/${config.value}/${toDate}/${fromDate}`,
-      { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } },
-    );
-    const payload = await response.json();
-    if (!response.ok || payload?.status === 'error') {
-      throw new Error(payload?.errors?.[0]?.message || payload?.message || 'Upstox V3 historical candle API error');
-    }
-    return (payload?.data?.candles || []).map((candle: any[]) => ({
-      timestamp: candle[0], open: Number(candle[1]), high: Number(candle[2]), low: Number(candle[3]), close: Number(candle[4]), volume: Number(candle[5] || 0),
-    })).slice(-25000);
+    // Keep the first chart paint small and fast. Older bars are loaded
+    // progressively by getHistoricalDataBefore() as the user scrolls left.
+    const pageLimit = resolution === 'D' ? 366 : 5_000;
+    const to = Math.floor(Date.now() / 1000);
+    const minutesPerCandle = /^\d+$/.test(resolution) ? Math.max(1, Number(resolution)) : 1440;
+    const tradingBarsPerDay = 375;
+    const lookbackDays = resolution === 'D'
+      ? 366
+      : Math.min(180, Math.max(7, Math.ceil((pageLimit * minutesPerCandle) / tradingBarsPerDay * 1.15)));
+    const from = to - lookbackDays * 86400;
+    return this.fetchFyersHistoryPage(accessToken, instrumentKey, resolution, from, to);
   }
 
+  async getHistoricalDataBefore(accessToken: string, instrumentKey: string, interval: string, beforeTimestamp: string, limit = 5_000): Promise<any> {
+    const resolutionMap: Record<string, string> = {
+      '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
+      '15minute': '15', '20minute': '20', '30minute': '30', '60minute': '60',
+      '120minute': '120', '240minute': '240', 'day': 'D', '1day': 'D', 'week': '1W', 'month': '1M',
+    };
+    const resolution = resolutionMap[interval] || interval;
+    if (!resolution) throw new Error(`Unsupported Fyers history interval: ${interval}`);
+    const beforeMs = Date.parse(String(beforeTimestamp));
+    const beforeSec = Number.isFinite(beforeMs) ? Math.floor(beforeMs / 1000) : Math.floor(Date.now() / 1000);
+    const safeLimit = Math.min(Math.max(100, Number(limit) || 5_000), 5_000);
+    const minutesPerCandle = /^\d+$/.test(resolution) ? Math.max(1, Number(resolution)) : 1440;
+    const tradingBarsPerDay = 375;
+    const lookbackDays = resolution === 'D'
+      ? Math.min(366, safeLimit)
+      : Math.min(180, Math.max(7, Math.ceil((safeLimit * minutesPerCandle) / tradingBarsPerDay * 1.15)));
+    const to = Math.max(1, beforeSec - 1);
+    const from = Math.max(1, to - lookbackDays * 86400);
+    return this.fetchFyersHistoryPage(accessToken, instrumentKey, resolution, from, to);
+  }
+
+  private async fetchFyersHistoryPage(accessToken: string, instrumentKey: string, resolution: string, from: number, to: number): Promise<any> {
+    const params = new URLSearchParams({
+      symbol: instrumentKey,
+      resolution,
+      date_format: '0',
+      range_from: String(from),
+      range_to: String(to),
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
+      });
+      const text = await response.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch {
+        const error: any = new Error(`Fyers history returned a non-JSON response (${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
+      if (!response.ok || data?.s === 'error') {
+        const error: any = new Error(data?.message || `Fyers history failed (${response.status})`);
+        error.status = response.status;
+        error.brokerCode = Number(data?.code) || undefined;
+        error.brokerRateLimited = response.status === 429 || Number(data?.code) === 429;
+        throw error;
+      }
+      return (data?.candles || []).map((row: any[]) => ({
+        timestamp: new Date(Number(row[0]) * 1000).toISOString(),
+        open: Number(row[1]),
+        high: Number(row[2]),
+        low: Number(row[3]),
+        close: Number(row[4]),
+        volume: Number(row[5] || 0),
+      })).slice(-5_000);
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        const timeoutError: any = new Error('Fyers history request timed out');
+        timeoutError.status = 504;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
   async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<any> {
     const data = await this.upstoxFetch(`/option/chain?instrument_key=${encodeURIComponent(instrumentKey)}&expiry_date=${encodeURIComponent(expiryDate)}`, accessToken);
     const rows = (data || []).map((row: any) => ({ strike: Number(row.strike_price), expiry: row.expiry, underlyingKey: row.underlying_key, call: normalizeOptionQuote(row.call_options), put: normalizeOptionQuote(row.put_options) })).filter((row: any) => Number.isFinite(row.strike));
@@ -564,9 +620,15 @@ export class FyersAdapter extends BaseBroker {
   }
 
   async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<any> {
-    return withBrokerRequestGate('fyers', accessToken, async () => {
+    if (!instrumentKeys.length) return {};
+    // Dedicated chart-heartbeat lane. Quote snapshots are sampled every few
+    // seconds and must never wait behind history/options/portfolio traffic.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2_500);
+    try {
       const query = encodeURIComponent(instrumentKeys.join(','));
       const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${query}`, {
+        signal: controller.signal,
         headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
       });
       const text = await response.text();
@@ -584,9 +646,27 @@ export class FyersAdapter extends BaseBroker {
       }
       return Object.fromEntries((data?.d || []).map((q: any) => [
         q.n || q.v?.symbol,
-        { ltp: Number(q.v?.lp || 0), chg: String(q.v?.chp ?? q.v?.ch ?? 0), volume: Number(q.v?.volume ?? 0), bid: Number(q.v?.bid ?? 0), ask: Number(q.v?.ask ?? 0), timestamp: new Date().toISOString() },
+        {
+          ltp: Number(q.v?.lp || 0),
+          chg: String(q.v?.chp ?? q.v?.ch ?? 0),
+          change: Number(q.v?.ch ?? 0),
+          changePercent: Number(q.v?.chp ?? 0),
+          volume: Number(q.v?.volume ?? 0),
+          bid: Number(q.v?.bid ?? 0),
+          ask: Number(q.v?.ask ?? 0),
+          timestamp: new Date().toISOString(),
+        },
       ]));
-    });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        const timeoutError: any = new Error('Fyers quotes request timed out');
+        timeoutError.status = 504;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
