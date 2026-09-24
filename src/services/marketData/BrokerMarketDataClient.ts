@@ -20,6 +20,7 @@ type FyersStream = {
   generation: number;
   stopped: boolean;
   lastTickAt: Map<string, number>;
+  refreshTimer?: number;
 };
 
 /**
@@ -56,6 +57,15 @@ export class BrokerMarketDataClient {
       if (stream.stopped || generation !== stream.generation || controller.signal.aborted) return;
       stream.attempt = 0;
       this.emit(stream, { type: 'status', status: 'connected' });
+      // Vercel Functions have a hard execution-duration ceiling. End this
+      // browser-to-Vercel stream before that ceiling and reconnect cleanly so
+      // the market feed never waits for a 300s function timeout.
+      if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
+      stream.refreshTimer = window.setTimeout(() => {
+        if (stream.stopped || generation !== stream.generation) return;
+        controller.abort();
+        void this.connectFyers(stream);
+      }, 240_000);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let remainder = '';
@@ -73,6 +83,7 @@ export class BrokerMarketDataClient {
         }
       }
     } catch (error: any) {
+      if (stream.refreshTimer) { window.clearTimeout(stream.refreshTimer); stream.refreshTimer = undefined; }
       if (!stream.stopped && !controller.signal.aborted && generation === stream.generation) {
         stream.attempt += 1;
         this.emit(stream, { type: 'status', status: 'reconnecting' });
@@ -108,8 +119,8 @@ export class BrokerMarketDataClient {
     const now = Date.now();
     // REST is only a safety net. Keep it dormant while the stream is healthy,
     // but recover quickly when the socket is connected yet no ticks arrive.
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 3_000);
-    const canPoll = now - stream.lastQuotePollAt >= 3_000;
+    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 650);
+    const canPoll = now - stream.lastQuotePollAt >= 350;
     if (stale && canPoll && !stream.pollInFlight) {
       stream.lastQuotePollAt = now;
       stream.pollInFlight = true;
@@ -204,8 +215,10 @@ export class BrokerMarketDataClient {
       stream!.stopped = true;
       stream!.generation += 1;
       stream!.controller?.abort();
+      if (stream!.refreshTimer) window.clearTimeout(stream!.refreshTimer);
       if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
       if (stream!.reconnectTimer) window.clearTimeout(stream!.reconnectTimer);
+      if (stream!.refreshTimer) window.clearTimeout(stream!.refreshTimer);
       if (stream!.watchdogTimer) window.clearInterval(stream!.watchdogTimer);
       this.streams.delete(streamKey);
     };
@@ -222,8 +235,10 @@ export class BrokerMarketDataClient {
       stream.stopped = true;
       stream.generation += 1;
       stream.controller?.abort();
+      if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
       if (stream.pollTimer) window.clearTimeout(stream.pollTimer);
       if (stream.reconnectTimer) window.clearTimeout(stream.reconnectTimer);
+      if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
       if (stream.watchdogTimer) window.clearInterval(stream.watchdogTimer);
       this.streams.delete(key);
     }
