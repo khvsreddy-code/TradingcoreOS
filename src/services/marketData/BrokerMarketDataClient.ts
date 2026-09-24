@@ -21,6 +21,8 @@ type FyersStream = {
   stopped: boolean;
   lastTickAt: Map<string, number>;
   refreshTimer?: number;
+  quoteController?: AbortController;
+  visibilityHandler?: () => void;
 };
 
 /**
@@ -114,51 +116,57 @@ export class BrokerMarketDataClient {
   }
 
   private async pollQuotes(stream: FyersStream): Promise<void> {
-    if (stream.stopped) return;
+    if (stream.stopped || stream.pollInFlight) return;
     const keys = stream.instrumentKeys;
+    if (!keys.length) return;
     const now = Date.now();
-    // REST is only a safety net. Keep it dormant while the stream is healthy,
-    // but recover quickly when the socket is connected yet no ticks arrive.
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 3_000);
-    const canPoll = now - stream.lastQuotePollAt >= 1_000;
-    if (stale && canPoll && !stream.pollInFlight) {
-      stream.lastQuotePollAt = now;
-      stream.pollInFlight = true;
-      try {
-        const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`, { cache: 'no-store' });
-        if (response.ok) {
-          const payload = await readTradingApiJson<any>(response);
-          const rows = payload?.data || {};
-          for (const [key, quote] of Object.entries(rows)) {
-            const q: any = quote || {};
-            const ltp = Number(q.ltp);
-            if (!Number.isFinite(ltp)) continue;
-            const tick: any = {
-              instrumentKey: String(key),
-              ltp,
-              close: Number(q.close ?? q.prevClose ?? 0) || undefined,
-              change: Number(q.change ?? 0) || undefined,
-              changePercent: Number(q.changePercent ?? q.chg ?? 0) || undefined,
-              volume: Number(q.volume ?? 0) || 0,
-              bid: Number.isFinite(Number(q.bid)) ? [{ price: Number(q.bid), quantity: 0 }] : undefined,
-              ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
-              receivedAt: new Date().toISOString(),
-              lastTradeTimestamp: (() => {
-                const raw = q.timestamp;
-                const numeric = typeof raw === 'number' ? raw : Number(raw);
-                if (Number.isFinite(numeric)) return new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString();
-                const parsed = Date.parse(String(raw || ''));
-                return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
-              })(),
-            };
-            stream.lastTickAt.set(String(key), Date.now());
-            this.emit(stream, { type: 'tick', tick });
-          }
+    // Quotes API is the deterministic recovery heartbeat. The WebSocket remains
+    // the low-latency path, but chart candles must not depend on a long-lived
+    // Vercel streaming function staying alive.
+    if (now - stream.lastQuotePollAt < 3_500) return;
+    stream.lastQuotePollAt = now;
+    stream.pollInFlight = true;
+    const controller = new AbortController();
+    stream.quoteController = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 2_800);
+    try {
+      const response = await tradingApi(`/api/trading/fyers/market-data?instrument_keys=${encodeURIComponent(keys.join(','))}`, { cache: 'no-store', signal: controller.signal });
+      if (response.ok) {
+        const payload = await readTradingApiJson<any>(response);
+        const rows = payload?.data || {};
+        for (const [key, quote] of Object.entries(rows)) {
+          const q: any = quote || {};
+          const ltp = Number(q.ltp);
+          if (!Number.isFinite(ltp)) continue;
+          const tick: any = {
+            instrumentKey: String(key),
+            ltp,
+            close: Number(q.close ?? q.prevClose ?? 0) || undefined,
+            change: Number(q.change ?? q.chg ?? 0) || undefined,
+            changePercent: Number(q.changePercent ?? q.chgPercent ?? q.chp ?? 0) || undefined,
+            volume: Number(q.volume ?? 0) || 0,
+            bid: Number.isFinite(Number(q.bid)) ? [{ price: Number(q.bid), quantity: 0 }] : undefined,
+            ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
+            receivedAt: new Date().toISOString(),
+            lastTradeTimestamp: (() => {
+              const raw = q.timestamp;
+              const numeric = typeof raw === 'number' ? raw : Number(raw);
+              if (Number.isFinite(numeric)) return new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString();
+              const parsed = Date.parse(String(raw || ''));
+              return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
+            })(),
+          };
+          stream.lastTickAt.set(String(key), Date.now());
+          this.emit(stream, { type: 'tick', tick });
         }
-      } catch { /* websocket remains primary; retry on the next stale interval */ }
-      finally { stream.pollInFlight = false; }
+      }
+    } catch { /* next heartbeat retries; WebSocket remains the fast path */ }
+    finally {
+      window.clearTimeout(timeout);
+      if (stream.quoteController === controller) stream.quoteController = undefined;
+      stream.pollInFlight = false;
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1_000);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 3_500);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
@@ -192,6 +200,20 @@ export class BrokerMarketDataClient {
       void this.connectFyers(stream);
       void this.pollQuotes(stream);
       this.startWatchdog(stream);
+      const onVisibility = () => {
+        if (document.visibilityState !== 'visible' || stream!.stopped) return;
+        if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
+        stream!.lastQuotePollAt = 0;
+        void this.pollQuotes(stream!);
+        const stale = stream!.instrumentKeys.some(key => Date.now() - (stream!.lastTickAt.get(String(key)) || 0) > 5_000);
+        if (stale && !stream!.controller?.signal.aborted) {
+          stream!.controller?.abort();
+          void this.connectFyers(stream!);
+        }
+      };
+      stream.visibilityHandler = onVisibility;
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', onVisibility);
     } else {
       const union = [...new Set([...stream.instrumentKeys, ...normalizedKeys])].sort();
       const changed = union.join(',') !== stream.instrumentKeys.join(',');
@@ -217,6 +239,8 @@ export class BrokerMarketDataClient {
       stream!.controller?.abort();
       if (stream!.refreshTimer) window.clearTimeout(stream!.refreshTimer);
       if (stream!.pollTimer) window.clearTimeout(stream!.pollTimer);
+      stream!.quoteController?.abort();
+      if (stream!.visibilityHandler) { document.removeEventListener('visibilitychange', stream!.visibilityHandler); window.removeEventListener('focus', stream!.visibilityHandler); }
       if (stream!.reconnectTimer) window.clearTimeout(stream!.reconnectTimer);
       if (stream!.refreshTimer) window.clearTimeout(stream!.refreshTimer);
       if (stream!.watchdogTimer) window.clearInterval(stream!.watchdogTimer);
@@ -237,6 +261,8 @@ export class BrokerMarketDataClient {
       stream.controller?.abort();
       if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
       if (stream.pollTimer) window.clearTimeout(stream.pollTimer);
+      stream.quoteController?.abort();
+      if (stream.visibilityHandler) { document.removeEventListener('visibilitychange', stream.visibilityHandler); window.removeEventListener('focus', stream.visibilityHandler); }
       if (stream.reconnectTimer) window.clearTimeout(stream.reconnectTimer);
       if (stream.refreshTimer) window.clearTimeout(stream.refreshTimer);
       if (stream.watchdogTimer) window.clearInterval(stream.watchdogTimer);
