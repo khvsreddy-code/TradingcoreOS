@@ -1,8 +1,9 @@
 import { CoreSpiritIrProgram } from './ir';
+import { CORE_SPIRIT_IR_FORMAT, CORE_SPIRIT_IR_VERSION, validateCoreSpiritIr, serializeCoreSpiritIr } from './irContract';
 
 export type CoreSpiritExecutableArtifact = {
-  format: 'coreSpirit-ir';
-  version: 1;
+  format: typeof CORE_SPIRIT_IR_FORMAT;
+  version: typeof CORE_SPIRIT_IR_VERSION;
   sourceId: string;
   checksum: string;
   instructionCount: number;
@@ -12,7 +13,7 @@ export type CoreSpiritExecutableArtifact = {
 
 /** Stable, dependency-free checksum for cache keys and deterministic artifact identity. */
 export function coreSpiritChecksum(value: unknown): string {
-  const text = JSON.stringify(value);
+  const text = typeof value === 'object' && value !== null ? JSON.stringify(value) : JSON.stringify(value);
   let hash = 2166136261;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);
@@ -23,15 +24,15 @@ export function coreSpiritChecksum(value: unknown): string {
 
 export function makeExecutableArtifact(ir: CoreSpiritIrProgram): CoreSpiritExecutableArtifact {
   return {
-    format: 'coreSpirit-ir', version: 1, sourceId: ir.sourceId,
-    checksum: coreSpiritChecksum(ir), instructionCount: ir.entry.instructions.length,
+    format: CORE_SPIRIT_IR_FORMAT, version: CORE_SPIRIT_IR_VERSION, sourceId: ir.sourceId,
+    checksum: coreSpiritChecksum(serializeCoreSpiritIr(ir)), instructionCount: ir.entry.instructions.length,
     maxLookback: ir.maxLookback, ir,
   };
 }
 
 export function validateExecutableArtifact(artifact: unknown): artifact is CoreSpiritExecutableArtifact {
   const a = artifact as CoreSpiritExecutableArtifact;
-  return Boolean(a && a.format === 'coreSpirit-ir' && a.version === 1 && a.ir?.version === 1 &&
-    a.checksum === coreSpiritChecksum(a.ir) && Number.isInteger(a.instructionCount) &&
+  return Boolean(a && a.format === CORE_SPIRIT_IR_FORMAT && a.version === CORE_SPIRIT_IR_VERSION && validateCoreSpiritIr(a.ir) &&
+    a.checksum === coreSpiritChecksum(serializeCoreSpiritIr(a.ir)) && Number.isInteger(a.instructionCount) &&
     a.instructionCount === a.ir.entry.instructions.length && Number.isInteger(a.maxLookback) && a.maxLookback >= 0);
 }

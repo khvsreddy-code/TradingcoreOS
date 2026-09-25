@@ -2,13 +2,18 @@ import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { analyzeCoreSpirit, CoreSpiritDiagnostic } from './semanticAnalyzer';
 import { CoreSpiritExecutableArtifact, makeExecutableArtifact } from './artifact';
+import { resolveCoreSpiritNames } from './nameResolver';
+import { optimizeCoreSpiritIr } from './optimizer';
+import { validateCoreSpiritIr } from './irContract';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
 export class CoreSpiritCompiler {
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit'): CoreSpiritCompileResult {
+    const names = resolveCoreSpiritNames(ast);
     const semantic = analyzeCoreSpirit(ast);
-    if (semantic.diagnostics.some(d => d.severity === 'error')) return { diagnostics: semantic.diagnostics };
+    const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
+    if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics };
     const instructions: CoreSpiritIrInstruction[] = [];
     const sourceMapEntries: Array<{instruction:number;start:number;end:number;line:number;column:number;kind:string}> = [];
     const mark=(n:CoreSpiritAstNode,before:number)=>{ if(n.span && instructions.length>before) sourceMapEntries.push({instruction:instructions.length-1,start:n.span.start,end:n.span.end,line:n.span.line,column:n.span.column,kind:n.type}); };
@@ -24,6 +29,7 @@ export class CoreSpiritCompiler {
         case 'identifier': {
           const dest = `t${temp++}`;
           if (['open','high','low','close','volume','time'].includes(n.name)) instructions.push({ op:'loadSeries', dest, name:n.name, offset:0 });
+          else if (n.name === 'bar_index') instructions.push({ op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') instructions.push({ op:'const', dest, value:null });
           else instructions.push({ op:'move', dest, source:n.name });
           return dest;
@@ -53,6 +59,7 @@ export class CoreSpiritCompiler {
     const stmt=(n:CoreSpiritAstNode):void=>{
       switch(n.type){
         case 'program': n.body.forEach(stmt); break;
+        case 'typeDeclaration': break;
         case 'let': { const source=expr(n.expression); instructions.push({op:'setLocal',name:n.name,source,series:true}); if(!locals.includes(n.name))locals.push(n.name); break; }
         case 'expressionStatement': expr(n.expression); break;
         case 'if': {
@@ -67,10 +74,12 @@ export class CoreSpiritCompiler {
     };
     try {
       stmt(ast);
-      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const ir:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries}};
-      return {ir,diagnostics:semantic.diagnostics,artifact:makeExecutableArtifact(ir)};
+      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries}};
+      const ir = optimizeCoreSpiritIr(rawIr);
+      if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
+      return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {
-      return {diagnostics:[...semantic.diagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};
+      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};
     }
   }
 }

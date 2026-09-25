@@ -1,0 +1,16 @@
+{
+  "release": "CoreSpirit v38",
+  "focus": [
+    "future strategy contract",
+    "signal-to-order boundary",
+    "EMA+RSI killer example"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/strategyContract.ts",
+    "src/services/coreSpirit/stage38StrategyKillerExample.test.ts",
+    "examples/coreSpirit/ema-rsi-strategy.core",
+    "examples/coreSpirit/ema-rsi-strategy.expected.json",
+    "CORESPIRIT_STAGES_13_14_DEEP.md"
+  ],
+  "baseline": "CoreSpirit v37"
+}

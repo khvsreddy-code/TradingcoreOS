@@ -1,0 +1,42 @@
+import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
+
+/**
+ * Stable CoreSpirit VM contract. The VM executes this contract, never AST nodes.
+ * Keep opcode names and operand meaning backwards compatible within this version.
+ */
+export const CORE_SPIRIT_IR_FORMAT = 'coreSpirit-ir' as const;
+export const CORE_SPIRIT_IR_VERSION = 1 as const;
+
+export const CORE_SPIRIT_IR_OPCODES = [
+  'const','loadSeries','move','unary','binary','call','index','setLocal',
+  'jumpIfFalse','jump','emit',
+] as const;
+export type CoreSpiritIrOpcode = typeof CORE_SPIRIT_IR_OPCODES[number];
+
+export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIrInstruction {
+  const instruction = value as CoreSpiritIrInstruction | undefined;
+  return !!instruction && typeof instruction === 'object' &&
+    typeof (instruction as any).op === 'string' &&
+    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op);
+}
+
+export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrProgram {
+  const p = program as CoreSpiritIrProgram | undefined;
+  if (!p || p.version !== CORE_SPIRIT_IR_VERSION || typeof p.sourceId !== 'string') return false;
+  if (!p.entry || !Array.isArray(p.entry.instructions) || !Array.isArray(p.locals)) return false;
+  if (!Number.isInteger(p.maxLookback) || p.maxLookback < 0) return false;
+  return p.entry.instructions.every(isCoreSpiritIrInstruction);
+}
+
+/** Stable structural representation used by caches, replay and worker transport. */
+export function serializeCoreSpiritIr(program: CoreSpiritIrProgram): string {
+  if (!validateCoreSpiritIr(program)) throw new Error('Invalid CoreSpirit IR');
+  return stableStringify(program);
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
+}

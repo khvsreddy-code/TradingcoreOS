@@ -1,6 +1,7 @@
 import { CORE_SPIRIT_STDLIB } from './standardLibrary';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
+import { normalizeCoreSpiritSource } from './syntax';
 
 export type CoreSpiritCompletion = { label: string; kind: 'function'|'keyword'|'series'|'visual'|'data'|'type'|'property'; detail: string; insertText?: string };
 export type CoreSpiritTypeInfo = { name:string; type:string; detail:string };
@@ -39,12 +40,30 @@ export function getCoreSpiritUdtMembers(source:string, typeName:string):CoreSpir
 }
 
 export function getCoreSpiritTypeInfo(source:string, cursor:number):CoreSpiritTypeInfo|null {
-  const before=source.slice(0,Math.max(0,cursor)); const word=before.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0]; if(!word) return null;
-  const lines=source.split(/\r?\n/); const defs=new Map<string,string>();
-  for(const line of lines){ const m=line.match(/^\s*(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/); if(m){ const rhs=m[2].trim(); let t='unknown'; if(/^[-+]?\d/.test(rhs)) t='number'; else if(/^['"]/.test(rhs)) t='string'; else if(/^(true|false)$/.test(rhs)) t='boolean'; else if(/^(open|high|low|close|volume|time)\b/.test(rhs)) t='series<number>'; else { const u=getCoreSpiritUdtInfos(source).find(x=>x.name===rhs.split(/[.(]/)[0]); if(u)t=`udt:${u.name}`; else if(/^[A-Za-z_][A-Za-z0-9_]*\(\)$/.test(rhs)){ const ctor=getCoreSpiritUdtInfos(source).find(x=>x.name===rhs.slice(0,-2)); if(ctor)t=`udt:${ctor.name}`; } } defs.set(m[1],t); }}
-  if(defs.has(word)) return {name:word,type:defs.get(word)!,detail:`${word}: ${defs.get(word)}`};
-  const builtin=SERIES.find(x=>x.label===word); if(builtin)return {name:word,type:'series<number>',detail:'built-in market series'};
-  const udt=getCoreSpiritUdtInfos(source).find(x=>x.name===word); if(udt)return {name:word,type:`type ${udt.name}`,detail:`${udt.fields.length} field(s)`};
+  const before=source.slice(0,Math.max(0,cursor));
+  const word=before.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0];
+  if(!word) return null;
+
+  try {
+    const parsed=new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+    if(!parsed.diagnostics.length) {
+      const semantic=analyzeCoreSpirit(parsed.ast);
+      const type=semantic.symbols.get(word);
+      if(type) return {name:word,type,detail:`${word}: ${type}`};
+
+      const udt=semantic.udts.get(word);
+      if(udt) return {name:word,type:`type ${udt.name}`,detail:`${udt.fields.length} field(s)`};
+    }
+  } catch {
+    // Editor type info remains best-effort while the user is typing invalid code.
+  }
+
+  const builtin=SERIES.find(x=>x.label===word);
+  if(builtin) return {name:word,type:'series<number>',detail:'built-in market series'};
+
+  const udt=getCoreSpiritUdtInfos(source).find(x=>x.name===word);
+  if(udt) return {name:word,type:`type ${udt.name}`,detail:`${udt.fields.length} field(s)`};
+
   return null;
 }
 

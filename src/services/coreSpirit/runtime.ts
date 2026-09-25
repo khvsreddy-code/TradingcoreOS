@@ -3,16 +3,18 @@ import { CoreEventBus, coreEventBus } from '../core/event/eventBus';
 import { CoreSpiritObject, CoreSpiritProgram, CoreSpiritValue } from './types';
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { CoreSpiritCompiler } from './compiler';
-import { createCoreSpiritExecutionContext } from './executionContext';
-import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './types';
+import { createCoreSpiritExecutionContext, createCoreSpiritExecutionFrame } from './executionContext';
+import { CoreSpiritSeriesEngine } from './seriesEngine';
+import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritBarState } from './types';
 import { sma as kernelSma, highest as kernelHighest, lowest as kernelLowest, emaStep, trueRange, rsiFromAverages } from './indicatorKernel';
+import { calculateNativeIndicator, calculateNativeAtr } from './indicatorEngine';
 
 export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
 };
 export type CoreSpiritRuntimeState = {
-  barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean };
+  barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: CoreSpiritBarState;
 };
 export type CoreSpiritExecutionResult = { outputs: CoreSpiritObject[]; state: CoreSpiritRuntimeState; diagnostics: string[] };
 
@@ -28,7 +30,9 @@ export class CoreSpiritRuntime {
   private readonly maxOutputsPerBar: number;
   private readonly maxHistoryBars: number;
   private readonly executionContext: CoreSpiritExecutionContext;
-  private state: CoreSpiritRuntimeState = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true } };
+  private readonly seriesEngine = new CoreSpiritSeriesEngine();
+  private executionRevision = 0;
+  private state: CoreSpiritRuntimeState = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, barIndex:-1, timestamp:0, symbol:'', timeframe:'unknown', timezone:'Asia/Kolkata', session:{id:'',marketDate:'',isOpen:false,phase:'unknown'}, mode:'historical', revision:0, isNewBar:true, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true } };
   private compiledIr?: CoreSpiritIrProgram;
   private loadedProgramId?: string;
   private history: HistoricalCandle[] = [];
@@ -36,13 +40,14 @@ export class CoreSpiritRuntime {
   private committedSeriesState: Record<string, number[]> = {};
   private committedLocalSeries: Record<string, Array<number | boolean | string | null>> = {};
   private committedCrossState: Record<string, { a:number; b:number }> = {};
-  private currentBarSnapshot?: { seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; crossState: Record<string, {a:number;b:number}>; historyLength:number };
+  private currentBarSnapshot?: { seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; crossState: Record<string, {a:number;b:number}>; historyLength:number; bar: HistoricalCandle };
   private realtime = false;
   private lastBarWasRealtime = false;
   private plotOrdinal = 0;
   private indicatorMemo = new Map<string, unknown>();
   private outputCount = 0;
   private dataMemo = new Map<string, unknown>();
+  private realtimeLifecycle: 'idle' | 'evaluating' | 'committed' = 'idle';
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
@@ -56,7 +61,7 @@ export class CoreSpiritRuntime {
     this.bus = bus;
   }
 
-  reset(): void { this.state = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true } }; this.history = []; this.crossState = {}; this.committedSeriesState = {}; this.committedLocalSeries = {}; this.committedCrossState = {}; this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; }
+  reset(): void { this.seriesEngine.reset(); this.executionRevision = 0; this.state = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, barIndex:-1, timestamp:0, symbol:'', timeframe:'unknown', timezone:'Asia/Kolkata', session:{id:'',marketDate:'',isOpen:false,phase:'unknown'}, mode:'historical', revision:0, isNewBar:true, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true } }; this.history = []; this.crossState = {}; this.committedSeriesState = {}; this.committedLocalSeries = {}; this.committedCrossState = {}; this.currentBarSnapshot = undefined; this.realtimeLifecycle = 'idle'; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; }
   getState(): CoreSpiritRuntimeState { return { ...this.state, locals: { ...this.state.locals }, seriesState: Object.fromEntries(Object.entries(this.state.seriesState).map(([k,v]) => [k,[...v]])), localSeries: Object.fromEntries(Object.entries(this.state.localSeries).map(([k,v]) => [k,[...v]])) }; }
 
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
@@ -80,6 +85,7 @@ export class CoreSpiritRuntime {
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
     const outputs: CoreSpiritObject[] = [], diagnostics: string[] = [];
     const normalized = { ...bar };
+    const incomingTimestamp = this.toEpoch(normalized.timestamp);
     const last = this.history[this.history.length - 1];
     const sameBucket = !!last && this.toEpoch(last.timestamp) === this.toEpoch(normalized.timestamp);
 
@@ -97,12 +103,15 @@ export class CoreSpiritRuntime {
         seriesState: cloneNumberMap(this.state.seriesState),
         localSeries: cloneValueMap(this.state.localSeries),
         crossState: cloneCrossMap(this.crossState),
-        historyLength: this.history.length,
+        historyLength: this.history.length, bar: { ...normalized },
       };
       this.history.push(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
     }
     const barIndex = this.history.length - 1;
+    this.executionRevision = sameBucket ? this.executionRevision + 1 : 0;
+    this.seriesEngine.setBars(this.history);
+    this.seriesEngine.beginBar(barIndex, normalized, false, this.executionRevision);
     this.state.barIndex = barIndex;
     this.state.time = this.toEpoch(normalized.timestamp);
     this.state.locals = {};
@@ -110,8 +119,10 @@ export class CoreSpiritRuntime {
     this.indicatorMemo.clear();
     this.outputCount = 0;
     this.validateBar(normalized);
-    this.state.barState = { index:barIndex, time:this.state.time, isFirst:barIndex===0, isLast:false, isRealtime:true, isConfirmed:false };
+    this.state.barState = { ...createCoreSpiritExecutionFrame({ timestamp:incomingTimestamp, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:'realtime', isRealtime:true, isConfirmed:false, isNewBar:!sameBucket, revision:this.executionRevision, isFirst:barIndex===0, isLast:false }) };
+    this.executionContext.frame = this.state.barState; this.executionContext.session = this.state.barState.session;
     this.lastBarWasRealtime = true;
+    this.realtimeLifecycle = 'evaluating';
     try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, outputs, diagnostics); }
     catch (error) { diagnostics.push(`bar ${barIndex}: ${error instanceof Error ? error.message : String(error)}`); }
     return { outputs, state: this.getState(), diagnostics };
@@ -158,20 +169,36 @@ export class CoreSpiritRuntime {
     return results;
   }
 
-  /** Commit the current realtime bar as historical/confirmed state. */
-  confirmRealtimeBar(): void {
-    if (this.state.barIndex < 0) return;
-    this.state.barState = { ...this.state.barState!, isRealtime:false, isConfirmed:true, isLast:true };
-    this.committedSeriesState = cloneNumberMap(this.state.seriesState);
-    this.committedLocalSeries = cloneValueMap(this.state.localSeries);
-    this.committedCrossState = cloneCrossMap(this.crossState);
-    this.currentBarSnapshot = undefined;
-    this.lastBarWasRealtime = false;
+  beginRealtimeEvaluation(): void { if (this.state.barIndex >= 0) { this.realtimeLifecycle='evaluating'; this.lastBarWasRealtime=true; } }
+
+  commitRealtimeBar(): void {
+    if (this.state.barIndex < 0 || !this.lastBarWasRealtime) return;
+    this.state.barState={...this.state.barState,isRealtime:false,isConfirmed:true,isLast:true};
+    this.committedSeriesState=cloneNumberMap(this.state.seriesState);
+    this.committedLocalSeries=cloneValueMap(this.state.localSeries);
+    this.committedCrossState=cloneCrossMap(this.crossState);
+    this.currentBarSnapshot=undefined; this.lastBarWasRealtime=false; this.realtimeLifecycle='committed';
   }
+
+  confirmRealtimeBar(): void { this.commitRealtimeBar(); }
+
+  rollbackRealtimeBar(): void {
+    const snapshot=this.currentBarSnapshot; if(!snapshot || !this.lastBarWasRealtime)return;
+    this.state.seriesState=cloneNumberMap(snapshot.seriesState);
+    this.state.localSeries=cloneValueMap(snapshot.localSeries);
+    this.crossState=cloneCrossMap(snapshot.crossState);
+    this.history=this.history.slice(0,snapshot.historyLength); this.seriesEngine.setBars(this.history);
+    this.state.locals={}; this.currentBarSnapshot=undefined; this.lastBarWasRealtime=false; this.realtimeLifecycle='idle';
+    const last=this.history.at(-1);
+    if(last){ const index=this.history.length-1; this.state.barIndex=index; this.state.time=this.toEpoch(last.timestamp); this.seriesEngine.beginBar(index,last,true,0); this.state.barState={...createCoreSpiritExecutionFrame({timestamp:this.toEpoch(last.timestamp),barIndex:index,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:'historical',isRealtime:false,isConfirmed:true,isNewBar:false,revision:0,isFirst:index===0,isLast:true})}; }
+  }
+
+  getRealtimeLifecycle(): 'idle'|'evaluating'|'committed' { return this.realtimeLifecycle; }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
     const outputs: CoreSpiritObject[] = [], diagnostics: string[] = [];
     this.compiledIr = ir; this.reset();
+    this.seriesEngine.reset(bars);
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.plotOrdinal = 0;
@@ -179,7 +206,9 @@ export class CoreSpiritRuntime {
       this.outputCount = 0;
       const bar = bars[i];
       this.validateBar(bar); this.state.barIndex = i; this.state.time = this.toEpoch(bar.timestamp); this.state.locals = {};
-      this.state.barState = { index:i, time:this.state.time, isFirst:i===0, isLast:i===bars.length-1, isRealtime:false, isConfirmed:true };
+      this.executionRevision = 0; this.seriesEngine.beginBar(i, bar, true, this.executionRevision);
+      this.state.barState = { ...createCoreSpiritExecutionFrame({ timestamp:this.state.time, barIndex:i, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:false, isConfirmed:true, isNewBar:true, revision:this.executionRevision, isFirst:i===0, isLast:i===bars.length-1 }) };
+      this.executionContext.frame = this.state.barState; this.executionContext.session = this.state.barState.session;
       this.history.push(bar);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
       try { this.executeBlock(ir.entry.instructions, bar, this.history, i, outputs, diagnostics); }
@@ -188,7 +217,8 @@ export class CoreSpiritRuntime {
     return { outputs, state: this.getState(), diagnostics };
   }
 
-  getExecutionContext(): CoreSpiritExecutionContext { return { ...this.executionContext }; }
+  getExecutionContext(): CoreSpiritExecutionContext { return { ...this.executionContext, frame: this.executionContext.frame ? { ...this.executionContext.frame } : undefined, session: this.executionContext.session ? { ...this.executionContext.session } : undefined }; }
+  getExecutionFrame() { return this.executionContext.frame ? { ...this.executionContext.frame, session: { ...this.executionContext.frame.session } } : undefined; }
   getLoadedProgramId(): string | undefined { return this.loadedProgramId; }
   getLoadedIr(): CoreSpiritIrProgram | undefined { return this.compiledIr; }
   loadIr(ir: CoreSpiritIrProgram): void {
@@ -247,11 +277,8 @@ export class CoreSpiritRuntime {
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
-    if (!Number.isInteger(offset) || offset < 0) throw new Error(`future indexing is not allowed for ${name}[${offset}]`);
-    if (offset > barIndex) return null;
-    const source = bars[barIndex-offset]; if (!source) return null;
-    const value = name === 'time' ? this.toEpoch(source.timestamp) : Number((source as any)[name]);
-    return Number.isFinite(value) ? value : null;
+    if (this.seriesEngine.currentIndex !== barIndex) this.seriesEngine.beginBar(barIndex, bar, this.state.barState.isConfirmed, this.executionRevision);
+    return this.seriesEngine.value(name as any, offset);
   }
 
   private call(callKey:string,name:string,args:unknown[],bar:HistoricalCandle,bars:HistoricalCandle[],index:number,seriesArgs:string[]):unknown {
@@ -260,29 +287,39 @@ export class CoreSpiritRuntime {
     if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
     const finish = (value: unknown) => { this.indicatorMemo.set(memoKey, value); return value; };
     if (name==='nz') { const value=Number(args[0]); return finish(Number.isFinite(value) ? value : Number(args[1] ?? 0)); }
-    if (name==='isNa') return finish(args[0] == null || (typeof args[0] === 'number' && !Number.isFinite(args[0])));
+    if (name==='na' || name==='isNa') return finish(args[0] == null || (typeof args[0] === 'number' && !Number.isFinite(args[0])));
+    if (name==='bar_index') return finish(index);
+    if (name==='time') return finish(this.toEpoch(bar.timestamp));
     if (name==='max') return finish(Math.max(Number(args[0]), Number(args[1])));
     if (name==='min') return finish(Math.min(Number(args[0]), Number(args[1])));
     if (name==='abs') return finish(Math.abs(Number(args[0])));
     if (name==='sqrt') return finish(Math.sqrt(Number(args[0])));
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
-    if (name==='crossover'||name==='crossunder') {
+    if (name==='sign') { const n=Number(args[0]); return finish(Number.isFinite(n) ? (n>0?1:n<0?-1:0) : null); }
+    if (name==='round') { const places=Math.max(0, Math.floor(Number(args[1] ?? 0))); const scale=10**places; return finish(Math.round(Number(args[0])*scale)/scale); }
+    if (name==='cross'||name==='crossover'||name==='crossunder') {
       const a=Number(args[0]), b=Number(args[1]);
       const previous=this.crossState[callKey];
       this.crossState[callKey]={a,b};
       if(!Number.isFinite(a)||!Number.isFinite(b)||!previous) return finish(false);
+      if (name==='cross') return finish((previous.a <= previous.b && a > b) || (previous.a >= previous.b && a < b));
       return finish(name==='crossover' ? previous.a <= previous.b && a > b : previous.a >= previous.b && a < b);
     }
-    if (name==='sma'||name==='highest'||name==='lowest'||name==='change') {
-      const values=this.window(series,length,bars,index);
-      if(name==='sma') return finish(kernelSma(values, length));
-      if(name==='highest') return finish(kernelHighest(values, length));
-      if(name==='lowest') return finish(kernelLowest(values, length));
-      const current=values[0], previous=this.loadSeries(series,length,bar,bars,index); return finish(current==null||previous==null?null:current-previous);
+    if(name==='rising'||name==='falling') {
+      const p=Math.max(1,Math.floor(Number(args[1] ?? 1))); const values=this.window(series,p+1,bars,index);
+      if(values.length < p+1) return finish(false);
+      const current=values[0]; const prior=values.slice(1,p+1);
+      return finish(name==='rising' ? prior.every(v=>current>v) : prior.every(v=>current<v));
     }
-    if(name==='ema') { const key=`ema:${series}:${length}`, current=Number(args[0]); if(args[0] == null || !Number.isFinite(current))return finish(null); const historyValues=this.window(series,length,bars,index); if(historyValues.length<length)return null; const prevRaw=this.state.seriesState[key]?.at(-1); const prev=prevRaw == null ? null : Number(prevRaw); const value=emaStep(current, Number.isFinite(prev as number) ? prev : null, historyValues, length); if(value == null) return finish(null); this.pushState(key,value); return finish(value); }
-    if(name==='rsi') { const key=`rsi:${series}:${length}`, current=Number(args[0]), previous=index>0?Number(this.loadSeries(series,1,bar,bars,index)):NaN; if(args[0] == null || !Number.isFinite(current)||!Number.isFinite(previous)||index<length)return finish(null); const gain=Math.max(0,current-previous),loss=Math.max(0,previous-current),g=`${key}:gain`,l=`${key}:loss`,pg=Number(this.state.seriesState[g]?.at(-1)),pl=Number(this.state.seriesState[l]?.at(-1)); const ag=Number.isFinite(pg)?(pg*(length-1)+gain)/length:this.averageGain(series,length,bars,index),al=Number.isFinite(pl)?(pl*(length-1)+loss)/length:this.averageLoss(series,length,bars,index); this.pushState(g,ag);this.pushState(l,al);return finish(rsiFromAverages(ag,al)); }
-    if(name==='atr') { const key=`atr:${length}`, trKey=`atr:tr:${length}`, prevClose=index>0?Number(this.loadSeries('close',1,bar,bars,index)):Number(bar.open), h=Number(bar.high),l=Number(bar.low),tr=Math.max(h-l,Math.abs(h-prevClose),Math.abs(l-prevClose)); this.pushState(trKey,tr); const trHistory=this.state.seriesState[trKey]||[]; if(trHistory.length<length)return null; const prev=Number(this.state.seriesState[key]?.at(-1)); const value=Number.isFinite(prev)?(prev*(length-1)+tr)/length:trHistory.slice(-length).reduce((a,b)=>a+b,0)/length; this.pushState(key,value); return finish(value); }
+    if(['sma','highest','lowest','sum','mean','stdev','wma','rma','median','variance','change','ema','hma','rsi'].includes(name)) {
+      const values=this.window(series,length,bars,index);
+      const value=calculateNativeIndicator(name,args,values,{state:this.state.seriesState,push:(key,v)=>this.pushState(key,v)},series);
+      return finish(value);
+    }
+    if(name==='atr') {
+      const previousClose=index>0?Number(this.loadSeries('close',1,bar,bars,index)):Number(bar.open);
+      return finish(calculateNativeAtr(bar,previousClose,length,{state:this.state.seriesState,push:(key,v)=>this.pushState(key,v)}));
+    }
     if(name==='vwap') { const day=this.sessionDay(bar.timestamp),dayKey='vwap:day',pvKey='vwap:pv',volKey='vwap:vol'; const dayNumber=Number(day.replace(/-/g,'')); const previousDay=this.state.seriesState[dayKey]?.at(-1); if(previousDay!==dayNumber){this.state.seriesState[pvKey]=[];this.state.seriesState[volKey]=[];this.state.seriesState[dayKey]=[];} this.pushState(dayKey,Number(day.replace(/-/g,''))); const pv=Number(this.state.seriesState[pvKey]?.at(-1)||0)+((Number(bar.high)+Number(bar.low)+Number(bar.close))/3)*Math.max(0,Number(bar.volume)||0),vol=Number(this.state.seriesState[volKey]?.at(-1)||0)+Math.max(0,Number(bar.volume)||0);this.pushState(pvKey,pv);this.pushState(volKey,vol);return finish(vol?pv/vol:null); }
     if(name==='request') {
       const symbol=String(args[0] ?? this.executionContext.symbol), timeframe=String(args[1] ?? this.executionContext.timeframe), field=String(args[2] ?? 'close') as any, offset=Math.max(0,Math.floor(Number(args[3] ?? 0)));
@@ -406,7 +443,10 @@ export class CoreSpiritRuntime {
         outputs.push({kind:'table',id:`${this.options.sourceId}:table:${position}:${row}:${column}:${outputId||barIndex}`,position,row,column,text,style:{background:color(args[4],'rgba(15,23,42,.88)'),color:color(args[5],'#fff'),fontSize:Number.isFinite(num(args[6]))?Math.max(8,Math.min(32,num(args[6]))):12},metadata:{source:this.options.sourceId}});
       }
       else if(kind==='signal'){
-        const type=String(args[0]??'signal'); outputs.push({kind:'signal',time,type,metadata:{source:this.options.sourceId,barIndex}});
+        // Boolean signal conditions are output gates; string signals remain named events.
+        if(typeof args[0]==='boolean' && !args[0]) return;
+        const type=typeof args[0]==='boolean' ? 'signal' : String(args[0]??'signal');
+        outputs.push({kind:'signal',time,type,metadata:{source:this.options.sourceId,barIndex}});
         this.bus.emit('script.signal',{scriptId:this.options.sourceId,time,type,metadata:{barIndex}});
       }
       else if(kind==='entry') {

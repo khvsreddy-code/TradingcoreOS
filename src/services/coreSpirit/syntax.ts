@@ -9,6 +9,11 @@ export function normalizeCoreSpiritSource(source: string): string {
     const trimmed = raw.trim();
     if (!trimmed || trimmed.startsWith('//')) { out.push(raw); continue; }
 
+    // `strategy("Name")` is metadata syntax. Keep it outside the executable VM grammar.
+    if (wrapperDepth === 0 && /^strategy\s*\(.*\)\s*$/i.test(trimmed)) {
+      continue;
+    }
+
     // `indicator("Name") { ... }` is metadata syntax. Preserve its body; only
     // remove the wrapper so the actual script remains executable.
     if (wrapperDepth === 0 && /^indicator\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i.test(trimmed)) {
@@ -30,7 +35,7 @@ export function normalizeCoreSpiritSource(source: string): string {
     // Concise inputs. `input length = int(20, min: 1)` lowers to a normal value
     // declaration for the deterministic core; richer UI metadata is retained by
     // the editor layer rather than being executed by the VM.
-    raw = raw.replace(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:int|float|number|bool|string)\s*\(\s*([^,)]*).*\)\s*;?$/i, '$1let $2 = $3;');
+    raw = raw.replace(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(int|float|number|bool|string)\s*\(\s*([^,)]*).*\)\s*;?$/i, '$1let $2: $3 = $4;');
     raw = raw.replace(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/i, '$1let $2 = $3');
 
     // Human-readable crossover operators.
@@ -51,6 +56,10 @@ export function normalizeCoreSpiritSource(source: string): string {
       const ifMatch = raw.match(/^(\s*)if\s+(.+?)\s*\{\s*$/);
       if (ifMatch && !ifMatch[2].startsWith('(')) raw = `${ifMatch[1]}if (${ifMatch[2].trim()}) {`;
     }
+
+    // Strategy convenience forms lower to ordinary event calls.
+    raw = raw.replace(/^(\s*)entry\s*\(\s*["'](long|short)["']\s*\)\s*;?$/i, '$1entry(true, \"$2\");');
+    raw = raw.replace(/^(\s*)exit\s*\(\s*["'](long|short)["']\s*\)\s*;?$/i, '$1exit(true, \"$2\");');
 
     // Friendly plot/signal forms and optional names.
     const plotBare = raw.match(/^(\s*)plot\s+(.+?)\s*;?$/);

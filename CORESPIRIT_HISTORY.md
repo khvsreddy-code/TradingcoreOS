@@ -1,3 +1,35 @@
+# TradingCoreOS v31 — CoreSpirit v1 language freeze + type-system hardening
+**Date:** 2026-09-25
+**Base:** v31
+
+### Implemented
+- Declared the CoreSpirit v1 language boundary in `languageSpec.ts` before further syntax expansion.
+- Reworked the static type algebra to distinguish `int`, `float`, broad `number`, scalar values and `series<T>` values.
+- Added explicit type normalization, assignability, numeric promotion, series element extraction and type joining.
+- Added typed variable declarations (`let x: float = ...`) and generic series declarations.
+- Preserved `series<number>` compatibility for the existing market-series contract while indicator outputs now report `series<float>`.
+- Made numeric functions preserve series-ness in semantic inference.
+- Tightened historical indexing so only series values can be indexed and negative/future indexes are rejected.
+- Updated input normalization so typed `input` declarations retain their requested scalar type.
+- Added boolean-gated `signal(condition)` semantics while retaining named string signals.
+- Made the compiler accept type declarations as compile-time-only statements.
+- Updated editor type information to prefer the semantic analyzer over regex-only inference.
+- Added `stage31TypeSystemContract.test.ts`.
+
+### Verification
+- Targeted TypeScript compilation of the Stage 31 contract passes.
+- Stage 31 contract executes successfully with the dependency-free CommonJS harness.
+- Full repository/browser build is not claimed because the uploaded archive does not include npm dependencies.
+- The existing Stage 1 realtime rollback test still reports its pre-existing state-retention expectation mismatch; this change does not suppress or redefine that failure.
+
+### Deliberately not claimed complete
+- Full exact-reference indicator corpus.
+- Exchange/session calendar semantics.
+- Higher-order series arguments across the entire builtin catalog.
+- Full VM compatibility/migration contract.
+- Full browser/realtime conformance run.
+- Rich visual primitive completion.
+
 # TradingCoreOS v23 — CoreSpirit visual scene-graph deep pass
 **Date:** 2026-09-20
 **Base:** v22

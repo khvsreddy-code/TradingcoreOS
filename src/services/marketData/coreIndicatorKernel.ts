@@ -1,50 +1,39 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 
-/** Canonical deterministic time-series math used by the native indicator layer. */
+/** Canonical deterministic time-series math shared with CoreSpirit. */
+import { sma as coreSma, emaStep as coreEmaStep } from '../coreSpirit/indicatorKernel';
+
 export function sma(values: number[], period: number): Array<number | null> {
   const p = Math.max(1, Math.floor(period));
   const out: Array<number | null> = [];
-  let sum = 0;
-  for (let i = 0; i < values.length; i += 1) {
-    sum += values[i];
-    if (i >= p) sum -= values[i - p];
-    out.push(i + 1 >= p ? sum / p : null);
+  for (let i = 0; i < values.length; i++) {
+    const window = values.slice(Math.max(0, i - p + 1), i + 1).reverse();
+    out.push(window.length >= p ? coreSma(window, p) : null);
   }
   return out;
 }
 
-/** EMA seeded from the first complete SMA window, then recursively updated. */
 export function ema(values: number[], period: number): Array<number | null> {
   const p = Math.max(1, Math.floor(period));
-  const alpha = 2 / (p + 1);
   const out: Array<number | null> = [];
   let previous: number | null = null;
-  for (let i = 0; i < values.length; i += 1) {
-    if (i < p - 1) { out.push(null); continue; }
-    if (previous == null) {
-      let sum = 0;
-      for (let j = i - p + 1; j <= i; j += 1) sum += values[j];
-      previous = sum / p;
-    } else {
-      previous = alpha * values[i] + (1 - alpha) * previous;
-    }
+  for (let i = 0; i < values.length; i++) {
+    const window = values.slice(Math.max(0, i - p + 1), i + 1).reverse();
+    if (window.length < p) { out.push(null); continue; }
+    previous = coreEmaStep(values[i], previous, window, p);
     out.push(previous);
   }
   return out;
 }
 
-/** Wilder/RMA smoothing with an SMA seed. */
 export function rma(values: number[], period: number): Array<number | null> {
   const p = Math.max(1, Math.floor(period));
   const out: Array<number | null> = [];
   let previous: number | null = null;
-  for (let i = 0; i < values.length; i += 1) {
+  for (let i = 0; i < values.length; i++) {
     if (i < p - 1) { out.push(null); continue; }
-    if (previous == null) {
-      let sum = 0;
-      for (let j = i - p + 1; j <= i; j += 1) sum += values[j];
-      previous = sum / p;
-    } else previous = ((p - 1) * previous + values[i]) / p;
+    if (previous == null) previous = values.slice(i - p + 1, i + 1).reduce((a,b)=>a+b,0) / p;
+    else previous = ((p - 1) * previous + values[i]) / p;
     out.push(previous);
   }
   return out;

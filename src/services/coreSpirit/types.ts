@@ -5,13 +5,32 @@ export type CoreSpiritValue = number | boolean | string | null;
 export type CoreSpiritSeries = Array<CoreSpiritValue>;
 
 /** Runtime bar-state flags exposed to the execution engine. */
-export type CoreSpiritBarState = {
+export type CoreSpiritExecutionFrame = {
+  timestamp: number;
+  barIndex: number;
+  symbol: string;
+  timeframe: string;
+  timezone: string;
+  session: CoreSpiritSessionState;
+  mode: CoreSpiritExecutionMode;
+  isRealtime: boolean;
+  isConfirmed: boolean;
+  isNewBar: boolean;
+  revision: number;
+};
+
+export type CoreSpiritSessionState = {
+  id: string;
+  marketDate: string;
+  isOpen: boolean;
+  phase: 'pre' | 'open' | 'post' | 'closed' | 'unknown';
+};
+
+export type CoreSpiritBarState = CoreSpiritExecutionFrame & {
   index: number;
   time: number;
   isFirst: boolean;
   isLast: boolean;
-  isRealtime: boolean;
-  isConfirmed: boolean;
 };
 
 /** Shared output contract. Rendering remains owned by Core Chart. */
@@ -196,6 +215,8 @@ export type CoreSpiritExecutionContext = {
   startedAt: number;
   runId: string;
   policy?: CoreSpiritExecutionPolicy;
+  session?: CoreSpiritSessionState;
+  frame?: CoreSpiritExecutionFrame;
 };
 
 export type CoreSpiritCompilationArtifact = {

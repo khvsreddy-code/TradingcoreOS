@@ -33,7 +33,23 @@ export class CoreSpiritParser {
     const end=this.consume('rightBrace','Expected } after type declaration');
     return {type:'typeDeclaration',name:name.lexeme,fields,span:this.makeSpan(start,end)} as any;
   }
-  private letStatement():CoreSpiritAstNode { const name=this.consume('identifier','Expected variable name'); this.consume('equal','Expected = after variable name'); const expression=this.expression(); this.match('semicolon'); return {type:'let',name:name.lexeme,expression,span:this.makeSpan(name,this.previous())}; }
+  private letStatement():CoreSpiritAstNode {
+    const name=this.consume('identifier','Expected variable name');
+    let declaredType:string|undefined;
+    if(this.match('colon')) {
+      const typeToken=this.consume('identifier','Expected type name');
+      declaredType=typeToken.lexeme;
+      if(this.match('less')) {
+        const element=this.consume('identifier','Expected generic type argument');
+        this.consume('greater','Expected > after generic type');
+        declaredType += `<${element.lexeme}>`;
+      }
+    }
+    this.consume('equal','Expected = after variable name');
+    const expression=this.expression();
+    this.match('semicolon');
+    return {type:'let',name:name.lexeme,declaredType,expression,span:this.makeSpan(name,this.previous())};
+  }
   private ifStatement():CoreSpiritAstNode { const start=this.previous(); this.consume('leftParen','Expected ( after if'); const condition=this.expression(); this.consume('rightParen','Expected ) after condition'); const thenBranch=this.block(); let elseBranch:CoreSpiritAstNode[]|undefined; if(this.match('else')) elseBranch=this.block(); return {type:'if',condition,thenBranch,elseBranch,span:this.makeSpan(start,this.previous())}; }
   private block():CoreSpiritAstNode[]{this.consume('leftBrace','Expected {'); const body:CoreSpiritAstNode[]=[]; while(!this.check('rightBrace')&&!this.check('eof'))body.push(this.statement()); this.consume('rightBrace','Expected }'); return body;}
   private expression(){return this.or();}

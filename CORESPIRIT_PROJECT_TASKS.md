@@ -172,6 +172,39 @@ Relevant source area: `src/services/coreSpirit/`
 - [ ] Broker-connected realtime conformance run.
 
 
+
+## 3.9 CoreSpirit v1 language freeze + type-system hardening — TradingCoreOS v31 foundation
+
+**Goal:** stop expanding syntax until the language core has a small, explicit contract and a compiler-grade scalar/series type model.
+
+### Language boundary
+- [x] Declared v1 core surface in `src/services/coreSpirit/languageSpec.ts`.
+- [x] Core statements: `let`, `if/else`, `type`.
+- [x] Core scalar families: `int`, `float`, `number`, `boolean`, `string`, `null`.
+- [x] Core series families: `series<int>`, `series<float>`, `series<number>`, `series<boolean>`, `series<string>`.
+- [x] Built-in market series: `open`, `high`, `low`, `close`, `volume`, `time`.
+- [x] Core indicators/math remain deterministic and chart-independent.
+- [x] VM remains network-free and renderer-free; host capabilities stay behind explicit adapters.
+
+### Type-system hardening
+- [x] Integer literals infer as `int`; decimal literals infer as `float`.
+- [x] Numeric promotion is explicit (`int -> float`, with `number` retained as a broad compatibility numeric type).
+- [x] Series element types are represented explicitly and can be indexed only as historical series.
+- [x] Declared variable types are supported with `let x: float = ...` and generic series forms.
+- [x] `input foo = int(...)` lowers to a typed declaration instead of losing the requested type.
+- [x] Indicator outputs are typed as `series<float>`.
+- [x] Numeric builtins preserve series-ness when their inputs are series.
+- [x] Future indexing and scalar indexing are rejected during semantic analysis.
+- [x] Boolean `signal(condition)` is supported as an output gate; named string signals remain supported.
+- [x] Type-aware editor lookup now uses the semantic analyzer when the source is valid.
+
+### Regression contract
+- [x] Added `stage31TypeSystemContract.test.ts`.
+- [x] Targeted TypeScript compilation passes.
+- [x] Stage 31 contract executes successfully with the dependency-free CommonJS test harness.
+- [ ] Full repository/browser build still requires the archive's npm dependencies.
+- [ ] Realtime rollback/commit regression in the older Stage 1 test remains an existing issue and is not being masked by this change.
+
 ## 3.7 Stage 1–3 visual system deep pass — TradingCoreOS v22
 
 The goal of v22 is to make CoreSpirit a genuinely expressive chart language rather than a collection of line plots. The design borrows the *capabilities* users expect from modern chart scripting while keeping CoreSpirit's own simpler surface syntax and a renderer-independent output model.

@@ -5,6 +5,11 @@ export * from './parser';
 export * from './semanticAnalyzer';
 export * from './ir';
 export * from './compiler';
+export * from './standardLibrary';
+export * from './nameResolver';
+export * from './optimizer';
+export { lexCoreSpirit, parseCoreSpiritStage, resolveCoreSpiritStage, typeCheckCoreSpiritStage, lowerCoreSpiritStage, compileCoreSpiritStages, serializeCoreSpiritAst } from './pipelineStages';
+export * from './indicatorEngine';
 export * from './coreSpiritPipeline';
 export * from './runtime';
 export * from './outputDispatcher';
@@ -20,3 +25,26 @@ export * from './footprintScene';
 export * from './incrementalAst';
 export * from './hotReload';
 export * from './monacoAdapter';
+export * from './languageSpec';
+
+export * from './executionContext';
+export * from './seriesEngine';
+export * from './session';
+export * from './irContract';
+export * from './replay';
+export * from './coreSpiritRoadmap';
+export * from './sandboxPolicy';
+export * from './executionProtocol';
+export * from './sourceMetadata';
+export * from './strategyContract';
+export * from './debuggerContract';
+export { CORE_SPIRIT_REPLAY_VERSION, replayIsDeterministic } from './replayContract';
+export * from './signalBoundary';
+
+export * from './layeredPlatformContract';
+export * from './languageFoundation';
+export * from './visualScene';
+
+export * from './visualIdentity';
+export * from './runtimeKernel';
+export * from './modelAbi';

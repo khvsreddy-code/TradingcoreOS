@@ -2,6 +2,7 @@ import { CoreEventBus, coreEventBus } from '../core/event/eventBus';
 import { CoreDrawingStore } from '../core/drawing/coreDrawingStore';
 import { CoreDrawingDispatcher } from '../core/drawing/drawingDispatcher';
 import { CoreSpiritObject } from './types';
+import { CoreSpiritEventBus, createSignalEvent } from './eventSystem';
 
 export type CoreSpiritPlotPoint = { time: number; value: number | null };
 export type CoreSpiritOutputFrame = { plots: Map<string, CoreSpiritPlotPoint[]>; plotStyles: Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>; drawingCount: number; signals: CoreSpiritObject[]; drawings: CoreSpiritObject[]; visuals: CoreSpiritObject[]; labels: Extract<CoreSpiritObject,{kind:'label'}>[]; tables: Extract<CoreSpiritObject,{kind:'table'}>[] };
@@ -18,7 +19,7 @@ export class CoreSpiritOutputDispatcher {
   private tables: Extract<CoreSpiritObject,{kind:'table'}>[] = [];
   private plotStyles = new Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>();
 
-  constructor(bus: CoreEventBus = coreEventBus, drawingStore = new CoreDrawingStore()) {
+  constructor(bus: CoreEventBus = coreEventBus, drawingStore = new CoreDrawingStore(), private readonly eventSystem = new CoreSpiritEventBus(bus)) {
     this.drawings = drawingStore;
     this.drawingDispatcher = new CoreDrawingDispatcher(drawingStore, bus);
   }
@@ -54,6 +55,16 @@ export class CoreSpiritOutputDispatcher {
         if (this.visuals.length > 25000) this.visuals.splice(0, this.visuals.length - 25000);
       } else if (output.kind === 'signal') {
         this.signals.push(output);
+        void this.eventSystem.publish(createSignalEvent({
+          sourceId,
+          runId: sourceId,
+          mode: 'realtime',
+          barIndex: Math.max(0, this.signals.length - 1),
+          timestamp: output.time,
+          sequence: this.signals.length,
+          type: output.type,
+          metadata: output.metadata,
+        })).then(result => this.eventSystem.bridgeSignalToLegacyBus(result.event));
         if (this.signals.length > 10000) this.signals.splice(0, this.signals.length - 10000);
       } else if (output.kind === 'orderIntent') {
         // Execution remains outside the chart renderer. The visual projection shows

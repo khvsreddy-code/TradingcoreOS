@@ -1,0 +1,29 @@
+{
+  "name": "EMA + RSI Cross",
+  "inputs": {
+    "fast": 20,
+    "slow": 50,
+    "rsiLength": 14
+  },
+  "plots": [
+    "emaFast",
+    "emaSlow"
+  ],
+  "signals": [
+    "LONG",
+    "SHORT"
+  ],
+  "modes": [
+    "historical",
+    "replay",
+    "realtime"
+  ],
+  "debugger": [
+    "source",
+    "ast",
+    "ir",
+    "runtimeState",
+    "outputs"
+  ],
+  "executionBoundary": "signals-only"
+}
