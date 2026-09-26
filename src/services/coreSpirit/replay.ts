@@ -1,4 +1,4 @@
-import type { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CoreSpiritMarketBar } from './marketData';
 import { CoreSpiritRuntime } from './runtime';
 import type { CoreSpiritIrProgram } from './ir';
 import { coreSpiritChecksum, makeExecutableArtifact } from './artifact';
@@ -8,7 +8,7 @@ import type { CoreSpiritRuntimeState } from './runtime';
 
 export type CoreSpiritReplayDataset = {
   id: string;
-  bars: HistoricalCandle[];
+  bars: CoreSpiritMarketBar[];
   symbol?: string;
   timeframe?: string;
 };
@@ -69,7 +69,7 @@ export function assertDeterministicReplay(ir: CoreSpiritIrProgram, dataset: Core
   return { first, second };
 }
 
-function buildTrace(outputs: CoreSpiritObject[], state: CoreSpiritRuntimeState, bars: HistoricalCandle[]): CoreSpiritReplayTraceEntry[] {
+function buildTrace(outputs: CoreSpiritObject[], state: CoreSpiritRuntimeState, bars: CoreSpiritMarketBar[]): CoreSpiritReplayTraceEntry[] {
   return bars.map((bar, barIndex) => {
     const time = new Date(bar.timestamp).getTime();
     const barOutputs = outputs.filter(output => Number((output as any).time) === time || Number((output as any).metadata?.barIndex) === barIndex);

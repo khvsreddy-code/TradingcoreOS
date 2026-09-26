@@ -1,3 +1,4 @@
+/** CoreSpirit architecture authority: docs/CORESPIRIT.md */
 export * from './types';
 export * from './ast';
 export * from './lexer';
@@ -48,3 +49,40 @@ export * from './visualScene';
 export * from './visualIdentity';
 export * from './runtimeKernel';
 export * from './modelAbi';
+
+export * from './executionAuthority';
+export * from './explainability';
+export * from './ideRuntimeBridge';
+export * from './marketData';
+export * from './executionHost';
+export * from './executionTarget';
+export * from './scanner';
+export * from './signalEngine';
+export * from './executionAdapter';
+export * from './architectureContract';
+export * from './platformRuntime';
+
+export * from './canonicalTradingModel';
+export * from './visualGraph';
+
+export * from './uiRuntime';
+export * from './visualMetadata';
+
+export * from './visualAdvanced';
+export * from './visualRealtimeEngine';
+
+export * from './declarativeVisual';
+export * from './visualApp';
+export * from './workspaceRuntime';
+export * from './multiSymbolTimeframe';
+
+export * from './modelOrchestration';
+export * from './researchApiContract';
+
+export * from './aiModel';
+export * from './modelVisualization';
+
+export * from './visualDebugger';
+
+export * from './semanticGraph';
+export * from './reactiveEngine';

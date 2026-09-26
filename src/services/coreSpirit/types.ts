@@ -1,4 +1,4 @@
-import { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CoreSpiritMarketBar } from './marketData';
 import { CoreSpiritAst } from './ast';
 
 export type CoreSpiritValue = number | boolean | string | null;
@@ -47,11 +47,11 @@ export type CoreSpiritVisualStyle = {
 };
 
 export type CoreSpiritObject =
-  | { kind: 'series'; time: number; value: number | null; name?: string; seriesId?: string; style?: CoreSpiritPlotStyle }
+  | { kind: 'series'; time: number; value: number | null; name?: string; seriesId?: string; style?: CoreSpiritPlotStyle; metadata?: Record<string, unknown> }
   | { kind: 'marker'; id?: string; time: number; price: number; metadata?: Record<string, unknown> }
   | { kind: 'label'; id: string; time: number; price: number; text: string; position: CoreSpiritLabelPosition; style?: CoreSpiritLabelStyle; metadata?: Record<string, unknown> }
-  | { kind: 'line'; id?: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: Record<string, unknown> }
-  | { kind: 'zone'; id?: string; left: number; right: number; top: number; bottom: number; state?: 'active' | 'mitigated' | 'broken'; style?: CoreSpiritVisualStyle & Record<string, unknown> }
+  | { kind: 'line'; id?: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: Record<string, unknown>; metadata?: Record<string, unknown> }
+  | { kind: 'zone'; id?: string; left: number; right: number; top: number; bottom: number; state?: 'active' | 'mitigated' | 'broken'; style?: CoreSpiritVisualStyle & Record<string, unknown>; metadata?: Record<string, unknown> }
   | { kind: 'box'; id: string; left: number; right: number; top: number; bottom: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'band'; id: string; time: number; top: number | null; bottom: number | null; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'arrow'; id: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
@@ -63,7 +63,8 @@ export type CoreSpiritObject =
   | { kind: 'table'; id: string; position: 'topLeft'|'topCenter'|'topRight'|'middleLeft'|'middleCenter'|'middleRight'|'bottomLeft'|'bottomCenter'|'bottomRight'; row: number; column: number; text: string; style?: CoreSpiritTableStyle; metadata?: Record<string, unknown> }
   | { kind: 'footprint'; id: string; time: number; rows: CoreSpiritFootprintSceneRow[]; tickSize: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'signal'; time: number; type: string; metadata?: Record<string, unknown> }
-  | { kind: 'orderIntent'; id: string; time: number; side: 'long'|'short'|'flat'; confidence: number; stop?: number|null; target?: number|null; tag?: string; metadata?: Record<string, unknown> };
+  | { kind: 'orderIntent'; id: string; time: number; side: 'long'|'short'|'flat'; confidence: number; stop?: number|null; target?: number|null; tag?: string; metadata?: Record<string, unknown> }
+  | { kind: 'scanCandidate'; id: string; time: number; score: number; label?: string; metadata?: Record<string, unknown> };
 
 export type CoreSpiritProgram = {
   version: 1;
@@ -73,7 +74,7 @@ export type CoreSpiritProgram = {
 };
 
 export type CoreSpiritBarExecutionContext = {
-  bars: HistoricalCandle[];
+  bars: CoreSpiritMarketBar[];
   barIndex: number;
   outputs: CoreSpiritObject[];
 };
@@ -143,6 +144,19 @@ export type CoreSpiritDataRequest = {
 
 export type CoreSpiritDataState = 'historical' | 'confirmed' | 'developing' | 'realtime';
 
+export type CoreSpiritDataAlignment = 'last-confirmed' | 'latest' | 'exact';
+
+/** Context timestamps use CoreSpirit execution epoch-seconds, matching ExecutionFrame/time. */
+export type CoreSpiritDataResolutionContext = {
+  asOfTimestamp: number;
+  baseSymbol: string;
+  baseTimeframe: string;
+  executionMode: CoreSpiritExecutionMode;
+  revision: number;
+  alignment: CoreSpiritDataAlignment;
+  maxStalenessMs?: number;
+};
+
 export type CoreSpiritDataSnapshot = {
   value: number | null;
   source: string;
@@ -188,6 +202,8 @@ export type CoreSpiritFootprintScene = {
 /** Host capability boundary for cross-symbol/TF/depth/footprint data. */
 export type CoreSpiritDataResolver = {
   request?: (request: CoreSpiritDataRequest) => CoreSpiritDataSnapshot | Promise<CoreSpiritDataSnapshot>;
+  requestAt?: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext) => CoreSpiritDataSnapshot | Promise<CoreSpiritDataSnapshot>;
+  series?: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext) => number[] | Promise<number[]>;
   /** Optional batched resolver. Hosts should prefer this for scripts requesting several symbols/TFs. */
   requestBatch?: (requests: CoreSpiritDataRequest[]) => CoreSpiritDataSnapshot[] | Promise<CoreSpiritDataSnapshot[]>;
   /** Lower-TF data is now structured instead of being reduced to only the last value. */

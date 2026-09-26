@@ -25,6 +25,17 @@ const KEYWORDS: CoreSpiritCompletion[] = [
   { label: 'false', kind: 'keyword', detail: 'boolean literal' },
 ];
 const SERIES: CoreSpiritCompletion[] = ['open','high','low','close','volume','time'].map(label => ({ label, kind:'series', detail:'built-in market series' }));
+const UI_ROOT: CoreSpiritCompletion[] = [{ label:'ui', kind:'property', detail:'language-driven runtime UI namespace' }];
+const WORKSPACE_ROOTS: CoreSpiritCompletion[] = [
+  { label:'visual', kind:'visual', detail:'declarative renderer-neutral visual namespace' },
+  { label:'app', kind:'property', detail:'declarative trading workspace namespace' },
+];
+const UI_PANEL_MEMBERS: CoreSpiritCompletion[] = [
+  {label:'number',kind:'property',detail:'panel.number(label, value, action?)'},
+  {label:'button',kind:'property',detail:'panel.button(label, action?)'},
+  {label:'toggle',kind:'property',detail:'panel.toggle(label, value, action?)'},
+  {label:'slider',kind:'property',detail:'panel.slider(label, min, max, value?, action?)'},
+];
 const DATA: CoreSpiritCompletion[] = ['request','lowerTf','depthImbalance','footprintDelta','footprintBuy','footprintSell','footprintPoc','footprintVah','footprintVal','footprintRows'].map(label => ({ label, kind:'data', detail:'host-provided market-data capability' }));
 
 function getCoreSpiritUdtInfos(source: string): CoreSpiritUdtInfo[] {
@@ -69,7 +80,7 @@ export function getCoreSpiritTypeInfo(source:string, cursor:number):CoreSpiritTy
 
 function allCompletions(): CoreSpiritCompletion[] {
   const functions = CORE_SPIRIT_STDLIB.map(x => ({ label:x.name, kind: x.name.match(/plot|label|box|zone|band|gradient|shape|heatmap|arrow|polyline|hline|bg|barcolor|table|footprint/) ? 'visual' as const : 'function' as const, detail:`${x.returnType}${x.capability ? ` • ${x.capability}` : ''}` }));
-  return [...KEYWORDS, ...SERIES, ...DATA, ...functions];
+  return [...KEYWORDS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...DATA, ...functions];
 }
 
 export function getCoreSpiritCompletionContext(source: string, cursor = source.length): CoreSpiritCompletionContext {
@@ -87,7 +98,41 @@ export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiri
   const needle = (prefix || context.prefix || '').trim().toLowerCase();
   if (context.mode === 'member') {
     const before=source.slice(0,Math.max(0,context.cursor ?? source.length)); const target=before.match(/([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_]*)$/)?.[1];
+    if (target === 'ui') {
+      const members=[{label:'panel',kind:'property' as const,detail:'ui.panel(title)'}];
+      return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    }
+    if (target === 'visual') {
+      const members = [
+        {label:'line',kind:'function' as const,detail:'visual.line(id,time1,price1,time2,price2,meta?)'},
+        {label:'zone',kind:'function' as const,detail:'visual.zone(id,top,bottom,left?,right?,meta?)'},
+        {label:'liquidityZone',kind:'function' as const,detail:'visual.liquidityZone(id,top,bottom,strength,extend,meta?)'},
+        {label:'heatmap',kind:'function' as const,detail:'visual.heatmap(id,payload,meta?)'},
+        {label:'liquidityMap',kind:'function' as const,detail:'visual.liquidityMap(id,payload,meta?)'},
+        {label:'depth',kind:'function' as const,detail:'visual.depth(id,payload,meta?)'},
+        {label:'volumeProfile',kind:'function' as const,detail:'visual.volumeProfile(id,payload,meta?)'},
+        {label:'footprint',kind:'function' as const,detail:'visual.footprint(id,payload,meta?)'},
+        {label:'structureGraph',kind:'function' as const,detail:'visual.structureGraph(id,payload,meta?)'},
+        {label:'probabilitySurface',kind:'function' as const,detail:'visual.probabilitySurface(id,payload,meta?)'},
+        {label:'regimeBand',kind:'function' as const,detail:'visual.regimeBand(id,payload,meta?)'},
+        {label:'tradePath',kind:'function' as const,detail:'visual.tradePath(id,payload,meta?)'},
+        {label:'modelField',kind:'function' as const,detail:'visual.modelField(id,payload,meta?)'},
+        {label:'replayTrace',kind:'function' as const,detail:'visual.replayTrace(id,payload,meta?)'},
+      ];
+      return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    }
+    if (target === 'app') {
+      const members = [
+        {label:'create',kind:'function' as const,detail:'app.create(title,id?)'},
+        {label:'chart',kind:'function' as const,detail:'app.chart(id?,slot?,sourceRef?)'},
+        {label:'panel',kind:'function' as const,detail:'app.panel(slot,kind,id?,title?,sourceRef?)'},
+        {label:'overlay',kind:'function' as const,detail:'app.overlay(kind,sourceRef?,id?)'},
+        {label:'bind',kind:'function' as const,detail:'app.bind(event,actionId,sourceRef?)'},
+      ];
+      return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    }
     const typeInfo=target ? getCoreSpiritTypeInfo(source, Math.max(0,before.lastIndexOf(target)+target.length)) : null;
+    if (typeInfo?.type === 'ui:panel') return UI_PANEL_MEMBERS.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
     const udtType=typeInfo?.type?.startsWith('udt:') ? typeInfo.type.slice(4) : target;
     const members=udtType ? getCoreSpiritUdtMembers(source,udtType) : [];
     const memberFiltered=members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));

@@ -3,6 +3,7 @@ import { CoreDrawingStore } from '../core/drawing/coreDrawingStore';
 import { CoreDrawingDispatcher } from '../core/drawing/drawingDispatcher';
 import { CoreSpiritObject } from './types';
 import { CoreSpiritEventBus, createSignalEvent } from './eventSystem';
+import { CoreSpiritExplainabilityStore, buildSignalExplanation, explanationFactsFromRuntimeLocals } from './explainability';
 
 export type CoreSpiritPlotPoint = { time: number; value: number | null };
 export type CoreSpiritOutputFrame = { plots: Map<string, CoreSpiritPlotPoint[]>; plotStyles: Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>; drawingCount: number; signals: CoreSpiritObject[]; drawings: CoreSpiritObject[]; visuals: CoreSpiritObject[]; labels: Extract<CoreSpiritObject,{kind:'label'}>[]; tables: Extract<CoreSpiritObject,{kind:'table'}>[] };
@@ -18,13 +19,14 @@ export class CoreSpiritOutputDispatcher {
   private visuals: CoreSpiritObject[] = [];
   private tables: Extract<CoreSpiritObject,{kind:'table'}>[] = [];
   private plotStyles = new Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>();
+  readonly explainability = new CoreSpiritExplainabilityStore();
 
   constructor(bus: CoreEventBus = coreEventBus, drawingStore = new CoreDrawingStore(), private readonly eventSystem = new CoreSpiritEventBus(bus)) {
     this.drawings = drawingStore;
     this.drawingDispatcher = new CoreDrawingDispatcher(drawingStore, bus);
   }
 
-  reset(): void { this.plots.clear(); this.plotStyles.clear(); this.signals = []; this.outputDrawings = []; this.labels = []; this.visuals = []; this.tables = []; this.drawings.clear(); }
+  reset(): void { this.plots.clear(); this.plotStyles.clear(); this.signals = []; this.outputDrawings = []; this.labels = []; this.visuals = []; this.tables = []; this.drawings.clear(); this.explainability.clear(); }
 
   accept(outputs: CoreSpiritObject[], sourceId = 'coreSpirit'): CoreSpiritOutputFrame {
     for (const output of outputs) {
@@ -55,15 +57,33 @@ export class CoreSpiritOutputDispatcher {
         if (this.visuals.length > 25000) this.visuals.splice(0, this.visuals.length - 25000);
       } else if (output.kind === 'signal') {
         this.signals.push(output);
+        const metadata = output.metadata || {};
+        const signalId = String(metadata.signalId || `${sourceId}:signal:${this.signals.length - 1}:${output.time}`);
+        const explanationFacts = Array.isArray(metadata.explanationFacts) ? metadata.explanationFacts as any : explanationFactsFromRuntimeLocals(metadata.runtimeLocals as Record<string, unknown> | undefined);
+        const explanation = buildSignalExplanation({
+          signalId,
+          sourceId,
+          runId: String(metadata.runId || sourceId),
+          symbol: String(metadata.symbol || ''),
+          timeframe: String(metadata.timeframe || ''),
+          barIndex: Number(metadata.barIndex || 0),
+          timestamp: output.time,
+          type: output.type,
+          reason: typeof metadata.reason === 'string' ? metadata.reason : undefined,
+          facts: explanationFacts,
+          decisions: [{ label: 'Signal', status: 'INFO', reason: typeof metadata.reason === 'string' ? metadata.reason : `Signal ${output.type} emitted` }],
+          source: { outputId: typeof metadata.outputId === 'string' ? metadata.outputId : undefined },
+        });
+        this.explainability.record(explanation);
         void this.eventSystem.publish(createSignalEvent({
           sourceId,
-          runId: sourceId,
+          runId: String(metadata.runId || sourceId),
           mode: 'realtime',
-          barIndex: Math.max(0, this.signals.length - 1),
+          barIndex: Number(metadata.barIndex ?? Math.max(0, this.signals.length - 1)),
           timestamp: output.time,
           sequence: this.signals.length,
           type: output.type,
-          metadata: output.metadata,
+          metadata: { ...output.metadata, explainabilityChecksum: explanation.checksum },
         })).then(result => this.eventSystem.bridgeSignalToLegacyBus(result.event));
         if (this.signals.length > 10000) this.signals.splice(0, this.signals.length - 10000);
       } else if (output.kind === 'orderIntent') {

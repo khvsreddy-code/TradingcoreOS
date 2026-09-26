@@ -1,0 +1,233 @@
+import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
+import { getCoreSpiritBuiltin } from './standardLibrary';
+
+export type CoreSpiritGraphNodeKind =
+  | 'input'
+  | 'compute'
+  | 'control'
+  | 'visual'
+  | 'ui'
+  | 'signal'
+  | 'automation'
+  | 'effect';
+
+export type CoreSpiritGraphNode = {
+  id: string;
+  instruction: number;
+  kind: CoreSpiritGraphNodeKind;
+  op: CoreSpiritIrInstruction['op'];
+  name?: string;
+  dest?: string;
+  dependencies: string[];
+  sourceInputs: string[];
+  pure: boolean;
+  effectful: boolean;
+  source?: { start: number; end: number; line: number; column: number };
+};
+
+export type CoreSpiritSemanticGraph = {
+  version: 1;
+  sourceId: string;
+  nodes: CoreSpiritGraphNode[];
+  roots: string[];
+  outputs: string[];
+  checksum: string;
+};
+
+export type CoreSpiritExecutionGraph = {
+  version: 1;
+  order: string[];
+  instructionByNode: Record<string, number>;
+  barriers: string[];
+};
+
+export type CoreSpiritVisualGraph = {
+  version: 1;
+  nodes: string[];
+  dependencies: Record<string, string[]>;
+  layers: Record<'visual'|'ui'|'signal'|'automation', string[]>;
+};
+
+export type CoreSpiritReactivePlan = {
+  version: 1;
+  nodeByInstruction: Record<string, number>;
+  sourceInputs: Record<string, string[]>;
+  dependencies: Record<string, string[]>;
+  dependents: Record<string, string[]>;
+  alwaysRecompute: string[];
+  effectNodes: string[];
+};
+
+export type CoreSpiritGraphBundle = {
+  semantic: CoreSpiritSemanticGraph;
+  execution: CoreSpiritExecutionGraph;
+  visual: CoreSpiritVisualGraph;
+  reactive: CoreSpiritReactivePlan;
+};
+
+const VISUAL_EMITS = new Set([
+  'plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table',
+]);
+const AUTOMATION_EMITS = new Set(['entry','exit','buy','sell']);
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
+}
+
+function stableChecksum(value: unknown): string {
+  const text = stableStringify(value);
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function asSource(program: CoreSpiritIrProgram, instruction: number) {
+  const entry = program.sourceMap.entries.filter(item => item.instruction <= instruction).at(-1);
+  return entry ? { start: entry.start, end: entry.end, line: entry.line, column: entry.column } : undefined;
+}
+
+function builtinPurity(name: string): boolean {
+  if (name.startsWith('ui.') || name.startsWith('visual.') || name.startsWith('app.') || name.startsWith('scan.')) return false;
+  return getCoreSpiritBuiltin(name)?.pure ?? false;
+}
+
+function instructionDest(ins: CoreSpiritIrInstruction): string | undefined {
+  return 'dest' in ins ? ins.dest : undefined;
+}
+
+function instructionName(ins: CoreSpiritIrInstruction): string | undefined {
+  if (ins.op === 'call') return ins.name;
+  if (ins.op === 'emit') return ins.kind;
+  return ins.op;
+}
+
+function registerDeps(ins: CoreSpiritIrInstruction): string[] {
+  switch (ins.op) {
+    case 'move': return [ins.source];
+    case 'unary': return [ins.operand];
+    case 'binary': return [ins.left, ins.right];
+    case 'call': return [...ins.args];
+    case 'index': return [ins.target, ins.index];
+    case 'setLocal': return [ins.source];
+    case 'jumpIfFalse': return [ins.condition];
+    case 'emit': return ins.args.slice(1);
+    default: return [];
+  }
+}
+
+function sourceInputs(ins: CoreSpiritIrInstruction): string[] {
+  if (ins.op === 'loadSeries') return [ins.name];
+  if (ins.op === 'call') {
+    const names = [...(ins.seriesArgs || [])];
+    if (ins.name === 'bar_index') names.push('bar_index');
+    if (ins.name === 'time') names.push('time');
+    if (ins.name === 'request' || ins.name === 'requestBatch' || ins.name === '__member_get') names.push('external-data');
+    return Array.from(new Set(names));
+  }
+  return [];
+}
+
+function classify(ins: CoreSpiritIrInstruction): CoreSpiritGraphNodeKind {
+  if (ins.op === 'emit') {
+    if (VISUAL_EMITS.has(ins.kind)) return 'visual';
+    if (ins.kind === 'signal') return 'signal';
+    if (AUTOMATION_EMITS.has(ins.kind)) return 'automation';
+    return 'effect';
+  }
+  if (ins.op === 'jump' || ins.op === 'jumpIfFalse') return 'control';
+  if (ins.op === 'call') {
+    if (ins.name.startsWith('ui.')) return 'ui';
+    if (ins.name.startsWith('visual.') || ins.name.startsWith('app.')) return 'visual';
+    if (ins.name.startsWith('scan.')) return 'effect';
+  }
+  if (ins.op === 'loadSeries') return 'input';
+  return 'compute';
+}
+
+export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram): CoreSpiritGraphBundle {
+  const producer = new Map<string, string>();
+  const nodes: CoreSpiritGraphNode[] = [];
+  const instructionByNode: Record<string, number> = {};
+
+  for (let instruction = 0; instruction < program.entry.instructions.length; instruction++) {
+    const ins = program.entry.instructions[instruction];
+    const id = `i:${instruction}`;
+    const dependencies = registerDeps(ins).map(reg => producer.get(reg)).filter((value): value is string => Boolean(value));
+    const inputs = sourceInputs(ins);
+    const pure = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'index' || (ins.op === 'call' && builtinPurity(ins.name));
+    const effectful = ins.op === 'emit' || ins.op === 'setLocal' || ins.op === 'jump' || (ins.op === 'call' && !pure);
+    const node: CoreSpiritGraphNode = {
+      id,
+      instruction,
+      kind: classify(ins),
+      op: ins.op,
+      name: instructionName(ins),
+      dest: instructionDest(ins),
+      dependencies: Array.from(new Set(dependencies)),
+      sourceInputs: inputs,
+      pure,
+      effectful,
+      source: asSource(program, instruction),
+    };
+    nodes.push(node);
+    instructionByNode[id] = instruction;
+    if (node.dest) producer.set(node.dest, id);
+    if (ins.op === 'setLocal') producer.set(ins.name, id);
+  }
+
+  const dependents: Record<string, string[]> = {};
+  for (const node of nodes) {
+    for (const dependency of node.dependencies) (dependents[dependency] ||= []).push(node.id);
+  }
+  const outputNodes = nodes.filter(node => ['visual','ui','signal','automation','effect'].includes(node.kind)).map(node => node.id);
+  const roots = nodes.filter(node => node.dependencies.length === 0).map(node => node.id);
+  const barriers = nodes.filter(node => node.effectful).map(node => node.id);
+  const alwaysRecompute = nodes.filter(node => node.effectful || (node.op === 'call' && !node.pure)).map(node => node.id);
+
+  const semantic: CoreSpiritSemanticGraph = {
+    version: 1,
+    sourceId: program.sourceId,
+    nodes,
+    roots,
+    outputs: outputNodes,
+    checksum: stableChecksum(nodes.map(({source, ...node}) => node)),
+  };
+  const execution: CoreSpiritExecutionGraph = {
+    version: 1,
+    order: nodes.map(node => node.id),
+    instructionByNode,
+    barriers,
+  };
+  const layers = {
+    visual: nodes.filter(node => node.kind === 'visual').map(node => node.id),
+    ui: nodes.filter(node => node.kind === 'ui').map(node => node.id),
+    signal: nodes.filter(node => node.kind === 'signal').map(node => node.id),
+    automation: nodes.filter(node => node.kind === 'automation').map(node => node.id),
+  } as const;
+  const visual: CoreSpiritVisualGraph = {
+    version: 1,
+    nodes: [...layers.visual, ...layers.ui, ...layers.signal, ...layers.automation],
+    dependencies: Object.fromEntries(nodes.filter(node => visualNode(node.kind)).map(node => [node.id, [...node.dependencies]])),
+    layers,
+  };
+  const sourceInputsByNode: Record<string, string[]> = Object.fromEntries(nodes.map(node => [node.id, [...node.sourceInputs]]));
+  const dependencies: Record<string, string[]> = Object.fromEntries(nodes.map(node => [node.id, [...node.dependencies]]));
+  const dependentsByNode = Object.fromEntries(nodes.map(node => [node.id, [...(dependents[node.id] || [])]]));
+  const reactive: CoreSpiritReactivePlan = {
+    version: 1,
+    nodeByInstruction: instructionByNode,
+    sourceInputs: sourceInputsByNode,
+    dependencies,
+    dependents: dependentsByNode,
+    alwaysRecompute,
+    effectNodes: barriers,
+  };
+  return { semantic, execution, visual, reactive };
+}
+
+function visualNode(kind: CoreSpiritGraphNodeKind): boolean {
+  return kind === 'visual' || kind === 'ui' || kind === 'signal' || kind === 'automation';
+}

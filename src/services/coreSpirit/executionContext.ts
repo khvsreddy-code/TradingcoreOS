@@ -1,5 +1,6 @@
 import type { CoreSpiritExecutionContext, CoreSpiritExecutionFrame, CoreSpiritExecutionMode } from './types';
 import { resolveSession } from './session';
+import type { CoreSpiritExecutionTarget } from './executionTarget';
 
 export function createCoreSpiritExecutionContext(options: Partial<CoreSpiritExecutionContext> = {}): CoreSpiritExecutionContext {
   const mode: CoreSpiritExecutionMode = options.mode || 'historical';

@@ -60,7 +60,26 @@ export class CoreSpiritParser {
   private term(){let e=this.factor();while(this.match('plus','minus'))e=this.binary(e,this.previous().lexeme,this.factor());return e;}
   private factor(){let e=this.unary();while(this.match('star','slash','percent'))e=this.binary(e,this.previous().lexeme,this.unary());return e;}
   private unary():CoreSpiritAstNode {if(this.match('bang','minus','plus')){const op=this.previous();return {type:'unary',operator:op.lexeme as '!'|'+'|'-',operand:this.unary(),span:this.makeSpan(op,this.previous())};}return this.postfix();}
-  private postfix():CoreSpiritAstNode {let e=this.primary();while(true){if(this.match('leftBracket')){const idx=this.expression();const end=this.consume('rightBracket','Expected ]');e={type:'index',target:e,index:idx,span:this.makeSpanFrom(e,end)};}else if(this.match('dot')){ const member=this.consume('identifier','Expected member name after .'); e={type:'member',target:e,member:member.lexeme,span:this.makeSpanFrom(e,member)}; }else if(this.match('leftParen')){const args:CoreSpiritAstNode[]=[];if(!this.check('rightParen')){do{args.push(this.expression());}while(this.match('comma'));}const end=this.consume('rightParen','Expected )');if(e.type!=='identifier')throw this.error('Only named functions can be called');e={type:'call',name:e.name,args,span:this.makeSpanFrom(e,end)};}else break;}return e;}
+  private postfix():CoreSpiritAstNode {
+    let e=this.primary();
+    while(true){
+      if(this.match('leftBracket')){
+        const idx=this.expression(); const end=this.consume('rightBracket','Expected ]');
+        e={type:'index',target:e,index:idx,span:this.makeSpanFrom(e,end)};
+      } else if(this.match('dot')){
+        const member=this.consume('identifier','Expected member name after .');
+        e={type:'member',target:e,member:member.lexeme,span:this.makeSpanFrom(e,member)};
+      } else if(this.match('leftParen')){
+        const args:CoreSpiritAstNode[]=[];
+        if(!this.check('rightParen')){do{args.push(this.expression());}while(this.match('comma'));}
+        const end=this.consume('rightParen','Expected )');
+        if(e.type==='identifier') e={type:'call',name:e.name,args,span:this.makeSpanFrom(e,end)};
+        else if(e.type==='member') e={type:'memberCall',target:e.target,member:e.member,args,span:this.makeSpanFrom(e,end)};
+        else throw this.error('Only named functions or member functions can be called');
+      } else break;
+    }
+    return e;
+  }
   private primary():CoreSpiritAstNode {if(this.match('number'))return {type:'number',value:this.previous().value as number,span:this.tokenSpan(this.previous())};if(this.match('string'))return {type:'string',value:this.previous().value as string,span:this.tokenSpan(this.previous())};if(this.match('true','false'))return {type:'boolean',value:this.previous().value as boolean,span:this.tokenSpan(this.previous())};if(this.match('null'))return {type:'null',value:null,span:this.tokenSpan(this.previous())};if(this.match('identifier'))return {type:'identifier',name:this.previous().lexeme,span:this.tokenSpan(this.previous())};if(this.match('leftParen')){const e=this.expression();this.consume('rightParen','Expected )');return e;}throw this.error('Expected expression');}
   private binary(left:CoreSpiritAstNode,operator:string,right:CoreSpiritAstNode):CoreSpiritAstNode{return {type:'binary',operator:operator as any,left,right,span:this.makeSpanFrom(left,right)};}
   private synchronize(){ while(!this.check('eof')){ if(this.match('semicolon')) return; if(this.check('rightBrace')) return; this.advance(); } }

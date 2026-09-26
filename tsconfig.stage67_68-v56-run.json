@@ -1,0 +1,4 @@
+{
+  "compilerOptions":{"target":"ES2022","module":"CommonJS","moduleResolution":"Node","strict":true,"skipLibCheck":true,"esModuleInterop":true,"outDir":".stage67_68_v56_cjs","lib":["ES2022","DOM"],"types":[]},
+  "files":["src/services/coreSpirit/stage67_68ExternalModelAbi.test.ts","src/services/coreSpirit/modelOrchestration.ts","src/services/coreSpirit/modelAbi.ts","src/services/coreSpirit/artifact.ts","src/services/coreSpirit/executionTarget.ts"]
+}

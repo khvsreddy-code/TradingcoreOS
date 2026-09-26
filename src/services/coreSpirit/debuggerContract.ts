@@ -3,7 +3,7 @@ export const CORE_SPIRIT_DEBUGGER_VERSION = 1 as const;
 export type DebuggerValue = number | boolean | string | null;
 export interface DebuggerSourceLocation { line: number; column: number; length?: number; }
 export interface DebuggerAstRef { nodeId: string; kind: string; source?: DebuggerSourceLocation; }
-export interface DebuggerIrStep { pc: number; opcode: string; args: readonly unknown[]; astNodeId?: string; source?: DebuggerSourceLocation; }
+export interface DebuggerIrStep { pc: number; opcode: string; args: readonly unknown[]; astNodeId?: string; source?: DebuggerSourceLocation; value?: DebuggerValue; resultRegister?: string; }
 export interface DebuggerStateEntry { name: string; value: DebuggerValue; }
 export interface DebuggerBarSnapshot {
   barIndex: number; timestamp: number; symbol: string; timeframe: string;

@@ -23,6 +23,17 @@ export type CoreSpiritType =
   | 'series<string>'
   | `array<${string}>`
   | `udt:${string}`
+  | 'ui:root'
+  | 'ui:panel'
+  | 'ui:control'
+  | 'visual:root'
+  | 'visual:object'
+  | 'app:root'
+  | 'app:widget'
+  | 'scan:root'
+  | 'scan:candidate'
+  | 'market:ref'
+  | 'timeframe:ref'
   | 'unknown';
 
 export type CoreSpiritNumericScalar = 'int' | 'float' | 'number';

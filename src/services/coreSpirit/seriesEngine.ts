@@ -1,4 +1,4 @@
-import type { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CoreSpiritMarketBar } from './marketData';
 
 export type CoreSpiritSeriesField = 'open'|'high'|'low'|'close'|'volume'|'time';
 export type CoreSpiritSeriesMode = 'historical'|'realtime'|'replay'|'backtest'|'historicalTick';
@@ -6,15 +6,15 @@ export type CoreSpiritSeriesRevision = { barIndex:number; timestamp:number; revi
 
 /** Canonical bar/series cursor. All history indexing goes through this class. */
 export class CoreSpiritSeriesEngine {
-  private bars: HistoricalCandle[] = [];
+  private bars: CoreSpiritMarketBar[] = [];
   private revision = 0;
   private currentBarIndex = -1;
   private currentTimestamp = 0;
   private currentConfirmed = true;
 
-  reset(bars: HistoricalCandle[] = []) { this.bars=[...bars]; this.revision=0; this.currentBarIndex=-1; this.currentTimestamp=0; this.currentConfirmed=true; }
-  setBars(bars: HistoricalCandle[]) { this.bars=[...bars]; }
-  beginBar(index:number, bar:HistoricalCandle, confirmed:boolean, revision:number) {
+  reset(bars: CoreSpiritMarketBar[] = []) { this.bars=[...bars]; this.revision=0; this.currentBarIndex=-1; this.currentTimestamp=0; this.currentConfirmed=true; }
+  setBars(bars: CoreSpiritMarketBar[]) { this.bars=[...bars]; }
+  beginBar(index:number, bar:CoreSpiritMarketBar, confirmed:boolean, revision:number) {
     this.currentBarIndex=index; this.currentTimestamp=Date.parse(String(bar.timestamp)); this.currentConfirmed=confirmed; this.revision=revision;
     if (index < 0) throw new Error('invalid bar index');
   }
@@ -23,7 +23,7 @@ export class CoreSpiritSeriesEngine {
   get currentIndex(){ return this.currentBarIndex; }
   get currentBar(){ return this.bars[this.currentBarIndex]; }
   getBars(){ return this.bars; }
-  replaceCurrent(bar:HistoricalCandle){ if(this.currentBarIndex>=0)this.bars[this.currentBarIndex]=bar; }
+  replaceCurrent(bar:CoreSpiritMarketBar){ if(this.currentBarIndex>=0)this.bars[this.currentBarIndex]=bar; }
 
   value(field:CoreSpiritSeriesField, offset=0): number|null {
     if(!Number.isInteger(offset)||offset<0) throw new Error(`future indexing is not allowed for ${field}[${offset}]`);

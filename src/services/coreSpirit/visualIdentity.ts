@@ -14,7 +14,7 @@ export type CoreSpiritVisualHandle = Readonly<{
 
 export type CoreSpiritVisualPatch = Partial<Pick<
   CoreSpiritSceneNode,
-  'visible' | 'interactive' | 'locked' | 'anchor' | 'anchors' | 'timeRange' | 'style' | 'payload' | 'zIndex' | 'pane'
+  'visible' | 'interactive' | 'locked' | 'anchor' | 'anchors' | 'timeRange' | 'style' | 'payload' | 'metadata' | 'zIndex' | 'pane' | 'parentId' | 'semanticRole' | 'interaction'
 >>;
 
 export type CoreSpiritVisualMutation =
@@ -52,6 +52,7 @@ export class CoreSpiritVisualObjectStore {
       layer: current.layer,
       payload: patch.payload ? { ...patch.payload } : current.payload,
       style: patch.style ? { ...(patch.style as CoreSpiritSceneStyle) } : current.style,
+      metadata: patch.metadata ? { ...patch.metadata } : current.metadata,
     };
     this.nodes.set(id, cloneNode(next));
     return { id, sourceId: this.sourceId, kind: current.kind };

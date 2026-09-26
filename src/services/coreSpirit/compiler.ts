@@ -5,19 +5,24 @@ import { CoreSpiritExecutableArtifact, makeExecutableArtifact } from './artifact
 import { resolveCoreSpiritNames } from './nameResolver';
 import { optimizeCoreSpiritIr } from './optimizer';
 import { validateCoreSpiritIr } from './irContract';
+import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
+import { buildCoreSpiritGraphBundle } from './semanticGraph';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
 export class CoreSpiritCompiler {
-  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit'): CoreSpiritCompileResult {
+  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer } = {}): CoreSpiritCompileResult {
+    const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const names = resolveCoreSpiritNames(ast);
-    const semantic = analyzeCoreSpirit(ast);
+    const semantic = analyzeCoreSpirit(ast, { layer });
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
     if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics };
     const instructions: CoreSpiritIrInstruction[] = [];
     const sourceMapEntries: Array<{instruction:number;start:number;end:number;line:number;column:number;kind:string}> = [];
     const mark=(n:CoreSpiritAstNode,before:number)=>{ if(n.span && instructions.length>before) sourceMapEntries.push({instruction:instructions.length-1,start:n.span.start,end:n.span.end,line:n.span.line,column:n.span.column,kind:n.type}); };
     const locals: string[] = [];
+    const dataRefRegisters = new Map<string, string>();
+    const dataMemberSources = new Map<CoreSpiritAstNode, { ref: string; field: 'open'|'high'|'low'|'close'|'volume'|'time' }>();
     let temp = 0;
 
     const expr = (n: CoreSpiritAstNode): string => {
@@ -39,12 +44,52 @@ export class CoreSpiritCompiler {
         case 'call': {
           const args=n.args.map(expr),dest=`t${temp++}`;
           const seriesArgs=n.args.filter(a=>a.type==='identifier'&&['open','high','low','close','volume','time'].includes(a.name)).map(a=>(a as any).name);
-          instructions.push({op:'call',dest,name:n.name,args,seriesArgs,callId:`${n.name}:${n.span?.start ?? temp}`});
-          if(['plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','signal','entry','exit','alert','webhook'].includes(n.name)) instructions.push({op:'emit',kind:n.name as any,args:[dest,...args],outputId:`${n.name}:${n.span?.start ?? temp}`});
+          const seriesSources = n.args.flatMap(arg => { const source = dataMemberSources.get(arg); return source ? [source] : []; });
+          instructions.push({op:'call',dest,name:n.name,args,seriesArgs,seriesSources:seriesSources.length ? seriesSources : undefined,callId:`${n.name}:${n.span?.start ?? temp}`});
+          if (n.name === 'market' || n.name === 'timeframe') dataRefRegisters.set(n.span ? `${n.span.start}:${n.span.end}` : `temp:${dest}`, dest);
+          if(['plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','signal','entry','exit','buy','sell','alert','webhook'].includes(n.name)) instructions.push({op:'emit',kind:n.name as any,args:[dest,...args],outputId:`${n.name}:${n.span?.start ?? temp}`});
           return dest;
         }
-        case 'member': throw new Error(`Member access '${n.member}' is not executable yet; use it in the type-aware editor or model layer.`);
-        case 'typeDeclaration': return;
+        case 'memberCall': {
+          const rootNamespace = n.target.type === 'identifier' && ['ui','visual','app','scan'].includes(n.target.name) ? n.target.name : undefined;
+          const target = rootNamespace ? undefined : expr(n.target);
+          const args = n.args.map((arg, index) => {
+            const actionPosition = (rootNamespace === 'ui' || rootNamespace === undefined) && ((n.member === 'button' && index === 1) || (n.member === 'toggle' && index === 2) || (n.member === 'number' && index === 2) || (n.member === 'slider' && index === 4));
+            if (actionPosition && arg.type === 'identifier' && !locals.includes(arg.name)) {
+              const actionDest = `t${temp++}`;
+              instructions.push({ op:'const', dest:actionDest, value:arg.name });
+              return actionDest;
+            }
+            return expr(arg);
+          });
+          const dest=`t${temp++}`;
+          const callName = rootNamespace === 'ui'
+            ? `ui.${n.member}`
+            : rootNamespace === 'visual'
+              ? `visual.${n.member}`
+              : rootNamespace === 'app'
+                ? `app.${n.member}`
+                : rootNamespace === 'scan'
+                  ? `scan.${n.member}`
+                  : `ui.panel.${n.member}`;
+          instructions.push({op:'call', dest, name:callName, args:target ? [target,...args] : args, callId:`${rootNamespace || 'member'}:${n.member}:${n.span?.start ?? temp}`});
+          if (rootNamespace === 'scan' && n.member === 'emit') {
+            instructions.push({op:'emit',kind:'scanCandidate',args:[dest,...args],outputId:`scanCandidate:${n.span?.start ?? temp}`});
+          }
+          return dest;
+        }
+        case 'member': {
+          const target = expr(n.target);
+          const isDataRef = n.target.type === 'identifier' && dataRefRegisters.has(n.target.name) || n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe');
+          if (!isDataRef) throw new Error(`Member access '${n.member}' is only executable for market()/timeframe() references.`);
+          const memberDest=`t${temp++}`; const memberName=`t${temp++}`;
+          instructions.push({op:'const',dest:memberName,value:n.member});
+          instructions.push({op:'call',dest:memberDest,name:'__member_get',args:[target,memberName],callId:`member:${n.member}:${n.span?.start ?? temp}`});
+          const refRegister = n.target.type === 'identifier' ? (dataRefRegisters.get(n.target.name) || target) : target;
+          dataMemberSources.set(n,{ ref: refRegister, field: n.member as 'open'|'high'|'low'|'close'|'volume'|'time' });
+          return memberDest;
+        }
+        case 'typeDeclaration': return '';
         case 'index': {
           const target=expr(n.target), index=expr(n.index), dest=`t${temp++}`;
           if(n.target.type==='identifier'&&n.index.type==='number'&&typeof n.index.value==='number'&&Number.isInteger(n.index.value)) instructions.push({op:'loadSeries',dest,name:n.target.name,offset:n.index.value});
@@ -60,7 +105,7 @@ export class CoreSpiritCompiler {
       switch(n.type){
         case 'program': n.body.forEach(stmt); break;
         case 'typeDeclaration': break;
-        case 'let': { const source=expr(n.expression); instructions.push({op:'setLocal',name:n.name,source,series:true}); if(!locals.includes(n.name))locals.push(n.name); break; }
+        case 'let': { const source=expr(n.expression); const isDataRef = n.expression.type === 'call' && (n.expression.name === 'market' || n.expression.name === 'timeframe'); if (isDataRef) dataRefRegisters.set(n.name, source); instructions.push({op:'setLocal',name:n.name,source,series:!isDataRef}); if(!locals.includes(n.name))locals.push(n.name); break; }
         case 'expressionStatement': expr(n.expression); break;
         case 'if': {
           const condition=expr(n.condition), jumpFalse=instructions.length; instructions.push({op:'jumpIfFalse',condition,target:-1});
@@ -74,8 +119,9 @@ export class CoreSpiritCompiler {
     };
     try {
       stmt(ast);
-      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries}};
-      const ir = optimizeCoreSpiritIr(rawIr);
+      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'memberCall':collect(n.target);n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries}};
+      const optimized = optimizeCoreSpiritIr(rawIr);
+      const ir = { ...optimized, graphs: buildCoreSpiritGraphBundle(optimized) } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {

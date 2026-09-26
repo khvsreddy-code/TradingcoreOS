@@ -1,8 +1,12 @@
+import type { CoreSpiritUiState } from './uiRuntime';
+import type { CoreSpiritWorkspaceState } from './workspaceRuntime';
+import type { CoreSpiritMarketBar } from './marketData';
 export type CoreSpiritChartTarget = {
   chartId: string;
   symbol: string;
   timeframe: string;
-  run: (source: string, sourceId?: string) => Promise<{ barsProcessed: number; plotsEmitted: number; signalsEmitted: number; diagnostics: string[] }>;
+  getBars?: () => readonly CoreSpiritMarketBar[];
+  run: (source: string, sourceId?: string) => Promise<{ barsProcessed: number; plotsEmitted: number; signalsEmitted: number; diagnostics: string[]; runId?: string; outputs?: readonly import('./types').CoreSpiritObject[]; state?: { uiState?: CoreSpiritUiState; workspaceState?: CoreSpiritWorkspaceState } }>;
 };
 
 class CoreSpiritChartRegistry {

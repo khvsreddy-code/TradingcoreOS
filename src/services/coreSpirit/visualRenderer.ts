@@ -32,7 +32,10 @@ export type CoreSpiritRendererCapability =
   | "pointer-events"
   | "animation"
   | "high-dpi"
-  | "offscreen";
+  | "offscreen"
+  | "advanced-geometry"
+  | "texture"
+  | "animation-clock";
 
 export interface CoreSpiritRendererTarget {
   id: string;
@@ -52,6 +55,8 @@ export interface CoreSpiritRenderCommand {
   kind?: CoreSpiritSceneKind;
   layer?: CoreSpiritSceneLayer;
   zIndex?: number;
+  interactive?: boolean;
+  actionIds?: readonly string[];
 }
 
 export interface CoreSpiritRenderFrame {
@@ -111,7 +116,7 @@ export class CoreSpiritRendererRegistry {
 export class CoreSpiritHeadlessRenderer implements CoreSpiritRenderer {
   readonly capabilities: CoreSpiritRendererCapabilities = Object.freeze({
     backend: "headless",
-    supports: ["2d", "raster-export", "vector-export", "offscreen"] as const,
+    supports: ["2d", "raster-export", "vector-export", "offscreen", "advanced-geometry", "animation-clock"] as const,
   });
 
   private target?: CoreSpiritRendererTarget;
@@ -134,6 +139,8 @@ export class CoreSpiritHeadlessRenderer implements CoreSpiritRenderer {
         kind: node.kind,
         layer: node.layer,
         zIndex: node.zIndex,
+        interactive: node.interactive,
+        actionIds: [node.interaction?.onClick?.actionId, node.interaction?.onHover?.actionId, node.interaction?.onContextMenu?.actionId].filter((x): x is string => Boolean(x)),
       })),
     };
     return this.lastFrame;
@@ -147,6 +154,8 @@ export class CoreSpiritHeadlessRenderer implements CoreSpiritRenderer {
         kind: node.kind,
         layer: node.layer,
         zIndex: node.zIndex,
+        interactive: node.interactive,
+        actionIds: [node.interaction?.onClick?.actionId, node.interaction?.onHover?.actionId, node.interaction?.onContextMenu?.actionId].filter((x): x is string => Boolean(x)),
       })),
       ...diff.updated.map(node => ({
         op: "upsert" as const,
@@ -154,6 +163,8 @@ export class CoreSpiritHeadlessRenderer implements CoreSpiritRenderer {
         kind: node.kind,
         layer: node.layer,
         zIndex: node.zIndex,
+        interactive: node.interactive,
+        actionIds: [node.interaction?.onClick?.actionId, node.interaction?.onHover?.actionId, node.interaction?.onContextMenu?.actionId].filter((x): x is string => Boolean(x)),
       })),
       ...diff.removed.map(nodeId => ({ op: "remove" as const, nodeId })),
     ];

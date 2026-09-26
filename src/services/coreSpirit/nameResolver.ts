@@ -13,6 +13,7 @@ export type CoreSpiritNameResolution = {
 
 const builtinSeries = new Set(['open','high','low','close','volume','time']);
 const builtinState = new Set(['na','bar_index']);
+const builtinNamespaces = new Set(['ui', 'visual', 'app', 'scan']);
 
 /** Pure lexical/name-resolution pass. It does not infer expression types. */
 export function resolveCoreSpiritNames(ast: CoreSpiritAst): CoreSpiritNameResolution {
@@ -23,7 +24,7 @@ export function resolveCoreSpiritNames(ast: CoreSpiritAst): CoreSpiritNameResolu
   const expression = (n:CoreSpiritAstNode, scope:Map<string, CoreSpiritType>) => {
     switch(n.type) {
       case 'identifier':
-        if (!builtinSeries.has(n.name) && !builtinState.has(n.name) && !scope.has(n.name)) report(n, `Unknown identifier '${n.name}'`, 'UNKNOWN_IDENTIFIER');
+        if (!builtinSeries.has(n.name) && !builtinState.has(n.name) && !builtinNamespaces.has(n.name) && !scope.has(n.name)) report(n, `Unknown identifier '${n.name}'`, 'UNKNOWN_IDENTIFIER');
         break;
       case 'call':
         if (!CORE_SPIRIT_BUILTINS.has(n.name)) report(n, `Unknown function '${n.name}'`, 'UNKNOWN_FUNCTION');
@@ -31,6 +32,14 @@ export function resolveCoreSpiritNames(ast: CoreSpiritAst): CoreSpiritNameResolu
         break;
       case 'index': expression(n.target, scope); expression(n.index, scope); break;
       case 'member': expression(n.target, scope); break;
+      case 'memberCall':
+        if (!(n.target.type === 'identifier' && ['ui','visual','app','scan'].includes(n.target.name))) expression(n.target, scope);
+        n.args.forEach((a, index) => {
+          const actionPosition = (n.member === 'button' && index === 1) || (n.member === 'toggle' && index === 2) || (n.member === 'number' && index === 2) || (n.member === 'slider' && index === 4);
+          if (actionPosition && a.type === 'identifier' && !scope.has(a.name)) return;
+          expression(a, scope);
+        });
+        break;
       case 'unary': expression(n.operand, scope); break;
       case 'binary': expression(n.left, scope); expression(n.right, scope); break;
       case 'number': case 'string': case 'boolean': case 'null': case 'typeDeclaration': break;

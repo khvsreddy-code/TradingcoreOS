@@ -123,6 +123,7 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
      chartId: chartId.current,
      symbol: resolvedInstrumentKey,
      timeframe,
+     getBars: () => [...candles.current] as any,
      run: async (source:string, sourceId='coreSpirit-editor') => {
        const runId=++coreSpiritRunId.current;
        const bars=[...candles.current];
@@ -130,12 +131,12 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
        publishChartLifecycle('updating');
        try {
          const result=await runCoreSpiritInWorker(source,bars,sourceId);
-         if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored']};
+         if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
          coreSpiritOutput.current?.reset();
          coreSpiritOutput.current?.applyObjects(result.outputs);
          coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:Date.now(),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
          publishChartLifecycle('ready');
-         return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics};
+         return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,runId:`${sourceId}:${runId}`,outputs:result.outputs};
        } catch(error) {
          publishChartLifecycle('error');
          throw error;
@@ -501,10 +502,18 @@ export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,lev
  host.current?.addEventListener('pointerdown',onPointerDown); host.current?.addEventListener('pointermove',onPointerMove); host.current?.addEventListener('pointerup',onPointerUp); host.current?.addEventListener('pointercancel',onPointerUp);
  const onChartClick=(param:any)=>{
    const tool=drawingToolRef.current;
-   if(tool==='none'||tool==='crosshair'||!param?.point||!candle.current)return;
+   if(!param?.point||!candle.current)return;
    const rawTime=(c.timeScale() as any).coordinateToTime?.(param.point.x);
    const rawPrice=(candle.current as any).coordinateToPrice?.(param.point.y);
    if(rawTime==null||rawPrice==null||!Number.isFinite(Number(rawPrice)))return;
+   if(tool==='none'){
+     const clickedTime=Number(rawTime);
+     let barIndex=-1; let distance=Number.POSITIVE_INFINITY;
+     candles.current.forEach((bar:any,index:number)=>{const t=Math.floor(Date.parse(bar.timestamp)/1000); const d=Math.abs(t-clickedTime); if(d<distance){distance=d;barIndex=index;}});
+     if(barIndex>=0) window.dispatchEvent(new CustomEvent('TRADINGCORE_CORESPIRIT_DEBUG_BAR',{detail:{chartIndex,symbol:resolvedInstrumentKey,timeframe,barIndex,time:clickedTime,price:Number(rawPrice)}}));
+     return;
+   }
+   if(tool==='crosshair')return;
    const rawPoint={time:Number(rawTime),price:Number(rawPrice)};
    const snapCandidates=candles.current.slice(-250).flatMap((b:any)=>{const t=Math.floor(Date.parse(b.timestamp)/1000);return [{time:t,price:Number(b.open),kind:'ohlc' as const},{time:t,price:Number(b.high),kind:'ohlc' as const},{time:t,price:Number(b.low),kind:'ohlc' as const},{time:t,price:Number(b.close),kind:'ohlc' as const}].filter(x=>Number.isFinite(x.price));});
    const point=snapDataPoint(rawPoint,snapCandidates,coordinateAdapter(),10);

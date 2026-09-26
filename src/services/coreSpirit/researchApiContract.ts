@@ -72,3 +72,32 @@ export interface CoreSpiritResearchClient {
   replay(request: CoreSpiritResearchReplayRequest): Promise<CoreSpiritResearchReplayResult>;
   train(request: CoreSpiritResearchTrainingRequest): Promise<CoreSpiritResearchTrainingResult>;
 }
+
+export interface CoreSpiritResearchModelArtifact {
+  modelId: string;
+  modelVersion: string;
+  implementation: 'python' | 'cpp' | 'rust' | 'wasm' | 'onnx' | 'remote';
+  artifactChecksum: string;
+  inputFeatures: readonly string[];
+  predictionField: string;
+  confidenceField?: string;
+}
+
+export interface CoreSpiritResearchModelInferenceRequest {
+  modelId: string;
+  modelVersion: string;
+  artifactChecksum: string;
+  symbol: string;
+  timeframe: string;
+  timestamp: number;
+  features: Readonly<Record<string, number | readonly number[]>>;
+}
+
+export interface CoreSpiritResearchModelInferenceResult {
+  modelId: string;
+  modelVersion: string;
+  prediction: number | readonly number[];
+  confidence?: number;
+  metadata: Readonly<Record<string, string | number | boolean | null>>;
+  outputChecksum: string;
+}

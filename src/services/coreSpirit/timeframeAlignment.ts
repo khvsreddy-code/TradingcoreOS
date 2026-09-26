@@ -26,3 +26,28 @@ export function groupIntrabars(parentBars: Array<{ timestamp: number; endTimesta
     return { parentTimestamp: parent.timestamp, timeframe: `${parentDurationMs}ms`, points, complete: points.length > 0 && points.at(-1)!.timestamp < end, source: 'aligned-ltf' };
   });
 }
+
+/** Strict higher-timeframe alignment used by native timeframe references. */
+export function alignTimeframeSnapshots(
+  targetTimes: number[],
+  snapshots: CoreSpiritDataSnapshot[],
+  policy: { confirmedOnly?: boolean; maxStalenessMs?: number } = {},
+): CoreSpiritAlignedPoint[] {
+  const ordered = [...snapshots]
+    .filter(x => x.timestamp != null)
+    .sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  let cursor = 0;
+  let current: CoreSpiritDataSnapshot | undefined;
+  return targetTimes.map(timestamp => {
+    while (cursor < ordered.length && Number(ordered[cursor].timestamp) <= timestamp) {
+      const candidate = ordered[cursor++];
+      if (policy.confirmedOnly !== false && candidate.state === 'developing') continue;
+      current = candidate;
+    }
+    if (!current) return { timestamp, value: null, state: 'historical' as CoreSpiritDataState };
+    const stale = policy.maxStalenessMs != null && timestamp - Number(current.timestamp) > policy.maxStalenessMs;
+    return stale
+      ? { timestamp, value: null, state: current.state ?? 'historical', source: current.source }
+      : { timestamp, value: current.value, state: current.state ?? 'historical', source: current.source };
+  });
+}

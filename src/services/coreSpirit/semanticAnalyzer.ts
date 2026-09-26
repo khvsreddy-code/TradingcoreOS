@@ -1,5 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
+import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import {
   CoreSpiritType,
   compatible,
@@ -38,7 +39,8 @@ function liftedNumericReturn(args:CoreSpiritType[]):CoreSpiritType {
   return args.some(isSeriesType) ? 'series<float>' : 'float';
 }
 
-export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
+export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpiritProgramLayer } = {}):CoreSpiritSemanticResult {
+  const layer: CoreSpiritProgramLayer = options.layer || 'script';
   const diagnostics:CoreSpiritDiagnostic[]=[];
   const symbols=new Map<string,CoreSpiritType>();
   const udts=new Map<string,CoreSpiritUdt>();
@@ -63,6 +65,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
 
       case 'member': {
         const target=infer(n.target,scope);
+        const dataFields = new Set(['open','high','low','close','volume','time']);
+        if (target === 'market:ref' || target === 'timeframe:ref') {
+          if (!dataFields.has(n.member)) { report(n,`Data reference has no field '${n.member}'`,'UNKNOWN_DATA_FIELD'); return 'unknown'; }
+          return 'series<float>';
+        }
         if(!target.startsWith('udt:')) {
           report(n,`'${target}' has no fields`,'TYPE_MEMBER_TARGET');
           return 'unknown';
@@ -71,6 +78,93 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
         const field=udt?.fields.find(f=>f.name===n.member);
         if(!field) report(n,`Type '${target.slice(4)}' has no member '${n.member}'`,'UNKNOWN_MEMBER');
         return field?.type || 'unknown';
+      }
+
+      case 'memberCall': {
+        const targetIsUi = n.target.type === 'identifier' && n.target.name === 'ui';
+        const targetIsVisual = n.target.type === 'identifier' && n.target.name === 'visual';
+        const targetIsApp = n.target.type === 'identifier' && n.target.name === 'app';
+        const targetIsScan = n.target.type === 'identifier' && n.target.name === 'scan';
+        const targetType = targetIsUi ? 'ui:root' as CoreSpiritType : targetIsVisual ? 'visual:root' as CoreSpiritType : targetIsApp ? 'app:root' as CoreSpiritType : targetIsScan ? 'scan:root' as CoreSpiritType : infer(n.target, scope);
+        const argTypes = n.args.map(x => infer(x, scope));
+        if (targetType === 'ui:root') {
+          if (n.member !== 'panel') report(n, `ui.${n.member} is not a supported root UI constructor`, 'UI_UNKNOWN_ROOT');
+          if (n.member === 'panel' && n.args.length !== 1) report(n, 'ui.panel expects a title', 'UI_PANEL_ARGS');
+          if (n.member === 'panel' && n.args.length && !compatible('string', argTypes[0])) report(n, 'ui.panel title must be a string', 'UI_PANEL_TITLE');
+          return n.member === 'panel' ? 'ui:panel' : 'unknown';
+        }
+        if (targetType === 'visual:root') {
+          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
+            line: { min:5, max:6, result:'visual:object' },
+            zone: { min:3, max:6, result:'visual:object' },
+            liquidityZone: { min:5, max:6, result:'visual:object' },
+            heatmap: { min:2, max:4, result:'visual:object' },
+            liquidityMap: { min:2, max:4, result:'visual:object' },
+            depth: { min:2, max:4, result:'visual:object' },
+            volumeProfile: { min:2, max:4, result:'visual:object' },
+            footprint: { min:2, max:4, result:'visual:object' },
+            structureGraph: { min:2, max:4, result:'visual:object' },
+            probabilitySurface: { min:2, max:4, result:'visual:object' },
+            regimeBand: { min:2, max:4, result:'visual:object' },
+            tradePath: { min:2, max:4, result:'visual:object' },
+            modelField: { min:2, max:4, result:'visual:object' },
+            replayTrace: { min:2, max:4, result:'visual:object' },
+          };
+          const rule=rules[n.member];
+          if(!rule){ report(n, `visual.${n.member} is not a supported declarative visual constructor`, 'VISUAL_UNKNOWN'); return 'unknown'; }
+          if(n.args.length<rule.min || n.args.length>rule.max) report(n, `visual.${n.member} expects ${rule.min}-${rule.max} arguments`, 'VISUAL_ARGS');
+          if(n.args.length && !compatible('string', argTypes[0])) report(n, `visual.${n.member} id must be a string`, 'VISUAL_ID');
+          return rule.result;
+        }
+        if (targetType === 'scan:root') {
+          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
+            universe: { min:1, max:1, result:'scan:root' },
+            emit: { min:1, max:3, result:'scan:candidate' },
+          };
+          const rule=rules[n.member];
+          if(!rule){ report(n, `scan.${n.member} is not a supported scanner constructor`, 'SCAN_UNKNOWN'); return 'unknown'; }
+          if(n.args.length<rule.min || n.args.length>rule.max) report(n, `scan.${n.member} expects ${rule.min}-${rule.max} arguments`, 'SCAN_ARGS');
+          if(n.member === 'universe' && n.args[0] && !compatible('string', argTypes[0])) report(n, 'scan.universe id must be a string', 'SCAN_UNIVERSE_ID');
+          if(n.member === 'emit' && n.args[0] && !isNumericType(argTypes[0])) report(n, 'scan.emit score must be numeric', 'SCAN_SCORE');
+          return rule.result;
+        }
+        if (targetType === 'app:root') {
+          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
+            create: { min:1, max:2, result:'app:root' },
+            chart: { min:0, max:3, result:'app:widget' },
+            panel: { min:2, max:5, result:'app:widget' },
+            overlay: { min:1, max:3, result:'app:widget' },
+            targets: { min:1, max:8, result:'app:root' },
+            require: { min:1, max:1, result:'null' },
+            bind: { min:2, max:3, result:'null' },
+          };
+          const rule=rules[n.member];
+          if(!rule){ report(n, `app.${n.member} is not a supported workspace constructor`, 'APP_UNKNOWN'); return 'unknown'; }
+          if(n.args.length<rule.min || n.args.length>rule.max) report(n, `app.${n.member} expects ${rule.min}-${rule.max} arguments`, 'APP_ARGS');
+          return rule.result;
+        }
+        if (targetType === 'ui:panel') {
+          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
+            number: { min:2, max:3, result:'ui:control' },
+            button: { min:1, max:2, result:'ui:control' },
+            toggle: { min:2, max:3, result:'ui:control' },
+            slider: { min:3, max:5, result:'ui:control' },
+          };
+          const rule = rules[n.member];
+          if (!rule) { report(n, `UI panel has no method '${n.member}'`, 'UI_UNKNOWN_METHOD'); return 'unknown'; }
+          if (n.args.length < rule.min || n.args.length > rule.max) report(n, `panel.${n.member} expects ${rule.min}-${rule.max} arguments`, 'UI_ARG_COUNT');
+          if (n.args[0] && !compatible('string', argTypes[0])) report(n, `panel.${n.member} label must be a string`, 'UI_LABEL');
+          if (n.member === 'number' && n.args[1] && !isNumericType(argTypes[1])) report(n, 'panel.number value must be numeric', 'UI_NUMBER_VALUE');
+          if (n.member === 'toggle' && n.args[1] && !isBooleanType(argTypes[1])) report(n, 'panel.toggle value must be boolean', 'UI_TOGGLE_VALUE');
+          if (n.member === 'slider' && [1,2].some(i => n.args[i] && !isNumericType(argTypes[i]))) report(n, 'panel.slider min and max must be numeric', 'UI_SLIDER_RANGE');
+          return rule.result;
+        }
+        if (targetType === 'ui:control') {
+          report(n, `UI control '${n.member}' is not a mutable method; use host interaction events`, 'UI_CONTROL_METHOD');
+          return 'unknown';
+        }
+        report(n, `Cannot call member '${n.member}' on '${targetType}'`, 'TYPE_MEMBER_CALL_TARGET');
+        return 'unknown';
       }
 
       case 'index': {
@@ -162,11 +256,27 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
         }
 
         if(n.name==='entry'){
+          if(layer !== 'strategy' && layer !== 'automation') report(n,'entry is not available to script/model programs; emit a signal and let automation create the order intent','CAPABILITY_STRATEGY_EVENTS');
           if(!isBooleanType(argTypes[0])) report(n,'entry first argument must be a boolean condition','TYPE_ENTRY_CONDITION');
           if(!compatible('string',argTypes[1])) report(n,'entry side must be a string','TYPE_ENTRY_SIDE');
         }
-        if(n.name==='exit' && !isBooleanType(argTypes[0]))
-          report(n,'exit first argument must be a boolean condition','TYPE_EXIT_CONDITION');
+        if(n.name==='exit'){
+          if(layer !== 'strategy' && layer !== 'automation') report(n,'exit is not available to script/model programs; emit a signal and let automation create the order intent','CAPABILITY_STRATEGY_EVENTS');
+          if(!isBooleanType(argTypes[0])) report(n,'exit first argument must be a boolean condition','TYPE_EXIT_CONDITION');
+        }
+        if(['buy','sell'].includes(n.name) && layer !== 'automation')
+          report(n,`${n.name} is automation-only and creates an order intent, never a broker order`,'CAPABILITY_ORDER_INTENTS');
+
+        if(n.name==='webhook' && layer !== 'automation')
+          report(n,'webhook delivery is host-owned; only automation may request an event delivery through policy','CAPABILITY_WEBHOOK');
+
+        if(n.name==='meta') {
+          if (n.args.length % 2 !== 0) report(n,'meta expects key/value pairs','META_PAIRS');
+          for(let i=0;i<n.args.length;i+=2) {
+            if(n.args[i] && !compatible('string',argTypes[i])) report(n.args[i],'meta keys must be strings','META_KEY');
+          }
+          return 'unknown';
+        }
 
         if(['plot','marker','line','zone','box','band','gradient','arrow','shape','heatmap','polyline','hline'].includes(n.name) &&
           n.args.length>0 && !isNumericType(argTypes[0]))
@@ -305,6 +415,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst):CoreSpiritSemanticResult {
 
       case 'member':
         visit(n.target,scope);
+        infer(n,scope);
+        break;
+
+      case 'memberCall':
+        if (!(n.target.type === 'identifier' && ['ui','visual','app','scan'].includes(n.target.name))) visit(n.target,scope);
+        n.args.forEach((x,index)=>{
+          const actionPosition = (n.member === 'button' && index === 1) || (n.member === 'toggle' && index === 2) || (n.member === 'number' && index === 2) || (n.member === 'slider' && index === 4);
+          if (actionPosition && x.type === 'identifier' && !scope.has(x.name)) return;
+          visit(x,scope);
+        });
         infer(n,scope);
         break;
 

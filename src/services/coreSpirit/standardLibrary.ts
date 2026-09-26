@@ -44,6 +44,8 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'falling', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
   // Market
   { name:'vwap', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'market' },
+  { name:'market', minArgs:1, maxArgs:1, returnType:'market:ref', pure:false, category:'market', capability:'market' },
+  { name:'timeframe', minArgs:1, maxArgs:1, returnType:'timeframe:ref', pure:false, category:'market', capability:'market' },
   // State
   { name:'nz', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'state' },
   { name:'na', minArgs:1, maxArgs:1, returnType:'boolean', pure:true, category:'state' },
@@ -51,6 +53,7 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'time', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'state' },
   // Output / strategy primitives
   { name:'plot', minArgs:1, maxArgs:5, returnType:'event', pure:true, category:'output' },
+  { name:'meta', minArgs:2, maxArgs:undefined, returnType:'unknown', pure:true, category:'output' },
   { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'output' },
 ];
 
@@ -99,7 +102,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'marker', minArgs:1, maxArgs:4, returnType:'event', pure:true, category:'extension' },
   { name:'label', minArgs:1, maxArgs:8, returnType:'event', pure:true, category:'extension' },
   { name:'labelAt', minArgs:2, maxArgs:9, returnType:'event', pure:true, category:'extension' },
-  { name:'line', minArgs:4, maxArgs:5, returnType:'event', pure:true, category:'extension' },
+  { name:'line', minArgs:4, maxArgs:7, returnType:'event', pure:true, category:'extension' },
   { name:'zone', minArgs:4, maxArgs:8, returnType:'event', pure:true, category:'extension' },
   { name:'box', minArgs:4, maxArgs:8, returnType:'event', pure:true, category:'extension' },
   { name:'band', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension' },
@@ -115,6 +118,8 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'table', minArgs:4, maxArgs:7, returnType:'event', pure:true, category:'extension' },
   { name:'entry', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension' },
   { name:'exit', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension' },
+  { name:'buy', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension' },
+  { name:'sell', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension' },
   { name:'alert', minArgs:0, returnType:'event', pure:false, category:'extension', capability:'alert' },
   { name:'webhook', minArgs:1, returnType:'event', pure:false, category:'extension', capability:'webhook' },
 ];

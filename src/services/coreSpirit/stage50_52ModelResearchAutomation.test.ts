@@ -5,6 +5,7 @@ import {
 } from "./modelAbi";
 import { CoreSpiritModelRuntime } from "./modelRuntime";
 import { CoreSpiritAutomationOrchestrator } from "./automationPipeline";
+import { createAutomationLifecycle, transitionAutomationLifecycle } from "./automationLifecycle";
 import type { CoreSpiritStrategyEvent } from "./strategyContract";
 
 (async () => {
@@ -88,6 +89,11 @@ if (first.outputChecksum !== second.outputChecksum) throw new Error("model resul
 if (first.outputs.probability_up.data[0] !== 0.84) throw new Error("model output mismatch");
 
 const orderLog: string[] = [];
+let lifecycle = createAutomationLifecycle('ema-rsi-live', context.timestamp);
+lifecycle = transitionAutomationLifecycle(lifecycle, 'VALIDATE', 'user', 'contract validation', context.timestamp + 1);
+lifecycle = transitionAutomationLifecycle(lifecycle, 'ARM', 'user', 'paper checks complete', context.timestamp + 2);
+lifecycle = transitionAutomationLifecycle(lifecycle, 'ACTIVATE_LIVE', 'user', 'explicit live activation', context.timestamp + 3);
+
 const automation = new CoreSpiritAutomationOrchestrator(
   {
     evaluate: async intent => ({
@@ -113,6 +119,8 @@ const automation = new CoreSpiritAutomationOrchestrator(
   {
     allowLiveExecution: true,
     maxQuantityPerIntent: 10,
+    automationId: 'ema-rsi-live',
+    lifecycle,
   },
 );
 
@@ -134,6 +142,9 @@ const result = await automation.handleStrategyEvent(event, 2, context.timestamp 
 
 if (!result.execution?.accepted) throw new Error("automation execution boundary failed");
 if (orderLog.join("|") !== "buy:2") throw new Error("automation order intent mismatch");
+
+const paperLifecycle = transitionAutomationLifecycle(createAutomationLifecycle('ema-rsi-paper', context.timestamp), 'VALIDATE', 'user', 'validated', context.timestamp + 1);
+const paperLifecycle2 = transitionAutomationLifecycle(paperLifecycle, 'ENTER_PAPER', 'user', 'paper test', context.timestamp + 2);
 
 const dryRun = new CoreSpiritAutomationOrchestrator(
   {
@@ -157,6 +168,8 @@ const dryRun = new CoreSpiritAutomationOrchestrator(
   {
     allowLiveExecution: false,
     maxQuantityPerIntent: 10,
+    automationId: 'ema-rsi-paper',
+    lifecycle: paperLifecycle2,
   },
 );
 

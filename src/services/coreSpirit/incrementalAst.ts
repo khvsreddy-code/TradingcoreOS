@@ -21,6 +21,7 @@ function collectReusable(ast: CoreSpiritAst, source: string) {
       case 'unary': visit(n.operand); break;
       case 'binary': visit(n.left); visit(n.right); break;
       case 'call': n.args.forEach(visit); break;
+      case 'memberCall': visit(n.target); n.args.forEach(visit); break;
       case 'index': visit(n.target); visit(n.index); break;
       case 'member': visit(n.target); break;
       case 'typeDeclaration': break;
@@ -44,6 +45,7 @@ function reuseTree(next: CoreSpiritAst, previous: CoreSpiritAst, previousSource:
       case 'unary': return { ...n, operand: visit(n.operand) };
       case 'binary': return { ...n, left: visit(n.left), right: visit(n.right) };
       case 'call': return { ...n, args: n.args.map(visit) };
+      case 'memberCall': return { ...n, target: visit(n.target), args: n.args.map(visit) };
       case 'index': return { ...n, target: visit(n.target), index: visit(n.index) };
       case 'member': return { ...n, target: visit(n.target) };
       default: return n;

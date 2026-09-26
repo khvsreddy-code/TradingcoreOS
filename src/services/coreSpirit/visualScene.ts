@@ -10,6 +10,8 @@
 import type { CoreSpiritObject } from './types';
 import { coreSpiritChecksum } from './artifact';
 import type { CoreSpiritVisualPatch } from './visualIdentity';
+import { normalizeCoreSpiritVisualMetadata } from './visualMetadata';
+import type { CoreSpiritAdvancedVisualObject } from './visualAdvanced';
 
 export const CORE_SPIRIT_SCENE_VERSION = 1 as const;
 
@@ -17,6 +19,9 @@ export type CoreSpiritSceneLayer =
   | 'price'
   | 'indicator'
   | 'structure'
+  | 'liquidity'
+  | 'volume'
+  | 'depth'
   | 'order'
   | 'data'
   | 'ui';
@@ -44,12 +49,36 @@ export type CoreSpiritSceneKind =
   | 'signal'
   | 'orderIntent'
   | 'table'
-  | 'panel';
+  | 'panel'
+  | 'liquidityZone'
+  | 'heatmap'
+  | 'volumeProfile'
+  | 'depthMap'
+  | 'interactivePanel'
+  | 'probabilitySurface'
+  | 'regimeBand'
+  | 'tradePath'
+  | 'structureGraph'
+  | 'replayTrace'
+  | 'liquidityMap'
+  | 'modelField';
 
 export type CoreSpiritSceneAnchor = {
   time?: number;
   price?: number;
 };
+
+export type CoreSpiritSceneAction = Readonly<{
+  kind: 'inspect' | 'focus' | 'openPanel' | 'emitEvent';
+  actionId: string;
+  params?: Readonly<Record<string, unknown>>;
+}>;
+
+export type CoreSpiritSceneInteraction = Readonly<{
+  onClick?: CoreSpiritSceneAction;
+  onHover?: CoreSpiritSceneAction;
+  onContextMenu?: CoreSpiritSceneAction;
+}>;
 
 export type CoreSpiritSceneStyle = Record<string, unknown>;
 
@@ -68,6 +97,10 @@ export type CoreSpiritSceneNode = {
   timeRange?: { start: number; end: number };
   style?: CoreSpiritSceneStyle;
   payload: Readonly<Record<string, unknown>>;
+  metadata?: Readonly<Record<string, string | number | boolean | null>>;
+  parentId?: string;
+  semanticRole?: string;
+  interaction?: CoreSpiritSceneInteraction;
 };
 
 export type CoreSpiritSceneIdentity = {
@@ -99,6 +132,10 @@ export type CoreSpiritSceneQuota = {
   maxTables: number;
   maxPointsPerPolyline: number;
   maxPayloadBytes: number;
+  maxAdvancedCells: number;
+  maxDepthLevels: number;
+  maxGraphNodes: number;
+  maxGraphEdges: number;
 };
 
 export const CORE_SPIRIT_DEFAULT_SCENE_QUOTA: Readonly<CoreSpiritSceneQuota> = Object.freeze({
@@ -107,6 +144,10 @@ export const CORE_SPIRIT_DEFAULT_SCENE_QUOTA: Readonly<CoreSpiritSceneQuota> = O
   maxTables: 1000,
   maxPointsPerPolyline: 5000,
   maxPayloadBytes: 1_500_000,
+  maxAdvancedCells: 250_000,
+  maxDepthLevels: 20_000,
+  maxGraphNodes: 20_000,
+  maxGraphEdges: 40_000,
 });
 
 const LAYER_BY_KIND: Readonly<Record<CoreSpiritSceneKind, CoreSpiritSceneLayer>> = {
@@ -131,6 +172,18 @@ const LAYER_BY_KIND: Readonly<Record<CoreSpiritSceneKind, CoreSpiritSceneLayer>>
   orderIntent: 'order',
   table: 'ui',
   panel: 'ui',
+  liquidityZone: 'liquidity',
+  heatmap: 'data',
+  volumeProfile: 'volume',
+  depthMap: 'depth',
+  interactivePanel: 'ui',
+  probabilitySurface: 'data',
+  regimeBand: 'indicator',
+  tradePath: 'order',
+  structureGraph: 'structure',
+  replayTrace: 'data',
+  liquidityMap: 'liquidity',
+  modelField: 'data',
 };
 
 function payloadFromObject(output: CoreSpiritObject): Readonly<Record<string, unknown>> {
@@ -142,6 +195,7 @@ function payloadFromObject(output: CoreSpiritObject): Readonly<Record<string, un
   delete copy.seriesId;
   delete copy.name;
   delete copy.style;
+  delete copy.metadata;
   return copy;
 }
 
@@ -193,14 +247,17 @@ export function coreSpiritObjectToSceneNode(
   const kind = output.kind as CoreSpiritSceneKind;
   const time = 'time' in output ? Number((output as { time?: number }).time ?? 0) : undefined;
   const price = 'price' in output ? Number((output as { price?: number }).price ?? 0) : undefined;
+  const id = fallbackId(output, sourceId, index);
+  const metadata = normalizeCoreSpiritVisualMetadata((output as { metadata?: Readonly<Record<string, unknown>> }).metadata);
+  const interactive = Boolean(metadata);
   return {
-    id: fallbackId(output, sourceId, index),
+    id,
     kind,
     layer: LAYER_BY_KIND[kind],
     pane,
     zIndex: kind === 'signal' || kind === 'orderIntent' ? 700 : kind === 'label' || kind === 'table' ? 900 : 100,
     visible: true,
-    interactive: false,
+    interactive,
     locked: true,
     sourceId,
     anchor: time != null || price != null ? { time, price } : undefined,
@@ -208,6 +265,8 @@ export function coreSpiritObjectToSceneNode(
     timeRange: timeRangeFromObject(output),
     style: styleFromObject(output),
     payload: payloadFromObject(output),
+    metadata,
+    interaction: metadata ? { onHover: { kind:'inspect', actionId:'visual.inspect', params:{ objectId:id } } } : undefined,
   };
 }
 
@@ -228,6 +287,72 @@ export function patchCoreSpiritSceneNode(
     anchor: patch.anchor ? { ...patch.anchor } : node.anchor,
     anchors: patch.anchors ? patch.anchors.map(anchor => ({ ...anchor })) : node.anchors,
     timeRange: patch.timeRange ? { ...patch.timeRange } : node.timeRange,
+    parentId: 'parentId' in patch ? patch.parentId : node.parentId,
+    semanticRole: 'semanticRole' in patch ? patch.semanticRole : node.semanticRole,
+    interaction: 'interaction' in patch ? patch.interaction : node.interaction,
+  };
+}
+
+
+export function coreSpiritAdvancedVisualToSceneNode(
+  visual: CoreSpiritAdvancedVisualObject,
+  pane: CoreSpiritScenePane = 'main',
+): CoreSpiritSceneNode {
+  const kind = visual.kind;
+  const timeRange = visual.timeRange ? { ...visual.timeRange } : undefined;
+  return {
+    id: visual.id,
+    kind: kind as CoreSpiritSceneKind,
+    layer: LAYER_BY_KIND[kind as CoreSpiritSceneKind],
+    pane,
+    zIndex: visual.zIndex ?? (kind === 'tradePath' ? 720 : 150),
+    visible: true,
+    interactive: Boolean(visual.metadata),
+    locked: true,
+    sourceId: visual.sourceId,
+    timeRange,
+    payload: { ...visual.payload },
+    metadata: visual.metadata,
+    semanticRole: visual.semanticRole,
+    interaction: visual.metadata
+      ? { onHover: { kind: 'inspect', actionId: 'visual.inspect', params: { objectId: visual.id } } }
+      : undefined,
+  };
+}
+
+export function buildCoreSpiritSceneFromAdvancedVisuals(
+  identity: CoreSpiritSceneIdentity,
+  visuals: readonly CoreSpiritAdvancedVisualObject[],
+  sourceId = 'advanced',
+  revision = 0,
+): CoreSpiritScene {
+  const normalized = visuals.map(visual => coreSpiritAdvancedVisualToSceneNode({ ...visual, sourceId: visual.sourceId || sourceId }, identity.pane));
+  return buildCoreSpiritSceneFromNodes(identity, normalized, revision);
+}
+
+export function buildCoreSpiritSceneFromNodes(
+  identity: CoreSpiritSceneIdentity,
+  nodes: readonly CoreSpiritSceneNode[],
+  revision = 0,
+): CoreSpiritScene {
+  const structural = { version: CORE_SPIRIT_SCENE_VERSION, identity, revision, nodes: nodes.map(cloneSceneNodeForGraph) };
+  return { ...structural, checksum: coreSpiritChecksum(structural) };
+}
+
+function cloneSceneNodeForGraph(node: CoreSpiritSceneNode): CoreSpiritSceneNode {
+  return {
+    ...node,
+    anchor: node.anchor ? { ...node.anchor } : undefined,
+    anchors: node.anchors?.map(anchor => ({ ...anchor })),
+    timeRange: node.timeRange ? { ...node.timeRange } : undefined,
+    style: node.style ? { ...node.style } : undefined,
+    payload: { ...node.payload },
+    metadata: node.metadata ? { ...node.metadata } : undefined,
+    interaction: node.interaction ? {
+      onClick: node.interaction.onClick ? { ...node.interaction.onClick, params: node.interaction.onClick.params ? { ...node.interaction.onClick.params } : undefined } : undefined,
+      onHover: node.interaction.onHover ? { ...node.interaction.onHover, params: node.interaction.onHover.params ? { ...node.interaction.onHover.params } : undefined } : undefined,
+      onContextMenu: node.interaction.onContextMenu ? { ...node.interaction.onContextMenu, params: node.interaction.onContextMenu.params ? { ...node.interaction.onContextMenu.params } : undefined } : undefined,
+    } : undefined,
   };
 }
 
@@ -250,23 +375,73 @@ export function validateCoreSpiritScene(
   if (scene.version !== CORE_SPIRIT_SCENE_VERSION) errors.push('unsupported scene version');
   if (scene.nodes.length > quota.maxNodes) errors.push(`scene exceeds maxNodes (${quota.maxNodes})`);
   const ids = new Set<string>();
+  const parentById = new Map<string, string | undefined>();
   let labels = 0;
   let tables = 0;
+  let advancedCells = 0;
+  let depthLevels = 0;
+  let graphNodes = 0;
+  let graphEdges = 0;
   for (const node of scene.nodes) {
     if (ids.has(node.id)) errors.push(`duplicate scene node id '${node.id}'`);
     ids.add(node.id);
+    parentById.set(node.id, node.parentId);
+    if (node.parentId && node.parentId === node.id) errors.push(`scene node '${node.id}' cannot parent itself`);
+    if (containsFunction(node)) errors.push(`scene node '${node.id}' contains a non-serializable function`);
     if (!Number.isInteger(node.zIndex)) errors.push(`scene node '${node.id}' has non-integer zIndex`);
     if (node.kind === 'label') labels += 1;
     if (node.kind === 'table') tables += 1;
     if (node.kind === 'polyline' && (node.anchors?.length ?? 0) > quota.maxPointsPerPolyline) {
       errors.push(`scene node '${node.id}' exceeds polyline point quota`);
     }
+    const payload = node.payload as Record<string, unknown>;
+    if (node.kind === 'heatmap' || node.kind === 'probabilitySurface') {
+      const grid = payload.grid as { columns?: number; rows?: number; values?: unknown[] } | undefined;
+      const cells = (grid?.values?.length ?? 0);
+      advancedCells += cells;
+      if (cells > quota.maxAdvancedCells) errors.push(`scene node '${node.id}' exceeds advanced cell quota`);
+    }
+    if (node.kind === 'depthMap' || node.kind === 'footprint') {
+      const levels = ((payload.levels ?? payload.rows) as unknown[] | undefined)?.length ?? 0;
+      depthLevels += levels;
+      if (levels > quota.maxDepthLevels) errors.push(`scene node '${node.id}' exceeds depth-level quota`);
+    }
+    if (node.kind === 'structureGraph') {
+      graphNodes += ((payload.nodes as unknown[] | undefined)?.length ?? 0);
+      graphEdges += ((payload.edges as unknown[] | undefined)?.length ?? 0);
+    }
+  }
+  for (const node of scene.nodes) {
+    let cursor = node.parentId;
+    const seen = new Set<string>();
+    while (cursor) {
+      if (seen.has(cursor)) { errors.push(`scene graph contains a parent cycle at '${node.id}'`); break; }
+      seen.add(cursor);
+      if (!parentById.has(cursor)) { errors.push(`scene node '${node.id}' references missing parent '${cursor}'`); break; }
+      cursor = parentById.get(cursor);
+    }
   }
   if (labels > quota.maxLabels) errors.push(`scene exceeds maxLabels (${quota.maxLabels})`);
   if (tables > quota.maxTables) errors.push(`scene exceeds maxTables (${quota.maxTables})`);
+  if (advancedCells > quota.maxAdvancedCells) errors.push(`scene exceeds maxAdvancedCells (${quota.maxAdvancedCells})`);
+  if (depthLevels > quota.maxDepthLevels) errors.push(`scene exceeds maxDepthLevels (${quota.maxDepthLevels})`);
+  if (graphNodes > quota.maxGraphNodes) errors.push(`scene exceeds maxGraphNodes (${quota.maxGraphNodes})`);
+  if (graphEdges > quota.maxGraphEdges) errors.push(`scene exceeds maxGraphEdges (${quota.maxGraphEdges})`);
   const bytes = new TextEncoder().encode(JSON.stringify(scene.nodes)).byteLength;
   if (bytes > quota.maxPayloadBytes) errors.push(`scene payload exceeds maxPayloadBytes (${quota.maxPayloadBytes})`);
   return errors;
+}
+
+function containsFunction(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (typeof value === 'function') return true;
+  if (!value || typeof value !== 'object') return false;
+  const objectValue = value as object;
+  if (seen.has(objectValue)) return false;
+  seen.add(objectValue);
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    if (containsFunction(child, seen)) return true;
+  }
+  return false;
 }
 
 export function diffCoreSpiritScenes(previous: CoreSpiritScene, next: CoreSpiritScene): CoreSpiritSceneDiff {
@@ -300,4 +475,6 @@ export const CORE_SPIRIT_VISUAL_PRIMITIVES = Object.freeze([
   'candleLayer', 'heikinAshi', 'customBars',
   'line', 'hline', 'zone', 'box', 'band', 'arrow', 'shape', 'polyline',
   'label', 'background', 'barcolor', 'footprint', 'marker', 'table', 'panel',
+  'liquidityZone', 'heatmap', 'volumeProfile', 'depthMap', 'interactivePanel',
+  'probabilitySurface', 'regimeBand', 'tradePath', 'structureGraph', 'replayTrace',
 ] as const);

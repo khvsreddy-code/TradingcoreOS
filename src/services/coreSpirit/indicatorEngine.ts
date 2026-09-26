@@ -1,4 +1,4 @@
-import type { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CoreSpiritMarketBar } from './marketData';
 import { emaStep, rsiFromAverages, sma, highest, lowest, trueRange } from './indicatorKernel';
 
 /** Single deterministic primitive indicator implementation shared by CoreSpirit/runtime hosts. */
@@ -47,7 +47,7 @@ export function calculateNativeIndicator(name:string,args:unknown[],history:numb
   }
 }
 
-export function calculateNativeAtr(bar:Pick<HistoricalCandle,'high'|'low'>,previousClose:number|null,period:number,ctx:NativeIndicatorContext):number|null {
+export function calculateNativeAtr(bar:Pick<CoreSpiritMarketBar,'high'|'low'>,previousClose:number|null,period:number,ctx:NativeIndicatorContext):number|null {
   const p=Math.max(1,Math.floor(period)); const tr=trueRange(Number(bar.high),Number(bar.low),previousClose); if(tr==null)return null;
   const trKey=`atr:${p}:tr`, atrKey=`atr:${p}`; ctx.push(trKey,tr); const trHistory=ctx.state[trKey]||[]; if(trHistory.length<p)return null;
   const previous=Number(ctx.state[atrKey]?.at(-1)); const value=Number.isFinite(previous)?((p-1)*previous+tr)/p:trHistory.slice(-p).reduce((a,b)=>a+b,0)/p;

@@ -1,9 +1,9 @@
-import { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CoreSpiritMarketBar } from './marketData';
 import { CoreSpiritObject } from './types';
 
 type WorkerResult = { outputs: CoreSpiritObject[]; diagnostics: string[]; state?: unknown };
 
-export async function runCoreSpiritInWorker(source: string, bars: HistoricalCandle[], sourceId: string): Promise<WorkerResult> {
+export async function runCoreSpiritInWorker(source: string, bars: CoreSpiritMarketBar[], sourceId: string): Promise<WorkerResult> {
   if (typeof Worker === 'undefined') {
     const { executeCoreSpirit } = await import('./coreSpiritPipeline');
     const result = executeCoreSpirit(source, bars, sourceId);

@@ -1,5 +1,9 @@
 /**
- * CoreSpirit Model ABI — Stage 49.
+ * CoreSpirit Model ABI — Stage 49 / transport ABI v1.
+ *
+ * v55+ adds a strict semantic model profile in modelOrchestration.ts. This file
+ * remains the stable low-level transport shape so older model hosts can stay
+ * compatible while new models get typed feature/context/output guarantees.
  *
  * Models are external compute capabilities consumed by the same CoreSpirit
  * runtime. A model may be implemented in WASM, a host-native process/RPC
@@ -37,6 +41,7 @@ export interface CoreSpiritModelManifest {
 export type CoreSpiritModelCapability =
   | 'read-series'
   | 'read-features'
+  | 'read-market-state'
   | 'write-output'
   | 'persistent-state';
 

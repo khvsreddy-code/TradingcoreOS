@@ -18,6 +18,50 @@ class Transport(Protocol):
 
 
 @dataclass(frozen=True)
+class ModelResult:
+    model_id: str
+    model_version: str
+    prediction: Any
+    confidence: float | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    output_checksum: str = ""
+
+
+class ModelHandle:
+    """Research-side handle for a registered CoreSpirit external model.
+
+    The handle orchestrates inference through the configured transport; it does
+    not execute broker orders and does not embed the production CoreSpirit VM.
+    """
+
+    def __init__(self, client: "CoreSpiritClient", model_id: str, model_version: str):
+        self._client = client
+        self.model_id = model_id
+        self.model_version = model_version
+
+    def predict(self, *, symbol: str, timeframe: str, timestamp: int, features: Mapping[str, Any]) -> ModelResult:
+        infer = getattr(self._client._transport, "infer_model", None)
+        if infer is None:
+            raise RuntimeError("research transport does not implement infer_model()")
+        raw = infer({
+            "modelId": self.model_id,
+            "modelVersion": self.model_version,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "timestamp": timestamp,
+            "features": dict(features),
+        })
+        return ModelResult(
+            model_id=str(raw["modelId"]),
+            model_version=str(raw["modelVersion"]),
+            prediction=raw.get("prediction"),
+            confidence=float(raw["confidence"]) if raw.get("confidence") is not None else None,
+            metadata=dict(raw.get("metadata", {})),
+            output_checksum=str(raw.get("outputChecksum", "")),
+        )
+
+
+@dataclass(frozen=True)
 class ReplayResult:
     run_id: str
     artifact_checksum: str
@@ -111,6 +155,9 @@ class CoreSpiritClient:
     def __init__(self, transport: Transport):
         self._transport = transport
         self.market = Market(transport)
+
+    def model(self, model_id: str, model_version: str) -> ModelHandle:
+        return ModelHandle(self, model_id, model_version)
 
     def load(self, artifact: str) -> CoreSpiritModel:
         info = self._transport.load(artifact)
