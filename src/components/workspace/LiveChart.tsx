@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { TradingViewAdvancedChart } from './TradingViewAdvancedChart';
 import { ChartLifecycle } from '../../services/core/chart/chartLifecycle';
 import { ChartUpdateScheduler } from '../../services/core/chart/chartUpdateScheduler';
 import { CoreDrawing, normalizeCoreDrawings } from '../../services/core/drawing/coreDrawing';
@@ -94,7 +93,7 @@ function markerForAutomation(a:AutomationConfig,c:HistoricalCandle[]):{time:numb
 
 const line=(chart:IChartApi,color:string,width=1,lineStyle:0|1|2=0)=>chart.addSeries(LineSeries,{color,lineWidth:width,lineStyle,priceLineVisible:false,lastValueVisible:true});
 
-function LegacyLiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=true}:Props){
+export function LiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=true}:Props){
  const resolvedInstrumentKey=canonicalInstrumentKey(brokerId,instrumentKey);
  const host=useRef<HTMLDivElement>(null),oscHost=useRef<HTMLDivElement>(null); const chart=useRef<IChartApi>(); const oscChart=useRef<IChartApi>(); const candle=useRef<ISeriesApi<'Candlestick'>>(); const closeLine=useRef<ISeriesApi<'Line'>>(); const volume=useRef<ISeriesApi<'Histogram'>>(); const indicatorSeries=useRef<ISeriesApi<'Line'>[]>([]);
  const markerPlugin=useRef<any>(null); const oscSeries=useRef<ISeriesApi<'Line'>[]>([]); const candles=useRef<HistoricalCandle[]>([]);
@@ -765,12 +764,4 @@ function LegacyLiveChart({instrumentKey,brokerId='unknown',tick,onAnalytics,leve
     {coreSpiritDiagnostics.length>0 && <div className="max-h-24 overflow-auto border-t border-[#222636] px-3 py-2 text-[8px] font-mono text-[#f59e0b]">{coreSpiritDiagnostics.map((d,i)=><div key={i}>{d}</div>)}</div>}
   </div>}{historyLoading&&<div className="pointer-events-none absolute left-1/2 top-3 z-40 -translate-x-1/2"><div className="flex items-center gap-2 rounded-full border border-[#303747] bg-[#0b0e15]/95 px-3 py-1.5 font-mono text-[9px] text-[#cbd5e1] shadow-xl backdrop-blur"><span className="h-2.5 w-2.5 animate-spin rounded-full border border-[#475569] border-t-[#10b981]"/>Loading more history…</div></div>}
 </div>{oscillatorKinds(indicators)&&<div ref={oscHost} className="mt-2 h-32 rounded-xl overflow-hidden border border-[#222636]"/>}</>}</div>;
-}
-
-/** TradingCoreOS chart entrypoint. Advanced Charts is the renderer; CoreSpirit remains the engine. */
-export function LiveChart(props: Props) {
-  const useAdvanced = import.meta.env.VITE_TRADINGVIEW_ADVANCED_CHART !== 'false';
-  const [advancedFailed, setAdvancedFailed] = useState(false);
-  if (!useAdvanced || advancedFailed) return <LegacyLiveChart {...props} />;
-  return <TradingViewAdvancedChart {...props} onUnavailable={() => setAdvancedFailed(true)} />;
 }

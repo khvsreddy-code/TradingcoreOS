@@ -8,10 +8,7 @@
     "build": "vite build",
     "start": "vite preview",
     "preview": "vite preview",
-    "lint": "tsc --noEmit",
-    "setup:tradingview": "node scripts/fetch-tradingview.mjs",
-    "predev": "npm run setup:tradingview",
-    "prebuild": "npm run setup:tradingview"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
