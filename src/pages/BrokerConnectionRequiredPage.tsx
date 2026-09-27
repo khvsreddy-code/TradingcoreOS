@@ -182,7 +182,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
             3. Verify Endpoint
           </span>
           <span className="text-slate-600">→</span>
-          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'ready' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
+          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'ready' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
             4. Ready
           </span>
         </div>
@@ -246,21 +246,21 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
                   <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800/80 flex items-start gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-white block">Non-Custodial</span>
                       <span className="text-[11px] text-slate-400">Never stores your cash or funds</span>
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800/80 flex items-start gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-white block">Direct API</span>
                       <span className="text-[11px] text-slate-400">Direct broker API routing from your account</span>
                     </div>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800/80 flex items-start gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-white block">OAuth 2.0</span>
                       <span className="text-[11px] text-slate-400">Your broker login is never seen</span>
@@ -491,14 +491,14 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                       key={check.id}
                       className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
                         check.completed
-                          ? 'bg-emerald-500/5 border-emerald-500/30 text-white'
+                          ? 'bg-blue-500/5 border-blue-500/30 text-white'
                           : 'bg-slate-900/50 border-slate-800/80 text-slate-400 opacity-60'
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`p-1.5 rounded-lg ${
-                            check.completed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'
+                            check.completed ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-500'
                           }`}
                         >
                           <IconComp className="w-4 h-4" />
@@ -510,7 +510,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                       </div>
 
                       {check.completed ? (
-                        <div className="flex items-center gap-1 text-emerald-400 font-bold">
+                        <div className="flex items-center gap-1 text-blue-400 font-bold">
                           <Check className="w-4 h-4" />
                           <span>OK</span>
                         </div>
@@ -532,28 +532,28 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.4 }}
-              className="w-full max-w-lg bg-[#0E131F] border border-emerald-500/40 rounded-2xl p-8 shadow-2xl space-y-6 text-center relative overflow-hidden"
+              className="w-full max-w-lg bg-[#0E131F] border border-blue-500/40 rounded-2xl p-8 shadow-2xl space-y-6 text-center relative overflow-hidden"
             >
-              <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-xl shadow-emerald-500/10">
+              <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mx-auto shadow-xl shadow-blue-500/10">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
 
               <div>
-                <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold uppercase tracking-wider inline-block mb-2">
+                <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold uppercase tracking-wider inline-block mb-2">
                   System Initialized
                 </span>
                 <h1 className="text-2xl font-bold text-white tracking-tight">TradingCore OS is Ready</h1>
                 <p className="text-xs text-slate-400 font-mono mt-1">
-                  Active Broker: <span className="text-emerald-400 font-bold">{selectedBroker?.name || 'Connected Broker'}</span>
+                  Active Broker: <span className="text-blue-400 font-bold">{selectedBroker?.name || 'Connected Broker'}</span>
                 </p>
               </div>
 
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-left font-mono text-xs space-y-2">
                 <div className="flex justify-between items-center text-slate-300">
                   <span className="text-slate-400">Endpoint Health:</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="text-blue-400 font-bold flex items-center gap-1">
                     <Activity className="w-3.5 h-3.5" />
                     Endpoint verified
                   </span>
@@ -570,7 +570,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
               <button
                 onClick={() => onBrokerConnected()}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-base shadow-2xl shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-slate-950 font-bold text-base shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
               >
                 <span>Launch Workspace</span>
                 <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />

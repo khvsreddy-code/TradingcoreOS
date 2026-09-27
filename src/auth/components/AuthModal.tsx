@@ -89,7 +89,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             {/* Header Close Button */}
             <button
               onClick={onClose}
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-[#8c93a6] transition-colors hover:bg-[#181b28] hover:text-[#f3f4f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981] cursor-pointer"
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-[#8c93a6] transition-colors hover:bg-[#181b28] hover:text-[#f3f4f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] cursor-pointer"
               aria-label="Close authentication modal"
             >
               <X className="h-4 w-4" />
@@ -105,7 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
             {/* 1. TradingCore Logo */}
             <div className="flex flex-col items-center text-center pt-2">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#090a0f] border border-[#222636] text-[#10b981] shadow-inner mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#090a0f] border border-[#222636] text-[#3b82f6] shadow-inner mb-4">
                 <svg
                   width="24"
                   height="24"
@@ -155,7 +155,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               <button
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                className={`flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981] cursor-pointer ${
+                className={`flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] cursor-pointer ${
                   isLoading
                     ? 'border-[#222636] bg-[#181b28] text-[#8c93a6] cursor-not-allowed opacity-80'
                     : 'border-[#222636] bg-[#181b28] text-[#f3f4f6] hover:border-[#33384f] hover:bg-[#222636]'
@@ -165,9 +165,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex items-center gap-2 font-mono text-xs text-[#10b981]"
+                    className="flex items-center gap-2 font-mono text-xs text-[#3b82f6]"
                   >
-                    <Loader2 className="h-4 w-4 animate-spin text-[#10b981]" />
+                    <Loader2 className="h-4 w-4 animate-spin text-[#3b82f6]" />
                     <span>{stepText}</span>
                   </motion.div>
                 ) : (
@@ -197,7 +197,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
               {/* 4. Security Notice */}
               <div className="rounded-lg border border-[#222636] bg-[#090a0f] p-3.5 flex items-start gap-2.5">
-                <ShieldCheck className="h-4 w-4 text-[#10b981] shrink-0 mt-0.5" />
+                <ShieldCheck className="h-4 w-4 text-[#3b82f6] shrink-0 mt-0.5" />
                 <div className="text-[11px] text-[#8c93a6] leading-relaxed">
                   <span className="font-semibold text-[#f3f4f6]">Non-Custodial Architecture:</span> TradingCore never stores your broker credentials or capital. Session is tokenized via encrypted Google OAuth.
                 </div>
@@ -207,11 +207,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             {/* 5. Terms & Privacy */}
             <div className="mt-6 border-t border-[#222636] pt-4 text-center font-mono text-[10px] text-[#8c93a6] space-x-1">
               <span>By signing in, you agree to TradingCore's</span>
-              <a href="/terms" className="text-[#f3f4f6] underline hover:text-[#10b981] transition-colors">
+              <a href="/terms" className="text-[#f3f4f6] underline hover:text-[#3b82f6] transition-colors">
                 Terms of Service
               </a>
               <span>&</span>
-              <a href="/privacy" className="text-[#f3f4f6] underline hover:text-[#10b981] transition-colors">
+              <a href="/privacy" className="text-[#f3f4f6] underline hover:text-[#3b82f6] transition-colors">
                 Privacy Policy
               </a>
             </div>

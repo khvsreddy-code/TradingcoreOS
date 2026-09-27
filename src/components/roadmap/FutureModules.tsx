@@ -7,7 +7,7 @@ const ROADMAP_ITEMS = [
     name: 'Marketplace & Extensions',
     details: 'Community indicators, layout templates, hotkey macro presets',
     status: 'Planned',
-    statusBg: 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/30'
+    statusBg: 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/30'
   },
   {
     phase: 'PHASE 03',

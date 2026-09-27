@@ -66,7 +66,7 @@ export type CoreSpiritGraphBundle = {
 };
 
 const VISUAL_EMITS = new Set([
-  'plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table',
+  'plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','text','polygon','customVisual',
 ]);
 const AUTOMATION_EMITS = new Set(['entry','exit','buy','sell']);
 

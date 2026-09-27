@@ -46,9 +46,9 @@ export function BrokerRuntimeSwitcher({ onConnect }: { onConnect?: (brokerId: st
                 key={brokerId}
                 onClick={() => switchBroker(brokerId)}
                 title={connected ? `Switch live route to ${label}` : `Connect ${label}`}
-                className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-[9px] font-mono font-bold transition-colors ${active && connected ? 'border-[#10b981]/50 bg-[#10b981]/10 text-[#10b981]' : connected ? 'border-[#222636] text-[#d1d5db] hover:border-[#10b981]/40 hover:text-white' : 'border-[#222636] text-[#64748b] hover:border-[#64748b] hover:text-[#d1d5db]'}`}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-[9px] font-mono font-bold transition-colors ${active && connected ? 'border-[#3b82f6]/50 bg-[#3b82f6]/10 text-[#3b82f6]' : connected ? 'border-[#222636] text-[#d1d5db] hover:border-[#3b82f6]/40 hover:text-white' : 'border-[#222636] text-[#64748b] hover:border-[#64748b] hover:text-[#d1d5db]'}`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-[#10b981]' : 'bg-[#475569]'}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-[#3b82f6]' : 'bg-[#475569]'}`} />
                 {label}
                 {active && connected && <span className="text-[8px]">ACTIVE</span>}
                 {!connected && <span className="text-[8px]">CONNECT</span>}

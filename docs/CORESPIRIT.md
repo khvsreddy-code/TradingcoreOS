@@ -8,6 +8,70 @@ The core mental model is:
 
 Charting, replay, research, strategy evaluation, and automation should share the same semantics rather than growing separate mini-runtimes.
 
+
+## 0. Historical lineage and recovered invariants
+
+The current architecture is the result of a continuous CoreSpirit line, not a restart at v45. The historical CoreSpirit documents and release manifests supplied with the project were reconciled into this architecture so that older decisions remain visible and newer stages do not accidentally reintroduce previously rejected designs.
+
+### v13–v20 — market-data and runtime foundations
+
+The early line established the basic compiler/runtime boundary, persistent market history, cancellation, stale-response guards, configurable timezone/state retention, parser recovery, static type checking, runtime quotas, deterministic indicator kernels, stable call identities, warm-up behavior, and stable output identity. These decisions remain foundational: the VM owns execution semantics; the host owns network/data transport; history must be valid and dense rather than synthetically fabricated; state keys must survive recompilation and bar-to-bar execution.
+
+### v21–v23 — visual composition becomes a runtime capability
+
+Visuals evolved from styled plots into labels, exact time/price annotations, boxes, bands, fills, gradients, arrows, symbols, heatmaps, polylines, horizontal levels, backgrounds, bar tinting and tables. Stable visual reconciliation was introduced so logical objects update in place rather than accumulating duplicates. This lineage directly leads to the current persistent renderer-neutral scene graph and realtime visual patch engine.
+
+### v24–v29 — prediction, rich data, host planning and real language tooling
+
+Prediction became an explicit deterministic model concept with broker-neutral entry/exit intents. Rich-data work added provider-neutral requests, bid/ask/spread/mid, lower-timeframe/intrabar access, footprint summaries/rows and historical-tick execution. The data planner introduced request deduplication and batching outside the VM. The editor evolved into a DOM-free language-service boundary with diagnostics, completions, formatting, semantic tokens, definition lookup and cached compilation. These are now expressed by the canonical data model, model ABI, scanner, IDE and execution-target contracts.
+
+### v30–v31 — time-series correctness and language freeze
+
+The language was hardened around explicit scalar/series types, typed declarations, boolean signal gating, future-index rejection and semantic analysis. Time became a first-class execution-frame concept and one series engine became the canonical history cursor. Chart history loading returned to a target-based contract with broker-safe windowing, generation checks and no fabricated candles. The type/language boundary was frozen before later syntax expansion.
+
+### v32–v36 — deterministic runtime, native indicators, compiler and IR/replay
+
+Time, series indexing, session context and realtime revision semantics were made explicit. Realtime became a begin/revise/rollback/commit transaction. The native indicator engine became the single mathematical implementation. The v1 semantic core was intentionally small at 30 primitives, with visual/output/host capabilities kept in the larger extension ecosystem. The compiler pipeline became independently testable and stable IR became the only production VM input. Replay consumes validated artifacts and checksums state/output/trace determinism.
+
+### v37–v39 — architecture consolidation
+
+The architecture was consolidated into the rule used today: **one language → one compiler → one stable IR → one VM → multiple execution environments**. The debugger became observational, signals became an immutable boundary before risk/order intent, strategy events became declarative, and the EMA+RSI program became an end-to-end conformance fixture. Stage governance became dependency-aware and contract-driven.
+
+### v40–v43 — layered platform, visual identity, renderer ABI and event bus
+
+Script, Model, Strategy and Automation were formalized as capability layers over the same runtime. Persistent visual identity, rollback-safe indicator contracts and the renderer-neutral scene ABI were added. Signals became native immutable events with dedupe/idempotency; webhooks became host capabilities; the VM remained network-free.
+
+### v45 — external model, research and automation foundation
+
+The model invocation ABI, Python research surface and signal-to-automation pipeline became explicit. Python was deliberately kept outside the production VM. The model/runtime boundary introduced typed inputs/outputs and host-owned execution. v45 is the direct foundation for the stricter model ABI, AI semantics and model-visualization work in the current line.
+
+### v68 — declarative AUTOMATE + universal ORDER intent
+
+Automation became a compact language concept over a single canonical order-intent schema. `order` can express direction, quantity/risk sizing, flattening and protective stop/target data without exposing risk, policy or broker execution internals. Legacy `entry`/`exit`/`buy`/`sell` remain compatibility mappings.
+
+### v67 — declarative MODEL surface
+
+MODEL was reduced to the same principle used for SHOW: users describe intent, not platform machinery. A model declaration can name a registered model or a host implementation binding, optionally declare input/output fields and types, and expose qualified outputs such as `Regime.confidence`. The compiler lowers those references into the existing expression/IR path; the host receives the opaque binding and remains responsible for resolving the strict model ABI, adapters, state and quotas. MODEL can feed the universal SHOW primitive without introducing a model-specific renderer or runtime.
+
+### Recovered invariants that remain binding
+
+- A single canonical series/history cursor owns indexing, warm-up, bar state and future-sample rejection.
+- A single native indicator engine owns mathematical definitions; chart/replay/backtest code does not fork indicator math.
+- Realtime revisions are provisional transactions; only commit advances confirmed state.
+- The production VM executes validated IR artifacts, never arbitrary AST nodes.
+- Artifact identity is deterministic and source mapping is part of the executable contract.
+- The host owns network, broker, filesystem, process, renderer and external-model transports.
+- Visual identity is stable and scene state is transactional, so rollback never creates duplicate logical objects.
+- Signals/events are immutable and idempotent at the consumer boundary.
+- Order intent is broker-neutral; risk and policy are authoritative before execution.
+- Python/C++/Rust/WASM/ONNX/remote models are adapters behind one semantic model ABI, not competing runtimes.
+- The core language remains intentionally smaller than the total platform capability surface; extensions are capability-scoped rather than silently promoted into the language core.
+- Historical data loaders and host planners must prefer valid dense history, bounded caches and stale-response protection over fabricated or race-prone data.
+
+### Historical gaps and current reconciliation
+
+Some older documents deliberately said "not claimed complete." Those statements remain historical records, not automatic blockers. The current status is determined by the v71 tracker and current contracts. Known items that are still genuinely open include exchange/session-calendar completeness, full indicator reference-value corpus, persisted artifact migration compatibility, production worker scheduling for large scans, production renderer/browser end-to-end validation, and full production external-model transports. Items already replaced by later contracts—such as transactional realtime visuals, rich visual primitives, model adapters, multi-symbol/MTF alignment, and debugger/source mapping—are considered superseded rather than still-open historical TODOs.
+
 ## 1. How to think about CoreSpirit
 
 The governing product philosophy is **trading-system-centric, not chart-centric**. A chart is one projection of the runtime; the same executable artifact should feed research, models, signals, automation, replay and controlled execution.
@@ -325,9 +389,9 @@ The debugger must not create a second runtime whose behavior can diverge from pr
 
 ## 11. Standard library philosophy
 
-Keep the deterministic core small and trustworthy. Around 30 core primitives is a deliberate target for v1.
+Keep the deterministic semantic core small and trustworthy. The current core registry intentionally remains at 30 primitives; the rest of the supported ecosystem stays in extension contracts.
 
-Platform-specific extensions can exist, but they should not silently become part of the language core.
+Platform-specific extensions can exist, but they should not silently become part of the language core. The human-facing catalog may group core and extension capabilities together for discoverability without changing their authority or execution class.
 
 Avoid:
 
@@ -367,26 +431,23 @@ This example is valuable because it can certify compilation, indicators, visuals
 
 ## 13. Roadmap acceptance model
 
-The architectural roadmap remains:
+The architectural roadmap is now 57 stages. The first 18 establish the language/runtime/governance foundation; later stages extend that same contract across visuals, UI, execution targets, scanner/data, models/AI, explainability/debugging, graph compilation, reactive scheduling, numerical planning, capability security, v1 convergence, language unification, universal SHOW, the declarative MODEL surface, library discoverability and readable syntax.
 
-1. Language foundation
-2. Series runtime
-3. Indicator runtime
-4. IR + VM
-5. Historical vs realtime semantics
-6. Runtime-native indicators
-7. Tiny standard library
-8. Compiler pipeline
-9. Stable IR contract
-10. CoreSpirit replay
-11. Debugger
-12. Signal boundary
-13. Strategy model
-14. Killer example
-15. Explicit non-goals
-16. Release roadmap
-17. IDE/runtime convergence
-18. Platform architecture/governance
+The v1 convergence milestone is:
+
+```text
+one CoreSpirit artifact
+        ↓
+same Core IR + VM
+        ↓
+reactive execution
+        ↓
+renderer-neutral scene graph
+        ↓
+deterministic replay
+        ↓
+host-specific projections
+```
 
 A stage is complete because its contract and conformance gates are satisfied, not because a UI feature exists.
 
@@ -1707,6 +1768,35 @@ Machine-readable `CORESPIRIT_Vxx_MANIFEST.json` files remain the release identit
 
 Do not create version-specific CoreSpirit architecture Markdown files. Update the architecture document only when architectural truth changes; update the tracker whenever implementation status changes.
 
+### Reconciled pre-v45 lineage
+
+The v13–v45 source record has been mined rather than copied wholesale. The authoritative historical inputs were:
+
+- `CORESPIRIT_HISTORY.md`
+- `CORESPIRIT_LAYERED_PLATFORM_V40.md`
+- `CORESPIRIT_MODEL_AUTOMATION.md`
+- `CORESPIRIT_PROJECT_TASKS.md`
+- `CORESPIRIT_STAGES_1_16_DEEP.md`
+- `CORESPIRIT_STAGES_10_13_DEEP.md`
+- `CORESPIRIT_STAGES_13_14_DEEP.md`
+- `CORESPIRIT_STAGES_46_47_DEEP.md`
+- `CORESPIRIT_V28_DATA_VISUAL_CONTRACT.md`
+- `CORESPIRIT_V30_RELEASE_NOTES.md`
+- `CORESPIRIT_V31_CHART_DATA_FIX.md`
+- `CORESPIRIT_V32_TIME_SERIES_CHART_CONTRACT.md`
+- `CORESPIRIT_V33_REALTIME_INDICATOR_CONTRACT.md`
+- `CORESPIRIT_V34_STDLIB_COMPILER_CONTRACT.md`
+- `CORESPIRIT_V35_DEEP_STEPS_5_6_7_8.md`
+- `CORESPIRIT_V36_IR_REPLAY_IMPLEMENTATION.md`
+- `CORESPIRIT_V39_DEEP_1_16.md`
+- `CORESPIRIT_V39_VERIFICATION.md`
+- `CORESPIRIT_V41_DEEP_STAGES_1_2.md`
+- `CORESPIRIT_V42_VISUAL_IDENTITY_AND_STAGES_3_4_5.md`
+- `CORESPIRIT_V43_RENDERER_EVENT_BUS_IMPLEMENTATION.md`
+- `CORESPIRIT_V37_MANIFEST.json` through `CORESPIRIT_V45_MANIFEST.json`
+
+The historical manifests v37, v38, v39, v40, v41, v42, v43 and v45 in this release are byte-for-byte identical to the supplied historical archive. They are retained as machine release records; their human-readable implications are consolidated into this document and the living build tracker.
+
 ### Short version history
 
 - **v45:** research/model/automation foundation.
@@ -1723,6 +1813,15 @@ Do not create version-specific CoreSpirit architecture Markdown files. Update th
 - **v56:** AI as a semantic model kind on the existing ABI, structured direction/probability/regime/confidence outputs, host-side AI model handles, and renderer-neutral model explanation surfaces.
 - **v57:** automation explainability records with retained decision paths, optional per-instruction runtime tracing, bar-level visual debugger sessions, source-map highlighting, and chart-click-to-debug integration.
 - **v58:** semantic/execution/visual graph compilation attached to the existing Core IR plus reactive dirty-propagation and pure-node reuse with transactional rollback-safe caches.
+- **v59:** historical lineage reconciliation; pre-v45 CoreSpirit design records were mined into the stable architecture brain and living build tracker while v37–v45 machine manifests were preserved unchanged.
+- **v60:** host-side CPU/WASM/GPU numerical execution planning, deterministic backend eligibility, hybrid pure-work placement, explicit compute batching, and capability-based sandbox enforcement for resources and authority.
+- **v61:** the first converged CoreSpirit v1 runtime contract: one executable artifact travels through the existing reactive VM, renderer-neutral scene graph and deterministic replay hosts; realtime revisions use the same visual transaction boundary.
+- **v62:** programmable visual coordinate semantics become first-class: plot placement, chart/panel/side-panel/floating areas, time/bar/price/percentage/screen/normalized coordinates, point-based geometry, relative bar anchors, axis ranges, and custom visuals all persist as renderer-neutral scene metadata.
+- **v63:** the language surface was unified: concise syntax transforms are registered outside the core parser, direct output/event emission comes from builtin descriptors, namespaced members use one shared member registry across semantic analysis/lowering/editor completion, and the compiler no longer carries a second hard-coded emission allow-list.
+- **v64:** the user-facing language was reduced to six semantic concepts — DATA, LET, WHEN, SHOW, MODEL and AUTOMATE — with executable WHEN/SHOW lowering, MODEL/AUTOMATE declaration metadata, host-resolved automation events, and one shared semantic path underneath all six concepts.
+- **v65:** the remaining duplicate surface-normalization path was collapsed into one delegating entry point; SHOW became a dedicated Core IR visual emission that directly projects into existing scene objects, while concise coordinate pairs infer time/price or normalized space and retain explicit coordinate escapes for advanced code.
+- **v66:** SHOW coordinate inference became a centralized semantic contract, and the renderer-neutral Scene Graph became an explicitly internal compiler/runtime concern behind a public visual-projection summary boundary.
+- **v67:** MODEL became a declarative language surface with compact registry/host bindings, explicit input/output metadata, model-qualified output references and a host-owned resolver while the strict model ABI remained underneath.
 
 
 ## 30. Every automation is explainable
@@ -1974,6 +2073,190 @@ model
 ```
 
 
+
+## 34. Numerical acceleration is a planner concern
+
+GPU acceleration is deliberately **not** a new CoreSpirit language primitive. The language describes the computation; the host execution planner decides which numerical backend can safely perform eligible pure work.
+
+The architecture is:
+
+```text
+CoreSpirit source
+      ↓
+Core IR + semantic graph
+      ↓
+execution planner
+      ↓
+┌───────────┬───────────┬───────────┐
+CPU         WASM        GPU
+baseline    portable    vectorized
+deterministic            host-owned
+      ↓
+pure numerical work
+      ↓
+ordered CoreSpirit runtime
+      ↓
+visuals / signals / automation
+```
+
+The planner estimates workload from the compiled graph rather than from UI state. The primary dimensions are:
+
+```text
+symbols × timeframes × bars × pure instructions
+```
+
+This matters for scanners and research workloads such as:
+
+```text
+NIFTY500
+  × 3 timeframes
+  × 10,000 bars
+  × multiple indicators
+```
+
+The planner can convert the workload into bounded batches and record an explicit assignment for each backend.
+
+### CPU
+
+CPU is the semantic baseline. It remains available as the deterministic fallback and retains effectful/stateful operations in hybrid execution.
+
+### WASM
+
+WASM is a portable host backend for pure numerical workloads where the host has a suitable runtime. It is not required for CoreSpirit correctness and is never assumed to exist.
+
+### GPU
+
+GPU is an optional vectorized backend. CoreSpirit does not claim that every GPU kernel is bit-for-bit deterministic. Therefore a plan that requires deterministic output can select GPU only when the host explicitly advertises a deterministic GPU profile.
+
+When effects exist, the preferred design is hybrid:
+
+```text
+pure numerical nodes
+       ↓
+GPU / WASM
+
+state / effects / outputs
+       ↓
+CPU CoreSpirit runtime
+```
+
+Visual creation, signals, automation, risk and policy do not move onto an accelerator merely because their upstream calculation was accelerated.
+
+The planner is therefore a **placement and batching contract**, not a new execution engine. The actual CPU/WASM/GPU implementation remains outside CoreSpirit's language semantics.
+
+### Accelerator selection is explainable
+
+Every plan records:
+
+- workload estimate;
+- backend assignments;
+- batch geometry;
+- deterministic status;
+- why CPU/WASM/GPU was or was not selected;
+- whether execution is hybrid.
+
+That information is intended for the debugger, profiler and scanner planner.
+
+## 35. Capability-based sandbox is the security boundary
+
+CoreSpirit should not become a general-purpose replacement for C++.
+
+Its security model is an explicit capability allow-list:
+
+```text
+Program layer
+      +
+Execution target
+      +
+Host grants
+      ↓
+CoreSpirit sandbox
+      ↓
+exact capabilities for this run
+```
+
+The sandbox exposes only trading/application capabilities such as market data, series, visuals, models, signals, research data, scanning, webhooks, risk queries, policy evaluation, order-intent creation and approved numerical backends.
+
+There is deliberately **no sandbox capability** for:
+
+```text
+raw network
+filesystem
+arbitrary process
+native call
+broker credentials
+direct broker API
+direct account mutation
+```
+
+These are not merely denied at runtime. They are absent from the CoreSpirit capability vocabulary so the language/runtime cannot use the sandbox API to manufacture them.
+
+### Capability composition
+
+A grant is the intersection of:
+
+```text
+program layer
+       ∩
+execution target
+       ∩
+explicit host grant
+```
+
+For example:
+
+```text
+research + research target + GPU grant
+        ↓
+compute-gpu is available
+```
+
+while:
+
+```text
+script + chart target + no GPU grant
+        ↓
+compute-cpu only
+```
+
+Trying to request an ungranted capability produces a typed `CoreSpiritCapabilityDeniedError`.
+
+### Resource quotas
+
+The sandbox also bounds resource consumption per revision:
+
+```text
+instructions
+data requests
+model calls
+visual nodes
+compute units
+GPU memory
+```
+
+A quota breach is represented explicitly rather than being allowed to spill into an unbounded host process.
+
+The sandbox is not itself an OS container or GPU driver. The host still owns those mechanisms. CoreSpirit receives only a bounded capability surface and a bounded resource budget.
+
+### Acceleration never expands authority
+
+This invariant is important:
+
+```text
+CPU capability
+   ≠ broker authority
+
+WASM capability
+   ≠ network authority
+
+GPU capability
+   ≠ process authority
+```
+
+Changing the numerical backend must never change what the CoreSpirit program is legally allowed to observe or mutate. The backend is a compute placement decision only.
+
+This gives TradingCoreOS a path to large-scale numerical acceleration without turning CoreSpirit into an unsafe general-purpose native runtime.
+
 ## 32. Visual compiler (#21): source → semantic graph → execution graph → visual graph
 
 CoreSpirit is no longer conceptually limited to a sequential statement list. The compiler now derives graph metadata from the same lowered Core IR so the program can be reasoned about as a dependency system without changing the VM contract.
@@ -2087,3 +2370,3076 @@ The cache is not authoritative trading state. Before a speculative realtime revi
 The runtime exposes recompute/reuse/effect statistics so the visual debugger and future performance tooling can explain not only *what* recomputed, but *why* it was considered affected.
 
 The long-term direction is to use the same graph for incremental chart updates, scanner batches, multi-symbol dashboards, model explanation surfaces and visual applications. The graph becomes the shared substrate; the stable Core IR remains the portable executable artifact.
+
+
+## 36. Numerical acceleration without making GPU part of the language (#23)
+
+CoreSpirit should be able to scale numerical workloads without turning the language into a GPU programming language. The source program describes semantics; the host execution planner decides placement.
+
+```text
+CoreSpirit source
+      ↓
+semantic graph + stable Core IR
+      ↓
+execution planner
+      ↓
+┌──────────┬──────────┬──────────┐
+│   CPU    │   WASM   │   GPU    │
+│ baseline │ portable │ optional │
+└──────────┴──────────┴──────────┘
+      ↓
+pure numerical work
+      ↓
+ordered CoreSpirit VM / effect path
+```
+
+### The planner works from workload shape
+
+The planner does not look at how many chart widgets are open. It estimates actual numerical work from the compiled program and the host workload dimensions:
+
+```text
+work units
+≈ pure instructions
+  × symbols
+  × timeframes
+  × bars
+```
+
+This makes scanner/research workloads naturally plannable:
+
+```text
+500 symbols
+ × 3 timeframes
+ × 10,000 bars
+ × N pure computations
+```
+
+The planner can produce bounded batches with explicit symbol/timeframe/bar offsets. This is important for large scans because the host can schedule chunks, cancel them, retry them and collect results without creating 500 unrelated language runtimes.
+
+### Backend rules
+
+**CPU** is the semantic baseline and deterministic fallback.
+
+**WASM** is a portable optional numerical backend. It is useful where the host wants a sandbox-friendly vectorized worker without requiring native GPU drivers.
+
+**GPU** is an optional vectorized backend. GPU use is never assumed, and CoreSpirit does not pretend that arbitrary GPU floating-point execution is automatically bit-for-bit deterministic.
+
+Therefore:
+
+```text
+requireDeterministic = true
+        ↓
+GPU allowed only if host profile says deterministic = true
+        ↓
+otherwise CPU/WASM fallback
+```
+
+### Hybrid execution
+
+Most real CoreSpirit programs have effects:
+
+```text
+EMA
+RSI
+spread
+probability
+      ↓
+   signal
+      ↓
+ visual / automation
+```
+
+The planner therefore supports:
+
+```text
+pure numerical nodes
+        ↓
+GPU / WASM
+
+stateful / effectful nodes
+        ↓
+CPU CoreSpirit runtime
+```
+
+This does not move risk, signals, broker calls or visual authority onto the accelerator. The accelerator only computes data that the existing runtime is already allowed to compute.
+
+### Why not "GPU everything"?
+
+Because side effects and state transitions have ordering semantics. A GPU backend should not become a second VM. The planner is specifically a **placement/batching layer**, not a semantic execution engine.
+
+The execution plan records:
+
+- workload estimate;
+- backend assignment;
+- batch geometry;
+- deterministic status;
+- accelerator eligibility;
+- hybrid effect placement;
+- planner rationale.
+
+That makes acceleration inspectable in the debugger/profiler and keeps optimization from becoming invisible runtime behavior.
+
+### Host ownership
+
+CoreSpirit does not implement CUDA, WebGPU, Metal, OpenCL, driver management or native device scheduling in the language runtime. Those are host concerns.
+
+The contract is:
+
+```text
+CoreSpirit IR
+      ↓
+host planner
+      ↓
+host backend adapter
+      ↓
+CPU / WASM / GPU implementation
+```
+
+The actual GPU/WASM adapter is deliberately a later host milestone. v60 establishes the stable planning contract first.
+
+## 37. Capability-based sandbox is part of the language architecture (#24)
+
+CoreSpirit is intentionally not a general-purpose systems language. The VM should never acquire powers simply because the host happens to have them.
+
+The sandbox is therefore an explicit capability composition:
+
+```text
+Program layer
+       ∩
+Execution target
+       ∩
+Explicit host grant
+       ↓
+CoreSpirit sandbox
+```
+
+A capability is available only when all three boundaries permit it.
+
+### Safe capability vocabulary
+
+The sandbox can grant controlled capabilities such as:
+
+```text
+market-data
+series
+visuals
+interactive-ui
+signals
+models
+research-data
+scanner
+webhooks
+strategy-events
+order-intents
+risk-queries
+policy-evaluation
+
+compute-cpu
+compute-wasm
+compute-gpu
+```
+
+The following are intentionally **not capabilities**:
+
+```text
+raw-network
+filesystem
+arbitrary-process
+native-call
+broker-credentials
+direct-broker-api
+direct-account-mutation
+```
+
+This is stronger than a UI-level permission toggle. There is no CoreSpirit sandbox API through which a script can manufacture one of those powers.
+
+### Example
+
+A normal chart script gets:
+
+```text
+script + chart + default host grant
+        ↓
+series
+market-data
+visuals
+interactive-ui
+signals
+compute-cpu
+```
+
+It does not automatically get GPU.
+
+A host may explicitly grant:
+
+```text
+research + research + compute-gpu
+```
+
+and receive:
+
+```text
+compute-gpu
+```
+
+without receiving:
+
+```text
+filesystem
+raw-network
+broker
+native-call
+```
+
+Changing the numerical backend never expands authority.
+
+### Per-revision quotas
+
+The sandbox carries explicit limits for:
+
+```text
+instructions
+data requests
+model calls
+visual nodes
+compute units
+GPU memory
+```
+
+Each revision starts with a clean usage budget.
+
+Quota failures are typed and observable rather than becoming silent host overuse.
+
+### Accelerator authority rule
+
+The critical security invariant is:
+
+```text
+CPU       ≠ broker
+WASM      ≠ broker
+GPU       ≠ broker
+```
+
+An accelerator can only compute the values already authorized by the current CoreSpirit program and host policy. It cannot acquire network access, launch processes, open files, call a native broker library, or mutate an account.
+
+### Sandbox and execution targets
+
+The sandbox does not replace the existing execution-target capability system.
+
+They form two separate checks:
+
+```text
+Execution target:
+    "may this environment use this class of capability?"
+
+Sandbox:
+    "was this exact capability granted to this run?"
+```
+
+This preserves the existing Script/Model/Strategy/Automation layer separation while making the final host grant explicit and auditable.
+
+### Security consequence
+
+CoreSpirit therefore remains a trading-native runtime rather than becoming an unsafe replacement for C++:
+
+```text
+safe numerical acceleration
+        +
+bounded host resources
+        +
+explicit capability grants
+        +
+no direct OS/broker powers
+```
+
+The long-term design can support larger scans and GPU-backed research without weakening the execution authority model established by the earlier stages.
+
+
+## 38. The CoreSpirit v1 end state: one artifact, one runtime, many hosts
+
+The long-term target is not "a bigger chart script language." It is a trading-native programming environment in which one program can travel through the full lifecycle:
+
+```text
+code
+  ↓
+canonical market data
+  ↓
+CoreSpirit compiler
+  ↓
+validated Core IR artifact
+  ↓
+reactive runtime
+  ├── visuals
+  ├── models
+  ├── signals
+  └── strategy / automation facts
+  ↓
+historical | replay | live | scanner | research
+  ↓
+event system
+  ↓
+signals | webhooks | automation
+  ↓
+risk
+  ↓
+order intent
+  ↓
+policy
+  ↓
+execution host
+  ↓
+broker
+```
+
+The critical property is **not** that every environment has identical infrastructure. The critical property is that every environment consumes the same semantic artifact and the same runtime contracts.
+
+### The four-part v1 convergence
+
+**1. One executable artifact**
+
+Source is compiled once into the validated artifact. The artifact carries stable IR, source mapping, graph metadata and checksum identity. Historical, replay and realtime hosts do not compile alternate versions of the same source.
+
+**2. One reactive execution substrate**
+
+The reactive graph is an optimization and scheduling layer over the existing VM. Pure values can be reused when their dependency closure is unchanged; stateful and effectful work remains ordered. There is no "chart VM", "replay VM" and "scanner VM".
+
+This gives the platform a scalable execution model:
+
+```text
+same semantic program
+       ↓
+different invalidated inputs
+       ↓
+different host workload shapes
+       ↓
+same CoreSpirit semantics
+```
+
+**3. One renderer-neutral scene graph**
+
+Visuals are runtime data, not renderer calls. A scene contains stable node identity, semantic kind, layer/pane, payload, metadata and serializable interaction references.
+
+Realtime execution uses:
+
+```text
+begin revision
+      ↓
+compute + emit scene
+      ↓
+scene diff
+      ↓
+VisualPatch
+      ↓
+commit or rollback
+```
+
+A renderer may be TradingView-like, canvas, WebGL, desktop, mobile or another future host. Those are projections of the scene graph rather than competing visual semantics.
+
+**4. Deterministic replay as a truth surface**
+
+Replay is more than a playback button. It is the platform's semantic verification mechanism:
+
+```text
+artifact checksum
+       +
+immutable dataset identity
+       ↓
+same VM
+       ↓
+same outputs/state/trace
+       ↓
+repeat
+       ↓
+same checksums
+```
+
+A deterministic replay record can therefore be used by tests, regression tooling, debugger sessions, model validation and future deployment checks.
+
+### The end-state split between CoreSpirit and the host
+
+CoreSpirit owns:
+
+```text
+language semantics
+series/history semantics
+indicator math
+IR + VM
+reactive scheduling
+scene semantics
+signals / strategy facts
+model semantic contracts
+replay semantics
+explainability facts
+```
+
+The TradingCoreOS host owns:
+
+```text
+market/feed acquisition
+exchange sessions/calendars
+device/backend scheduling
+Python/C++/WASM/ONNX/remote transports
+rendering
+webhooks/network delivery
+risk
+policy
+credentials
+broker connectivity
+process lifecycle
+persistent external side effects
+```
+
+This is why the platform can grow without turning the language into an operating system or a broker SDK.
+
+### What "bigger than Pine" actually means
+
+The strategic comparison is architectural rather than feature-count based.
+
+A chart scripting language generally starts from:
+
+```text
+bars → indicators → plots
+```
+
+CoreSpirit starts from:
+
+```text
+market data
+   ↕
+stateful computation
+   ↕
+visual scene
+   ↕
+models
+   ↕
+signals/events
+   ↕
+replay/backtest/live
+   ↕
+risk/policy
+   ↕
+execution host
+```
+
+The language is therefore a **portable trading-system description**, not merely a plotting syntax.
+
+### Acceptance criterion for v1
+
+CoreSpirit v1 should be considered architecturally coherent when one canonical program can be:
+
+1. compiled into one validated artifact;
+2. executed by the shared runtime in historical/replay/realtime hosts;
+3. projected into the same persistent scene model;
+4. revised transactionally during a developing realtime bar;
+5. replayed twice with identical deterministic checksums;
+6. inspected through runtime/reactive statistics and debugger metadata;
+7. routed into signals/events without gaining broker authority.
+
+Anything beyond this—GPU production adapters, complete model transports, full scanner workers, exchange calendars, advanced renderer implementations and live broker adapters—is a host/product maturation layer, not a reason to fork the CoreSpirit execution model.
+
+## 39. Programmable visual coordinate system: plot placement is not the visual foundation
+
+CoreSpirit v62 makes visual placement and coordinate semantics first-class runtime data. The important architectural distinction is that **`plot()` is a convenience surface**, while the underlying scene model is programmable geometry plus explicit placement. This gives CoreSpirit two compatible ways to create visuals without maintaining two visual architectures.
+
+### 39.1 Two APIs, one scene contract
+
+The high-level form is optimized for the common indicator case:
+
+```corespirit
+plot(r, chart.price, bar_index > 100, range(0, 100), "#22c55e", 2, "RSI")
+plot(rsi(close, 14), panel("Momentum"), true, range(0, 100))
+```
+
+Conceptually, these arguments mean:
+
+```text
+value
+  + area
+  + visibility condition
+  + optional axis/range domain
+  + style
+  → series scene node with placement metadata
+```
+
+The lower-level form constructs semantic geometry directly:
+
+```corespirit
+line(point(time[2], high[2]), point(time, low), panel("Structure"))
+box(point(time[3], high[3]), point(time, low[1]), panel("Structure"))
+polygon(
+    point(time[2], high[2]),
+    point(time[1], low[1]),
+    point(time, high),
+    sidePanel("Geometry")
+)
+text("LONG", above_bar(2))
+text("Risk: 0.25%", point(20, 20, "screen"), panel("Risk"))
+customVisual(
+    "risk-surface",
+    "{\"schema\":\"risk\",\"version\":1}",
+    point(0.25, 0.75, "normalized"),
+    sidePanel("Risk")
+)
+```
+
+Both routes become `CoreSpiritObject` values, then renderer-neutral scene nodes. There is therefore no hidden "plot renderer" that bypasses the real visual model.
+
+The current v62 language surface uses positional semantic constructors rather than a named-argument grammar. The conceptual `area =`, `when =`, and `range =` notation describes the contract, while the implemented form passes the same information as typed values.
+
+### 39.2 Areas are semantic destinations, not renderer handles
+
+CoreSpirit defines four area families:
+
+```text
+chart
+ ├── price
+ ├── volume
+ ├── indicator
+ └── custom
+
+panel("Momentum")
+sidePanel("Risk")
+floatingArea("Inspector")
+```
+
+An area identifies **where a visual belongs conceptually**. It does not expose DOM nodes, canvas contexts, WebGL objects, chart-library pane IDs, or widget references to the VM. Host renderers resolve the semantic area to a concrete viewport.
+
+This separation matters because the same program can render into a desktop chart, browser surface, replay inspector, research notebook, or another renderer without changing language semantics.
+
+### 39.3 Coordinate spaces are explicit
+
+The visual contract currently defines six coordinate spaces:
+
+| Space | Meaning | Typical use |
+|---|---|---|
+| `time` | timestamp on the horizontal trading axis; y remains price-oriented | lines, zones, annotations tied to bars |
+| `bar` | bar index on the horizontal trading axis; y remains price-oriented | structural drawings using bar offsets |
+| `price` | price-domain coordinates | price-relative geometry or price-space overlays |
+| `percentage` | normalized 0–100 domain | panel-relative or percentage-based graphics |
+| `screen` | host viewport/device coordinates | fixed-position UI/annotation geometry inside an area |
+| `normalized` | normalized 0–1 coordinates | portable fractional positioning independent of viewport size |
+
+A visual point carries its coordinate-space tag with the coordinates. A renderer performs the final transformation to pixels/device space. CoreSpirit never needs to know the viewport transform.
+
+For example:
+
+```corespirit
+point(t1, p1)                     // time/price semantic point
+point(bar_index - 20, p1, "bar")  // bar/price structural point
+point(20, 20, "screen")            // fixed in-area viewport point
+point(0.25, 0.75, "normalized")    // fractional in-area position
+point(50, 75, "percentage")        // percentage-space position
+```
+
+### 39.4 Geometry is declarative and renderer-neutral
+
+The v62 semantic geometry contract includes:
+
+```text
+point
+line
+box
+polygon
+```
+
+A line is two typed points. A box is two typed corner points. A polygon is a bounded ordered point set. This is deliberately more general than a price/time-specific line primitive because the same geometry can live in a panel, side panel, normalized overlay, or future custom renderer.
+
+Geometry validation also rejects mixed coordinate spaces inside one line, box, or polygon. A single object must have one coordinate interpretation so the host can apply one deterministic transform. This prevents ambiguous objects such as a time-space start point connected to a normalized-space end point.
+
+The semantic geometry is retained even when the runtime also provides legacy `time`/`price` fields for compatibility with existing chart consumers. Legacy fields are compatibility projections; direct geometry is the authoritative expressive form for coordinate-aware objects.
+
+### 39.5 Plot ranges describe scale intent, not pixels
+
+`range(min, max)` is an axis-domain declaration. It does not mean "draw between these screen coordinates." A panel plot can therefore say:
+
+```corespirit
+plot(rsi(close, 14), panel("Momentum"), true, range(0, 100))
+```
+
+and communicate that its visual scale is the 0–100 domain while leaving actual axis layout, tick spacing, margins, and pixels to the host renderer.
+
+This separation also makes ranges reusable by non-chart hosts such as research inspectors or model explanation surfaces.
+
+### 39.6 Relative bar placement is a coordinate constructor
+
+Bar-relative helpers express semantic anchoring without embedding renderer offsets:
+
+```corespirit
+text("LONG", above_bar(2))
+text("STOP", below_bar(1))
+text("ENTRY", at_bar(0))
+```
+
+The runtime records the relative position and bar offset. The host resolves that relationship against the active bar geometry. This means a label survives chart resizing, timeframe changes, and renderer replacement without turning its meaning into a fixed pixel coordinate.
+
+### 39.7 Conditions and visibility are part of placement
+
+A conditional plot is not implemented as "draw everything and hide it later." The `when` condition becomes semantic visibility on the visual placement:
+
+```text
+computed value
+     ↓
+placement { area, coordinateSpace, visible, range, clip }
+     ↓
+scene reconciliation
+```
+
+When visibility is false, the scene projection can omit the object for that revision instead of emitting a semantically visible object whose renderer must guess what to do. This keeps conditional visuals deterministic across historical, replay and realtime execution.
+
+### 39.8 Clipping and viewport responsibility
+
+The placement contract carries a clipping policy (`area` or `none`). This expresses semantic intent but does not expose a clipping rectangle or GPU scissor state. A host renderer decides the concrete clipping implementation for the target surface.
+
+The same rule applies to screen and normalized coordinates: CoreSpirit may request a semantic coordinate space, but it does not receive viewport width, device pixel ratio, DOM measurements, or GPU resource handles as hidden inputs.
+
+### 39.9 Custom visuals are an escape hatch without breaking the architecture
+
+`customVisual(id, payload, ...)` provides a structured extension point for visuals not yet represented by a built-in geometry primitive. The payload is data, not executable renderer code. It may carry a schema/version and optional point placement, while the host adapter decides whether that schema maps to a heatmap, probability surface, order-flow widget, model explanation, or another renderer.
+
+That allows the platform to grow from:
+
+```text
+line / box / polygon / text
+```
+
+to richer systems such as:
+
+```text
+liquidity heatmap
+order-flow ladder
+probability surface
+regime band
+trade path
+structure graph
+model explanation surface
+```
+
+without turning the CoreSpirit VM into a renderer SDK.
+
+### 39.10 Stable scene identity remains mandatory
+
+Coordinate-aware visuals still obey the existing scene identity and transaction rules:
+
+```text
+CoreSpirit output
+      ↓
+scene identity
+      ↓
+placement + geometry + payload
+      ↓
+diff
+      ↓
+VisualPatch
+      ↓
+commit / rollback
+```
+
+Changing a point, panel, range, visibility flag, or custom payload revises the same logical visual when its stable identity is unchanged. Realtime rollback removes speculative state without creating duplicate objects.
+
+### 39.11 Coordinate semantics do not grant execution authority
+
+Visual placement is observational. A screen-coordinate label, side-panel risk surface, heatmap, or custom renderer payload cannot authorize a signal, approve risk, create an order intent, call a broker, or open a network connection. The capability sandbox and execution boundary remain unchanged.
+
+### 39.12 Why this is the right foundation
+
+The resulting model is:
+
+```text
+CoreSpirit program
+      ↓
+semantic value / event / geometry
+      ↓
+area + coordinate space + range + visibility
+      ↓
+renderer-neutral scene graph
+      ↓
+host projection
+      ↓
+chart / panel / inspector / replay / research UI
+```
+
+So `plot()` remains ergonomic for ordinary indicators, while the architecture is no longer defined by plots. A single CoreSpirit program can place indicator series, structural drawings, model surfaces, automation status, and interactive inspection objects into multiple semantic regions while every object remains part of the same transactional scene model.
+
+## 40. Visual placement does not fork CoreSpirit
+
+The visual coordinate layer is intentionally an extension of the v1 scene graph rather than a new rendering runtime. Compiler lowering, Core IR, reactive scheduling, replay, debugger traces, scene identity, rollback, and capability checks continue to operate on the same execution artifact.
+
+This gives the platform a clean evolution path:
+
+```text
+plot convenience API
+       ↘
+        visual coordinate contract
+       ↙
+point / geometry constructors
+       ↓
+scene graph
+       ↓
+renderer host adapters
+```
+
+No renderer implementation is required inside CoreSpirit to establish the semantic contract.
+
+
+
+## 41. Core language unification: many capabilities, one language
+
+CoreSpirit should be able to expose a large trading-native capability surface without turning every capability into a new mini-language. The v63 rule is therefore **subtraction through convergence**:
+
+```text
+friendly surface forms
+        ↓
+registered source transforms
+        ↓
+small executable grammar
+        ↓
+AST
+        ↓
+shared callable/member contracts
+        ↓
+semantic analysis
+        ↓
+one Core IR
+        ↓
+one VM
+```
+
+The user can still write ergonomic forms such as `input`, `crossesAbove`, `plot value`, or compact `if condition { ... }` blocks. Those are not alternate language runtimes. They are registered spellings that converge into the same core syntax before parsing.
+
+### 41.1 The parser stays deliberately small
+
+The parser's job is now even more sharply defined:
+
+- parse declarations, expressions, calls, members, indexing and control flow;
+- preserve source locations;
+- report syntax diagnostics and recover where possible;
+- never acquire chart-specific, strategy-specific or broker-specific semantics.
+
+This is important because the size of the total platform is no longer a reason for the executable grammar to grow. Visuals, scanner operations, model calls, signals and UI remain calls over the same expression grammar.
+
+### 41.2 Surface syntax is a registry, not a second compiler
+
+`surfaceForms.ts` contains the concise source spellings and `syntax.ts` is only the generic transformation executor.
+
+That means the syntax normalizer does not decide what a plot, signal, strategy or visual *means*. It only turns an accepted surface spelling into the canonical spelling accepted by the core parser.
+
+The rule is:
+
+> **Surface syntax may change spelling; it may not introduce a new execution model.**
+
+This keeps future syntax additions reviewable. A proposal that requires its own parser branch, AST family, execution path or renderer-specific semantic stage is no longer "just syntax sugar"; it is a language architecture change.
+
+### 41.3 Callable semantics are described once
+
+Direct function descriptors now carry output information such as `emitKind`, while namespaced methods are described in a single member registry.
+
+For example:
+
+```text
+plot(...)              → builtin descriptor → emit(plot)
+signal(...)            → builtin descriptor → emit(signal)
+webhook(...)           → builtin descriptor → emit(webhook)
+
+visual.line(...)       → member contract → call(visual.line)
+ui.panel(...).number  → member contract → call(ui.panel.number)
+scan.emit(...)         → member contract → call + emit(scanCandidate)
+```
+
+The semantic analyzer uses the same contract for arity and return type. The compiler uses it for lowering and emission. The editor uses it for member completion.
+
+This eliminates the previous failure mode where the same feature could be added independently to:
+
+```text
+syntax.ts
+semanticAnalyzer.ts
+compiler.ts
+languageService.ts
+```
+
+and quietly drift out of sync.
+
+### 41.4 `plot()` remains a convenience API
+
+The unification does not remove the ergonomic plotting surface. It changes what `plot()` means architecturally:
+
+```text
+plot(...)
+   ↓
+call contract
+   ↓
+visual/output event
+   ↓
+scene placement + coordinate semantics
+   ↓
+persistent scene graph
+```
+
+`plot` is therefore a convenience function, not the definition of the visual system.
+
+The same compiler machinery can lower a scalar calculation, a signal, a visual object, a scanner candidate or a workspace call without teaching the compiler a separate mini-language for each domain.
+
+### 41.5 Why this matters for future growth
+
+This architecture makes the language surface proportional to concepts rather than subsystems.
+
+Adding a new renderer-neutral visual constructor should normally mean:
+
+```text
+1. add one callable/member contract;
+2. add runtime behavior behind the existing call ABI;
+3. add semantic validation;
+4. add one contract test.
+```
+
+It should not require a new parser production plus a compiler allow-list plus an editor-only list plus an unrelated normalization rule.
+
+That is the core subtraction principle for the next phase of CoreSpirit.
+
+### 41.6 The boundary between language and host remains intact
+
+Unification does not weaken the sandbox or execution boundaries. A shared call registry describes *what a program may request*; capability checks still determine *what the current host may actually provide*.
+
+Therefore:
+
+```text
+language contract ≠ authority grant
+language contract ≠ renderer implementation
+language contract ≠ broker API
+language contract ≠ model process
+```
+
+The host remains responsible for capabilities, quotas, rendering, market transport, model adapters, scanner scheduling and broker execution.
+
+### 41.7 v63 acceptance rule
+
+A future CoreSpirit feature is considered architecturally small only when its surface can converge into the existing parser/AST/IR path and its semantics can be declared through the shared callable/member contracts.
+
+This gives CoreSpirit a useful discipline:
+
+> **Grow capabilities, not languages.**
+
+
+## 42. The six-concept CoreSpirit language
+
+The platform underneath CoreSpirit is intentionally large. The language users write should not expose that platform as a matching number of concepts.
+
+The user mental model is therefore reduced to:
+
+```text
+DATA
+LET
+WHEN
+SHOW
+MODEL
+AUTOMATE
+```
+
+These are **semantic concepts**, not six new parser productions.
+
+The implementation remains:
+
+```text
+friendly source surface
+        ↓
+registered surface lowering
+        ↓
+small core grammar
+        ↓
+AST
+        ↓
+semantic contracts
+        ↓
+Core IR
+        ↓
+VM
+```
+
+The objective is not to hide complexity by removing power. It is to keep the user's vocabulary stable while the platform grows underneath it.
+
+### 42.1 DATA
+
+**DATA** means read trading context without owning the transport.
+
+Examples:
+
+```corespirit
+close
+high
+volume
+market("NIFTY500").close
+timeframe("1D").close
+```
+
+The DATA concept includes:
+
+- canonical OHLCV series;
+- time and bar context;
+- symbol/timeframe references;
+- host-provided depth/order-flow observations;
+- historical and confirmed-only aligned data.
+
+It does not mean:
+
+```text
+socket
+broker API
+database connection
+filesystem
+network client
+```
+
+The host still owns those implementations.
+
+### 42.2 LET
+
+**LET** creates a named value or derived series.
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+r = rsi(close, 14)
+```
+
+The concise assignment surface lowers to the existing `let` core grammar. There is no separate strategy-variable language, model-variable language, or visual-variable language.
+
+This matters because the same value can feed:
+
+```text
+SHOW
+WHEN
+MODEL
+AUTOMATE
+```
+
+without being copied into subsystem-specific representations.
+
+### 42.3 WHEN
+
+**WHEN** expresses a condition or an incoming automation event.
+
+```corespirit
+when crossesAbove(fast, slow):
+    signal "LONG"
+```
+
+lowers to the same core control-flow form:
+
+```text
+if (crossover(fast, slow)) {
+    signal("LONG");
+}
+```
+
+An automation may also consume a named incoming event:
+
+```corespirit
+when "LONG":
+    buy(1, "entry")
+```
+
+The runtime resolves the event through a host-provided event resolver. A consumed event is not the same thing as a signal being emitted. The event boundary therefore remains explicit and does not create hidden broker authority.
+
+WHEN is the language-level simplification of:
+
+```text
+if
+event guards
+signal conditions
+automation triggers
+```
+
+without creating separate control-flow constructs for each subsystem.
+
+### 42.4 SHOW
+
+**SHOW** means "project this value or visual fact into the renderer-neutral scene."
+
+The simplest form is:
+
+```corespirit
+show fast, slow on price
+show r on panel("Momentum")
+```
+
+At the language boundary this now becomes one semantic visual operation:
+
+```text
+show
+ ↓
+Core IR: emit(show)
+ ↓
+existing scene-compatible object
+```
+
+The important distinction is:
+
+> **SHOW is the user concept. `plot()` is a compatibility/advanced API.**
+
+The full scene graph still supports richer geometry, coordinate spaces, ranges, clipping, heatmaps, model fields, order-flow visuals and custom data-driven objects.
+
+### 42.5 MODEL
+
+**MODEL** declares that part of the program describes features and model outputs.
+
+A compact declaration can therefore look like:
+
+```corespirit
+model "Regime":
+    features:
+        momentum = ema(close, 20)
+        volatility = stdev(close, 20)
+    predict regime
+```
+
+The v64 front end records this declaration as metadata on the same executable artifact. Feature expressions still use the normal LET/DATA path.
+
+The declaration is deliberately **not** a second VM or a second model language. The actual model implementation remains behind the existing host-owned model ABI:
+
+```text
+CoreSpirit features
+        ↓
+semantic model declaration
+        ↓
+existing model ABI
+        ↓
+Python / C++ / Rust / WASM / ONNX / remote host
+        ↓
+typed model result
+```
+
+This keeps MODEL understandable to users while preserving the platform's strict model boundary.
+
+### 42.6 AUTOMATE
+
+**AUTOMATE** declares the event-to-intent part of the trading system.
+
+```corespirit
+automate "Momentum":
+    when "LONG":
+        buy(1, "entry")
+```
+
+The source describes an orchestration relationship, not a broker API.
+
+Internally the path remains:
+
+```text
+incoming event
+     ↓
+AUTOMATE
+     ↓
+proposed order intent
+     ↓
+risk
+     ↓
+policy
+     ↓
+execution host
+     ↓
+broker adapter
+```
+
+The language does not expose credentials, sockets, account mutation or a broker-specific execution client.
+
+The compact AUTOMATE concept therefore replaces several implementation-level ideas in the user's mental model:
+
+```text
+signal consumer
+automation lifecycle
+order-intent creation
+risk handoff
+execution handoff
+```
+
+Those platform mechanisms remain observable and explainable, but they are no longer required vocabulary for writing a basic automation.
+
+### 42.7 One value, many projections
+
+The strongest consequence of the six-concept model is that a value does not become a different kind of object merely because a different subsystem consumes it.
+
+For example:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+momentum = fast - slow
+
+show fast, slow on price
+
+when momentum > 0:
+    signal "LONG"
+
+model "Regime":
+    features:
+        momentum = momentum
+    predict regime
+```
+
+The underlying `momentum` computation remains one runtime value/series. SHOW, WHEN and MODEL are different projections of that same state.
+
+That is much closer to the architecture we want than having independent:
+
+```text
+plot language
+strategy language
+model language
+automation language
+```
+
+### 42.8 Platform concepts are not language concepts
+
+Internals such as:
+
+```text
+IR
+reactive graph
+scene graph
+model ABI
+execution planner
+capability sandbox
+event bus
+automation lifecycle
+risk engine
+execution gateway
+```
+
+remain important engineering contracts, but they are deliberately absent from the basic source-language mental model.
+
+This is the boundary:
+
+```text
+USER LANGUAGE
+DATA / LET / WHEN / SHOW / MODEL / AUTOMATE
+                         ↓
+PLATFORM INTERNALS
+AST / IR / VM / reactive runtime / scene graph /
+model ABI / sandbox / risk / policy / execution hosts
+```
+
+The language should become easier even as the platform becomes more capable.
+
+### 42.9 Surface syntax and executable semantics remain separate
+
+A six-concept language does **not** mean six independent evaluators.
+
+The acceptance rule is:
+
+```text
+DATA   → existing data/series semantics
+LET    → existing bindings
+WHEN   → existing control flow / event input
+SHOW   → existing visual/output calls
+MODEL  → existing feature computation + model ABI metadata
+AUTOMATE → existing event + order-intent pipeline
+```
+
+If a future feature cannot be expressed through an existing semantic path and instead requires a new parser, AST, evaluator and runtime, that feature must be treated as an explicit language architecture milestone rather than quietly added as syntax sugar.
+
+### 42.10 v64 rule
+
+The product question for new language work is no longer:
+
+> "What new function should we add?"
+
+It is:
+
+> "Which of the six user concepts does this belong to, and can it reuse an existing semantic path?"
+
+That is the subtraction/unification rule for the next phase of CoreSpirit.
+
+
+## 43. Six concepts are the language boundary, not six mini-languages
+
+The six concepts are intentionally **semantic categories over one executable language**.
+
+```text
+DATA       → acquire/read canonical trading context
+LET        → bind reusable values and series
+WHEN       → branch on state or consume an input event
+SHOW       → project state into visual scene semantics
+MODEL      → describe feature/prediction intent
+AUTOMATE   → connect events to order-intent orchestration
+```
+
+The platform underneath may contain dozens of registries and hosts, but those are implementation contracts. A user does not need a separate syntax vocabulary for charting, models, scanning, alerts and execution.
+
+This has a practical compiler consequence:
+
+```text
+surface syntax
+     ↓
+surface lowering
+     ↓
+core AST
+     ↓
+shared semantic contracts
+     ↓
+Core IR
+     ↓
+VM
+```
+
+There must be one normalization entry point. `syntax.ts` is only the API boundary; the registered surface layer in `surfaceForms.ts` is the source of truth. A feature must not be able to introduce a second line-by-line normalizer merely because it belongs to a different subsystem.
+
+That is the deeper v63/v64 lesson:
+
+> **A small grammar is only valuable when there is also one small surface pipeline.**
+
+### 43.1 MODEL and AUTOMATE stay declarative at the surface
+
+MODEL and AUTOMATE can look like blocks because humans reason about features, predictions, triggers and intents as groups.
+
+Their declarations are metadata and semantic bindings on the same executable artifact. They do not create:
+
+```text
+model parser
+automation parser
+model VM
+automation VM
+```
+
+The runtime remains unified.
+
+### 43.2 Advanced APIs remain real
+
+The simplification is not the removal of power.
+
+Expert users and platform code may still use explicit calls for:
+
+```text
+line
+box
+zone
+heatmap
+customVisual
+plot
+entry
+exit
+buy
+sell
+webhook
+```
+
+They are capability APIs, compatibility surfaces or implementation-level vocabulary. They are not independent language concepts.
+
+---
+
+## 44. SHOW is the universal visual primitive
+
+`SHOW` is now the canonical user-facing visual operation.
+
+The source language should make these equivalent in spirit:
+
+```corespirit
+show ema(close, 20) on price
+show rsi(close, 14) in panel "Momentum"
+show resistance from [t1, p1] to [t2, p2]
+show zone from 25100 to 25200
+show signal "LONG" above bar
+```
+
+The important pipeline is:
+
+```text
+SHOW
+ ↓
+Core IR: emit(show)
+ ↓
+semantic visual object
+ ↓
+Scene Graph
+ ↓
+VisualPatch / renderer host
+```
+
+There is deliberately **no** intermediate requirement that SHOW become `plot()`, `line()` or `zone()` source calls.
+
+Those APIs remain compatibility/advanced interfaces. SHOW is the common semantic front door.
+
+### 44.1 SHOW of a value
+
+```corespirit
+show fast on price
+show r in panel "Momentum"
+```
+
+The runtime creates normal scene-compatible series objects with placement metadata.
+
+A condition can remain a WHEN-level concern:
+
+```corespirit
+when bar_index > 100:
+    show fast on price
+```
+
+or use the compact modifier:
+
+```corespirit
+show fast on price when bar_index > 100
+```
+
+Both represent ordinary runtime control flow plus a visual projection.
+
+### 44.2 SHOW of geometry
+
+Geometry is selected semantically rather than by teaching every primitive as a top-level language concept.
+
+```corespirit
+show resistance from [t1, p1] to [t2, p2]
+show support from [t3, p3] to [t4, p4]
+show box at [0.1, 0.2] to [0.5, 0.8]
+```
+
+These lower to the single SHOW IR emission and produce existing line/box scene objects.
+
+A visual object's semantic role can therefore be `resistance` or `support` without introducing a new runtime primitive for each trading concept.
+
+### 44.3 SHOW of a region
+
+```corespirit
+show zone from 25100 to 25200
+```
+
+is a price-domain visual region.
+
+The source expresses the meaning of the region, not fabricated hidden time endpoints. The scene payload carries viewport/domain intent so the host can stretch the region over the appropriate chart domain.
+
+### 44.4 SHOW of a signal visualization
+
+```corespirit
+show signal "LONG" above bar
+```
+
+creates a visual signal marker/label.
+
+That is intentionally different from:
+
+```corespirit
+when condition:
+    signal "LONG"
+```
+
+The first is a visual projection. The second is an event emitted into the signal boundary.
+
+The same trading fact may therefore be both:
+
+```text
+signal event
+     +
+visual explanation
+```
+
+without confusing rendering with automation authority.
+
+### 44.5 Why `plot()` remains
+
+`plot()` is useful as a compatibility/API function and for generated code, migration tools and expert users.
+
+It is not the language foundation.
+
+That gives CoreSpirit a stable product rule:
+
+> **SHOW is the visual concept; plot/line/box/zone/... are implementations or expert APIs.**
+
+---
+
+## 45. Coordinate systems should disappear for normal code
+
+The coordinate contract remains rich:
+
+```text
+time
+bar
+price
+percentage
+screen
+normalized
+```
+
+but normal users should rarely need to specify a space.
+
+### 45.1 Inference by source shape
+
+```corespirit
+show line from [t1, p1] to [t2, p2]
+```
+
+is inferred as time/price geometry.
+
+```corespirit
+show box at [0.1, 0.2] to [0.5, 0.8]
+```
+
+is inferred as normalized geometry because both points are ordinary 0..1 pairs.
+
+The lowering makes that inference explicit before execution:
+
+```text
+[t1,p1]       → point(..., "time")
+[0.1,0.2]     → point(..., "normalized")
+```
+
+This means the renderer never has to guess.
+
+### 45.2 Explicit coordinate escape hatch
+
+Advanced code can still write:
+
+```corespirit
+point(x, y, "screen")
+point(x, y, "normalized")
+point(x, y, "percentage")
+```
+
+Explicit coordinate spaces are an escape hatch, not the normal syntax.
+
+### 45.3 No silent coordinate mixing
+
+Once resolved, a geometry object has one coordinate space.
+
+```text
+time → time        valid
+normalized → normalized   valid
+time → normalized  invalid
+```
+
+The validation rule remains mandatory even for advanced APIs.
+
+### 45.4 Area inference and coordinate inference are separate
+
+`panel("Momentum")` decides **where** the object lives.
+
+The coordinate space decides **how its geometry is interpreted within that area**.
+
+This separation prevents the visual system from becoming a pile of chart-specific shortcuts.
+
+### 45.5 The design pattern
+
+This is the general CoreSpirit UX rule:
+
+> **Powerful underneath, inferred above, explicit only when ambiguity matters.**
+
+That rule should apply beyond visuals to data alignment, model bindings, automation intent and future language additions.
+
+---
+
+## 46. v65 acceptance rule
+
+A visual language addition is considered successful only when it answers three questions:
+
+```text
+1. What SHOW semantic does the user mean?
+2. Which coordinate/area semantics are inferred or explicit?
+3. Which existing Scene Graph object represents the result?
+```
+
+If the answer requires a new top-level visual language concept, another visual evaluator, or device-specific coordinate logic inside the VM, the feature is not considered a small extension.
+
+
+
+The v65 release defines a **universal SHOW visual primitive**: visual source forms converge through one Core IR emission and the existing renderer-neutral scene graph.
+
+
+v65 makes this a **single surface pipeline**: `syntax.ts` delegates to the registered `surfaceForms.ts` normalizer so no feature can create a competing pre-parser.
+
+
+## 47. SHOW should own the visual surface
+
+v66 makes the earlier v65 idea deeper: `show` is not merely one more builtin. It is the **language-level visual intent boundary**.
+
+The user says what should be visible:
+
+```corespirit
+show ema(close, 20) on price
+show rsi(close, 14) in panel "Momentum"
+show line from [t1, p1] to [t2, p2]
+show zone from 25100 to 25200
+show signal "LONG" above bar
+```
+
+The compiler/runtime decides how that intent becomes renderer-neutral visual state.
+
+The canonical flow is:
+
+```text
+SHOW source
+   ↓
+surface semantic intent
+   ↓
+one Core IR `show` emission
+   ↓
+runtime visual projection
+   ↓
+private Scene Graph
+   ↓
+host renderer
+```
+
+The important subtraction is that users do not need separate mental models for:
+
+```text
+plot
+line
+box
+zone
+label
+marker
+heatmap
+...
+```
+
+Those remain compatibility/advanced capabilities. The language concept is SHOW.
+
+### 47.1 SHOW modifiers are semantic, not scene fields
+
+`on price`, `in panel "Momentum"` and `when ...` describe intent.
+
+They do **not** expose:
+
+```text
+layer
+pane
+zIndex
+parent
+nodeId
+```
+
+The runtime owns those implementation decisions.
+
+### 47.2 One visual evaluator
+
+Every SHOW shape travels through the same runtime emission kind.
+
+There is no:
+
+```text
+series evaluator
+line evaluator
+box evaluator
+zone evaluator
+```
+
+as separate language runtimes.
+
+The semantic kind may differ, but the execution authority is one:
+
+```text
+Core IR → VM → visual projection
+```
+
+That is what keeps advanced visuals from becoming another family of mini-languages.
+
+---
+
+## 48. Coordinate inference should be centralized
+
+The v65 rule "powerful underneath, inferred above" becomes a concrete compiler contract in v66.
+
+The source can use concise pairs:
+
+```corespirit
+show line from [time[2], low[2]] to [time, high]
+show line from [bar_index, low] to [bar_index, high]
+show box at [0.1, 0.2] to [0.5, 0.8]
+```
+
+The compiler resolves them before execution:
+
+```text
+[time[2], low[2]]      → time space
+[bar_index, low]       → bar space
+[0.1, 0.2]             → normalized space
+```
+
+The inference result is deterministic and explicit.
+
+### 48.1 Conservative inference
+
+Inference has intentionally small rules:
+
+```text
+both x/y are numeric literals in 0..1 → normalized
+x is bar-like                    → bar
+otherwise                         → time/price geometry
+```
+
+The runtime never sees an unresolved "maybe this is screen space" decision.
+
+### 48.2 Explicit escape hatch
+
+Advanced code can still use:
+
+```corespirit
+point(x, y, "screen")
+point(x, y, "percentage")
+point(x, y, "normalized")
+```
+
+That does not create a second visual language. It is the typed escape hatch of the same visual semantic system.
+
+### 48.3 Coordinate inference is not device conversion
+
+CoreSpirit may say:
+
+```text
+time / bar / price / normalized / percentage / screen
+```
+
+but it never says:
+
+```text
+pixel x=812
+pixel y=346
+DOM node #42
+WebGL buffer 17
+```
+
+Host renderers own device/view conversion.
+
+---
+
+## 49. Scene Graph encapsulation
+
+The Scene Graph is internal architecture
+
+This is the explicit v66 rule:
+
+> **Scene Graph = compiler/runtime concern, not a user language concept.**
+
+The internal graph may still contain:
+
+```text
+layer
+pane
+zIndex
+node identity
+source identity
+anchor
+parent
+time range
+style
+payload
+metadata
+interaction
+placement
+```
+
+That remains excellent implementation machinery.
+
+But the primary runtime API now exposes:
+
+```text
+visual summary
+revision
+checksum
+object count
+visual update counts
+```
+
+rather than graph topology.
+
+### 49.1 Why this matters
+
+A user should be able to write:
+
+```corespirit
+show liquidityZones
+```
+
+without learning:
+
+```text
+create node
+assign layer
+assign pane
+set zIndex
+attach parent
+attach interaction
+```
+
+The compiler/runtime performs those decisions from semantic visual intent.
+
+### 49.2 Public boundary
+
+The public visual projection boundary is now:
+
+The public visual boundary is now:
+
+```text
+CoreSpirit source
+      ↓
+visual semantics
+      ↓
+visual summary / update
+```
+
+while:
+
+```text
+visual summary/update
+      ↓
+private Scene Graph
+      ↓
+renderer adapter
+```
+
+belongs to platform implementation.
+
+This lets the renderer ABI evolve without forcing language evolution.
+
+### 49.3 The same principle applies elsewhere
+
+The rule is broader than visuals:
+
+```text
+user concept
+   ↓
+semantic contract
+   ↓
+platform implementation
+```
+
+Users should not have to learn:
+
+```text
+IR opcodes
+reactive dependency graphs
+model ABI transport
+risk authority checks
+GPU planner assignments
+scene graph topology
+```
+
+unless they are building platform infrastructure.
+
+That is the desired CoreSpirit abstraction boundary.
+
+
+## 50. MODEL should be a declarative language concept, not an ABI tutorial
+
+The model architecture is deliberately split into two layers:
+
+```text
+User language
+    MODEL
+      ↓
+binding + input/output intent
+      ↓
+Core expression / IR
+      ↓
+host model boundary
+      ↓
+strict model ABI
+      ↓
+Python / C++ / Rust / WASM / ONNX / remote
+```
+
+### 50.1 What a user should have to understand
+
+The common case is intentionally small:
+
+```corespirit
+model "Regime":
+    use "nifty-regime-v3"
+
+    input:
+        price: number
+        volume: number
+        volatility: number
+
+    output:
+        regime: string
+        confidence: number
+```
+
+The declaration answers only four questions:
+
+1. Which logical model is being used?
+2. Which input values belong to that model?
+3. Which outputs can the program refer to?
+4. What basic types are those values?
+
+Everything else is platform machinery.
+
+### 50.2 Bindings are opaque to the language runtime
+
+A registry binding:
+
+```corespirit
+use "nifty-regime-v3"
+```
+
+means "use the host-resolved model identified by this logical locator."
+
+An external binding:
+
+```corespirit
+use python "models/regime.py"
+```
+
+means "the host has an implementation locator for this model."
+
+The VM does **not** interpret that path, import Python, spawn a process, open a socket, read the filesystem, or obtain broker authority. The binding is immutable metadata attached to the executable artifact and passed to the host resolver.
+
+This keeps the surface simple without weakening the security boundary.
+
+### 50.3 Model outputs are ordinary language values
+
+A user can write:
+
+```corespirit
+when Regime.confidence > 0.8:
+    show Regime
+```
+
+The source-level qualified member is normalized to the existing expression grammar:
+
+```text
+Regime.confidence
+      ↓
+model("Regime").confidence
+      ↓
+call model
+      ↓
+call __model_get
+      ↓
+host resolver
+```
+
+There is no model-specific expression evaluator.
+
+Declared output names are checked statically. Optional field types can further constrain the expression. When no explicit type is supplied, CoreSpirit may use conservative semantic defaults for familiar fields such as confidence/probability or regime/direction.
+
+### 50.4 SHOW makes models another visual source
+
+The same model value can cross directly into the universal SHOW primitive:
+
+```corespirit
+show Regime
+```
+
+This does not create `showModel()` or a model-specific visual subsystem.
+
+Internally:
+
+```text
+MODEL result
+   ↓
+SHOW
+   ↓
+Visual IR
+   ↓
+private Scene Graph
+```
+
+The model therefore participates in the same visual, replay, reactive and renderer-neutral pipeline as indicators and other data.
+
+### 50.5 The ABI remains underneath
+
+The strict ABI continues to define:
+
+- model identity/version
+- typed tensor input/output schemas
+- deterministic execution
+- state and rollback tokens
+- request/output checksums
+- model quotas
+- capability declarations
+- implementation/transport adapters
+- Python/C++/Rust/WASM/ONNX/remote integration
+- AI semantic mappings
+
+Those details are intentionally absent from the common source-language model. The public contract is therefore **typed MODEL fields + opaque model binding + ABI remains internal**, and the editor provides **MODEL output completion** without exposing adapter machinery.
+
+The architectural rule is:
+
+> **MODEL is a declarative contract in CoreSpirit; model execution is a host capability governed by the strict ABI.**
+
+### 50.6 Editor support follows the same abstraction
+
+The language service knows MODEL declarations well enough to complete:
+
+```text
+Regime.
+```
+
+with the declared outputs and their optional types.
+
+It does not expose the adapter class, ABI version, transport, process, or filesystem mechanics as required source concepts.
+
+### 50.7 Input binding is intentionally host/runtime work
+
+The declaration can name `price`, `volume` and `volatility` without forcing the user to construct ABI tensors manually.
+
+The next host-layer step is automatic binding:
+
+```text
+DATA / LET
+   ↓
+declared MODEL inputs
+   ↓
+typed ABI features
+   ↓
+model adapter
+```
+
+That mapping belongs to the execution host and model orchestration layer, not the core grammar.
+
+## v67 acceptance rule
+
+A CoreSpirit user should be able to declare and consume a model without learning the words "ABI", "adapter", "transport", "state token", "quota" or "Python process". Those remain platform internals while the resulting model value remains deterministic, typed where declared, replayable and capability-bounded.
+
+
+
+## 51. Automation stays simple above a hard execution boundary
+
+CoreSpirit AUTOMATE is intentionally a user-facing orchestration concept, not a broker API tutorial.
+
+The language describes intent:
+
+```corespirit
+automate "Momentum":
+    when "LONG":
+        order long 1% risk
+        stop 1.5 atr
+        target 3 atr
+```
+
+The platform expands this internally to:
+
+```text
+AUTOMATE
+   ↓
+Order Intent
+   ↓
+Risk
+   ↓
+Policy
+   ↓
+Execution Host
+   ↓
+Broker Adapter
+```
+
+The source language therefore never needs to expose lifecycle state, authority records, risk-engine interfaces, venue clients or broker credentials. Those mechanisms remain mandatory platform boundaries and remain observable through automation explainability rather than becoming source vocabulary.
+
+The concise action may also be written as a structured block:
+
+```corespirit
+order:
+    side: long
+    risk: 1%
+    stop: 1.5 atr(14)
+    target: 3 atr(14)
+```
+
+Both forms lower to the same canonical order-intent representation.
+
+## 52. One ORDER concept replaces entry/exit/buy/sell at the surface
+
+`entry()`, `exit()`, `buy()` and `sell()` historically represented different source actions, but the platform ultimately needs one data structure: a proposed order intent.
+
+CoreSpirit therefore promotes:
+
+```corespirit
+order long 1% risk
+order short 5 quantity
+order exit all
+```
+
+to the primary AUTOMATE vocabulary.
+
+A canonical intent contains semantic data rather than an execution verb:
+
+```text
+side
+sizing
+stop
+ target
+tag
+reason / metadata
+```
+
+Sizing is explicit:
+
+```text
+quantity     → fixed units; risk engine may reduce it
+riskPercent  → portfolio/account risk budget; risk engine resolves quantity
+all          → close/flatten semantic intent; host resolves actual venue action
+```
+
+This distinction is important. `1% risk` is not silently converted into a quantity inside the VM. The VM proposes the risk-sized intent; the risk engine resolves or rejects the executable quantity.
+
+Likewise `order exit all` is not a broker-side `sell all` command. It is a semantic flatten intent. The execution host is responsible for translating that intent into venue-specific close behavior.
+
+Legacy `entry`, `exit`, `buy` and `sell` APIs remain compatibility paths so existing artifacts do not lose meaning, but they are no longer the conceptual language model.
+
+## 53. AUTOMATE order safety invariants
+
+The simplification at the language boundary does not relax execution safety.
+
+1. `order` is available only to AUTOMATE execution layers.
+2. Every order is a proposed intent before risk.
+3. Risk must approve or reduce executable quantity before policy.
+4. Policy must authorize before execution.
+5. The execution host remains the only broker-facing authority.
+6. `riskPercent` and `all` do not receive arbitrary quantity semantics from the VM.
+7. No order surface can carry broker credentials, sockets, filesystem handles or native execution clients.
+8. Realtime/replay revisions can propose intents, but only committed/authorized host state can progress toward live execution.
+
+The resulting design is deliberately asymmetric:
+
+```text
+language: simple
+runtime: structured
+risk: authoritative
+execution: host-owned
+```
+
+That is the intended CoreSpirit abstraction boundary.
+
+## 54. Surface equivalence is a release invariant
+
+Every future user-facing order spelling must lower to the same `orderIntent` semantic emission path. A new spelling must not create a new VM instruction, executor, or broker integration.
+
+Examples that are intentionally equivalent:
+
+```corespirit
+order long 1% risk
+```
+
+```corespirit
+order:
+    side: long
+    risk: 1%
+```
+
+They both produce the same order-intent schema before the risk engine.
+
+
+## 55. AUTOMATE is simple above a mandatory authority chain
+
+The source language should not expose the platform control plane.
+
+```corespirit
+automate "Momentum":
+    when "LONG":
+        order long 1% risk
+        stop 1.5 atr
+        target 3 atr
+```
+
+This is intentionally a compact description of desired behavior. It lowers to one proposed order intent and then enters the existing authority pipeline:
+
+```text
+AUTOMATE
+   ↓
+Order Intent
+   ↓
+RISK
+   ↓
+POLICY
+   ↓
+EXECUTION HOST
+   ↓
+BROKER
+```
+
+The language does not need to teach the user the lifecycle state machine, authority checksum, policy engine or venue adapter. Those remain platform internals and remain observable through explainability/debugging.
+
+## 56. `order` is the universal automation action
+
+`entry()`, `exit()`, `buy()` and `sell()` are implementation-era spellings for the same underlying semantic need: propose an order intent.
+
+CoreSpirit therefore promotes a single action:
+
+```corespirit
+order long 1% risk
+order short 5 quantity
+order exit all
+```
+
+The equivalent structured form is:
+
+```corespirit
+order:
+    side: long
+    risk: 1%
+    stop: 1.5 atr(14)
+    target: 3 atr(14)
+```
+
+Both lower to the same `orderIntent` representation.
+
+## 57. Intent data, not broker commands
+
+A universal order intent contains semantic information:
+
+```text
+side
+sizing
+stop
+ target
+tag
+metadata
+```
+
+Sizing has three meanings:
+
+```text
+quantity     → proposed fixed quantity
+riskPercent  → proposed account/portfolio risk budget
+all          → proposed flatten/close intent
+```
+
+`riskPercent` must not be turned into a quantity by CoreSpirit itself. The risk engine owns that resolution and may approve, reduce or reject it.
+
+Likewise `all` must not be hard-coded to `sell`. Closing a position is a semantic operation whose final venue-side action depends on the actual position and execution host.
+
+This is why the intent object is the correct abstraction boundary: it is rich enough for automation while still being inert until the host control plane authorizes it.
+
+## 58. Compatibility does not create a second execution language
+
+Existing programs may still contain:
+
+```text
+entry(...)
+exit(...)
+buy(...)
+sell(...)
+```
+
+Those spellings remain supported for artifact compatibility, but they map into the same canonical order-intent representation.
+
+There is therefore only one order semantics in the runtime:
+
+```text
+legacy order spelling ─┐
+canonical `order` ─────┼──→ orderIntent → risk → policy → execution
+future shorthand ─────┘
+```
+
+A new surface spelling is accepted only if it reduces to the same intent schema. That rule prevents automation from becoming another collection of mini-languages.
+
+## 59. Realtime and replay use the same order semantics
+
+Because `orderIntent` is data rather than an immediate broker call, the same representation can exist in historical, replay and realtime evaluation.
+
+```text
+replay/realtime revision
+        ↓
+proposed order intent
+        ↓
+rollback-safe state
+        ↓
+commit / authority checks
+        ↓
+host risk + policy + execution
+```
+
+This keeps the language deterministic and makes automation decisions inspectable before any live-side effect is permitted.
+
+
+## v68 acceptance rule
+
+A CoreSpirit automation author should need to understand only the declarative `AUTOMATE` and `order` concepts. The platform may retain a detailed risk, policy, lifecycle and execution architecture underneath, but those internals must not become required source-language knowledge. Every new order surface must lower to the same broker-neutral order intent before the host-owned authority chain is entered.
+
+
+## 60. EVENT is one semantic boundary for signals, alerts, webhooks and notifications
+
+The user-facing language does not need separate concepts for `signal`, `alert`, `webhook`, `emit` and `event`.
+
+The preferred surface is:
+
+```corespirit
+emit "LONG"
+```
+
+A named event is immutable runtime data. It is not a network request and it is not a broker action.
+
+The event travels as:
+
+```text
+CoreSpirit source
+      ↓
+immutable EVENT
+      ↓
+host-owned routing
+      ├── webhook
+      ├── notification
+      ├── alert
+      └── automation
+```
+
+Routing may be declared compactly:
+
+```corespirit
+route "LONG" to webhook "my-server"
+route "LONG" to notification
+route "LONG" to automation "Momentum"
+```
+
+or attached to one emission:
+
+```corespirit
+emit "LONG" to:
+    webhook "my-server"
+    automation "Momentum"
+    alert
+```
+
+The compiler records routing as serializable surface metadata. The VM produces the event and cannot open a socket, invoke a broker, or perform the destination's side effect.
+
+This is intentionally the same abstraction pattern used by MODEL and AUTOMATE:
+
+> **simple source intent, structured platform contract, host-owned authority.**
+
+Legacy `signal()`, `alert()` and `webhook()` calls remain compatibility APIs, but new language design should normally extend the single EVENT boundary instead of adding another destination-specific verb.
+
+## 61. WHEN is the central reactive construct
+
+`WHEN` is the source-language gateway into reactive behavior.
+
+The same construct can react to:
+
+```corespirit
+when crossover(fast, slow):
+    show "LONG"
+
+when bar closes:
+    emit "BAR-CLOSE"
+
+when fill:
+    emit "FILLED"
+
+when Regime.confidence > 0.8:
+    emit "TREND-CONFIDENT"
+
+when price enters zone:
+    emit "ZONE-ENTER"
+
+when webhook "risk-update":
+    emit "RISK-UPDATE"
+```
+
+The important distinction is that these are not six execution mechanisms.
+
+They lower into one of two forms:
+
+```text
+WHEN + ordinary expression
+        ↓
+existing conditional IR
+```
+
+or:
+
+```text
+WHEN + named host event
+        ↓
+event(name)
+        ↓
+host event resolver
+        ↓
+existing conditional IR
+```
+
+Therefore the VM has no event-specific executor for fills, webhooks, bar closes or model thresholds.
+
+### Event sources
+
+The host may provide truth for event names such as:
+
+```text
+LONG
+BAR-CLOSE
+fill
+price.enters.zone
+webhook:risk-update
+```
+
+The exact detection of a fill, price-zone transition, webhook arrival or exchange-specific lifecycle event remains host-owned because those sources depend on external state.
+
+### Expression-driven WHEN
+
+Model output thresholds and market predicates remain normal language expressions:
+
+```corespirit
+when Regime.confidence > 0.8:
+    show Regime
+```
+
+```corespirit
+when crossesAbove(fast, slow):
+    emit "LONG"
+```
+
+No separate model trigger language or indicator trigger language is required.
+
+### Realtime and replay
+
+`WHEN` does not bypass transactional execution.
+
+```text
+new input/revision
+      ↓
+evaluate WHEN
+      ↓
+produce provisional outputs/events
+      ↓
+rollback or commit
+```
+
+A host may therefore replay the same event state deterministically, and a realtime revision can be discarded without accumulating event-side state.
+
+## 60. Universal EVENT boundary
+
+CoreSpirit exposes a **universal EVENT boundary** for named events, signals, alerts, webhooks, notifications and automation triggers. The event value is immutable; destination routing remains host-owned.
+
+## v69 language rule
+
+The preferred mental model is now:
+
+```text
+DATA
+LET
+WHEN
+SHOW
+MODEL
+AUTOMATE
+```
+
+with `EVENT` treated as a shared runtime value/boundary rather than a seventh top-level source block.
+
+`emit` produces an EVENT. `when` can consume an EVENT. Routing determines destinations. The platform owns delivery mechanics.
+
+The architectural rule is:
+
+> **one event concept, many destinations; one reactive construct, many event sources.**
+
+This prevents the language from growing a new keyword or mini-language every time TradingCoreOS adds another event-producing or event-consuming subsystem.
+
+## v70 implementation record — composability + progressive simplicity
+
+CoreSpirit now treats **composability as a language invariant**, not merely a feature idea. The existing six concepts still converge into the same compiler/IR/VM path, but their values and events can be connected across boundaries:
+
+```text
+indicator/value
+     │
+     ├──────────────► SHOW
+     │
+     ├──────────────► WHEN
+     │
+     ▼
+   MODEL
+     │
+     └──────────────► WHEN / SHOW
+
+EVENT ──────────────► WHEN ──────────────► AUTOMATE ──────────────► ORDER INTENT
+```
+
+### The composition rule
+
+A CoreSpirit author should be able to build a program incrementally without switching languages or runtimes:
+
+```corespirit
+show ema(close, 20)
+```
+
+then:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+show fast, slow
+
+when crossesAbove(fast, slow):
+    emit "LONG"
+```
+
+then a model can become another producer of ordinary values:
+
+```corespirit
+model "Regime":
+    use "nifty-regime-v3"
+    output:
+        regime: string
+        confidence: number
+
+when Regime.confidence > 0.8 and momentum > 0:
+    emit "LONG"
+```
+
+and automation consumes the same event boundary:
+
+```corespirit
+automate "Momentum":
+    when "LONG":
+        order long 1% risk
+```
+
+There is no indicator runtime, model runtime, event runtime and automation runtime that the user must learn separately. These are **composable contracts around the same executable artifact**.
+
+### Composition graph
+
+v70 attaches a serializable composition graph to surface metadata. It records nodes such as `indicator`, `model`, `event`, `condition`, `automation`, `order-intent` and `show`, plus edges such as `feeds`, `triggers`, `renders` and `routes`.
+
+The graph is descriptive only. It does not execute code, access a broker, resolve network destinations, or create a second evaluator. The existing compiler, stable IR and VM remain authoritative.
+
+### Progressive simplicity
+
+CoreSpirit should feel like a language that grows with the user:
+
+1. **One line:** `show ema(close, 20)`
+2. **Two values:** calculate `fast` and `slow` and show them.
+3. **Reactive behavior:** `when crossesAbove(fast, slow): emit "LONG"`.
+4. **Model enrichment:** use typed model outputs inside ordinary expressions.
+5. **Automation:** consume named events and create canonical order intents.
+6. **Deployment:** compile once and deploy the same artifact to the active chart.
+
+Every step is shorthand over the same semantic pipeline. There is no hidden beginner evaluator and no separate automation language.
+
+### UI surface
+
+The chart-side CoreSpirit editor remains the fast `Create → Compile → Deploy to chart` path. In v70 the product accent is blue rather than green. Trading-positive/negative colors remain semantic chart colors rather than being used as the product theme.
+
+## v70 architectural deepening — complexity firewall (#15) + invisible superpowers (#16)
+
+The next refinement of CoreSpirit is not to add more user-facing concepts. It is to make a deliberate distinction between **semantic concepts authors need to understand** and **implementation mechanisms the platform must preserve underneath**.
+
+The governing rule is:
+
+> **Hide mechanisms, expose meaning.**
+
+A CoreSpirit author should be able to express a trading idea without learning how the compiler represents it, how the VM schedules it, how a renderer materializes it, how a model is transported, or how a broker eventually receives an execution request.
+
+This is a complexity firewall, not an abstraction leak. The hidden systems remain strongly typed, testable, deterministic and capability-restricted; they simply do not become part of the public language vocabulary.
+
+### 15. What should be removed from the user's conceptual burden?
+
+The following concepts may remain fully implemented internally, but should not be required knowledge for normal CoreSpirit programming:
+
+| Internal mechanism | Public-language policy |
+|---|---|
+| Core IR details | Hidden; authors write source semantics, not IR instructions. |
+| Execution-target syntax | Hidden behind deployment/host selection; the same artifact remains portable. |
+| Scene-node syntax | Hidden behind `SHOW`; advanced visual APIs remain secondary compatibility surfaces. |
+| Renderer concepts | Hidden; CoreSpirit produces renderer-neutral visual semantics. |
+| Host capabilities | Hidden from ordinary source; capability enforcement remains a host/runtime concern. |
+| Broker concepts | Hidden behind order intent, risk and policy boundaries. |
+| Model transport details | Hidden behind `MODEL` and the typed external-model ABI. |
+| Webhook transport details | Hidden behind EVENT routing and host delivery. |
+| Automation lifecycle mechanics | Hidden behind declarative `AUTOMATE`; lifecycle state remains platform governance. |
+| Coordinate-space mechanics | Hidden unless the author actually needs explicit placement. |
+| Visual patch/diff mechanics | Hidden behind the visual runtime and transactional scene projection. |
+| CPU/GPU/WASM selection | Hidden behind host execution planning and capability negotiation. |
+| Execution-planner concepts | Hidden; authors describe computation, not scheduling strategy. |
+| Risk-policy plumbing | Hidden behind the authoritative risk/policy boundary. |
+
+This does **not** mean these mechanisms are unimportant. The opposite is true: they are important enough that the user should not be able to accidentally bypass them.
+
+The public language should therefore remain centered on:
+
+```text
+DATA
+LET
+WHEN
+SHOW
+MODEL
+AUTOMATE
+```
+
+with EVENT functioning as a shared runtime value/boundary rather than becoming another general-purpose language subsystem.
+
+#### Why hiding these mechanisms improves the language
+
+If an author has to understand IR nodes before writing a signal, scene nodes before showing an indicator, transport adapters before calling a model, or broker objects before expressing an order, the implementation architecture has leaked into the language.
+
+That creates several forms of conceptual debt:
+
+1. **Vocabulary debt** — every implementation subsystem becomes another term to learn.
+2. **Portability debt** — source begins to depend on a particular host or renderer.
+3. **Security debt** — powerful implementation handles become tempting source-level capabilities.
+4. **Compatibility debt** — internal refactors become language-breaking changes.
+5. **Teaching debt** — beginner examples must explain infrastructure before they explain trading logic.
+6. **Composability debt** — every subsystem starts looking like a separate mini-language.
+
+CoreSpirit should absorb that complexity at the compiler/runtime/host boundary instead.
+
+#### The progressive disclosure rule
+
+Advanced users may eventually inspect diagnostics, source maps, model metadata, visual metadata, execution traces and runtime graphs. Those are **inspection surfaces**, not new programming concepts.
+
+The distinction is:
+
+```text
+AUTHORING SURFACE
+    ↓
+meaningful CoreSpirit concepts
+
+INSPECTION SURFACE
+    ↓
+compiler / IR / graph / runtime details
+
+HOST SURFACE
+    ↓
+transport / renderer / broker / process / device mechanics
+```
+
+The deeper layers may be visible to developers and platform engineers without becoming mandatory language knowledge.
+
+### 16. What must not be removed
+
+Simplifying the language must never simplify away the architectural boundaries that make the platform safe, deterministic and extensible.
+
+These are **invisible superpowers**: capabilities the user benefits from without having to program against their machinery.
+
+#### VM → broker is forbidden
+
+The VM may produce deterministic facts, events and broker-neutral intents. It must never acquire broker credentials or call a venue API directly.
+
+```text
+CoreSpirit source
+      ↓
+     VM
+      ↓
+order intent
+      ↓
+risk / policy
+      ↓
+execution host
+      ↓
+broker
+```
+
+The broker boundary is therefore an authority boundary, not merely an implementation detail.
+
+#### MODEL → broker is forbidden
+
+A model may calculate or return typed facts such as regime, probability or confidence. It cannot approve an order, mutate account state, or submit a broker request.
+
+```text
+MODEL
+  ↓
+typed model fact
+  ↓
+CoreSpirit logic
+  ↓
+EVENT / strategy intent
+  ↓
+automation
+```
+
+This keeps model providers interchangeable and prevents external inference infrastructure from becoming an execution authority.
+
+#### INDICATOR → broker is forbidden
+
+Indicators remain measurement/computation primitives. An indicator may feed SHOW, LET, WHEN or MODEL inputs, but it does not receive broker authority.
+
+This preserves the distinction between:
+
+```text
+measurement → decision logic → risk → execution
+```
+
+rather than collapsing all four into a single callable primitive.
+
+#### Risk before execution is mandatory
+
+The user-facing `order` surface creates a canonical order intent. It does not mean an order has been approved or submitted.
+
+Risk, policy, account constraints, venue rules and execution-host checks remain downstream authorities. This protects the language from accidentally becoming an account-mutation API.
+
+#### Renderer-neutral visuals must remain
+
+`SHOW` expresses semantic visual intent. Scene graphs, visual patches, GPU APIs, canvas/WebGL/WebGPU handles and browser-specific renderer state remain below the CoreSpirit boundary.
+
+This allows the same artifact to project into chart, replay, research or future visual hosts without rewriting the language around a particular rendering technology.
+
+#### Deterministic replay must remain a truth surface
+
+The same validated artifact and dataset identity must produce reproducible semantic results under replay, subject to explicitly modeled external inputs.
+
+Replay is not merely a testing convenience. It is the architecture's protection against hidden state, nondeterministic scheduling and accidental host leakage.
+
+#### One IR / one VM must remain
+
+Simplification must never become a reason to create:
+
+```text
+beginner VM
+indicator VM
+model VM
+automation VM
+visual VM
+```
+
+or any equivalent collection of mini-runtimes.
+
+All public syntax remains source sugar over the same compiler, stable IR and VM.
+
+#### Reactive runtime must remain
+
+`WHEN` is a reactive semantic construct, not a callback framework. Dependency tracking, invalidation, recomputation, reuse and realtime transaction semantics remain runtime responsibilities.
+
+The author sees:
+
+```text
+when crossesAbove(fast, slow):
+    emit "LONG"
+```
+
+not the scheduler, dirty-set propagation or dependency graph that makes it work.
+
+#### Capability sandbox must remain
+
+CoreSpirit should not gain raw network, filesystem, arbitrary process, native-call or broker-credential authority simply because an implementation target becomes more powerful.
+
+Acceleration remains authority-neutral:
+
+```text
+CPU  ≠ broker
+WASM ≠ broker
+GPU  ≠ broker
+```
+
+Capability negotiation, quotas and host permissions remain infrastructure contracts.
+
+#### Typed external model ABI must remain
+
+Python, C++, Rust, WASM, ONNX and remote services may remain model implementations, but they must converge on one semantic model contract.
+
+```text
+CoreSpirit MODEL
+       ↓
+Typed model ABI
+       ↓
+Python / C++ / Rust / WASM / ONNX / remote
+       ↓
+typed outputs
+       ↓
+CoreSpirit semantics
+```
+
+The transport can evolve without changing the meaning of `MODEL` in the language.
+
+### The combined rule: remove complexity, not architecture
+
+The correct end state is therefore not:
+
+```text
+simple language
+↓
+simple implementation
+```
+
+It is:
+
+```text
+simple language
+      ↓
+strong compiler boundary
+      ↓
+stable IR
+      ↓
+reactive deterministic VM
+      ↓
+capability sandbox
+      ↓
+renderer/model/automation/risk hosts
+      ↓
+controlled external systems
+```
+
+The user experiences a small language. The platform underneath remains sophisticated.
+
+That asymmetry is intentional.
+
+### Complexity firewall acceptance criteria
+
+Future CoreSpirit work should be reviewed against these questions:
+
+1. Does this introduce a new concept that a normal author must learn?
+2. If yes, can it be expressed as an existing DATA/LET/WHEN/SHOW/MODEL/AUTOMATE composition instead?
+3. Does the feature expose an implementation mechanism rather than trading semantics?
+4. Does it create a second evaluator, scheduler, VM, IR or renderer model?
+5. Does it weaken the VM → broker, MODEL → broker or INDICATOR → broker boundaries?
+6. Does it bypass risk/policy before execution?
+7. Does it make deterministic replay harder to guarantee?
+8. Does it turn a host capability or transport into a source-language primitive unnecessarily?
+9. Can advanced implementation details remain available through inspection/debugging surfaces instead of authoring syntax?
+10. Does the feature preserve the principle: **hide mechanisms, expose meaning**?
+
+A feature that fails these checks should be redesigned before it is promoted into the CoreSpirit public language.
+
+
+
+## v71 architecture refinement — standard library discoverability + readable syntax (#17–#18)
+
+v71 deepens the same six-concept language rather than adding another subsystem. The central question is no longer “how many functions exist?” but “can a new author discover the right concept without learning the platform internals first?”
+
+### 17. Standard library: organize for discovery, not count
+
+The historical v32–v36 line deliberately kept the executable core small. That remains a runtime contract: the current executable core registry stays at its established size, and platform extensions remain separate. v71 therefore does **not** solve library growth by silently moving every existing extension into the core.
+
+Instead, CoreSpirit now has a separate human-facing catalog that organizes already-supported functionality into stable groups. The current registry is intentionally split as:
+
+```text
+30 semantic core primitives
+80 extension / compatibility capabilities
+110 total registered callables
+```
+
+The 30/80 split is an architectural boundary, not a UI limitation.
+
+```text
+PRICE
+  open  high  low  close  volume
+
+MATH
+  abs  min  max  sqrt  pow  round  sign  exp  log  tanh  clamp  sigmoid
+
+TREND
+  sma  ema  hma  wma  rma
+
+MOMENTUM
+  rsi  change  probability
+
+VOLATILITY
+  atr  stdev  variance
+
+STRUCTURE
+  highest  lowest  cross  crossover  crossunder  rising  falling
+
+MARKET
+  market  timeframe  vwap
+
+MODELS
+  model  predict  score
+
+VISUAL
+  show
+
+EVENTS
+  emit  event  signal  alert  webhook
+
+DATA
+  request  requestBatch  lowerTf  bid  ask  spread  mid  ...
+
+STATE
+  nz  na  isNa  bar_index  time
+```
+
+The grouping is **metadata for discoverability**, not a second registry. Compiler validation, semantic analysis, signature lookup and VM execution still consume the existing canonical builtin registry.
+
+This is important because “small language” and “large ecosystem” are not contradictory:
+
+```text
+small semantic core
+       +
+large capability ecosystem
+       +
+strong discoverability layer
+```
+
+The editor should therefore expose primary concepts in human order instead of making users scan an undifferentiated function list.
+
+#### Primary versus advanced knowledge
+
+A beginner should normally discover:
+
+```text
+Price → Trend → Structure → Volatility → Models → Visual → Events
+```
+
+before being asked to understand:
+
+```text
+requestBatch
+intrabar...
+footprint...
+visual.*
+execution planner
+host capability details
+```
+
+Advanced functionality is still real and supported, but it should be progressively disclosed. The language does not become weaker; the first page of the language becomes easier to comprehend.
+
+#### Do not advertise nonexistent capabilities
+
+Desired future primitives such as `roc` and `stoch` are legitimate library candidates, but they are not exposed as executable CoreSpirit builtins until deterministic runtime, compiler, and conformance contracts exist.
+
+That rule prevents the catalog from becoming a marketing list that the runtime cannot actually execute.
+
+### 18. Readability: surface syntax should read like trading logic
+
+CoreSpirit already has normalization infrastructure, so readable syntax should be used where it preserves exactly one canonical meaning.
+
+Preferred:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+
+show fast, slow
+
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+Canonical lowering remains:
+
+```text
+fast crossesAbove slow
+          ↓
+   crossover(fast, slow)
+          ↓
+   existing condition IR
+          ↓
+          VM
+```
+
+Likewise, market data should read as a reference rather than a transport request:
+
+```corespirit
+nifty = market("NIFTY")
+spread = nifty.close - market("BANKNIFTY").close
+```
+
+The source author sees:
+
+```text
+market → reference → field
+```
+
+not:
+
+```text
+request → batching → provider → cache → alignment → host transport
+```
+
+The latter remains real architecture, but it belongs behind the compiler/host boundary.
+
+### Readability is not a new language
+
+Approved readability aliases must satisfy four rules:
+
+1. **One canonical lowering.** A readable form maps to an existing function/expression/IR meaning.
+2. **No semantic drift.** Sugar cannot change lookahead, realtime, state, determinism or capability rules.
+3. **Editor convergence.** Completion, hover, formatting and diagnostics teach the same surface spelling.
+4. **No new executor.** The alias is removed before the stable IR/VM boundary.
+
+This makes `crossesAbove` a language spelling, not a fifth crossing algorithm.
+
+### Data references are similarly layered
+
+`market("NIFTY").close` is valid because `market()` already produces a typed data reference and the existing member-access path already resolves OHLCV/time fields through the host-owned data resolver.
+
+The editor should therefore complete:
+
+```text
+market("NIFTY").
+                     ├── open
+                     ├── high
+                     ├── low
+                     ├── close
+                     ├── volume
+                     └── time
+```
+
+This is an ergonomics improvement over the same existing ABI, not a new data runtime.
+
+### #13–#18 as one coherent design rule
+
+The six recent refinements now form one chain:
+
+```text
+COMPOSABILITY
+    ↓
+PROGRESSIVE SIMPLICITY
+    ↓
+COMPLEXITY FIREWALL
+    ↓
+INVISIBLE ARCHITECTURAL BOUNDARIES
+    ↓
+DISCOVERABLE STANDARD LIBRARY
+    ↓
+READABLE SURFACE SYNTAX
+```
+
+That chain answers two different failure modes:
+
+```text
+Too much architecture exposed
+→ user is overwhelmed
+
+Too much capability exposed without structure
+→ user is overwhelmed
+```
+
+The solution is not to weaken the architecture. It is to make the architecture **invisible, layered and discoverable**.
+
+
+### v71 deeper architecture model
+
+The six refinements should be understood as one authoring-and-runtime contract:
+
+```text
+#13 COMPOSABILITY
+      ↓
+#14 PROGRESSIVE SIMPLICITY
+      ↓
+#15 COMPLEXITY FIREWALL
+      ↓
+#16 INVISIBLE SUPERPOWERS
+      ↓
+#17 DISCOVERABLE LIBRARY
+      ↓
+#18 READABLE SYNTAX
+```
+
+The first two control how ideas combine and how beginners enter the language. The middle two protect the architecture from leaking into the authoring model. The last two make the remaining surface easy to discover and read.
+
+#### One public language, many hidden services
+
+The intended layering is:
+
+```text
+AUTHOR
+  │
+  │ DATA / LET / WHEN / SHOW / MODEL / AUTOMATE
+  ▼
+CORESPIRIT SOURCE
+  ▼
+SURFACE NORMALIZATION
+  ▼
+CANONICAL AST / SEMANTICS
+  ▼
+STABLE IR
+  ▼
+REACTIVE VM
+  ▼
+CAPABILITY-GATED HOST SERVICES
+  ├── market data
+  ├── model adapters
+  ├── visual projection
+  ├── automation/risk handoff
+  └── execution adapters
+```
+
+The author should not need to know how a market request is batched, how a visual scene is patched, how an external model is transported, or which compute backend is selected. Those mechanisms remain inspectable to platform developers and debuggers without becoming ordinary source vocabulary.
+
+#### Composition is a contract graph, not another runtime
+
+The composable graph answers:
+
+```text
+what depends on what?
+what can be shown?
+what can trigger WHEN?
+what can feed automation?
+where does an order intent appear?
+```
+
+It does not answer:
+
+```text
+how to execute the program
+how to bypass risk
+how to call a broker
+how to schedule a second evaluator
+```
+
+Those remain existing compiler/VM/host responsibilities.
+
+#### Progressive syntax is a learning ladder
+
+CoreSpirit should support the same concept at increasing depth:
+
+```text
+1. SHOW one value
+   show ema(close, 20)
+
+2. NAME reusable values
+   fast = ema(close, 20)
+
+3. COMBINE conditions
+   when fast crossesAbove slow:
+       emit "LONG"
+
+4. ADD model facts
+   when Regime.confidence > 0.8:
+       ...
+
+5. ADD automation
+   automate:
+       when "LONG":
+           order long 1% risk
+```
+
+The implementation may be sophisticated at every step; the syntax does not need to be.
+
+#### Standard library has four jobs, not one
+
+The library system is deliberately separated into four layers:
+
+```text
+SEMANTIC CORE
+small + stable + deterministic
+
+EXTENSIONS
+large + specialized + platform-aware
+
+DISCOVERY CATALOG
+human grouping + ordering + explanations
+
+LANGUAGE SERVICE
+completion + hover + member access + diagnostics
+```
+
+The combined ecosystem can therefore be large without making the language feel large. Current v71 counts are 30 semantic core primitives, 80 extensions/compatibility capabilities, and 110 combined registered callables.
+
+#### Readable aliases are compiler commitments
+
+`crossesAbove` and `crossesBelow` are deliberately not alternative implementations. They are source-language spellings with one canonical lowering:
+
+```text
+a crossesAbove b → crossover(a, b)
+a crossesBelow b → crossunder(a, b)
+```
+
+The same principle governs `market("NIFTY").close`: readability changes the way a data reference is written, not the underlying data-access authority.
+
+#### Six-concept authoring model and hidden authority model
+
+The user-visible concepts and hidden platform powers are intentionally asymmetric:
+
+| User can express | Platform secretly guarantees |
+|---|---|
+| DATA | alignment, history rules, quotas and host-owned acquisition |
+| LET | typed values/series through the canonical compiler |
+| WHEN | deterministic reactive condition evaluation |
+| SHOW | renderer-neutral visual projection |
+| MODEL | typed external-model ABI with host adapters |
+| AUTOMATE | lifecycle/risk/policy handoff without broker authority |
+
+That asymmetry is a feature. CoreSpirit should feel small because the architecture underneath is doing the hard work.
+
+### Product UI direction
+
+v71 continues the blue product-accent rule across the website. Green product-accent values were removed from active UI surfaces and replaced with the blue family. Trading chart roles now use the same blue/red semantic pairing where green had previously been used for positive/up states; red remains distinct for negative/down states.
+
+The result is a single visual hierarchy:
+
+```text
+BLUE
+product identity / active UI / positive trading state
+
+RED
+negative trading state / destructive warning
+
+PURPLE / AMBER / NEUTRAL
+specialized semantic roles
+```
+
+Product accent and semantic meaning remain encoded separately in the architecture even though the active positive chart color is now blue.

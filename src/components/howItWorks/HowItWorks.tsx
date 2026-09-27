@@ -89,7 +89,7 @@ export const HowItWorks: React.FC<{ onLaunch?: () => void }> = ({ onLaunch }) =>
         <div className="mt-12 text-center">
           <button
             onClick={onLaunch}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#10b981] px-6 py-3 text-xs font-bold text-[#090a0f] hover:bg-[#059669] transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#3b82f6] px-6 py-3 text-xs font-bold text-[#090a0f] hover:bg-[#2563eb] transition-all cursor-pointer"
           >
             Connect Broker & Launch Setup
           </button>

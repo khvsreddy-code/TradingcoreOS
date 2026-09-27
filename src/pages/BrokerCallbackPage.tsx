@@ -103,9 +103,9 @@ export const BrokerCallbackPage: React.FC = () => {
         )}
 
         {status === 'success' && (
-          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 space-y-2">
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
-            <p className="font-bold text-sm text-emerald-400 font-mono">Authorization Successful!</p>
+          <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-blue-300 space-y-2">
+            <CheckCircle2 className="w-6 h-6 text-blue-400 mx-auto" />
+            <p className="font-bold text-sm text-blue-400 font-mono">Authorization Successful!</p>
             <p className="text-[11px] text-slate-300">
               Broker endpoint connected. Closing authorization popup and returning to TradingCore OS...
             </p>

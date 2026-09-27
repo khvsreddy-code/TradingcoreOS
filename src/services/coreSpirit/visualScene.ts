@@ -12,6 +12,8 @@ import { coreSpiritChecksum } from './artifact';
 import type { CoreSpiritVisualPatch } from './visualIdentity';
 import { normalizeCoreSpiritVisualMetadata } from './visualMetadata';
 import type { CoreSpiritAdvancedVisualObject } from './visualAdvanced';
+import type { CoreSpiritVisualPlacement, CoreSpiritVisualRelativePosition } from './visualCoordinates';
+import { validateCoreSpiritVisualPlacement } from './visualCoordinates';
 
 export const CORE_SPIRIT_SCENE_VERSION = 1 as const;
 
@@ -41,6 +43,7 @@ export type CoreSpiritSceneKind =
   | 'arrow'
   | 'shape'
   | 'polyline'
+  | 'polygon'
   | 'label'
   | 'background'
   | 'barcolor'
@@ -61,7 +64,8 @@ export type CoreSpiritSceneKind =
   | 'structureGraph'
   | 'replayTrace'
   | 'liquidityMap'
-  | 'modelField';
+  | 'modelField'
+  | 'customVisual';
 
 export type CoreSpiritSceneAnchor = {
   time?: number;
@@ -101,6 +105,8 @@ export type CoreSpiritSceneNode = {
   parentId?: string;
   semanticRole?: string;
   interaction?: CoreSpiritSceneInteraction;
+  placement?: CoreSpiritVisualPlacement;
+  relativePosition?: CoreSpiritVisualRelativePosition;
 };
 
 export type CoreSpiritSceneIdentity = {
@@ -163,6 +169,7 @@ const LAYER_BY_KIND: Readonly<Record<CoreSpiritSceneKind, CoreSpiritSceneLayer>>
   arrow: 'structure',
   shape: 'structure',
   polyline: 'structure',
+  polygon: 'structure',
   label: 'ui',
   background: 'price',
   barcolor: 'price',
@@ -184,6 +191,7 @@ const LAYER_BY_KIND: Readonly<Record<CoreSpiritSceneKind, CoreSpiritSceneLayer>>
   replayTrace: 'data',
   liquidityMap: 'liquidity',
   modelField: 'data',
+  customVisual: 'data',
 };
 
 function payloadFromObject(output: CoreSpiritObject): Readonly<Record<string, unknown>> {
@@ -196,6 +204,9 @@ function payloadFromObject(output: CoreSpiritObject): Readonly<Record<string, un
   delete copy.name;
   delete copy.style;
   delete copy.metadata;
+  delete copy.visual;
+  delete copy.geometry;
+  delete copy.relativePosition;
   return copy;
 }
 
@@ -217,7 +228,10 @@ function anchorsFromObject(output: CoreSpiritObject): readonly CoreSpiritSceneAn
     case 'arrow':
       return [output.start, output.end];
     case 'polyline':
+    case 'polygon':
       return output.points.map(point => ({ time: point.time, price: point.price }));
+    case 'customVisual':
+      return output.geometry?.kind === 'polygon' ? output.geometry.points.map(point => ({ time: point.x, price: point.y })) : undefined;
     default:
       return undefined;
   }
@@ -231,8 +245,16 @@ function timeRangeFromObject(output: CoreSpiritObject): { start: number; end: nu
       return { start: Math.min(...times), end: Math.max(...times) };
     }
     case 'zone':
+      if (output.domain === 'viewport') return undefined;
+      return { start: Math.min(output.left, output.right), end: Math.max(output.left, output.right) };
     case 'box':
       return { start: Math.min(output.left, output.right), end: Math.max(output.left, output.right) };
+    case 'polygon':
+      if (!output.points.length) return undefined;
+      return { start: Math.min(...output.points.map(point => point.time)), end: Math.max(...output.points.map(point => point.time)) };
+    case 'customVisual':
+      if (output.geometry?.kind === 'polygon' && output.geometry.points.length) return { start: Math.min(...output.geometry.points.map(point => point.x)), end: Math.max(...output.geometry.points.map(point => point.x)) };
+      return undefined;
     default:
       return undefined;
   }
@@ -267,6 +289,8 @@ export function coreSpiritObjectToSceneNode(
     payload: payloadFromObject(output),
     metadata,
     interaction: metadata ? { onHover: { kind:'inspect', actionId:'visual.inspect', params:{ objectId:id } } } : undefined,
+    placement: (output as any).visual,
+    relativePosition: (output as any).relativePosition,
   };
 }
 
@@ -348,6 +372,8 @@ function cloneSceneNodeForGraph(node: CoreSpiritSceneNode): CoreSpiritSceneNode 
     style: node.style ? { ...node.style } : undefined,
     payload: { ...node.payload },
     metadata: node.metadata ? { ...node.metadata } : undefined,
+    placement: node.placement ? { ...node.placement, area: { ...node.placement.area }, range: node.placement.range ? { ...node.placement.range } : undefined } : undefined,
+    relativePosition: node.relativePosition ? { ...node.relativePosition } : undefined,
     interaction: node.interaction ? {
       onClick: node.interaction.onClick ? { ...node.interaction.onClick, params: node.interaction.onClick.params ? { ...node.interaction.onClick.params } : undefined } : undefined,
       onHover: node.interaction.onHover ? { ...node.interaction.onHover, params: node.interaction.onHover.params ? { ...node.interaction.onHover.params } : undefined } : undefined,
@@ -388,6 +414,7 @@ export function validateCoreSpiritScene(
     parentById.set(node.id, node.parentId);
     if (node.parentId && node.parentId === node.id) errors.push(`scene node '${node.id}' cannot parent itself`);
     if (containsFunction(node)) errors.push(`scene node '${node.id}' contains a non-serializable function`);
+    if (node.placement) errors.push(...validateCoreSpiritVisualPlacement(node.placement).map(error => `scene node '${node.id}': ${error}`));
     if (!Number.isInteger(node.zIndex)) errors.push(`scene node '${node.id}' has non-integer zIndex`);
     if (node.kind === 'label') labels += 1;
     if (node.kind === 'table') tables += 1;
@@ -473,7 +500,7 @@ export function serializeCoreSpiritScene(scene: CoreSpiritScene): string {
 /** Visual APIs are extension capabilities, not additions to the 30-function core stdlib. */
 export const CORE_SPIRIT_VISUAL_PRIMITIVES = Object.freeze([
   'candleLayer', 'heikinAshi', 'customBars',
-  'line', 'hline', 'zone', 'box', 'band', 'arrow', 'shape', 'polyline',
+  'line', 'hline', 'zone', 'box', 'band', 'arrow', 'shape', 'polyline', 'polygon', 'customVisual',
   'label', 'background', 'barcolor', 'footprint', 'marker', 'table', 'panel',
   'liquidityZone', 'heatmap', 'volumeProfile', 'depthMap', 'interactivePanel',
   'probabilitySurface', 'regimeBand', 'tradePath', 'structureGraph', 'replayTrace',

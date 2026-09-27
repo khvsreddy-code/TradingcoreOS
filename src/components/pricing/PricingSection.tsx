@@ -104,26 +104,26 @@ export const PricingSection: React.FC<{ onSelectPlan?: (planName: string) => voi
 
               <ul className="space-y-3 text-xs font-mono text-[#d1d5db] mb-8">
                 <li className="flex items-center gap-2.5">
-                  <Check className="h-4 w-4 text-[#10b981]" /> Multiple broker connections as supported integrations expand
+                  <Check className="h-4 w-4 text-[#3b82f6]" /> Multiple broker connections as supported integrations expand
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <Check className="h-4 w-4 text-[#10b981]" /> Multi-Chart Grid (2x2 & 4x1 Layouts)
+                  <Check className="h-4 w-4 text-[#3b82f6]" /> Multi-Chart Grid (2x2 & 4x1 Layouts)
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <Check className="h-4 w-4 text-[#10b981]" /> Advanced Hotkey Macro Engine & Splitting
+                  <Check className="h-4 w-4 text-[#3b82f6]" /> Advanced Hotkey Macro Engine & Splitting
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <Check className="h-4 w-4 text-[#10b981]" /> Real-time Option Chain & PCR Analytics
+                  <Check className="h-4 w-4 text-[#3b82f6]" /> Real-time Option Chain & PCR Analytics
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <Check className="h-4 w-4 text-[#10b981]" /> Automated Daily Max Loss Guardrails
+                  <Check className="h-4 w-4 text-[#3b82f6]" /> Automated Daily Max Loss Guardrails
                 </li>
               </ul>
             </div>
 
             <button
               onClick={() => onSelectPlan && onSelectPlan('Power Trader')}
-              className="w-full rounded-lg bg-[#10b981] py-3 text-xs font-bold text-[#090a0f] hover:bg-[#059669] transition-all cursor-pointer"
+              className="w-full rounded-lg bg-[#3b82f6] py-3 text-xs font-bold text-[#090a0f] hover:bg-[#2563eb] transition-all cursor-pointer"
             >
               Get Power Trader OS
             </button>

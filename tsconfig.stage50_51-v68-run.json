@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "types": [],
+    "strict": false,
+    "noEmit": false,
+    "outDir": "/mnt/data/corespirit_v67_automation_work/.stage50_51_build"
+  },
+  "include": [
+    "src/services/coreSpirit/orderIntent.ts",
+    "src/services/coreSpirit/automationSurface.ts",
+    "src/services/coreSpirit/strategyContract.ts",
+    "src/services/coreSpirit/standardLibrary.ts",
+    "src/services/coreSpirit/callContract.ts",
+    "src/services/coreSpirit/runtime.ts",
+    "src/services/coreSpirit/semanticAnalyzer.ts",
+    "src/services/coreSpirit/types.ts",
+    "src/services/coreSpirit/syntax.ts",
+    "src/services/coreSpirit/surfaceForms.ts",
+    "src/services/coreSpirit/languageConcepts.ts",
+    "src/services/coreSpirit/automationPipeline.ts",
+    "src/services/coreSpirit/compiler.ts",
+    "src/services/coreSpirit/parser.ts",
+    "src/services/coreSpirit/lexer.ts",
+    "src/services/coreSpirit/languageService.ts",
+    "src/services/coreSpirit/memberRegistry.ts",
+    "src/services/coreSpirit/artifact.ts",
+    "src/services/coreSpirit/semanticGraph.ts",
+    "src/services/coreSpirit/optimizer.ts",
+    "src/services/coreSpirit/irContract.ts",
+    "src/services/coreSpirit/ir.ts",
+    "src/services/coreSpirit/layeredPlatformContract.ts",
+    "src/services/coreSpirit/executionAuthority.ts",
+    "src/services/coreSpirit/automationLifecycle.ts",
+    "src/services/coreSpirit/explainability.ts",
+    "src/services/coreSpirit/stage50_51AutomationOrderSurface.test.ts"
+  ]
+}

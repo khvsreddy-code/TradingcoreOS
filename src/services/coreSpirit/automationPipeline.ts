@@ -15,6 +15,8 @@ import type {
 } from './strategyContract';
 import type { CoreSpiritEventEnvelope } from './eventSystem';
 import { strategyEventToOrderIntent } from './strategyContract';
+import { coreSpiritRuntimeOrderToStrategyIntent } from './orderIntent';
+import type { CoreSpiritObject } from './types';
 import { coreSpiritChecksum } from './artifact';
 import { appendExecutionAuthorityRecord, createExecutionAuthority, validateExecutionAuthority, type CoreSpiritOrderIntentAuthority } from './executionAuthority';
 import { buildAutomationDecisionTrace, buildSignalExplanation, buildAutomationExplanationRecord, CoreSpiritAutomationExplainabilityStore, type CoreSpiritAutomationExplainability, type CoreSpiritExplanationDecision } from './explainability';
@@ -122,12 +124,35 @@ export class CoreSpiritAutomationOrchestrator {
     return this.getLifecycle();
   }
 
+  async handleRuntimeOrderIntent(
+    runtimeIntent: Extract<CoreSpiritObject, { kind: 'orderIntent' }>,
+    symbol: string,
+    now: number,
+    positionId?: string,
+  ): Promise<CoreSpiritAutomationResult> {
+    const intent: CoreSpiritOrderIntent = coreSpiritRuntimeOrderToStrategyIntent(runtimeIntent, { symbol, requestedAt: now, positionId });
+    const event: CoreSpiritStrategyEvent = {
+      id: runtimeIntent.id, strategyId: String(runtimeIntent.metadata?.source ?? this.lifecycle.automationId),
+      kind: runtimeIntent.side === 'flat' ? 'exit' : 'entry', direction: runtimeIntent.side === 'short' ? 'short' : 'long',
+      positionId: positionId ?? `${symbol}:${runtimeIntent.side}`, barIndex: Number(runtimeIntent.metadata?.barIndex ?? 0),
+      timestamp: runtimeIntent.time, symbol, timeframe: '', reason: String(runtimeIntent.metadata?.reason ?? 'declarative order intent'),
+    };
+    return this.handleOrderIntent(intent, event, now);
+  }
+
   async handleStrategyEvent(
     event: CoreSpiritStrategyEvent,
     quantity: number | undefined,
     now: number,
   ): Promise<CoreSpiritAutomationResult> {
-    const intent = strategyEventToOrderIntent(event, now, quantity);
+    return this.handleOrderIntent(strategyEventToOrderIntent(event, now, quantity), event, now);
+  }
+
+  async handleOrderIntent(
+    intent: CoreSpiritOrderIntent,
+    event: CoreSpiritStrategyEvent,
+    now: number,
+  ): Promise<CoreSpiritAutomationResult> {
     const lifecycleState = this.lifecycle.state;
     const authority = createExecutionAuthority({
       intentId: intent.id,

@@ -1,5 +1,5 @@
 /**
- * CoreSpirit native event system — Stage 47.
+ * CoreSpirit native event system — universal EVENT boundary.
  *
  * Signals are immutable events. One event can fan out to chart/alert/webhook/
  * automation consumers. CoreSpirit itself never performs network I/O.
@@ -8,6 +8,7 @@
 import { coreSpiritChecksum } from "./artifact";
 import { coreEventBus, type CoreEventBus } from "../core/event/eventBus";
 import type { CoreSpiritExecutionMode } from "./types";
+import type { CoreSpiritEventDestination } from "./languageConcepts";
 
 export const CORE_SPIRIT_EVENT_ABI_VERSION = 1 as const;
 
@@ -17,7 +18,8 @@ export type CoreSpiritEventType =
   | "coreSpirit.webhook"
   | "coreSpirit.strategy.entry"
   | "coreSpirit.strategy.exit"
-  | "coreSpirit.automation";
+  | "coreSpirit.automation"
+  | "coreSpirit.event";
 
 export interface CoreSpiritEventEnvelope<TPayload extends Record<string, unknown> = Record<string, unknown>> {
   abiVersion: typeof CORE_SPIRIT_EVENT_ABI_VERSION;
@@ -234,6 +236,86 @@ export function createSignalEvent(input: {
   });
 }
 
+
+export function createNamedCoreSpiritEvent(input: {
+  sourceId: string;
+  programChecksum?: string;
+  runId: string;
+  mode: CoreSpiritExecutionMode;
+  barIndex: number;
+  timestamp: number;
+  sequence: number;
+  name: string;
+  destinations?: readonly CoreSpiritEventDestination[];
+  metadata?: Readonly<Record<string, unknown>>;
+}): CoreSpiritEventEnvelope {
+  return createCoreSpiritEvent({
+    type: "coreSpirit.event",
+    sourceId: input.sourceId,
+    programChecksum: input.programChecksum,
+    runId: input.runId,
+    mode: input.mode,
+    barIndex: input.barIndex,
+    timestamp: input.timestamp,
+    sequence: input.sequence,
+    payload: {
+      name: input.name,
+      destinations: [...(input.destinations ?? [])],
+      ...(input.metadata ?? {}),
+    },
+  });
+}
+
+export interface CoreSpiritEventDestinationHandler {
+  kind: CoreSpiritEventDestination['kind'];
+  target?: string;
+  handle: (event: CoreSpiritEventEnvelope, destination: CoreSpiritEventDestination) => void | Promise<void>;
+}
+
+export class CoreSpiritEventRouter {
+  private readonly handlers: CoreSpiritEventDestinationHandler[] = [];
+
+  register(handler: CoreSpiritEventDestinationHandler): () => void {
+    this.handlers.push(handler);
+    return () => {
+      const index = this.handlers.indexOf(handler);
+      if (index >= 0) this.handlers.splice(index, 1);
+    };
+  }
+
+  async dispatch(event: CoreSpiritEventEnvelope): Promise<CoreSpiritEventDelivery[]> {
+    const destinations = Array.isArray(event.payload.destinations) ? event.payload.destinations as CoreSpiritEventDestination[] : [];
+    const deliveries: CoreSpiritEventDelivery[] = [];
+    for (let i = 0; i < destinations.length; i++) {
+      const destination = destinations[i];
+      const candidates = this.handlers.filter(handler =>
+        handler.kind === destination.kind &&
+        (handler.target === undefined || handler.target === ('target' in destination ? destination.target : undefined)),
+      );
+      for (const handler of candidates) {
+        try {
+          await handler.handle(event, destination);
+          deliveries.push({
+            eventId: event.id,
+            consumerId: `route:${destination.kind}:${'target' in destination ? destination.target : ''}:${handler.kind}`,
+            dedupeKey: `${event.dedupeKey}:${destination.kind}:${'target' in destination ? destination.target : ''}`,
+            status: "delivered",
+          });
+        } catch (error) {
+          deliveries.push({
+            eventId: event.id,
+            consumerId: `route:${destination.kind}:${'target' in destination ? destination.target : ''}:${handler.kind}`,
+            dedupeKey: `${event.dedupeKey}:${destination.kind}:${'target' in destination ? destination.target : ''}`,
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+    return deliveries;
+  }
+}
+
 export function projectWebhookPayload(
   event: CoreSpiritEventEnvelope,
   include: readonly string[],
@@ -254,7 +336,7 @@ export function projectWebhookPayload(
 }
 
 export class CoreSpiritWebhookConsumer implements CoreSpiritEventConsumer {
-  readonly topics = ["coreSpirit.signal"] as const;
+  readonly topics = ["coreSpirit.signal", "coreSpirit.event"] as const;
   readonly priority = 200;
 
   constructor(

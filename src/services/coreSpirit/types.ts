@@ -1,5 +1,7 @@
+import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import type { CoreSpiritMarketBar } from './marketData';
 import { CoreSpiritAst } from './ast';
+import type { CoreSpiritVisualGeometry, CoreSpiritVisualPlacement, CoreSpiritVisualRelativePosition } from './visualCoordinates';
 
 export type CoreSpiritValue = number | boolean | string | null;
 export type CoreSpiritSeries = Array<CoreSpiritValue>;
@@ -47,30 +49,34 @@ export type CoreSpiritVisualStyle = {
 };
 
 export type CoreSpiritObject =
-  | { kind: 'series'; time: number; value: number | null; name?: string; seriesId?: string; style?: CoreSpiritPlotStyle; metadata?: Record<string, unknown> }
-  | { kind: 'marker'; id?: string; time: number; price: number; metadata?: Record<string, unknown> }
-  | { kind: 'label'; id: string; time: number; price: number; text: string; position: CoreSpiritLabelPosition; style?: CoreSpiritLabelStyle; metadata?: Record<string, unknown> }
-  | { kind: 'line'; id?: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: Record<string, unknown>; metadata?: Record<string, unknown> }
-  | { kind: 'zone'; id?: string; left: number; right: number; top: number; bottom: number; state?: 'active' | 'mitigated' | 'broken'; style?: CoreSpiritVisualStyle & Record<string, unknown>; metadata?: Record<string, unknown> }
-  | { kind: 'box'; id: string; left: number; right: number; top: number; bottom: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
-  | { kind: 'band'; id: string; time: number; top: number | null; bottom: number | null; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
-  | { kind: 'arrow'; id: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
-  | { kind: 'shape'; id: string; time: number; price: number; shape: NonNullable<CoreSpiritVisualStyle['shape']>; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
-  | { kind: 'polyline'; id: string; points: CoreSpiritPoint[]; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
-  | { kind: 'hline'; id: string; price: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
-  | { kind: 'background'; id: string; time: number; color: string; opacity?: number; metadata?: Record<string, unknown> }
-  | { kind: 'barcolor'; id: string; time: number; color: string; opacity?: number; metadata?: Record<string, unknown> }
-  | { kind: 'table'; id: string; position: 'topLeft'|'topCenter'|'topRight'|'middleLeft'|'middleCenter'|'middleRight'|'bottomLeft'|'bottomCenter'|'bottomRight'; row: number; column: number; text: string; style?: CoreSpiritTableStyle; metadata?: Record<string, unknown> }
+  | { kind: 'series'; time: number; value: number | null; name?: string; seriesId?: string; style?: CoreSpiritPlotStyle; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'marker'; id?: string; time: number; price: number; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'label'; id: string; time: number; price: number; text: string; position: CoreSpiritLabelPosition; style?: CoreSpiritLabelStyle; visual?: CoreSpiritVisualPlacement; relativePosition?: CoreSpiritVisualRelativePosition; metadata?: Record<string, unknown> }
+  | { kind: 'line'; id?: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: Record<string, unknown>; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; metadata?: Record<string, unknown> }
+  | { kind: 'zone'; id?: string; left: number; right: number; top: number; bottom: number; state?: 'active' | 'mitigated' | 'broken'; domain?: 'bar' | 'viewport'; style?: CoreSpiritVisualStyle & Record<string, unknown>; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; metadata?: Record<string, unknown> }
+  | { kind: 'box'; id: string; left: number; right: number; top: number; bottom: number; style?: CoreSpiritVisualStyle; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; metadata?: Record<string, unknown> }
+  | { kind: 'band'; id: string; time: number; top: number | null; bottom: number | null; style?: CoreSpiritVisualStyle; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'arrow'; id: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: CoreSpiritVisualStyle; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; metadata?: Record<string, unknown> }
+  | { kind: 'shape'; id: string; time: number; price: number; shape: NonNullable<CoreSpiritVisualStyle['shape']>; style?: CoreSpiritVisualStyle; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'polyline'; id: string; points: CoreSpiritPoint[]; style?: CoreSpiritVisualStyle; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; metadata?: Record<string, unknown> }
+  | { kind: 'hline'; id: string; price: number; style?: CoreSpiritVisualStyle; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'background'; id: string; time: number; color: string; opacity?: number; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'barcolor'; id: string; time: number; color: string; opacity?: number; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
+  | { kind: 'table'; id: string; position: 'topLeft'|'topCenter'|'topRight'|'middleLeft'|'middleCenter'|'middleRight'|'bottomLeft'|'bottomCenter'|'bottomRight'; row: number; column: number; text: string; style?: CoreSpiritTableStyle; visual?: CoreSpiritVisualPlacement; metadata?: Record<string, unknown> }
   | { kind: 'footprint'; id: string; time: number; rows: CoreSpiritFootprintSceneRow[]; tickSize: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'signal'; time: number; type: string; metadata?: Record<string, unknown> }
-  | { kind: 'orderIntent'; id: string; time: number; side: 'long'|'short'|'flat'; confidence: number; stop?: number|null; target?: number|null; tag?: string; metadata?: Record<string, unknown> }
-  | { kind: 'scanCandidate'; id: string; time: number; score: number; label?: string; metadata?: Record<string, unknown> };
+  | { kind: 'event'; id: string; time: number; name: string; destinations?: import('./languageConcepts').CoreSpiritEventDestination[]; metadata?: Record<string, unknown> }
+  | { kind: 'orderIntent'; id: string; time: number; side: 'long'|'short'|'flat'; confidence: number; stop?: number|null; target?: number|null; tag?: string; sizing?: import('./orderIntent').CoreSpiritOrderSizing; metadata?: Record<string, unknown> }
+  | { kind: 'scanCandidate'; id: string; time: number; score: number; label?: string; metadata?: Record<string, unknown> }
+  | { kind: 'polygon'; id: string; points: CoreSpiritPoint[]; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
+  | { kind: 'customVisual'; id: string; time?: number; payload: Readonly<Record<string, unknown>>; visual?: CoreSpiritVisualPlacement; geometry?: CoreSpiritVisualGeometry; metadata?: Record<string, unknown> };
 
 export type CoreSpiritProgram = {
   version: 1;
   id: string;
   source: string;
   ast: CoreSpiritAst;
+  surface?: CoreSpiritSurfaceMetadata;
 };
 
 export type CoreSpiritBarExecutionContext = {

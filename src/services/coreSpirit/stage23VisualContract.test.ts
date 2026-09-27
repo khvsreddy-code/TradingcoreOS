@@ -12,18 +12,18 @@ const bars = Array.from({ length: 30 }, (_, i) => ({
 describe('CoreSpirit v23 expressive visual contract', () => {
   const source = `
     fast = ema(close, 5)
-    plot(fast, "#22c55e", 2, 0, "Fast")
+    plot(fast, "#3b82f6", 2, 0, "Fast")
     if crossover(close, fast) {
-      shape(low, "arrowUp", "#22c55e", 10, "BUY")
-      label("BUY", "below", "#16a34a", "#fff", 12, "pill", "700", "italic")
+      shape(low, "arrowUp", "#3b82f6", 10, "BUY")
+      label("BUY", "below", "#2563eb", "#fff", 12, "pill", "700", "italic")
     }
     box(time[10], time, highest(high, 10), lowest(low, 10), "#2563eb", "#60a5fa", 0.10, "hatch")
     polyline(time[6], low[6], time[3], high[3], time, close, "#f59e0b", 2, "dots")
     hline(close, "#64748b", 1, 1)
     bg("#1d4ed8", 0.04)
-    barcolor("#22c55e", 0.08)
+    barcolor("#3b82f6", 0.08)
     table("topRight", 0, 0, "CoreSpirit", "rgba(15,23,42,.88)", "#fff", 12)
-    table("topRight", 1, 0, "Expressive", "rgba(15,23,42,.88)", "#22c55e", 11)
+    table("topRight", 1, 0, "Expressive", "rgba(15,23,42,.88)", "#3b82f6", 11)
   `;
 
   it('compiles the v23 visual primitives', () => {

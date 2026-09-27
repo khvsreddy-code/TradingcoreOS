@@ -15,6 +15,7 @@ import type { CoreSpiritMarketDataset, CoreSpiritMarketBar } from './marketData'
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutionTarget } from './executionTarget';
 import { CoreSpiritScanner, type CoreSpiritScanRun, type CoreSpiritScanUniverse, type CoreSpiritScannerOptions } from './scanner';
+import { planCoreSpiritExecution, type CoreSpiritExecutionPlan, type CoreSpiritExecutionPlannerOptions } from './executionPlanner';
 
 export interface CoreSpiritPlatformCompile {
   result: CoreSpiritCompileResult;
@@ -79,6 +80,10 @@ export class CoreSpiritPlatformRuntime {
     mode: 'historical' | 'realtime' | 'replay' | 'backtest' | 'historicalTick',
   ): CoreSpiritSignalBatch {
     return this.signals.fromOutputs({ sourceId: artifact.sourceId, programChecksum: artifact.checksum, runId, mode, outputs });
+  }
+
+  planExecution(artifact: CoreSpiritExecutableArtifact, options: CoreSpiritExecutionPlannerOptions = {}): CoreSpiritExecutionPlan {
+    return planCoreSpiritExecution(artifact.ir, options);
   }
 
   scanArtifact(artifact: CoreSpiritExecutableArtifact, universe: CoreSpiritScanUniverse, options: CoreSpiritScannerOptions = {}): Promise<CoreSpiritScanRun> {

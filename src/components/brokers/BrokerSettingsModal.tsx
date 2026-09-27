@@ -106,8 +106,8 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
     switch (status) {
       case 'Connected':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/30">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-pulse" />
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/30">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#3b82f6] animate-pulse" />
             Connected
           </span>
         );
@@ -147,7 +147,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#222636] flex items-center justify-between bg-[#11131c]">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981]">
+            <div className="p-2 rounded-xl bg-[#3b82f6]/10 border border-[#3b82f6]/20 text-[#3b82f6]">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
@@ -166,7 +166,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
               disabled={isSyncing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#222636] bg-[#181b28] text-xs font-mono text-[#f3f4f6] hover:bg-[#222636] transition-colors cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`h-3.5 w-3.5 text-[#10b981] ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 text-[#3b82f6] ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing...' : 'Sync All'}</span>
             </button>
 
@@ -193,7 +193,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                     onClose();
                     onNavigateToConnect();
                   }}
-                  className="flex items-center gap-1 text-xs font-mono text-[#10b981] hover:underline cursor-pointer"
+                  className="flex items-center gap-1 text-xs font-mono text-[#3b82f6] hover:underline cursor-pointer"
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
                   <span>Connect New</span>
@@ -216,7 +216,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                       onClose();
                       onNavigateToConnect();
                     }}
-                    className="w-full py-2 rounded-lg bg-[#10b981] text-xs font-bold text-[#090a0f] hover:bg-[#059669] transition-colors cursor-pointer"
+                    className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[#090a0f] hover:bg-[#2563eb] transition-colors cursor-pointer"
                   >
                     Connect Broker Now
                   </button>
@@ -234,7 +234,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                       onClick={() => setSelectedBrokerId(conn.brokerId)}
                       className={`p-4 rounded-xl border transition-all cursor-pointer space-y-3 ${
                         isSelected
-                          ? 'border-[#10b981]/50 bg-[#11131c]'
+                          ? 'border-[#3b82f6]/50 bg-[#11131c]'
                           : 'border-[#222636] bg-[#0c0e15] hover:border-[#33384f]'
                       }`}
                     >
@@ -246,11 +246,11 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                                 type="text"
                                 value={tempName}
                                 onChange={(e) => setTempName(e.target.value)}
-                                className="px-2 py-0.5 text-xs font-mono bg-[#181b28] border border-[#10b981] rounded text-[#f3f4f6] focus:outline-none"
+                                className="px-2 py-0.5 text-xs font-mono bg-[#181b28] border border-[#3b82f6] rounded text-[#f3f4f6] focus:outline-none"
                               />
                               <button
                                 onClick={() => handleRename(conn.brokerId)}
-                                className="p-1 text-[#10b981] hover:text-[#059669]"
+                                className="p-1 text-[#3b82f6] hover:text-[#2563eb]"
                               >
                                 <Check className="h-3.5 w-3.5" />
                               </button>
@@ -274,7 +274,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                           )}
 
                           {conn.isPrimary && (
-                            <span className="px-1.5 py-0.2 rounded bg-[#10b981]/20 text-[#10b981] text-[9px] font-mono font-bold border border-[#10b981]/30">
+                            <span className="px-1.5 py-0.2 rounded bg-[#3b82f6]/20 text-[#3b82f6] text-[9px] font-mono font-bold border border-[#3b82f6]/30">
                               PRIMARY
                             </span>
                           )}
@@ -287,7 +287,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                         <span>Broker: {conn.name}</span>
                         <span>
                           Latency:{' '}
-                          <span className="text-[#10b981] font-bold">
+                          <span className="text-[#3b82f6] font-bold">
                             {(pings[conn.brokerId] ?? conn.latencyMs) != null ? `${pings[conn.brokerId] ?? conn.latencyMs} ms` : '—'}
                           </span>
                         </span>
@@ -301,7 +301,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                               e.stopPropagation();
                               handleSetPrimary(conn.brokerId);
                             }}
-                            className="text-[#10b981] hover:underline text-[11px]"
+                            className="text-[#3b82f6] hover:underline text-[11px]"
                           >
                             Set Primary
                           </button>
@@ -358,7 +358,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
 
                     <button
                       onClick={() => handleRefreshSession(activeConnectionInfo.brokerId)}
-                      className="px-3 py-1.5 rounded-lg border border-[#222636] bg-[#181b28] text-xs font-mono text-[#10b981] hover:bg-[#222636] flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg border border-[#222636] bg-[#181b28] text-xs font-mono text-[#3b82f6] hover:bg-[#222636] flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       <span>Refresh Session</span>
@@ -380,7 +380,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                     </div>
                     <div>
                       <span className="text-[#8c93a6] block text-[10px]">Token Expiry</span>
-                      <span className="text-[#10b981]">24h Active</span>
+                      <span className="text-[#3b82f6]">24h Active</span>
                     </div>
                   </div>
 
@@ -391,7 +391,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                         href={activeAdapter.developerPortalUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-[#10b981] hover:underline flex items-center gap-1 font-bold"
+                        className="text-[#3b82f6] hover:underline flex items-center gap-1 font-bold"
                       >
                         <span>Portal</span>
                         <ExternalLink className="h-3.5 w-3.5" />
@@ -412,7 +412,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                           key={p}
                           className="px-2.5 py-1 rounded-lg bg-[#181b28] border border-[#222636] text-xs font-mono text-[#f3f4f6] flex items-center gap-1.5"
                         >
-                          <ShieldCheck className="h-3.5 w-3.5 text-[#10b981]" />
+                          <ShieldCheck className="h-3.5 w-3.5 text-[#3b82f6]" />
                           <span>{p}</span>
                         </span>
                       )
@@ -446,13 +446,13 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                           key={item.label}
                           className={`p-2.5 rounded-lg border flex items-center justify-between ${
                             item.supported
-                              ? 'bg-[#10b981]/5 border-[#10b981]/20 text-[#f3f4f6]'
+                              ? 'bg-[#3b82f6]/5 border-[#3b82f6]/20 text-[#f3f4f6]'
                               : 'bg-[#181b28]/40 border-[#222636] text-[#8c93a6] opacity-60'
                           }`}
                         >
                           <span>{item.label}</span>
                           {item.supported ? (
-                            <CheckCircle2 className="h-4 w-4 text-[#10b981]" />
+                            <CheckCircle2 className="h-4 w-4 text-[#3b82f6]" />
                           ) : (
                             <X className="h-4 w-4 text-[#8c93a6]" />
                           )}
@@ -481,7 +481,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         {/* Footer */}
         <div className="px-6 py-3 border-t border-[#222636] bg-[#11131c] flex items-center justify-between text-xs font-mono text-[#8c93a6]">
           <div className="flex items-center gap-2">
-            <Zap className="h-3.5 w-3.5 text-[#10b981]" />
+            <Zap className="h-3.5 w-3.5 text-[#3b82f6]" />
             <span>TradingCore OS Runtime</span>
           </div>
           <span>Non-custodial direct broker integration</span>

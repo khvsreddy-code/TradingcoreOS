@@ -30,6 +30,7 @@ export interface CoreSpiritHostRunResult {
   diagnostics: readonly string[];
   finalState: ReturnType<CoreSpiritRuntime['getState']>;
   outputCount: number;
+  reactiveStats: ReturnType<CoreSpiritRuntime['getReactiveExecutionStats']>;
 }
 
 export interface CoreSpiritExecutionHost {
@@ -72,6 +73,7 @@ abstract class BaseCoreSpiritExecutionHost implements CoreSpiritExecutionHost {
       diagnostics: result.diagnostics,
       finalState: result.state,
       outputCount: result.outputs.length,
+      reactiveStats: runtime.getReactiveExecutionStats(),
     };
   }
 }

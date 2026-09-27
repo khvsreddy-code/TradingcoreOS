@@ -28,12 +28,18 @@ export type CoreSpiritType =
   | 'ui:control'
   | 'visual:root'
   | 'visual:object'
+  | 'visual:chart-root'
+  | 'visual:area'
+  | 'visual:point'
+  | 'visual:range'
+  | 'visual:position'
   | 'app:root'
   | 'app:widget'
   | 'scan:root'
   | 'scan:candidate'
   | 'market:ref'
   | 'timeframe:ref'
+  | 'model:ref'
   | 'unknown';
 
 export type CoreSpiritNumericScalar = 'int' | 'float' | 'number';

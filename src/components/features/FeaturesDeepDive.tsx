@@ -83,13 +83,13 @@ export const FeaturesDeepDive: React.FC = () => {
                   <div key={i} className="rounded border border-[#1e2230] bg-[#11131c] p-3 min-h-[110px] flex flex-col justify-between">
                     <div className="flex justify-between text-[#8c93a6]">
                       <span className="font-bold text-[#f3f4f6]">{chart}</span>
-                      <span className="text-[#10b981]">+0.85%</span>
+                      <span className="text-[#3b82f6]">+0.85%</span>
                     </div>
                     <svg className="w-full h-10" viewBox="0 0 100 30">
                       <path
                         d="M0,20 Q25,5 50,18 T100,5"
                         fill="none"
-                        stroke={i % 2 === 0 ? '#10b981' : '#3b82f6'}
+                        stroke={i % 2 === 0 ? '#3b82f6' : '#3b82f6'}
                         strokeWidth="2"
                       />
                     </svg>
@@ -119,7 +119,7 @@ export const FeaturesDeepDive: React.FC = () => {
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                   <div className="rounded border border-[#1e2230] bg-[#11131c] p-2.5">
-                    <span className="text-[#10b981] font-bold block">Ctrl + Enter</span>
+                    <span className="text-[#3b82f6] font-bold block">Ctrl + Enter</span>
                     <span className="text-[#8c93a6] text-[11px]">Submit Active Order</span>
                   </div>
                   <div className="rounded border border-[#1e2230] bg-[#11131c] p-2.5">
@@ -141,10 +141,10 @@ export const FeaturesDeepDive: React.FC = () => {
               <div className="rounded-lg border border-[#1e2230] bg-[#090a0f] p-4 font-mono text-xs text-[#8c93a6] space-y-2">
                 <div className="flex items-center justify-between border-b border-[#1e2230] pb-2 text-[11px] text-[#f3f4f6]">
                   <span>HOTKEY TELEMETRY LOG</span>
-                  <span className="text-[#10b981]">SYSTEM ACTIVE</span>
+                  <span className="text-[#3b82f6]">SYSTEM ACTIVE</span>
                 </div>
                 <div className="text-[11px] space-y-1">
-                  <p className="text-[#10b981]">15:24:01.002 [HOTKEY] Ctrl+B executed -&gt; BUY 25 BANKNIFTY 47500 CE @ 312.45</p>
+                  <p className="text-[#3b82f6]">15:24:01.002 [HOTKEY] Ctrl+B executed -&gt; BUY 25 BANKNIFTY 47500 CE @ 312.45</p>
                   <p className="text-[#3b82f6]">15:24:01.018 [BROKER API] Broker response received</p>
                   <p className="text-[#d1d5db]">15:24:05.110 [SL TRAIL] Dragged Stop Loss to 47000.00</p>
                   <p className="text-[#8c93a6]">15:25:00.000 [SYSTEM] Waiting for key combination...</p>
@@ -202,7 +202,7 @@ export const FeaturesDeepDive: React.FC = () => {
                       row.isAtMoney ? 'bg-[#181b28] text-[#f3f4f6] font-bold' : 'text-[#8c93a6]'
                     }`}
                   >
-                    <span className="text-[#10b981]">{row.callOi}</span>
+                    <span className="text-[#3b82f6]">{row.callOi}</span>
                     <span className="text-[#f3f4f6]">₹{row.callLtp}</span>
                     <span>0.52</span>
                     <span className="text-center text-[#3b82f6] font-bold">{row.strike}</span>
@@ -249,10 +249,10 @@ export const FeaturesDeepDive: React.FC = () => {
                   <span>RISK GUARDRAIL ACTIVE</span>
                 </div>
                 <p className="text-xs text-[#d1d5db] leading-relaxed">
-                  Daily Loss Limit set to <strong className="text-[#f3f4f6]">₹10,000.00</strong>. Current Unrealized P&L is <strong className="text-[#10b981]">+₹1,725.00</strong>. System will auto-square-off if P&L reaches -₹10,000.00.
+                  Daily Loss Limit set to <strong className="text-[#f3f4f6]">₹10,000.00</strong>. Current Unrealized P&L is <strong className="text-[#3b82f6]">+₹1,725.00</strong>. System will auto-square-off if P&L reaches -₹10,000.00.
                 </p>
                 <div className="w-full bg-[#1e2230] h-2 rounded-full overflow-hidden">
-                  <div className="bg-[#10b981] h-full w-[20%]" />
+                  <div className="bg-[#3b82f6] h-full w-[20%]" />
                 </div>
                 <span className="text-[10px] text-[#8c93a6] block text-right">0% Drawdown Limit Reached</span>
               </div>

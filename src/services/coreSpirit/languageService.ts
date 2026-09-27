@@ -1,7 +1,10 @@
-import { CORE_SPIRIT_STDLIB } from './standardLibrary';
+import { CORE_SPIRIT_STDLIB, CORE_SPIRIT_LIBRARY_GROUPS, getCoreSpiritLibraryGroup } from './standardLibrary';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { normalizeCoreSpiritSource } from './syntax';
+import { getCoreSpiritMemberContracts } from './memberRegistry';
+import { CORE_SPIRIT_LANGUAGE_CONCEPTS } from './languageConcepts';
+import { getCoreSpiritModelSurfaceDeclarations } from './modelSurface';
 
 export type CoreSpiritCompletion = { label: string; kind: 'function'|'keyword'|'series'|'visual'|'data'|'type'|'property'; detail: string; insertText?: string };
 export type CoreSpiritTypeInfo = { name:string; type:string; detail:string };
@@ -18,16 +21,25 @@ export type CoreSpiritEditorSnapshot = { diagnostics: CoreSpiritEditorDiagnostic
 const SNAPSHOT_CACHE = new Map<string, CoreSpiritEditorSnapshot>();
 
 
+const READABLE_OPERATORS: CoreSpiritCompletion[] = [
+  { label:'crossesAbove', kind:'keyword', detail:'readable condition operator • lowers to crossover(a, b)', insertText:'crossesAbove' },
+  { label:'crossesBelow', kind:'keyword', detail:'readable condition operator • lowers to crossunder(a, b)', insertText:'crossesBelow' },
+];
+
 const KEYWORDS: CoreSpiritCompletion[] = [
-  { label: 'let', kind: 'keyword', detail: 'declare a value/series' },
-  { label: 'if', kind: 'keyword', detail: 'conditional block' },
+  { label: 'let', kind: 'keyword', detail: 'LET • declare a value/series' },
+  { label: 'if', kind: 'keyword', detail: 'WHEN • conditional block' },
+  { label: 'when', kind: 'keyword', detail: 'WHEN • conditional/event block' },
+  { label: 'show', kind: 'keyword', detail: 'SHOW • project values into a visual area' },
+  { label: 'model', kind: 'keyword', detail: 'MODEL • declare a host-bound model artifact' },
+  { label: 'automate', kind: 'keyword', detail: 'AUTOMATE • declare an event-to-intent flow' },
+  { label: 'order', kind: 'keyword', detail: 'AUTOMATE • declare one universal order intent' },
   { label: 'true', kind: 'keyword', detail: 'boolean literal' },
   { label: 'false', kind: 'keyword', detail: 'boolean literal' },
 ];
 const SERIES: CoreSpiritCompletion[] = ['open','high','low','close','volume','time'].map(label => ({ label, kind:'series', detail:'built-in market series' }));
 const UI_ROOT: CoreSpiritCompletion[] = [{ label:'ui', kind:'property', detail:'language-driven runtime UI namespace' }];
 const WORKSPACE_ROOTS: CoreSpiritCompletion[] = [
-  { label:'visual', kind:'visual', detail:'declarative renderer-neutral visual namespace' },
   { label:'app', kind:'property', detail:'declarative trading workspace namespace' },
 ];
 const UI_PANEL_MEMBERS: CoreSpiritCompletion[] = [
@@ -78,16 +90,53 @@ export function getCoreSpiritTypeInfo(source:string, cursor:number):CoreSpiritTy
   return null;
 }
 
-function allCompletions(): CoreSpiritCompletion[] {
-  const functions = CORE_SPIRIT_STDLIB.map(x => ({ label:x.name, kind: x.name.match(/plot|label|box|zone|band|gradient|shape|heatmap|arrow|polyline|hline|bg|barcolor|table|footprint/) ? 'visual' as const : 'function' as const, detail:`${x.returnType}${x.capability ? ` • ${x.capability}` : ''}` }));
-  return [...KEYWORDS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...DATA, ...functions];
+export function getCoreSpiritLanguageConcepts() {
+  return CORE_SPIRIT_LANGUAGE_CONCEPTS.map(concept => ({
+    concept,
+    detail: concept === 'DATA' ? 'market/context inputs'
+      : concept === 'LET' ? 'values and series bindings'
+      : concept === 'WHEN' ? 'conditions and event guards'
+      : concept === 'SHOW' ? 'visual scene projection'
+      : concept === 'MODEL' ? 'feature/prediction declaration'
+      : 'event-to-order-intent orchestration',
+  }));
 }
+
+function allCompletions(): CoreSpiritCompletion[] {
+  const hiddenImplementationVisuals = new Set([
+    'plot','marker','label','labelAt','line','zone','box','band','fill','gradient',
+    'arrow','shape','heatmap','polyline','hline','bg','barcolor','table','text',
+    'polygon','customVisual',
+  ]);
+  const groupRank = new Map(CORE_SPIRIT_LIBRARY_GROUPS.map((group, index) => [group.id, index] as const));
+  const functions = CORE_SPIRIT_STDLIB
+    .filter(x => x.name !== 'show' && !hiddenImplementationVisuals.has(x.name))
+    .map(x => ({
+      label:x.name,
+      kind:'function' as const,
+      detail:`${getCoreSpiritLibraryGroup(x.name)?.label ?? 'Advanced'} • ${x.returnType}${x.capability ? ` • ${x.capability}` : ''}`,
+      _rank: groupRank.get(getCoreSpiritLibraryGroup(x.name)?.id ?? 'data') ?? 99,
+      _advanced: x.category === 'extension' && !getCoreSpiritLibraryGroup(x.name),
+    }))
+    .sort((a,b) => a._rank - b._rank || a.label.localeCompare(b.label))
+    .map(({_rank,_advanced,...item}) => item);
+  const advancedVisuals = [...hiddenImplementationVisuals].map(name => ({
+    label:name,
+    kind:'visual' as const,
+    detail:'advanced/compatibility visual API • SHOW is the primary surface',
+  }));
+  return [...READABLE_OPERATORS, ...KEYWORDS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...DATA, ...functions, ...advancedVisuals];
+}
+
 
 export function getCoreSpiritCompletionContext(source: string, cursor = source.length): CoreSpiritCompletionContext {
   const before = source.slice(0, Math.max(0, cursor));
   const line = before.slice(before.lastIndexOf('\n') + 1);
   const word = line.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] || '';
-  if (/\.[A-Za-z_][A-Za-z0-9_]*$/.test(line)) return { prefix: word, mode: 'member', trigger: '.', cursor, memberTarget: line.match(/([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*$/)?.[1] };
+  if (/\.[A-Za-z_][A-Za-z0-9_]*$/.test(line)) {
+    const memberTarget = line.match(/((?:[A-Za-z_][A-Za-z0-9_]*)|(?:market|timeframe)\s*\([^)]*\))\.[A-Za-z_][A-Za-z0-9_]*$/)?.[1];
+    return { prefix: word, mode: 'member', trigger: '.', cursor, memberTarget };
+  }
   if (/\b[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*$/.test(line)) return { prefix: word, mode: 'argument', trigger: '(' };
   if (/\b(?:plot|label|box|zone|band|gradient|shape|heatmap|arrow|polyline|hline|table)\s*\([^)]*$/.test(line)) return { prefix: word, mode: 'call' };
   return { prefix: word, mode: 'global' };
@@ -97,42 +146,50 @@ export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiri
   const all = [...allCompletions(), ...getCoreSpiritUdtInfos(source).map(u=>({label:u.name,kind:'type' as const,detail:`CoreSpirit type • ${u.fields.length} fields`}))];
   const needle = (prefix || context.prefix || '').trim().toLowerCase();
   if (context.mode === 'member') {
-    const before=source.slice(0,Math.max(0,context.cursor ?? source.length)); const target=before.match(/([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_]*)$/)?.[1];
+    const before=source.slice(0,Math.max(0,context.cursor ?? source.length)); const target=before.match(/((?:[A-Za-z_][A-Za-z0-9_]*)|(?:market|timeframe)\s*\([^)]*\))\.([A-Za-z_]*)$/)?.[1];
     if (target === 'ui') {
-      const members=[{label:'panel',kind:'property' as const,detail:'ui.panel(title)'}];
+      const members = getCoreSpiritMemberContracts('ui').map(contract => ({ label:contract.member, kind:'property' as const, detail:`${contract.callName}(${contract.minArgs}${contract.maxArgs !== undefined && contract.maxArgs !== contract.minArgs ? `-${contract.maxArgs}` : ''} args)` }));
       return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
     }
     if (target === 'visual') {
-      const members = [
-        {label:'line',kind:'function' as const,detail:'visual.line(id,time1,price1,time2,price2,meta?)'},
-        {label:'zone',kind:'function' as const,detail:'visual.zone(id,top,bottom,left?,right?,meta?)'},
-        {label:'liquidityZone',kind:'function' as const,detail:'visual.liquidityZone(id,top,bottom,strength,extend,meta?)'},
-        {label:'heatmap',kind:'function' as const,detail:'visual.heatmap(id,payload,meta?)'},
-        {label:'liquidityMap',kind:'function' as const,detail:'visual.liquidityMap(id,payload,meta?)'},
-        {label:'depth',kind:'function' as const,detail:'visual.depth(id,payload,meta?)'},
-        {label:'volumeProfile',kind:'function' as const,detail:'visual.volumeProfile(id,payload,meta?)'},
-        {label:'footprint',kind:'function' as const,detail:'visual.footprint(id,payload,meta?)'},
-        {label:'structureGraph',kind:'function' as const,detail:'visual.structureGraph(id,payload,meta?)'},
-        {label:'probabilitySurface',kind:'function' as const,detail:'visual.probabilitySurface(id,payload,meta?)'},
-        {label:'regimeBand',kind:'function' as const,detail:'visual.regimeBand(id,payload,meta?)'},
-        {label:'tradePath',kind:'function' as const,detail:'visual.tradePath(id,payload,meta?)'},
-        {label:'modelField',kind:'function' as const,detail:'visual.modelField(id,payload,meta?)'},
-        {label:'replayTrace',kind:'function' as const,detail:'visual.replayTrace(id,payload,meta?)'},
-      ];
+      const members = getCoreSpiritMemberContracts('visual').map(contract => ({
+        label:contract.member,
+        kind:'function' as const,
+        detail:`${contract.callName}(${contract.minArgs}${contract.maxArgs !== undefined && contract.maxArgs !== contract.minArgs ? `-${contract.maxArgs}` : ''} args)`
+      }));
       return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
     }
     if (target === 'app') {
-      const members = [
-        {label:'create',kind:'function' as const,detail:'app.create(title,id?)'},
-        {label:'chart',kind:'function' as const,detail:'app.chart(id?,slot?,sourceRef?)'},
-        {label:'panel',kind:'function' as const,detail:'app.panel(slot,kind,id?,title?,sourceRef?)'},
-        {label:'overlay',kind:'function' as const,detail:'app.overlay(kind,sourceRef?,id?)'},
-        {label:'bind',kind:'function' as const,detail:'app.bind(event,actionId,sourceRef?)'},
-      ];
+      const members = getCoreSpiritMemberContracts('app').map(contract => ({
+        label:contract.member,
+        kind:'function' as const,
+        detail:`${contract.callName}(${contract.minArgs}${contract.maxArgs !== undefined && contract.maxArgs !== contract.minArgs ? `-${contract.maxArgs}` : ''} args)`
+      }));
       return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
     }
+    const modelDecl = getCoreSpiritModelSurfaceDeclarations(source).find((item) => item.name === target);
+    if (modelDecl) {
+      const outputs = [...new Set([...(modelDecl.outputs ?? []), ...(modelDecl.predictions ?? [])])].map((field) => ({
+        label: field,
+        kind: 'property' as const,
+        detail: `${modelDecl.name}.${field} • MODEL output${modelDecl.outputTypes?.[field] && modelDecl.outputTypes[field] !== 'unknown' ? ` • ${modelDecl.outputTypes[field]}` : ''}`,
+        insertText: field,
+      }));
+      const modelFiltered = outputs.filter(x => !needle || x.label.toLowerCase().startsWith(needle));
+      if (modelFiltered.length) return modelFiltered;
+    }
+
     const typeInfo=target ? getCoreSpiritTypeInfo(source, Math.max(0,before.lastIndexOf(target)+target.length)) : null;
-    if (typeInfo?.type === 'ui:panel') return UI_PANEL_MEMBERS.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    if (typeInfo?.type === 'ui:panel') return getCoreSpiritMemberContracts('panel').map(contract => ({label:contract.member,kind:'property' as const,detail:`${contract.callName}(${contract.minArgs}${contract.maxArgs !== undefined && contract.maxArgs !== contract.minArgs ? `-${contract.maxArgs}` : ''} args)`})).filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    if (typeInfo?.type === 'market:ref' || typeInfo?.type === 'timeframe:ref') {
+      const fields: CoreSpiritCompletion[] = ['open','high','low','close','volume','time'].map(label => ({ label, kind:'property' as const, detail:`${target}.${label} • market series field`, insertText:label }));
+      return fields.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    }
+    const directDataRef = /^(?:market\(|timeframe\()/.test(target ?? '');
+    if (directDataRef) {
+      const fields: CoreSpiritCompletion[] = ['open','high','low','close','volume','time'].map(label => ({ label, kind:'property' as const, detail:`data reference field • ${label}`, insertText:label }));
+      return fields.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    }
     const udtType=typeInfo?.type?.startsWith('udt:') ? typeInfo.type.slice(4) : target;
     const members=udtType ? getCoreSpiritUdtMembers(source,udtType) : [];
     const memberFiltered=members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
@@ -174,6 +231,8 @@ export function getCoreSpiritSignature(name: string): string | null {
 
 
 export function getCoreSpiritHover(name: string): CoreSpiritHover | null {
+  if (name === 'crossesAbove') return { label:'a crossesAbove b', detail:'readable WHEN operator', documentation:'Lowers to crossover(a, b) through the existing CoreSpirit surface-normalization path.' };
+  if (name === 'crossesBelow') return { label:'a crossesBelow b', detail:'readable WHEN operator', documentation:'Lowers to crossunder(a, b) through the existing CoreSpirit surface-normalization path.' };
   const builtin = CORE_SPIRIT_STDLIB.find(x => x.name === name);
   if (builtin) return { label: getCoreSpiritSignature(name) || name, detail: builtin.capability ? `capability: ${builtin.capability}` : `returns ${builtin.returnType}`, documentation: builtin.pure ? 'Deterministic within the current bar/context.' : 'May depend on runtime state or host market data.' };
   if (['open','high','low','close','volume','time'].includes(name)) return { label:name, detail:'built-in market series', documentation:'Current chart bar series value.' };
@@ -188,7 +247,7 @@ export function getCoreSpiritSemanticTokens(source: string): CoreSpiritSemanticT
   lines.forEach((line,lineIndex)=>{
     const comment=line.indexOf('//'); if(comment>=0) out.push({line:lineIndex,column:comment,length:line.length-comment,token:'comment'});
     const re=/\b(?:let|if|else|true|false)\b|\b(?:open|high|low|close|volume|time)\b|\b(?:[A-Za-z_][A-Za-z0-9_]*)\b|\b(?:\d+(?:\.\d+)?)\b|"(?:[^"\\]|\\.)*"/g;
-    let m:RegExpExecArray|null; while((m=re.exec(line))){ const text=m[0]; if(comment>=0 && m.index>=comment) break; let token:'keyword'|'function'|'series'|'number'|'string'|'identifier'='identifier'; if(/^(let|if|else|true|false)$/.test(text)) token='keyword'; else if(/^(open|high|low|close|volume|time)$/.test(text)) token='series'; else if(/^\d/.test(text)) token='number'; else if(/^"/.test(text)) token='string'; else if(/\s*\(/.test(line.slice(m.index+text.length))) token='function'; out.push({line:lineIndex,column:m.index,length:text.length,token}); }
+    let m:RegExpExecArray|null; while((m=re.exec(line))){ const text=m[0]; if(comment>=0 && m.index>=comment) break; let token:'keyword'|'function'|'series'|'number'|'string'|'identifier'='identifier'; if(/^(let|if|else|true|false|when|show|model|automate|crossesAbove|crossesBelow)$/.test(text)) token='keyword'; else if(/^(open|high|low|close|volume|time)$/.test(text)) token='series'; else if(/^\d/.test(text)) token='number'; else if(/^"/.test(text)) token='string'; else if(/\s*\(/.test(line.slice(m.index+text.length))) token='function'; out.push({line:lineIndex,column:m.index,length:text.length,token}); }
   });
   return out;
 }

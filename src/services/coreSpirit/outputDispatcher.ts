@@ -2,7 +2,7 @@ import { CoreEventBus, coreEventBus } from '../core/event/eventBus';
 import { CoreDrawingStore } from '../core/drawing/coreDrawingStore';
 import { CoreDrawingDispatcher } from '../core/drawing/drawingDispatcher';
 import { CoreSpiritObject } from './types';
-import { CoreSpiritEventBus, createSignalEvent } from './eventSystem';
+import { CoreSpiritEventBus, createSignalEvent, createNamedCoreSpiritEvent, CoreSpiritEventRouter } from './eventSystem';
 import { CoreSpiritExplainabilityStore, buildSignalExplanation, explanationFactsFromRuntimeLocals } from './explainability';
 
 export type CoreSpiritPlotPoint = { time: number; value: number | null };
@@ -20,6 +20,7 @@ export class CoreSpiritOutputDispatcher {
   private tables: Extract<CoreSpiritObject,{kind:'table'}>[] = [];
   private plotStyles = new Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>();
   readonly explainability = new CoreSpiritExplainabilityStore();
+  readonly eventRouter = new CoreSpiritEventRouter();
 
   constructor(bus: CoreEventBus = coreEventBus, drawingStore = new CoreDrawingStore(), private readonly eventSystem = new CoreSpiritEventBus(bus)) {
     this.drawings = drawingStore;
@@ -50,11 +51,24 @@ export class CoreSpiritOutputDispatcher {
         const idx = this.tables.findIndex(x => x.id === output.id);
         if (idx >= 0) this.tables[idx] = output; else this.tables.push(output);
         if (this.tables.length > 1000) this.tables.splice(0, this.tables.length - 1000);
-      } else if (output.kind === 'box' || output.kind === 'band' || output.kind === 'arrow' || output.kind === 'shape' || output.kind === 'background' || output.kind === 'barcolor') {
+      } else if (output.kind === 'box' || output.kind === 'band' || output.kind === 'arrow' || output.kind === 'shape' || output.kind === 'polygon' || output.kind === 'customVisual' || output.kind === 'background' || output.kind === 'barcolor') {
         const id = (output as any).id || `${output.kind}:${this.visuals.length}`;
         const idx = this.visuals.findIndex(x => (x as any).id === id);
         if (idx >= 0 && !['band','shape','background','barcolor'].includes(output.kind)) this.visuals[idx] = output; else this.visuals.push(output);
         if (this.visuals.length > 25000) this.visuals.splice(0, this.visuals.length - 25000);
+      } else if (output.kind === 'event') {
+        const event = createNamedCoreSpiritEvent({
+          sourceId,
+          runId: String(output.metadata?.runId || sourceId),
+          mode: 'realtime',
+          barIndex: Number(output.metadata?.barIndex ?? Math.max(0, this.signals.length - 1)),
+          timestamp: output.time,
+          sequence: this.signals.length + 1,
+          name: output.name,
+          destinations: output.destinations,
+          metadata: output.metadata,
+        });
+        void this.eventSystem.publish(event).then(result => this.eventRouter.dispatch(result.event));
       } else if (output.kind === 'signal') {
         this.signals.push(output);
         const metadata = output.metadata || {};
@@ -94,7 +108,7 @@ export class CoreSpiritOutputDispatcher {
           kind: 'signal',
           time: output.time,
           type: output.side === 'flat' ? 'EXIT' : output.side === 'long' ? 'ENTRY LONG' : 'ENTRY SHORT',
-          metadata: { ...(output.metadata || {}), intentId: output.id, confidence: output.confidence, position: output.side === 'short' ? 'above' : 'below', shape: output.side === 'short' ? 'arrowDown' : 'arrowUp', color: output.side === 'short' ? '#ef4444' : '#22c55e' },
+          metadata: { ...(output.metadata || {}), intentId: output.id, confidence: output.confidence, position: output.side === 'short' ? 'above' : 'below', shape: output.side === 'short' ? 'arrowDown' : 'arrowUp', color: output.side === 'short' ? '#ef4444' : '#3b82f6' },
         });
         if (this.signals.length > 10000) this.signals.splice(0, this.signals.length - 10000);
       }

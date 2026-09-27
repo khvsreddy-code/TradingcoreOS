@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "outDir": ".stage61_v61_cjs",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/opt/nvm/versions/node/v22.16.0/lib/node_modules/ts-node/node_modules/@types"
+    ]
+  },
+  "files": [
+    "src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts"
+  ]
+}

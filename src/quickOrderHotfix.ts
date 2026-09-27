@@ -20,7 +20,7 @@
     const header = q('header');
     const strip = header?.lastElementChild as HTMLElement | null;
     const cards = strip ? Array.from(strip.children).filter(x => x instanceof HTMLElement) as HTMLElement[] : [];
-    const card = cards.find(x => x.className.includes('border-[#10b981]/50'));
+    const card = cards.find(x => x.className.includes('border-[#3b82f6]/50'));
     if (card) {
       const lines = (card.innerText || '').split('\n').map(x => x.trim()).filter(Boolean);
       return { label: lines[1] || lines[0] || '', type: lines[3] || lines[2] || '' };
@@ -60,7 +60,7 @@
   const mkInput = (placeholder: string, type = 'text') => { const i = document.createElement('input'); i.type = type; i.placeholder = placeholder; i.className = 'tco-qo-input'; return i; };
   const styles = () => {
     if (q('#tco-qo-styles')) return;
-    const s = document.createElement('style'); s.id = 'tco-qo-styles'; s.textContent = `.tco-qo-ui{display:flex;flex-direction:column;gap:8px;font-family:JetBrains Mono,monospace}.tco-qo-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#d1d5db}.tco-qo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tco-qo-select,.tco-qo-input{width:100%;box-sizing:border-box;background:#090a0f;border:1px solid #222636;border-radius:6px;padding:8px;color:#d1d5db;font:10px JetBrains Mono,monospace;outline:none}.tco-qo-contract{min-height:28px;display:flex;align-items:center;padding:6px 8px;border:1px solid #222636;border-radius:6px;background:#090a0f;color:#64748b;font-size:9px}.tco-qo-submit{width:100%;padding:9px;border:0;border-radius:6px;background:#10b981;color:#06110d;font:700 10px JetBrains Mono,monospace;cursor:pointer}.tco-qo-submit:hover{filter:brightness(1.08)}`; document.head.appendChild(s);
+    const s = document.createElement('style'); s.id = 'tco-qo-styles'; s.textContent = `.tco-qo-ui{display:flex;flex-direction:column;gap:8px;font-family:JetBrains Mono,monospace}.tco-qo-title{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#d1d5db}.tco-qo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tco-qo-select,.tco-qo-input{width:100%;box-sizing:border-box;background:#090a0f;border:1px solid #222636;border-radius:6px;padding:8px;color:#d1d5db;font:10px JetBrains Mono,monospace;outline:none}.tco-qo-contract{min-height:28px;display:flex;align-items:center;padding:6px 8px;border:1px solid #222636;border-radius:6px;background:#090a0f;color:#64748b;font-size:9px}.tco-qo-submit{width:100%;padding:9px;border:0;border-radius:6px;background:#3b82f6;color:#06110d;font:700 10px JetBrains Mono,monospace;cursor:pointer}.tco-qo-submit:hover{filter:brightness(1.08)}`; document.head.appendChild(s);
   };
   function render() {
     const panel = quickPanel(); if (!panel) return;

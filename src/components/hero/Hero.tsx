@@ -35,7 +35,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
       <div className="hero-grid pointer-events-none absolute inset-0" />
       <div className="hero-orb hero-orb-a pointer-events-none absolute -left-32 top-20 h-96 w-96 rounded-full" />
       <div className="hero-orb hero-orb-b pointer-events-none absolute right-0 top-0 h-[34rem] w-[34rem] rounded-full" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#10b981]/40 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#3b82f6]/40 to-transparent" />
 
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
         <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-10">
@@ -47,8 +47,8 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
               className="eyebrow mb-6 inline-flex items-center gap-2"
             >
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#10b981]/60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#10b981]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3b82f6]/60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3b82f6]" />
               </span>
               BROWSER-BASED TRADING OPERATING SYSTEM
               <span className="font-mono text-[8px] text-[#596175]">NSE / BSE</span>
@@ -95,7 +95,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
               transition={{ duration: 0.65, delay: 0.28 }}
               className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-xs text-[#7f879b]"
             >
-              <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#10b981]" /> OAuth broker authorization</span>
+              <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#3b82f6]" /> OAuth broker authorization</span>
               <span className="inline-flex items-center gap-2"><Zap className="h-4 w-4 text-[#60a5fa]" /> Browser-native execution</span>
               <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-[#c084fc]" /> Live market workspace</span>
             </motion.div>
@@ -132,7 +132,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                 <div className="flex gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]/70" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]/70" />
                 </div>
                 <div className="flex h-6 flex-1 items-center rounded-md border border-white/[0.06] bg-[#070a10] px-3 font-mono text-[9px] text-[#5d667a]">
                   tradingcoreos.vercel.app / workspace
@@ -144,14 +144,14 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
 
               <div className="flex h-12 items-center justify-between border-b border-white/[0.06] px-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#10b981]/30 bg-[#10b981]/10 text-xs font-black text-[#10b981]">TC</div>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#3b82f6]/30 bg-[#3b82f6]/10 text-xs font-black text-[#3b82f6]">TC</div>
                   <div>
                     <div className="text-[11px] font-bold text-[#f3f4f6]">TradingCore OS</div>
                     <div className="font-mono text-[8px] text-[#687187]">NIFTY 50 · NSE · 5m</div>
                   </div>
                 </div>
                 <div className="hidden gap-5 font-mono text-[9px] text-[#657087] md:flex">
-                  <span className="text-[#10b981]">AUTOMATIONS</span><span>MODELS</span><span>INDICATORS</span><span>PORTFOLIO</span>
+                  <span className="text-[#3b82f6]">AUTOMATIONS</span><span>MODELS</span><span>INDICATORS</span><span>PORTFOLIO</span>
                 </div>
               </div>
 
@@ -165,10 +165,10 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                     ['RELIANCE', '1,411.90', '-0.22%'],
                     ['HDFCBANK', '1,942.50', '+0.44%'],
                   ].map(([name, price, chg], i) => (
-                    <div key={name} className={`border-b border-white/[0.04] px-3 py-2.5 font-mono ${i === 0 ? 'bg-[#10b981]/[0.07]' : ''}`}>
+                    <div key={name} className={`border-b border-white/[0.04] px-3 py-2.5 font-mono ${i === 0 ? 'bg-[#3b82f6]/[0.07]' : ''}`}>
                       <div className="flex justify-between text-[9px]">
                         <span className="font-semibold text-[#dfe3eb]">{name}</span>
-                        <span className={chg.startsWith('-') ? 'text-[#fb7185]' : 'text-[#34d399]'}>{chg}</span>
+                        <span className={chg.startsWith('-') ? 'text-[#fb7185]' : 'text-[#60a5fa]'}>{chg}</span>
                       </div>
                       <div className="mt-1 text-[9px] text-[#747e93]">{price}</div>
                     </div>
@@ -179,48 +179,48 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                   <div className="absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] [background-size:42px_42px]" />
                   <div className="absolute left-3 right-3 top-3 flex items-center justify-between font-mono text-[8px] text-[#667086]">
                     <span>O 24,091 · H 24,212 · L 24,040 · <b className="text-[#f3f4f6]">C 24,175</b></span>
-                    <span className="text-[#34d399]">+84.80</span>
+                    <span className="text-[#60a5fa]">+84.80</span>
                   </div>
                   <svg viewBox="0 0 600 150" preserveAspectRatio="none" className="absolute inset-x-0 top-10 h-52 w-full">
                     <defs>
                       <linearGradient id="heroArea" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0" stopColor="#10b981" stopOpacity=".22" />
-                        <stop offset="1" stopColor="#10b981" stopOpacity="0" />
+                        <stop offset="0" stopColor="#3b82f6" stopOpacity=".22" />
+                        <stop offset="1" stopColor="#3b82f6" stopOpacity="0" />
                       </linearGradient>
                     </defs>
                     <path d="M30 135 L30 116 L80 110 L120 115 L160 92 L200 101 L240 78 L280 88 L320 65 L360 72 L400 48 L440 57 L480 35 L520 43 L565 22 L565 135 Z" fill="url(#heroArea)" />
-                    <path d="M30 116 L80 110 L120 115 L160 92 L200 101 L240 78 L280 88 L320 65 L360 72 L400 48 L440 57 L480 35 L520 43 L565 22" fill="none" stroke="#34d399" strokeWidth="2.2" />
+                    <path d="M30 116 L80 110 L120 115 L160 92 L200 101 L240 78 L280 88 L320 65 L360 72 L400 48 L440 57 L480 35 L520 43 L565 22" fill="none" stroke="#60a5fa" strokeWidth="2.2" />
                     <line x1="25" x2="575" y1="78" y2="78" stroke="#a78bfa" strokeDasharray="5 5" opacity=".7" />
                     {candles.slice(5).map((c, i) => (
-                      <line key={i} x1={c.x} x2={c.x} y1={c.h} y2={c.l} stroke="#d1fae5" strokeWidth="1" opacity=".45" />
+                      <line key={i} x1={c.x} x2={c.x} y1={c.h} y2={c.l} stroke="#dbeafe" strokeWidth="1" opacity=".45" />
                     ))}
                   </svg>
                   <div className="absolute left-[56%] top-[35%] rounded-md border border-[#a78bfa]/30 bg-[#111522]/90 px-2 py-1 font-mono text-[8px] text-[#d8b4fe] shadow-lg">VWAP 24,148</div>
-                  <div className="absolute right-3 top-[42%] rounded bg-[#10b981] px-2 py-1 font-mono text-[8px] font-bold text-[#06100c] shadow-[0_0_18px_rgba(16,185,129,.25)]">24,175.65</div>
+                  <div className="absolute right-3 top-[42%] rounded bg-[#3b82f6] px-2 py-1 font-mono text-[8px] font-bold text-[#06100c] shadow-[0_0_18px_rgba(59,130,246,.25)]">24,175.65</div>
                   <div className="absolute bottom-3 left-3 flex items-center gap-3 rounded-lg border border-white/[0.07] bg-[#0b0e16]/90 px-3 py-2 font-mono text-[8px] text-[#8b95aa] backdrop-blur">
-                    <span className="text-[#34d399]">BUY 82%</span><span className="text-[#525c70]">•</span><span>BOS CONFIRMED</span><span className="text-[#525c70]">•</span><span>RR 2.8</span>
+                    <span className="text-[#60a5fa]">BUY 82%</span><span className="text-[#525c70]">•</span><span>BOS CONFIRMED</span><span className="text-[#525c70]">•</span><span>RR 2.8</span>
                   </div>
                 </div>
 
                 <div className="border-l border-white/[0.06] bg-[#0b0e16]">
                   <div className="flex border-b border-white/[0.06] font-mono text-[8px]">
-                    <span className="flex-1 border-b border-[#10b981] bg-[#10b981]/[0.05] py-2 text-center text-[#f3f4f6]">ORDER</span>
+                    <span className="flex-1 border-b border-[#3b82f6] bg-[#3b82f6]/[0.05] py-2 text-center text-[#f3f4f6]">ORDER</span>
                     <span className="flex-1 py-2 text-center text-[#69748a]">POSITIONS</span>
                   </div>
                   <div className="space-y-3 p-3 font-mono">
                     <div className="text-[8px] uppercase tracking-[0.14em] text-[#69748a]">NIFTY 50</div>
                     <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.06] bg-[#070a10] p-1">
-                      <div className="rounded bg-[#10b981]/15 py-1.5 text-center text-[9px] font-bold text-[#34d399]">BUY</div>
+                      <div className="rounded bg-[#3b82f6]/15 py-1.5 text-center text-[9px] font-bold text-[#60a5fa]">BUY</div>
                       <div className="py-1.5 text-center text-[9px] text-[#69748a]">SELL</div>
                     </div>
                     <div className="rounded-lg border border-white/[0.06] bg-[#070a10] p-2.5">
                       <div className="flex justify-between text-[8px] text-[#69748a]"><span>Qty</span><span className="text-[#e5e7eb]">25</span></div>
                       <div className="mt-2 flex justify-between text-[8px] text-[#69748a]"><span>Margin</span><span className="text-[#e5e7eb]">₹1.25L</span></div>
                     </div>
-                    <div className="rounded-lg bg-[#10b981] py-2 text-center text-[8px] font-black tracking-wider text-[#06100c]">BUY MARKET</div>
+                    <div className="rounded-lg bg-[#3b82f6] py-2 text-center text-[8px] font-black tracking-wider text-[#06100c]">BUY MARKET</div>
                     <div className="border-t border-white/[0.06] pt-3">
-                      <div className="flex justify-between text-[8px]"><span className="text-[#69748a]">Net P&amp;L</span><span className="text-[#34d399]">+₹1,725</span></div>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.05]"><div className="h-full w-[68%] rounded-full bg-gradient-to-r from-[#10b981] to-[#60a5fa]" /></div>
+                      <div className="flex justify-between text-[8px]"><span className="text-[#69748a]">Net P&amp;L</span><span className="text-[#60a5fa]">+₹1,725</span></div>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.05]"><div className="h-full w-[68%] rounded-full bg-gradient-to-r from-[#3b82f6] to-[#60a5fa]" /></div>
                     </div>
                   </div>
                 </div>
@@ -233,7 +233,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
               className="absolute -bottom-5 -left-5 hidden rounded-xl border border-white/[0.08] bg-[#0d111a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
             >
               <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#687187]">Signal engine</div>
-              <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[#f3f4f6]"><span className="h-2 w-2 rounded-full bg-[#10b981]" /> Bullish confluence <span className="font-mono text-[#34d399]">84%</span></div>
+              <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[#f3f4f6]"><span className="h-2 w-2 rounded-full bg-[#3b82f6]" /> Bullish confluence <span className="font-mono text-[#60a5fa]">84%</span></div>
             </motion.div>
 
             <motion.div

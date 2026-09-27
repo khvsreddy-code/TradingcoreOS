@@ -72,7 +72,7 @@ export const Footer: React.FC<{ onLaunch?: () => void }> = ({ onLaunch }) => {
         {/* Bottom Bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs">
           <div className="flex items-center gap-3">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-[#11131c] border border-[#1e2230] text-[#10b981] font-bold text-xs">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-[#11131c] border border-[#1e2230] text-[#3b82f6] font-bold text-xs">
               TC
             </div>
             <span className="text-[#f3f4f6] font-bold">TradingCore OS</span>
@@ -81,7 +81,7 @@ export const Footer: React.FC<{ onLaunch?: () => void }> = ({ onLaunch }) => {
 
           {/* Live Status Indicator */}
           <div className="flex items-center gap-2 rounded-full border border-[#1e2230] bg-[#0c0e15] px-3 py-1 text-[11px]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#3b82f6]" />
             <span className="text-[#f3f4f6]">TradingCore API available</span>
             <span className="text-[#8c93a6]">· Broker status depends on your connection</span>
           </div>

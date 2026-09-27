@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "outDir": ".stage47_48_cjs",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": []
+  },
+  "files": [
+    "src/services/coreSpirit/stage47UniversalShowSurface.test.ts",
+    "src/services/coreSpirit/stage48SceneGraphEncapsulation.test.ts",
+    "src/services/coreSpirit/stage42CoreSpiritV1Runtime.test.ts"
+  ]
+}

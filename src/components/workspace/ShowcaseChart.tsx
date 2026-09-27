@@ -73,7 +73,7 @@ export function ShowcaseChart({ basePrice, timeframe, showLevels, showForecast }
     });
 
     const candles = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#34d399', borderDownColor: '#fb7185', wickUpColor: '#34d399', wickDownColor: '#fb7185',
+      upColor: '#3b82f6', downColor: '#ef4444', borderUpColor: '#60a5fa', borderDownColor: '#fb7185', wickUpColor: '#60a5fa', wickDownColor: '#fb7185',
       priceLineVisible: true, lastValueVisible: true,
     });
     const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'volume', lastValueVisible: false, priceLineVisible: false });
@@ -106,7 +106,7 @@ export function ShowcaseChart({ basePrice, timeframe, showLevels, showForecast }
 
     const lines = [
       candles.createPriceLine({ price: basePrice, color: '#60a5fa', lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'ENTRY' }),
-      candles.createPriceLine({ price: basePrice + 310, color: '#34d399', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'TARGET' }),
+      candles.createPriceLine({ price: basePrice + 310, color: '#60a5fa', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'TARGET' }),
       candles.createPriceLine({ price: basePrice - 225, color: '#fb7185', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'INVALIDATION' }),
       candles.createPriceLine({ price: pv / vol, color: '#c084fc', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: 'VWAP' }),
     ];

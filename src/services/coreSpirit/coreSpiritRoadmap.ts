@@ -1,5 +1,5 @@
 /**
- * CoreSpirit stages 1–33: architecture contract and release gates.
+ * CoreSpirit stages 1–53: architecture contract and release gates.
  * This file is intentionally data-first so tooling can render the roadmap,
  * check dependencies, and keep the language/runtime roadmap in sync.
  */
@@ -84,10 +84,10 @@ export const CORE_SPIRIT_STAGES: readonly CoreSpiritStage[] = [
     ],
   },
   {
-    id: 7, name: 'Tiny standard library', kind: 'foundation',
+    id: 7, name: 'Small semantic core', kind: 'foundation',
     goal: 'Keep a small, documented core of reliable primitives and separate platform extensions.', dependencies: [1, 3, 4],
     gates: [
-      { id: 'cs7-size', statement: 'Core standard-library surface remains intentionally small (30 primitives in v1).', automated: true },
+      { id: 'cs7-size', statement: 'Core semantic builtin surface remains intentionally small (30 primitives); larger capabilities live in extensions.', automated: true },
       { id: 'cs7-runtime', statement: 'Every core primitive has a deterministic runtime implementation or compile-time contract.', automated: true },
       { id: 'cs7-extension', statement: 'Platform-specific capabilities live outside the core library.', automated: true },
     ],
@@ -423,7 +423,251 @@ export const CORE_SPIRIT_STAGES: readonly CoreSpiritStage[] = [
     ],
   },
 
-];
+
+  {
+    id: 40, name: 'Numerical execution planner', kind: 'runtime',
+    goal: 'Make CPU/WASM/GPU acceleration a host-planning concern over the same Core IR, with workload estimation, batching, deterministic eligibility and hybrid pure-work offload.', dependencies: [27, 28, 30, 31, 38, 39],
+    gates: [
+      { id: 'cs40-backend-neutral', statement: 'CoreSpirit models CPU, WASM and GPU as interchangeable numerical backends behind a host planner; no backend becomes a language primitive.', automated: true },
+      { id: 'cs40-determinism', statement: 'A deterministic request cannot select a backend that does not declare deterministic execution.', automated: true },
+      { id: 'cs40-batch', statement: 'Large symbol × timeframe × bar workloads are converted into bounded deterministic batches.', automated: true },
+      { id: 'cs40-hybrid', statement: 'When effects/state exist, pure numerical nodes may be assigned to an accelerator while ordered effect nodes remain on CPU.', automated: true },
+      { id: 'cs40-fallback', statement: 'CPU remains the semantic fallback when no alternate backend is available or eligible.', automated: true },
+    ],
+  },
+  {
+    id: 41, name: 'Capability-based sandbox', kind: 'runtime',
+    goal: 'Make resource and platform authority an explicit allow-list so CoreSpirit code can receive only granted capabilities and cannot express raw OS, broker, filesystem, process or unrestricted network powers.', dependencies: [15, 18, 27, 40],
+    gates: [
+      { id: 'cs41-allow-list', statement: 'Sandbox capabilities are explicitly granted and are the intersection of program-layer and execution-target authority.', automated: true },
+      { id: 'cs41-dangerous-absent', statement: 'Raw network, filesystem, arbitrary process, native-call, broker-credential and direct-account capabilities are not expressible through the sandbox API.', automated: true },
+      { id: 'cs41-quotas', statement: 'Instruction, data-request, model-call, visual-node and compute-unit limits are enforced per revision.', automated: true },
+      { id: 'cs41-accelerator', statement: 'WASM/GPU compute requires an explicit compute capability and never grants broker/network/account authority.', automated: true },
+      { id: 'cs41-host-owned', statement: 'The sandbox constrains CoreSpirit while leaving actual OS/driver/process/network implementation to the host.', automated: true },
+    ],
+
+  },
+  {
+    id: 42, name: 'CoreSpirit v1 converged runtime', kind: 'runtime',
+    goal: 'Freeze the first end-state runtime contract: one executable artifact travels through reactive execution, renderer-neutral scene projection and deterministic replay, while hosts remain adapters rather than alternate runtimes.',
+    dependencies: [10, 18, 39, 41],
+    gates: [
+      { id: 'cs42-one-artifact', statement: 'Historical, replay and realtime v1 sessions are built around the same validated executable artifact and existing VM.', automated: true },
+      { id: 'cs42-reactive', statement: 'The v1 runtime exposes the existing reactive engine as the single execution/reuse substrate; it does not introduce a second evaluator.', automated: true },
+      { id: 'cs42-scene', statement: 'Run outputs can be projected into the persistent renderer-neutral scene graph and realtime revisions produce transactional visual patches.', automated: true },
+      { id: 'cs42-replay', statement: 'Replay verification compares repeated artifact + dataset execution through the existing replay host and yields a deterministic acceptance record.', automated: true },
+      { id: 'cs42-host-neutral', statement: 'The v1 runtime contains orchestration only; clock/data/rendering/model/network/broker implementations remain host capabilities.', automated: true },
+    ],
+    nonGoals: ['full GPU/WASM production adapters', 'broker execution inside CoreSpirit', 'a second VM or alternate evaluator'],
+  },
+  {
+    id: 43, name: 'Programmable visual coordinate system', kind: 'platform',
+    goal: 'Make visual placement and coordinate spaces first-class scene semantics: chart areas, panels, side panels, time/bar/price/percentage/screen/normalized coordinates, ranges, relative bar anchors, rich geometry and custom visuals.', dependencies: [25, 26, 39, 42],
+    gates: [
+      { id: 'cs43-plot-placement', statement: 'plot can target a semantic area, conditional visibility and optional numeric range without changing legacy plot behavior.', automated: true },
+      { id: 'cs43-coordinate-spaces', statement: 'CoreSpirit exposes validated time, bar, price, percentage, screen and normalized coordinate spaces through serializable point contracts.', automated: true },
+      { id: 'cs43-rich-geometry', statement: 'Point-based line/box/polygon geometry and relative bar text placement enter the same scene graph as legacy visuals.', automated: true },
+      { id: 'cs43-custom-visual', statement: 'Custom visual payloads are renderer-neutral, serializable and area-addressable.', automated: true },
+      { id: 'cs43-scene-preservation', statement: 'Placement, geometry and relative-position metadata survive scene construction, validation, diffing and realtime-compatible identity rules.', automated: true },
+      { id: 'cs43-host-neutral', statement: 'Coordinate contracts contain no DOM, Canvas, WebGL/WebGPU or device-specific handles; coordinate resolution remains host-owned.', automated: true },
+    ],
+  },
+
+  {
+    id: 44, name: 'Core language unification', kind: 'compiler',
+    goal: 'Keep the external language surface pleasant while preventing feature-specific mini-languages: surface conveniences, direct calls and namespaced members must converge through shared registries into the same parser, compiler, stable IR and VM.',
+    dependencies: [18, 38, 42, 43],
+    gates: [
+      { id: 'cs44-small-core', statement: 'The executable parser grammar remains the small core language; feature additions do not require a new parser sub-language merely to describe outputs or host capabilities.', automated: true },
+      { id: 'cs44-surface-registry', statement: 'Concise surface spellings are implemented as registered source transforms rather than feature-specific logic scattered through the compiler pipeline.', automated: true },
+      { id: 'cs44-call-registry', statement: 'Direct callable output semantics and namespaced member call contracts are described once and consumed by semantic analysis and lowering.', automated: true },
+      { id: 'cs44-no-compiler-allowlist', statement: 'Compiler emission lowering does not maintain a second hard-coded list of visual/strategy/event function names; emit kinds come from the shared call contracts.', automated: true },
+      { id: 'cs44-editor-convergence', statement: 'Editor member completion uses the same member registry as semantic analysis and lowering so the language service cannot invent a divergent mini-language.', automated: true },
+      { id: 'cs44-one-ir', statement: 'All surface forms converge into the same AST/IR/VM contract; syntax sugar cannot create an alternate execution path.', automated: true },
+    ],
+    nonGoals: ['named-argument parser syntax', 'a second AST for strategy/visual declarations', 'renderer-specific language keywords'],
+  },
+
+  {
+    id: 45, name: 'Six-concept language surface', kind: 'compiler',
+    goal: 'Reduce the user mental model to DATA, LET, WHEN, SHOW, MODEL and AUTOMATE while keeping the executable grammar and VM unchanged underneath. Concise WHEN/SHOW forms lower into core syntax; MODEL/AUTOMATE declarations become stable artifact metadata plus existing callable semantics.',
+    dependencies: [1, 8, 18, 44],
+    gates: [
+      { id: 'cs45-six-concepts', statement: 'The documented user mental model contains exactly DATA, LET, WHEN, SHOW, MODEL and AUTOMATE.', automated: true },
+      { id: 'cs45-when', statement: 'WHEN source blocks lower deterministically to existing if control flow, including quoted incoming event names for automation.', automated: true },
+      { id: 'cs45-show', statement: 'SHOW source forms lower to the single Core IR show emission kind and then to renderer-neutral visual scene objects.', automated: true },
+      { id: 'cs45-declarations', statement: 'MODEL and AUTOMATE declarations are captured as serializable metadata on the same executable artifact rather than introducing a second AST or VM.', automated: true },
+      { id: 'cs45-event-boundary', statement: 'Incoming automation events are host-resolved through an explicit event resolver; event queries never become signal emission or broker authority.', automated: true },
+      { id: 'cs45-one-language', statement: 'All six concepts converge through the existing lexer/parser/AST/Core IR/VM path; no concept introduces a feature-specific executor.', automated: true },
+      { id: 'cs45-editor', statement: 'The editor presents the six concepts as the primary language vocabulary while retaining implementation call/member completion as an expert surface.', automated: true },
+    ],
+    nonGoals: ['a second parser grammar for models or automation', 'direct model-process access from the VM', 'direct broker execution from AUTOMATE syntax', 'named-argument syntax', 'general-purpose function declarations'],
+  },
+  {
+    id: 46, name: 'Universal SHOW visual primitive', kind: 'compiler',
+    goal: 'Make SHOW the primary visual language concept with one Visual IR emission path, while retaining plot/geometry calls as compatibility and advanced APIs. Infer common coordinate spaces from concise source forms and preserve explicit coordinate escapes for advanced users.',
+    dependencies: [43, 45],
+    gates: [
+      { id: 'cs46-show-ir', statement: 'All user-facing SHOW forms compile to the single Core IR show emission kind rather than plot/line/box-specific emission kinds.', automated: true },
+      { id: 'cs46-show-series', statement: 'SHOW series forms support price/chart areas, named panels and conditional WHEN projection without introducing another runtime.', automated: true },
+      { id: 'cs46-show-geometry', statement: 'SHOW line/resistance/support/box forms produce existing renderer-neutral geometry and scene objects.', automated: true },
+      { id: 'cs46-show-zone', statement: 'SHOW zone expresses a price-domain region without fabricating hidden time coordinates; viewport/domain intent remains serializable.', automated: true },
+      { id: 'cs46-coordinate-inference', statement: 'Bracket coordinate pairs infer normalized space for common 0..1 literals and time/price space otherwise; explicit point(..., space) remains available.', automated: true },
+      { id: 'cs46-same-scene', statement: 'Universal SHOW output enters the existing scene graph and remains subject to the same diff, rollback, quota and renderer-neutral validation contracts.', automated: true },
+      { id: 'cs46-surface-simple', statement: 'Editor primary completion does not require users to learn the advanced visual function family; SHOW is the primary visual entry point.', automated: true },
+    ],
+    nonGoals: ['removing compatibility visual APIs', 'device-coordinate transforms inside the VM', 'a second visual executor', 'implicit coordinate mixing', 'renderer-specific syntax in the language'],
+  },
+
+
+  {
+    id: 47, name: 'Universal SHOW surface + coordinate inference', kind: 'compiler',
+    goal: 'Make SHOW the complete user-facing visual vocabulary for common projections while centralizing conservative coordinate inference before execution; advanced coordinate constructors remain escape hatches, not required syntax.',
+    dependencies: [43, 45, 46],
+    gates: [
+      { id: 'cs47-one-show', statement: 'Value, line, box, zone and signal visual forms all enter one SHOW semantic emission path; plot/line/box/zone remain implementation compatibility APIs.', automated: true },
+      { id: 'cs47-inference', statement: 'Coordinate inference is centralized, deterministic and explicit before runtime: 0..1 literal pairs infer normalized, bar-index-leading pairs infer bar, other geometry defaults to time/price.', automated: true },
+      { id: 'cs47-bracket', statement: 'Bracketed pairs with nested indexing/calls are parsed structurally rather than with a renderer-specific mini-parser.', automated: true },
+      { id: 'cs47-modifiers', statement: 'SHOW area and conditional modifiers are lowered as semantic placement/control-flow data rather than scene graph fields in source syntax.', automated: true },
+      { id: 'cs47-one-ir', statement: 'SHOW continues to compile to one Core IR show emission kind and one runtime semantic projection path.', automated: true },
+      { id: 'cs47-no-device', statement: 'Coordinate inference does not introduce device coordinates, viewport handles or renderer behavior into the VM.', automated: true },
+    ],
+    nonGoals: ['named-argument visual grammar', 'renderer-specific coordinate syntax', 'a second visual evaluator'],
+  },
+  {
+    id: 48, name: 'Scene graph encapsulation', kind: 'platform',
+    goal: 'Make the renderer-neutral scene graph a compiler/runtime implementation detail. User-facing runtime results expose visual summaries and transactional updates instead of layers, panes, z-indexes, nodes, parents or graph topology.',
+    dependencies: [18, 22, 24, 46, 47],
+    gates: [
+      { id: 'cs48-public-summary', statement: 'Primary CoreSpirit runtime APIs expose visual summaries/checksums/counts rather than Scene Graph nodes.', automated: true },
+      { id: 'cs48-realtime-summary', statement: 'Realtime revisions expose opaque visual update summaries while commit/rollback remains synchronized with the private scene transaction.', automated: true },
+      { id: 'cs48-no-scene-barrel', statement: 'The primary CoreSpirit API does not export Scene Graph builder/engine implementation symbols.', automated: true },
+      { id: 'cs48-host-boundary', statement: 'Renderer hosts may consume internal scene state through dedicated adapters without making scene topology part of the language mental model.', automated: false },
+      { id: 'cs48-serializable', statement: 'Public visual summaries remain deterministic, serializable and sufficient for replay/debugger status without exposing renderer topology.', automated: true },
+    ],
+    nonGoals: ['removing the internal renderer-neutral scene graph', 'removing advanced visual host adapters', 'device coordinates in CoreSpirit'],
+  },
+
+  {
+    id: 49, name: 'Declarative MODEL surface', kind: 'compiler',
+    goal: 'Make MODEL a compact user-facing declaration for registered and external model bindings while keeping typed ABI, adapters, state/rollback semantics, quotas and capability security behind the language surface.',
+    dependencies: [18, 44, 45, 48],
+    gates: [
+      { id: 'cs49-binding', statement: 'MODEL declarations support compact registry bindings (`use "model-id"`) and explicit host implementation bindings such as `use python "path"` without embedding the external runtime in the VM.', automated: true },
+      { id: 'cs49-io-schema', statement: 'MODEL input/output declarations are captured as stable surface metadata, including optional scalar/series field types, and do not create a second executable AST or model runtime.', automated: true },
+      { id: 'cs49-reference', statement: 'Qualified model outputs such as `Regime.confidence` lower to the existing core expression model and are statically checked against declared model outputs and declared output types when present.', automated: true },
+      { id: 'cs49-editor', statement: 'MODEL output members are discoverable through the same editor/member completion contract as other language members.', automated: true },
+      { id: 'cs49-runtime-bridge', statement: 'Runtime model output reads use an optional host-owned resolver boundary that receives the model binding as opaque metadata; no filesystem, process, network or broker access is introduced into CoreSpirit.', automated: true },
+      { id: 'cs49-show', statement: 'SHOW can project a whole model result through the universal visual primitive rather than requiring a model-specific visual API.', automated: true },
+      { id: 'cs49-abi-hidden', statement: 'The user-facing MODEL syntax does not expose ABI versions, transport details, quotas, adapter classes or rollback tokens; those remain platform contracts.', automated: false },
+    ],
+    nonGoals: ['embedding Python in the VM', 'automatic filesystem execution of model paths', 'a second model evaluator', 'model-specific renderer syntax', 'direct model access to broker/account authority'],
+  },
+
+  {
+    id: 50, name: 'Declarative AUTOMATE surface', kind: 'compiler',
+    goal: 'Make AUTOMATE a compact declarative language concept. Human-facing order actions, lifecycle routing and common stop/target sizing syntax lower into the existing order-intent path without exposing risk, policy or broker mechanics.',
+    dependencies: [18, 44, 45, 49],
+    gates: [
+      { id: 'cs50-automate-surface', statement: 'AUTOMATE supports compact when + order syntax while retaining one core parser and one executable artifact.', automated: true },
+      { id: 'cs50-order-shorthand', statement: 'order long/short/exit shorthand lowers deterministically to the canonical order intent surface.', automated: true },
+      { id: 'cs50-order-block', statement: 'Structured order: blocks with side, risk/quantity, stop and target lower to the same canonical order intent.', automated: true },
+      { id: 'cs50-atr-shorthand', statement: 'Common `1.5 atr` and explicit `atr(14)` protective-level expressions normalize through the normal expression grammar.', automated: true },
+      { id: 'cs50-lifecycle-hidden', statement: 'Automation lifecycle and risk/policy/execution mechanics remain platform internals rather than source-language requirements.', automated: true },
+      { id: 'cs50-editor', statement: 'Editor completion presents order as the primary AUTOMATE action and retains entry/exit/buy/sell as compatibility APIs.', automated: true },
+    ],
+    nonGoals: ['direct broker commands in CoreSpirit', 'automatic live activation from source', 'a second automation runtime', 'feature-specific parser grammar'],
+  },
+  {
+    id: 51, name: 'Universal ORDER intent', kind: 'platform',
+    goal: 'Unify entry, exit, buy and sell at the semantic boundary into one structured order intent carrying direction, sizing policy and protective levels, while preserving the mandatory RISK -> POLICY -> EXECUTION host authority chain.',
+    dependencies: [14, 18, 50],
+    gates: [
+      { id: 'cs51-one-intent', statement: 'Canonical user-facing order forms emit exactly one Core IR orderIntent kind.', automated: true },
+      { id: 'cs51-sizing', statement: 'Order intent distinguishes quantity, riskPercent and all sizing without silently converting risk budgets into quantities inside the VM.', automated: true },
+      { id: 'cs51-protection', statement: 'Stop and target values are carried as intent data and remain subject to risk/policy validation.', automated: true },
+      { id: 'cs51-flat', statement: '`order exit all` is represented as a flat/close semantic intent and is not hard-coded as a sell command.', automated: true },
+      { id: 'cs51-risk-chain', statement: 'Universal order intents still require risk approval, policy authorization and host-owned execution before any broker request.', automated: true },
+      { id: 'cs51-legacy-compat', statement: 'Legacy entry/exit/buy/sell calls remain compatible mappings to order intent so prior artifacts do not gain a second execution meaning.', automated: true },
+    ],
+    nonGoals: ['broker-specific order verbs in the language', 'bypassing risk with quantity or risk syntax', 'moving execution authority into the VM'],
+  },
+  {
+    id: 52, name: 'Universal EVENT emission and routing', kind: 'platform',
+    goal: 'Collapse signal, alert, webhook and host notification emission into one immutable EVENT boundary. Sources emit a named event; destination routing remains declarative metadata and host-owned dispatch.',
+    dependencies: [12, 45, 50, 51],
+    gates: [
+      { id: 'cs52-emit', statement: '`emit "NAME"` compiles to one Core IR event emission kind; legacy signal/alert/webhook calls remain compatibility mappings.', automated: true },
+      { id: 'cs52-route', statement: 'route declarations and emit-to blocks attach serializable event destinations without executable routing logic in the VM.', automated: true },
+      { id: 'cs52-fanout', statement: 'A single immutable event can fan out deterministically to webhook, notification, alert and automation destinations through a host-owned router.', automated: true },
+      { id: 'cs52-no-network', statement: 'Event routing cannot open sockets or invoke a broker/network API from CoreSpirit; destination handlers remain host capabilities.', automated: true },
+      { id: 'cs52-replay', statement: 'Event identity includes stable source/run/bar/timestamp/payload identity and is replay-safe.', automated: true },
+    ],
+    nonGoals: ['direct HTTP from CoreSpirit', 'one API per destination', 'broker execution through event emission'],
+  },
+  {
+    id: 53, name: 'WHEN as the central reactive construct', kind: 'compiler',
+    goal: 'Make WHEN the one source-level reactive control construct. Market transitions, named events, fills, model thresholds and webhook inputs all converge into ordinary expressions or the host event resolver.',
+    dependencies: [5, 10, 12, 49, 52],
+    gates: [
+      { id: 'cs53-one-when', statement: 'WHEN source blocks lower through the existing core conditional path rather than introducing a second reactive executor.', automated: true },
+      { id: 'cs53-event-forms', statement: 'Named events, bar closes, fills, price-enter-zone and webhook event forms normalize to event(...) queries through one event-surface contract.', automated: true },
+      { id: 'cs53-expression-forms', statement: 'Expression-driven WHEN conditions such as model output thresholds and crossovers remain ordinary CoreSpirit expressions.', automated: true },
+      { id: 'cs53-host-resolve', statement: 'Event truth is supplied by an explicit host resolver and cannot implicitly perform side effects.', automated: true },
+      { id: 'cs53-replay', statement: 'The same WHEN semantics are usable across historical/replay/realtime execution with host-provided event state.', automated: true },
+      { id: 'cs53-surface-simple', statement: 'Users do not need separate alert/webhook/signal/event-trigger grammars to express reactive behavior.', automated: true },
+    ],
+    nonGoals: ['a seventh top-level block concept named EVENT', 'separate execution engines per event source', 'implicit asynchronous callbacks inside the VM'],
+  },
+  {
+    id: 54, name: 'Composable language surfaces', kind: 'compiler',
+    goal: 'Make indicator values, MODEL outputs, events, WHEN conditions, AUTOMATE blocks and ORDER intents composable through one serializable semantic graph while preserving the existing compiler/IR/VM and host authority boundaries.', dependencies: [45, 49, 51, 52, 53],
+    gates: [
+      { id: 'cs54-graph', statement: 'Surface metadata carries a serializable composition graph describing producers, consumers and semantic edges without creating a second evaluator.', automated: true },
+      { id: 'cs54-model-when', statement: 'Typed MODEL outputs can feed ordinary expressions and WHEN conditions through the existing expression grammar.', automated: true },
+      { id: 'cs54-event-when', statement: 'Named EVENT emissions can feed central WHEN conditions without event-specific execution.', automated: true },
+      { id: 'cs54-automation-order', statement: 'WHEN can trigger AUTOMATE and AUTOMATE can produce canonical ORDER intent without bypassing risk/policy/execution authority.', automated: true },
+      { id: 'cs54-one-runtime', statement: 'Composition remains metadata over the same validated artifact, IR and VM rather than introducing feature-specific runtimes.', automated: true },
+    ],
+    nonGoals: ['a second reactive executor', 'implicit broker access', 'runtime execution from composition metadata'],
+  },
+  {
+    id: 55, name: 'Progressive simplicity', kind: 'tooling',
+    goal: 'Make the simplest CoreSpirit programs extremely small while allowing users to grow from one-line SHOW to indicators, WHEN, MODEL and AUTOMATE without changing languages or execution semantics.', dependencies: [44, 45, 46, 50, 54],
+    gates: [
+      { id: 'cs55-one-line', statement: '`show ema(close, 20)` compiles through the same core pipeline as advanced programs.', automated: true },
+      { id: 'cs55-reactive', statement: '`when crossesAbove(fast, slow): emit "LONG"` lowers to the same crossover, conditional and EVENT contracts used by advanced source.', automated: true },
+      { id: 'cs55-progression', statement: 'The editor examples progress from value -> show -> reactive event -> model -> automation -> deployment without introducing a beginner-only evaluator.', automated: true },
+      { id: 'cs55-chart-deploy', statement: 'The chart-side editor remains a fast Create -> Compile -> Deploy workflow over the same executable artifact.', automated: false },
+      { id: 'cs55-blue-ui', statement: 'CoreSpirit/chart product chrome uses the blue product accent while trading semantic colors remain independent.', automated: false },
+    ],
+    nonGoals: ['PineScript compatibility as a design target', 'a wizard-only programming model', 'a second editor runtime'],
+  },
+  {
+    id: 56, name: 'Standard library discoverability', kind: 'tooling',
+    goal: 'Organize the existing standard library around human-facing discovery groups without changing executable builtin semantics or inflating the core registry.',
+    dependencies: [34, 44, 45, 55],
+    gates: [
+      { id: 'cs56-catalog', statement: 'The standard library has a stable human-facing catalog with ordered groups for Price, Math, Trend, Momentum, Volatility, Structure, Market, Models, Visual, Events, Data and State.', automated: true },
+      { id: 'cs56-core-count', statement: 'Discoverability metadata does not change the executable core primitive count or create duplicate runtime implementations.', automated: true },
+      { id: 'cs56-editor', statement: 'Language-service completions present the discoverability groups in a predictable order and keep advanced compatibility visuals secondary to SHOW.', automated: true },
+      { id: 'cs56-no-fake-builtins', statement: 'Functions without runtime contracts are not advertised as executable builtins merely because they are desirable catalog entries.', automated: true },
+    ],
+    nonGoals: ['inflating the core primitive registry', 'adding unimplemented indicators as fake builtins', 'a second completion registry'],
+  },
+  {
+    id: 57, name: 'Readable surface syntax', kind: 'compiler',
+    goal: 'Use readable source forms aggressively where they map cleanly to existing semantics: crossing operators use `a crossesAbove b` / `a crossesBelow b`, market references read as `market("NIFTY").close`, and the compiler remains the sole semantic lowering path.',
+    dependencies: [44, 45, 54, 56],
+    gates: [
+      { id: 'cs57-crosses', statement: '`a crossesAbove b` and `a crossesBelow b` lower deterministically to crossover(a, b) and crossunder(a, b) through the existing surface normalization path.', automated: true },
+      { id: 'cs57-data-members', statement: 'market/timeframe references expose standard OHLCV/time member completion and continue to execute through the existing __member_get ABI.', automated: true },
+      { id: 'cs57-hover', statement: 'Editor hover and completion descriptions teach readable syntax while documenting its canonical lowering target.', automated: true },
+      { id: 'cs57-one-language', statement: 'Readable syntax remains source sugar over the existing parser/IR/VM path; no operator runtime or data-reference runtime is introduced.', automated: true },
+    ],
+    nonGoals: ['custom infix operators beyond the approved readability aliases', 'replacing the canonical crossover functions internally', 'exposing request plumbing to beginners'],
+  }
+]
 
 export function getCoreSpiritStage(id: number): CoreSpiritStage | undefined {
   return CORE_SPIRIT_STAGES.find(stage => stage.id === id);
@@ -438,6 +682,6 @@ export function validateCoreSpiritRoadmap(): string[] {
       if (dep >= stage.id) errors.push(`stage ${stage.id} has non-previous dependency ${dep}`);
     }
   }
-  if (CORE_SPIRIT_STAGES.length !== 39) errors.push('CoreSpirit roadmap must contain exactly 39 stages');
+  if (CORE_SPIRIT_STAGES.length !== 57) errors.push('CoreSpirit roadmap must contain exactly 57 stages');
   return errors;
 }

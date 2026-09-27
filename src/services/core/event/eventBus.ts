@@ -12,6 +12,7 @@ export type CoreEventMap = {
   'replay.stopped': { sessionId: string; cursorTime: number; sequence?: number };
   'replay.step': { sessionId: string; cursorTime: number; index: number; sequence?: number };
   'script.signal': { scriptId: string; time: number; type: string; metadata?: Record<string, unknown>; sequence?: number };
+  'script.event': { scriptId: string; time: number; name: string; destinations?: unknown[]; metadata?: Record<string, unknown>; sequence?: number };
   'script.alert': { scriptId: string; time: number; payload: Record<string, unknown>; sequence?: number };
   'script.webhook': { scriptId: string; time: number; endpoint?: string; payload: Record<string, unknown>; sequence?: number };
   'model.prediction': { modelId: string; symbol: string; timeframe: string; payload: Record<string, unknown>; sequence?: number };

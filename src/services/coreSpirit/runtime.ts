@@ -1,3 +1,4 @@
+import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import type { CoreSpiritMarketBar } from './marketData';
 import { CoreEventBus, coreEventBus } from '../core/event/eventBus';
 import { CoreSpiritObject, CoreSpiritProgram, CoreSpiritValue } from './types';
@@ -13,13 +14,29 @@ import type { DebuggerIrStep, DebuggerValue } from './debuggerContract';
 import { CoreSpiritUiRuntime, type CoreSpiritUiEvent, type CoreSpiritUiState, type CoreSpiritUiAction } from './uiRuntime';
 import { CoreSpiritWorkspaceRuntime, type CoreSpiritWorkspaceState } from './workspaceRuntime';
 import type { CoreSpiritExecutionTarget } from './executionTarget';
+import type { CoreSpiritModelSurfaceBinding } from './languageConcepts';
 import type { CoreSpiritGraphNode } from './semanticGraph';
 import { CoreSpiritReactiveEngine } from './reactiveEngine';
+import {
+  coreSpiritAboveBar, coreSpiritAtBar, coreSpiritBelowBar, coreSpiritChartArea, coreSpiritPanelArea,
+  coreSpiritSidePanelArea, coreSpiritFloatingArea, coreSpiritPoint, coreSpiritRange,
+  toCoreSpiritRuntimeArea, toCoreSpiritRuntimePoint, toCoreSpiritRuntimeRange, toCoreSpiritRuntimeRelativePosition,
+  isCoreSpiritVisualArea, isCoreSpiritVisualPoint, isCoreSpiritVisualRange, isCoreSpiritVisualRelativePosition,
+  placementFromRuntimeArgs, coreSpiritPlacement, validateCoreSpiritVisualGeometry, type CoreSpiritVisualPoint,
+} from './visualCoordinates';
 import { CORE_SPIRIT_EXECUTION_TARGET_PROFILES } from './executionTarget';
+
+export type CoreSpiritModelOutputResolver = (request: {
+  modelName: string;
+  field: string;
+  binding?: CoreSpiritModelSurfaceBinding;
+  context: CoreSpiritExecutionContext;
+  bar: CoreSpiritMarketBar;
+}) => unknown;
 
 export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number; executionTarget?: CoreSpiritExecutionTarget;
-  timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; debugTrace?: boolean; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy']; layer?: CoreSpiritProgramLayer; reactiveExecution?: boolean;
+  timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; debugTrace?: boolean; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy']; layer?: CoreSpiritProgramLayer; reactiveExecution?: boolean; eventResolver?: (eventName: string) => boolean; modelOutputResolver?: CoreSpiritModelOutputResolver;
 };
 export type CoreSpiritRuntimeState = {
   barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: CoreSpiritBarState; uiState: CoreSpiritUiState; workspaceState: CoreSpiritWorkspaceState;
@@ -61,6 +78,8 @@ export class CoreSpiritRuntime {
   private realtimeLifecycle: 'idle' | 'evaluating' | 'committed' = 'idle';
   private readonly debugTraceEnabled: boolean;
   private readonly reactiveExecutionEnabled: boolean;
+  private readonly eventResolver?: (eventName: string) => boolean;
+  private readonly modelOutputResolver?: CoreSpiritModelOutputResolver;
   private readonly reactiveEngine = new CoreSpiritReactiveEngine();
   private debugBarTraces = new Map<number, DebuggerIrStep[]>();
 
@@ -71,6 +90,8 @@ export class CoreSpiritRuntime {
     this.executionTarget = options.executionTarget || inferredTarget;
     this.debugTraceEnabled = Boolean(options.debugTrace);
     this.reactiveExecutionEnabled = options.reactiveExecution !== false;
+    this.eventResolver = options.eventResolver;
+    this.modelOutputResolver = options.modelOutputResolver;
     this.options = { symbol: options.symbol || '', timeframe: options.timeframe || 'unknown', sourceId: options.sourceId || 'coreSpirit', maxStepsPerBar: Math.max(100, options.maxStepsPerBar || 10000), timezone: options.timezone || 'Asia/Kolkata', stateHistoryLimit: Math.max(512, Math.floor(options.stateHistoryLimit || 2048)), layer: options.layer || 'script', executionTarget: this.executionTarget };
     this.timezone = this.options.timezone;
     this.abortSignal = options.abortSignal;
@@ -105,7 +126,7 @@ export class CoreSpiritRuntime {
   dispatchUiEvent(event: CoreSpiritUiEvent): CoreSpiritUiAction | undefined { return this.uiRuntime.dispatch(event); }
 
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
-    const compiled = this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer: this.options.layer });
+    const compiled = this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer: this.options.layer, surface: program.surface });
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id;
@@ -390,11 +411,53 @@ export class CoreSpiritRuntime {
       if (!Number.isFinite(score)) throw new Error('scan.emit requires a finite score');
       return finish(score);
     }
+    if (name === 'model') {
+      const modelName = String(args[0] ?? '');
+      return finish(Object.freeze({ __coreSpiritModelRef: modelName }));
+    }
+    if (name === '__model_get') {
+      const ref = args[0] as any;
+      const field = String(args[1] ?? '');
+      if (!ref || typeof ref !== 'object' || !ref.__coreSpiritModelRef) return finish(null);
+      if (!this.modelOutputResolver) return finish(null);
+      const modelName = String(ref.__coreSpiritModelRef);
+      const declaration = this.compiledIr?.surface?.declarations.find(
+        (item): item is Extract<NonNullable<CoreSpiritIrProgram['surface']>['declarations'][number], { kind: 'model' }> =>
+          item.kind === 'model' && item.name === modelName,
+      );
+      const resolved = this.modelOutputResolver({
+        modelName,
+        field,
+        binding: declaration?.binding,
+        context: this.getExecutionContext(),
+        bar,
+      });
+      if (resolved && typeof (resolved as any).then === 'function') return finish(null);
+      return finish(resolved);
+    }
+    if (name === 'show') return finish(null);
     if (name === 'meta') {
       const metadata: Record<string, string | number | boolean | null> = {};
       for (let i = 0; i + 1 < args.length; i += 2) metadata[String(args[i])] = (args[i + 1] === null || ['string','number','boolean'].includes(typeof args[i + 1])) ? args[i + 1] as any : String(args[i + 1]);
       return finish(Object.freeze(metadata));
     }
+    if (name === 'visual.area') {
+      const area=String(args[0] ?? 'price') as any;
+      return finish(toCoreSpiritRuntimeArea(coreSpiritChartArea(area)));
+    }
+    if (name === 'panel') return finish(toCoreSpiritRuntimeArea(coreSpiritPanelArea(String(args[0] ?? 'Panel'))));
+    if (name === 'sidePanel') return finish(toCoreSpiritRuntimeArea(coreSpiritSidePanelArea(String(args[0] ?? 'Side Panel'))));
+    if (name === 'floatingArea') return finish(toCoreSpiritRuntimeArea(coreSpiritFloatingArea(String(args[0] ?? 'Floating'))));
+    if (name === 'point') {
+      const point = typeof args[0] === 'string'
+        ? coreSpiritPoint(Number(args[1]), Number(args[2]), String(args[0]) as any)
+        : coreSpiritPoint(Number(args[0]), Number(args[1]), typeof args[2] === 'string' ? String(args[2]) as any : 'time');
+      return finish(toCoreSpiritRuntimePoint(point));
+    }
+    if (name === 'range') return finish(toCoreSpiritRuntimeRange(coreSpiritRange(Number(args[0]), Number(args[1]))));
+    if (name === 'above_bar') return finish(toCoreSpiritRuntimeRelativePosition(coreSpiritAboveBar(Number(args[0] ?? 0))));
+    if (name === 'below_bar') return finish(toCoreSpiritRuntimeRelativePosition(coreSpiritBelowBar(Number(args[0] ?? 0))));
+    if (name === 'at_bar') return finish(toCoreSpiritRuntimeRelativePosition(coreSpiritAtBar(Number(args[0] ?? 0))));
     if (name === 'ui.panel') { this.requireTargetCapability('interactive-ui'); return finish(this.uiRuntime.panel(`${this.options.sourceId}:panel:${callKey}`, String(args[0] ?? 'Panel'))); }
     if (name === 'ui.panel.number') return finish(this.uiRuntime.number(args[0], String(args[1] ?? ''), args[2], typeof args[3] === 'string' ? args[3] : undefined));
     if (name === 'ui.panel.button') return finish(this.uiRuntime.button(args[0], String(args[1] ?? ''), typeof args[2] === 'string' ? args[2] : undefined));
@@ -442,6 +505,10 @@ export class CoreSpiritRuntime {
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
     if (name==='sign') { const n=Number(args[0]); return finish(Number.isFinite(n) ? (n>0?1:n<0?-1:0) : null); }
     if (name==='round') { const places=Math.max(0, Math.floor(Number(args[1] ?? 0))); const scale=10**places; return finish(Math.round(Number(args[0])*scale)/scale); }
+    if (name==='event') {
+      const eventName=String(args[0] ?? '');
+      return finish(Boolean(this.eventResolver?.(eventName)));
+    }
     if (name==='cross'||name==='crossover'||name==='crossunder') {
       const a=Number(args[0]), b=Number(args[1]);
       const previous=this.crossState[callKey];
@@ -605,11 +672,10 @@ export class CoreSpiritRuntime {
   private averageLoss(series:string,length:number,bars:CoreSpiritMarketBar[],index:number):number { let total=0; for(let i=index-length+1;i<=index;i++){ if(i<=0)continue; const c=Number((bars[i] as any)[series]),p=Number((bars[i-1] as any)[series]); total+=Math.max(0,p-c); } return total/length; }
 
   private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:CoreSpiritMarketBar,barIndex:number,outputs:CoreSpiritObject[],diagnostics:string[],outputId?:string):void {
-    const visualKinds = new Set(['plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table']);
+    const visualKinds = new Set(['show','plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','text','polygon','customVisual']);
     if (visualKinds.has(kind)) this.requireTargetCapability('visuals');
     if (kind === 'signal') this.requireTargetCapability('signals');
-    if (kind === 'entry' || kind === 'exit') this.requireTargetCapability('order-intents');
-    if (kind === 'buy' || kind === 'sell') this.requireTargetCapability('order-intents');
+    if (kind === 'entry' || kind === 'exit' || kind === 'buy' || kind === 'sell' || kind === 'orderIntent') this.requireTargetCapability('order-intents');
     if (kind === 'alert' || kind === 'webhook') this.requireTargetCapability('webhooks');
     if (kind === 'scanCandidate') this.requireTargetCapability('candidate-emission');
 
@@ -619,47 +685,168 @@ export class CoreSpiritRuntime {
     if ((kind === 'buy' || kind === 'sell') && this.options.layer !== 'automation') {
       throw new Error(`${kind} is automation-only; scripts, models and strategies must stop at the signal/strategy boundary`);
     }
+    if (kind === 'orderIntent' && this.options.layer !== 'automation') {
+      throw new Error('order is automation-only; scripts, models and strategies must stop at the signal/strategy boundary');
+    }
     const time=this.toEpoch(bar.timestamp);
     if (++this.outputCount > this.maxOutputsPerBar) throw new Error(`output limit exceeded (${this.maxOutputsPerBar})`);
     const finite = (v:unknown) => Number.isFinite(Number(v));
     const num = (v:unknown) => Number(v);
     const color = (v:unknown, fallback:string) => typeof v === 'string' && v ? v : fallback;
     try {
+      if(kind==='show'){
+        const visualKind=String(args[0] ?? 'series').toLowerCase();
+        const areaArg=args.find(isCoreSpiritVisualArea);
+        const area=areaArg || toCoreSpiritRuntimeArea(coreSpiritChartArea('price'));
+        const placementSpace = (candidate: unknown): any => isCoreSpiritVisualPoint(candidate) ? candidate.space : 'time';
+        const metadataBase: Record<string, unknown> = { source:this.options.sourceId, barIndex };
+        if (visualKind === 'model') {
+          const ref = args[1] as any;
+          const modelName = ref?.__coreSpiritModelRef ? String(ref.__coreSpiritModelRef) : String(ref ?? '');
+          const declaration = this.compiledIr?.surface?.declarations.find(
+            (item): item is Extract<NonNullable<CoreSpiritIrProgram['surface']>['declarations'][number], { kind: 'model' }> =>
+              item.kind === 'model' && item.name === modelName,
+          );
+          const resolved = this.modelOutputResolver
+            ? this.modelOutputResolver({ modelName, field: '*', binding: declaration?.binding, context: this.getExecutionContext(), bar })
+            : null;
+          const modelPayload = resolved && typeof resolved === 'object' ? resolved : { value: resolved };
+          outputs.push({
+            kind:'customVisual',
+            id:`${this.options.sourceId}:show:${barIndex}:${outputId||'model'}`,
+            time,
+            payload:{ modelId:modelName, outputs:modelPayload },
+            visual:coreSpiritPlacement(area, 'time'),
+            metadata:{...metadataBase, semanticRole:'model', modelId:modelName},
+          });
+        } else if (visualKind === 'series') {
+          const value = args[1] == null ? null : Number(args[1]);
+          const range = args.find(isCoreSpiritVisualRange);
+          const visible = args.find(value => typeof value === 'boolean');
+          if (visible === false) return;
+          const seriesId = outputId ? `${this.options.sourceId}:${outputId}` : `${this.options.sourceId}:show:${this.plotOrdinal++}`;
+          outputs.push({
+            kind:'series',
+            time,
+            value:value !== null && Number.isFinite(value) ? value : null,
+            seriesId,
+            style:{ color:undefined, lineWidth:2, priceLineVisible:false, lastValueVisible:true },
+            visual:coreSpiritPlacement(area, 'time', { visible:visible === undefined ? true : Boolean(visible), range }),
+          });
+        } else if (visualKind === 'line') {
+          const role = typeof args[1] === 'string' ? String(args[1]) : 'line';
+          const a = isCoreSpiritVisualPoint(args[2]) ? args[2] : undefined;
+          const b = isCoreSpiritVisualPoint(args[3]) ? args[3] : undefined;
+          if (!a || !b) throw new Error('show line requires two coordinate points');
+          const errors = validateCoreSpiritVisualGeometry({kind:'line',from:a,to:b});
+          if (errors.length) throw new Error(errors.join('; '));
+          outputs.push({
+            kind:'line',
+            id:`${this.options.sourceId}:show:${barIndex}:${outputId||'line'}`,
+            start:{ time:a.space==='time'?a.x:time, price:a.y },
+            end:{ time:b.space==='time'?b.x:time, price:b.y },
+            style:{source:this.options.sourceId, lineWidth:2},
+            geometry:{kind:'line',from:a,to:b},
+            visual:coreSpiritPlacement(area,a.space),
+            metadata:{...metadataBase, semanticRole:role},
+          });
+        } else if (visualKind === 'box') {
+          const a = isCoreSpiritVisualPoint(args[1]) ? args[1] : undefined;
+          const b = isCoreSpiritVisualPoint(args[2]) ? args[2] : undefined;
+          if (!a || !b) throw new Error('show box requires two coordinate points');
+          const errors = validateCoreSpiritVisualGeometry({kind:'box',from:a,to:b});
+          if (errors.length) throw new Error(errors.join('; '));
+          const left=a.space==='time'?a.x:time, right=b.space==='time'?b.x:time;
+          outputs.push({kind:'box', id:`${this.options.sourceId}:show:${barIndex}:${outputId||'box'}`, left,right,top:a.y,bottom:b.y, style:{}, geometry:{kind:'box',from:a,to:b}, visual:coreSpiritPlacement(area,a.space), metadata:metadataBase});
+        } else if (visualKind === 'zone') {
+          const top=Number(args[1]), bottom=Number(args[2]);
+          if (!Number.isFinite(top)||!Number.isFinite(bottom)) throw new Error('show zone requires finite price bounds');
+          outputs.push({
+            kind:'zone',
+            id:`${this.options.sourceId}:show:${barIndex}:${outputId||'zone'}`,
+            left:time,right:time,top:Math.max(top,bottom),bottom:Math.min(top,bottom),state:'active',
+            domain:(typeof args[4]==='string' && String(args[4]) === 'bar') ? 'bar' : 'viewport',
+            style:{fillOpacity:0.12},
+            visual:coreSpiritPlacement(area,'price'),
+            metadata:{...metadataBase, domain: typeof args[4]==='string'?String(args[4]):'viewport'},
+          });
+        } else if (visualKind === 'signal') {
+          const text=String(args[1] ?? '');
+          const relative=isCoreSpiritVisualRelativePosition(args[2]) ? args[2] : coreSpiritAboveBar(0);
+          outputs.push({
+            kind:'label',
+            id:`${this.options.sourceId}:show:${barIndex}:${outputId||'signal'}`,
+            time,
+            price:Number.isFinite(Number(bar.close))?Number(bar.close):0,
+            text,
+            position:relative.kind==='aboveBar'?'above':relative.kind==='belowBar'?'below':'inBar',
+            style:{},
+            visual:coreSpiritPlacement(area,'bar'),
+            relativePosition:relative,
+            metadata:{...metadataBase, semanticRole:'signal'},
+          });
+        } else {
+          throw new Error(`unsupported SHOW visual kind '${visualKind}'`);
+        }
+      }
       if(kind==='plot'){
-        const value=args[0] == null ? null : Number(args[0]);
+        const parsed = placementFromRuntimeArgs(args);
+        if (parsed.placement && !parsed.placement.visible) return;
+        const visualArgs = parsed.placement ? parsed.legacyArgs : args;
+        const value=visualArgs[0] == null ? null : Number(visualArgs[0]);
         const seriesId=outputId ? `${this.options.sourceId}:${outputId}` : `${this.options.sourceId}:plot:${this.plotOrdinal++}`;
-        const style={color:typeof args[1]==='string'?args[1]:undefined,lineWidth:Number.isFinite(Number(args[2]))?Math.max(1,Math.min(5,Number(args[2]))):2,lineStyle:Number.isFinite(Number(args[3]))?Number(args[3]):0,title:typeof args[4]==='string'?args[4]:undefined,priceLineVisible:false,lastValueVisible:true};
-        outputs.push({kind:'series',time,value:value !== null && Number.isFinite(value)?value:null,seriesId,style});
+        const style={color:typeof visualArgs[1]==='string'?visualArgs[1]:undefined,lineWidth:Number.isFinite(Number(visualArgs[2]))?Math.max(1,Math.min(5,Number(visualArgs[2]))):2,lineStyle:Number.isFinite(Number(visualArgs[3]))?Number(visualArgs[3]):0,title:typeof visualArgs[4]==='string'?visualArgs[4]:undefined,priceLineVisible:false,lastValueVisible:true};
+        outputs.push({kind:'series',time,value:value !== null && Number.isFinite(value)?value:null,seriesId,style,visual:parsed.placement});
       }
       else if(kind==='marker'){
-        const price=Number(args[1]??args[0]);
-        if(Number.isFinite(price)) outputs.push({kind:'marker',id:`${this.options.sourceId}:marker:${barIndex}`,time:Number(args[0])||time,price,metadata:{source:this.options.sourceId,barIndex}});
+        const point=isCoreSpiritVisualPoint(args[0]) ? args[0] : undefined;
+         const area=args.find(isCoreSpiritVisualArea);
+        const price=point ? point.y : Number(args[1]??args[0]);
+        const markerTime=point && point.space === 'time' ? point.x : Number(args[0]) || time;
+        if(Number.isFinite(price)) outputs.push({kind:'marker',id:`${this.options.sourceId}:marker:${barIndex}`,time:markerTime,price,visual:coreSpiritPlacement(area || coreSpiritChartArea('price'),point?.space || 'time'),metadata:{source:this.options.sourceId,barIndex}});
       }
-      else if(kind==='label'||kind==='labelAt'){
-        const isAt=kind==='labelAt'; const price=Number(isAt?args[0]:(String(args[1]??'above')==='below'?bar.low:bar.high));
-        const text=String(isAt?args[1]:args[0]??''); const position=String(isAt?args[2]??'price':args[1]??'above') as any;
+      else if(kind==='label'||kind==='labelAt'||kind==='text'){
+        const isAt=kind==='labelAt';
+        const relative = !isAt && isCoreSpiritVisualRelativePosition(args[1]) ? args[1] : undefined;
+        const point = !isAt && isCoreSpiritVisualPoint(args[1]) ? args[1] : undefined;
+        const pointTime = point && point.space === 'time' ? point.x : time;
+        const price=point ? point.y : relative ? (relative.kind === 'belowBar' ? bar.low : bar.high) : Number(isAt?args[0]:(String(args[1]??'above')==='below'?bar.low:bar.high));
+        const area=args.find(isCoreSpiritVisualArea); const coordinateSpace=point?.space || 'time';
+         const text=String(isAt?args[1]:args[0]??''); const position=(relative ? (relative.kind==='belowBar'?'below':relative.kind==='aboveBar'?'above':'inBar') : String(isAt?args[2]??'price':args[1]??'above')) as any;
         const background=String(isAt?args[3]??'#2563eb':args[2]??'#2563eb'); const textColor=String(isAt?args[4]??'#ffffff':args[3]??'#ffffff');
         const fontSize=Number(isAt?args[5]??12:args[4]??12); const shape=String(isAt?args[6]??'pill':args[5]??'pill') as any;
         const fontWeight=String(isAt?args[7]??'600':args[6]??'600'); const fontStyle=String(isAt?args[8]??'normal':args[7]??'normal') as any;
-        if(Number.isFinite(price)&&text) outputs.push({kind:'label',id:`${this.options.sourceId}:label:${barIndex}:${outputId||text}`,time,price,text,position,style:{background,color:textColor,fontSize,shape,fontWeight,fontStyle},metadata:{source:this.options.sourceId,barIndex}});
+        if(Number.isFinite(price)&&text) outputs.push({kind:'label',id:`${this.options.sourceId}:label:${barIndex}:${outputId||text}`,time:pointTime,price,text,position,style:{background,color:textColor,fontSize,shape,fontWeight,fontStyle},relativePosition:relative,visual:area || relative || point ? coreSpiritPlacement(area || coreSpiritChartArea('price'),coordinateSpace) : undefined,metadata:{source:this.options.sourceId,barIndex}});
       }
       else if(kind==='line'){
-        const a={time:num(args[0])||time,price:num(args[1])},b={time:num(args[2])||time,price:num(args[3])};
+        const directA=isCoreSpiritVisualPoint(args[0]) ? args[0] : undefined;
+        const directB=isCoreSpiritVisualPoint(args[1]) ? args[1] : undefined;
+        const a=directA ? {time:directA.space==='time'?directA.x:time,price:directA.y} : {time:num(args[0])||time,price:num(args[1])};
+        const b=directB ? {time:directB.space==='time'?directB.x:time,price:directB.y} : {time:num(args[2])||time,price:num(args[3])};
+        const styleArgs=directA&&directB ? args.slice(2) : args.slice(4);
+         const area=styleArgs.find(isCoreSpiritVisualArea);
         if(Number.isFinite(a.price)&&Number.isFinite(b.price)) {
-          const colorArg = args.find((value, i) => i >= 4 && typeof value === 'string');
-          const widthArg = args.find((value, i) => i >= 4 && typeof value === 'number');
-          const metadataArg = args.find((value, i) => i >= 4 && value !== null && typeof value === 'object') as Record<string,unknown> | undefined;
+          const colorArg = styleArgs.find((value) => typeof value === 'string');
+          const widthArg = styleArgs.find((value) => typeof value === 'number');
+          const metadataArg = styleArgs.find((value) => value !== null && typeof value === 'object' && !isCoreSpiritVisualArea(value) && !isCoreSpiritVisualPoint(value)) as Record<string,unknown> | undefined;
           const widthValue = widthArg === undefined ? 1 : Math.max(1, Math.min(6, num(widthArg)));
-          outputs.push({kind:'line',id:`${this.options.sourceId}:line:${outputId||barIndex}`,start:a,end:b,style:{source:this.options.sourceId,color:color(colorArg,'#f59e0b'),lineWidth:widthValue},metadata:metadataArg});
+          outputs.push({kind:'line',id:`${this.options.sourceId}:line:${barIndex}:${outputId||'line'}`,start:a,end:b,style:{source:this.options.sourceId,color:color(colorArg,'#f59e0b'),lineWidth:widthValue},geometry:directA&&directB?{kind:'line',from:directA,to:directB}:undefined,visual:area?coreSpiritPlacement(area,(directA||directB)?.space || 'time'):undefined,metadata:metadataArg});
         }
       }
       else if(kind==='zone'){
         const left=num(args[0])||time,right=num(args[1])||time,top=num(args[2]),bottom=num(args[3]);
-        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'zone',id:`${this.options.sourceId}:zone:${outputId||barIndex}`,left,right,top,bottom,state:'active',style:{color:color(args[4],'#38bdf8'),fillColor:color(args[5],color(args[4],'#38bdf8')),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.12,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
+        if([left,right,top,bottom].every(Number.isFinite)) { const area=args.find(isCoreSpiritVisualArea); outputs.push({kind:'zone',id:`${this.options.sourceId}:zone:${barIndex}:${outputId||'zone'}`,left,right,top,bottom,state:'active',style:{color:color(args[4],'#38bdf8'),fillColor:color(args[5],color(args[4],'#38bdf8')),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.12,pattern:(typeof args[7]==='string'?args[7]:'solid') as any},visual:area?coreSpiritPlacement(area,'time'):undefined}); }
       }
       else if(kind==='box'){
-        const left=num(args[0])||time,right=num(args[1])||time,top=num(args[2]),bottom=num(args[3]);
-        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'box',id:`${this.options.sourceId}:box:${outputId||barIndex}`,left,right,top,bottom,style:{fillColor:color(args[4],'#2563eb'),color:color(args[5],'#2563eb'),fillOpacity:Number.isFinite(Number(args[6]))?Math.max(0,Math.min(1,num(args[6]))):0.16,pattern:(typeof args[7]==='string'?args[7]:'solid') as any}});
+        const directA=isCoreSpiritVisualPoint(args[0]) ? args[0] : undefined;
+        const directB=isCoreSpiritVisualPoint(args[1]) ? args[1] : undefined;
+        const left=directA ? (directA.space==='time'?directA.x:time) : num(args[0])||time;
+        const right=directB ? (directB.space==='time'?directB.x:time) : num(args[1])||time;
+        const top=directA ? directA.y : num(args[2]);
+        const bottom=directB ? directB.y : num(args[3]);
+        const styleArgs=directA&&directB ? args.slice(2) : args.slice(4);
+         const area=styleArgs.find(isCoreSpiritVisualArea);
+        if([left,right,top,bottom].every(Number.isFinite)) outputs.push({kind:'box',id:`${this.options.sourceId}:box:${barIndex}:${outputId||'box'}`,left,right,top,bottom,style:{fillColor:color(styleArgs[0],'#2563eb'),color:color(styleArgs[1],'#2563eb'),fillOpacity:Number.isFinite(Number(styleArgs[2]))?Math.max(0,Math.min(1,num(styleArgs[2]))):0.16,pattern:(typeof styleArgs[3]==='string'?styleArgs[3]:'solid') as any},geometry:directA&&directB?{kind:'box',from:directA,to:directB}:undefined,visual:area?coreSpiritPlacement(area,(directA||directB)?.space || 'time'):undefined});
       }
       else if(kind==='band'||kind==='fill'||kind==='gradient'){
         const top=num(args[0]),bottom=num(args[1]);
@@ -672,11 +859,32 @@ export class CoreSpiritRuntime {
       }
       else if(kind==='arrow'){
         const a={time:num(args[0])||time,price:num(args[1])},b={time:num(args[2])||time,price:num(args[3])};
-        if([a.time,a.price,b.time,b.price].every(Number.isFinite)) outputs.push({kind:'arrow',id:`${this.options.sourceId}:arrow:${outputId||barIndex}`,start:a,end:b,style:{color:color(args[4],'#f59e0b'),lineWidth:Number.isFinite(Number(args[5]))?Math.max(1,Math.min(8,num(args[5]))):2}});
+        if([a.time,a.price,b.time,b.price].every(Number.isFinite)) outputs.push({kind:'arrow',id:`${this.options.sourceId}:arrow:${barIndex}:${outputId||'arrow'}`,start:a,end:b,style:{color:color(args[4],'#f59e0b'),lineWidth:Number.isFinite(Number(args[5]))?Math.max(1,Math.min(8,num(args[5]))):2}});
       }
       else if(kind==='shape'||kind==='heatmap'){
         const price=num(args[0]),shape=kind==='heatmap'?'square':String(args[1]||'circle') as any;
         if(finite(price)){ const intensity=kind==='heatmap'?Math.max(0,Math.min(1,Math.abs(num(args[1])))):1; outputs.push({kind:'shape',id:`${this.options.sourceId}:shape:${outputId||barIndex}`,time,price,shape,style:{color:color(kind==='heatmap'?args[2]:args[2],'#f59e0b'),fillColor:color(args[2],'#f59e0b'),opacity:kind==='heatmap'?Math.max(.08,intensity):1,size:Number.isFinite(Number(kind==='heatmap'?args[3]:args[3]))?Math.max(4,Math.min(40,num(args[3])||10)):10,text:typeof args[4]==='string'?args[4]:undefined}}); }
+      }
+       else if(kind==='polygon'){
+         const points: CoreSpiritVisualPoint[]=[];
+         let pointCursor=0;
+         while(pointCursor<args.length && isCoreSpiritVisualPoint(args[pointCursor]) && points.length<8){ points.push(args[pointCursor] as CoreSpiritVisualPoint); pointCursor += 1; }
+         if(points.length===0){
+           let i=0; while(i+1<args.length && points.length<8 && Number.isFinite(num(args[i])) && Number.isFinite(num(args[i+1]))){ points.push(coreSpiritPoint(num(args[i]),num(args[i+1]),'time')); i+=2; }
+           pointCursor=i;
+         }
+         if(points.length>=3){
+           const styleStart=pointCursor;
+           const area=args.find(isCoreSpiritVisualArea); const coordinateSpace=points[0].space;
+           outputs.push({kind:'polygon',id:`${this.options.sourceId}:polygon:${barIndex}:${outputId||'polygon'}`,points:points.map(point=>({time:point.space==='time'?point.x:time,price:point.y})),geometry:{kind:'polygon',points},visual:coreSpiritPlacement(area || coreSpiritChartArea('price'),coordinateSpace),style:{color:typeof args[styleStart]==='string'?String(args[styleStart]):'#38bdf8',fillColor:typeof args[styleStart+1]==='string'?String(args[styleStart+1]):'#38bdf8',fillOpacity:Number.isFinite(Number(args[styleStart+2]))?Number(args[styleStart+2]):0.12},metadata:{source:this.options.sourceId}});
+         }
+       }
+      else if(kind==='customVisual'){
+        const id=`${this.options.sourceId}:custom:${String(args[0] ?? 'visual')}:${barIndex}`;
+        const payloadValue=typeof args[1]==='string' ? safeJson(String(args[1])) : args[1];
+        const area=args.find(isCoreSpiritVisualArea) || coreSpiritChartArea('custom');
+        const point=args.find(isCoreSpiritVisualPoint); const coordinateSpace=point?.space || 'time';
+         if(payloadValue && typeof payloadValue==='object') outputs.push({kind:'customVisual',id,time,payload:payloadValue as Record<string,unknown>,visual:coreSpiritPlacement(area,coordinateSpace),geometry:point?{kind:'point',point}:undefined,metadata:{source:this.options.sourceId}});
       }
       else if(kind==='polyline'){
         const points: {time:number;price:number}[]=[]; let i=0;
@@ -703,6 +911,26 @@ export class CoreSpiritRuntime {
         const id = `${this.options.sourceId}:candidate:${barIndex}:${this.executionRevision}:${this.outputCount}`;
         outputs.push({ kind:'scanCandidate', id, time, score, label, metadata });
       }
+      else if(kind==='event'){
+        this.requireTargetCapability('signals');
+        const name=String(args[0] ?? args[1] ?? 'EVENT');
+        const routes = Array.isArray(this.compiledIr?.surface?.eventRoutes)
+          ? this.compiledIr!.surface!.eventRoutes!.filter((route:any)=>String(route.eventName).toUpperCase()===name.toUpperCase()).flatMap((route:any)=>route.destinations || [])
+          : [];
+        const metadata={
+          source:this.options.sourceId,
+          barIndex,
+          runId:this.executionContext.runId,
+          symbol:this.options.symbol,
+          timeframe:this.options.timeframe,
+          revision:this.executionRevision,
+          confirmed:this.state.barState.isConfirmed,
+          outputId,
+          eventId:`${this.options.sourceId}:event:${barIndex}:${this.executionRevision}:${name}`,
+        };
+        outputs.push({kind:'event',id:String(metadata.eventId),time,name,destinations:routes,metadata});
+        this.bus.emit('script.event',{scriptId:this.options.sourceId,time,name,destinations:routes,metadata});
+      }
       else if(kind==='signal'){
         // Boolean signal conditions are output gates; string signals remain named events.
         if(typeof args[0]==='boolean' && !args[0]) return;
@@ -726,6 +954,20 @@ export class CoreSpiritRuntime {
         };
         outputs.push({kind:'signal',time,type,metadata});
         this.bus.emit('script.signal',{scriptId:this.options.sourceId,time,type,metadata});
+      }
+      else if(kind==='orderIntent') {
+        const side=String(args[0] ?? 'long');
+        const sizingKind=String(args[1] ?? 'quantity');
+        const sizingValue=Number(args[2]);
+        const stop=args[3] == null ? null : (Number.isFinite(Number(args[3])) ? Number(args[3]) : null);
+        const target=args[4] == null ? null : (Number.isFinite(Number(args[4])) ? Number(args[4]) : null);
+        const sizing=normalizeCoreSpiritOrderSizing(sizingKind, sizingValue);
+        const intent=createCoreSpiritOrderIntent({side: side as any, sizing, stop, target}, {
+          id:`${this.options.sourceId}:order:${barIndex}:${this.executionRevision}:${this.outputCount+1}`,
+          time, sourceId:this.options.sourceId, barIndex, mode:this.executionContext.mode, runId:this.executionContext.runId,
+        });
+        outputs.push(intent);
+        this.bus.emit('execution.intent',{source:this.options.sourceId,payload:intent});
       }
       else if(kind==='entry') {
         const condition=Boolean(args[0]); if(!condition) return;

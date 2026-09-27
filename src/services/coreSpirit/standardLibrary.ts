@@ -1,4 +1,5 @@
 import type { CoreSpiritType } from './typeSystem';
+import type { CoreSpiritIrEmitKind } from './callContract';
 
 export type CoreSpiritBuiltin = {
   name: string;
@@ -7,7 +8,29 @@ export type CoreSpiritBuiltin = {
   returnType: CoreSpiritType | 'event' | 'unknown';
   pure: boolean;
   capability?: 'alert' | 'webhook' | 'market' | 'ai';
+  emitKind?: CoreSpiritIrEmitKind;
   category: 'series' | 'math' | 'condition' | 'market' | 'state' | 'output' | 'extension';
+};
+
+export type CoreSpiritLibraryGroupId =
+  | 'price'
+  | 'math'
+  | 'trend'
+  | 'momentum'
+  | 'volatility'
+  | 'structure'
+  | 'market'
+  | 'models'
+  | 'visual'
+  | 'events'
+  | 'data'
+  | 'state';
+
+export type CoreSpiritLibraryGroup = {
+  id: CoreSpiritLibraryGroupId;
+  label: string;
+  description: string;
+  names: readonly string[];
 };
 
 /**
@@ -51,17 +74,32 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'na', minArgs:1, maxArgs:1, returnType:'boolean', pure:true, category:'state' },
   { name:'bar_index', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'state' },
   { name:'time', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'state' },
-  // Output / strategy primitives
-  { name:'plot', minArgs:1, maxArgs:5, returnType:'event', pure:true, category:'output' },
-  { name:'meta', minArgs:2, maxArgs:undefined, returnType:'unknown', pure:true, category:'output' },
-  { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'output' },
 ];
 
 /** Existing TradingCoreOS capabilities remain available as an extension set.
  * They are deliberately not part of the small language core.
  */
 export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
+  // Visual/output compatibility and advanced surface contracts. These remain
+  // executable through the shared registry but are intentionally outside the
+  // 30-primitive semantic core. SHOW/EMIT are discoverability-first surfaces.
+  { name:'plot', minArgs:1, maxArgs:10, returnType:'event', pure:true, category:'extension', emitKind:'plot' },
+  { name:'panel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
+  { name:'sidePanel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
+  { name:'floatingArea', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
+  { name:'point', minArgs:2, maxArgs:3, returnType:'visual:point', pure:true, category:'extension' },
+  { name:'range', minArgs:2, maxArgs:2, returnType:'visual:range', pure:true, category:'extension' },
+  { name:'above_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
+  { name:'below_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
+  { name:'at_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
+  { name:'meta', minArgs:2, maxArgs:undefined, returnType:'unknown', pure:true, category:'extension' },
+  { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'signal' },
+  { name:'emit', minArgs:1, maxArgs:1, returnType:'event', pure:false, category:'extension', emitKind:'event' },
+
   { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension' },
+  { name:'event', minArgs:1, maxArgs:1, returnType:'boolean', pure:false, category:'extension' },
+  { name:'model', minArgs:1, maxArgs:1, returnType:'model:ref', pure:false, category:'extension' },
+
   { name:'variance', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension' },
   { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension' },
   { name:'change', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension' },
@@ -99,30 +137,70 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'footprintRowSell', minArgs:1, maxArgs:1, returnType:'number', pure:false, category:'extension', capability:'market' },
   { name:'footprintRowDelta', minArgs:1, maxArgs:1, returnType:'number', pure:false, category:'extension', capability:'market' },
   { name:'footprintRowImbalance', minArgs:1, maxArgs:1, returnType:'number', pure:false, category:'extension', capability:'market' },
-  { name:'marker', minArgs:1, maxArgs:4, returnType:'event', pure:true, category:'extension' },
-  { name:'label', minArgs:1, maxArgs:8, returnType:'event', pure:true, category:'extension' },
-  { name:'labelAt', minArgs:2, maxArgs:9, returnType:'event', pure:true, category:'extension' },
-  { name:'line', minArgs:4, maxArgs:7, returnType:'event', pure:true, category:'extension' },
-  { name:'zone', minArgs:4, maxArgs:8, returnType:'event', pure:true, category:'extension' },
-  { name:'box', minArgs:4, maxArgs:8, returnType:'event', pure:true, category:'extension' },
-  { name:'band', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension' },
-  { name:'fill', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension' },
-  { name:'gradient', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension' },
-  { name:'arrow', minArgs:4, maxArgs:6, returnType:'event', pure:true, category:'extension' },
-  { name:'shape', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension' },
-  { name:'heatmap', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension' },
-  { name:'polyline', minArgs:6, maxArgs:20, returnType:'event', pure:true, category:'extension' },
-  { name:'hline', minArgs:1, maxArgs:4, returnType:'event', pure:true, category:'extension' },
-  { name:'bg', minArgs:1, maxArgs:2, returnType:'event', pure:true, category:'extension' },
-  { name:'barcolor', minArgs:1, maxArgs:2, returnType:'event', pure:true, category:'extension' },
-  { name:'table', minArgs:4, maxArgs:7, returnType:'event', pure:true, category:'extension' },
-  { name:'entry', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension' },
-  { name:'exit', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension' },
-  { name:'buy', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension' },
-  { name:'sell', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension' },
-  { name:'alert', minArgs:0, returnType:'event', pure:false, category:'extension', capability:'alert' },
-  { name:'webhook', minArgs:1, returnType:'event', pure:false, category:'extension', capability:'webhook' },
+  { name:'show', minArgs:1, maxArgs:16, returnType:'event', pure:true, category:'output', emitKind:'show' },
+  { name:'marker', minArgs:1, maxArgs:7, returnType:'event', pure:true, category:'extension', emitKind:'marker' },
+  { name:'text', minArgs:1, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'text' },
+  { name:'polygon', minArgs:3, maxArgs:20, returnType:'event', pure:true, category:'extension', emitKind:'polygon' },
+  { name:'customVisual', minArgs:2, maxArgs:6, returnType:'event', pure:true, category:'extension', emitKind:'customVisual' },
+  { name:'label', minArgs:1, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'label' },
+  { name:'labelAt', minArgs:2, maxArgs:9, returnType:'event', pure:true, category:'extension', emitKind:'labelAt' },
+  { name:'line', minArgs:2, maxArgs:7, returnType:'event', pure:true, category:'extension', emitKind:'line' },
+  { name:'zone', minArgs:4, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'zone' },
+  { name:'box', minArgs:2, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'box' },
+  { name:'band', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension', emitKind:'band' },
+  { name:'fill', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension', emitKind:'fill' },
+  { name:'gradient', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension', emitKind:'gradient' },
+  { name:'arrow', minArgs:4, maxArgs:6, returnType:'event', pure:true, category:'extension', emitKind:'arrow' },
+  { name:'shape', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension', emitKind:'shape' },
+  { name:'heatmap', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension', emitKind:'heatmap' },
+  { name:'polyline', minArgs:6, maxArgs:20, returnType:'event', pure:true, category:'extension', emitKind:'polyline' },
+  { name:'hline', minArgs:1, maxArgs:4, returnType:'event', pure:true, category:'extension', emitKind:'hline' },
+  { name:'bg', minArgs:1, maxArgs:2, returnType:'event', pure:true, category:'extension', emitKind:'bg' },
+  { name:'barcolor', minArgs:1, maxArgs:2, returnType:'event', pure:true, category:'extension', emitKind:'barcolor' },
+  { name:'table', minArgs:4, maxArgs:7, returnType:'event', pure:true, category:'extension', emitKind:'table' },
+  { name:'entry', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension', emitKind:'entry' },
+  { name:'exit', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'exit' },
+  { name:'buy', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension', emitKind:'buy' },
+  { name:'sell', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension', emitKind:'sell' },
+  { name:'order', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension', emitKind:'orderIntent' },
+  { name:'alert', minArgs:0, returnType:'event', pure:false, category:'extension', capability:'alert', emitKind:'alert' },
+  { name:'webhook', minArgs:1, returnType:'event', pure:false, category:'extension', capability:'webhook', emitKind:'webhook' },
 ];
+
+/**
+ * Human-facing catalog order. This is deliberately separate from the executable
+ * builtin array: reorganizing discovery must never change runtime semantics.
+ *
+ * Names listed here are only builtins that already exist in the registry.
+ * Desired future indicators such as `roc` and `stoch` are documented as
+ * candidates but are not exposed until their deterministic runtime contracts exist.
+ */
+export const CORE_SPIRIT_LIBRARY_GROUPS: readonly CoreSpiritLibraryGroup[] = [
+  { id:'price', label:'Price', description:'Current-bar market series.', names:['open','high','low','close','volume'] },
+  { id:'math', label:'Math', description:'Deterministic scalar and numerical helpers.', names:['abs','min','max','sqrt','pow','round','sign','exp','log','tanh','clamp','sigmoid'] },
+  { id:'trend', label:'Trend', description:'Smoothing and trend-oriented series transforms.', names:['sma','ema','hma','wma','rma'] },
+  { id:'momentum', label:'Momentum', description:'Momentum and oscillator transforms already backed by runtime contracts.', names:['rsi','change','probability'] },
+  { id:'volatility', label:'Volatility', description:'Volatility and dispersion measurements.', names:['atr','stdev','variance'] },
+  { id:'structure', label:'Structure', description:'Range, extrema and crossing conditions.', names:['highest','lowest','cross','crossover','crossunder','rising','falling'] },
+  { id:'market', label:'Market', description:'Instrument, timeframe and session-aware market references.', names:['market','timeframe','vwap'] },
+  { id:'models', label:'Models', description:'Typed model references and host-bound model inference.', names:['model','predict','score'] },
+  { id:'visual', label:'Visual', description:'Primary visual projection surface.', names:['show'] },
+  { id:'events', label:'Events', description:'Reactive event emission and event queries.', names:['emit','event','signal','alert','webhook'] },
+  { id:'data', label:'Data', description:'Advanced host-provided market-data access.', names:['request','requestBatch','lowerTf','bid','ask','spread','mid','intrabarCount','intrabarSum','intrabarHigh','intrabarLow','intrabarDelta','depthImbalance','footprintDelta','footprintBuy','footprintSell','footprintPoc','footprintVah','footprintVal','footprintRows','footprintRowPrice','footprintRowBuy','footprintRowSell','footprintRowDelta','footprintRowImbalance'] },
+  { id:'state', label:'State', description:'Execution-frame and missing-value helpers.', names:['nz','na','isNa','bar_index','time'] },
+];
+
+const CORE_SPIRIT_LIBRARY_GROUP_BY_NAME = new Map<string, CoreSpiritLibraryGroup>(
+  CORE_SPIRIT_LIBRARY_GROUPS.flatMap(group => group.names.map(name => [name, group] as const)),
+);
+
+export function getCoreSpiritLibraryGroup(name: string): CoreSpiritLibraryGroup | undefined {
+  return CORE_SPIRIT_LIBRARY_GROUP_BY_NAME.get(name);
+}
+
+export function getCoreSpiritLibraryCatalog(): readonly CoreSpiritLibraryGroup[] {
+  return CORE_SPIRIT_LIBRARY_GROUPS;
+}
 
 export const CORE_SPIRIT_STDLIB: readonly CoreSpiritBuiltin[] = [
   ...CORE_SPIRIT_STANDARD_LIBRARY,

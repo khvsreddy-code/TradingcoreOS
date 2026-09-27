@@ -70,7 +70,7 @@ export const FAQSection: React.FC = () => {
               >
                 <button
                   onClick={() => toggleAccordion(index)}
-                  className="w-full flex items-center justify-between p-5 text-left font-medium text-sm text-[#f3f4f6] hover:bg-[#11131c] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#10b981] cursor-pointer"
+                  className="w-full flex items-center justify-between p-5 text-left font-medium text-sm text-[#f3f4f6] hover:bg-[#11131c] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3b82f6] cursor-pointer"
                 >
                   <span className="flex items-center gap-3">
                     <span className="font-mono text-xs text-[#8c93a6] font-bold">

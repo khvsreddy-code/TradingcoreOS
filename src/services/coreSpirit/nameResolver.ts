@@ -13,7 +13,7 @@ export type CoreSpiritNameResolution = {
 
 const builtinSeries = new Set(['open','high','low','close','volume','time']);
 const builtinState = new Set(['na','bar_index']);
-const builtinNamespaces = new Set(['ui', 'visual', 'app', 'scan']);
+const builtinNamespaces = new Set(['ui', 'visual', 'app', 'scan', 'chart']);
 
 /** Pure lexical/name-resolution pass. It does not infer expression types. */
 export function resolveCoreSpiritNames(ast: CoreSpiritAst): CoreSpiritNameResolution {

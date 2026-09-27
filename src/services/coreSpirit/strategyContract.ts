@@ -6,6 +6,8 @@
  * CoreSpirit -> Strategy Event -> Risk Engine -> Order Intent -> Execution
  */
 
+import type { CoreSpiritOrderSizing } from './orderIntent';
+
 export const CORE_SPIRIT_STRATEGY_VERSION = 1 as const;
 
 export type StrategyEventKind = "entry" | "exit";
@@ -35,8 +37,12 @@ export interface CoreSpiritOrderIntent {
   id: string;
   strategyEventId: string;
   symbol: string;
-  side: "buy" | "sell";
+  side: "buy" | "sell" | "flat";
+  direction: "long" | "short" | "flat";
   quantity?: number;
+  sizing?: CoreSpiritOrderSizing;
+  stop?: number | null;
+  target?: number | null;
   positionId: string;
   requestedAt: number;
   reason: string;
@@ -53,7 +59,7 @@ export interface StrategyExecutionRequest {
   orderIntentId: string;
   venue: string;
   symbol: string;
-  side: "buy" | "sell";
+  side: "buy" | "sell" | "flat";
   quantity: number;
   policyId: string;
 }
@@ -79,7 +85,9 @@ export function strategyEventToOrderIntent(
     strategyEventId: event.id,
     symbol: event.symbol,
     side,
+    direction: event.kind === 'exit' ? 'flat' : event.direction,
     quantity,
+    sizing: quantity !== undefined ? { kind: 'quantity', value: quantity } : { kind: 'all' },
     positionId: event.positionId,
     requestedAt: now,
     reason: event.reason,

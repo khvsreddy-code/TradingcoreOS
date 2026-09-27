@@ -5,6 +5,7 @@ import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
 import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
+import { describeCoreSpiritSurface } from './surfaceForms';
 
 export function normalizeCoreSpirit(source: string) { return normalizeCoreSpiritSource(source); }
 export function parseCoreSpirit(source: string) { return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse(); }
@@ -15,9 +16,11 @@ export function parseCoreSpiritDetailed(source: string) {
 export function compileCoreSpirit(source: string, sourceId = 'coreSpirit'): CoreSpiritCompileResult {
   const parsed=parseCoreSpiritDetailed(source);
   if(parsed.diagnostics.length) return { diagnostics: parsed.diagnostics.map(d=>({severity:'error' as const,message:d.message,line:d.line,column:d.column,start:d.start,end:d.end,code:'SYNTAX_ERROR'})) };
-  return new CoreSpiritCompiler().compile(parsed.ast, sourceId);
+  return new CoreSpiritCompiler().compile(parsed.ast, sourceId, { surface: describeCoreSpiritSurface(source) });
 }
-export function makeCoreSpiritProgram(source: string, id = 'coreSpirit'): CoreSpiritProgram { return { version:1,id,source:normalizeCoreSpiritSource(source),ast:parseCoreSpirit(source) }; }
+export function makeCoreSpiritProgram(source: string, id = 'coreSpirit'): CoreSpiritProgram {
+  return { version:1,id,source:normalizeCoreSpiritSource(source),ast:parseCoreSpirit(source),surface:describeCoreSpiritSurface(source) };
+}
 export function executeCoreSpirit(source: string, bars: CoreSpiritMarketBar[], sourceId='coreSpirit'): CoreSpiritExecutionResult {
   const program=makeCoreSpiritProgram(source,sourceId); const runtime=new CoreSpiritRuntime({sourceId});
   return runtime.executeIr(runtime.loadProgram(program),bars);

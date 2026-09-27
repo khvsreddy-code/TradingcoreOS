@@ -23,7 +23,7 @@ export const PRICE_SOURCES: Array<{value: PriceSource; label: string}> = [
   { value: 'hl2', label: 'HL2 (High+Low)/2' }, { value: 'hlc3', label: 'HLC3 (Typical)' }, { value: 'ohlc4', label: 'OHLC4' }, { value: 'hlcc4', label: 'HLCC4' },
 ];
 export const defaultIndicatorStyle = (kind: IndicatorKind) => ({
-  color: ({EMA:'#38bdf8',SMA:'#f59e0b',HMA:'#e879f9',VWAP:'#c084fc',RSI:'#f59e0b',MACD:'#38bdf8',ATR:'#22c55e',ADX:'#22c55e',CCI:'#fb7185',OBV:'#60a5fa',MFI:'#a78bfa'} as Record<string,string>)[kind] || '#94a3b8',
+  color: ({EMA:'#38bdf8',SMA:'#f59e0b',HMA:'#e879f9',VWAP:'#c084fc',RSI:'#f59e0b',MACD:'#38bdf8',ATR:'#3b82f6',ADX:'#3b82f6',CCI:'#fb7185',OBV:'#60a5fa',MFI:'#a78bfa'} as Record<string,string>)[kind] || '#94a3b8',
   lineWidth: 2 as number, lineStyle: 0 as 0 | 1 | 2,
 });
 export const INDICATOR_LIBRARY: Array<{ kind: IndicatorKind; description: string; overlay: boolean; defaults: Partial<IndicatorConfig> }> = [

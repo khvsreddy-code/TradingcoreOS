@@ -1,6 +1,8 @@
+import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
+import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
 import {
   CoreSpiritType,
   compatible,
@@ -31,7 +33,7 @@ export type CoreSpiritSemanticResult = {
 };
 
 const seriesNames=new Set(['open','high','low','close','volume','time']);
-const specialIdentifiers=new Set(['na']);
+const specialIdentifiers=new Set(['na','bar_index','chart']);
 const comparisonOps=new Set(['==','!=','<','<=','>','>=']);
 const numericBuiltins=new Set(['abs','sqrt','pow','round','exp','log','tanh','clamp','sigmoid','probability','predict','score']);
 
@@ -39,7 +41,7 @@ function liftedNumericReturn(args:CoreSpiritType[]):CoreSpiritType {
   return args.some(isSeriesType) ? 'series<float>' : 'float';
 }
 
-export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpiritProgramLayer } = {}):CoreSpiritSemanticResult {
+export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata } = {}):CoreSpiritSemanticResult {
   const layer: CoreSpiritProgramLayer = options.layer || 'script';
   const diagnostics:CoreSpiritDiagnostic[]=[];
   const symbols=new Map<string,CoreSpiritType>();
@@ -64,7 +66,32 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
         return scope.get(n.name) || 'unknown';
 
       case 'member': {
+        if (n.target.type === 'identifier' && n.target.name === 'chart') {
+          if (!['price','volume','indicator','custom'].includes(n.member)) { report(n, `chart has no area '${n.member}'`, 'UNKNOWN_CHART_AREA'); return 'unknown'; }
+          return 'visual:area';
+        }
         const target=infer(n.target,scope);
+        const modelDeclarations = options.surface?.declarations.filter((declaration): declaration is Extract<CoreSpiritSurfaceMetadata['declarations'][number], { kind: 'model' }> => declaration.kind === 'model') ?? [];
+        const model = target === 'model:ref' ? modelDeclarations.find(declaration =>
+          n.target.type === 'call' && n.target.name === 'model' && n.target.args[0]?.type === 'string'
+            ? declaration.name === n.target.args[0].value
+            : false,
+        ) : undefined;
+        if (target === 'model:ref') {
+          if (!model) {
+            report(n, 'Unknown model reference', 'UNKNOWN_MODEL');
+            return 'unknown';
+          }
+          if (!model.outputs.includes(n.member) && !model.predictions.includes(n.member)) {
+            report(n, `Model '${model.name}' has no output '${n.member}'`, 'UNKNOWN_MODEL_OUTPUT');
+            return 'unknown';
+          }
+          const declaredType = model.outputTypes?.[n.member];
+          if (declaredType && declaredType !== 'unknown') return declaredType === 'series<number>' ? 'series<float>' : declaredType;
+          if (/confidence|probability|score/i.test(n.member)) return 'number';
+          if (/regime|direction|label|class/i.test(n.member)) return 'string';
+          return 'unknown';
+        }
         const dataFields = new Set(['open','high','low','close','volume','time']);
         if (target === 'market:ref' || target === 'timeframe:ref') {
           if (!dataFields.has(n.member)) { report(n,`Data reference has no field '${n.member}'`,'UNKNOWN_DATA_FIELD'); return 'unknown'; }
@@ -81,90 +108,61 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
       }
 
       case 'memberCall': {
-        const targetIsUi = n.target.type === 'identifier' && n.target.name === 'ui';
-        const targetIsVisual = n.target.type === 'identifier' && n.target.name === 'visual';
-        const targetIsApp = n.target.type === 'identifier' && n.target.name === 'app';
-        const targetIsScan = n.target.type === 'identifier' && n.target.name === 'scan';
-        const targetType = targetIsUi ? 'ui:root' as CoreSpiritType : targetIsVisual ? 'visual:root' as CoreSpiritType : targetIsApp ? 'app:root' as CoreSpiritType : targetIsScan ? 'scan:root' as CoreSpiritType : infer(n.target, scope);
+        const targetType = infer(n.target, scope);
+        const rootNamespace =
+          n.target.type === 'identifier' && CORE_SPIRIT_ROOT_NAMESPACES.includes(n.target.name as any)
+            ? n.target.name
+            : targetType === 'ui:panel' || targetType === 'ui:control'
+              ? 'panel'
+              : undefined;
+
+        if (!rootNamespace) {
+          report(n, `Cannot call member '${n.member}' on '${targetType}'`, 'TYPE_MEMBER_CALL_TARGET');
+          n.args.forEach(x => infer(x, scope));
+          return 'unknown';
+        }
+
+        const contract = getCoreSpiritMemberContract(rootNamespace, n.member);
+        if (!contract) {
+          if (rootNamespace === 'panel' && targetType === 'ui:control') {
+            report(n, `UI control '${n.member}' is not a mutable method; use host interaction events`, 'UI_CONTROL_METHOD');
+          } else {
+            report(n, `${rootNamespace}.${n.member} is not a supported member`, rootNamespace === 'visual' ? 'VISUAL_UNKNOWN' : rootNamespace === 'scan' ? 'SCAN_UNKNOWN' : rootNamespace === 'app' ? 'APP_UNKNOWN' : 'UI_UNKNOWN_ROOT');
+          }
+          n.args.forEach(x => infer(x, scope));
+          return 'unknown';
+        }
+
         const argTypes = n.args.map(x => infer(x, scope));
-        if (targetType === 'ui:root') {
-          if (n.member !== 'panel') report(n, `ui.${n.member} is not a supported root UI constructor`, 'UI_UNKNOWN_ROOT');
-          if (n.member === 'panel' && n.args.length !== 1) report(n, 'ui.panel expects a title', 'UI_PANEL_ARGS');
-          if (n.member === 'panel' && n.args.length && !compatible('string', argTypes[0])) report(n, 'ui.panel title must be a string', 'UI_PANEL_TITLE');
-          return n.member === 'panel' ? 'ui:panel' : 'unknown';
+        if (n.args.length < contract.minArgs || (contract.maxArgs !== undefined && n.args.length > contract.maxArgs)) {
+          const max = contract.maxArgs === undefined ? '∞' : String(contract.maxArgs);
+          report(n, `${contract.callName} expects ${contract.minArgs === contract.maxArgs ? contract.minArgs : `${contract.minArgs}-${max}`} arguments`, `${contract.namespace.toUpperCase()}_ARGS`);
         }
-        if (targetType === 'visual:root') {
-          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
-            line: { min:5, max:6, result:'visual:object' },
-            zone: { min:3, max:6, result:'visual:object' },
-            liquidityZone: { min:5, max:6, result:'visual:object' },
-            heatmap: { min:2, max:4, result:'visual:object' },
-            liquidityMap: { min:2, max:4, result:'visual:object' },
-            depth: { min:2, max:4, result:'visual:object' },
-            volumeProfile: { min:2, max:4, result:'visual:object' },
-            footprint: { min:2, max:4, result:'visual:object' },
-            structureGraph: { min:2, max:4, result:'visual:object' },
-            probabilitySurface: { min:2, max:4, result:'visual:object' },
-            regimeBand: { min:2, max:4, result:'visual:object' },
-            tradePath: { min:2, max:4, result:'visual:object' },
-            modelField: { min:2, max:4, result:'visual:object' },
-            replayTrace: { min:2, max:4, result:'visual:object' },
-          };
-          const rule=rules[n.member];
-          if(!rule){ report(n, `visual.${n.member} is not a supported declarative visual constructor`, 'VISUAL_UNKNOWN'); return 'unknown'; }
-          if(n.args.length<rule.min || n.args.length>rule.max) report(n, `visual.${n.member} expects ${rule.min}-${rule.max} arguments`, 'VISUAL_ARGS');
-          if(n.args.length && !compatible('string', argTypes[0])) report(n, `visual.${n.member} id must be a string`, 'VISUAL_ID');
-          return rule.result;
+
+        if (contract.namespace === 'ui' && contract.member === 'panel' && n.args.length && !compatible('string', argTypes[0]))
+          report(n, 'ui.panel title must be a string', 'UI_PANEL_TITLE');
+
+        if (contract.namespace === 'panel') {
+          if (n.args[0] && !compatible('string', argTypes[0])) report(n, `panel.${contract.member} label must be a string`, 'UI_LABEL');
+          if (contract.member === 'number' && n.args[1] && !isNumericType(argTypes[1])) report(n, 'panel.number value must be numeric', 'UI_NUMBER_VALUE');
+          if (contract.member === 'toggle' && n.args[1] && !isBooleanType(argTypes[1])) report(n, 'panel.toggle value must be boolean', 'UI_TOGGLE_VALUE');
+          if (contract.member === 'slider' && [1,2].some(i => n.args[i] && !isNumericType(argTypes[i]))) report(n, 'panel.slider min and max must be numeric', 'UI_SLIDER_RANGE');
         }
-        if (targetType === 'scan:root') {
-          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
-            universe: { min:1, max:1, result:'scan:root' },
-            emit: { min:1, max:3, result:'scan:candidate' },
-          };
-          const rule=rules[n.member];
-          if(!rule){ report(n, `scan.${n.member} is not a supported scanner constructor`, 'SCAN_UNKNOWN'); return 'unknown'; }
-          if(n.args.length<rule.min || n.args.length>rule.max) report(n, `scan.${n.member} expects ${rule.min}-${rule.max} arguments`, 'SCAN_ARGS');
-          if(n.member === 'universe' && n.args[0] && !compatible('string', argTypes[0])) report(n, 'scan.universe id must be a string', 'SCAN_UNIVERSE_ID');
-          if(n.member === 'emit' && n.args[0] && !isNumericType(argTypes[0])) report(n, 'scan.emit score must be numeric', 'SCAN_SCORE');
-          return rule.result;
+
+        if (contract.namespace === 'visual' && n.args.length && !compatible('string', argTypes[0]))
+          report(n, `${contract.callName} id must be a string`, 'VISUAL_ID');
+
+        if (contract.namespace === 'scan') {
+          if (contract.member === 'universe' && n.args[0] && !compatible('string', argTypes[0])) report(n, 'scan.universe id must be a string', 'SCAN_UNIVERSE_ID');
+          if (contract.member === 'emit' && n.args[0] && !isNumericType(argTypes[0])) report(n, 'scan.emit score must be numeric', 'SCAN_SCORE');
         }
-        if (targetType === 'app:root') {
-          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
-            create: { min:1, max:2, result:'app:root' },
-            chart: { min:0, max:3, result:'app:widget' },
-            panel: { min:2, max:5, result:'app:widget' },
-            overlay: { min:1, max:3, result:'app:widget' },
-            targets: { min:1, max:8, result:'app:root' },
-            require: { min:1, max:1, result:'null' },
-            bind: { min:2, max:3, result:'null' },
-          };
-          const rule=rules[n.member];
-          if(!rule){ report(n, `app.${n.member} is not a supported workspace constructor`, 'APP_UNKNOWN'); return 'unknown'; }
-          if(n.args.length<rule.min || n.args.length>rule.max) report(n, `app.${n.member} expects ${rule.min}-${rule.max} arguments`, 'APP_ARGS');
-          return rule.result;
-        }
-        if (targetType === 'ui:panel') {
-          const rules: Record<string, { min:number; max:number; result: CoreSpiritType }> = {
-            number: { min:2, max:3, result:'ui:control' },
-            button: { min:1, max:2, result:'ui:control' },
-            toggle: { min:2, max:3, result:'ui:control' },
-            slider: { min:3, max:5, result:'ui:control' },
-          };
-          const rule = rules[n.member];
-          if (!rule) { report(n, `UI panel has no method '${n.member}'`, 'UI_UNKNOWN_METHOD'); return 'unknown'; }
-          if (n.args.length < rule.min || n.args.length > rule.max) report(n, `panel.${n.member} expects ${rule.min}-${rule.max} arguments`, 'UI_ARG_COUNT');
-          if (n.args[0] && !compatible('string', argTypes[0])) report(n, `panel.${n.member} label must be a string`, 'UI_LABEL');
-          if (n.member === 'number' && n.args[1] && !isNumericType(argTypes[1])) report(n, 'panel.number value must be numeric', 'UI_NUMBER_VALUE');
-          if (n.member === 'toggle' && n.args[1] && !isBooleanType(argTypes[1])) report(n, 'panel.toggle value must be boolean', 'UI_TOGGLE_VALUE');
-          if (n.member === 'slider' && [1,2].some(i => n.args[i] && !isNumericType(argTypes[i]))) report(n, 'panel.slider min and max must be numeric', 'UI_SLIDER_RANGE');
-          return rule.result;
-        }
+
         if (targetType === 'ui:control') {
           report(n, `UI control '${n.member}' is not a mutable method; use host interaction events`, 'UI_CONTROL_METHOD');
           return 'unknown';
         }
-        report(n, `Cannot call member '${n.member}' on '${targetType}'`, 'TYPE_MEMBER_CALL_TARGET');
-        return 'unknown';
+
+        return contract.returnType;
       }
 
       case 'index': {
@@ -220,6 +218,15 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
 
         const argTypes=n.args.map(x=>infer(x,scope));
 
+        if(['panel','sidePanel','floatingArea'].includes(n.name) && n.args.length && !compatible('string',argTypes[0]))
+          report(n, `${n.name} title must be a string`, 'TYPE_VISUAL_AREA');
+        if(n.name==='point') {
+          if(n.args.length >= 2 && (!isNumericType(argTypes[0]) || !isNumericType(argTypes[1]))) report(n, 'point coordinates must be numeric', 'TYPE_VISUAL_POINT');
+          if(n.args.length === 3 && !compatible('string',argTypes[2])) report(n, 'point coordinate space must be a string', 'TYPE_VISUAL_POINT_SPACE');
+        }
+        if(n.name==='range' && n.args.length===2 && (!isNumericType(argTypes[0]) || !isNumericType(argTypes[1]))) report(n, 'range bounds must be numeric', 'TYPE_VISUAL_RANGE');
+        if(['above_bar','below_bar','at_bar'].includes(n.name) && n.args.length && !isNumericType(argTypes[0])) report(n, `${n.name} offset must be numeric`, 'TYPE_VISUAL_POSITION');
+
         if(['sma','ema','hma','rsi','highest','lowest','sum','mean','stdev','wma','rma','median','variance','change'].includes(n.name) &&
           n.args.length>0 && !isNumericType(argTypes[0]))
           report(n,`${n.name} first argument must be numeric`,'TYPE_INDICATOR_INPUT');
@@ -266,6 +273,23 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
         }
         if(['buy','sell'].includes(n.name) && layer !== 'automation')
           report(n,`${n.name} is automation-only and creates an order intent, never a broker order`,'CAPABILITY_ORDER_INTENTS');
+        if(n.name==='order'){
+          if(layer !== 'automation') report(n,'order is automation-only and creates a proposed order intent; risk and policy remain mandatory','CAPABILITY_ORDER_INTENTS');
+          if(n.args.length < 2) report(n,'order expects a side and sizing specification','TYPE_ORDER_SPEC');
+          if(n.args[0] && !['string'].includes(argTypes[0] === 'string' ? 'string' : '')) report(n,'order side must be a string','TYPE_ORDER_SIDE');
+          if(n.args[1] && !['string'].includes(argTypes[1] === 'string' ? 'string' : '')) report(n,'order sizing kind must be a string','TYPE_ORDER_SIZING');
+          if(n.args.length >= 3 && !isNumericType(argTypes[2])) report(n,'order sizing value must be numeric','TYPE_ORDER_SIZE');
+          if(n.args.length >= 4 && !(isNumericType(argTypes[3]) || argTypes[3] === 'null' || argTypes[3] === 'unknown')) report(n,'order stop must be numeric or null','TYPE_ORDER_STOP');
+          if(n.args.length >= 5 && !(isNumericType(argTypes[4]) || argTypes[4] === 'null' || argTypes[4] === 'unknown')) report(n,'order target must be numeric or null','TYPE_ORDER_TARGET');
+        }
+
+        if(n.name==='event'){
+          if(!compatible('string',argTypes[0])) report(n,'event name must be a string','TYPE_EVENT_NAME');
+        }
+
+        if(n.name==='emit'){
+          if(!compatible('string',argTypes[0])) report(n,'emit event name must be a string','TYPE_EVENT_NAME');
+        }
 
         if(n.name==='webhook' && layer !== 'automation')
           report(n,'webhook delivery is host-owned; only automation may request an event delivery through policy','CAPABILITY_WEBHOOK');
@@ -278,13 +302,22 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
           return 'unknown';
         }
 
-        if(['plot','marker','line','zone','box','band','gradient','arrow','shape','heatmap','polyline','hline'].includes(n.name) &&
-          n.args.length>0 && !isNumericType(argTypes[0]))
-          report(n,`${n.name} requires a numeric value`,'TYPE_OUTPUT');
+        if(['plot','marker'].includes(n.name) && n.args.length>0 && !isNumericType(argTypes[0]) && !['visual:point'].includes(argTypes[0]))
+          report(n,`${n.name} requires a numeric value or visual point`,'TYPE_OUTPUT');
 
-        if(['box','arrow','line'].includes(n.name) && n.args.length>=4 &&
-          [0,1,2,3].some(i=>!isNumericType(argTypes[i])))
-          report(n,`${n.name} coordinate arguments must be numeric`,'TYPE_VISUAL_COORDINATE');
+        if(['box','arrow','line'].includes(n.name)) {
+          const pointOverload = n.args.length >= 2 && argTypes[0] === 'visual:point' && argTypes[1] === 'visual:point';
+          const numericOverload = n.args.length >= 4 && [0,1,2,3].every(i=>isNumericType(argTypes[i]));
+          if (!pointOverload && !numericOverload) report(n,`${n.name} requires either two visual points or four numeric coordinates`,'TYPE_VISUAL_COORDINATE');
+        }
+        if(n.name==='polygon') {
+          const pointCount = argTypes.findIndex(type => type !== 'visual:point');
+          const effectivePointCount = pointCount < 0 ? argTypes.length : pointCount;
+          const pointOverload = effectivePointCount >= 3 && (argTypes.slice(effectivePointCount).every(type => compatible('string', type) || isNumericType(type) || type === 'visual:area'));
+          const numericOverload = n.args.length >= 6 && [0,1,2,3,4,5].every(i=>isNumericType(argTypes[i]));
+          if (!pointOverload && !numericOverload) report(n,'polygon requires at least three visual points or three time/price pairs','TYPE_VISUAL_POLYGON');
+        }
+        if(n.name==='customVisual' && n.args.length >= 2 && !compatible('string', argTypes[0])) report(n,'customVisual id must be a string','TYPE_CUSTOM_VISUAL_ID');
 
         if(n.name==='zone' && n.args.length>=4 &&
           [0,1,2,3].some(i=>!isNumericType(argTypes[i])))
@@ -419,7 +452,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
         break;
 
       case 'memberCall':
-        if (!(n.target.type === 'identifier' && ['ui','visual','app','scan'].includes(n.target.name))) visit(n.target,scope);
+        if (!(n.target.type === 'identifier' && CORE_SPIRIT_ROOT_NAMESPACES.includes(n.target.name as any))) visit(n.target,scope);
         n.args.forEach((x,index)=>{
           const actionPosition = (n.member === 'button' && index === 1) || (n.member === 'toggle' && index === 2) || (n.member === 'number' && index === 2) || (n.member === 'slider' && index === 4);
           if (actionPosition && x.type === 'identifier' && !scope.has(x.name)) return;

@@ -7,14 +7,17 @@ import { optimizeCoreSpiritIr } from './optimizer';
 import { validateCoreSpiritIr } from './irContract';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import { buildCoreSpiritGraphBundle } from './semanticGraph';
+import { getCoreSpiritBuiltin } from './standardLibrary';
+import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
+import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
 export class CoreSpiritCompiler {
-  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer } = {}): CoreSpiritCompileResult {
+  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata } = {}): CoreSpiritCompileResult {
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const names = resolveCoreSpiritNames(ast);
-    const semantic = analyzeCoreSpirit(ast, { layer });
+    const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface });
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
     if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics };
     const instructions: CoreSpiritIrInstruction[] = [];
@@ -46,16 +49,22 @@ export class CoreSpiritCompiler {
           const seriesArgs=n.args.filter(a=>a.type==='identifier'&&['open','high','low','close','volume','time'].includes(a.name)).map(a=>(a as any).name);
           const seriesSources = n.args.flatMap(arg => { const source = dataMemberSources.get(arg); return source ? [source] : []; });
           instructions.push({op:'call',dest,name:n.name,args,seriesArgs,seriesSources:seriesSources.length ? seriesSources : undefined,callId:`${n.name}:${n.span?.start ?? temp}`});
+          const builtin = getCoreSpiritBuiltin(n.name);
+          if (builtin?.emitKind) {
+            instructions.push({op:'emit',kind:builtin.emitKind,args:[dest,...args],outputId:`${builtin.emitKind}:${n.span?.start ?? temp}`});
+          }
           if (n.name === 'market' || n.name === 'timeframe') dataRefRegisters.set(n.span ? `${n.span.start}:${n.span.end}` : `temp:${dest}`, dest);
-          if(['plot','marker','label','labelAt','line','zone','box','band','fill','gradient','arrow','shape','heatmap','polyline','hline','bg','barcolor','table','signal','entry','exit','buy','sell','alert','webhook'].includes(n.name)) instructions.push({op:'emit',kind:n.name as any,args:[dest,...args],outputId:`${n.name}:${n.span?.start ?? temp}`});
           return dest;
         }
         case 'memberCall': {
-          const rootNamespace = n.target.type === 'identifier' && ['ui','visual','app','scan'].includes(n.target.name) ? n.target.name : undefined;
+          const rootNamespace = n.target.type === 'identifier' && CORE_SPIRIT_ROOT_NAMESPACES.includes(n.target.name as any) ? n.target.name : undefined;
+          const namespace = rootNamespace || 'panel';
+          const contract = getCoreSpiritMemberContract(namespace, n.member);
+          if (!contract) throw new Error(`Unknown member '${namespace}.${n.member}'.`);
           const target = rootNamespace ? undefined : expr(n.target);
+          const actionPositions = new Set(contract.actionArgIndices || []);
           const args = n.args.map((arg, index) => {
-            const actionPosition = (rootNamespace === 'ui' || rootNamespace === undefined) && ((n.member === 'button' && index === 1) || (n.member === 'toggle' && index === 2) || (n.member === 'number' && index === 2) || (n.member === 'slider' && index === 4));
-            if (actionPosition && arg.type === 'identifier' && !locals.includes(arg.name)) {
+            if (actionPositions.has(index) && arg.type === 'identifier' && !locals.includes(arg.name)) {
               const actionDest = `t${temp++}`;
               instructions.push({ op:'const', dest:actionDest, value:arg.name });
               return actionDest;
@@ -63,25 +72,31 @@ export class CoreSpiritCompiler {
             return expr(arg);
           });
           const dest=`t${temp++}`;
-          const callName = rootNamespace === 'ui'
-            ? `ui.${n.member}`
-            : rootNamespace === 'visual'
-              ? `visual.${n.member}`
-              : rootNamespace === 'app'
-                ? `app.${n.member}`
-                : rootNamespace === 'scan'
-                  ? `scan.${n.member}`
-                  : `ui.panel.${n.member}`;
-          instructions.push({op:'call', dest, name:callName, args:target ? [target,...args] : args, callId:`${rootNamespace || 'member'}:${n.member}:${n.span?.start ?? temp}`});
-          if (rootNamespace === 'scan' && n.member === 'emit') {
-            instructions.push({op:'emit',kind:'scanCandidate',args:[dest,...args],outputId:`scanCandidate:${n.span?.start ?? temp}`});
+          instructions.push({op:'call', dest, name:contract.callName, args:target ? [target,...args] : args, callId:`${contract.callName}:${n.span?.start ?? temp}`});
+          if (contract.emitKind) {
+            instructions.push({op:'emit',kind:contract.emitKind,args:[dest,...args],outputId:`${contract.emitKind}:${n.span?.start ?? temp}`});
           }
           return dest;
         }
         case 'member': {
+          if (n.target.type === 'identifier' && n.target.name === 'chart' && ['price','volume','indicator','custom'].includes(n.member)) {
+            const memberDest=`t${temp++}`; const areaDest=`t${temp++}`;
+            instructions.push({ op:'const', dest:areaDest, value:n.member });
+            instructions.push({ op:'call', dest:memberDest, name:'visual.area', args:[areaDest], callId:`chart.area:${n.member}:${n.span?.start ?? temp}` });
+            return memberDest;
+          }
+          const isModelRef = n.target.type === 'call' && n.target.name === 'model';
+          if (isModelRef) {
+            const target = expr(n.target);
+            const memberDest = `t${temp++}`;
+            const memberName = `t${temp++}`;
+            instructions.push({ op:'const', dest:memberName, value:n.member });
+            instructions.push({ op:'call', dest:memberDest, name:'__model_get', args:[target,memberName], callId:`model:${n.member}:${n.span?.start ?? temp}` });
+            return memberDest;
+          }
           const target = expr(n.target);
           const isDataRef = n.target.type === 'identifier' && dataRefRegisters.has(n.target.name) || n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe');
-          if (!isDataRef) throw new Error(`Member access '${n.member}' is only executable for market()/timeframe() references.`);
+          if (!isDataRef) throw new Error(`Member access '${n.member}' is only executable for market()/timeframe() references or chart areas.`);
           const memberDest=`t${temp++}`; const memberName=`t${temp++}`;
           instructions.push({op:'const',dest:memberName,value:n.member});
           instructions.push({op:'call',dest:memberDest,name:'__member_get',args:[target,memberName],callId:`member:${n.member}:${n.span?.start ?? temp}`});
@@ -119,7 +134,7 @@ export class CoreSpiritCompiler {
     };
     try {
       stmt(ast);
-      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'memberCall':collect(n.target);n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries}};
+      const sourceNodes: CoreSpiritAstNode[]=[]; const collect=(n:CoreSpiritAstNode)=>{sourceNodes.push(n); switch(n.type){case 'program':n.body.forEach(collect);break;case 'let':collect(n.expression);break;case 'expressionStatement':collect(n.expression);break;case 'if':collect(n.condition);n.thenBranch.forEach(collect);n.elseBranch?.forEach(collect);break;case 'unary':collect(n.operand);break;case 'binary':collect(n.left);collect(n.right);break;case 'call':n.args.forEach(collect);break;case 'memberCall':collect(n.target);n.args.forEach(collect);break;case 'index':collect(n.target);collect(n.index);break;case 'member':collect(n.target);break;case 'typeDeclaration':break;case 'number':case 'string':case 'boolean':case 'null':case 'identifier':break;}}; collect(ast); const spans=sourceNodes.filter(n=>n.span); const sourceMapEntries=spans.map((n,i)=>({instruction:Math.min(i,Math.max(0,instructions.length-1)),start:n.span!.start,end:n.span!.end,line:n.span!.line,column:n.span!.column,kind:n.type})); const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:{version:1,sourceId,entries:sourceMapEntries},...(options.surface ? { surface: options.surface } : {})};
       const optimized = optimizeCoreSpiritIr(rawIr);
       const ir = { ...optimized, graphs: buildCoreSpiritGraphBundle(optimized) } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };

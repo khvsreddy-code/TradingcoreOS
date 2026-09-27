@@ -13,13 +13,13 @@ describe('CoreSpirit v22 rich visual contract', () => {
   const source = `
     fast = ema(close, 5)
     slow = ema(close, 12)
-    plot(fast, "#22c55e", 2, 0, "Fast")
+    plot(fast, "#3b82f6", 2, 0, "Fast")
     band(fast + atr(5), fast - atr(5), "#38bdf8", 0.10)
     fill(fast, slow, "#8b5cf6", 0.08)
-    gradient(highest(close, 10), lowest(close, 10), "#22c55e", "#8b5cf6", 0.08)
+    gradient(highest(close, 10), lowest(close, 10), "#3b82f6", "#8b5cf6", 0.08)
     box(time[10], time, highest(high, 10), lowest(low, 10), "#2563eb", "#60a5fa", 0.10, "hatch")
     arrow(time[5], low[5], time, high, "#f59e0b", 2)
-    shape(low, "arrowUp", "#22c55e", 10, "BUY")
+    shape(low, "arrowUp", "#3b82f6", 10, "BUY")
   `;
 
   it('compiles all rich visual primitives', () => {

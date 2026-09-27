@@ -29,7 +29,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigate }) => {
       {/* User Avatar Button */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-lg border border-[#222636] bg-[#11131c] px-2.5 py-1.5 text-xs font-medium text-[#f3f4f6] transition-all hover:border-[#33384f] hover:bg-[#181b28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981] cursor-pointer"
+        className="flex items-center gap-2 rounded-lg border border-[#222636] bg-[#11131c] px-2.5 py-1.5 text-xs font-medium text-[#f3f4f6] transition-all hover:border-[#33384f] hover:bg-[#181b28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] cursor-pointer"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -42,7 +42,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigate }) => {
               referrerPolicy="no-referrer"
             />
           ) : (
-            <span className="font-mono text-[10px] font-bold text-[#10b981]">
+            <span className="font-mono text-[10px] font-bold text-[#3b82f6]">
               {user.name.charAt(0).toUpperCase()}
             </span>
           )}
@@ -73,7 +73,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigate }) => {
             <div className="border-b border-[#222636] p-3.5 bg-[#090a0f]">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-xs text-[#f3f4f6] truncate block">{user.name}</span>
-                <span className="rounded bg-[#10b981]/10 border border-[#10b981]/30 px-1.5 py-0.2 font-mono text-[9px] text-[#10b981] font-semibold">
+                <span className="rounded bg-[#3b82f6]/10 border border-[#3b82f6]/30 px-1.5 py-0.2 font-mono text-[9px] text-[#3b82f6] font-semibold">
                   {user.plan}
                 </span>
               </div>
@@ -141,7 +141,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigate }) => {
             </div>
 
             <div className="border-t border-[#222636] bg-[#090a0f] p-2 text-center font-mono text-[10px] text-[#8c93a6]">
-              <ShieldCheck className="h-3 w-3 inline-block mr-1 text-[#10b981]" />
+              <ShieldCheck className="h-3 w-3 inline-block mr-1 text-[#3b82f6]" />
               OAuth Session Secured
             </div>
           </motion.div>

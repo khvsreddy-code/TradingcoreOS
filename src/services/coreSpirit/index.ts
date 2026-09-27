@@ -7,6 +7,10 @@ export * from './semanticAnalyzer';
 export * from './ir';
 export * from './compiler';
 export * from './standardLibrary';
+export * from './callContract';
+export * from './memberRegistry';
+export * from './surfaceForms';
+export * from './languageConcepts';
 export * from './nameResolver';
 export * from './optimizer';
 export { lexCoreSpirit, parseCoreSpiritStage, resolveCoreSpiritStage, typeCheckCoreSpiritStage, lowerCoreSpiritStage, compileCoreSpiritStages, serializeCoreSpiritAst } from './pipelineStages';
@@ -44,11 +48,11 @@ export * from './signalBoundary';
 
 export * from './layeredPlatformContract';
 export * from './languageFoundation';
-export * from './visualScene';
+export * from './visualCoordinates';
 
-export * from './visualIdentity';
 export * from './runtimeKernel';
 export * from './modelAbi';
+export * from './modelSurface';
 
 export * from './executionAuthority';
 export * from './explainability';
@@ -63,17 +67,13 @@ export * from './architectureContract';
 export * from './platformRuntime';
 
 export * from './canonicalTradingModel';
-export * from './visualGraph';
 
 export * from './uiRuntime';
 export * from './visualMetadata';
 
 export * from './visualAdvanced';
-export * from './visualRealtimeEngine';
 
-export * from './declarativeVisual';
 export * from './visualApp';
-export * from './workspaceRuntime';
 export * from './multiSymbolTimeframe';
 
 export * from './modelOrchestration';
@@ -86,3 +86,17 @@ export * from './visualDebugger';
 
 export * from './semanticGraph';
 export * from './reactiveEngine';
+
+export * from './executionPlanner';
+export * from './capabilitySandbox';
+export * from './coreSpiritV1Runtime';
+
+export * from './visualProjection';
+
+export * from './orderIntent';
+export * from './eventSurface';
+export * from './automationSurface';
+export * from './eventSystem';
+export * from './eventEngine';
+
+export * from ./'composability';

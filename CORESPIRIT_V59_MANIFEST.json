@@ -1,0 +1,79 @@
+{
+  "release": "CoreSpirit v59 — historical lineage reconciliation",
+  "baseline": "v58",
+  "runtime_baseline": "v58 visual compiler graph + reactive runtime",
+  "kind": "documentation_and_lineage_consolidation",
+  "roadmap_range": "1-39",
+  "focus": [
+    "reconcile supplied pre-v45 CoreSpirit history into the stable architecture document",
+    "reconcile historical stage contracts into the living build tracker",
+    "preserve immutable historical release manifests v37-v45",
+    "retain the v58 runtime/code unchanged",
+    "prevent reintroduction of obsolete version-specific CoreSpirit Markdown"
+  ],
+  "historical_sources": [
+    "CORESPIRIT_HISTORY.md",
+    "CORESPIRIT_LAYERED_PLATFORM_V40.md",
+    "CORESPIRIT_MODEL_AUTOMATION.md",
+    "CORESPIRIT_PROJECT_TASKS.md",
+    "CORESPIRIT_STAGES_1_16_DEEP.md",
+    "CORESPIRIT_STAGES_10_13_DEEP.md",
+    "CORESPIRIT_STAGES_13_14_DEEP.md",
+    "CORESPIRIT_STAGES_46_47_DEEP.md",
+    "CORESPIRIT_V28_DATA_VISUAL_CONTRACT.md",
+    "CORESPIRIT_V30_RELEASE_NOTES.md",
+    "CORESPIRIT_V31_CHART_DATA_FIX.md",
+    "CORESPIRIT_V32_TIME_SERIES_CHART_CONTRACT.md",
+    "CORESPIRIT_V33_REALTIME_INDICATOR_CONTRACT.md",
+    "CORESPIRIT_V34_STDLIB_COMPILER_CONTRACT.md",
+    "CORESPIRIT_V35_DEEP_STEPS_5_6_7_8.md",
+    "CORESPIRIT_V36_IR_REPLAY_IMPLEMENTATION.md",
+    "CORESPIRIT_V39_DEEP_1_16.md",
+    "CORESPIRIT_V39_VERIFICATION.md",
+    "CORESPIRIT_V41_DEEP_STAGES_1_2.md",
+    "CORESPIRIT_V42_VISUAL_IDENTITY_AND_STAGES_3_4_5.md",
+    "CORESPIRIT_V43_RENDERER_EVENT_BUS_IMPLEMENTATION.md"
+  ],
+  "historical_manifests": [
+    "CORESPIRIT_V37_MANIFEST.json",
+    "CORESPIRIT_V38_MANIFEST.json",
+    "CORESPIRIT_V39_MANIFEST.json",
+    "CORESPIRIT_V40_MANIFEST.json",
+    "CORESPIRIT_V41_MANIFEST.json",
+    "CORESPIRIT_V42_MANIFEST.json",
+    "CORESPIRIT_V43_MANIFEST.json",
+    "CORESPIRIT_V45_MANIFEST.json"
+  ],
+  "historical_manifest_integrity": "byte-for-byte identical to supplied historical archive",
+  "current_documents": {
+    "architecture": "docs/CORESPIRIT.md",
+    "tracker": "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "machine_release": "CORESPIRIT_V59_MANIFEST.json"
+  },
+  "architecture_invariants_recovered": [
+    "canonical series/history cursor",
+    "explicit execution frame and realtime transaction semantics",
+    "single native indicator engine",
+    "validated stable IR is the only production VM input",
+    "deterministic executable artifacts and replay checksums",
+    "persistent transactional scene identity",
+    "immutable idempotent events",
+    "risk-authoritative order intent boundary",
+    "host-owned network/broker/model/renderer capabilities",
+    "small core standard library with capability-scoped extensions",
+    "host data planner/cache with stale-response protection"
+  ],
+  "tests": [
+    "historical source inventory matches supplied pre-v45 archive",
+    "historical manifest byte-for-byte checks v37-v45",
+    "documentation split remains CORESPIRIT.md + CORESPIRIT_BUILD_TRACKER.md",
+    "roadmap remains 39 stages"
+  ],
+  "documentation_policy": {
+    "architecture": "docs/CORESPIRIT.md",
+    "tracker": "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "machine_release": "CORESPIRIT_V59_MANIFEST.json",
+    "no_version_specific_CoreSpirit_markdown": true,
+    "historical_markdown_handling": "mine and reconcile into the two canonical documents; do not copy legacy CoreSpirit markdown into the active tree"
+  }
+}

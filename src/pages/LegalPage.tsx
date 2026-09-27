@@ -9,8 +9,8 @@ export function LegalPage({ kind }: Props) {
     <div className="min-h-screen bg-[#070a10] text-[#f3f4f6] font-sans">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#070a10]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5 sm:px-8">
-          <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:text-[#34d399] transition-colors">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md border border-[#10b981]/30 bg-[#10b981]/10 text-[10px] font-black text-[#34d399]">TC</span>
+          <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:text-[#60a5fa] transition-colors">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md border border-[#3b82f6]/30 bg-[#3b82f6]/10 text-[10px] font-black text-[#60a5fa]">TC</span>
             TradingCore OS
           </a>
           <a href="/" className="inline-flex items-center gap-2 rounded-lg border border-[#222636] bg-[#11131c] px-3 py-2 text-xs font-mono text-[#9aa3b5] hover:border-[#3a4358] hover:text-white transition-colors">
@@ -21,7 +21,7 @@ export function LegalPage({ kind }: Props) {
 
       <main className="mx-auto max-w-3xl px-5 py-16 sm:px-8 sm:py-20">
         <div className="eyebrow mb-5 inline-flex items-center gap-2">
-          {privacy ? <ShieldCheck className="h-3.5 w-3.5 text-[#34d399]" /> : <FileText className="h-3.5 w-3.5 text-[#60a5fa]" />}
+          {privacy ? <ShieldCheck className="h-3.5 w-3.5 text-[#60a5fa]" /> : <FileText className="h-3.5 w-3.5 text-[#60a5fa]" />}
           TRADINGCORE · {privacy ? 'PRIVACY' : 'TERMS'}
         </div>
         <h1 className="section-title">{privacy ? 'Privacy Policy' : 'Terms of Service'}</h1>

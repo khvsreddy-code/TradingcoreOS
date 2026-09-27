@@ -99,7 +99,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
         >
           <div className="terminal-chrome">
             <div className="flex items-center gap-1.5">
-              <span className="terminal-dot bg-[#ff5f57]" /><span className="terminal-dot bg-[#febc2e]" /><span className="terminal-dot bg-[#28c840]" />
+              <span className="terminal-dot bg-[#ff5f57]" /><span className="terminal-dot bg-[#febc2e]" /><span className="terminal-dot bg-[#3b82f6]" />
             </div>
             <div className="hidden flex-1 items-center justify-center sm:flex">
               <div className="terminal-address">tradingcoreos.vercel.app/dashboard</div>
@@ -111,7 +111,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
             <div className="flex items-center gap-3">
               <div className="brand-chip">TC</div>
               <div>
-                <div className="text-[11px] font-bold text-[#f3f4f6]">TradingCore <span className="text-[#34d399]">OS</span></div>
+                <div className="text-[11px] font-bold text-[#f3f4f6]">TradingCore <span className="text-[#60a5fa]">OS</span></div>
                 <div className="font-mono text-[8px] text-[#59647a]">PROFESSIONAL TRADING TERMINAL</div>
               </div>
             </div>
@@ -140,25 +140,25 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 {WATCHLIST_DATA.map(item => {
                   const active = selectedSymbol === item.symbol;
                   return (
-                    <button key={item.symbol} onClick={() => setSelectedSymbol(item.symbol)} className={`flex w-full items-center justify-between border-b border-white/[0.035] px-3 py-2.5 text-left transition ${active ? 'bg-[#10b981]/[0.08]' : 'hover:bg-white/[0.025]'}`}>
+                    <button key={item.symbol} onClick={() => setSelectedSymbol(item.symbol)} className={`flex w-full items-center justify-between border-b border-white/[0.035] px-3 py-2.5 text-left transition ${active ? 'bg-[#3b82f6]/[0.08]' : 'hover:bg-white/[0.025]'}`}>
                       <div>
                         <div className={`font-mono text-[9px] font-semibold ${active ? 'text-[#f3f4f6]' : 'text-[#b6bdcb]'}`}>{item.symbol}</div>
                         <div className="mt-0.5 text-[8px] text-[#59647a]">NSE · F&amp;O</div>
                       </div>
                       <div className="text-right font-mono">
                         <div className="text-[9px] text-[#e6e9ef]">{fmt(item.ltp)}</div>
-                        <div className={`mt-0.5 text-[8px] ${item.changePercent >= 0 ? 'text-[#34d399]' : 'text-[#fb7185]'}`}>{item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%</div>
+                        <div className={`mt-0.5 text-[8px] ${item.changePercent >= 0 ? 'text-[#60a5fa]' : 'text-[#fb7185]'}`}>{item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%</div>
                       </div>
                     </button>
                   );
                 })}
               </div>
               <div className="border-t border-white/[0.06] p-3">
-                <div className="mb-2 flex items-center justify-between font-mono text-[8px] uppercase tracking-[0.15em] text-[#69748a]"><span>Market depth</span><span className="text-[#34d399]">L2</span></div>
+                <div className="mb-2 flex items-center justify-between font-mono text-[8px] uppercase tracking-[0.15em] text-[#69748a]"><span>Market depth</span><span className="text-[#60a5fa]">L2</span></div>
                 <div className="space-y-1">
                   {DEPTH_DATA.map((row, i) => (
                     <div key={i} className="grid grid-cols-2 gap-2 font-mono text-[8px]">
-                      <span className="text-right text-[#34d399]">{row.bidPrice.toFixed(2)} <em className="not-italic text-[#59647a]">{row.bidQty}</em></span>
+                      <span className="text-right text-[#60a5fa]">{row.bidPrice.toFixed(2)} <em className="not-italic text-[#59647a]">{row.bidQty}</em></span>
                       <span className="text-[#fb7185]">{row.askPrice.toFixed(2)} <em className="not-italic text-[#59647a]">{row.askQty}</em></span>
                     </div>
                   ))}
@@ -174,7 +174,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                     <div className="mt-0.5 font-mono text-[8px] text-[#59647a]">NSE · F&amp;O · INDEX</div>
                   </div>
                   <div className="font-mono text-[12px] font-semibold text-[#e8ebf1]">{fmt(selected.ltp)}</div>
-                  <div className="rounded-md bg-[#10b981]/10 px-1.5 py-1 font-mono text-[8px] text-[#34d399]">+{selected.changePercent.toFixed(2)}%</div>
+                  <div className="rounded-md bg-[#3b82f6]/10 px-1.5 py-1 font-mono text-[8px] text-[#60a5fa]">+{selected.changePercent.toFixed(2)}%</div>
                 </div>
                 <div className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-[#0b0e16] p-0.5">
                   {['1m', '3m', '5m', '15m', '1H', '1D'].map(tf => (
@@ -191,8 +191,8 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
               <div className="relative h-[500px] overflow-hidden bg-[#090d14]">
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-3 py-3 sm:px-4">
                   <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0a0d14]/88 px-2.5 py-1.5 font-mono text-[8px] backdrop-blur-xl shadow-lg">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#34d399] shadow-[0_0_10px_rgba(52,211,153,.7)]" />
-                    <span className="text-[#34d399]">BUY</span><span className="text-[#f3f4f6]">82%</span><span className="text-[#515c71]">•</span><span className="text-[#8b95a9]">BOS CONFIRMED</span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa] shadow-[0_0_10px_rgba(52,211,153,.7)]" />
+                    <span className="text-[#60a5fa]">BUY</span><span className="text-[#f3f4f6]">82%</span><span className="text-[#515c71]">•</span><span className="text-[#8b95a9]">BOS CONFIRMED</span>
                   </div>
                   <div className="flex items-center gap-2 rounded-lg border border-[#a78bfa]/15 bg-[#0a0d14]/88 px-2.5 py-1.5 font-mono text-[8px] text-[#c4b5fd] backdrop-blur-xl shadow-lg">
                     <Sparkles className="h-3 w-3" /> MODEL CONFLUENCE
@@ -217,8 +217,8 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
 
             <aside className="border-t border-white/[0.06] bg-[#0b0e16] lg:border-l lg:border-t-0">
               <div className="flex border-b border-white/[0.06] font-mono text-[9px]">
-                <button onClick={() => setActiveTab('Order')} className={`flex-1 py-3 ${activeTab === 'Order' ? 'border-b border-[#34d399] bg-[#10b981]/[0.04] text-white' : 'text-[#667188]'}`}>ORDER</button>
-                <button onClick={() => setActiveTab('Positions')} className={`flex-1 py-3 ${activeTab === 'Positions' ? 'border-b border-[#34d399] bg-[#10b981]/[0.04] text-white' : 'text-[#667188]'}`}>POSITIONS <span className="text-[#34d399]">(2)</span></button>
+                <button onClick={() => setActiveTab('Order')} className={`flex-1 py-3 ${activeTab === 'Order' ? 'border-b border-[#60a5fa] bg-[#3b82f6]/[0.04] text-white' : 'text-[#667188]'}`}>ORDER</button>
+                <button onClick={() => setActiveTab('Positions')} className={`flex-1 py-3 ${activeTab === 'Positions' ? 'border-b border-[#60a5fa] bg-[#3b82f6]/[0.04] text-white' : 'text-[#667188]'}`}>POSITIONS <span className="text-[#60a5fa]">(2)</span></button>
               </div>
 
               {activeTab === 'Order' ? (
@@ -231,14 +231,14 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                   <div>
                     <div className="mb-1.5 text-[8px] uppercase tracking-[0.14em] text-[#59647a]">Side</div>
                     <div className="grid grid-cols-2 gap-1.5">
-                      <button onClick={() => setOrderSide('Buy')} className={`rounded-lg py-2 text-[9px] font-bold ${orderSide === 'Buy' ? 'bg-[#10b981]/15 text-[#34d399] ring-1 ring-[#10b981]/40' : 'border border-white/[0.06] text-[#657087]'}`}>BUY</button>
+                      <button onClick={() => setOrderSide('Buy')} className={`rounded-lg py-2 text-[9px] font-bold ${orderSide === 'Buy' ? 'bg-[#3b82f6]/15 text-[#60a5fa] ring-1 ring-[#3b82f6]/40' : 'border border-white/[0.06] text-[#657087]'}`}>BUY</button>
                       <button onClick={() => setOrderSide('Sell')} className={`rounded-lg py-2 text-[9px] font-bold ${orderSide === 'Sell' ? 'bg-[#ef4444]/15 text-[#fb7185] ring-1 ring-[#ef4444]/40' : 'border border-white/[0.06] text-[#657087]'}`}>SELL</button>
                     </div>
                   </div>
                   <div>
                     <div className="mb-1.5 flex justify-between text-[8px] text-[#59647a]"><span>QUANTITY</span><span>LOT 15</span></div>
                     <div className="flex items-center gap-2">
-                      <input value={quantity} onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))} type="number" className="w-20 rounded-lg border border-white/[0.07] bg-[#070a10] px-2.5 py-2 text-[10px] text-white outline-none focus:border-[#10b981]/50" />
+                      <input value={quantity} onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))} type="number" className="w-20 rounded-lg border border-white/[0.07] bg-[#070a10] px-2.5 py-2 text-[10px] text-white outline-none focus:border-[#3b82f6]/50" />
                       <div className="flex gap-1">
                         {[25, 50, 100].map(q => <button key={q} onClick={() => setQuantity(q)} className="rounded-md border border-white/[0.06] px-2 py-1.5 text-[8px] text-[#687187] hover:text-white">+{q}</button>)}
                       </div>
@@ -246,7 +246,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                   </div>
                   <div className="border-t border-white/[0.06] pt-3">
                     <div className="flex justify-between text-[8px] text-[#59647a]"><span>EST. MARGIN</span><span className="text-[#e5e7eb]">₹1,25,650</span></div>
-                    <button onClick={onLaunch} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[9px] font-black tracking-[0.12em] ${orderSide === 'Buy' ? 'bg-gradient-to-r from-[#10b981] to-[#14b8a6] text-[#04110c]' : 'bg-gradient-to-r from-[#ef4444] to-[#f43f5e] text-white'}`}>
+                    <button onClick={onLaunch} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[9px] font-black tracking-[0.12em] ${orderSide === 'Buy' ? 'bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-[#06101f]' : 'bg-gradient-to-r from-[#ef4444] to-[#f43f5e] text-white'}`}>
                       <Zap className="h-3.5 w-3.5" /> {orderSide.toUpperCase()} MARKET
                     </button>
                   </div>
@@ -260,7 +260,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 <div className="divide-y divide-white/[0.05] p-3 font-mono">
                   {POSITIONS_DATA.map(pos => (
                     <div key={pos.id} className="py-3">
-                      <div className="flex items-start justify-between gap-2 text-[9px]"><span className="font-bold text-[#e5e7eb]">{pos.symbol}</span><span className={pos.pnl >= 0 ? 'text-[#34d399]' : 'text-[#fb7185]'}>{pos.pnl >= 0 ? '+' : '-'}₹{Math.abs(pos.pnl).toFixed(2)}</span></div>
+                      <div className="flex items-start justify-between gap-2 text-[9px]"><span className="font-bold text-[#e5e7eb]">{pos.symbol}</span><span className={pos.pnl >= 0 ? 'text-[#60a5fa]' : 'text-[#fb7185]'}>{pos.pnl >= 0 ? '+' : '-'}₹{Math.abs(pos.pnl).toFixed(2)}</span></div>
                       <div className="mt-1 flex justify-between text-[8px] text-[#59647a]"><span>{pos.type} · {pos.lots} lots</span><span>₹{pos.ltp.toFixed(2)}</span></div>
                     </div>
                   ))}
@@ -268,8 +268,8 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
               )}
 
               <div className="mt-auto border-t border-white/[0.06] bg-[#070a10] p-3">
-                <div className="flex items-center justify-between font-mono"><span className="text-[8px] text-[#59647a]">TOTAL NET P&amp;L</span><span className="text-[11px] font-bold text-[#34d399]">+₹1,725.00</span></div>
-                <div className="mt-2 flex items-center justify-between text-[8px] text-[#59647a]"><span className="inline-flex items-center gap-1"><TrendingUp className="h-3 w-3 text-[#34d399]" /> Confluence 84%</span><button onClick={onLaunch} className="text-[#60a5fa] hover:text-white">Launch full OS →</button></div>
+                <div className="flex items-center justify-between font-mono"><span className="text-[8px] text-[#59647a]">TOTAL NET P&amp;L</span><span className="text-[11px] font-bold text-[#60a5fa]">+₹1,725.00</span></div>
+                <div className="mt-2 flex items-center justify-between text-[8px] text-[#59647a]"><span className="inline-flex items-center gap-1"><TrendingUp className="h-3 w-3 text-[#60a5fa]" /> Confluence 84%</span><button onClick={onLaunch} className="text-[#60a5fa] hover:text-white">Launch full OS →</button></div>
               </div>
             </aside>
           </div>

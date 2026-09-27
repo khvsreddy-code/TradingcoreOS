@@ -1,11 +1,12 @@
 /**
  * CoreSpirit v1 language boundary.
  *
- * This is deliberately small. New syntax should be added here first, then
- * implemented in lexer/parser/type-system/compiler/runtime together with a
- * contract test. Renderer/broker concerns are not part of the language core.
+ * This is deliberately small. New core syntax should be added here first. Surface conveniences belong in
+ * registered transforms; callable/member semantics belong in the shared registries,
+ * then converge through the same lexer/parser/type-system/compiler/runtime path. Renderer/broker concerns are not part of the language core.
  */
 export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
+  userConcepts: Object.freeze(['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE'] as const),
   statements: Object.freeze(['let', 'if', 'else', 'type'] as const),
   scalarTypes: Object.freeze(['int', 'float', 'number', 'boolean', 'string', 'null'] as const),
   seriesTypes: Object.freeze([
@@ -20,15 +21,22 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
     'sma','ema','hma','highest','lowest','sum','mean','stdev','wma','rma','median',
     'abs','min','max','sqrt','pow','round','sign',
     'cross','crossover','crossunder','rising','falling',
-    'vwap','nz','na','bar_index','time','plot','signal',
+    'vwap','nz','na','bar_index','time','event','emit','show','plot','signal',
   ] as const),
-  executionOutputs: Object.freeze(['plot', 'signal'] as const),
+  executionOutputs: Object.freeze(['show', 'plot', 'signal', 'event'] as const),
   mathIndicators: Object.freeze([
     'sma', 'ema', 'hma', 'rsi', 'atr', 'vwap', 'highest', 'lowest', 'sum', 'mean', 'stdev', 'wma', 'rma', 'median', 'variance', 'change',
   ] as const),
   coreMath: Object.freeze([
     'nz', 'na', 'bar_index', 'time', 'cross', 'crossover', 'crossunder', 'rising', 'falling', 'max', 'min', 'abs', 'sqrt', 'pow', 'round', 'sign', 'isNa', 'exp', 'log', 'tanh',
     'clamp', 'sigmoid', 'probability',
+  ] as const),
+  surfaceRules: Object.freeze([
+    'WHEN blocks are indentation/colon sugar for if blocks',
+    'EVENT is a shared immutable runtime value; emit produces it and when consumes it; EVENT is cross-cutting, not a seventh top-level block concept',
+    'SHOW is the universal visual projection; plot() and other visual calls are compatibility/advanced APIs',
+    'MODEL and AUTOMATE declarations are artifact metadata plus existing executable calls',
+    'DATA is the read-only market/context concept; it is not a broker API',
   ] as const),
   nonGoals: Object.freeze([
     'arbitrary host/network access from the VM',

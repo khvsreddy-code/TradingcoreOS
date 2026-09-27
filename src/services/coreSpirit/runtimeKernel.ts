@@ -14,6 +14,7 @@ import {
 } from './layeredPlatformContract';
 import type { CoreSpiritExecutionMode } from './types';
 import { CoreSpiritModelRegistry } from './modelAbi';
+import { createCoreSpiritSandbox, type CoreSpiritCapabilitySandbox } from './capabilitySandbox';
 
 export type CoreSpiritRuntimePlane =
   | 'data'
@@ -58,6 +59,7 @@ export interface CoreSpiritRuntimeKernelOptions {
   budget: CoreSpiritRuntimeBudget;
   services: CoreSpiritRuntimeServices;
   modelRegistry?: CoreSpiritModelRegistry;
+  sandbox?: CoreSpiritCapabilitySandbox;
 }
 
 export class CoreSpiritCapabilityError extends Error {
@@ -75,11 +77,13 @@ export class CoreSpiritRuntimeKernel {
   readonly budget: CoreSpiritRuntimeBudget;
   readonly services: CoreSpiritRuntimeServices;
   readonly modelRegistry: CoreSpiritModelRegistry;
+  readonly sandbox: CoreSpiritCapabilitySandbox;
 
   constructor(options: CoreSpiritRuntimeKernelOptions) {
     this.identity = { ...options.identity };
     this.budget = { ...options.budget };
     this.services = options.services;
+    this.sandbox = options.sandbox ?? createCoreSpiritSandbox({ layer: options.identity.layer, target: options.identity.mode === 'historical' ? 'chart' : options.identity.mode === 'realtime' ? 'chart' : options.identity.mode === 'replay' ? 'replay' : 'backtest' });
     this.modelRegistry = options.modelRegistry ?? new CoreSpiritModelRegistry();
     this.validateArchitecture();
   }

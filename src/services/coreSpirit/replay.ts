@@ -41,6 +41,9 @@ export function replayCoreSpirit(ir: CoreSpiritIrProgram, dataset: CoreSpiritRep
     symbol: dataset.symbol,
     timeframe: dataset.timeframe,
     executionMode: 'replay',
+    // Replay identity must be stable across repeated runs; the runtime otherwise
+    // generates a time-based runId that would leak into signal metadata.
+    runId: `${sourceId}:replay:${dataset.id}`,
   });
   runtime.loadIr(artifact.ir);
   const execution = runtime.executeIr(artifact.ir, dataset.bars);

@@ -5,8 +5,8 @@ import type { HistoricalCandle } from '../brokers/BrokerAdapter';
 
 const source = `
 fast = ema(close, 3)
-plot(fast, "#22c55e", 3, 0, "Fast")
-label("BUY", "below", "#16a34a", "#ffffff", 12, "pill")
+plot(fast, "#3b82f6", 3, 0, "Fast")
+label("BUY", "below", "#2563eb", "#ffffff", 12, "pill")
 labelAt(high, "HIGH", "price", "#111827", "#ffffff", 11, "box")
 `;
 

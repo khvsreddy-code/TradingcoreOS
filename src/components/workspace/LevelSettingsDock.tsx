@@ -9,13 +9,13 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   </label>
 );
 
-const input = 'w-full rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#10b981]/60';
+const input = 'w-full rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#3b82f6]/60';
 const select = input;
 
 const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
   <button type="button" onClick={() => onChange(!value)} className="flex w-full items-center justify-between rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[9px] text-[#cbd5e1]">
     <span>{label}</span>
-    <span className={`h-3.5 w-6 rounded-full p-0.5 ${value ? 'bg-[#10b981]' : 'bg-[#252b38]'}`}>
+    <span className={`h-3.5 w-6 rounded-full p-0.5 ${value ? 'bg-[#3b82f6]' : 'bg-[#252b38]'}`}>
       <span className={`block h-2.5 w-2.5 rounded-full bg-white transition-transform ${value ? 'translate-x-2.5' : ''}`} />
     </span>
   </button>
@@ -40,7 +40,7 @@ export function LevelSettingsDock() {
   return (
     <div className="fixed z-[85] top-[185px] right-[660px] max-w-[330px] max-[1500px]:right-[360px] max-[900px]:top-[120px] max-[900px]:right-3 font-mono text-[10px]">
       {!open ? (
-        <button onClick={() => setOpen(true)} className="flex h-8 items-center gap-2 rounded-md border border-[#222636] bg-[#0b0e15]/95 px-3 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#10b981]/50 hover:text-white">
+        <button onClick={() => setOpen(true)} className="flex h-8 items-center gap-2 rounded-md border border-[#222636] bg-[#0b0e15]/95 px-3 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#3b82f6]/50 hover:text-white">
           <Settings2 className="h-3.5 w-3.5" />
           <span>LEVEL SETTINGS</span>
         </button>
@@ -60,7 +60,7 @@ export function LevelSettingsDock() {
             </div>
 
             <div>
-              <div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Level Detection</div>
+              <div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#3b82f6]">Level Detection</div>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Lookback Bars"><input className={input} type="number" min="50" max="5000" value={s.lookbackPeriod} onChange={e => patch({ lookbackPeriod: Math.max(50, Math.min(5000, Number(e.target.value) || 800)) })} /></Field>
                 <Field label="Pivot Strength"><input className={input} type="number" min="2" max="50" value={s.pivotLength} onChange={e => patch({ pivotLength: Math.max(2, Math.min(50, Number(e.target.value) || 10)) })} /></Field>
@@ -74,7 +74,7 @@ export function LevelSettingsDock() {
             </div>
 
             <div>
-              <div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#10b981]">Display</div>
+              <div className="mb-2 text-[8px] font-semibold uppercase tracking-widest text-[#3b82f6]">Display</div>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Historical Start"><select className={select} value={s.levelStartMode} onChange={e => patch({ levelStartMode: e.target.value as DynamicLevelSettings['levelStartMode'] })}><option>Confirmation</option><option>Pivot</option></select></Field>
                 <Field label="Level Style"><select className={select} value={s.displayAsZones ? 'Zones' : 'Lines'} onChange={e => patch({ displayAsZones: e.target.value === 'Zones' })}><option>Lines</option><option>Zones</option></select></Field>
@@ -89,7 +89,7 @@ export function LevelSettingsDock() {
               Levels come from confirmed price pivots and price action. ATR is used for spacing/merging and optional breakout buffering; it does not manufacture directional levels.
             </div>
 
-            <button onClick={() => { saveDynamicLevelSettings(DEFAULT_DYNAMIC_LEVEL_SETTINGS); setS({ ...DEFAULT_DYNAMIC_LEVEL_SETTINGS }); }} className="w-full rounded-md border border-[#252b38] px-2 py-1.5 text-[9px] text-[#94a3b8] hover:border-[#10b981]/50 hover:text-white">
+            <button onClick={() => { saveDynamicLevelSettings(DEFAULT_DYNAMIC_LEVEL_SETTINGS); setS({ ...DEFAULT_DYNAMIC_LEVEL_SETTINGS }); }} className="w-full rounded-md border border-[#252b38] px-2 py-1.5 text-[9px] text-[#94a3b8] hover:border-[#3b82f6]/50 hover:text-white">
               Reset Level Feature Defaults
             </button>
           </div>

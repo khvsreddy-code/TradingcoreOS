@@ -54,7 +54,7 @@ export function IndicatorDock() {
   const remove = (id: string) => { commit(items.filter(x => x.id !== id)); if (editing === id) setEditing(null); };
 
   return <div className="fixed z-[80] top-[185px] right-[310px] max-w-[330px] font-mono text-[10px] max-[1500px]:right-4 max-[900px]:top-[120px] max-[900px]:right-3">
-    {!open ? <button onClick={() => setOpen(true)} className="rounded-lg border border-[#222636] bg-[#0b0e15]/95 px-3 py-2 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#10b981]/50 hover:text-white"><span className="text-[#10b981]">●</span> INDICATORS <b className="ml-1">{active.length}</b></button> :
+    {!open ? <button onClick={() => setOpen(true)} className="rounded-lg border border-[#222636] bg-[#0b0e15]/95 px-3 py-2 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#3b82f6]/50 hover:text-white"><span className="text-[#3b82f6]">●</span> INDICATORS <b className="ml-1">{active.length}</b></button> :
       <div className="w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-[#2a3040] bg-[#0b0e15]/98 shadow-2xl backdrop-blur">
         <div className="flex items-center justify-between border-b border-[#222636] px-3 py-2.5"><div><div className="text-[9px] uppercase tracking-widest text-[#64748b]">Chart indicators</div><div className="mt-0.5 text-xs font-semibold text-white">{active.length} active · {managed.length} added</div></div><button onClick={() => { setOpen(false); setEditing(null); }} className="rounded-md p-1 text-[#64748b] hover:text-white"><X className="h-3.5 w-3.5"/></button></div>
         <div className="max-h-[420px] overflow-y-auto p-2">
@@ -63,9 +63,9 @@ export function IndicatorDock() {
             const isEditing = editing === x.id;
             return <div key={x.id} className={`mb-1.5 rounded-lg border bg-[#090c12] last:mb-0 ${x.enabled ? 'border-[#222636]' : 'border-[#222636]/70 opacity-70'}`}>
               <div className="flex items-center gap-2 px-2.5 py-2">
-                <button onClick={() => patch(x.id, { enabled: !x.enabled })} title={x.enabled ? 'Hide study' : 'Show study'} className={x.enabled ? 'text-[#10b981] hover:text-white' : 'text-[#64748b] hover:text-white'}>{x.enabled ? <Eye className="h-3.5 w-3.5"/> : <EyeOff className="h-3.5 w-3.5"/>}</button>
+                <button onClick={() => patch(x.id, { enabled: !x.enabled })} title={x.enabled ? 'Hide study' : 'Show study'} className={x.enabled ? 'text-[#3b82f6] hover:text-white' : 'text-[#64748b] hover:text-white'}>{x.enabled ? <Eye className="h-3.5 w-3.5"/> : <EyeOff className="h-3.5 w-3.5"/>}</button>
                 <button onClick={() => setEditing(isEditing ? null : x.id)} className="min-w-0 flex-1 text-left"><div className="truncate text-[10px] font-semibold text-[#e5e7eb]">{x.kind}</div><div className="mt-0.5 text-[8px] text-[#64748b]">{x.enabled ? (fmtConfig(x) || (lib?.overlay ? 'Overlay' : 'Pane')) : 'Hidden · ' + (fmtConfig(x) || (lib?.overlay ? 'Overlay' : 'Pane'))}</div></button>
-                <button onClick={() => setEditing(isEditing ? null : x.id)} title="Settings" className={`rounded-md p-1.5 ${isEditing ? 'bg-[#10b981]/10 text-[#10b981]' : 'text-[#64748b] hover:text-white'}`}><Settings2 className="h-3.5 w-3.5"/></button>
+                <button onClick={() => setEditing(isEditing ? null : x.id)} title="Settings" className={`rounded-md p-1.5 ${isEditing ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'text-[#64748b] hover:text-white'}`}><Settings2 className="h-3.5 w-3.5"/></button>
                 <button onClick={() => remove(x.id)} title="Delete study" className="rounded-md p-1.5 text-[#64748b] hover:text-[#ef4444]"><Trash2 className="h-3.5 w-3.5"/></button>
               </div>
               {isEditing && <div className="space-y-2 border-t border-[#222636] px-2.5 py-2.5 text-[8px] text-[#8c93a6]">

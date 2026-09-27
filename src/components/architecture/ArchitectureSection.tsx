@@ -16,13 +16,13 @@ export const ArchitectureSection: React.FC = () => (
           <div className="eyebrow mb-4 inline-flex">SYSTEM ARCHITECTURE</div>
           <h2 className="section-title max-w-xl">Your broker stays the broker. TradingCore becomes the workspace above it.</h2>
           <p className="section-copy max-w-xl">TradingCore is designed as a broker-agnostic control layer: your account remains with the broker while TradingCore organizes market data, analysis, risk and execution around it.</p>
-          <div className="mt-7 inline-flex items-center gap-2 rounded-lg border border-[#1e2230] bg-[#0c0e15] px-3 py-2 font-mono text-[10px] text-[#8c93a6]"><LockKeyhole className="h-3.5 w-3.5 text-[#10b981]" /> Access tokens encrypted at rest</div>
+          <div className="mt-7 inline-flex items-center gap-2 rounded-lg border border-[#1e2230] bg-[#0c0e15] px-3 py-2 font-mono text-[10px] text-[#8c93a6]"><LockKeyhole className="h-3.5 w-3.5 text-[#3b82f6]" /> Access tokens encrypted at rest</div>
         </div>
 
         <div className="rounded-2xl border border-[#1e2230] bg-[#0c0e15] p-4 sm:p-6">
           <div className="mb-5 flex items-center justify-between border-b border-[#1e2230] pb-4 font-mono text-[9px] uppercase tracking-[0.18em] text-[#596175]">
             <span>TRADINGCORE CONTROL PLANE</span>
-            <span className="text-[#10b981]">BROKER-AGNOSTIC</span>
+            <span className="text-[#3b82f6]">BROKER-AGNOSTIC</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {layers.map(({ icon: Icon, title, copy }, index) => (
