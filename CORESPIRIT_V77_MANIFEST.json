@@ -1,0 +1,26 @@
+{
+  "release": "CoreSpirit v77 — semantic dependency graph composability",
+  "baseline": "v76",
+  "roadmap_range": "1–59",
+  "kind": "compiler_and_semantic_graph_hardening",
+  "focus": [
+    "make semantic entities rather than source words the composability authority",
+    "derive composition projections from AST + semantic analysis + explicit declarations",
+    "preserve data/model alias identity through semantic bindings",
+    "collapse implementation-only expression nodes in user-facing composition views",
+    "keep regex compatibility isolated from new language semantics"
+  ],
+  "invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "one source semantic dependency graph is the authoring/dependency authority",
+    "execution-specific graphs may remain IR-derived but should link to stable semantic IDs",
+    "strings/comments/member names are not lexical dependency shortcuts",
+    "new language semantics do not enter the legacy regex compatibility layer"
+  ],
+  "verification": [
+    "STAGE54_55_COMPOSABILITY_OK",
+    "STAGE76_CST_NORMALIZATION_OK",
+    "STAGE77_SEMANTIC_COMPOSABILITY_OK"
+  ],
+  "roadmap_note": "v77 does not add stage 60; it continues the existing 59-stage consolidation cycle."
+}
