@@ -1367,3 +1367,58 @@ The #21/#22 architecture is primarily a compiler/tooling contract in this releas
 - standard-library core count remains unchanged;
 - source scan confirms primary UI surfaces are black/near-black with blue accents and no v72 blue/navy panel conversion leftovers.
 
+
+
+## v74 development cycle — #23/#24 CoreSpirit Language Simplification
+
+This release does not add roadmap stage 60. The active roadmap remains 59 stages. v74 treats #23 and #24 as a cross-cutting reduction/consolidation cycle over the existing architecture.
+
+### #23 — OS improvement priorities
+
+The priority map is based on author burden and semantic convergence, not the number of remaining subsystems.
+
+#### P0 — reduce public complexity
+
+- [ ] Simplify authoring where equivalent forms require too much ceremony.
+- [ ] Make the compiler the sole place where source sugar is unified into one semantic dependency model.
+- [ ] Keep `show` as the primary user-facing visual abstraction; renderer and scene mechanics remain hidden.
+- [x] Keep `when` + `emit` as the universal event boundary.
+- [x] Keep automation centered on intent + risk, with broker/risk/policy plumbing outside the language runtime.
+
+#### P1 — improve the authoring experience
+
+- [ ] Compact MODEL consumption and typed model-field discovery.
+- [ ] Make editor completion teach Simple CoreSpirit before implementation details.
+- [ ] Expand diagnostics so the compiler explains inferred semantics and normalization in user terms.
+- [x] Preserve deterministic replay as an artifact property.
+- [ ] Close the remaining session/calendar semantic gap.
+- [ ] Finish production-renderer end-to-end validation.
+- [ ] Add production scanner scheduling, quotas, cancellation and deterministic backpressure.
+
+#### P2/P3 — expand only after consolidation
+
+- [ ] Expand indicator/reference-value coverage.
+- [ ] Add versioned artifact migration compatibility.
+- [ ] Profile before advanced GPU optimization.
+- [ ] Add new syntax only when repeated real authoring friction justifies it.
+
+### #24 — reduction cycle instead of another giant stage
+
+- [x] Declared the 59-stage roadmap mature enough to pause structural accumulation.
+- [x] Defined the reduction workflow: inventory → canonical meaning → compiler normalization → editor → diagnostics → replay/regression → retire redundant forms.
+- [x] Kept one language → one compiler → one stable IR → one VM.
+- [x] Kept one reactive runtime rather than simple/advanced/professional evaluators.
+- [x] Kept authoring levels as presentation/discoverability profiles, not grammar forks.
+- [ ] Inventory duplicate public syntax and choose canonical forms.
+- [ ] Add conformance tests proving readable and explicit forms converge.
+- [ ] Add migration checks before retiring persisted source forms.
+
+### v74 Supabase persistence repair
+
+The live Supabase project was inspected directly. `public.user_settings` existed and its authenticated RLS policies were already correct, but the `authenticated` role had no table privileges. That prevented the browser PostgREST client from exposing the table and produced the observed 404.
+
+Applied migration: `20260927055419_grant_authenticated_user_owned_table_access`.
+
+Authenticated table access was added for the browser-facing user-owned tables already consumed by the client: `user_settings`, `profiles`, `workspace_layouts` and `workspace_layout_library`. Existing RLS policies remain the row-level authority, and no anonymous DML access was added.
+
+Post-migration verification confirmed `authenticated` SELECT/INSERT/UPDATE privileges on `public.user_settings`, and the PostgREST schema was reloaded.
