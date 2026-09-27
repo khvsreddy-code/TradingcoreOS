@@ -68,7 +68,8 @@ export type CoreSpiritSurfaceDeclaration =
     };
 
 export type CoreSpiritCompositionMetadata = {
-  version: 1;
+  version: 2;
+  sourceGraphVersion?: 1;
   nodes: ReadonlyArray<{ id: string; kind: string; name: string; contract: string }>;
   edges: ReadonlyArray<{ from: string; to: string; relation: string }>;
 };
