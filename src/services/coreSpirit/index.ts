@@ -103,3 +103,4 @@ export * from './composability';
 
 export * from './surfaceCst';
 export * from './compilerPipeline';
+export * from './semanticDependencyGraph';
