@@ -1,6 +1,8 @@
 import { compileCoreSpirit } from './coreSpiritPipeline';
 import { describeCoreSpiritSurface, normalizeCoreSpiritSource } from './surfaceForms';
-import { validateCoreSpiritCompositionGraph } from './composability';
+import { validateCoreSpiritCompositionGraph, buildCoreSpiritCompositionGraph } from './composability';
+import { CoreSpiritParser } from './parser';
+import { analyzeCoreSpirit } from './semanticAnalyzer';
 
 export function runStage54_55ComposabilityContract() {
   const source = `
@@ -24,8 +26,11 @@ automate "Momentum":
 
   const surface = describeCoreSpiritSurface(source);
   if (!surface.composition) throw new Error('composition metadata missing');
-  const graph = surface.composition;
-  const graphErrors = validateCoreSpiritCompositionGraph(graph as any);
+  const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+  if (parsed.diagnostics.length) throw new Error(parsed.diagnostics.map(d=>d.message).join('; '));
+  const semantic = analyzeCoreSpirit(parsed.ast,{ surface });
+  const graph = buildCoreSpiritCompositionGraph(parsed.ast,semantic,surface);
+  const graphErrors = validateCoreSpiritCompositionGraph(graph);
   if (graphErrors.length) throw new Error(graphErrors.join('; '));
 
   const ids = new Set(graph.nodes.map(node => node.id));
