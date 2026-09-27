@@ -134,16 +134,28 @@ export function buildCoreSpiritSemanticDependencyGraph(
       case 'member': {
         const targetId = expression(node.target, conditionOwner);
         const modelSymbol = node.target.type === 'identifier' ? bindings[node.target.name] : undefined;
+        const directModelLocator = node.target.type === 'call' && node.target.name === 'model'
+          ? literalString(node.target.args[0])
+          : undefined;
+        const directModelDeclaration = directModelLocator ? modelDecls.get(directModelLocator) : undefined;
+        const directModelId = directModelDeclaration
+          ? 'model:' + directModelDeclaration.name
+          : directModelLocator
+            ? 'model:' + directModelLocator
+            : undefined;
+        const resolvedModelId = modelSymbol?.startsWith('model:') ? modelSymbol : directModelId;
 
-        if (modelSymbol?.startsWith('model:')) {
-          const modelName = modelSymbol.slice('model:'.length);
+        if (resolvedModelId?.startsWith('model:')) {
+          const modelName = resolvedModelId.slice('model:'.length);
+          addNode({id:resolvedModelId,kind:'model',name:directModelDeclaration?.name ?? modelName,type:'model:ref'});
+
           const outputId = addNode({
             id:'model-output:' + modelName + ':' + node.member,
             kind:'model-output',
             name:modelName + '.' + node.member,
             source:sourceSpan(node),
           });
-          addEdge(modelSymbol, outputId, 'depends-on');
+          addEdge(resolvedModelId, outputId, 'depends-on');
           return outputId;
         }
 
@@ -380,13 +392,6 @@ export function buildCoreSpiritSemanticDependencyGraph(
   visit(ast);
 
   for (const declaration of surface.declarations) {
-    if (declaration.kind === 'indicator') {
-      for (const feature of (declaration as Extract<CoreSpiritSurfaceDeclaration,{kind:'indicator'}>).name ? [] : []) {
-        const target = 'symbol:' + feature;
-        if (nodes.has(target)) addEdge('indicator:' + declaration.name,target,'contains');
-      }
-    }
-
     if (declaration.kind === 'automation') {
       for (const trigger of declaration.triggers) {
         const eventName = trigger.match(/^["']([^"']+)["']$/)?.[1];
