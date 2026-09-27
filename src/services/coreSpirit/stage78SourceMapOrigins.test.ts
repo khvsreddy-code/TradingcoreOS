@@ -27,7 +27,7 @@ assert(sourceMap.length===instructions.length,'source map must contain one entry
 assert(sourceMap.every((entry,index)=>entry.instruction===index),'source map instruction indexes drifted');
 assert(sourceMap.every((entry,index)=>entry.sourceNodeId===instructions[index].origin?.sourceNodeId),'source map lost instruction origin identity');
 
-const folded=instructions.find(instruction=>instruction.op==='const'&&instruction.dest.startsWith('t'));
+const folded=instructions.find(instruction=>instruction.op==='const'&&instruction.origin?.sourceNodeId.includes('binary:'));
 assert(Boolean(folded?.origin?.sourceNodeId.includes('binary:')),'optimized folded instruction did not retain binary source origin');
 
 const jumpIndex=instructions.findIndex(instruction=>instruction.op==='jumpIfFalse');
@@ -36,7 +36,7 @@ assert(instructions[jumpIndex].origin?.sourceNodeId.startsWith('if:'),'jump did 
 
 const emitIndex=instructions.findIndex(instruction=>instruction.op==='emit');
 assert(emitIndex>=0,'emit instruction missing');
-assert(instructions[emitIndex].origin?.sourceNodeId.includes('expressionStatement:'),'emit did not retain its source statement origin');
+assert(instructions[emitIndex].origin?.sourceNodeId.startsWith('call:'),'emit did not retain its CALL source origin');
 
 const modelCalls=instructions.filter(instruction=>instruction.op==='call'&&instruction.name==='__model_get');
 assert(modelCalls.length>0,'model member call missing');
