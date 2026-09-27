@@ -134,7 +134,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                   <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]/70" />
                 </div>
-                <div className="flex h-6 flex-1 items-center rounded-md border border-white/[0.06] bg-[#070a10] px-3 font-mono text-[9px] text-[#5d667a]">
+                <div className="flex h-6 flex-1 items-center rounded-md border border-white/[0.06] bg-[#0b0e15] px-3 font-mono text-[9px] text-[#5d667a]">
                   tradingcoreos.vercel.app / workspace
                 </div>
                 <div className="hidden items-center gap-1.5 font-mono text-[9px] text-[#6f7890] sm:flex">
@@ -155,7 +155,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-[148px_1fr_170px] bg-[#070a10]">
+              <div className="grid grid-cols-[148px_1fr_170px] bg-[#0b1422]">
                 <div className="border-r border-white/[0.06]">
                   <div className="border-b border-white/[0.06] px-3 py-2 font-mono text-[8px] uppercase tracking-[0.16em] text-[#69748a]">Watchlist</div>
                   {[
@@ -202,18 +202,18 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                   </div>
                 </div>
 
-                <div className="border-l border-white/[0.06] bg-[#0b0e16]">
+                <div className="border-l border-[#222636] bg-[#090a0f]">
                   <div className="flex border-b border-white/[0.06] font-mono text-[8px]">
                     <span className="flex-1 border-b border-[#3b82f6] bg-[#3b82f6]/[0.05] py-2 text-center text-[#f3f4f6]">ORDER</span>
                     <span className="flex-1 py-2 text-center text-[#69748a]">POSITIONS</span>
                   </div>
                   <div className="space-y-3 p-3 font-mono">
                     <div className="text-[8px] uppercase tracking-[0.14em] text-[#69748a]">NIFTY 50</div>
-                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.06] bg-[#070a10] p-1">
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.06] bg-[#0b0e15] p-1">
                       <div className="rounded bg-[#3b82f6]/15 py-1.5 text-center text-[9px] font-bold text-[#60a5fa]">BUY</div>
                       <div className="py-1.5 text-center text-[9px] text-[#69748a]">SELL</div>
                     </div>
-                    <div className="rounded-lg border border-white/[0.06] bg-[#070a10] p-2.5">
+                    <div className="rounded-lg border border-white/[0.06] bg-[#0b0e15] p-2.5">
                       <div className="flex justify-between text-[8px] text-[#69748a]"><span>Qty</span><span className="text-[#e5e7eb]">25</span></div>
                       <div className="mt-2 flex justify-between text-[8px] text-[#69748a]"><span>Margin</span><span className="text-[#e5e7eb]">₹1.25L</span></div>
                     </div>
@@ -230,7 +230,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
             <motion.div
               animate={{ y: [0, -7, 0] }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute -bottom-5 -left-5 hidden rounded-xl border border-white/[0.08] bg-[#0d111a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
+              className="absolute -bottom-5 -left-5 hidden rounded-xl border border-white/[0.08] bg-[#10203a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
             >
               <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#687187]">Signal engine</div>
               <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[#f3f4f6]"><span className="h-2 w-2 rounded-full bg-[#3b82f6]" /> Bullish confluence <span className="font-mono text-[#60a5fa]">84%</span></div>
@@ -239,7 +239,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
             <motion.div
               animate={{ y: [0, 7, 0] }}
               transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-              className="absolute -right-4 top-20 hidden rounded-xl border border-white/[0.08] bg-[#0d111a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
+              className="absolute -right-4 top-20 hidden rounded-xl border border-white/[0.08] bg-[#10203a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
             >
               <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#687187]">Execution</div>
               <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[#f3f4f6]"><span className="h-2 w-2 rounded-full bg-[#60a5fa]" /> Broker connected</div>

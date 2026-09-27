@@ -6,13 +6,13 @@
 
 ## Current release
 
-**Release:** CoreSpirit v71 — discoverable standard library + readable syntax + blue website
+**Release:** CoreSpirit v73 — compiler complexity absorption + progressive authoring levels + black primary UI / blue accent correction
 
 **Tracker state:** restored as a first-class project document.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
-**Machine release record:** `CORESPIRIT_V71_MANIFEST.json`
+**Machine release record:** `CORESPIRIT_V73_MANIFEST.json`
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments.
 
@@ -147,6 +147,8 @@
 
 ## Stage tracker
 
+**Status legend:** ✅ implemented and verified; ◐ architecture defined / implementation staged.
+
 | Stage | Name | Status |
 |---:|---|---|
 | 1 | Language foundation | ✅ |
@@ -206,6 +208,8 @@
 | 55 | Progressive simplicity | ✅ |
 | 56 | Standard library discoverability | ✅ |
 | 57 | Readable surface syntax | ✅ |
+| 58 | Compiler complexity absorption | ◐ |
+| 59 | Progressive authoring levels | ◐ |
 
 | 49 | Declarative MODEL surface | compiler | 18, 44, 45, 48 | ✅ |
 
@@ -251,7 +255,7 @@ The user-facing model language is intentionally small. `MODEL` declares a bindin
 
 - [x] `CORESPIRIT.md` contains stable architecture plus concise version history; detailed implementation status stays in the tracker.
 - [x] `CORESPIRIT_BUILD_TRACKER.md` is restored as the living implementation/status record.
-- [x] `CORESPIRIT_V71_MANIFEST.json` is the current machine release record; older manifests remain immutable release records.
+- [x] `CORESPIRIT_V73_MANIFEST.json` is the current machine release record; older manifests remain immutable release records.
 - [x] No version-specific CoreSpirit architecture/tracker Markdown files are required or introduced; version history stays concise in CORESPIRIT.md while implementation truth stays here.
 
 
@@ -475,7 +479,7 @@ The old master task file also contains a useful "adopt / improve / do not copy b
 
 ### Historical status reconciliation
 
-Old "not claimed complete" items are not blindly carried forward. Current truth comes from the active 57-stage roadmap and tests.
+Old "not claimed complete" items are not blindly carried forward. Current truth comes from the active 59-stage roadmap and tests.
 
 **Superseded by later implementation:** rich visual primitives, persistent visual identity, renderer-neutral scene ABI, realtime visual transactions, model orchestration, multi-symbol/MTF alignment, structured AI semantics, explainability, visual debugging, visual compiler graphs and reactive scheduling.
 
@@ -680,7 +684,7 @@ The following supplied historical manifests are retained unchanged in the curren
 - [x] `STAGE45_SIX_CONCEPT_LANGUAGE_OK`
 - [x] Focused TypeScript check passes for visual coordinates, runtime, compiler, semantic analysis and scene graph.
 - [x] v1 runtime, reactive graph, numerical planner and capability sandbox regression contracts remain compatible.
-- [x] Historical v62 verification recorded a 43-stage roadmap at that release; the active v71 roadmap now contains 57 stages.
+- [x] Historical v62 verification recorded a 43-stage roadmap at that release; the active v73 roadmap now contains 59 stages.
 
 ## Next concrete work
 
@@ -1054,7 +1058,7 @@ v66 does **not** remove the internal Scene Graph or renderer adapters. It change
 - [x] `STAGE42_CORESPIRIT_V1_RUNTIME_OK`
 - [x] `STAGE73_74_VISUAL_COMPILER_REACTIVE_OK`
 - [x] `STAGE75_76_EXECUTION_PLANNER_SANDBOX_OK`
-- [x] Historical v69 validation recorded 51 stages; the active v71 roadmap now contains 57 stages.
+- [x] Historical v69 validation recorded 51 stages; the active v73 roadmap now contains 59 stages.
 
 ### v68 boundary
 
@@ -1235,3 +1239,131 @@ This pass is documentation/governance only. No new evaluator, parser, IR, VM, br
 - [x] Market-reference member completion passes.
 - [x] Blue/green source scan reviewed for active UI residues.
 - [ ] Full Vite production build remains unclaimed when dependencies are absent from the archive.
+
+## v72 architectural deepening — #19 declarative configuration + #20 one-file application model
+
+This release deepens the language model without creating a new runtime. The focus is on reducing **imperative setup** and allowing the user to describe a complete trading application in one source artifact.
+
+### #19 — Declarative configuration
+
+- [x] Established the architectural rule that indicator/model/automation configuration should be represented as declaration metadata rather than setup API calls.
+- [x] Defined examples for `indicator "Momentum"` configuration, model `source`, and automation `mode`.
+- [x] Defined deterministic defaulting, declaration-local scope, pre-execution validation and replay-stable configuration semantics.
+- [x] Preserved host authority: automation mode is descriptive policy metadata; it does not activate live broker execution inside the VM.
+- [x] Kept renderer, broker, transport, GPU/WASM, execution-target and capability details outside ordinary configuration vocabulary.
+
+### #20 — One-file application model
+
+- [x] Defined `app "Nifty Momentum":` as an authoring/composition envelope over the existing language concepts.
+- [x] Defined the target one-file composition of inputs, calculations, MODEL, SHOW, WHEN, EVENT and AUTOMATE/ORDER intent.
+- [x] Defined semantic compiler splitting as dependency construction over one artifact, not independent scripts or multiple evaluators.
+- [x] Preserved one language → one compiler → one stable IR → one VM.
+- [x] Preserved the existing EVENT → WHEN → AUTOMATE → ORDER and RISK → POLICY → EXECUTION boundaries.
+- [x] Defined acceptance criteria for source locations, typed configuration, replay, editor completion and deployment of one complete artifact.
+
+### v72 design status
+
+The #19/#20 material is an architectural contract and target surface. The exact `app` shorthand and full nested configuration parser are **not claimed as implemented merely by this documentation pass**. Existing v71 language normalization remains the executable baseline until dedicated compiler contracts are added.
+
+### v72 UI correction — right-side black treatment
+
+The previous blue pass changed green accents but retained several near-black right-side panels. This release corrects that specific issue rather than treating accent replacement as sufficient.
+
+- [x] Right-side order/positions surfaces in the public workspace preview are now blue-tinted navy surfaces rather than near-black blocks.
+- [x] The homepage hero's right-side order panel is now part of the same blue/navy surface hierarchy.
+- [x] Right-side CoreSpirit/chart docks retain readable dark contrast but no longer use the old pure-black-looking surface treatment where the visual role calls for a panel surface.
+- [x] Remaining black values used for SVG/grid masks, drop shadows, terminal depth and accessibility contrast are structural and are not treated as UI accent colors.
+- [x] Remaining official third-party brand colors are not rewritten merely to force a single palette.
+
+The visual hierarchy is now:
+
+```text
+BLUE / NAVY
+  product identity
+  active controls
+  right-side panels / docks
+  positive live state where appropriate
+
+RED
+  negative / destructive trading semantics
+
+PURPLE / AMBER / NEUTRAL
+  specialized semantic roles
+
+BLACK
+  only structural depth, shadows, masks or non-UI technical rendering
+```
+
+### v72 implementation boundary
+
+No new evaluator, parser runtime, IR, VM or broker authority was introduced for this documentation/design pass. The actual declarative `app` implementation should be added as a dedicated future compiler stage with conformance tests rather than quietly turning the documentation examples into an unverified second syntax system.
+
+## v73 architectural deepening — #21 compiler complexity absorption + #22 progressive authoring levels
+
+### #21 — Compiler should do the hard work
+
+- [x] Defined AST, semantic graph and dependency graph as compiler representations of one source program, not parallel execution models.
+- [x] Defined visual, EVENT/WHEN, MODEL and AUTOMATE views as projections of the same semantic dependency structure.
+- [x] Locked one canonical lowering route to the existing stable Core IR and single VM.
+- [x] Made equivalent readable/explicit syntax a convergence requirement, e.g. `a crossesAbove b` → `crossover(a, b)`.
+- [x] Kept source maps available for deep inspection while hiding IR mechanics from ordinary authoring.
+- [x] Made deterministic reactive dependency planning part of compiler output rather than a feature-specific scheduler.
+- [x] Defined optimization as semantics-preserving transformation only; optimization cannot alter event identity, replay, model meaning, SHOW semantics or risk/policy authority.
+- [x] Preserved the complexity firewall: execution targets, renderers, transport, host capabilities, broker mechanics and risk-policy plumbing remain internal.
+
+### #22 — Three authoring levels
+
+- [x] Defined Level 1 — Simple for short SHOW/WHEN programs.
+- [x] Defined Level 2 — Advanced for composable calculations, MODEL facts and richer reactive logic.
+- [x] Defined Level 3 — Professional for typed data, multi-symbol, multi-timeframe, external models, custom visual geometry, event handlers, performance controls and deep inspection.
+- [x] Kept all three levels on the same language/compiler/IR/VM substrate.
+- [x] Defined authoring level as a tooling/discoverability profile rather than a grammar fork.
+- [x] Defined authoring level as independent from security/capability authority.
+- [x] Defined progressive upgrade: Level 1 programs should grow by adding semantic detail, not by rewriting into another DSL.
+
+### UI palette correction — black remains primary
+
+The previous v72 visual correction over-corrected the panel surfaces toward blue/navy. That is not the intended product identity.
+
+The intended hierarchy is now:
+
+```text
+BLACK
+  primary application background
+  panels / cards / workspace chrome
+  chart surfaces
+
+BLUE
+  primary accent
+  active controls
+  focus states
+  selected states
+  CoreSpirit identity
+
+RED
+  negative / destructive / down-state trading semantics
+
+PURPLE / AMBER / NEUTRAL
+  specialized semantic roles
+```
+
+- [x] Restored black/near-black as the primary UI surface family.
+- [x] Kept blue as the product accent instead of green/emerald/teal.
+- [x] Removed the blue/navy replacement of primary right-side panel surfaces introduced by v72.
+- [x] Kept subtle charcoal differentiation between cards and the base background rather than turning major surfaces blue.
+- [x] Preserved blue accent on CoreSpirit editor/deploy controls.
+- [x] Preserved red for negative/destructive trading semantics.
+- [x] Kept structural black where technical rendering requires it.
+
+### v73 implementation boundary
+
+The #21/#22 architecture is primarily a compiler/tooling contract in this release. It does not create a second evaluator, alternate IR or professional-only runtime. The exact full one-file `app` sugar from v72 remains a staged compiler feature rather than being silently claimed as complete.
+
+### v73 verification target
+
+- roadmap contains exactly 59 stages and all dependencies point backward;
+- readable syntax still lowers through the existing normalization path;
+- existing composability, model, automation/order and EVENT/WHEN contracts remain intact;
+- standard-library core count remains unchanged;
+- source scan confirms primary UI surfaces are black/near-black with blue accents and no v72 blue/navy panel conversion leftovers.
+

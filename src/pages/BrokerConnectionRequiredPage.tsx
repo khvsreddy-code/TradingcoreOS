@@ -150,17 +150,17 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
   };
 
   return (
-    <div className="min-h-screen bg-[#07090E] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="min-h-screen bg-[#07090E] text-slate-100 flex flex-col font-sans selection:bg-blue-500/30 selection:text-blue-200">
       {/* OS Setup Top Header Bar */}
       <header className="border-b border-slate-800/80 bg-[#0B0F17]/90 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-slate-950 shadow-lg shadow-cyan-500/20">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-500 to-blue-600 flex items-center justify-center font-bold text-slate-950 shadow-lg shadow-blue-500/20">
             TC
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold tracking-wide text-white text-sm">TradingCore OS Setup</span>
-              <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">
+              <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
                 System Initialization
               </span>
             </div>
@@ -170,15 +170,15 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
         {/* Step Indicator */}
         <div className="hidden md:flex items-center gap-2 font-mono text-xs text-slate-400">
-          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'welcome' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
+          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'welcome' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
             1. Welcome
           </span>
           <span className="text-slate-600">→</span>
-          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'choose' || currentStep === 'connect' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
+          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'choose' || currentStep === 'connect' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
             2. Choose Broker
           </span>
           <span className="text-slate-600">→</span>
-          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'verifying' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
+          <span className={`px-2.5 py-1 rounded-md ${currentStep === 'verifying' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold' : 'bg-slate-900 border border-slate-800'}`}>
             3. Verify Endpoint
           </span>
           <span className="text-slate-600">→</span>
@@ -218,15 +218,15 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
               transition={{ duration: 0.3 }}
               className="w-full max-w-2xl bg-[#0E131F] border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6 relative overflow-hidden"
             >
-              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
                   <Cpu className="w-6 h-6" />
                 </div>
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                    Welcome, <span className="text-cyan-400">{userDisplayName}</span>
+                    Welcome, <span className="text-blue-400">{userDisplayName}</span>
                   </h1>
                   <p className="text-xs text-slate-400 font-mono mt-0.5">
                     TradingCore OS Operating System First Boot
@@ -236,7 +236,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
               <div className="space-y-4 text-sm text-slate-300 leading-relaxed border-t border-slate-800/80 pt-5">
                 <p className="font-medium text-white flex items-center gap-2 text-base">
-                  <ShieldCheck className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                  <ShieldCheck className="w-5 h-5 text-blue-400 flex-shrink-0" />
                   Bring Your Own Broker (BYOB) Architecture
                 </p>
                 <p className="text-slate-400 text-xs leading-relaxed">
@@ -271,7 +271,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
               <button
                 onClick={() => setCurrentStep('choose')}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-sm shadow-xl shadow-cyan-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-slate-950 font-bold text-sm shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
               >
                 <span>Select Your Broker to Begin Setup</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -293,7 +293,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                 <div>
                   <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                     <span>Choose Your Broker</span>
-                    <span className="text-xs font-mono font-normal text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full border border-cyan-500/20">
+                    <span className="text-xs font-mono font-normal text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/20">
                       Broker selection
                     </span>
                   </h2>
@@ -312,7 +312,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                 {BROKERS_CONFIG.map((broker) => (
                   <div
                     key={broker.id}
-                    className="bg-[#0E131F] hover:bg-[#121929] border border-slate-800 hover:border-cyan-500/40 rounded-xl p-5 transition-all flex flex-col justify-between group shadow-xl"
+                    className="bg-[#0E131F] hover:bg-[#121929] border border-slate-800 hover:border-blue-500/40 rounded-xl p-5 transition-all flex flex-col justify-between group shadow-xl"
                   >
                     <div>
                       <div className="flex items-start justify-between mb-3">
@@ -324,7 +324,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                             {broker.tag}
                           </div>
                           <div>
-                            <h3 className="font-semibold text-white text-base group-hover:text-cyan-300 transition-colors">
+                            <h3 className="font-semibold text-white text-base group-hover:text-blue-300 transition-colors">
                               {broker.name}
                             </h3>
                             <p className="text-[11px] font-mono text-slate-400">{broker.apiVersion}</p>
@@ -343,7 +343,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
                       <div className="flex items-center gap-2 mb-4 text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 flex items-center gap-1">
-                          <Globe className="w-3 h-3 text-cyan-400" />
+                          <Globe className="w-3 h-3 text-blue-400" />
                           OAuth 2.0
                         </span>
                       </div>
@@ -351,7 +351,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
 
                     <button
                       onClick={() => openConnectStep(broker)}
-                      className="w-full py-2.5 px-4 rounded-lg bg-cyan-500/10 hover:bg-cyan-500 hover:text-slate-950 text-cyan-400 border border-cyan-500/30 hover:border-cyan-400 font-medium text-xs transition-all flex items-center justify-center gap-2 group-hover:shadow-lg group-hover:shadow-cyan-500/10 cursor-pointer"
+                      className="w-full py-2.5 px-4 rounded-lg bg-blue-500/10 hover:bg-blue-500 hover:text-slate-950 text-blue-400 border border-blue-500/30 hover:border-blue-400 font-medium text-xs transition-all flex items-center justify-center gap-2 group-hover:shadow-lg group-hover:shadow-blue-500/10 cursor-pointer"
                     >
                       <span>Connect {broker.name}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -404,7 +404,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
               {/* Direct OAuth 2.0 broker authorization */}
               <div className="space-y-4 pt-2">
                   <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 text-xs text-slate-300 space-y-2.5">
-                    <div className="flex items-center gap-2 text-cyan-400 font-medium">
+                    <div className="flex items-center gap-2 text-blue-400 font-medium">
                       <Zap className="w-4 h-4" />
                       <span>Official Direct Broker Authorization</span>
                     </div>
@@ -417,7 +417,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                       <div className="text-[11px] font-mono bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 text-slate-400 space-y-1">
                         <div className="flex items-center justify-between text-slate-300">
                           <span>Registered Callback URL:</span>
-                          <span className="text-cyan-400 text-[10px]">OAuth 2.0 Standard</span>
+                          <span className="text-blue-400 text-[10px]">OAuth 2.0 Standard</span>
                         </div>
                         <p className="text-[10px] text-slate-300 select-all font-mono break-all bg-slate-900 p-1.5 rounded border border-slate-800">
                           {window.location.origin}/auth/broker-callback
@@ -429,7 +429,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                   <button
                     onClick={() => handleConnectOAuth(selectedBroker)}
                     disabled={isConnecting}
-                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-slate-950 font-bold text-sm shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     {isConnecting ? (
                       <>
@@ -459,7 +459,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
               className="w-full max-w-xl bg-[#0E131F] border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6"
             >
               <div className="flex items-center gap-3 border-b border-slate-800/80 pb-4">
-                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
                   <RefreshCw className="w-6 h-6 animate-spin" />
                 </div>
                 <div>
@@ -472,11 +472,11 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
               <div className="space-y-1.5 font-mono">
                 <div className="flex justify-between text-xs text-slate-400">
                   <span>System Verification Progress</span>
-                  <span className="text-cyan-400 font-bold">{verificationProgress}%</span>
+                  <span className="text-blue-400 font-bold">{verificationProgress}%</span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-500 transition-all duration-300"
                     style={{ width: `${verificationProgress}%` }}
                   />
                 </div>
@@ -564,7 +564,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                 </div>
                 <div className="flex justify-between items-center text-slate-300 border-t border-slate-800/80 pt-2">
                   <span className="text-slate-400">Order Routing:</span>
-                  <span className="text-cyan-400 font-bold">Direct Non-Custodial API</span>
+                  <span className="text-blue-400 font-bold">Direct Non-Custodial API</span>
                 </div>
               </div>
 
@@ -583,7 +583,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
       {/* Setup Footer */}
       <footer className="border-t border-slate-800/60 bg-[#0B0F17]/80 py-4 px-6 text-center text-xs font-mono text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Zap className="w-3.5 h-3.5 text-cyan-400" />
+          <Zap className="w-3.5 h-3.5 text-blue-400" />
           <span>TradingCore OS · Broker setup</span>
         </div>
         <p>TradingCore is a professional trading operating system that connects directly to your own broker account.</p>

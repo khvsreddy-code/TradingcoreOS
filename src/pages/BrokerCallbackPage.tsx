@@ -83,7 +83,7 @@ export const BrokerCallbackPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#07090E] text-slate-100 flex items-center justify-center p-6 font-sans">
       <div className="w-full max-w-md bg-[#0E131F] border border-slate-800 rounded-2xl p-8 shadow-2xl text-center space-y-5">
-        <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto shadow-lg shadow-cyan-500/10">
+        <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto shadow-lg shadow-blue-500/10">
           <ShieldCheck className="w-6 h-6" />
         </div>
 
@@ -96,8 +96,8 @@ export const BrokerCallbackPage: React.FC = () => {
 
         {status === 'exchanging' && (
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-3">
-            <RefreshCw className="w-6 h-6 text-cyan-400 animate-spin mx-auto" />
-            <p className="font-mono text-cyan-300">Exchanging Auth Code for Encrypted Access Session...</p>
+            <RefreshCw className="w-6 h-6 text-blue-400 animate-spin mx-auto" />
+            <p className="font-mono text-blue-300">Exchanging Auth Code for Encrypted Access Session...</p>
             <p className="text-[11px] text-slate-400">Performing AES-256-GCM token storage and handshake verification.</p>
           </div>
         )}

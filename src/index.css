@@ -32,7 +32,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 }
 
 .hero-orb-a {
-  background: radial-gradient(circle, rgba(16,185,129,.16), transparent 68%);
+  background: radial-gradient(circle, rgba(59,130,246,.16), transparent 68%);
   filter: blur(12px);
 }
 .hero-orb-b {
@@ -40,7 +40,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   filter: blur(20px);
 }
 .product-glow {
-  background: radial-gradient(circle at 50% 50%, rgba(16,185,129,.11), transparent 62%);
+  background: radial-gradient(circle at 50% 50%, rgba(59,130,246,.11), transparent 62%);
   filter: blur(35px);
 }
 
@@ -99,9 +99,9 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 }
 .premium-button:hover { transform: translateY(-1px); }
 .premium-button-primary {
-  color: #06101f;
+  color: #090a0f;
   background: linear-gradient(135deg, #60a5fa, #3b82f6 60%, #2563eb);
-  box-shadow: 0 10px 35px rgba(16,185,129,.18), inset 0 1px rgba(255,255,255,.28);
+  box-shadow: 0 10px 35px rgba(59,130,246,.18), inset 0 1px rgba(255,255,255,.28);
 }
 .premium-button-primary:hover { box-shadow: 0 15px 42px rgba(59,130,246,.28), inset 0 1px rgba(255,255,255,.28); }
 .premium-button-secondary {
@@ -147,7 +147,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   justify-content: center;
   border-radius: 8px;
   border: 1px solid rgba(59,130,246,.28);
-  background: rgba(16,185,129,.08);
+  background: rgba(59,130,246,.08);
   font-size: 9px;
   font-weight: 900;
   color: #60a5fa;
@@ -181,7 +181,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   width: 6px;
   border-radius: 50%;
   background: #60a5fa;
-  box-shadow: 0 0 0 4px rgba(52,211,153,.08), 0 0 14px rgba(52,211,153,.45);
+  box-shadow: 0 0 0 4px rgba(96,165,250,.08), 0 0 14px rgba(96,165,250,.45);
 }
 
 /* TradingView-style desktop watchlist rail injected by workspaceHotfix.ts. */
@@ -219,11 +219,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   cursor: pointer;
   transition: border-color .15s ease, background .15s ease;
 }
-.tco-watchlist-item:hover { border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.05); }
+.tco-watchlist-item:hover { border-color: rgba(59,130,246,.35); background: rgba(59,130,246,.05); }
 .tco-watchlist-remove { position: absolute; right: 7px; top: 5px; color: #64748b; font-size: 13px; }
 .tco-watchlist-remove:hover { color: #ef4444; }
 .tco-watchlist-add { border-style: dashed; color: #64748b; text-align: center; }
-.tco-watchlist-add:hover { border-color: rgba(16,185,129,.35); color: #3b82f6; }
+.tco-watchlist-add:hover { border-color: rgba(59,130,246,.35); color: #3b82f6; }
 @media (max-width: 1535px) {
   .tco-watchlist-rail { display: none !important; }
   .tco-watchlist-source-hidden { display: flex !important; }

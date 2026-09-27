@@ -46,7 +46,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onBack, onSuccess }) => {
             type="button"
             onClick={signIn}
             disabled={loading}
-            className="mt-6 flex w-full items-center justify-center gap-3 rounded-lg bg-[#3b82f6] px-4 py-3 text-sm font-semibold text-[#06101f] disabled:opacity-60"
+            className="mt-6 flex w-full items-center justify-center gap-3 rounded-lg bg-[#3b82f6] px-4 py-3 text-sm font-semibold text-[#090a0f] disabled:opacity-60"
           >
             {loading ? <><Loader2 size={17} className="animate-spin" /> {authStep === 'connecting' ? 'Connecting...' : authStep === 'authenticating' ? 'Authenticating...' : 'Preparing workspace...'}</> : <>Continue with Google <ArrowRight size={17} /></>}
           </button>

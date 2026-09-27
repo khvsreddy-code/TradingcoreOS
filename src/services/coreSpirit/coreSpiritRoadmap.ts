@@ -666,6 +666,34 @@ export const CORE_SPIRIT_STAGES: readonly CoreSpiritStage[] = [
       { id: 'cs57-one-language', statement: 'Readable syntax remains source sugar over the existing parser/IR/VM path; no operator runtime or data-reference runtime is introduced.', automated: true },
     ],
     nonGoals: ['custom infix operators beyond the approved readability aliases', 'replacing the canonical crossover functions internally', 'exposing request plumbing to beginners'],
+  },
+  {
+    id: 58, name: 'Compiler complexity absorption', kind: 'compiler',
+    goal: 'Make the compiler absorb architectural complexity on behalf of authors: one source artifact is normalized into one semantic dependency model, then projected into visual, event, model, automation and execution views before lowering to the stable IR consumed by the single VM.',
+    dependencies: [39, 42, 43, 54, 55, 57],
+    gates: [
+      { id: 'cs58-one-semantic-model', statement: 'AST, semantic graph, dependency graph and feature-specific projections are compiler views of the same source program rather than independent runtimes.', automated: false },
+      { id: 'cs58-deterministic-lowering', statement: 'Equivalent source forms lower to the same canonical semantic and IR representation regardless of whether the user writes beginner-friendly or explicit syntax.', automated: true },
+      { id: 'cs58-source-maps', statement: 'Compiler outputs retain source locations so advanced IR/runtime inspection remains possible without exposing IR concepts in ordinary authoring.', automated: true },
+      { id: 'cs58-reactive-plan', statement: 'Reactive dependency/invalidation planning remains deterministic and is consumed by the existing runtime rather than a feature-specific scheduler.', automated: true },
+      { id: 'cs58-optimization-safe', statement: 'Compiler optimizations preserve observable CoreSpirit semantics, event identity, replay determinism and authority boundaries.', automated: false },
+      { id: 'cs58-no-leak', statement: 'Execution targets, host capabilities, broker transports, renderers and risk-policy plumbing are not required source-language concepts.', automated: true },
+    ],
+    nonGoals: ['a public AST/IR language', 'per-feature compilers', 'parallel evaluators', 'automatic host capability escalation'],
+  },
+  {
+    id: 59, name: 'Progressive authoring levels', kind: 'tooling',
+    goal: 'Define three authoring levels—Simple, Advanced and Professional—as progressive presentation and capability profiles over the same CoreSpirit language, compiler, IR and VM rather than separate languages.',
+    dependencies: [45, 49, 54, 55, 56, 57, 58],
+    gates: [
+      { id: 'cs59-simple', statement: 'Level 1 supports short SHOW and WHEN programs such as `show ema(close, 20)` and `when close crossesAbove ema(close, 20): emit "LONG"` through the canonical pipeline.', automated: true },
+      { id: 'cs59-advanced', statement: 'Level 2 exposes MODEL facts and composable reactive conditions without requiring users to learn ABI, IR, transport or execution mechanics.', automated: false },
+      { id: 'cs59-professional', statement: 'Level 3 can expose typed data, multi-symbol, multi-timeframe, custom visual geometry, external models, event handlers and performance controls while preserving the same execution substrate.', automated: false },
+      { id: 'cs59-same-language', statement: 'Authoring level is a discoverability/presentation classification, not a grammar fork or alternate runtime.', automated: true },
+      { id: 'cs59-upgrade-path', statement: 'A program can grow from Level 1 to Level 3 by adding declarations and type detail rather than rewriting into another language.', automated: false },
+      { id: 'cs59-capability-boundary', statement: 'Professional access increases expressiveness and inspection, not broker/network/filesystem authority; sandbox and host policy remain authoritative.', automated: true },
+    ],
+    nonGoals: ['a beginner-only interpreter', 'an advanced-only DSL', 'professional mode as a broker bypass', 'locking features to visual wizard states'],
   }
 ]
 
@@ -682,6 +710,6 @@ export function validateCoreSpiritRoadmap(): string[] {
       if (dep >= stage.id) errors.push(`stage ${stage.id} has non-previous dependency ${dep}`);
     }
   }
-  if (CORE_SPIRIT_STAGES.length !== 57) errors.push('CoreSpirit roadmap must contain exactly 57 stages');
+  if (CORE_SPIRIT_STAGES.length !== 59) errors.push('CoreSpirit roadmap must contain exactly 59 stages');
   return errors;
 }

@@ -70,7 +70,7 @@ MODEL was reduced to the same principle used for SHOW: users describe intent, no
 
 ### Historical gaps and current reconciliation
 
-Some older documents deliberately said "not claimed complete." Those statements remain historical records, not automatic blockers. The current status is determined by the v71 tracker and current contracts. Known items that are still genuinely open include exchange/session-calendar completeness, full indicator reference-value corpus, persisted artifact migration compatibility, production worker scheduling for large scans, production renderer/browser end-to-end validation, and full production external-model transports. Items already replaced by later contracts—such as transactional realtime visuals, rich visual primitives, model adapters, multi-symbol/MTF alignment, and debugger/source mapping—are considered superseded rather than still-open historical TODOs.
+Some older documents deliberately said "not claimed complete." Those statements remain historical records, not automatic blockers. The current status is determined by the v73 tracker and current contracts. Known items that are still genuinely open include exchange/session-calendar completeness, full indicator reference-value corpus, persisted artifact migration compatibility, production worker scheduling for large scans, production renderer/browser end-to-end validation, and full production external-model transports. Items already replaced by later contracts—such as transactional realtime visuals, rich visual primitives, model adapters, multi-symbol/MTF alignment, and debugger/source mapping—are considered superseded rather than still-open historical TODOs.
 
 ## 1. How to think about CoreSpirit
 
@@ -431,7 +431,7 @@ This example is valuable because it can certify compilation, indicators, visuals
 
 ## 13. Roadmap acceptance model
 
-The architectural roadmap is now 57 stages. The first 18 establish the language/runtime/governance foundation; later stages extend that same contract across visuals, UI, execution targets, scanner/data, models/AI, explainability/debugging, graph compilation, reactive scheduling, numerical planning, capability security, v1 convergence, language unification, universal SHOW, the declarative MODEL surface, library discoverability and readable syntax.
+The architectural roadmap is now 59 stages. The first 18 establish the language/runtime/governance foundation; later stages extend that same contract across visuals, UI, execution targets, scanner/data, models/AI, explainability/debugging, graph compilation, reactive scheduling, numerical planning, capability security, v1 convergence, language unification, universal SHOW, the declarative MODEL surface, library discoverability and readable syntax.
 
 The v1 convergence milestone is:
 
@@ -5443,3 +5443,558 @@ specialized semantic roles
 ```
 
 Product accent and semantic meaning remain encoded separately in the architecture even though the active positive chart color is now blue.
+
+---
+
+## v72 architectural deepening — #19 declarative configuration + #20 one-file application model
+
+CoreSpirit's next simplification is not to remove capability. It is to remove **imperative setup language** and make configuration part of the same declarative semantic surface.
+
+### #19 — Configuration should describe intent, not instruct the platform
+
+Configuration belongs to the same authoring model as DATA, LET, WHEN, SHOW, MODEL and AUTOMATE. A user should describe **what an artifact is** and **what its boundaries are**, rather than manually calling setup APIs.
+
+The preferred surface is:
+
+```corespirit
+indicator "Momentum":
+    overlay: price
+    precision: 2
+```
+
+```corespirit
+model "Regime":
+    source: "nifty-regime-v3"
+```
+
+```corespirit
+automation "Momentum":
+    mode: paper
+```
+
+The important architectural distinction is:
+
+```text
+DECLARATIVE CONFIGURATION
+        ↓
+validated semantic metadata
+        ↓
+canonical program artifact
+        ↓
+existing compiler / IR / VM / host contracts
+```
+
+not:
+
+```text
+source
+ ↓
+setup API calls
+ ↓
+mutable host objects
+ ↓
+feature-specific runtime
+```
+
+#### Configuration principles
+
+**1. Configuration is data.**
+
+`overlay: price`, `precision: 2`, `source: "..."` and `mode: paper` are validated values attached to a declaration. They are not executable instructions.
+
+**2. Configuration has explicit scope.**
+
+Configuration belongs to the declaration immediately above it. It does not silently mutate unrelated indicators, models, automations or host state.
+
+**3. Configuration is validated before execution.**
+
+Unknown keys, malformed values, invalid combinations and unsupported modes should become source diagnostics before the executable artifact is accepted.
+
+**4. Defaults are deterministic.**
+
+Omitted configuration uses documented stable defaults. The compiler must not infer different defaults from the current broker, renderer, GPU, or deployment target.
+
+**5. Host authority remains intact.**
+
+`mode: paper` describes the requested automation environment. It does not grant the VM permission to submit orders. Live execution still requires the existing host-controlled risk → policy → execution chain.
+
+**6. Configuration must survive replay.**
+
+A compiled artifact must carry enough normalized declaration metadata that historical/replay and realtime hosts interpret the same source configuration identically.
+
+#### Configuration namespaces
+
+The public configuration vocabulary should stay deliberately small:
+
+```text
+INDICATOR
+  overlay
+  precision
+  title / display metadata
+
+MODEL
+  source
+  inputs / outputs
+  binding metadata
+
+AUTOMATION
+  mode
+  lifecycle intent / activation policy metadata
+```
+
+Lower-level fields such as renderer nodes, execution targets, model transports, broker routes and capability tokens remain hidden implementation details.
+
+#### Configuration is not another language
+
+A critical invariant is:
+
+```text
+configuration ≠ imperative API
+configuration ≠ second DSL
+configuration ≠ runtime object graph
+```
+
+The configuration syntax is simply a structured declaration surface that lowers into the same semantic metadata already attached to CoreSpirit's single executable artifact.
+
+### #20 — One file should describe the complete trading application
+
+The end-state authoring model should allow one CoreSpirit file to describe the full decision chain:
+
+```corespirit
+app "Nifty Momentum":
+
+    input fast = 20
+    input slow = 50
+
+    fast = ema(close, fast)
+    slow = ema(close, slow)
+
+    regime = model "Regime"
+
+    show fast, slow on price
+    show regime on panel "Regime"
+
+    when fast crossesAbove slow and regime.confidence > 0.8:
+        emit "LONG"
+
+    automate:
+        when "LONG":
+            order long 1% risk
+            stop 1.5 atr
+```
+
+This is not intended to create a sixth execution system called `APP`. `app` is a **composition/declaration envelope** for one source artifact.
+
+The compiler's job is to split that source into existing semantic regions:
+
+```text
+                        APP SOURCE
+                            │
+           ┌────────────────┼─────────────────┐
+           │                │                 │
+        DECLARATIONS      COMPUTATION      BEHAVIOR
+           │                │                 │
+     indicator/model/   lets/series       when/emit
+     automation/input                     automate/order
+           │                │                 │
+           └────────────────┼─────────────────┘
+                            ↓
+                 CANONICAL PROGRAM MODEL
+                            ↓
+                   STABLE CORE IR
+                            ↓
+                      REACTIVE VM
+                            ↓
+          ┌─────────────────┼──────────────────┐
+          ↓                 ↓                  ↓
+       VISUALS            EVENTS          ORDER INTENTS
+                                             ↓
+                                      RISK → POLICY
+                                         → EXECUTION
+```
+
+#### Why the one-file model matters
+
+**One source of truth.**
+
+A trading application should not require one file for the indicator, another for the model binding, another for signals and another for automation just because the implementation has separate subsystems.
+
+**Readable dependency locality.**
+
+The user can see the input, calculation, model, visualization, condition and automation in one place. This makes the program easier to review and reason about.
+
+**Deterministic compilation.**
+
+The compiler can build one dependency graph and one executable artifact while retaining source locations for each declaration and behavior block.
+
+**Safer deployment.**
+
+A single artifact gives the platform one object to validate for capabilities, replay identity, risk-policy compatibility and deployment mode.
+
+**Progressive disclosure.**
+
+Beginners can start with:
+
+```corespirit
+show ema(close, 20)
+```
+
+and later place that same expression inside a complete `app` without learning a replacement language.
+
+#### App composition rules
+
+The one-file model should follow these rules:
+
+```text
+APP
+ ├── inputs / configuration
+ ├── data + calculations
+ ├── model declarations / bindings
+ ├── SHOW projections
+ ├── WHEN conditions
+ ├── EVENT emission
+ └── AUTOMATE declarations
+       └── ORDER intent
+```
+
+The following remain prohibited from the app source:
+
+```text
+raw broker API calls
+raw network calls
+filesystem operations
+native process spawning
+renderer node construction
+GPU/WASM selection
+risk approval commands
+policy bypasses
+```
+
+Those are host/VM infrastructure, not application-language concepts.
+
+#### The compiler split is semantic, not textual
+
+A major design requirement is that the compiler does **not** simply split the file into independent scripts and run them separately. It should construct one semantic dependency model:
+
+```text
+input fast ───────► fast series ───────► SHOW
+                       │
+                       └───────────────► WHEN
+
+model Regime ───────────────────────────► WHEN
+
+WHEN ─────────────────► EVENT ──────────► AUTOMATE ──► ORDER INTENT
+```
+
+That preserves the existing composability invariant and avoids parallel runtimes.
+
+#### Single-file application acceptance criteria
+
+A future implementation is complete only when all of the following hold:
+
+```text
+✓ configuration is declarative and typed
+✓ one app file compiles to one executable artifact
+✓ nested declarations retain source locations
+✓ MODEL, SHOW, WHEN, EVENT and AUTOMATE remain composable
+✓ risk/policy/execution stay outside the VM
+✓ replay sees the same normalized configuration
+✓ editor completion can discover the complete file structure
+✓ deployment works without requiring users to understand the internal graph
+```
+
+### #19 + #20 combined principle
+
+The two ideas reinforce each other:
+
+```text
+DECLARATIVE CONFIGURATION
+          ↓
+ONE COMPLETE SOURCE FILE
+          ↓
+ONE SEMANTIC DEPENDENCY MODEL
+          ↓
+ONE CORE IR
+          ↓
+ONE REACTIVE VM
+          ↓
+MULTIPLE CONTROLLED HOST SERVICES
+```
+
+The result should feel like **one small trading language** even though the platform underneath contains a substantial compiler, runtime, visual system, model ABI, risk system, execution planner, sandbox and host ecosystem.
+
+### v72 design guardrails
+
+- `app` is an authoring envelope, not a second runtime.
+- Declaration configuration is semantic metadata, not executable setup code.
+- Multiple declarations still converge into one CoreSpirit compilation pipeline.
+- The single-file model must not weaken DATA/LET/WHEN/SHOW/MODEL/AUTOMATE boundaries.
+- Host infrastructure remains inspectable to platform engineers but hidden from ordinary source authoring.
+
+
+### Product visual identity — black primary, blue accent
+
+**Black remains the primary UI** surface family. Blue is the product accent used for identity, active controls and focus states.
+
+CoreSpirit and the wider TradingCoreOS product use a deliberately restrained palette:
+
+```text
+BLACK / NEAR-BLACK
+  primary application background
+  cards and panels
+  chart/workspace surfaces
+
+BLUE
+  product identity
+  primary accent
+  focus / active / selected controls
+
+RED
+  negative / destructive trading semantics
+
+PURPLE / AMBER / NEUTRAL
+  specialized semantic roles
+```
+
+Blue is therefore an **accent**, not a replacement for the product's black visual foundation. A blue button or selection state should read as emphasis on a black interface, not as a blue interface.
+
+
+## v73 architectural deepening — #21 compiler complexity absorption + #22 progressive authoring levels
+
+CoreSpirit now states an explicit rule for where complexity belongs:
+
+> **The language should be easy because the compiler is doing more work, not because the platform has less architecture.**
+
+### #21 — The compiler absorbs complexity
+
+The source author sees a compact semantic language. Internally, the compiler may construct several useful representations, but these are **views over one program**, not independent execution systems:
+
+```text
+CoreSpirit source
+      ↓
+Surface normalization
+      ↓
+AST / source model
+      ↓
+Semantic graph
+      ↓
+Dependency graph
+   ┌──┼───────────────┬───────────────┐
+   ↓  ↓               ↓               ↓
+Visual   EVENT/WHEN   MODEL      AUTOMATE/ORDER
+   \      |            |               /
+    \     └────────────┴──────────────/
+     \            ↓
+      \      canonical IR
+       \           ↓
+        └──── reactive VM
+```
+
+The important distinction is that the visual, event, model and automation graphs are **compiler projections**. They must not become separate evaluators, schedulers or VMs.
+
+The compiler's responsibilities therefore become deliberately broad:
+
+- resolve readable surface syntax into canonical semantics;
+- infer dependencies between values, models, events, visuals and automation;
+- type-check declaration configuration before runtime;
+- build deterministic reactive invalidation relationships;
+- produce source mappings for debugging without making IR knowledge mandatory;
+- perform semantics-preserving optimization;
+- preserve EVENT identity and replay determinism;
+- retain capability/risk/policy boundaries when lowering execution-related constructs;
+- emit one validated executable artifact for the existing runtime.
+
+#### Equivalent source should converge
+
+These should have one semantic meaning:
+
+```corespirit
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+and:
+
+```corespirit
+when crossover(fast, slow):
+    emit "LONG"
+```
+
+Readable syntax is therefore not an alternate feature implementation. It is a different spelling of the same semantic node.
+
+The same principle applies to declarative configuration. An author should be able to write intent such as:
+
+```corespirit
+indicator "Momentum":
+    overlay: price
+    precision: 2
+```
+
+without learning which internal metadata object, renderer contract or compiler node carries those values.
+
+#### Optimization is allowed; semantic drift is not
+
+Compiler optimization may change how work is organized, cached, batched or scheduled internally. It may not change:
+
+```text
+value meaning
+EVENT identity
+WHEN truth
+MODEL output meaning
+SHOW semantics
+ORDER intent meaning
+risk/policy authority
+replay determinism
+```
+
+This makes optimization an implementation concern instead of a language feature.
+
+#### Debugging stays possible without exposing internals
+
+Advanced inspection may still show:
+
+```text
+source line
+→ semantic node
+→ dependency
+→ IR instruction
+→ runtime state
+```
+
+but the ordinary author does not need to know what an IR opcode or dependency planner is in order to write the program.
+
+This is the same complexity-firewall principle from #15/#16 applied directly to compilation.
+
+### #22 — Three authoring levels, one language
+
+CoreSpirit should progressively reveal complexity rather than create separate beginner and professional languages.
+
+```text
+LEVEL 1 — SIMPLE
+      ↓ grow the program
+LEVEL 2 — ADVANCED
+      ↓ add deeper control
+LEVEL 3 — PROFESSIONAL
+```
+
+#### Level 1 — Simple
+
+The intended entry point for most traders is semantic and direct:
+
+```corespirit
+show ema(close, 20)
+
+when close crossesAbove ema(close, 20):
+    emit "LONG"
+```
+
+The author learns only the essential vocabulary: data, calculation, visual output and a reactive condition.
+
+#### Level 2 — Advanced
+
+The next layer introduces reusable named concepts and typed model facts:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+
+model "Regime":
+    use "regime-v3"
+
+show fast, slow
+
+when fast crossesAbove slow and Regime.confidence > 0.8:
+    emit "LONG"
+```
+
+The user is still writing the same language. They are simply composing more concepts.
+
+#### Level 3 — Professional
+
+Professional authoring exposes the full semantic vocabulary required by complex trading systems:
+
+```text
+typed data
+multi-symbol relationships
+multi-timeframe inputs
+custom renderer-neutral geometry
+external model bindings
+custom event handlers
+performance controls
+advanced inspection/debugging
+```
+
+These are still constrained by the same:
+
+```text
+compiler
+↓
+IR
+↓
+reactive runtime / VM
+↓
+host capability boundary
+↓
+risk → policy → execution
+```
+
+#### Authoring level is not a security level
+
+This distinction is important.
+
+A professional program is allowed to express more semantics, but it does **not** receive automatic authority over:
+
+```text
+broker credentials
+raw network
+filesystem
+arbitrary processes
+account mutation
+risk bypass
+```
+
+Capability policy remains independent of authoring level.
+
+#### Authoring level is not a grammar fork
+
+There is no:
+
+```text
+CoreSpirit Beginner
+CoreSpirit Pro
+CoreSpirit Enterprise DSL
+```
+
+There is only CoreSpirit.
+
+The levels are a tooling/discoverability model that can influence examples, completion depth, documentation and editor presentation while the underlying compiler contracts remain identical.
+
+### #21/#22 acceptance rule
+
+A future feature belongs in the CoreSpirit language only when both questions have good answers:
+
+```text
+1. Can the compiler absorb the complexity without creating another runtime?
+2. Can the editor reveal that complexity progressively rather than forcing it on every author?
+```
+
+If the answer to either is no, the feature should remain a host/internal concern until its semantic boundary becomes clear.
+
+### v73 architectural consequence
+
+The end-state is therefore stronger than simply having a concise syntax:
+
+```text
+small language surface
+      +
+rich compiler
+      +
+stable IR
+      +
+reactive VM
+      +
+strict capability / risk boundaries
+      =
+professional trading system without a professional-only language
+```
+

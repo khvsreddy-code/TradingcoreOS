@@ -191,7 +191,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
               <div className="relative h-[500px] overflow-hidden bg-[#090d14]">
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-3 py-3 sm:px-4">
                   <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0a0d14]/88 px-2.5 py-1.5 font-mono text-[8px] backdrop-blur-xl shadow-lg">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa] shadow-[0_0_10px_rgba(52,211,153,.7)]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa] shadow-[0_0_10px_rgba(96,165,250,.7)]" />
                     <span className="text-[#60a5fa]">BUY</span><span className="text-[#f3f4f6]">82%</span><span className="text-[#515c71]">•</span><span className="text-[#8b95a9]">BOS CONFIRMED</span>
                   </div>
                   <div className="flex items-center gap-2 rounded-lg border border-[#a78bfa]/15 bg-[#0a0d14]/88 px-2.5 py-1.5 font-mono text-[8px] text-[#c4b5fd] backdrop-blur-xl shadow-lg">
@@ -215,7 +215,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
               </div>
             </main>
 
-            <aside className="border-t border-white/[0.06] bg-[#0b0e16] lg:border-l lg:border-t-0">
+            <aside className="border-t border-[#222636] bg-[#090a0f] lg:border-l lg:border-t-0">
               <div className="flex border-b border-white/[0.06] font-mono text-[9px]">
                 <button onClick={() => setActiveTab('Order')} className={`flex-1 py-3 ${activeTab === 'Order' ? 'border-b border-[#60a5fa] bg-[#3b82f6]/[0.04] text-white' : 'text-[#667188]'}`}>ORDER</button>
                 <button onClick={() => setActiveTab('Positions')} className={`flex-1 py-3 ${activeTab === 'Positions' ? 'border-b border-[#60a5fa] bg-[#3b82f6]/[0.04] text-white' : 'text-[#667188]'}`}>POSITIONS <span className="text-[#60a5fa]">(2)</span></button>
@@ -223,7 +223,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
 
               {activeTab === 'Order' ? (
                 <div className="space-y-4 p-4 font-mono">
-                  <div className="rounded-xl border border-white/[0.06] bg-[#070a10] p-3">
+                  <div className="rounded-xl border border-white/[0.06] bg-[#0b0e15] p-3">
                     <div className="flex items-center justify-between text-[8px] text-[#667188]"><span>INSTRUMENT</span><span className="text-[#60a5fa]">NSE F&amp;O</span></div>
                     <div className="mt-1.5 text-[11px] font-bold text-[#f3f4f6]">{selectedSymbol}</div>
                     <div className="mt-1 text-[9px] text-[#59647a]">LTP ₹{fmt(selected.ltp)}</div>
@@ -246,7 +246,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                   </div>
                   <div className="border-t border-white/[0.06] pt-3">
                     <div className="flex justify-between text-[8px] text-[#59647a]"><span>EST. MARGIN</span><span className="text-[#e5e7eb]">₹1,25,650</span></div>
-                    <button onClick={onLaunch} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[9px] font-black tracking-[0.12em] ${orderSide === 'Buy' ? 'bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-[#06101f]' : 'bg-gradient-to-r from-[#ef4444] to-[#f43f5e] text-white'}`}>
+                    <button onClick={onLaunch} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[9px] font-black tracking-[0.12em] ${orderSide === 'Buy' ? 'bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-[#090a0f]' : 'bg-gradient-to-r from-[#ef4444] to-[#f43f5e] text-white'}`}>
                       <Zap className="h-3.5 w-3.5" /> {orderSide.toUpperCase()} MARKET
                     </button>
                   </div>

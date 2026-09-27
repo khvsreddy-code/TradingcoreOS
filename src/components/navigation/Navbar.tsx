@@ -103,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
               <button
                 onClick={onLaunchPlatform}
-                className="group flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#60a5fa] via-[#3b82f6] to-[#2563eb] px-4 py-2 text-sm font-semibold text-[#06101f] shadow-[0_8px_24px_rgba(59,130,246,.14)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(59,130,246,.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]" 
+                className="group flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#60a5fa] via-[#3b82f6] to-[#2563eb] px-4 py-2 text-sm font-semibold text-[#090a0f] shadow-[0_8px_24px_rgba(59,130,246,.14)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(59,130,246,.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]" 
               >
                 Launch Platform
                 <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
