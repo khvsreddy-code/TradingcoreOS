@@ -6,13 +6,13 @@
 
 ## Current release
 
-**Release:** CoreSpirit v73 — compiler complexity absorption + progressive authoring levels + black primary UI / blue accent correction
+**Release:** CoreSpirit v74 — CoreSpirit Language Simplification cycle + Supabase user-settings ACL repair
 
 **Tracker state:** restored as a first-class project document.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
-**Machine release record:** `CORESPIRIT_V73_MANIFEST.json`
+**Machine release record:** `CORESPIRIT_V74_MANIFEST.json`
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments.
 
