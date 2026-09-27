@@ -6369,3 +6369,121 @@ ONE STABLE IR
         ↓
 ONE VM / REACTIVE RUNTIME
 ```
+
+
+## v76 compiler architecture hardening — #1 and #3
+
+v76 turns the source-of-truth discussion into an implementation direction that is stricter than the earlier documentation-only statement.
+
+### #1 — one semantic source of truth
+
+The canonical source lifecycle is now:
+
+```text
+SOURCE
+  ↓
+LEXER / CST
+  ↓
+SURFACE NORMALIZATION
+  ↓
+NORMALIZED AST
+  ↓
+SEMANTIC MODEL
+  ↓
+IR
+  ↓
+OPTIMIZED IR
+  ↓
+VM / REACTIVE RUNTIME
+```
+
+CoreSpirit already had a real lexer and parser. The architectural defect was that some user-facing tooling and compatibility layers could still derive meaning directly from raw source text. v76 therefore introduces a canonical source-to-semantics gateway:
+
+```text
+createCoreSpiritCompilationUnit(source)
+```
+
+This produces the normalized source, AST, syntax diagnostics and semantic result as one coherent compilation unit. The compiler now exposes `compileSource()` through the same gateway, while editor diagnostics/type information consume the same unit.
+
+The long-term rule is:
+
+> **Parse once, understand once, project many times.**
+
+The same semantic model should feed diagnostics, composition graphs, completion, hover, source maps, debugger views and dependency inspection. Those are projections, not independent language analyzers.
+
+### #3 — regex must stop being the language parser
+
+The current lexer is now used for structural readable-operator normalization. `crossesAbove` / `crossesBelow` are normalized from token spans rather than regex matching. The structural pass supports balanced call/index/member expressions and the equivalent functional spelling.
+
+Examples:
+
+```corespirit
+ema(close, 20) crossesAbove ema(close, 50)
+```
+
+becomes:
+
+```text
+crossover(ema(close, 20), ema(close, 50))
+```
+
+and:
+
+```corespirit
+crossesAbove(ema(close, 20), ema(close, 50))
+```
+
+also converges to the same canonical call.
+
+Strings and comments containing syntax-like text are not treated as source operators. Nested parentheses are handled through token balance rather than a regex approximation.
+
+### Legacy compatibility containment
+
+Some older surface conveniences still require line-oriented transforms. v76 does not pretend those are already a full AST rewrite. Instead they are explicitly quarantined behind a protected-text boundary so legacy regex transforms cannot inspect or rewrite string literals and comments.
+
+That creates a migration path:
+
+```text
+legacy line transforms
+        ↓
+protected compatibility boundary
+        ↓
+canonical parser
+```
+
+New language features should not be added to that regex layer. New syntax is expected to become a token/AST transformation or a semantic grammar feature.
+
+### The end-state migration
+
+```text
+TODAY
+lexer + parser + protected compatibility surface
+                 ↓
+NEXT
+AST-backed surface transforms
+                 ↓
+TARGET
+normalized AST as the only language meaning source
+                 ↓
+semantic model as the only resolved meaning source
+```
+
+This is intentionally incremental. Removing the legacy surface layer is a migration task, not a flag-day parser rewrite.
+
+### v76 acceptance boundary
+
+A normalization rule is architecturally acceptable only when it is:
+
+```text
+lexically safe
+      +
+balanced-expression aware
+      +
+source-span preserving
+      +
+deterministic
+      +
+semantically convergent
+```
+
+If a rule needs unbounded regex knowledge of nested language syntax, it belongs in the lexer/parser/AST layers instead.
