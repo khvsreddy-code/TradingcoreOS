@@ -6175,3 +6175,197 @@ The compiler absorbs the additional structure; the author does not need to learn
 ### #23/#24 boundary
 
 This cycle is a **reduction and consolidation program** over existing stages 1–59. It is not permission to reopen foundational runtime architecture casually. New runtime primitives, new execution authorities, or parallel language layers require a separate architectural decision rather than appearing as side effects of “simplification.”
+
+
+## v75 target language contract — #25
+
+The long-term CoreSpirit language should remain teachable from a deliberately small public vocabulary. The implementation can remain rich; the author-facing grammar should remain small.
+
+### Minimal semantic vocabulary
+
+```text
+let
+when
+if
+show
+emit
+model
+automate
+```
+
+The expression ecosystem supplies capabilities such as `ema()`, `rsi()`, `atr()`, `market()` and `timeframe()`, plus the existing discoverable standard-library catalog. The goal is a small grammar with a large compositional ecosystem.
+
+A new keyword should be rare. Prefer expressions, members, model fields, event values, visual projections and host capabilities before adding another source-level control construct.
+
+### Small grammar, large platform
+
+```text
+small grammar
+    ≠
+small platform
+```
+
+CoreSpirit can expose a large mathematical/market/model/visual ecosystem without requiring a new keyword for every capability. Most functionality should be composition over the existing concepts.
+
+Before adding a keyword, ask whether an existing value, declaration, event, projection or expression can express the behavior. This protects the six-concept foundation while allowing the ecosystem to grow.
+
+## v75 ultimate application contract — #26
+
+The intended end state is one declarative `app` source file that can describe configuration, data, calculations, models, visuals, reactive events and automation intent without forcing authors to split the program into separate languages.
+
+```corespirit
+app "Nifty AI Momentum":
+
+    input fast = 20
+    input slow = 50
+
+    fast = ema(close, fast)
+    slow = ema(close, slow)
+
+    regime = model "nifty-regime-v3"
+
+    show fast, slow on price
+    show regime.probability in panel "AI Regime"
+
+    when fast crossesAbove slow:
+        show "LONG" above bar
+        emit "LONG"
+
+    when fast crossesBelow slow:
+        show "EXIT" below bar
+        emit "EXIT"
+
+    automate:
+        when "LONG":
+            if regime.confidence > 0.8:
+                order long 1% risk
+                stop 1.5 atr
+                target 3 atr
+
+        when "EXIT":
+            close position
+```
+
+Internally this is still one program identity:
+
+```text
+ONE SOURCE PROGRAM
+      ↓
+normalized syntax
+      ↓
+semantic program model
+      ↓
+ ┌────┬────┬─────┬──────┐
+ ↓    ↓    ↓     ↓      ↓
+data visuals events models automation
+ \     \    |     /      /
+  \     \   |    /      /
+       stable IR
+           ↓
+           VM
+```
+
+The internal views are compiler projections, not independent programs or runtimes. The full example is a target syntax contract; existing v64–v74 semantic building blocks remain authoritative until each remaining shorthand is implemented.
+
+## v75 compiler source-of-truth consolidation — #1
+
+The strongest version of “one language” is implementation-level unity. CoreSpirit should converge on:
+
+```text
+SOURCE
+  ↓
+TOKENS / CST
+  ↓
+NORMALIZED AST
+  ↓
+SEMANTIC MODEL
+  ↓
+IR
+  ↓
+OPTIMIZED IR
+  ↓
+RUNTIME
+```
+
+The current risk is that some compatibility/surface utilities still inspect source strings separately from the canonical parser. That can produce:
+
+```text
+same source
+ ├── surface normalization
+ ├── surface metadata scan
+ ├── composition scan
+ ├── parser
+ ├── semantic analysis
+ └── IR compiler
+```
+
+The desired authority model is:
+
+```text
+                 SOURCE
+                   ↓
+               Lexer / CST
+                   ↓
+             Normalized AST
+                   ↓
+           Semantic Program Model
+              /    |    |    \\
+             ↓     ↓    ↓     ↓
+      diagnostics graph completion source maps
+              \\     |     /
+               \\    |    /
+                editor/debugger
+                   ↓
+                  IR
+                   ↓
+                  VM
+```
+
+The semantic program model should own resolved declarations, names, types, members, dependencies, event relationships, visual projections, model references, automation intents and source spans. Diagnostics, completion, hover, composition graphs, debugger data and dependency views should be projections of that model.
+
+CST is for authoring fidelity—comments, formatting and exact spans. AST is for normalized language meaning. The semantic model is for resolved meaning. IR is for deterministic execution. None of CST/AST/semantic model becomes a runtime.
+
+### Incremental migration
+
+1. Keep compatibility sugar, but normalize once at the compiler entry point.
+2. Preserve source spans and original surface-form identity on normalized nodes.
+3. Build semantic metadata from AST + semantic analysis.
+4. Refactor `describeCoreSpiritSurface` and composition metadata to consume canonical semantics.
+5. Refactor editor completion, hover and diagnostics to consume the same semantic model.
+6. Retire redundant source-string scanners once equivalent semantic data is available.
+
+This is intentionally incremental rather than a flag-day parser rewrite.
+
+### #1 acceptance test
+
+```text
+one source
+  ↓
+one parse
+  ↓
+one normalization
+  ↓
+one semantic analysis
+  ↓
+all tooling views
+  ↓
+one IR
+  ↓
+one runtime
+```
+
+Equivalent source sugar should produce equivalent semantic and IR identities, while source maps still point back to the exact text the author wrote.
+
+The direction is therefore:
+
+```text
+SMALL PUBLIC LANGUAGE
+        ↓
+STRONG SINGLE COMPILER AUTHORITY
+        ↓
+RICH INTERNAL SEMANTIC MODEL
+        ↓
+ONE STABLE IR
+        ↓
+ONE VM / REACTIVE RUNTIME
+```
