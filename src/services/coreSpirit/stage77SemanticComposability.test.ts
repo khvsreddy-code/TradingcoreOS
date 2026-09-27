@@ -21,7 +21,7 @@ const source=[
   '',
   'when regime.confidence > 0.8 and value > 0:',
   '  emit "LONG"',
-].join('\\n');
+].join('\n');
 
 const normalized=normalizeCoreSpiritSource(source);
 const parsed=new CoreSpiritParser(normalized).parseDetailed();
