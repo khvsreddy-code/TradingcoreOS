@@ -99,4 +99,4 @@ export * from './automationSurface';
 export * from './eventSystem';
 export * from './eventEngine';
 
-export * from ./'composability';
+export * from './composability';
