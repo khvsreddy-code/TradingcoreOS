@@ -14,12 +14,6 @@ import { createCoreSpiritCompilationUnit } from './compilerPipeline';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
-function sourceKindForInstruction(instruction: CoreSpiritIrInstruction): string {
-  if (instruction.op === 'emit') return 'emit:' + instruction.kind;
-  if (instruction.op === 'call') return 'call:' + instruction.name;
-  return instruction.op;
-}
-
 export class CoreSpiritCompiler {
   compileSource(
     source: string,
@@ -179,17 +173,11 @@ export class CoreSpiritCompiler {
         locals,
         maxLookback:semantic.maxLookback,
         diagnostics:[],
-        sourceMap:{
-          version:1,
-          sourceId,
-          entries: instructions.flatMap((instruction,index) => instruction.origin
-            ? [{instruction:index,sourceNodeId:instruction.origin.sourceNodeId,start:instruction.origin.start,end:instruction.origin.end,line:instruction.origin.line,column:instruction.origin.column,kind:sourceKindForInstruction(instruction)}]
-            : []),
-        },
+        sourceMap:coreSpiritSourceMapFromInstructions(sourceId,instructions),
         ...(options.surface ? { surface: options.surface } : {}),
       };
       const optimized = optimizeCoreSpiritIr(rawIr);
-      const ir = { ...optimized, graphs: buildCoreSpiritGraphBundle(optimized) } as CoreSpiritIrProgram;
+      const ir = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), graphs: buildCoreSpiritGraphBundle(optimized) } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {
