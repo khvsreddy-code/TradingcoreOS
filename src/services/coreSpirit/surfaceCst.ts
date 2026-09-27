@@ -100,6 +100,19 @@ export function normalizeReadableOperatorsWithTokens(source:string):string {
   for(let i=0;i<tokens.length;i+=1){
     const token=tokens[i];
     if(token.type!=='identifier'||(token.lexeme!=='crossesAbove'&&token.lexeme!=='crossesBelow')) continue;
+    if(tokens[i+1]?.type==='leftParen'){
+      let depth=0;
+      let end=i+1;
+      for(;end<tokens.length;end+=1){
+        if(tokens[end].type==='leftParen') depth+=1;
+        else if(tokens[end].type==='rightParen'){depth-=1;if(depth===0)break;}
+      }
+      if(end<tokens.length&&tokens[end].type==='rightParen'){
+        const call=token.lexeme==='crossesAbove'?'crossover':'crossunder';
+        replacements.push({start:token.offset,end:token.offset+token.lexeme.length,text:call});
+        continue;
+      }
+    }
     const leftIndex=i-1;
     const rightIndex=i+1;
     if(leftIndex<0||rightIndex>=tokens.length) continue;
