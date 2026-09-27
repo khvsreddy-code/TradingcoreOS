@@ -13,11 +13,26 @@ export const CORE_SPIRIT_IR_OPCODES = [
 ] as const;
 export type CoreSpiritIrOpcode = typeof CORE_SPIRIT_IR_OPCODES[number];
 
+function hasValidInstructionOrigin(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const origin=value as Record<string,unknown>;
+  return typeof origin.sourceNodeId === 'string' &&
+    Number.isInteger(origin.start) &&
+    Number.isInteger(origin.end) &&
+    origin.start >= 0 &&
+    origin.end >= origin.start &&
+    Number.isInteger(origin.line) &&
+    origin.line >= 1 &&
+    Number.isInteger(origin.column) &&
+    origin.column >= 1;
+}
+
 export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIrInstruction {
   const instruction = value as CoreSpiritIrInstruction | undefined;
   return !!instruction && typeof instruction === 'object' &&
     typeof (instruction as any).op === 'string' &&
-    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op);
+    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op) &&
+    ((instruction as any).origin === undefined || hasValidInstructionOrigin((instruction as any).origin));
 }
 
 export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrProgram {
