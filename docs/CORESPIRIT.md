@@ -5998,3 +5998,180 @@ strict capability / risk boundaries
 professional trading system without a professional-only language
 ```
 
+
+
+## #23 — CoreSpirit Language Simplification development cycle
+
+CoreSpirit has accumulated a substantial implementation surface: stable IR/VM execution, reactive scheduling, persistent scenes, models, multi-symbol/timeframe data, automation, risk/policy boundaries, replay, scanners and host adapters. The architecture is now mature enough that the next useful move is **reduction of author-facing complexity rather than another large architectural layer**.
+
+This is deliberately a **development cycle, not a new roadmap stage**. The active roadmap remains at 59 stages. The cycle operates across those existing contracts and measures progress by how much complexity disappears from ordinary authoring without weakening the internal architecture.
+
+### Objective
+
+> **Move complexity downward: from source syntax into compiler normalization, semantic analysis, diagnostics and host orchestration.**
+
+The public language should answer:
+
+```text
+What data do I want?
+What value am I calculating?
+What should I show?
+When should something happen?
+What model fact do I consume?
+What automation intent should follow?
+```
+
+The public language should not require authors to understand ASTs, IR blocks, dependency planner internals, scene node identity, render patches, transport selection, capability negotiation, broker adapters, risk policy plumbing, worker scheduling or GPU/WASM execution.
+
+### Priority map
+
+| Priority | Area | Current direction | Exit condition |
+| --- | --- | --- | --- |
+| **P0** | Language | Reduce ceremony, increase readable forms, preserve one canonical lowering path | Common trading tasks require fewer source constructs and no semantic fork is introduced |
+| **P0** | Compiler | Normalize all surface sugar into one semantic model before IR lowering | Equivalent source forms produce equivalent semantic/IR results and source maps |
+| **P0** | Visuals | Make `show` the primary visual surface and keep scene machinery hidden | Simple visuals need no scene/renderer knowledge while advanced visuals still converge on the same scene graph |
+| **P0** | Events | Treat `when` + `emit` as universal reactive language primitives | Named events, conditions and bar/replay events share one runtime contract |
+| **P0** | Automation | Keep source focused on intent, sizing and risk; hide lifecycle/plumbing | Authoring an automation does not require broker, transport or lifecycle implementation knowledge |
+| **P1** | Models | Make model consumption compact and typed | A model can be consumed with a small source expression while ABI details remain inspectable but hidden |
+| **P1** | Editor | Teach the simple language first | Completion, templates and hover start from user concepts rather than implementation terminology |
+| **P1** | Diagnostics | Explain inferred semantics, not compiler machinery | Errors say what CoreSpirit understood, what is missing and how to fix it |
+| **P1** | Replay | Make replay a property of every executable artifact | Any valid script can be replayed with stable source, dataset and configuration identity |
+| **P1** | Session/calendar | Keep as a real open semantic area | Session boundaries, holidays, exchange clocks and partial sessions have explicit deterministic policy |
+| **P1** | Production renderer | Finish the real host path after semantic contracts are stable | Scene contracts are proven end-to-end with the production renderer without leaking renderer concepts into the language |
+| **P1** | Scanner workers | Add production scheduling/backpressure around the existing scanner contract | Concurrency, quotas, cancellation and deterministic collection are observable host behavior |
+| **P2** | Indicator corpus | Expand mathematical/reference coverage | Core indicators have reference-value and edge-case tests across supported input shapes |
+| **P2** | Artifact migration | Add versioned migration compatibility | Old compiled/script artifacts can be opened, validated and migrated without semantic ambiguity |
+| **P2** | Advanced GPU | Optimize only from profiling evidence | GPU/accelerator work demonstrates measured bottlenecks and preserves replay/authority invariants |
+| **P3** | More syntax | Add only when repeated real authoring cases justify it | New syntax removes repeated friction and lowers to already-established semantics |
+
+### What “simplification” actually means
+
+Simplification is not deleting expressive power. It is reducing the number of concepts a user must hold simultaneously.
+
+For example, these are intentionally equivalent authoring surfaces:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+and the more explicit compiler-facing representation:
+
+```text
+crossover(fast, slow)
+→ conditional dependency
+→ event emission
+```
+
+The second representation remains useful for diagnostics and tooling, but it does not become a second language that beginners must learn.
+
+### Simplification acceptance test
+
+A proposed public feature should survive all of the following checks:
+
+```text
+1. Can the same user task be expressed with less ceremony?
+2. Does it lower into an existing semantic contract?
+3. Does it avoid a new runtime or evaluator?
+4. Is its behavior deterministic in history, replay and realtime?
+5. Does it preserve broker/risk/policy boundaries?
+6. Can the editor explain it in user terminology?
+7. Can advanced users still inspect the underlying meaning?
+8. Does it remove a repeated source of confusion rather than add another option?
+```
+
+If a feature fails these tests, it belongs below the language surface or should remain an implementation detail.
+
+## #24 — Stop architectural accumulation; enter a reduction cycle
+
+The instruction for the next development cycle is intentionally negative:
+
+> **Do not respond to every remaining gap with another giant architectural stage.**
+
+The roadmap already has 59 stages and a large compatibility/test corpus. At this maturity level, quality comes from consolidation, semantic unification, documentation clarity and removal of redundant authoring paths.
+
+### Reduction-cycle workflow
+
+```text
+Inventory public surface
+        ↓
+Find duplicate / verbose forms
+        ↓
+Choose one canonical meaning
+        ↓
+Normalize at the compiler boundary
+        ↓
+Improve editor discoverability
+        ↓
+Improve diagnostics
+        ↓
+Replay / realtime / authority regression
+        ↓
+Retire unnecessary surface forms
+```
+
+The reduction cycle therefore prioritizes **fewer ways to express the same thing**, not more ways.
+
+### What should be frozen underneath
+
+During this cycle, the following remain architectural constants:
+
+```text
+one language
+      ↓
+one compiler
+      ↓
+one stable IR
+      ↓
+one VM
+      ↓
+one reactive execution substrate
+      ↓
+one renderer-neutral scene model
+      ↓
+one broker/risk/policy authority boundary
+```
+
+The cycle may simplify syntax, compiler passes and editor presentation, but it must not create a “simple runtime” beside the existing runtime or a “professional runtime” beside it.
+
+### The practical end state
+
+A trader should be able to begin with:
+
+```corespirit
+show ema(close, 20)
+```
+
+then grow naturally into:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+show fast, slow
+
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+then into model-aware and automated programs without learning a second language:
+
+```corespirit
+model "Regime":
+    use "regime-v3"
+
+when fast crossesAbove slow and Regime.confidence > 0.8:
+    emit "LONG"
+
+automate:
+    when "LONG":
+        order long 1% risk
+```
+
+The compiler absorbs the additional structure; the author does not need to learn the compiler's internal graph vocabulary.
+
+### #23/#24 boundary
+
+This cycle is a **reduction and consolidation program** over existing stages 1–59. It is not permission to reopen foundational runtime architecture casually. New runtime primitives, new execution authorities, or parallel language layers require a separate architectural decision rather than appearing as side effects of “simplification.”
