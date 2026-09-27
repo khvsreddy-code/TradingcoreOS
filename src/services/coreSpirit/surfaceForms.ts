@@ -5,6 +5,7 @@ import { modelSurfaceNames, normalizeCoreSpiritModelReferences, normalizedModelR
 import { normalizeCoreSpiritAutomationSource } from './automationSurface';
 import { normalizeCoreSpiritEventSource, normalizeCoreSpiritWhenCondition } from './eventSurface';
 import { buildCoreSpiritCompositionGraph } from './composability';
+import { normalizeReadableOperatorsWithTokens, withProtectedCoreSpiritSurfaceText } from './surfaceCst';
 
 export type CoreSpiritSurfaceSyntaxContext = {
   wrapperDepth: number;
@@ -170,18 +171,6 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
     apply: line => line.replace(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/i, '$1let $2 = $3'),
   },
   {
-    id: 'crosses-above',
-    apply: line => line
-      .replace(/\b([A-Za-z_][A-Za-z0-9_\[\]]*)\s+crossesAbove\s+([A-Za-z_][A-Za-z0-9_\[\]]*)/g, 'crossover($1, $2)')
-      .replace(/\bcrossesAbove\s*\(([^,()]+),\s*([^()]+)\)/g, 'crossover($1, $2)'),
-  },
-  {
-    id: 'crosses-below',
-    apply: line => line
-      .replace(/\b([A-Za-z_][A-Za-z0-9_\[\]]*)\s+crossesBelow\s+([A-Za-z_][A-Za-z0-9_\[\]]*)/g, 'crossunder($1, $2)')
-      .replace(/\bcrossesBelow\s*\(([^,()]+),\s*([^()]+)\)/g, 'crossunder($1, $2)'),
-  },
-  {
     id: 'implicit-assignment',
     apply: line => {
       const assignment = line.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
@@ -234,6 +223,10 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
 ];
 
 export function normalizeCoreSpiritSource(source: string): string {
+  // Normalize readable crossing syntax structurally before any legacy line transforms.
+  // This pass is token-aware, so strings/comments and nested call expressions are not
+  // rewritten accidentally.
+  source = normalizeReadableOperatorsWithTokens(source);
   source = normalizeCoreSpiritEventSource(source);
   source = normalizeCoreSpiritAutomationSource(source);
   const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
@@ -309,10 +302,12 @@ export function normalizeCoreSpiritSource(source: string): string {
 
     let currentLines: string[] = [raw];
     for (const transform of CORE_SPIRIT_SURFACE_TRANSFORMS) {
-      currentLines = currentLines.flatMap(line => {
-        const result = transform.apply(line);
-        return typeof result === 'string' ? [result] : (result.lines || [result.line]);
-      });
+      currentLines = currentLines.flatMap(line => withProtectedCoreSpiritSurfaceText(line, protectedLine =>
+        (() => {
+          const result = transform.apply(protectedLine);
+          return typeof result === 'string' ? result : (result.lines || [result.line]);
+        })() as any
+      ));
     }
     out.push(...currentLines);
   }
