@@ -6,9 +6,8 @@ const BOUNDARY_LEXEMES = new Set([
 ]);
 
 const BOUNDARY_TYPES = new Set([
-  'equalEqual','bangEqual','less','lessEqual','greater','greaterEqual',
-  'plus','minus','star','slash','percent','comma','semicolon',
-  'colon','leftBrace','rightBrace',
+  'equal','equalEqual','bangEqual','less','lessEqual','greater','greaterEqual',
+  'comma','semicolon','colon','leftBrace','rightBrace','and','or',
 ]);
 
 type SpanReplacement = { start:number; end:number; text:string };
@@ -42,12 +41,10 @@ function findExpressionStart(tokens: CoreSpiritToken[], index:number):number {
       i=open-1;
       continue;
     }
-    if(token.type==='dot'){
-      i-=1;
-      continue;
-    }
+    if(token.type==='dot'){i-=1;continue;}
+    if(token.type==='leftParen'||token.type==='leftBracket'||token.type==='plus'||token.type==='minus'||token.type==='star'||token.type==='slash'||token.type==='percent'){i-=1;continue;}
     if(token.type==='identifier'||token.type==='number'||token.type==='string'||token.type==='true'||token.type==='false'||token.type==='null'){
-      if(token.type==='identifier' && BOUNDARY_LEXEMES.has(token.lexeme)) return i+1;
+      if(token.type==='identifier'&&BOUNDARY_LEXEMES.has(token.lexeme)) return i+1;
       i-=1;
       continue;
     }
@@ -74,8 +71,7 @@ function findExpressionEnd(tokens: CoreSpiritToken[], index:number):number {
     }
     if(parenDepth===0&&bracketDepth===0){
       if(token.type==='eof'||BOUNDARY_TYPES.has(token.type)) break;
-      if(token.type==='identifier' && BOUNDARY_LEXEMES.has(token.lexeme)) break;
-      if(i>index && token.line>firstLine) break;
+      if(i>index&&token.line>firstLine) break;
     }
     i+=1;
   }
@@ -100,7 +96,11 @@ export function normalizeReadableOperatorsWithTokens(source:string):string {
   for(let i=0;i<tokens.length;i+=1){
     const token=tokens[i];
     if(token.type!=='identifier'||(token.lexeme!=='crossesAbove'&&token.lexeme!=='crossesBelow')) continue;
-    if(tokens[i+1]?.type==='leftParen'){
+    const previous=tokens[i-1];
+    const functionalBoundary=i===0||!previous||BOUNDARY_TYPES.has(previous.type)||
+      previous.type==='leftParen'||previous.type==='leftBracket'||
+      (previous.type==='identifier'&&BOUNDARY_LEXEMES.has(previous.lexeme));
+    if(functionalBoundary&&tokens[i+1]?.type==='leftParen'){
       let depth=0;
       let end=i+1;
       for(;end<tokens.length;end+=1){
@@ -108,8 +108,7 @@ export function normalizeReadableOperatorsWithTokens(source:string):string {
         else if(tokens[end].type==='rightParen'){depth-=1;if(depth===0)break;}
       }
       if(end<tokens.length&&tokens[end].type==='rightParen'){
-        const call=token.lexeme==='crossesAbove'?'crossover':'crossunder';
-        replacements.push({start:token.offset,end:token.offset+token.lexeme.length,text:call});
+        replacements.push({start:token.offset,end:token.offset+token.lexeme.length,text:token.lexeme==='crossesAbove'?'crossover':'crossunder'});
         continue;
       }
     }
