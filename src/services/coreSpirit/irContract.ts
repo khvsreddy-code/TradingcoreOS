@@ -16,15 +16,23 @@ export type CoreSpiritIrOpcode = typeof CORE_SPIRIT_IR_OPCODES[number];
 function hasValidInstructionOrigin(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const origin=value as Record<string,unknown>;
+  const start=origin.start;
+  const end=origin.end;
+  const line=origin.line;
+  const column=origin.column;
   return typeof origin.sourceNodeId === 'string' &&
-    Number.isInteger(origin.start) &&
-    Number.isInteger(origin.end) &&
-    origin.start >= 0 &&
-    origin.end >= origin.start &&
-    Number.isInteger(origin.line) &&
-    origin.line >= 1 &&
-    Number.isInteger(origin.column) &&
-    origin.column >= 1;
+    typeof start === 'number' &&
+    typeof end === 'number' &&
+    typeof line === 'number' &&
+    typeof column === 'number' &&
+    Number.isInteger(start) &&
+    Number.isInteger(end) &&
+    start >= 0 &&
+    end >= start &&
+    Number.isInteger(line) &&
+    line >= 1 &&
+    Number.isInteger(column) &&
+    column >= 1;
 }
 
 export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIrInstruction {
