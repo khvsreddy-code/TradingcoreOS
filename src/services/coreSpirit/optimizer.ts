@@ -1,4 +1,5 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
+import { coreSpiritSourceMapFromInstructions } from './ir';
 
 /** Conservative IR optimizer. Only folds operations whose operands are compile-time constants. */
 export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIrProgram {
@@ -12,7 +13,7 @@ export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIr
       const value = constants.get(instruction.operand)!;
       const folded = foldUnary(instruction.operator, value);
       constants.set(instruction.dest, folded);
-      return { op:'const', dest:instruction.dest, value:folded };
+      return { op:'const', dest:instruction.dest, value:folded, origin:instruction.origin };
     }
     if (instruction.op === 'binary' && constants.has(instruction.left) && constants.has(instruction.right)) {
       const folded = foldBinary(instruction.operator, constants.get(instruction.left)!, constants.get(instruction.right)!);
@@ -22,11 +23,11 @@ export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIr
     if (instruction.op === 'move' && constants.has(instruction.source)) {
       const value = constants.get(instruction.source)!;
       constants.set(instruction.dest, value);
-      return { op:'const', dest:instruction.dest, value };
+      return { op:'const', dest:instruction.dest, value, origin:instruction.origin };
     }
     return instruction;
   });
-  return { ...program, entry:{ ...program.entry, instructions }, diagnostics:[...program.diagnostics] };
+  return { ...program, entry:{ ...program.entry, instructions }, diagnostics:[...program.diagnostics], sourceMap: coreSpiritSourceMapFromInstructions(program.sourceId,instructions) };
 }
 
 function foldUnary(operator:'!'|'+'|'-', value:unknown): number|boolean|null {
