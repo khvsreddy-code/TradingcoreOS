@@ -40,7 +40,7 @@ automate "Momentum":
   if (!graph.edges.some(edge => edge.from === 'model:Regime' && edge.relation === 'feeds')) throw new Error('MODEL -> WHEN composition missing');
   if (!graph.edges.some(edge => edge.from.startsWith('condition:') && edge.to === 'event:LONG' && edge.relation === 'triggers')) throw new Error('WHEN -> EVENT composition missing');
   if (!graph.edges.some(edge => edge.to === 'automation:Momentum' && edge.relation === 'triggers')) throw new Error('WHEN -> AUTOMATE composition missing');
-  if (!graph.edges.some(edge => edge.to.startsWith('order-intent:') && edge.relation === 'routes')) throw new Error('AUTOMATE -> ORDER composition missing');
+  if (!graph.edges.some(edge => edge.from.startsWith('condition:') && edge.to.startsWith('order-intent:') && edge.relation === 'triggers')) throw new Error('CONDITION -> ORDER composition missing');
 
   const simple = compileCoreSpirit('show ema(close, 20)', 'stage54-simple');
   if (!simple.ir || simple.diagnostics.some(d => d.severity === 'error')) throw new Error('simplest CoreSpirit example failed');
