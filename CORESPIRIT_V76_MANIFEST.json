@@ -1,0 +1,30 @@
+{
+  "release": "CoreSpirit v76 — CST-aware normalization + canonical source compilation unit",
+  "baseline": "v75",
+  "roadmap_range": "1–59",
+  "kind": "compiler_hardening",
+  "changes": [
+    "token-aware readable crossing normalization",
+    "protected legacy compatibility surface",
+    "canonical source-to-semantics compilation unit",
+    "source-based compiler entry point",
+    "editor diagnostics/type lookup convergence"
+  ],
+  "architecture_invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "existing lexer/parser remain the language foundation",
+    "CST/AST/semantic model are representations, not runtimes",
+    "legacy regex transforms are compatibility-only",
+    "new language semantics must not be added to the regex layer"
+  ],
+  "target_pipeline": [
+    "source",
+    "lexer / CST-aware normalization",
+    "normalized AST",
+    "semantic model",
+    "IR",
+    "optimized IR",
+    "VM / reactive runtime"
+  ],
+  "roadmap_note": "v76 does not add stage 60; it hardens the existing 59-stage architecture."
+}
