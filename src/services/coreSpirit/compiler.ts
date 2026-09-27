@@ -37,6 +37,7 @@ export class CoreSpiritCompiler {
     const mark=(n:CoreSpiritAstNode,before:number)=>{ if(n.span && instructions.length>before) sourceMapEntries.push({instruction:instructions.length-1,start:n.span.start,end:n.span.end,line:n.span.line,column:n.span.column,kind:n.type}); };
     const locals: string[] = [];
     const dataRefRegisters = new Map<string, string>();
+    const modelRefRegisters = new Map<string, string>();
     const dataMemberSources = new Map<CoreSpiritAstNode, { ref: string; field: 'open'|'high'|'low'|'close'|'volume'|'time' }>();
     let temp = 0;
 
@@ -97,7 +98,8 @@ export class CoreSpiritCompiler {
             instructions.push({ op:'call', dest:memberDest, name:'visual.area', args:[areaDest], callId:`chart.area:${n.member}:${n.span?.start ?? temp}` });
             return memberDest;
           }
-          const isModelRef = n.target.type === 'call' && n.target.name === 'model';
+          const isModelRef = (n.target.type === 'call' && n.target.name === 'model') ||
+            (n.target.type === 'identifier' && modelRefRegisters.has(n.target.name));
           if (isModelRef) {
             const target = expr(n.target);
             const memberDest = `t${temp++}`;
@@ -132,7 +134,16 @@ export class CoreSpiritCompiler {
       switch(n.type){
         case 'program': n.body.forEach(stmt); break;
         case 'typeDeclaration': break;
-        case 'let': { const source=expr(n.expression); const isDataRef = n.expression.type === 'call' && (n.expression.name === 'market' || n.expression.name === 'timeframe'); if (isDataRef) dataRefRegisters.set(n.name, source); instructions.push({op:'setLocal',name:n.name,source,series:!isDataRef}); if(!locals.includes(n.name))locals.push(n.name); break; }
+        case 'let': {
+          const source=expr(n.expression);
+          const isDataRef = n.expression.type === 'call' && (n.expression.name === 'market' || n.expression.name === 'timeframe');
+          const isModelRef = n.expression.type === 'call' && n.expression.name === 'model';
+          if (isDataRef) dataRefRegisters.set(n.name, source);
+          if (isModelRef) modelRefRegisters.set(n.name, source);
+          instructions.push({op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef});
+          if(!locals.includes(n.name))locals.push(n.name);
+          break;
+        }
         case 'expressionStatement': expr(n.expression); break;
         case 'if': {
           const condition=expr(n.condition), jumpFalse=instructions.length; instructions.push({op:'jumpIfFalse',condition,target:-1});
