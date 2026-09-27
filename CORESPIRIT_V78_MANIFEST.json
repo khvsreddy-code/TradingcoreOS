@@ -1,0 +1,28 @@
+{
+  "release": "CoreSpirit v78 — P0 instruction provenance + optimized source maps",
+  "baseline": "v77",
+  "roadmap_range": "1–59",
+  "kind": "compiler_correctness_hardening",
+  "focus": [
+    "attach source origin directly to compiler-emitted IR instructions",
+    "preserve origin through optimizer transformations",
+    "regenerate source maps from optimized instructions",
+    "eliminate AST-index source-map approximation",
+    "feed semantic graph source attribution from direct instruction provenance"
+  ],
+  "origin_contract": {
+    "fields": ["sourceNodeId","start","end","line","column"],
+    "policy": "compiler-generated instructions carry their originating AST source span"
+  },
+  "architecture_invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "source provenance is carried by IR rather than reconstructed from instruction order",
+    "optimizers must preserve or intentionally merge provenance",
+    "downstream tools must not guess source ownership from instruction indexes"
+  ],
+  "verification": {
+    "roadmap": "59 stages; v78 is a P0 hardening cycle",
+    "source_map": "instruction origins, optimized-map regeneration and validator contract added",
+    "build": "full application build remains environment-dependent"
+  }
+}
