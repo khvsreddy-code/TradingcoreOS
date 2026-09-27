@@ -85,7 +85,16 @@ function stableChecksum(value: unknown): string {
 }
 
 function asSource(program: CoreSpiritIrProgram, instruction: number) {
-  const entry = program.sourceMap.entries.filter(item => item.instruction <= instruction).at(-1);
+  const current = program.entry.instructions[instruction];
+  if (current?.origin) {
+    return {
+      start: current.origin.start,
+      end: current.origin.end,
+      line: current.origin.line,
+      column: current.origin.column,
+    };
+  }
+  const entry = program.sourceMap.entries.find(item => item.instruction === instruction);
   return entry ? { start: entry.start, end: entry.end, line: entry.line, column: entry.column } : undefined;
 }
 
