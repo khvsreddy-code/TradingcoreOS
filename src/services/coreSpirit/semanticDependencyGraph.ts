@@ -355,6 +355,8 @@ export function buildCoreSpiritSemanticDependencyGraph(
           } else {
             bindings[node.name] = symbolId;
           }
+        } else if (node.expression.type === 'call' && (node.expression.name === 'market' || node.expression.name === 'timeframe')) {
+          bindings[node.name] = valueId;
         } else {
           bindings[node.name] = symbolId;
         }
