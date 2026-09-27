@@ -1,0 +1,19 @@
+{
+  "release": "CoreSpirit v74 — Language Simplification cycle + Supabase user-settings ACL repair",
+  "baseline": "v73",
+  "roadmap_range": "1–59",
+  "kind": "reduction_cycle_and_backend_access_correction",
+  "focus": [
+    "reduce author-facing syntax complexity without adding roadmap stage 60",
+    "compiler absorbs source-sugar complexity into one semantic model",
+    "preserve show/when/emit/automate as primary user concepts",
+    "freeze one language -> one compiler -> one stable IR -> one VM",
+    "repair authenticated PostgREST access for browser-facing user-owned tables"
+  ],
+  "invariants": [
+    "simple/advanced/professional authoring levels share one execution substrate",
+    "renderer, broker, model transport and risk-policy plumbing remain hidden infrastructure",
+    "RLS remains the row-level authority for user-owned persistence",
+    "no anonymous DML access was added"
+  ]
+}
