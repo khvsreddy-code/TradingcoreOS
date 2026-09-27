@@ -18,7 +18,7 @@ export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIr
     if (instruction.op === 'binary' && constants.has(instruction.left) && constants.has(instruction.right)) {
       const folded = foldBinary(instruction.operator, constants.get(instruction.left)!, constants.get(instruction.right)!);
       constants.set(instruction.dest, folded);
-      return { op:'const', dest:instruction.dest, value:folded };
+      return { op:'const', dest:instruction.dest, value:folded, origin:instruction.origin };
     }
     if (instruction.op === 'move' && constants.has(instruction.source)) {
       const value = constants.get(instruction.source)!;
