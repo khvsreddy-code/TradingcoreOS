@@ -331,6 +331,7 @@ export function describeCoreSpiritSurface(source: string): CoreSpiritSurfaceMeta
     ...surface,
     composition: {
       version: graph.version,
+      sourceGraphVersion: graph.sourceGraphVersion,
       nodes: graph.nodes.map(node => ({ id: node.id, kind: node.kind, name: node.name, contract: node.contract })),
       edges: graph.edges.map(edge => ({ from: edge.from, to: edge.to, relation: edge.relation })),
     },
