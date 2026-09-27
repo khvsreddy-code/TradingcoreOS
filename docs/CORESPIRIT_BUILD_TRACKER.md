@@ -1473,3 +1473,52 @@ CST is authoring fidelity, AST is normalized language meaning, the semantic mode
 - [ ] Completion and diagnostics consume the same semantic model.
 - [ ] Equivalent source forms prove equivalent semantic/IR identities.
 - [ ] Redundant source-string scanners are retired where possible.
+
+
+## v76 implementation record — compiler source-of-truth + CST-aware normalization
+
+v76 is a hardening/consolidation release. It does not add roadmap stage 60. The active roadmap remains 59 stages.
+
+### Built
+
+- Added `src/services/coreSpirit/surfaceCst.ts`.
+- Added token-aware readable crossing normalization using the existing CoreSpirit lexer.
+- Removed `crossesAbove` / `crossesBelow` from the legacy regex transform list.
+- Added protected compatibility transformation so remaining line/regex helpers cannot rewrite strings or comments.
+- Added `src/services/coreSpirit/compilerPipeline.ts` as the canonical source-to-semantics gateway.
+- Added `CoreSpiritCompiler.compileSource()` so source compilation can begin from that gateway instead of requiring callers to construct an AST independently.
+- Routed editor diagnostics and type lookup through the canonical compilation unit.
+- Exported the new normalization/pipeline contracts from `src/services/coreSpirit/index.ts`.
+- Added `stage76CstPipeline.test.ts` covering nested expressions, functional crossing syntax, strings/comments and canonical source-unit normalization.
+
+### Architectural result
+
+```text
+SOURCE
+  ↓
+LEXER / CST-aware surface boundary
+  ↓
+NORMALIZED SOURCE
+  ↓
+PARSER / AST
+  ↓
+SEMANTIC ANALYSIS
+  ↓
+IR
+  ↓
+VM
+```
+
+The remaining regex layer is compatibility infrastructure only. It is no longer the place to add new language semantics.
+
+### Still open
+
+- [ ] Move SHOW/WHEN/INPUT/automation/model surface transforms from line regexes to token/AST transforms incrementally.
+- [ ] Build the full canonical semantic-program model consumed by diagnostics, completion, composition graphs and debugger views.
+- [ ] Remove remaining source-string metadata scanners after equivalent AST/semantic data exists.
+- [ ] Prove equivalent surface forms yield equivalent normalized AST/semantic fingerprints.
+- [ ] Add parser-aware preservation for all source trivia needed by formatter/refactor tooling.
+
+### Verification note
+
+The new Stage 76 fixture is intended as a focused contract. Full application/Vite build status remains dependent on the deployment dependency environment.
