@@ -6,13 +6,13 @@
 
 ## Current release
 
-**Release:** CoreSpirit v74 — CoreSpirit Language Simplification cycle + Supabase user-settings ACL repair
+**Release:** CoreSpirit v77 — semantic dependency graph composability hardening
 
 **Tracker state:** restored as a first-class project document.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
-**Machine release record:** `CORESPIRIT_V74_MANIFEST.json`
+**Machine release record:** `CORESPIRIT_V77_MANIFEST.json`
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments.
 
@@ -1646,3 +1646,8 @@ The semantic graph is now the source-level authority for composability. The exis
 ### Verification boundary
 
 The focused semantic-composability regression is the primary v77 contract. Full application/Vite build verification remains deployment-environment dependent.
+
+
+### v77 refinement — automation ownership boundary
+
+The semantic graph deliberately models the runtime dependency chain that can be proven from normalized AST semantics. For a named AUTOMATE container, event triggers are explicit surface declarations, while order intents are semantic action nodes. The current normalized AST does not yet preserve exact container ownership for every order intent, so v77 does not fabricate an `AUTOMATION → ORDER` edge. The next migration should preserve declaration ownership during normalization so that container-level projections can be produced from the same semantic graph without lexical guessing.
