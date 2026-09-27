@@ -10,10 +10,22 @@ import { buildCoreSpiritGraphBundle } from './semanticGraph';
 import { getCoreSpiritBuiltin } from './standardLibrary';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
+import { createCoreSpiritCompilationUnit } from './compilerPipeline';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
 export class CoreSpiritCompiler {
+  compileSource(
+    source: string,
+    sourceId = 'coreSpirit',
+    options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata } = {},
+  ): CoreSpiritCompileResult {
+    const unit = createCoreSpiritCompilationUnit(source, options);
+    const errors = unit.diagnostics.filter(d => d.severity === 'error');
+    if (errors.length || !unit.semantic) return { diagnostics: unit.diagnostics };
+    return this.compile(unit.ast, sourceId, options);
+  }
+
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata } = {}): CoreSpiritCompileResult {
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const names = resolveCoreSpiritNames(ast);
