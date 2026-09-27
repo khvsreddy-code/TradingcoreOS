@@ -6,13 +6,13 @@
 
 ## Current release
 
-**Release:** CoreSpirit v77 — semantic dependency graph composability hardening
+**Release:** CoreSpirit v78 — P0 source provenance / source-map hardening
 
 **Tracker state:** restored as a first-class project document.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
-**Machine release record:** `CORESPIRIT_V77_MANIFEST.json`
+**Machine release record:** `CORESPIRIT_V78_MANIFEST.json`
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments.
 
@@ -1651,3 +1651,118 @@ The focused semantic-composability regression is the primary v77 contract. Full 
 ### v77 refinement — automation ownership boundary
 
 The semantic graph deliberately models the runtime dependency chain that can be proven from normalized AST semantics. For a named AUTOMATE container, event triggers are explicit surface declarations, while order intents are semantic action nodes. The current normalized AST does not yet preserve exact container ownership for every order intent, so v77 does not fabricate an `AUTOMATION → ORDER` edge. The next migration should preserve declaration ownership during normalization so that container-level projections can be produced from the same semantic graph without lexical guessing.
+
+
+## v78 implementation record — P0 source provenance / source-map hardening
+
+v78 continues the existing 59-stage reduction/consolidation cycle. No roadmap stage 60 is added.
+
+### #1 / #3 / #4 consolidation carried forward
+
+- [x] Source compilation has a canonical source-to-semantics gateway.
+- [x] Readable crossing normalization uses the existing lexer.
+- [x] Legacy regex normalization is compatibility-only and protected from strings/comments.
+- [x] Composability derives from semantic entities rather than lexical identifier scans.
+- [x] Model/data aliases preserve semantic entity identity.
+
+### #5 — instruction-origin tracking
+
+Previous state:
+
+\`\`\`text
+AST node index
+      ↓
+approximate instruction index
+      ↓
+source map
+\`\`\`
+
+v78 state:
+
+\`\`\`text
+AST node
+   ↓
+compiler emission
+   ↓
+IR instruction { origin: ... }
+   ↓
+optimizer preserves origin
+   ↓
+optimized IR
+   ↓
+source map regenerated from instructions
+\`\`\`
+
+Added to the IR contract:
+
+\`\`\`text
+origin.sourceNodeId
+origin.start
+origin.end
+origin.line
+origin.column
+\`\`\`
+
+Added:
+
+\`\`\`text
+coreSpiritSourceMapFromInstructions(...)
+\`\`\`
+
+The compiler now attaches origin metadata at instruction emission rather than reconstructing ownership later. The old unused \`mark()\` helper and AST-index source-map construction are removed from the compiler path.
+
+### Optimizer contract
+
+The constant-folding optimizer now preserves instruction origins when replacing:
+
+\`\`\`text
+unary → const
+binary → const
+move  → const
+\`\`\`
+
+The optimizer also regenerates the source map from its actual output instruction sequence. This removes the pre-optimization index-staleness problem.
+
+### IR validation
+
+The IR contract validates provenance shape when \`origin\` is present without breaking existing version-1 artifacts that may not contain it.
+
+### Semantic graph integration
+
+The IR-derived semantic graph now reads the instruction's direct \`origin\` first and only falls back to the source map when necessary. It no longer assumes the nearest earlier source-map entry owns an instruction.
+
+### Regression coverage
+
+Added:
+
+\`\`\`text
+src/services/coreSpirit/stage78SourceMapOrigins.test.ts
+\`\`\`
+
+The contract covers:
+
+- one AST construct producing multiple IR instructions;
+- model member lowering;
+- IF/WHEN control-flow origins;
+- event/body origins;
+- optimizer-preserved origin metadata;
+- one source-map entry per origin-bearing optimized instruction;
+- source-map entries agreeing with instruction origins.
+
+### #5 acceptance boundary
+
+\`\`\`text
+No instruction-index guessing
+No pre-optimization source-map authority
+No downstream lexical ownership reconstruction
+Every compiler instruction has provenance
+Every optimization replacement preserves provenance
+\`\`\`
+
+### Remaining provenance work
+
+- [ ] Introduce stable semantic-node IDs independent of only source spans where refactors require identity continuity.
+- [ ] Carry semantic entity IDs alongside sourceNodeId on IR instructions.
+- [ ] Preserve merged provenance when an optimization combines multiple source-originated operations into one instruction.
+- [ ] Expose origin data to debugger/profiler/replay UI.
+- [ ] Add end-to-end source-map tests after every future IR optimization pass.
