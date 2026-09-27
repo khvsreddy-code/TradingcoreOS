@@ -38,7 +38,7 @@ automate "Momentum":
     if (!ids.has(id)) throw new Error(`composition node missing: ${id}`);
   }
   if (!graph.edges.some(edge => edge.from === 'model:Regime' && edge.relation === 'feeds')) throw new Error('MODEL -> WHEN composition missing');
-  if (!graph.edges.some(edge => edge.from === 'event:LONG' && edge.to.startsWith('condition:') && edge.relation === 'feeds')) throw new Error('EVENT -> WHEN composition missing');
+  if (!graph.edges.some(edge => edge.from.startsWith('condition:') && edge.to === 'event:LONG' && edge.relation === 'triggers')) throw new Error('WHEN -> EVENT composition missing');
   if (!graph.edges.some(edge => edge.to === 'automation:Momentum' && edge.relation === 'triggers')) throw new Error('WHEN -> AUTOMATE composition missing');
   if (!graph.edges.some(edge => edge.to.startsWith('order-intent:') && edge.relation === 'routes')) throw new Error('AUTOMATE -> ORDER composition missing');
 
