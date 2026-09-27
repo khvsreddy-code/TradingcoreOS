@@ -5,6 +5,7 @@ import { normalizeCoreSpiritSource } from './syntax';
 import { getCoreSpiritMemberContracts } from './memberRegistry';
 import { CORE_SPIRIT_LANGUAGE_CONCEPTS } from './languageConcepts';
 import { getCoreSpiritModelSurfaceDeclarations } from './modelSurface';
+import { createCoreSpiritCompilationUnit } from './compilerPipeline';
 
 export type CoreSpiritCompletion = { label: string; kind: 'function'|'keyword'|'series'|'visual'|'data'|'type'|'property'; detail: string; insertText?: string };
 export type CoreSpiritTypeInfo = { name:string; type:string; detail:string };
@@ -68,13 +69,12 @@ export function getCoreSpiritTypeInfo(source:string, cursor:number):CoreSpiritTy
   if(!word) return null;
 
   try {
-    const parsed=new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
-    if(!parsed.diagnostics.length) {
-      const semantic=analyzeCoreSpirit(parsed.ast);
-      const type=semantic.symbols.get(word);
+    const unit=createCoreSpiritCompilationUnit(source);
+    if(!unit.diagnostics.length&&unit.semantic) {
+      const type=unit.semantic.symbols.get(word);
       if(type) return {name:word,type,detail:`${word}: ${type}`};
 
-      const udt=semantic.udts.get(word);
+      const udt=unit.semantic.udts.get(word);
       if(udt) return {name:word,type:`type ${udt.name}`,detail:`${udt.fields.length} field(s)`};
     }
   } catch {
@@ -213,13 +213,13 @@ export function formatCoreSpiritSource(source: string): string {
 }
 
 export function diagnoseCoreSpiritSource(source: string): CoreSpiritEditorDiagnostic[] {
-  const parsed = new CoreSpiritParser(source).parseDetailed();
-  const diagnostics: CoreSpiritEditorDiagnostic[] = parsed.diagnostics.map(d => ({ message:d.message, line:d.line, column:d.column, severity:'error' }));
-  if (!diagnostics.length) {
-    const semantic = analyzeCoreSpirit(parsed.ast);
-    diagnostics.push(...semantic.diagnostics.map(d => ({ message:d.message, line:d.line || 1, column:d.column || 1, severity:d.severity })));
-  }
-  return diagnostics;
+  const unit=createCoreSpiritCompilationUnit(source);
+  return unit.diagnostics.map(d => ({
+    message:d.message,
+    line:d.line || 1,
+    column:d.column || 1,
+    severity:d.severity,
+  }));
 }
 
 export function getCoreSpiritSignature(name: string): string | null {
