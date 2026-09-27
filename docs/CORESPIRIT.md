@@ -6487,3 +6487,241 @@ semantically convergent
 ```
 
 If a rule needs unbounded regex knowledge of nested language syntax, it belongs in the lexer/parser/AST layers instead.
+
+
+## v77 semantic graph consolidation — #1, #3 and #4
+
+v77 deepens the v76 compiler-hardening cycle by moving the composition model from lexical source discovery to resolved semantic entities.
+
+### #1 — the architecture is now defined around one semantic program
+
+The current pipeline is:
+
+\`\`\`text
+SOURCE
+  ↓
+LEXER / CST-aware surface boundary
+  ↓
+NORMALIZED SOURCE
+  ↓
+AST
+  ↓
+SEMANTIC MODEL
+  ↓
+SEMANTIC DEPENDENCY GRAPH
+  ↓
+IR
+  ↓
+OPTIMIZED IR
+  ↓
+VM / REACTIVE RUNTIME
+\`\`\`
+
+The semantic dependency graph is the bridge between language meaning and the many views the platform needs.
+
+It answers:
+
+\`\`\`text
+What is this symbol?
+What produces it?
+What data does it depend on?
+Which model output does it consume?
+Which condition gates it?
+Which event does it emit?
+Which visual does it feed?
+Which automation/order intent is downstream?
+\`\`\`
+
+The graph is semantic data. It does not execute code, access a broker, or become another runtime.
+
+### One source, many projections
+
+The intended projection tree is:
+
+\`\`\`text
+                 SEMANTIC PROGRAM MODEL
+                          │
+                 SEMANTIC DEPENDENCY GRAPH
+              ┌───────────┼────────────┐
+              ↓           ↓            ↓
+        diagnostics   completion    composition
+              ↓           ↓            ↓
+           editor      language UI   architecture view
+                          │
+                          ↓
+                         IR
+                          │
+          ┌───────────────┼─────────────────┐
+          ↓               ↓                 ↓
+      execution        reactive           replay
+       projection       projection        projection
+\`\`\`
+
+The source semantic graph is therefore the authoring/dependency authority. The existing IR graph remains useful for execution-specific instruction ordering and performance analysis; the migration goal is to link that execution graph back to semantic identities rather than independently rediscovering language meaning.
+
+### #3 — regex is now compatibility infrastructure
+
+The existing lexer is the structural authority for readable syntax such as:
+
+\`\`\`corespirit
+ema(close, 20) crossesAbove ema(close, 50)
+\`\`\`
+
+The token-aware layer handles balanced nested expressions and protects strings/comments.
+
+Legacy line transforms remain only for compatibility spellings that have not yet received first-class AST forms. They are explicitly behind a protected boundary.
+
+New language constructs must not be added by growing unbounded regex rules.
+
+The migration order remains:
+
+\`\`\`text
+regex compatibility
+       ↓
+token-aware transform
+       ↓
+AST transform
+       ↓
+semantic lowering
+\`\`\`
+
+### #4 — composability is now semantic, not lexical
+
+The old composition question was effectively:
+
+\`\`\`text
+"What words appear in this source?"
+\`\`\`
+
+The new question is:
+
+\`\`\`text
+"What resolved semantic entities depend on what other semantic entities?"
+\`\`\`
+
+A semantic dependency graph now contains entities such as:
+
+\`\`\`text
+data source
+symbol / value
+model
+model output
+condition
+event
+visual
+automation
+order intent
+\`\`\`
+
+and edges such as:
+
+\`\`\`text
+depends-on
+emits
+triggers
+renders
+contains
+\`\`\`
+
+### Why this matters
+
+Consider:
+
+\`\`\`corespirit
+let value = close
+let closeText = "hello close"
+\`\`\`
+
+The semantic graph contains:
+
+\`\`\`text
+data:close ──depends-on──> symbol:value
+\`\`\`
+
+but it does not create a dependency from \`close\` to \`closeText\`.
+
+Likewise:
+
+\`\`\`corespirit
+obj.close
+\`\`\`
+
+resolves the target object first. The member name \`close\` is not automatically treated as a market-data dependency.
+
+And:
+
+\`\`\`corespirit
+function(close)
+\`\`\`
+
+makes the \`close\` argument a real dependency because the AST identifies it as an expression argument.
+
+This is the difference between lexical matching and semantic dependency construction.
+
+### Model aliases are one semantic identity
+
+The semantic analyzer and compiler now preserve model binding identity through assignments:
+
+\`\`\`corespirit
+regime = model("Regime")
+
+when regime.confidence > 0.8:
+    emit "LONG"
+\`\`\`
+
+The identifier \`regime\` is resolved to the same MODEL entity rather than being treated as an unrelated variable whose member access happens to contain the word \`confidence\`.
+
+The compiler uses the same binding for \`__model_get\`, keeping model semantics aligned between analysis, composition and execution.
+
+### Composability projections
+
+The user-facing composition graph is now deliberately smaller than the internal semantic graph.
+
+\`\`\`text
+semantic dependency graph
+          ↓
+composition projection
+          ↓
+value / data / model / model-output
+condition / event / show
+automation / order-intent
+\`\`\`
+
+The semantic graph retains resolved dependency information; the composition projection exists for language inspection, editor visualization, documentation and future graph tooling.
+
+### #4 acceptance test
+
+A composability implementation is not considered semantic unless:
+
+\`\`\`text
+strings are ignored as identifiers
+comments are ignored as identifiers
+member names are not mistaken for symbols
+function arguments are real dependencies
+model aliases preserve entity identity
+data references preserve field identity
+conditions create explicit dependency nodes
+events/visuals/order intents are explicit output entities
+duplicate edges are deterministic
+\`\`\`
+
+### Remaining migration work
+
+v77 is intentionally not claiming that every graph view has already been moved to the same source graph.
+
+The next consolidation steps are:
+
+\`\`\`text
+semantic dependency graph
+        ↓
+attach stable semantic IDs to IR nodes
+        ↓
+execution graph references semantic IDs
+        ↓
+reactive graph references semantic IDs
+        ↓
+visual / automation / debugger projections reference semantic IDs
+\`\`\`
+
+That gives CoreSpirit one true meaning graph while still allowing execution-specific representations underneath.
+
