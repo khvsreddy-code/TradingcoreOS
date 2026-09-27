@@ -28,4 +28,29 @@ export type CoreSpiritIrInstruction =
 export type CoreSpiritIrBlock = { instructions:CoreSpiritIrInstruction[] };
 export type CoreSpiritSourceMapEntry = { instruction:number; sourceNodeId?:string; start:number; end:number; line:number; column:number; kind:string };
 export type CoreSpiritSourceMap = { version:1; sourceId:string; entries:CoreSpiritSourceMapEntry[] };
+export function coreSpiritSourceMapFromInstructions(
+  sourceId: string,
+  instructions: readonly CoreSpiritIrInstruction[],
+): CoreSpiritSourceMap {
+  return {
+    version: 1,
+    sourceId,
+    entries: instructions.flatMap((instruction,index) => instruction.origin
+      ? [{
+          instruction: index,
+          sourceNodeId: instruction.origin.sourceNodeId,
+          start: instruction.origin.start,
+          end: instruction.origin.end,
+          line: instruction.origin.line,
+          column: instruction.origin.column,
+          kind: instruction.op === 'emit'
+            ? 'emit:' + instruction.kind
+            : instruction.op === 'call'
+              ? 'call:' + instruction.name
+              : instruction.op,
+        }]
+      : []),
+  };
+}
+
 export type CoreSpiritIrProgram = { version:1; sourceId:string; entry:CoreSpiritIrBlock; locals:string[]; maxLookback:number; diagnostics:string[]; sourceMap:CoreSpiritSourceMap; graphs?: CoreSpiritGraphBundle; surface?: CoreSpiritSurfaceMetadata };
