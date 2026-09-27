@@ -49,7 +49,7 @@ function sourceSpan(n: CoreSpiritAstNode) {
 }
 
 function literalString(n?: CoreSpiritAstNode): string | undefined {
-  return n?.type === 'string' ? n.value : undefined;
+  return n?.type === 'string' && typeof n.value === 'string' ? n.value : undefined;
 }
 
 export function buildCoreSpiritSemanticDependencyGraph(
