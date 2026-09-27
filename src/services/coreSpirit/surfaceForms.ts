@@ -302,12 +302,10 @@ export function normalizeCoreSpiritSource(source: string): string {
 
     let currentLines: string[] = [raw];
     for (const transform of CORE_SPIRIT_SURFACE_TRANSFORMS) {
-      currentLines = currentLines.flatMap(line => withProtectedCoreSpiritSurfaceText(line, protectedLine =>
-        (() => {
-          const result = transform.apply(protectedLine);
-          return typeof result === 'string' ? result : (result.lines || [result.line]);
-        })() as any
-      ));
+      currentLines = currentLines.flatMap(line => {
+        const result = withProtectedCoreSpiritSurfaceText(line, protectedLine => transform.apply(protectedLine));
+        return typeof result === 'string' ? [result] : (result.lines || [result.line]);
+      });
     }
     out.push(...currentLines);
   }
