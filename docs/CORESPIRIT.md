@@ -6725,3 +6725,197 @@ visual / automation / debugger projections reference semantic IDs
 
 That gives CoreSpirit one true meaning graph while still allowing execution-specific representations underneath.
 
+
+
+## v78 P0 source provenance hardening — #5
+
+Source mapping is now treated as a compiler correctness contract rather than a best-effort debugger convenience.
+
+### Previous failure mode
+
+The compiler previously collected AST nodes and assigned instruction indexes approximately:
+
+\`\`\`text
+AST node 0 → instruction 0
+AST node 1 → instruction 1
+AST node 2 → instruction 2
+...
+\`\`\`
+
+That is invalid whenever one source construct emits multiple IR instructions.
+
+Examples include:
+
+\`\`\`corespirit
+model("Regime").confidence
+\`\`\`
+
+which can require multiple instructions, and:
+
+\`\`\`corespirit
+when condition:
+    emit "LONG"
+\`\`\`
+
+which lowers to control-flow plus body instructions.
+
+The old approach could therefore highlight the wrong source span.
+
+A second failure occurred across optimization: if the source map is finalized before constant folding or any future instruction transformation, instruction indexes can change while the map stays stale.
+
+### New rule — origin travels with the instruction
+
+Every compiler-emitted IR instruction can now carry:
+
+\`\`\`text
+origin:
+{
+    sourceNodeId
+    start
+    end
+    line
+    column
+}
+\`\`\`
+
+The \`sourceNodeId\` is a deterministic identity derived from the originating AST node kind and source span.
+
+The important relationship is now:
+
+\`\`\`text
+AST node
+   ↓
+one or more IR instructions
+   ↓
+each instruction keeps the AST origin
+\`\`\`
+
+This is a many-to-one source-to-instruction relationship, not an assumed one-to-one mapping.
+
+### Source map generation
+
+Source maps are now generated from the actual IR instruction stream:
+
+\`\`\`text
+IR instructions
+      ↓
+instruction.origin
+      ↓
+source map entries
+\`\`\`
+
+The centralized helper:
+
+\`\`\`text
+coreSpiritSourceMapFromInstructions(...)
+\`\`\`
+
+constructs the mapping from instruction provenance rather than AST position.
+
+### Optimization rule
+
+Optimization passes must preserve or intentionally transform provenance.
+
+For constant folding:
+
+\`\`\`text
+binary AST node
+     ↓
+binary IR instruction
+     ↓
+constant-folded IR instruction
+\`\`\`
+
+the replacement constant keeps the original binary instruction's \`origin\`.
+
+The optimized program then receives a freshly generated source map from the optimized instruction list.
+
+Therefore:
+
+\`\`\`text
+raw IR
+  ↓
+optimizer
+  ↓
+optimized IR + preserved origins
+  ↓
+fresh source map
+\`\`\`
+
+### Control-flow correctness
+
+For:
+
+\`\`\`corespirit
+when close > 1:
+    emit "LONG"
+\`\`\`
+
+the generated \`jumpIfFalse\` retains the \`if\` source node origin, while the emitted event retains the source node for the corresponding body expression.
+
+This lets debugger/profiler/replay tooling distinguish:
+
+\`\`\`text
+condition source
+vs.
+body source
+\`\`\`
+
+even though both belong to the same lowered control-flow region.
+
+### Provenance applications
+
+Instruction origin is intended to become the common provenance source for:
+
+\`\`\`text
+debugger highlighting
+compiler diagnostics
+visual graph selection
+replay diagnostics
+profiler attribution
+execution explanations
+runtime error localization
+\`\`\`
+
+No downstream tool should reconstruct source ownership by instruction index heuristics.
+
+### IR contract
+
+The IR remains version 1 for compatibility. Provenance is an optional backward-compatible field in the serialized instruction contract, but compiler-generated CoreSpirit artifacts now populate it.
+
+The IR validator also verifies the shape of any supplied provenance:
+
+\`\`\`text
+sourceNodeId = string
+start/end = valid ordered offsets
+line/column = valid positive locations
+\`\`\`
+
+### v78 acceptance test
+
+\`\`\`text
+1. Multiple instructions from one AST node share its sourceNodeId.
+2. Control-flow instructions point to the correct IF/WHEN source node.
+3. Optimized replacements retain the originating source node.
+4. Final source maps reference optimized instruction indexes.
+5. Source map entries agree with instruction.origin.
+6. No AST-index approximation remains.
+\`\`\`
+
+### Boundary with #1/#3/#4
+
+This P0 work strengthens the same single-source architecture:
+
+\`\`\`text
+#1  one semantic source of truth
+        ↓
+#3  safe normalization → canonical AST
+        ↓
+#4  semantic dependency graph
+        ↓
+#5  instruction provenance
+        ↓
+one coherent compiler artifact
+\`\`\`
+
+The result is that the compiler no longer has to guess where its own generated instructions came from.
