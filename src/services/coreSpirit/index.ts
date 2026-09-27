@@ -100,3 +100,6 @@ export * from './eventSystem';
 export * from './eventEngine';
 
 export * from './composability';
+
+export * from './surfaceCst';
+export * from './compilerPipeline';
