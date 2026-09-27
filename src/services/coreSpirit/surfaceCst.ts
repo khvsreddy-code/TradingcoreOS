@@ -191,10 +191,14 @@ function scanProtectedRanges(source:string):ProtectedRange[] {
  * them to inspect strings or comments. This is a containment boundary while
  * those transforms are incrementally retired in favor of token/AST transforms.
  */
-export function withProtectedCoreSpiritSurfaceText(source:string, transform:(code:string)=>string):string {
+export function withProtectedCoreSpiritSurfaceText<T extends string | { line: string; lines?: string[] }>(
+  source:string,
+  transform:(code:string)=>T,
+):T {
   const ranges=scanProtectedRanges(source);
+  const restore=(value:string):string => value.replace(/__CORESPIRIT_PROTECTED_(\d+)__/g,(_full,index)=>ranges[Number(index)]?.value??'');
   if(!ranges.length) return transform(source);
-  const placeholders=ranges.map((range,index)=>`__CORESPIRIT_PROTECTED_${index}__`);
+  const placeholders=ranges.map((_range,index)=>`__CORESPIRIT_PROTECTED_${index}__`);
   let masked='';
   let cursor=0;
   for(const [index,range] of ranges.entries()){
@@ -203,5 +207,10 @@ export function withProtectedCoreSpiritSurfaceText(source:string, transform:(cod
   }
   masked+=source.slice(cursor);
   const transformed=transform(masked);
-  return transformed.replace(/__CORESPIRIT_PROTECTED_(\d+)__/g,(_full,index)=>ranges[Number(index)]?.value??'');
+  if(typeof transformed==='string') return restore(transformed) as T;
+  return {
+    ...transformed,
+    line: restore(transformed.line),
+    ...(transformed.lines ? {lines: transformed.lines.map(restore)} : {}),
+  } as T;
 }
