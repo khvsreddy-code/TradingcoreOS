@@ -111,20 +111,45 @@ export function buildCoreSpiritCompositionGraph(
     if(projected) projectedNodes.set(projected.id,projected);
   }
 
-  const edges: CoreSpiritComposableEdge[] = [];
-  const mapId = (id:string): string | undefined => {
-    if(projectedNodes.has(id)) return id;
-    if(id.startsWith('indicator:')) return id;
-    return undefined;
+  const incoming = new Map<string,Array<{from:string;relation:CoreSpiritSemanticDependencyGraph['edges'][number]['relation']}>>();
+  for(const edge of semanticGraph.edges) {
+    const list=incoming.get(edge.to) ?? [];
+    list.push({from:edge.from,relation:edge.relation});
+    incoming.set(edge.to,list);
+  }
+
+  const projectedEdges:CoreSpiritComposableEdge[] = [];
+  const addProjectedEdge=(from:string,to:string,relation:CoreSpiritComposableEdge['relation']) => {
+    if(from===to||!projectedNodes.has(from)||!projectedNodes.has(to)) return;
+    if(!projectedEdges.some(item=>item.from===from&&item.to===to&&item.relation===relation)) {
+      projectedEdges.push({from,to,relation});
+    }
+  };
+
+  const nearestProjectedAncestors=(sourceId:string,visited=new Set<string>()):string[] => {
+    if(visited.has(sourceId)) return [];
+    visited.add(sourceId);
+    if(projectedNodes.has(sourceId)) return [sourceId];
+    const parents=incoming.get(sourceId) ?? [];
+    const result:string[]=[];
+    for(const parent of parents) {
+      for(const ancestor of nearestProjectedAncestors(parent.from,visited)) {
+        if(!result.includes(ancestor)) result.push(ancestor);
+      }
+    }
+    return result;
   };
 
   for(const edge of semanticGraph.edges) {
-    const from = mapId(edge.from);
-    const to = mapId(edge.to);
-    if(!from || !to || !projectedNodes.has(from) || !projectedNodes.has(to)) continue;
-    const relation = projectRelation(edge.relation);
-    if(!edges.some(item=>item.from===from&&item.to===to&&item.relation===relation)) {
-      edges.push({from,to,relation});
+    if(projectedNodes.has(edge.from)&&projectedNodes.has(edge.to)) {
+      addProjectedEdge(edge.from,edge.to,projectRelation(edge.relation));
+      continue;
+    }
+
+    if(projectedNodes.has(edge.to)) {
+      for(const ancestor of nearestProjectedAncestors(edge.from)) {
+        addProjectedEdge(ancestor,edge.to,projectRelation(edge.relation));
+      }
     }
   }
 
@@ -132,10 +157,9 @@ export function buildCoreSpiritCompositionGraph(
     version:2,
     sourceGraphVersion:semanticGraph.version,
     nodes:Object.freeze([...projectedNodes.values()]),
-    edges:Object.freeze(edges),
+    edges:Object.freeze(projectedEdges),
   });
 }
-
 export function validateCoreSpiritCompositionGraph(graph: CoreSpiritCompositionGraph): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
