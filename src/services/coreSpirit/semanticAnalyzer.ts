@@ -29,6 +29,7 @@ export type CoreSpiritSemanticResult = {
   diagnostics:CoreSpiritDiagnostic[];
   symbols:Map<string,CoreSpiritType>;
   udts:Map<string,CoreSpiritUdt>;
+  modelBindings:Map<string,string>;
   maxLookback:number;
 };
 
@@ -46,6 +47,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
   const diagnostics:CoreSpiritDiagnostic[]=[];
   const symbols=new Map<string,CoreSpiritType>();
   const udts=new Map<string,CoreSpiritUdt>();
+  const modelBindings=new Map<string,string>();
   let maxLookback=0;
 
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>
@@ -72,10 +74,12 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
         }
         const target=infer(n.target,scope);
         const modelDeclarations = options.surface?.declarations.filter((declaration): declaration is Extract<CoreSpiritSurfaceMetadata['declarations'][number], { kind: 'model' }> => declaration.kind === 'model') ?? [];
+        const modelBindingName = n.target.type === 'identifier' ? modelBindings.get(n.target.name) : undefined;
         const model = target === 'model:ref' ? modelDeclarations.find(declaration =>
-          n.target.type === 'call' && n.target.name === 'model' && n.target.args[0]?.type === 'string'
-            ? declaration.name === n.target.args[0].value
-            : false,
+          declaration.name === (modelBindingName ??
+            (n.target.type === 'call' && n.target.name === 'model' && n.target.args[0]?.type === 'string'
+              ? n.target.args[0].value
+              : undefined)),
         ) : undefined;
         if (target === 'model:ref') {
           if (!model) {
@@ -424,6 +428,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
 
         symbols.set(n.name,finalType);
         scope.set(n.name,finalType);
+        if(n.expression.type==='call' && n.expression.name==='model' && n.expression.args[0]?.type==='string') {
+          modelBindings.set(n.name,String(n.expression.args[0].value));
+        }
         break;
       }
 
@@ -489,7 +496,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options: { layer?: CoreSpir
   };
 
   visit(ast,new Map(symbols));
-  return {diagnostics,symbols,udts,maxLookback};
+  return {diagnostics,symbols,udts,modelBindings,maxLookback};
 }
 
 function constantNumber(n:CoreSpiritAstNode):number|undefined {
