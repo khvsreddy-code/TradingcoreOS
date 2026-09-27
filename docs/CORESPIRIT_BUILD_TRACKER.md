@@ -1522,3 +1522,127 @@ The remaining regex layer is compatibility infrastructure only. It is no longer 
 ### Verification note
 
 The new Stage 76 fixture is intended as a focused contract. Full application/Vite build status remains dependent on the deployment dependency environment.
+
+
+## v77 implementation record — semantic composability redesign
+
+v77 continues the existing 59-stage reduction/consolidation cycle. It does not add roadmap stage 60.
+
+### #1 — source-of-truth architecture
+
+- [x] Existing lexer/parser confirmed as the language foundation.
+- [x] Canonical source compilation unit established in v76.
+- [x] Semantic dependency graph added as a source-level semantic projection.
+- [x] Composition tooling now consumes AST + semantic result + explicit surface declarations.
+- [ ] Link every IR node to a stable semantic entity ID.
+- [ ] Migrate execution/reactive/visual/debug graph views to semantic IDs.
+
+### #3 — normalization boundary
+
+- [x] Readable crossing normalization remains token-aware.
+- [x] Strings/comments are protected from legacy compatibility transforms.
+- [x] New language semantics are prohibited from the regex compatibility list.
+- [ ] Move remaining SHOW/WHEN/INPUT/model/automation shorthand transforms to AST/token-aware transforms.
+- [ ] Retire the protected regex layer incrementally after equivalent AST transforms exist.
+
+### #4 — composability redesign
+
+Previous state:
+
+\`\`\`text
+source text
+   ↓
+identifier regex
+   ↓
+guessed relationships
+\`\`\`
+
+v77 state:
+
+\`\`\`text
+source
+  ↓
+normalized AST
+  ↓
+semantic analysis
+  ↓
+semantic dependency graph
+  ↓
+composition projection
+\`\`\`
+
+Added:
+
+\`\`\`text
+src/services/coreSpirit/semanticDependencyGraph.ts
+\`\`\`
+
+The graph resolves semantic entities including:
+
+\`\`\`text
+data sources
+symbols / values
+models
+model outputs
+conditions
+events
+visuals
+automations
+order intents
+\`\`\`
+
+and relations:
+
+\`\`\`text
+depends-on
+emits
+triggers
+renders
+contains
+\`\`\`
+
+The composability engine in:
+
+\`\`\`text
+src/services/coreSpirit/composability.ts
+\`\`\`
+
+now projects this semantic graph instead of scanning identifiers with regular expressions.
+
+### Regression coverage
+
+Added:
+
+\`\`\`text
+src/services/coreSpirit/stage77SemanticComposability.test.ts
+\`\`\`
+
+The fixture specifically proves:
+
+- \`close\` in an actual expression creates a data dependency.
+- \`"hello close"\` does not create a data dependency.
+- \`market("NIFTY").close\` preserves data-reference semantics.
+- \`regime = model("Regime")\` followed by \`regime.confidence\` resolves to the same model entity.
+- model output feeds a condition.
+- a condition triggers an emitted event.
+- composition validation sees only real graph nodes/edges.
+
+### Model alias consistency
+
+v77 also aligns semantic analysis and compilation for model aliases.
+
+\`\`\`corespirit
+regime = model("Regime")
+when regime.confidence > 0.8:
+    emit "LONG"
+\`\`\`
+
+The semantic analyzer records the model binding and the compiler preserves the model-reference register so member access remains an actual MODEL output lookup.
+
+### Architecture status
+
+The semantic graph is now the source-level authority for composability. The existing IR graph remains execution-specific. The next migration should connect IR nodes to semantic identities rather than independently reconstructing source meaning.
+
+### Verification boundary
+
+The focused semantic-composability regression is the primary v77 contract. Full application/Vite build verification remains deployment-environment dependent.
