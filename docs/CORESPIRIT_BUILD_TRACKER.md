@@ -1422,3 +1422,54 @@ Applied migration: `20260927055419_grant_authenticated_user_owned_table_access`.
 Authenticated table access was added for the browser-facing user-owned tables already consumed by the client: `user_settings`, `profiles`, `workspace_layouts` and `workspace_layout_library`. Existing RLS policies remain the row-level authority, and no anonymous DML access was added.
 
 Post-migration verification confirmed `authenticated` SELECT/INSERT/UPDATE privileges on `public.user_settings`, and the PostgREST schema was reloaded.
+
+
+## v75 architecture direction — #25/#26 target syntax + #1 source-of-truth compiler
+
+v75 continues the v74 reduction cycle. It does not add roadmap stage 60; the active roadmap remains 59 stages.
+
+### #25 — target language contract
+
+Minimal public vocabulary:
+
+```text
+let
+when
+if
+show
+emit
+model
+automate
+```
+
+Expressions such as `ema()`, `rsi()`, `atr()`, `market()` and `timeframe()` provide the computational vocabulary. The design goal is a small grammar with a large compositional ecosystem. New keywords should be rare and should only represent genuinely new semantic categories.
+
+### #26 — ultimate one-file application contract
+
+The target is one `app` program combining configuration, data, calculations, models, visuals, WHEN/EVENT behavior and AUTOMATE intent. Its internal dependency, visual, event, model and automation views remain compiler projections over one semantic program and lower to the existing IR/VM path.
+
+The complete Nifty AI Momentum example is documented as a target syntax contract, not as a claim that every final shorthand line is already accepted by the current parser.
+
+### #1 — compiler source-of-truth consolidation
+
+Desired pipeline:
+
+```text
+SOURCE → TOKENS/CST → NORMALIZED AST → SEMANTIC MODEL → IR → OPTIMIZED IR → RUNTIME
+```
+
+Some current compatibility/surface utilities still inspect source strings separately from the canonical parser. v75 therefore defines an incremental migration: normalize once at the compiler boundary; retain source spans; derive semantic metadata from AST + analysis; refactor composition/surface metadata and editor tooling to consume the same semantic model; then retire redundant source scanners.
+
+CST is authoring fidelity, AST is normalized language meaning, the semantic model is resolved program meaning, and IR is deterministic execution. None becomes a second runtime.
+
+### v75 acceptance criteria
+
+- [x] Minimal target language vocabulary defined.
+- [x] One-file application contract defined without a new runtime.
+- [x] Single compiler source-of-truth pipeline defined.
+- [x] CST/AST/semantic-model/IR responsibilities separated.
+- [ ] Composition metadata consumes canonical semantic data.
+- [ ] Surface metadata consumes canonical semantic data.
+- [ ] Completion and diagnostics consume the same semantic model.
+- [ ] Equivalent source forms prove equivalent semantic/IR identities.
+- [ ] Redundant source-string scanners are retired where possible.
