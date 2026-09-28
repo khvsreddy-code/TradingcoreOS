@@ -45,11 +45,10 @@ const source = [
   'let volatilityValue = volatility(motionValue)',
   'let reg = regime(motionValue, volatilityValue)',
   'show reg.trendProbability',
-  'when reg.noiseProbability < 0.2:',
-  '  emit "CLEAN"',
+  'if (reg.noiseProbability < 0.2) { signal("CLEAN"); }',
 ].join('\n');
 
-const normalizedStage92 = normalizeCoreSpiritSource(source);\nconsole.log('STAGE92_NORMALIZED_SOURCE_START');\nconsole.log(normalizedStage92);\nconsole.log('STAGE92_NORMALIZED_SOURCE_END');\nconst parsed = new CoreSpiritParser(normalizedStage92).parseDetailed();
+const parsed = new CoreSpiritParser(normalizedStage92).parseDetailed();
 assert(parsed.diagnostics.length===0,parsed.diagnostics.map(d=>d.message).join('; '));
 const surface = describeCoreSpiritSurface(source,{components:registry});
 const compiler = new CoreSpiritCompiler();
