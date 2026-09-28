@@ -72,7 +72,7 @@ const namespaceSource = [
   'let dispersion = stats.stdev(close, 20)',
   'let anchor = market.vwap()',
   'let p = probability.sigmoid(spread)',
-  'show visual.show(p)',
+  'show p',
 ].join('\n');
 const namespaceParsed = new CoreSpiritParser(normalizeCoreSpiritSource(namespaceSource)).parseDetailed();
 assert(namespaceParsed.diagnostics.length===0,namespaceParsed.diagnostics.map(d=>d.message).join('; '));
