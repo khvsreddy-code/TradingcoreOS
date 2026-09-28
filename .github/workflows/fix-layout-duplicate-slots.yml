@@ -1,0 +1,60 @@
+name: Fix duplicate chart slots
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Patch duplicate slot handling
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/LiveTradingTerminalV3.tsx')
+          s = path.read_text(encoding='utf-8')
+          original = s
+
+          # Do not jump to an already-used slot when selecting an instrument.
+          # A layout slot is an independent chart instance, so duplicate
+          # instrument keys are valid (e.g. NIFTY in all 9 charts).
+          patterns = [
+              re.compile(r"if\(slotKeys\.includes\(([^)]+)\)\)\{(?:(?!\}).){0,700}?setFocused\(slotKeys\.indexOf\(\1\)\)(?:(?!\}).){0,700}?return;?\}", re.S),
+              re.compile(r"if\s*\(\s*slotKeys\.includes\(([^)]+)\)\s*\)\s*\{(?:(?!\}).){0,700}?setFocused\(slotKeys\.indexOf\(\1\)\)(?:(?!\}).){0,700}?return;?\}", re.S),
+          ]
+          for pat in patterns:
+              s = pat.sub('', s)
+
+          # Also neutralize the common index-based dedupe guard while keeping
+          # the rest of the selection handler intact.
+          s = re.sub(
+              r"const\s+existing\s*=\s*slotKeys\.indexOf\(([^)]+)\);\s*if\s*\(\s*existing\s*>=\s*0\s*\)\s*\{(?:(?!\}).){0,700}?return;?\}",
+              '', s, flags=re.S)
+
+          if s == original:
+              print('No duplicate-slot guard matched; leaving file unchanged.')
+          else:
+              path.write_text(s, encoding='utf-8')
+              print('Patched duplicate-slot handling.')
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet -- src/LiveTradingTerminalV3.tsx; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/LiveTradingTerminalV3.tsx
+          git commit -m "fix: allow duplicate instruments across chart slots"
+          git push
