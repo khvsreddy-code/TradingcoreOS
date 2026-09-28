@@ -9,7 +9,7 @@ import { OAuthService } from '../auth/OAuthService.js';
 import { OrderIdempotencyRepository } from '../storage/OrderIdempotencyRepository.js';
 import type { BaseBroker } from '../brokers/adapters/BaseBroker.js';
 import type { BrokerOrderPayload } from '../brokers/contracts.js';
-import { getErrorMessage, getErrorStatus, isRecord } from '../../services/boundary/brokerApiValidation';
+import { getErrorMessage, getErrorStatus, isRecord } from '../../services/boundary/brokerApiValidation.js';
 import { createHmac, createHash, randomUUID } from 'node:crypto';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
