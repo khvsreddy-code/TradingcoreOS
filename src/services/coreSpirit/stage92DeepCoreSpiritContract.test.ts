@@ -73,8 +73,7 @@ const namespaceSource = [
   'let anchor = market.vwap()',
   'let p = probability.sigmoid(spread)',
   'show visual.show(p)',
-].join('
-');
+].join('\\n');
 const namespaceParsed = new CoreSpiritParser(normalizeCoreSpiritSource(namespaceSource)).parseDetailed();
 assert(namespaceParsed.diagnostics.length===0,namespaceParsed.diagnostics.map(d=>d.message).join('; '));
 const namespaceSurface = describeCoreSpiritSurface(namespaceSource,{components:registry});
