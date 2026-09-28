@@ -34,11 +34,19 @@ type State = {
   lossSeed: number[];
   cumulativePV: number;
   cumulativeVolume: number;
+  sma20Window: number[];
+  sma20Sum: number;
+  lastCommittedTimestamp: string | null;
 };
 
-const finite = (v: unknown): number | null => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const finite = (v: unknown): number | null => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const timestampMs = (v: unknown): number => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  if (v instanceof Date) return v.getTime();
+  const numeric = Number(v);
+  if (Number.isFinite(numeric)) return numeric;
+  const parsed = new Date(String(v)).getTime();
+  return Number.isFinite(parsed) ? parsed : NaN;
 };
 const closeOf = (b: HistoricalCandle) => Number(b.close);
 const typical = (b: HistoricalCandle) => (Number(b.high) + Number(b.low) + Number(b.close)) / 3;
@@ -48,46 +56,12 @@ function trueRange(current: HistoricalCandle, previous?: HistoricalCandle): numb
   return Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
 }
 
-function emaLast(values: number[], period: number): number | null {
-  if (values.length < period) return null;
-  let ema = values.slice(0, period).reduce((a,b)=>a+b,0) / period;
-  const alpha = 2 / (period + 1);
-  for (const value of values.slice(period)) ema = value * alpha + ema * (1 - alpha);
-  return ema;
-}
-
-function rsiLast(bars: HistoricalCandle[], period: number): number | null {
-  if (bars.length <= period) return null;
-  const start = bars.slice(-(period + 1));
-  let gain = 0, loss = 0;
-  for (let i=1;i<start.length;i++) {
-    const delta = closeOf(start[i]) - closeOf(start[i-1]);
-    gain += Math.max(0, delta); loss += Math.max(0, -delta);
-  }
-  let avgGain = gain / period, avgLoss = loss / period;
-  for (let i=period+1;i<bars.length;i++) {
-    const delta = closeOf(bars[i]) - closeOf(bars[i-1]);
-    avgGain = (avgGain * (period - 1) + Math.max(0, delta)) / period;
-    avgLoss = (avgLoss * (period - 1) + Math.max(0, -delta)) / period;
-  }
-  return avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
-}
-
-function atrLast(bars: HistoricalCandle[], period: number): number | null {
-  if (bars.length < period) return null;
-  const trs: number[] = [];
-  for (let i=0;i<bars.length;i++) trs.push(trueRange(bars[i], bars[i-1]));
-  let atr = trs.slice(0, period).reduce((a,b)=>a+b,0) / period;
-  for (let i=period;i<trs.length;i++) atr = (atr * (period - 1) + trs[i]) / period;
-  return atr;
-}
-
 /**
  * Stateful market calculation clock.
  *
- * Every tick can produce a calculation snapshot against the developing bar.
- * Bar-close updates use the exact same stateful engine, avoiding a separate
- * "realtime formula" that can diverge from replay/backtest semantics.
+ * The important optimization is that the developing candle is treated as a
+ * preview over committed indicator state. Tick updates therefore do not run
+ * an O(window) recalculation loop for EMA/RSI/ATR.
  */
 export class RealtimeCalculationEngine {
   private state: State = this.emptyState();
@@ -100,35 +74,49 @@ export class RealtimeCalculationEngine {
     this.state = this.emptyState();
     this.symbol = symbol;
     this.timeframe = timeframe;
-    for (const bar of bars) this.acceptBar(bar, false);
+    for (const bar of bars) this.acceptCommittedBar(bar);
   }
 
   updateTick(bar: HistoricalCandle, barIndex: number, isBarClose = false): CalculationSnapshot {
-    const previous = this.state.bars[this.state.bars.length - 1];
-    const last = previous;
-    // A developing bar replaces the current bar rather than advancing indicator state.
-    if (last && Number(last.timestamp) === Number(bar.timestamp)) {
+    const last = this.state.bars[this.state.bars.length - 1];
+    if (last && timestampMs(last.timestamp) === timestampMs(bar.timestamp)) {
       this.state.bars[this.state.bars.length - 1] = { ...bar };
       const snapshot = this.snapshot(bar, barIndex, 'tick', isBarClose);
       this.bus.emit('market.calculation', snapshot);
       if (isBarClose) {
+        this.commitCurrentDevelopingBar();
         this.bus.emit('market.bar', { symbol: this.symbol, timeframe: this.timeframe, bar: bar as unknown as Record<string, unknown> });
       }
       return snapshot;
     }
+
     if (last) {
-      // The previous developing bar becomes the completed bar when a new bucket starts.
+      this.commitCurrentDevelopingBar();
       this.bus.emit('market.bar', { symbol: this.symbol, timeframe: this.timeframe, bar: last as unknown as Record<string, unknown> });
     }
-    this.acceptBar(bar, true);
+    this.startDevelopingBar(bar);
     const snapshot = this.snapshot(bar, barIndex, 'tick', isBarClose);
     this.bus.emit('market.calculation', snapshot);
+    if (isBarClose) {
+      this.commitCurrentDevelopingBar();
+      this.bus.emit('market.bar', { symbol: this.symbol, timeframe: this.timeframe, bar: bar as unknown as Record<string, unknown> });
+    }
     return snapshot;
   }
 
   updateBar(bar: HistoricalCandle, barIndex: number): CalculationSnapshot {
-    this.acceptBar(bar, true);
+    const last = this.state.bars[this.state.bars.length - 1];
+    if (!last || timestampMs(last.timestamp) !== timestampMs(bar.timestamp)) {
+      if (last) this.commitCurrentDevelopingBar();
+      this.startDevelopingBar(bar);
+    } else {
+      this.state.bars[this.state.bars.length - 1] = { ...bar };
+      if (this.state.lastCommittedTimestamp === String(timestampMs(bar.timestamp))) {
+        this.rebuildCommittedState();
+      }
+    }
     const snapshot = this.snapshot(bar, barIndex, 'bar', true);
+    this.commitCurrentDevelopingBar();
     this.bus.emit('market.calculation', snapshot);
     this.bus.emit('market.bar', { symbol: this.symbol, timeframe: this.timeframe, bar: bar as unknown as Record<string, unknown> });
     return snapshot;
@@ -139,25 +127,32 @@ export class RealtimeCalculationEngine {
     return b ? this.snapshot(b, this.state.bars.length - 1, 'bar', true) : null;
   }
 
-  private acceptBar(bar: HistoricalCandle, emitState: boolean): void {
-    const previous = this.state.bars[this.state.bars.length - 1];
-    const close = finite(bar.close);
+  private startDevelopingBar(bar: HistoricalCandle): void {
+    this.state.bars.push({ ...bar });
+    if (this.state.bars.length > 25_000) this.state.bars.splice(0, this.state.bars.length - 25_000);
+  }
+
+  private commitCurrentDevelopingBar(): void {
+    const current = this.state.bars[this.state.bars.length - 1];
+    if (!current) return;
+    const currentKey = String(timestampMs(current.timestamp));
+    if (this.state.lastCommittedTimestamp === currentKey) return;
+    const previous = this.state.bars[this.state.bars.length - 2];
+    const close = finite(current.close);
     if (close == null) return;
 
-    this.state.bars.push({ ...bar });
-    const n = this.state.bars.length;
-
-    // EMA(20), seeded with SMA(20).
-    if (n >= 20) {
-      if (this.state.ema20 == null) {
+    // EMA(20), seeded with SMA(20). This method is idempotent: a historical
+    // committed candle can be observed by a first realtime tick without being
+    // applied to the recursive state twice.
+    if (this.state.ema20 == null) {
+      if (this.state.bars.length >= 20) {
         const window = this.state.bars.slice(-20);
         this.state.ema20 = window.reduce((s, x) => s + closeOf(x), 0) / 20;
-      } else {
-        this.state.ema20 = (close * (2 / 21)) + (this.state.ema20 * (19 / 21));
       }
+    } else {
+      this.state.ema20 = close * (2 / 21) + this.state.ema20 * (19 / 21);
     }
 
-    // RSI(14), Wilder smoothing.
     if (previous) {
       const delta = close - closeOf(previous);
       const gain = Math.max(0, delta);
@@ -175,23 +170,22 @@ export class RealtimeCalculationEngine {
       }
     }
 
-    // ATR(14), Wilder smoothing.
-    const tr = trueRange(bar, previous);
+    this.state.sma20Window.push(close);
+    this.state.sma20Sum += close;
+    if (this.state.sma20Window.length > 20) this.state.sma20Sum -= this.state.sma20Window.shift()!;
+
+    const tr = trueRange(current, previous);
     if (this.state.atr14 == null) {
       this.state.trSeed.push(tr);
-      if (this.state.trSeed.length >= 14) {
-        this.state.atr14 = this.state.trSeed.slice(-14).reduce((a,b)=>a+b,0) / 14;
-      }
+      if (this.state.trSeed.length >= 14) this.state.atr14 = this.state.trSeed.slice(-14).reduce((a,b)=>a+b,0) / 14;
     } else {
       this.state.atr14 = (this.state.atr14 * 13 + tr) / 14;
     }
 
-    const volume = Math.max(0, Number(bar.volume) || 0);
-    this.state.cumulativePV += typical(bar) * volume;
+    const volume = Math.max(0, Number(current.volume) || 0);
+    this.state.cumulativePV += typical(current) * volume;
     this.state.cumulativeVolume += volume;
-
-    if (this.state.bars.length > 25000) this.state.bars.splice(0, this.state.bars.length - 25000);
-    void emitState;
+    this.state.lastCommittedTimestamp = currentKey;
   }
 
   private snapshot(bar: HistoricalCandle, barIndex: number, mode: CalculationMode, isBarClose: boolean): CalculationSnapshot {
@@ -200,28 +194,59 @@ export class RealtimeCalculationEngine {
     const previousClose = previous ? closeOf(previous) : null;
     const change = previousClose == null ? null : close - previousClose;
     const changePct = previousClose == null || previousClose === 0 ? null : (change! / previousClose) * 100;
-    const recent = this.state.bars.slice(-20);
-    const sma20 = recent.length >= 20 ? recent.reduce((s, x) => s + closeOf(x), 0) / recent.length : null;
-    // Recompute the developing-bar view from the current series so tick-by-tick
-    // updates do not compound the same candle multiple times.
-    const closes = this.state.bars.slice(-250).map(closeOf);
-    const previewEma20 = emaLast(closes, 20);
-    const previewRsi14 = rsiLast(this.state.bars, 14);
-    const previewAtr14 = atrLast(this.state.bars, 14);
+
+    const committed = this.state.lastCommittedTimestamp === String(timestampMs(bar.timestamp));
+    const previewDeveloping = !committed;
+    const ema20 = this.state.ema20 == null ? null : previewDeveloping ? this.state.ema20 + (2 / 21) * (close - this.state.ema20) : this.state.ema20;
+    let rsi14: number | null = null;
+    if (this.state.avgGain14 != null && this.state.avgLoss14 != null && previous) {
+      const delta = close - previousClose!;
+      const gain = Math.max(0, delta), loss = Math.max(0, -delta);
+      const avgGain = (this.state.avgGain14 * 13 + gain) / 14;
+      const avgLoss = (this.state.avgLoss14 * 13 + loss) / 14;
+      rsi14 = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+    } else if (committed && this.state.avgGain14 != null && this.state.avgLoss14 != null) {
+      const avgLoss = this.state.avgLoss14;
+      rsi14 = avgLoss === 0 ? 100 : 100 - (100 / (1 + this.state.avgGain14 / avgLoss));
+    }
+
+    const atr14 = this.state.atr14 == null ? null : previewDeveloping && previous ? (this.state.atr14 * 13 + trueRange(bar, previous)) / 14 : this.state.atr14;
+    const sma20 = this.state.sma20Window.length >= 20
+      ? previewDeveloping ? (this.state.sma20Sum - this.state.sma20Window[0] + close) / 20 : this.state.sma20Sum / 20
+      : null;
+    const currentVolume = Math.max(0, Number(bar.volume) || 0);
+    const currentPv = typical(bar) * currentVolume;
+    const vwapDenominator = this.state.cumulativeVolume + (previewDeveloping ? currentVolume : 0);
+    const vwapNumerator = this.state.cumulativePV + (previewDeveloping ? currentPv : 0);
+    const vwap = vwapDenominator > 0 ? vwapNumerator / vwapDenominator : null;
+
     return {
-      symbol: this.symbol, timeframe: this.timeframe, mode,
+      symbol: this.symbol,
+      timeframe: this.timeframe,
+      mode,
       timestamp: Math.floor(new Date(bar.timestamp).getTime()),
-      barIndex, isBarClose,
-      values: {
-        close, change, changePct, sma20, ema20: previewEma20 ?? this.state.ema20, rsi14: previewRsi14,
-        atr14: previewAtr14 ?? this.state.atr14, vwap: this.state.cumulativeVolume > 0 ? this.state.cumulativePV / this.state.cumulativeVolume : null,
-        high: Number(bar.high), low: Number(bar.low),
-      },
+      barIndex,
+      isBarClose,
+      values: { close, change, changePct, sma20, ema20, rsi14, atr14, vwap, high: Number(bar.high), low: Number(bar.low) },
     };
   }
 
+  private acceptCommittedBar(bar: HistoricalCandle): void {
+    this.startDevelopingBar(bar);
+    this.commitCurrentDevelopingBar();
+  }
+
+  /**
+   * Rare correctness path for historical corrections to an already committed
+   * candle. Rebuilds the compact indicator state from the retained bar window.
+   */
+  private rebuildCommittedState(): void {
+    const retainedBars = this.state.bars.map((bar) => ({ ...bar }));
+    this.state = this.emptyState();
+    for (const bar of retainedBars) this.acceptCommittedBar(bar);
+  }
+
   private emptyState(): State {
-    return { bars: [], ema20: null, avgGain14: null, avgLoss14: null, atr14: null,
-      trSeed: [], gainSeed: [], lossSeed: [], cumulativePV: 0, cumulativeVolume: 0 };
+    return { bars: [], ema20: null, avgGain14: null, avgLoss14: null, atr14: null, trSeed: [], gainSeed: [], lossSeed: [], cumulativePV: 0, cumulativeVolume: 0, sma20Window: [], sma20Sum: 0, lastCommittedTimestamp: null };
   }
 }

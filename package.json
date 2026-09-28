@@ -8,7 +8,15 @@
     "build": "vite build",
     "start": "vite preview",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "architecture:check": "npm run test:contracts",
+    "typecheck": "tsc --noEmit",
+    "test:contracts": "node src/architectureConsolidationGuard.test.mjs && node src/routeContract.test.mjs && node src/v85HardeningContract.test.mjs && node src/coreSpiritV88PerformanceCompositionContract.test.mjs && node src/coreSpiritV90ComposabilityContract.test.mjs && node src/coreSpiritV92DeepContract.test.mjs && node src/indicatorCommunityContract.test.mjs && tsx src/services/coreSpirit/stage92DeepCoreSpiritContract.test.ts && tsx src/services/coreSpirit/stage93SeriesVectorFusion.test.ts && tsx src/services/core/chart/stage94ZeroCopyCanonicalDataPlane.test.ts && node src/services/core/chart/stage94ZeroCopyCanonicalDataPlane.test.mjs && tsx src/services/core/chart/stage95CanonicalDataPlaneChartEngine.test.ts && tsx src/services/core/chart/stage96ViewportScaleEngine.test.ts && tsx src/services/core/chart/stage97DrawingNavigationApi.test.ts && node src/services/core/chart/stage95CanonicalDataPlaneChartEngine.test.mjs",
+    "coreSpirit:check": "node tools/corespirit-cli.mjs check",
+    "coreSpirit:normalize": "node tools/corespirit-cli.mjs normalize",
+    "coreSpirit:inspect": "node tools/corespirit-cli.mjs inspect",
+    "coreSpirit:graph": "node tools/corespirit-cli.mjs graph",
+    "ci": "npm run test:contracts && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

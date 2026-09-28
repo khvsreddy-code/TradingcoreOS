@@ -28,16 +28,16 @@ export abstract class BaseBroker {
 
   // --- Real Broker API Integration Methods ---
 
-  async getProfile(accessToken: string): Promise<any> { throw new Error('Not implemented'); }
-  async getFunds(accessToken: string): Promise<any> { throw new Error('Not implemented'); }
-  async getHoldings(accessToken: string): Promise<any> { throw new Error('Not implemented'); }
-  async getPositions(accessToken: string): Promise<any> { throw new Error('Not implemented'); }
-  async getOrders(accessToken: string): Promise<any> { throw new Error('Not implemented'); }
-  async getTrades(accessToken: string): Promise<any> { throw new Error('Not implemented'); }
-  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> { throw new Error('Not implemented'); }
-  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<any> { throw new Error('Not implemented'); }
-  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<any> { throw new Error('Not implemented'); }
-  async placeOrder(accessToken: string, orderData: any): Promise<any> { throw new Error('Not implemented'); }
-  async modifyOrder(accessToken: string, orderId: string, orderData: any): Promise<any> { throw new Error('Not implemented'); }
-  async cancelOrder(accessToken: string, orderId: string): Promise<any> { throw new Error('Not implemented'); }
+  async getProfile(accessToken: string): Promise<BrokerProfile> { throw new Error('Not implemented'); }
+  async getFunds(accessToken: string): Promise<AccountFunds> { throw new Error('Not implemented'); }
+  async getHoldings(accessToken: string): Promise<Holding[]> { throw new Error('Not implemented'); }
+  async getPositions(accessToken: string): Promise<Position[]> { throw new Error('Not implemented'); }
+  async getOrders(accessToken: string): Promise<OrderResult[]> { throw new Error('Not implemented'); }
+  async getTrades(accessToken: string): Promise<TradeRecord[]> { throw new Error('Not implemented'); }
+  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<BrokerHistory> { throw new Error('Not implemented'); }
+  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> { throw new Error('Not implemented'); }
+  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> { throw new Error('Not implemented'); }
+  async placeOrder(accessToken: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> { throw new Error('Not implemented'); }
+  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> { throw new Error('Not implemented'); }
+  async cancelOrder(accessToken: string, orderId: string): Promise<CancelResult> { throw new Error('Not implemented'); }
 }

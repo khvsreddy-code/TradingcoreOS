@@ -6,6 +6,7 @@ import { getCoreSpiritMemberContracts } from './memberRegistry';
 import { CORE_SPIRIT_LANGUAGE_CONCEPTS } from './languageConcepts';
 import { getCoreSpiritModelSurfaceDeclarations } from './modelSurface';
 import { createCoreSpiritCompilationUnit } from './compilerPipeline';
+import { CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES, getCoreSpiritLibraryNamespaceEntries } from './standardLibraryNamespaces';
 
 export type CoreSpiritCompletion = { label: string; kind: 'function'|'keyword'|'series'|'visual'|'data'|'type'|'property'; detail: string; insertText?: string };
 export type CoreSpiritTypeInfo = { name:string; type:string; detail:string };
@@ -43,6 +44,7 @@ const UI_ROOT: CoreSpiritCompletion[] = [{ label:'ui', kind:'property', detail:'
 const WORKSPACE_ROOTS: CoreSpiritCompletion[] = [
   { label:'app', kind:'property', detail:'declarative trading workspace namespace' },
 ];
+const STANDARD_LIBRARY_ROOTS: CoreSpiritCompletion[] = CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES.map(label => ({ label, kind:'property' as const, detail:'CoreSpirit standard-library namespace' }));
 const UI_PANEL_MEMBERS: CoreSpiritCompletion[] = [
   {label:'number',kind:'property',detail:'panel.number(label, value, action?)'},
   {label:'button',kind:'property',detail:'panel.button(label, action?)'},
@@ -125,7 +127,7 @@ function allCompletions(): CoreSpiritCompletion[] {
     kind:'visual' as const,
     detail:'advanced/compatibility visual API • SHOW is the primary surface',
   }));
-  return [...READABLE_OPERATORS, ...KEYWORDS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...DATA, ...functions, ...advancedVisuals];
+  return [...READABLE_OPERATORS, ...KEYWORDS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
 }
 
 
@@ -147,6 +149,14 @@ export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiri
   const needle = (prefix || context.prefix || '').trim().toLowerCase();
   if (context.mode === 'member') {
     const before=source.slice(0,Math.max(0,context.cursor ?? source.length)); const target=before.match(/((?:[A-Za-z_][A-Za-z0-9_]*)|(?:market|timeframe)\s*\([^)]*\))\.([A-Za-z_]*)$/)?.[1];
+    if (target && (CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES as readonly string[]).includes(target)) {
+      const members = getCoreSpiritLibraryNamespaceEntries(target as any).map(entry => ({
+        label:entry.member,
+        kind:'function' as const,
+        detail:`${entry.qualifiedName} • ${entry.status}${entry.canonicalBuiltin ? ` → ${entry.canonicalBuiltin}` : entry.componentId ? ` → ${entry.componentId}` : ''}`,
+      }));
+      return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
+    }
     if (target === 'ui') {
       const members = getCoreSpiritMemberContracts('ui').map(contract => ({ label:contract.member, kind:'property' as const, detail:`${contract.callName}(${contract.minArgs}${contract.maxArgs !== undefined && contract.maxArgs !== contract.minArgs ? `-${contract.maxArgs}` : ''} args)` }));
       return members.filter(x=>!needle||x.label.toLowerCase().startsWith(needle));

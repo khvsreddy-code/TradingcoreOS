@@ -1,5 +1,5 @@
 /**
- * CoreSpirit stages 1–53: architecture contract and release gates.
+ * CoreSpirit stages 1–130: architecture contract and release gates.
  * This file is intentionally data-first so tooling can render the roadmap,
  * check dependencies, and keep the language/runtime roadmap in sync.
  */
@@ -688,13 +688,696 @@ export const CORE_SPIRIT_STAGES: readonly CoreSpiritStage[] = [
     gates: [
       { id: 'cs59-simple', statement: 'Level 1 supports short SHOW and WHEN programs such as `show ema(close, 20)` and `when close crossesAbove ema(close, 20): emit "LONG"` through the canonical pipeline.', automated: true },
       { id: 'cs59-advanced', statement: 'Level 2 exposes MODEL facts and composable reactive conditions without requiring users to learn ABI, IR, transport or execution mechanics.', automated: false },
-      { id: 'cs59-professional', statement: 'Level 3 can expose typed data, multi-symbol, multi-timeframe, custom visual geometry, external models, event handlers and performance controls while preserving the same execution substrate.', automated: false },
+      { id: 'cs59-professional', statement: 'Level 3 can expose typed data, multi-symbol, multi-timeframe, reusable component contracts, custom visual geometry, external models, event handlers, execution targets and performance controls while preserving the same execution substrate.', automated: false },
       { id: 'cs59-same-language', statement: 'Authoring level is a discoverability/presentation classification, not a grammar fork or alternate runtime.', automated: true },
       { id: 'cs59-upgrade-path', statement: 'A program can grow from Level 1 to Level 3 by adding declarations and type detail rather than rewriting into another language.', automated: false },
       { id: 'cs59-capability-boundary', statement: 'Professional access increases expressiveness and inspection, not broker/network/filesystem authority; sandbox and host policy remain authoritative.', automated: true },
     ],
     nonGoals: ['a beginner-only interpreter', 'an advanced-only DSL', 'professional mode as a broker bypass', 'locking features to visual wizard states'],
-  }
+  },
+  {
+    id: 60, name: 'Reusable semantic components and pipelines', kind: 'compiler',
+    goal: 'Allow any validated composition graph to become a reusable typed component or pipeline with explicit execution/state metadata, without creating a second language, evaluator or runtime.',
+    dependencies: [54, 58, 59],
+    gates: [
+      { id: 'cs60-component-contract', statement: 'Reusable components expose stable typed input/output ports, deterministic/stateful metadata and source identity.', automated: true },
+      { id: 'cs60-execution-profile', statement: 'Reusable component contracts can declare execution class, latency/cost, cacheability, parallelism and backend eligibility without introducing source-language keywords.', automated: true },
+      { id: 'cs60-state-profile', statement: 'Stateful reusable components can declare bar/window/session/external lifecycle plus snapshot and rollback requirements.', automated: true },
+      { id: 'cs60-materialization', statement: 'Validated composition graphs can be materialized and registered as reusable typed components at the host/compiler boundary.', automated: true },
+      { id: 'cs60-pipeline', statement: 'Pipelines validate stage-to-stage port compatibility and collapse to the same executable graph substrate.', automated: true },
+      { id: 'cs60-no-runtime-fork', statement: 'Component and pipeline metadata does not execute independently of the canonical CoreSpirit artifact and VM.', automated: true },
+    ],
+    nonGoals: ['a second component interpreter', 'feature-specific graph evaluators', 'broker authority inside reusable components'],
+  },
+  {
+    id: 61, name: 'Execution planning and hot/warm/cold lanes', kind: 'runtime',
+    goal: 'Plan executable nodes by latency, effect, state and cost so realtime work stays isolated from warm reactive work and cold research workloads.',
+    dependencies: [39, 40, 58, 60],
+    gates: [
+      { id: 'cs61-lanes', statement: 'Semantic/execution nodes carry deterministic hot/warm/cold lane metadata.', automated: true },
+      { id: 'cs61-barriers', statement: 'Effect and authority nodes remain execution barriers and cannot be accelerated as pure compute.', automated: true },
+      { id: 'cs61-planner', statement: 'Execution plans expose batches, accelerator assignments, lanes and cache identity without changing source semantics.', automated: true },
+    ],
+    nonGoals: ['automatic GPU execution without host capability', 'moving broker/risk authority into workers', 'a second runtime scheduler'],
+  },
+  {
+    id: 62, name: 'Incremental compilation and artifact caching', kind: 'compiler',
+    goal: 'Reuse unchanged syntax and cached executable artifacts so local source edits do not pay the full parse/compile cost when the program or artifact already exists.',
+    dependencies: [9, 38, 58, 61],
+    gates: [
+      { id: 'cs62-ast-reuse', statement: 'Incremental AST parsing structurally reuses unchanged nodes and reports reuse counts.', automated: true },
+      { id: 'cs62-compile-cache', statement: 'Identical normalized source for the same source id reuses a bounded LRU compile result.', automated: true },
+      { id: 'cs62-artifact-identity', statement: 'Artifact cache keys include compiler version, IR version, source identity and semantic identity.', automated: true },
+      { id: 'cs62-canonical-hash', statement: 'Equivalent object key order cannot produce different fast artifact checksums.', automated: true },
+    ],
+    nonGoals: ['a second compiler', 'silent semantic changes during cache reuse', 'unbounded browser memory growth'],
+  },
+  {
+    id: 63, name: 'Realtime backpressure and render coalescing', kind: 'runtime',
+    goal: 'Decouple market-data packet frequency from UI render frequency through external stores, frame coalescing and incremental developing-bar calculations.',
+    dependencies: [24, 39, 61, 62],
+    gates: [
+      { id: 'cs63-react', statement: 'High-frequency market ticks do not require one React state update per packet in the terminal/workspace path.', automated: true },
+      { id: 'cs63-chart', statement: 'Realtime chart renderer mutations are coalesced by key onto animation frames without changing candle reconciliation semantics.', automated: true },
+      { id: 'cs63-calculation', statement: 'Realtime EMA/RSI/ATR developing-bar previews are incremental rather than repeated O(window) recalculations.', automated: true },
+      { id: 'cs63-history', statement: 'Historical transport uses shared in-flight requests, stale-while-revalidate behavior and a bounded browser cache.', automated: true },
+    ],
+    nonGoals: ['dropping market data silently', 'reducing visible history merely to improve rendering', 'React as the market-data authority'],
+  },
+  {
+    id: 64, name: 'Universal data lineage and package contracts', kind: 'platform',
+    goal: 'Make complex composition inspectable and reusable by exposing generic value lineage plus validated package/component manifests over the same semantic graph.',
+    dependencies: [54, 58, 60, 62],
+    gates: [
+      { id: 'cs64-lineage', statement: 'Semantic graph values can be projected to a renderer-neutral lineage graph and traced backwards by dependency edges.', automated: true },
+      { id: 'cs64-package', statement: 'Package manifests declare components, versions, dependencies and capabilities and validate before registry admission.', automated: true },
+      { id: 'cs64-authoring', statement: 'Simple/Advanced/Professional presentation profiles change discoverability and inspection, not semantic execution.', automated: true },
+    ],
+    nonGoals: ['remote package execution by default', 'untrusted package capability escalation', 'a separate plugin language'],
+  },
+  {
+    id: 65, name: 'Measured performance budgets and reusable workers', kind: 'runtime',
+    goal: 'Make latency budgets observable and reuse worker execution contexts so expensive CoreSpirit work moves off the main thread without creating a worker per request.',
+    dependencies: [61, 63, 64],
+    gates: [
+      { id: 'cs65-budget', statement: 'Runtime records hot/bar, hot/tick and batch execution measurements against explicit budgets.', automated: true },
+      { id: 'cs65-worker-pool', statement: 'Chart/background CoreSpirit worker execution reuses a bounded worker pool with validated result envelopes.', automated: true },
+      { id: 'cs65-observability', statement: 'Reactive and performance metrics remain observational and cannot become hidden execution authority.', automated: true },
+    ],
+    nonGoals: ['unbounded worker creation', 'moving authority boundaries into workers', 'treating telemetry as trading logic'],
+  },
+  {
+    id: 66, name: 'CoreSpirit complexity absorber', kind: 'compiler',
+    goal: 'Keep the six-concept source surface stable while internal semantic, component, model-ABI, dependency, execution, reactive and backend layers absorb arbitrary system complexity.',
+    dependencies: [54, 58, 60, 64, 65],
+    gates: [
+      { id: 'cs66-surface', statement: 'CoreSpirit source remains centered on DATA, LET, WHEN, SHOW, MODEL and AUTOMATE.', automated: true },
+      { id: 'cs66-hidden-layers', statement: 'A compiled artifact can expose internal complexity-layer metadata without adding source keywords.', automated: true },
+      { id: 'cs66-authority', statement: 'Complexity absorption never expands broker, filesystem, network or process authority.', automated: true },
+    ],
+    nonGoals: ['a second evaluator', 'source-level backend directives', 'authority escalation through components'],
+  },
+  {
+    id: 67, name: 'Namespaced standard library architecture', kind: 'compiler',
+    goal: 'Scale CoreSpirit discoverability through qualified namespaces that resolve into the existing builtin/component registries rather than multiplying syntax or runtime implementations.',
+    dependencies: [56, 57, 58, 66],
+    gates: [
+      { id: 'cs67-aliasing', statement: 'Qualified library calls lower to canonical existing builtins or explicitly registered components.', automated: true },
+      { id: 'cs67-catalog', statement: 'Catalog-only capabilities can be documented without being falsely executable.', automated: true },
+      { id: 'cs67-no-duplication', statement: 'No namespace owns a duplicate mathematical/runtime implementation.', automated: true },
+    ],
+    nonGoals: ['duplicating the 30-primitive core', 'namespace-specific runtimes', 'mandatory namespace qualification'],
+  },
+  {
+    id: 68, name: 'Model ABI to semantic component convergence', kind: 'platform',
+    goal: 'Project strict MODEL ABI manifests into the same typed semantic component vocabulary so models compose with indicators and reusable graphs without a second programming model.',
+    dependencies: [32, 34, 49, 60, 66],
+    gates: [
+      { id: 'cs68-model-contract', statement: 'Validated model manifests can produce typed semantic component contracts with backend, state and capability metadata.', automated: true },
+      { id: 'cs68-rollback', statement: 'Stateful model components carry explicit snapshot/rollback requirements.', automated: true },
+      { id: 'cs68-authority', statement: 'Model component projection does not grant broker or arbitrary host authority.', automated: true },
+    ],
+    nonGoals: ['embedding Python in the VM', 'making model transport syntax part of CoreSpirit', 'automatic trust of external model packages'],
+  },
+  {
+    id: 69, name: 'Deep composable graph closure', kind: 'compiler',
+    goal: 'Make nested components, multi-output values, pipelines and reusable graph boundaries retain types, lineage and execution metadata from source through IR and runtime.',
+    dependencies: [54, 60, 62, 66, 68],
+    gates: [
+      { id: 'cs69-nested', statement: 'Component outputs can feed other components without requiring source-level pipeline syntax.', automated: true },
+      { id: 'cs69-lineage', statement: 'Nested component composition preserves dependency lineage and reusable boundary ports.', automated: true },
+      { id: 'cs69-incremental', statement: 'Component identity participates in compilation/cache invalidation boundaries.', automated: true },
+    ],
+    nonGoals: ['unbounded higher-order functions', 'hidden dynamic code generation', 'a second graph evaluator'],
+  },
+  {
+    id: 70, name: 'Progressive authoring depth without language forks', kind: 'compiler',
+    goal: 'Make Simple, Advanced and Professional authoring levels expose progressively deeper inspection and composition surfaces while converging on one language, compiler, IR and runtime.',
+    dependencies: [55, 59, 64, 66, 67, 69],
+    gates: [
+      { id: 'cs70-one-language', statement: 'All authoring levels compile through the same CoreSpirit frontend/IR/runtime path.', automated: true },
+      { id: 'cs70-discovery', statement: 'Advanced exposes namespace/component composition while Professional exposes contracts, IR, runtime and backend inspection.', automated: true },
+      { id: 'cs70-authority', statement: 'Authoring-level visibility changes do not change execution authority.', automated: true },
+    ],
+    nonGoals: ['separate syntaxes per level', 'professional-only semantics', 'UI toggles that silently change broker authority'],
+  },
+
+  {
+    id: 71, name: 'First-class dense series representation', kind: 'runtime',
+    goal: 'Make numeric series a first-class execution object with dense typed storage, explicit missing-value semantics and zero-copy typed-array reuse where the host already owns compatible buffers.', dependencies: [31, 32, 63, 70],
+    gates: [
+      { id: 'cs71-series-buffer', statement: 'Numeric series execution can consume Float64Array without copying when the input is already a compatible typed buffer.', automated: true },
+      { id: 'cs71-missing', statement: 'Vector kernels use a deterministic missing-value sentinel and preserve warm-up semantics at the series boundary.', automated: true },
+      { id: 'cs71-language', statement: 'The source language remains the same; dense representation is a runtime/compiler concern.', automated: true },
+    ],
+    nonGoals: ['forcing every series into a dense buffer', 'renderer-owned series memory', 'changing historical indexing semantics'],
+  },
+  {
+    id: 72, name: 'Vector operator execution contracts', kind: 'compiler',
+    goal: 'Describe vectorizability, fusion eligibility and execution strategy in builtin contracts so the planner can optimize from semantics instead of maintaining a second hard-coded operator list.', dependencies: [7, 67, 71],
+    gates: [
+      { id: 'cs72-contract', statement: 'Series-capable builtins declare vectorizable, fusible and execution-strategy metadata.', automated: true },
+      { id: 'cs72-stateful', statement: 'Stateful series operators such as EMA/RMA can be vectorizable without being incorrectly marked fusible.', automated: true },
+      { id: 'cs72-single-runtime', statement: 'Vector metadata selects execution paths over the same canonical builtin semantics; it does not create a second indicator implementation.', automated: true },
+    ],
+    nonGoals: ['duplicating indicator math in the planner', 'GPU-only semantics', 'requiring vector syntax in CoreSpirit'],
+  },
+  {
+    id: 73, name: 'Pure series operation fusion planner', kind: 'compiler',
+    goal: 'Discover maximal safe chains of pure series operations across transparent LET/local aliases and expose them as single-pass execution groups.', dependencies: [69, 71, 72],
+    gates: [
+      { id: 'cs73-aliases', statement: 'Fusion follows transparent move/setLocal aliases without requiring source-level pipeline syntax.', automated: true },
+      { id: 'cs73-fanout', statement: 'A series node with multiple semantic consumers is not illegally fused when doing so would remove a required intermediate value.', automated: true },
+      { id: 'cs73-maximal', statement: 'A safe chain such as SMA → STDEV → ZSCORE is represented as one maximal fusion group.', automated: true },
+    ],
+    nonGoals: ['fusing effectful nodes', 'fusing stateful EMA/RMA semantics', 'dynamic code generation'],
+  },
+  {
+    id: 74, name: 'Single-pass fused series kernels', kind: 'runtime',
+    goal: 'Execute fused pure-series groups chronologically with bounded rolling workspace and only the final dense output allocation, avoiding full-length intermediate arrays.', dependencies: [71, 72, 73],
+    gates: [
+      { id: 'cs74-one-pass', statement: 'A multi-operation series group executes in one chronological pass over the source buffer.', automated: true },
+      { id: 'cs74-intermediate', statement: 'Fused groups allocate no full intermediate series buffers; stage state stays bounded by operation lookback.', automated: true },
+      { id: 'cs74-shape', statement: 'Fused execution preserves source length and warm-up/missing-value shape.', automated: true },
+    ],
+    nonGoals: ['guaranteeing O(1) memory for every mathematical operator', 'replacing the scalar fallback', 'renderer-specific kernels'],
+  },
+  {
+    id: 75, name: 'Fusion-aware backend planning', kind: 'runtime',
+    goal: 'Make series fusion visible to the execution planner so CPU/WASM/GPU backends receive an optimization-ready workload description while the CPU semantic path remains the fallback.', dependencies: [24, 65, 73, 74],
+    gates: [
+      { id: 'cs75-plan', statement: 'Execution plans include validated series-fusion groups and explain when single-pass kernels are eligible.', automated: true },
+      { id: 'cs75-backends', statement: 'Fusion groups declare backend eligibility independently from host availability.', automated: true },
+      { id: 'cs75-fallback', statement: 'Unavailable WASM/GPU backends fall back to canonical CPU semantics without changing results.', automated: true },
+    ],
+    nonGoals: ['automatic browser GPU use before capability validation', 'moving broker/authority work to compute backends', 'silent backend-dependent semantics'],
+  },
+  {
+    id: 76, name: 'Series fusion conformance and performance contract', kind: 'governance',
+    goal: 'Lock vector/fusion semantics with executable regression tests before broader adoption in the runtime batch path.', dependencies: [71, 72, 73, 74, 75],
+    gates: [
+      { id: 'cs76-contract', statement: 'First-class series, operation fusion and backend metadata contracts pass deterministic focused tests.', automated: true },
+      { id: 'cs76-safety', statement: 'Stateful or effectful chains remain unfused under the conformance suite.', automated: true },
+      { id: 'cs76-observable', statement: 'Fusion remains an execution optimization; source semantics, IR shape and output contracts remain stable.', automated: true },
+    ],
+    nonGoals: ['claiming full production benchmark parity before representative workloads are measured', 'removing the canonical scalar executor'],
+  },
+
+  {
+    id: 77, name: 'Canonical shared consumer plane', kind: 'platform',
+    goal: 'Make one symbol/timeframe market timeline the ownership authority for chart, indicator, model and derived consumers.', dependencies: [71, 76],
+    gates: [
+      { id: 'cs77-one-plane', statement: 'A timeline key resolves to one canonical MarketDataStore within the host registry.', automated: true },
+      { id: 'cs77-borrow', statement: 'Consumer bindings borrow typed market views rather than owning copied market history.', automated: true },
+      { id: 'cs77-revision', statement: 'Consumers observe canonical revision and dirty-range metadata as the invalidation authority.', automated: true },
+    ],
+    nonGoals: ['worker shared memory as a prerequisite', 'removing legacy compatibility adapters', 'duplicating data stores per feature'],
+  },
+  {
+    id: 78, name: 'Indicator history ownership contract', kind: 'runtime',
+    goal: 'Move indicator execution toward read-only canonical inputs with derived outputs and state owned by the indicator domain.', dependencies: [72, 77],
+    gates: [
+      { id: 'cs78-input', statement: 'Canonical indicator bindings expose timeline-aligned typed series views.', automated: true },
+      { id: 'cs78-output', statement: 'IndicatorStore owns derived output columns while market history remains canonical.', automated: true },
+      { id: 'cs78-compat', statement: 'Legacy candle-array adapters remain explicit compatibility boundaries.', automated: true },
+    ],
+    nonGoals: ['rewriting every legacy indicator implementation at once', 'indicator-specific history stores'],
+  },
+  {
+    id: 79, name: 'Model feature view convergence', kind: 'platform',
+    goal: 'Bind model features directly to canonical numeric columns and a canonical timeline before tensor materialization.', dependencies: [68, 77],
+    gates: [
+      { id: 'cs79-view', statement: 'Model feature bindings can borrow canonical typed series columns without duplicating timeline storage.', automated: true },
+      { id: 'cs79-timeline', statement: 'Model feature metadata retains the canonical timeline key and revision.', automated: true },
+      { id: 'cs79-authority', statement: 'Feature binding does not add model execution authority.', automated: true },
+    ],
+    nonGoals: ['forcing every external model transport to zero-copy immediately', 'embedding external runtimes in CoreSpirit'],
+  },
+  {
+    id: 80, name: 'Multi-consumer data-plane convergence', kind: 'runtime',
+    goal: 'Extend canonical data ownership semantics to structure, liquidity, order flow, replay and scanner consumers.', dependencies: [77, 78, 79],
+    gates: [
+      { id: 'cs80-registry', statement: 'Canonical consumer identity is inspectable by kind and stable id.', automated: true },
+      { id: 'cs80-derived', statement: 'Derived domains do not own duplicate timestamp columns.', automated: true },
+      { id: 'cs80-replay', statement: 'Future replay/scanner consumers have the same canonical binding seam as chart/indicator/model consumers.', automated: true },
+    ],
+    nonGoals: ['one global dataset across unrelated symbols', 'cross-symbol timeline conflation'],
+  },
+  {
+    id: 81, name: 'Renderer-neutral chart data engine', kind: 'platform',
+    goal: 'Separate canonical market access, chart-specific data orchestration and rendering so chart consumers do not depend on renderer APIs.', dependencies: [77, 80],
+    gates: [
+      { id: 'cs81-data', statement: 'ChartDataEngine resolves canonical data and exposes typed views without owning duplicate market history.', automated: true },
+      { id: 'cs81-renderer', statement: 'Chart data contracts contain no Lightweight Charts objects.', automated: true },
+      { id: 'cs81-bindings', statement: 'Chart data can bind indicator/model feature views from the same plane.', automated: true },
+    ],
+    nonGoals: ['replacing Lightweight Charts in this stage', 'chart UI inside the data engine'],
+  },
+  {
+    id: 82, name: 'Renderer-neutral chart interaction engine', kind: 'platform',
+    goal: 'Own pointer, gesture, pan/zoom and semantic hit testing outside React and concrete renderer APIs.', dependencies: [81],
+    gates: [
+      { id: 'cs82-pointer', statement: 'Pointer and wheel/pinch interactions are represented by renderer-neutral events.', automated: true },
+      { id: 'cs82-hit', statement: 'Scene bounds can be hit-tested without renderer object references.', automated: true },
+      { id: 'cs82-ui-separation', statement: 'Interaction state is independent from React component state.', automated: true },
+    ],
+    nonGoals: ['DOM event ownership inside CoreSpirit', 'renderer-specific gesture semantics'],
+  },
+  {
+    id: 83, name: 'Chart viewport and scale system', kind: 'platform',
+    goal: 'Create renderer-neutral viewport and coordinate transforms for time, price, volume, percent and logarithmic chart modes.', dependencies: [81, 82],
+    gates: [
+      { id: 'cs83-viewport', statement: 'Pan, zoom and pixel-width state are represented without Lightweight Charts APIs.', automated: true },
+      { id: 'cs83-scales', statement: 'Time/price transforms are reversible within numeric precision for supported modes.', automated: true },
+      { id: 'cs83-shared-axis', statement: 'Chart panes can share a common time coordinate contract.', automated: true },
+    ],
+    nonGoals: ['renderer-specific autoscaling heuristics', 'claiming production parity yet'],
+  },
+  {
+    id: 84, name: 'Retained semantic chart scene and layers', kind: 'platform',
+    goal: 'Represent chart primitives as stable retained semantic nodes organized into deterministic data/indicator/structure/drawing/interaction layers.', dependencies: [18, 23, 81, 83],
+    gates: [
+      { id: 'cs84-stable', statement: 'Scene nodes retain stable identities across revisions.', automated: true },
+      { id: 'cs84-layers', statement: 'Layer ordering is explicit and renderer-neutral.', automated: true },
+      { id: 'cs84-hit-metadata', statement: 'Interactive nodes can expose serializable bounds for semantic hit testing.', automated: true },
+    ],
+    nonGoals: ['imperative WebGL drawing commands in CoreSpirit', 'DOM-owned chart primitives'],
+  },
+  {
+    id: 85, name: 'Chart rendering coordinator', kind: 'runtime',
+    goal: 'Coordinate retained scenes, panes and scales with concrete rendering backends without moving chart semantics into the renderer.', dependencies: [83, 84],
+    gates: [
+      { id: 'cs85-coordinator', statement: 'ChartRenderingEngine owns the renderer-neutral rendering boundary.', automated: true },
+      { id: 'cs85-panes', statement: 'Price and volume panes share the engine model and can be extended with custom panes.', automated: true },
+      { id: 'cs85-backends', statement: 'Lightweight Charts and native renderers remain replaceable host backends.', automated: true },
+    ],
+    nonGoals: ['activating native renderer in production'],
+  },
+  {
+    id: 86, name: 'Multi-pane chart model', kind: 'platform',
+    goal: 'Make price, volume, oscillator, order-flow and custom visual panes explicit engine entities with independent scales and scenes.', dependencies: [83, 84, 85],
+    gates: [
+      { id: 'cs86-registry', statement: 'Panes have stable ids, kinds, height ratios, scenes and scale models.', automated: true },
+      { id: 'cs86-time', statement: 'Pane time coordinates derive from one chart timeline contract.', automated: true },
+      { id: 'cs86-extensible', statement: 'New pane kinds can be added without changing the CoreSpirit language surface.', automated: true },
+    ],
+    nonGoals: ['pane-specific duplicate market stores'],
+  },
+  {
+    id: 87, name: 'ChartCore platform facade', kind: 'runtime',
+    goal: 'Make existing ChartCore a compatibility facade over the deeper data, viewport, scene and rendering architecture.', dependencies: [81, 83, 85, 86],
+    gates: [
+      { id: 'cs87-facade', statement: 'ChartCore delegates storage and rendering to the deeper chart-engine contracts.', automated: true },
+      { id: 'cs87-compat', statement: 'Existing ChartCore callers continue to work during the migration.', automated: true },
+      { id: 'cs87-react-free', statement: 'ChartCore remains independent from React/workspace component state.', automated: true },
+    ],
+    nonGoals: ['removing compatibility APIs immediately'],
+  },
+  {
+    id: 88, name: 'Native chart parity migration gate', kind: 'governance',
+    goal: 'Define the production gate that native rendering must satisfy before it can replace Lightweight Charts.', dependencies: [82, 83, 84, 85, 86, 87],
+    gates: [
+      { id: 'cs88-visual', statement: 'Native renderer passes candle, indicator, drawing, marker and multi-pane visual parity tests.', automated: true },
+      { id: 'cs88-interaction', statement: 'Native renderer passes viewport, crosshair, pan/zoom and hit-testing parity tests.', automated: true },
+      { id: 'cs88-history', statement: 'Native renderer sustains required high-history workloads without regressions.', automated: true },
+      { id: 'cs88-production', statement: 'Full typecheck, build, deployment and realtime validation pass before production activation.', automated: true },
+    ],
+    nonGoals: ['premature production migration', 'calling the current WebGL2 foundation TradingView-class'],
+  },
+
+
+  {
+    id: 89, name: 'Canonical chart viewport state', kind: 'platform',
+    goal: 'Make visible bars, pixels-per-bar, price domain, zoom, scroll and device-pixel ratio the single renderer-neutral viewport state.', dependencies: [83, 87],
+    gates: [
+      { id: 'cs89-state', statement: 'Viewport state exposes firstVisibleBar, lastVisibleBar, pixelsPerBar, priceMin, priceMax, zoom, scroll, pixelWidth and devicePixelRatio.', automated: true },
+      { id: 'cs89-clamp', statement: 'Viewport updates clamp safely to the canonical market length without renderer APIs.', automated: true },
+    ],
+    nonGoals: ['renderer-specific viewport state'],
+  },
+  {
+    id: 90, name: 'Fast bar/pixel transform kernel', kind: 'runtime',
+    goal: 'Cache the affine bar-index/pixel transform so hot-path coordinate conversion avoids allocations and repeated division setup.', dependencies: [89],
+    gates: [
+      { id: 'cs90-forward', statement: 'barIndex to x uses cached first-bar, scroll and pixels-per-bar state.', automated: true },
+      { id: 'cs90-inverse', statement: 'x to fractional barIndex is reversible within numeric precision.', automated: true },
+    ],
+    nonGoals: ['price transform ownership in the viewport module'],
+  },
+  {
+    id: 91, name: 'Viewport interaction mathematics', kind: 'platform',
+    goal: 'Make pan, zoom, resize and anchor-preserving navigation deterministic and independent from React or renderer APIs.', dependencies: [82, 89, 90],
+    gates: [
+      { id: 'cs91-pan', statement: 'Pixel and bar panning preserve fractional scroll state and clamp at data edges.', automated: true },
+      { id: 'cs91-zoom', statement: 'Zoom preserves the chosen anchor location within numeric precision.', automated: true },
+      { id: 'cs91-resize', statement: 'Resize recomputes pixels-per-bar without changing the logical visible range unexpectedly.', automated: true },
+    ],
+    nonGoals: ['gesture recognizer UI implementation'],
+  },
+  {
+    id: 92, name: 'Dedicated time scale engine', kind: 'platform',
+    goal: 'Own timestamp-to-display-coordinate and inverse time mapping outside the renderer.', dependencies: [81, 89, 90],
+    gates: [
+      { id: 'cs92-time', statement: 'Time scale binds the canonical Float64Array timeline without candle-object materialization.', automated: true },
+      { id: 'cs92-search', statement: 'Timestamp lookup uses ordered timeline search and supports fractional interpolation when safe.', automated: true },
+    ],
+    nonGoals: ['renderer-specific date labels'],
+  },
+  {
+    id: 93, name: 'Session calendar and timezone contract', kind: 'platform',
+    goal: 'Make timezone, trading-day, holiday and session-window semantics injectable into the time scale.', dependencies: [92],
+    gates: [
+      { id: 'cs93-timezone', statement: 'Time scale accepts an explicit IANA timezone rather than assuming browser local time.', automated: true },
+      { id: 'cs93-calendar', statement: 'Trading-day and session-window callbacks can identify closed dates and special sessions.', automated: true },
+    ],
+    nonGoals: ['embedding a global exchange holiday database in the chart engine'],
+  },
+  {
+    id: 94, name: 'Compressed non-trading time mapping', kind: 'platform',
+    goal: 'Support continuous, compressed and session-compressed time coordinates so weekends, holidays and session gaps need not consume chart width.', dependencies: [92, 93],
+    gates: [
+      { id: 'cs94-compressed', statement: 'Compressed mode maps bar sequences without wall-clock gap allocation.', automated: true },
+      { id: 'cs94-session', statement: 'Session-compressed mode can retain a deterministic configured inter-session gap.', automated: true },
+      { id: 'cs94-reverse', statement: 'Compressed coordinate-to-time mapping is reversible for supported timeline positions.', automated: true },
+    ],
+    nonGoals: ['inventing bars for missing market data'],
+  },
+  {
+    id: 95, name: 'Multi-timeframe timeline mapping', kind: 'platform',
+    goal: 'Make timeframe duration explicit to the time scale so multiple intraday and higher timeframe timelines can share coordinate semantics.', dependencies: [92, 94],
+    gates: [
+      { id: 'cs95-timeframe', statement: 'Timeframe strings resolve to deterministic durations for interpolation safety.', automated: true },
+      { id: 'cs95-mtf', statement: 'Time scale contracts do not require one fixed timeframe to perform timestamp mapping.', automated: true },
+    ],
+    nonGoals: ['aggregating raw bars into higher timeframes inside the scale engine'],
+  },
+  {
+    id: 96, name: 'Dedicated price scale engine', kind: 'platform',
+    goal: 'Own linear, logarithmic, percent and indexed price transforms with cached coefficients.', dependencies: [83, 89],
+    gates: [
+      { id: 'cs96-modes', statement: 'Linear, log, percent and indexed price transforms are reversible within numeric precision.', automated: true },
+      { id: 'cs96-cache', statement: 'Hot-path price transforms use cached forward and inverse coefficients.', automated: true },
+    ],
+    nonGoals: ['tick label formatting in the renderer'],
+  },
+  {
+    id: 97, name: 'Price autoscale and lock policy', kind: 'platform',
+    goal: 'Separate automatic visible-domain calculation from manual domains and locked user scales.', dependencies: [96],
+    gates: [
+      { id: 'cs97-auto', statement: 'Auto scale computes a visible high/low domain with deterministic padding.', automated: true },
+      { id: 'cs97-manual', statement: 'Manual domains remain stable until explicitly changed.', automated: true },
+      { id: 'cs97-lock', statement: 'Locked domains ignore non-forced auto/domain updates.', automated: true },
+    ],
+    nonGoals: ['renderer-specific scale animation'],
+  },
+  {
+    id: 98, name: 'Shared pane time-scale coordination', kind: 'platform',
+    goal: 'Make all chart panes consume one viewport/time coordinate authority while allowing independent vertical scales.', dependencies: [86, 92, 96],
+    gates: [
+      { id: 'cs98-time', statement: 'Price, volume and oscillator panes derive horizontal coordinates from one chart timeline/viewport contract.', automated: true },
+      { id: 'cs98-y', statement: 'Pane-specific vertical domains remain independent from the shared time axis.', automated: true },
+    ],
+    nonGoals: ['duplicating market timelines per pane'],
+  },
+  {
+    id: 99, name: 'Viewport and scale transform conformance gate', kind: 'governance',
+    goal: 'Prove forward/inverse transforms, session compression and interaction anchoring before the native renderer consumes them as production primitives.', dependencies: [90, 91, 94, 97, 98],
+    gates: [
+      { id: 'cs99-roundtrip', statement: 'Representative bar, time and price transforms round-trip within defined numeric tolerances.', automated: true },
+      { id: 'cs99-regression', statement: 'Legacy chart scale/viewport contracts remain compatible through the facade.', automated: true },
+    ],
+    nonGoals: ['claiming native renderer parity'],
+  },
+  {
+    id: 100, name: 'Chart viewport and scale migration gate', kind: 'governance',
+    goal: 'Freeze the viewport and scale contracts as the renderer-independent coordinate foundation for native chart migration.', dependencies: [99],
+    gates: [
+      { id: 'cs100-api', statement: 'Chart consumers can access viewport/time/price transforms without importing Lightweight Charts.', automated: true },
+      { id: 'cs100-production', statement: 'Full typecheck, build, realtime and interaction validation remain prerequisites for native production activation.', automated: true },
+    ],
+    nonGoals: ['removing Lightweight Charts from production at this stage'],
+  },
+
+  {
+    id: 101, name: 'Renderer-neutral drawing API', kind: 'platform',
+    goal: 'Provide first-class point, path and anchored drawing creation/control methods without exposing Lightweight Charts APIs.', dependencies: [88, 100],
+    gates: [
+      { id: 'cs101-create', statement: 'Single-point, multipoint and anchored creation resolve to the canonical CoreDrawing model.', automated: true },
+      { id: 'cs101-control', statement: 'Drawing lookup, update, visibility, selection, locking, z-order and removal use the same API.', automated: true },
+    ],
+    nonGoals: ['copying TradingView source or API implementations'],
+  },
+  {
+    id: 102, name: 'Semantic drawing tool catalog', kind: 'platform',
+    goal: 'Represent drawing tools as declarative interaction/geometry contracts with point counts, coordinate spaces and categories.', dependencies: [101],
+    gates: [
+      { id: 'cs102-catalog', statement: 'Tool definitions specify interaction type, coordinate space, point cardinality and semantic category.', automated: true },
+      { id: 'cs102-validation', statement: 'Creation validates tool point requirements before a drawing enters the store.', automated: true },
+    ],
+    nonGoals: ['implementing every advanced geometry renderer in one stage'],
+  },
+  {
+    id: 103, name: 'Drawing lifecycle and control state', kind: 'runtime',
+    goal: 'Make drawing visibility, selection, lock state, z-order, groups and undo/redo explicit state rather than UI conventions.', dependencies: [101, 102],
+    gates: [
+      { id: 'cs103-state', statement: 'Visible, selectionEnabled, locked, zIndex and groupId survive normalization and persistence.', automated: true },
+      { id: 'cs103-history', statement: 'Mutations remain undo/redo compatible through the canonical drawing store.', automated: true },
+    ],
+    nonGoals: ['renderer-owned drawing state'],
+  },
+  {
+    id: 104, name: 'Data and viewport anchored drawings', kind: 'platform',
+    goal: 'Support drawings tied to market time/price coordinates and drawings fixed to normalized pane coordinates.', dependencies: [101, 103],
+    gates: [
+      { id: 'cs104-data', statement: 'Data drawings store only canonical time/price anchors.', automated: true },
+      { id: 'cs104-viewport', statement: 'Viewport-anchored drawings use normalized 0..1 positions without inventing market timestamps.', automated: true },
+    ],
+    nonGoals: ['mixing coordinate spaces inside one anchor'],
+  },
+  {
+    id: 105, name: 'Drawing interaction state machine', kind: 'runtime',
+    goal: 'Translate pointer/click sequences into validated drawing drafts and committed point sets independently from React or renderers.', dependencies: [102, 103, 104],
+    gates: [
+      { id: 'cs105-draft', statement: 'Tool activation and point accumulation are deterministic and renderer-independent.', automated: true },
+      { id: 'cs105-finish', statement: 'A draft commits only when its declared point contract is satisfied.', automated: true },
+    ],
+    nonGoals: ['tool-specific UI dialogs'],
+  },
+  {
+    id: 106, name: 'Drawing hit testing and snapping boundary', kind: 'runtime',
+    goal: 'Keep semantic hit testing, handle selection and data-coordinate snapping above the rendering backend.', dependencies: [100, 105],
+    gates: [
+      { id: 'cs106-hit', statement: 'Selection uses semantic screen-space tolerance and respects visibility/selection/lock state.', automated: true },
+      { id: 'cs106-snap', statement: 'Data-point snapping uses renderer-neutral coordinate conversion.', automated: true },
+    ],
+    nonGoals: ['GPU-specific hit buffers'],
+  },
+  {
+    id: 107, name: 'Renderer-neutral chart navigation API', kind: 'platform',
+    goal: 'Expose spacing, horizontal offset, visible range, coordinate conversion and navigation gating without leaking renderer APIs.', dependencies: [100],
+    gates: [
+      { id: 'cs107-navigation', statement: 'Consumers can control time spacing and visible range through TradingCore chart contracts.', automated: true },
+      { id: 'cs107-conversion', statement: 'Time/X and price/Y conversions are available through the same renderer-neutral API.', automated: true },
+      { id: 'cs107-gating', statement: 'Pan/zoom enablement is enforced before navigation mutations are applied.', automated: true },
+    ],
+    nonGoals: ['removing Lightweight Charts as the current production backend'],
+  },
+  {
+    id: 108, name: 'Gesture-to-navigation controller', kind: 'platform',
+    goal: 'Translate pointer drag, wheel and pinch gestures into the navigation API without React state churn.', dependencies: [91, 107],
+    gates: [
+      { id: 'cs108-pan', statement: 'Pointer movement produces viewport pan deltas through the canonical navigation contract.', automated: true },
+      { id: 'cs108-zoom', statement: 'Wheel/pinch operations preserve an explicit zoom anchor and respect zoom gating.', automated: true },
+    ],
+    nonGoals: ['renderer-specific event listeners in the core layer'],
+  },
+  {
+    id: 109, name: 'Production navigation adapter', kind: 'platform',
+    goal: 'Map the renderer-neutral navigation contract to Lightweight Charts while keeping its API private to the production adapter.', dependencies: [107, 108],
+    gates: [
+      { id: 'cs109-bridge', statement: 'Production chart consumers use ChartController methods rather than importing Lightweight Charts for navigation.', automated: true },
+      { id: 'cs109-fallback', statement: 'Native chart navigation can consume the same contract without the production adapter.', automated: true },
+    ],
+    nonGoals: ['copying vendor drawing internals'],
+  },
+  {
+    id: 110, name: 'Drawing scene adapter boundary', kind: 'platform',
+    goal: 'Map canonical drawings into retained scene nodes so rendering can switch backends without changing drawing semantics.', dependencies: [106, 109],
+    gates: [
+      { id: 'cs110-scene', statement: 'Drawing identity, z-order and visibility survive data-to-scene projection.', automated: true },
+      { id: 'cs110-backend', statement: 'Scene projection does not import Lightweight Charts types.', automated: true },
+    ],
+    nonGoals: ['full parity rendering for every advanced tool'],
+  },
+  {
+    id: 111, name: 'Drawing and navigation persistence/events', kind: 'platform',
+    goal: 'Provide stable save/load and event semantics for drawing and navigation state across sessions and replay.', dependencies: [103, 107, 110],
+    gates: [
+      { id: 'cs111-events', statement: 'Create, update, move, visibility, selection and removal changes have deterministic event types.', automated: true },
+      { id: 'cs111-persistence', statement: 'Persisted drawings remain compatible across v1/v2 stored collections.', automated: true },
+    ],
+    nonGoals: ['server-side collaborative editing'],
+  },
+  {
+    id: 112, name: 'Drawing and interaction parity gate', kind: 'governance',
+    goal: 'Freeze the renderer-neutral interaction/drawing contracts only after production and native paths demonstrate equivalent semantics.', dependencies: [101, 106, 109, 110, 111],
+    gates: [
+      { id: 'cs112-drawing', statement: 'Creation, editing, selection, lock, z-order, delete and persistence semantics match across supported renderers.', automated: false },
+      { id: 'cs112-navigation', statement: 'Pan, zoom, visible-range and coordinate conversion semantics match across supported renderers.', automated: false },
+      { id: 'cs112-production', statement: 'Lightweight Charts remains the production backend until full interaction parity and production build validation are proven.', automated: true },
+    ],
+    nonGoals: ['forcing native renderer activation at v97'],
+  },
+
+
+  {
+    id: 113, name: 'Indicator configuration contract', kind: 'platform',
+    goal: 'Give every chart indicator a persistent, renderer-neutral settings contract covering inputs, styling, display and visibility.', dependencies: [7, 97, 100],
+    gates: [
+      { id: 'cs113-settings', statement: 'Indicator configuration contains explicit display settings without changing primitive calculation semantics.', automated: true },
+      { id: 'cs113-persist', statement: 'Indicator settings survive workspace save/load with stable defaults.', automated: true },
+    ],
+  },
+  {
+    id: 114, name: 'Shared indicator settings surface', kind: 'tooling',
+    goal: 'Use one settings model for indicator configuration surfaces rather than duplicating per-page controls.', dependencies: [113],
+    gates: [
+      { id: 'cs114-shared', statement: 'Indicator page and live indicator dock consume the same configuration model.', automated: true },
+      { id: 'cs114-sections', statement: 'Inputs, Style and Display are distinct settings groups.', automated: true },
+    ],
+  },
+  {
+    id: 115, name: 'Editable indicator source templates', kind: 'platform',
+    goal: 'Expose starter CoreSpirit source for native indicators without making source editing mandatory.', dependencies: [7, 113],
+    gates: [
+      { id: 'cs115-template', statement: 'Supported indicators expose deterministic starter CoreSpirit source.', automated: true },
+      { id: 'cs115-native-boundary', statement: 'Unsupported/native-only indicators remain explicitly identified instead of receiving fabricated implementations.', automated: true },
+    ],
+  },
+  {
+    id: 116, name: 'Indicator source studio', kind: 'tooling',
+    goal: 'Provide an in-product source editor for indicator code with compile, reset, copy and save actions.', dependencies: [115, 114],
+    gates: [
+      { id: 'cs116-editor', statement: 'Users can edit and inspect the complete indicator source snapshot.', automated: true },
+      { id: 'cs116-compile', statement: 'Save/publish paths compile source through the canonical CoreSpirit compiler.', automated: true },
+    ],
+  },
+  {
+    id: 117, name: 'User indicator draft persistence', kind: 'platform',
+    goal: 'Persist user-authored indicator drafts and immutable source versions through the existing CoreSpirit persistence layer.', dependencies: [116, 9],
+    gates: [
+      { id: 'cs117-version', statement: 'Every saved edit creates an immutable script version with source hash and compile status.', automated: true },
+      { id: 'cs117-owner', statement: 'Draft persistence is owner-scoped by authenticated user identity.', automated: true },
+    ],
+  },
+  {
+    id: 118, name: 'Public indicator publication contract', kind: 'platform',
+    goal: 'Define metadata, source snapshot and visibility needed to publish an indicator safely.', dependencies: [117],
+    gates: [
+      { id: 'cs118-metadata', statement: 'Publication stores title, description, tags, category, license, author and source snapshot.', automated: true },
+      { id: 'cs118-version-lock', statement: 'A publication points to a concrete immutable CoreSpirit script version.', automated: true },
+    ],
+  },
+  {
+    id: 119, name: 'Public indicator RLS boundary', kind: 'security',
+    goal: 'Allow anonymous discovery only for explicitly published public indicators while keeping draft ownership private.', dependencies: [118, 15],
+    gates: [
+      { id: 'cs119-public-read', statement: 'Anonymous reads can only see published public indicator rows.', automated: true },
+      { id: 'cs119-owner-write', statement: 'Only the owning authenticated user can create/update/archive their publication rows.', automated: true },
+    ],
+  },
+  {
+    id: 120, name: 'Indicator preview asset storage', kind: 'platform',
+    goal: 'Store optional user-provided indicator cover images in a dedicated public asset bucket with owner-scoped writes.', dependencies: [119],
+    gates: [
+      { id: 'cs120-storage', statement: 'Indicator covers use a dedicated bucket and owner-scoped upload/update/delete policy.', automated: true },
+      { id: 'cs120-types', statement: 'Unsupported file types and excessive file sizes are rejected client-side before upload.', automated: true },
+    ],
+  },
+  {
+    id: 121, name: 'Public indicator explore catalog', kind: 'platform',
+    goal: 'Provide a public browse surface for user-authored indicators with cards, previews and metadata.', dependencies: [118, 119, 120],
+    gates: [
+      { id: 'cs121-grid', statement: 'Public explore renders image/preview, title, description, author and metadata from the publication contract.', automated: true },
+      { id: 'cs121-anonymous', statement: 'The catalog remains available without authentication.', automated: true },
+    ],
+  },
+  {
+    id: 122, name: 'Public indicator source inspection', kind: 'tooling',
+    goal: 'Make the published CoreSpirit source inspectable and copyable from the public indicator detail surface.', dependencies: [121],
+    gates: [
+      { id: 'cs122-source', statement: 'Published source snapshots are displayed without requiring workspace access.', automated: true },
+      { id: 'cs122-copy', statement: 'Users can copy published CoreSpirit source without changing the stored publication.', automated: true },
+    ],
+  },
+  {
+    id: 123, name: 'Indicator catalog discovery controls', kind: 'tooling',
+    goal: 'Add search, category, open-source and sort controls without changing publication semantics.', dependencies: [121],
+    gates: [
+      { id: 'cs123-search', statement: 'Catalog search covers title, author, description, category and tags.', automated: true },
+      { id: 'cs123-filter', statement: 'Category and open-source filters map directly to publication fields.', automated: true },
+    ],
+  },
+  {
+    id: 124, name: 'User publication workflow', kind: 'platform',
+    goal: 'Connect indicator settings, source studio and publication metadata into one authenticated authoring flow.', dependencies: [114, 116, 117, 118, 121],
+    gates: [
+      { id: 'cs124-flow', statement: 'A user can add/edit an indicator, save source, add metadata and publish without a separate scripting system.', automated: true },
+      { id: 'cs124-auth', statement: 'Publishing requires an authenticated owner context.', automated: true },
+    ],
+  },
+  {
+    id: 125, name: 'Community usage telemetry', kind: 'platform',
+    goal: 'Track public views and indicator installs through bounded server-side counters.', dependencies: [119, 121],
+    gates: [
+      { id: 'cs125-views', statement: 'Published public rows can increment view counts through a constrained RPC.', automated: true },
+      { id: 'cs125-installs', statement: 'Published public rows can increment install counts through a constrained RPC.', automated: true },
+    ],
+  },
+  {
+    id: 126, name: 'Shareable indicator URLs', kind: 'platform',
+    goal: 'Give each public indicator a stable slug-based route suitable for direct sharing.', dependencies: [121, 122],
+    gates: [
+      { id: 'cs126-slug', statement: 'Each published indicator receives a stable unique slug.', automated: true },
+      { id: 'cs126-route', statement: 'Direct slug routes resolve to the correct public source snapshot without authentication.', automated: true },
+    ],
+  },
+  {
+    id: 127, name: 'Public route authentication boundary', kind: 'security',
+    goal: 'Ensure public indicator exploration is never redirected into the authenticated workspace merely because the visitor is anonymous.', dependencies: [119, 126],
+    gates: [
+      { id: 'cs127-anon-route', statement: 'The public explore route bypasses protected workspace redirect logic.', automated: true },
+      { id: 'cs127-no-privilege', statement: 'Public browsing does not grant draft or owner mutation privileges.', automated: true },
+    ],
+  },
+  {
+    id: 128, name: 'Indicator workspace integration', kind: 'platform',
+    goal: 'Expose settings, source editing and community publishing directly from the authenticated indicator workspace and live indicator dock.', dependencies: [114, 116, 124],
+    gates: [
+      { id: 'cs128-settings', statement: 'Active indicators expose the shared settings surface.', automated: true },
+      { id: 'cs128-source', statement: 'Active and newly added indicators can open their editable starter source where supported.', automated: true },
+      { id: 'cs128-community', statement: 'Workspace provides direct navigation to the public community catalog.', automated: true },
+    ],
+  },
+  {
+    id: 129, name: 'Indicator community security and documentation contract', kind: 'governance',
+    goal: 'Document source visibility, ownership, storage, publication and capability boundaries for user-authored indicators.', dependencies: [119, 120, 124, 127],
+    gates: [
+      { id: 'cs129-docs', statement: 'CoreSpirit and indicator documentation describe the public source contract and ownership boundary.', automated: true },
+      { id: 'cs129-secret', statement: 'Authoring UI explicitly warns users not to place credentials or secrets in public source.', automated: true },
+    ],
+    nonGoals: ['anonymous editing', 'automatic broker execution from public source'],
+  },
+  {
+    id: 130, name: 'User-authored indicator community migration gate', kind: 'governance',
+    goal: 'Freeze the first public indicator-authoring/explore architecture only after compiler, persistence, RLS, routing and UI contracts are all proven together.', dependencies: [122, 123, 124, 125, 126, 127, 128, 129],
+    gates: [
+      { id: 'cs130-end-to-end', statement: 'The authoring path can compile, save, version and publish a CoreSpirit indicator through the documented flow.', automated: false },
+      { id: 'cs130-public', statement: 'Anonymous visitors can discover and inspect published source without gaining mutation access.', automated: false },
+      { id: 'cs130-native', statement: 'Lightweight Charts remains the production backend; the community layer does not depend on renderer internals.', automated: true },
+    ],
+    nonGoals: ['copying TradingView source or implementation', 'automatic publication of uncompiled source'],
+  },
 ]
 
 export function getCoreSpiritStage(id: number): CoreSpiritStage | undefined {
@@ -710,6 +1393,6 @@ export function validateCoreSpiritRoadmap(): string[] {
       if (dep >= stage.id) errors.push(`stage ${stage.id} has non-previous dependency ${dep}`);
     }
   }
-  if (CORE_SPIRIT_STAGES.length !== 59) errors.push('CoreSpirit roadmap must contain exactly 59 stages');
+  if (CORE_SPIRIT_STAGES.length !== 130) errors.push('CoreSpirit roadmap must contain exactly 130 stages');
   return errors;
 }

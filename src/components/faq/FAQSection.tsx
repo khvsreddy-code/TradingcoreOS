@@ -44,17 +44,17 @@ export const FAQSection: React.FC = () => {
   };
 
   return (
-    <section id="faq" className="py-28 bg-[#090a0f] border-t border-[#1e2230]">
+    <section id="faq" className="py-28 bg-[var(--tco-surface-2)] border-t border-[#1e2230]">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#1e2230] bg-[#11131c] px-3 py-1 font-mono text-[11px] text-[#8c93a6] uppercase tracking-wider mb-4">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#1e2230] bg-[var(--tco-surface-3)] px-3 py-1 font-mono text-[11px] text-[var(--tco-muted)] uppercase tracking-wider mb-4">
             FREQUENTLY ASKED QUESTIONS
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#f3f4f6] tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-[var(--tco-text)] tracking-tight">
             Everything you need to know about TradingCore OS.
           </h2>
-          <p className="mt-4 text-sm text-[#8c93a6]">
+          <p className="mt-4 text-sm text-[var(--tco-muted)]">
             Transparent answers on security, broker integrations, execution latency, and the BYOB architecture.
           </p>
         </div>
@@ -66,21 +66,21 @@ export const FAQSection: React.FC = () => {
             return (
               <div
                 key={index}
-                className="rounded-xl border border-[#1e2230] bg-[#0c0e15] overflow-hidden transition-colors"
+                className="rounded-xl border border-[#1e2230] bg-[var(--tco-surface)] overflow-hidden transition-colors"
               >
                 <button
                   onClick={() => toggleAccordion(index)}
-                  className="w-full flex items-center justify-between p-5 text-left font-medium text-sm text-[#f3f4f6] hover:bg-[#11131c] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3b82f6] cursor-pointer"
+                  className="w-full flex items-center justify-between p-5 text-left font-medium text-sm text-[var(--tco-text)] hover:bg-[var(--tco-surface-3)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3b82f6] cursor-pointer"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="font-mono text-xs text-[#8c93a6] font-bold">
+                    <span className="font-mono text-xs text-[var(--tco-muted)] font-bold">
                       [{item.category.toUpperCase()}]
                     </span>
                     <span className="font-semibold">{item.question}</span>
                   </span>
                   <ChevronDown
-                    className={`h-4 w-4 text-[#8c93a6] transition-transform duration-200 ${
-                      isOpen ? 'rotate-180 text-[#f3f4f6]' : ''
+                    className={`h-4 w-4 text-[var(--tco-muted)] transition-transform duration-200 ${
+                      isOpen ? 'rotate-180 text-[var(--tco-text)]' : ''
                     }`}
                   />
                 </button>
@@ -94,7 +94,7 @@ export const FAQSection: React.FC = () => {
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-5 pt-0 text-xs text-[#8c93a6] leading-relaxed border-t border-[#1e2230] font-normal">
+                      <div className="p-5 pt-0 text-xs text-[var(--tco-muted)] leading-relaxed border-t border-[#1e2230] font-normal">
                         {item.answer}
                       </div>
                     </motion.div>

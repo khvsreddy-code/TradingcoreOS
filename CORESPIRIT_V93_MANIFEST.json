@@ -1,0 +1,7 @@
+{
+  "version": "v93",
+  "theme": "first-class-series-operation-fusion",
+  "publicSurface": ["DATA","LET","WHEN","SHOW","MODEL","AUTOMATE"],
+  "features": ["dense-float64-series","vector-execution-contracts","alias-aware-series-fusion","single-pass-fused-kernels","fusion-aware-execution-planner"],
+  "validation": ["STAGE93_FIRST_CLASS_SERIES_OK","STAGE93_OPERATION_FUSION_OK","STAGE93_SERIES_BACKEND_METADATA_OK"]
+}

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
 import { withBrokerRequestGate } from '../BrokerRequestGate.js';
+import type { BrokerHistory, BrokerMarketQuotes, BrokerOptionChain, BrokerOrderPayload, BrokerProfile, CancelResult, OrderMutationResult } from '../contracts.js';
 
 export class UpstoxAdapter extends BaseBroker {
   readonly brokerId = 'upstox';
@@ -121,7 +122,7 @@ export class UpstoxAdapter extends BaseBroker {
     return data.data;
   }
 
-  async getProfile(accessToken: string): Promise<any> {
+  async getProfile(accessToken: string): Promise<BrokerProfile> {
     const data = await this.upstoxFetch('/user/profile', accessToken);
     return {
       userId: data.user_id,
@@ -131,7 +132,7 @@ export class UpstoxAdapter extends BaseBroker {
     };
   }
 
-  async getFunds(accessToken: string): Promise<any> {
+  async getFunds(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').AccountFunds> {
     // Upstox Fund & Margin V3 is now the preferred endpoint.
     const response = await fetch('https://api.upstox.com/v3/user/get-funds-and-margin', {
       headers: { Accept: 'application/json', 'Api-Version': '3.0', Authorization: `Bearer ${accessToken}` },
@@ -152,7 +153,7 @@ export class UpstoxAdapter extends BaseBroker {
     };
   }
 
-  async getHoldings(accessToken: string): Promise<any> {
+  async getHoldings(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Holding[]> {
     const data = await this.upstoxFetch('/portfolio/long-term-holdings', accessToken);
     return (data || []).map((h: any) => ({
       id: h.instrument_token || h.trading_symbol || `h_${Math.random()}`,
@@ -165,7 +166,7 @@ export class UpstoxAdapter extends BaseBroker {
     }));
   }
 
-  async getPositions(accessToken: string): Promise<any> {
+  async getPositions(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Position[]> {
     const data = await this.upstoxFetch('/portfolio/short-term-positions', accessToken);
     return (data || []).map((p: any) => ({
       id: p.instrument_token || p.trading_symbol || `p_${Math.random()}`,
@@ -178,7 +179,7 @@ export class UpstoxAdapter extends BaseBroker {
     }));
   }
 
-  async getOrders(accessToken: string): Promise<any> {
+  async getOrders(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').OrderResult[]> {
     const data = await this.upstoxFetch('/order/retrieve-all', accessToken);
     return (data || []).map((o: any) => ({
       orderId: o.order_id,
@@ -188,12 +189,12 @@ export class UpstoxAdapter extends BaseBroker {
     }));
   }
 
-  async getTrades(accessToken: string): Promise<any> {
+  async getTrades(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').TradeRecord[]> {
     const data = await this.upstoxFetch('/order/trades/get-trades-for-day', accessToken);
     return (data || []).map((trade: any) => ({ tradeId: trade.trade_id, orderId: trade.order_id, symbol: trade.trading_symbol, side: trade.transaction_type, quantity: trade.quantity, price: trade.average_price, timestamp: trade.trade_timestamp, product: trade.product }));
   }
 
-  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<any> {
+  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> {
     if (!instrumentKeys.length) return {};
     // Chart heartbeat lane: quotes are sampled every few seconds by the browser.
     // Keep this request independent from the heavier shared REST queue and give
@@ -244,7 +245,7 @@ export class UpstoxAdapter extends BaseBroker {
       clearTimeout(timeout);
     }
   }
-  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
+  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
       '15minute': '15', '20minute': '20', '30minute': '30', '60minute': '60',
@@ -266,7 +267,7 @@ export class UpstoxAdapter extends BaseBroker {
     return this.fetchFyersHistoryPage(accessToken, instrumentKey, resolution, from, to);
   }
 
-  async getHistoricalDataBefore(accessToken: string, instrumentKey: string, interval: string, beforeTimestamp: string, limit = 5_000): Promise<any> {
+  async getHistoricalDataBefore(accessToken: string, instrumentKey: string, interval: string, beforeTimestamp: string, limit = 5_000): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
       '15minute': '15', '20minute': '20', '30minute': '30', '60minute': '60',
@@ -335,7 +336,7 @@ export class UpstoxAdapter extends BaseBroker {
       clearTimeout(timeout);
     }
   }
-  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<any> {
+  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> {
     const data = await this.upstoxFetch(`/option/chain?instrument_key=${encodeURIComponent(instrumentKey)}&expiry_date=${encodeURIComponent(expiryDate)}`, accessToken);
     const rows = (data || []).map((row: any) => ({ strike: Number(row.strike_price), expiry: row.expiry, underlyingKey: row.underlying_key, call: normalizeOptionQuote(row.call_options), put: normalizeOptionQuote(row.put_options) })).filter((row: any) => Number.isFinite(row.strike));
     const spot = Number(data?.[0]?.underlying_spot_price || 0);
@@ -347,7 +348,7 @@ export class UpstoxAdapter extends BaseBroker {
     return { underlyingKey: instrumentKey, expiry: data?.[0]?.expiry || expiryDate, spot, contracts: rows.filter((row: any) => keep.has(row.strike)) };
   }
 
-  async placeOrder(accessToken: string, orderData: any): Promise<any> {
+  async placeOrder(accessToken: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
     validateUpstoxOrder(orderData);
     const payload = {
       quantity: orderData.quantity || 1,
@@ -377,7 +378,7 @@ export class UpstoxAdapter extends BaseBroker {
     };
   }
 
-  async modifyOrder(accessToken: string, orderId: string, orderData: any): Promise<any> {
+  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
     const payload = {
       order_id: orderId,
       quantity: orderData.quantity,
@@ -399,7 +400,7 @@ export class UpstoxAdapter extends BaseBroker {
     };
   }
 
-  async cancelOrder(accessToken: string, orderId: string): Promise<any> {
+  async cancelOrder(accessToken: string, orderId: string): Promise<CancelResult> {
     const data = await this.upstoxHftFetch(`/v3/order/cancel?order_id=${encodeURIComponent(orderId)}`, accessToken, {
       method: 'DELETE'
     });
@@ -417,7 +418,7 @@ export class UpstoxAdapter extends BaseBroker {
   }
 }
 
-function validateUpstoxOrder(order: any): void {
+function validateUpstoxOrder(order: BrokerOrderPayload): void {
   if (!Number.isInteger(order.quantity) || order.quantity <= 0) throw new Error('Quantity must be a positive whole number');
   if (!/^[A-Z_]+\|.+$/.test(order.instrument_token || '')) throw new Error('A valid Upstox instrument token is required');
   if (!['BUY', 'SELL', 'Buy', 'Sell'].includes(order.side)) throw new Error('Order side must be BUY or SELL');
@@ -541,7 +542,7 @@ export class FyersAdapter extends BaseBroker {
     });
   }
 
-  async getProfile(accessToken: string): Promise<any> {
+  async getProfile(accessToken: string): Promise<BrokerProfile> {
     const data = await this.fyersFetch('/profile', accessToken);
     const p = data?.data || {};
     return {
@@ -552,7 +553,7 @@ export class FyersAdapter extends BaseBroker {
     };
   }
 
-  async getFunds(accessToken: string): Promise<any> {
+  async getFunds(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').AccountFunds> {
     const data = await this.fyersFetch('/funds', accessToken);
     const limits = Array.isArray(data?.fund_limit) ? data.fund_limit : [];
     const pick = (keys: string[]) => {
@@ -565,7 +566,7 @@ export class FyersAdapter extends BaseBroker {
     return { totalCapital, availableMargin, usedMargin, collateralMargin: 0 };
   }
 
-  async getHoldings(accessToken: string): Promise<any> {
+  async getHoldings(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Holding[]> {
     const data = await this.fyersFetch('/holdings', accessToken);
     const rows = data?.holdings || [];
     return rows.map((h: any) => ({
@@ -579,7 +580,7 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getPositions(accessToken: string): Promise<any> {
+  async getPositions(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Position[]> {
     const data = await this.fyersFetch('/positions', accessToken);
     const rows = data?.netPositions || [];
     return rows.map((p: any) => ({
@@ -593,7 +594,7 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getOrders(accessToken: string): Promise<any> {
+  async getOrders(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').OrderResult[]> {
     const data = await this.fyersFetch('/orders', accessToken);
     const rows = data?.orderBook || [];
     return rows.map((o: any) => ({
@@ -604,7 +605,7 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getTrades(accessToken: string): Promise<any> {
+  async getTrades(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').TradeRecord[]> {
     const data = await this.fyersFetch('/tradebook', accessToken);
     const rows = data?.tradeBook || [];
     return rows.map((t: any) => ({
@@ -619,7 +620,7 @@ export class FyersAdapter extends BaseBroker {
     }));
   }
 
-  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<any> {
+  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> {
     if (!instrumentKeys.length) return {};
     // Dedicated chart-heartbeat lane. Quote snapshots are sampled every few
     // seconds and must never wait behind history/options/portfolio traffic.
@@ -669,7 +670,7 @@ export class FyersAdapter extends BaseBroker {
     }
   }
 
-  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<any> {
+  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
       '15minute': '15', '20minute': '20', '30minute': '30', '60minute': '60',
@@ -695,7 +696,7 @@ export class FyersAdapter extends BaseBroker {
     return (data?.candles || []).map((c: any[]) => ({ timestamp: new Date(Number(c[0]) * 1000).toISOString(), open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5] || 0) })).slice(-25000);
   }
 
-  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<any> {
+  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> {
     // FYERS v3 options-chain endpoint returns CE/PE legs, OI, change-OI and
     // previous-session OI in one snapshot. Keep the request centred on ATM
     // with seven strikes on either side so the chart can select meaningful
@@ -766,7 +767,7 @@ export class FyersAdapter extends BaseBroker {
     };
   }
 
-  async placeOrder(accessToken: string, orderData: any): Promise<any> {
+  async placeOrder(accessToken: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
     const data = await this.fyersFetch('/orders/sync', accessToken, {
       method: 'POST',
       body: JSON.stringify(this.orderPayload(orderData)),
@@ -780,9 +781,9 @@ export class FyersAdapter extends BaseBroker {
     };
   }
 
-  async modifyOrder(accessToken: string, orderId: string, orderData: any): Promise<any> {
+  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
     const type = String(orderData.order_type || orderData.orderType || '').toUpperCase();
-    const payload: any = { id: orderId };
+    const payload: Record<string, unknown> = { id: orderId };
     if (orderData.quantity || orderData.qty) payload.qty = Number(orderData.quantity || orderData.qty);
     if (orderData.price || orderData.limitPrice) payload.limitPrice = Number(orderData.price || orderData.limitPrice);
     if (orderData.triggerPrice || orderData.trigger_price) payload.stopPrice = Number(orderData.triggerPrice || orderData.trigger_price);
@@ -791,7 +792,7 @@ export class FyersAdapter extends BaseBroker {
     return { orderId, status: 'PENDING', message: data?.message || 'Order modified successfully', timestamp: new Date().toISOString() };
   }
 
-  async cancelOrder(accessToken: string, orderId: string): Promise<any> {
+  async cancelOrder(accessToken: string, orderId: string): Promise<CancelResult> {
     await this.fyersFetch(`/orders/sync?id=${encodeURIComponent(orderId)}`, accessToken, { method: 'DELETE' });
     return { success: true, message: `Order ${orderId} cancelled` };
   }

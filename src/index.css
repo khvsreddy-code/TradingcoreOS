@@ -2,31 +2,79 @@
 @import "tailwindcss";
 
 :root {
+  --tco-bg: #070a10;
+  --tco-surface: #0c0e15;
+  --tco-surface-2: #090a0f;
+  --tco-surface-3: #11131c;
+  --tco-hover: #141824;
+  --tco-border: #222636;
+  --tco-border-soft: #1b1f2a;
+  --tco-text: #f3f4f6;
+  --tco-text-2: #e5e7eb;
+  --tco-heading: #f5f7fa;
+  --tco-muted: #8c93a6;
+  --tco-dim: #64748b;
+  --tco-faint: #59647a;
+  --tco-strong: #ffffff;
+  --tco-code-bg: #07090e;
+  --tco-code-text: #dbe4ee;
+  --tco-code-muted: #94a3b8;
+  --tco-slate: #475569;
+  --tco-control: #303747;
+  --tco-axis: #252b3a;
+  --tco-surface-blue: #0c1728;
+  --tco-code-bg-deep: #06080d;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color-scheme: dark;
-  background: #070a10;
-  color: #f3f4f6;
+  background: var(--tco-bg);
+  color: var(--tco-text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
-html { scroll-behavior: smooth; background: #070a10; }
-body { margin: 0; min-width: 320px; background: #070a10; }
+
+html[data-tco-theme="white"] {
+  --tco-bg: #f7f8fa;
+  --tco-surface: #ffffff;
+  --tco-surface-2: #f1f3f5;
+  --tco-surface-3: #e8ebef;
+  --tco-hover: #e2e6eb;
+  --tco-border: #d3d9e2;
+  --tco-border-soft: #e1e5eb;
+  --tco-text: #111827;
+  --tco-text-2: #1f2937;
+  --tco-heading: #0f172a;
+  --tco-muted: #526174;
+  --tco-dim: #667085;
+  --tco-faint: #7b8797;
+  --tco-strong: #0b0f15;
+  --tco-code-bg: #f0f2f5;
+  --tco-code-text: #1f2937;
+  --tco-code-muted: #5b6678;
+  --tco-slate: #667085;
+  --tco-control: #c7ced8;
+  --tco-axis: #c5ccd5;
+  --tco-surface-blue: #eef3f8;
+  --tco-code-bg-deep: #e7ebf0;
+}
+
+html { scroll-behavior: smooth; background: var(--tco-bg); }
+body { margin: 0; min-width: 320px; background: var(--tco-bg); color: var(--tco-text); }
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
 ::selection { background: rgba(59,130,246,.22); color: #eff6ff; }
 
 .font-mono { font-family: 'JetBrains Mono', monospace; }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: #070a10; }
-::-webkit-scrollbar-thumb { background: #20283a; border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: #354057; }
+::-webkit-scrollbar-track { background: var(--tco-bg); }
+::-webkit-scrollbar-thumb { background: var(--tco-border); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--tco-muted); }
 
 .hero-grid,
 .section-grid {
   background-image:
-    linear-gradient(rgba(255,255,255,.032) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.032) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--tco-text) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--tco-text) 4%, transparent) 1px, transparent 1px);
   background-size: 56px 56px;
   mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.8) 55%, transparent 100%);
 }
@@ -132,7 +180,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   width: min(440px, 60%);
   border: 1px solid rgba(255,255,255,.06);
   border-radius: 7px;
-  background: #070a10;
+  background: var(--tco-bg);
   padding: 5px 12px;
   text-align: center;
   font-family: 'JetBrains Mono', monospace;
@@ -173,7 +221,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   color: #667188;
   transition: .2s ease;
 }
-.toolbar-pill:hover { color: #f3f4f6; border-color: rgba(255,255,255,.12); }
+.toolbar-pill:hover { color: var(--tco-text); border-color: rgba(255,255,255,.12); }
 .toolbar-pill-active { color: #60a5fa; border-color: rgba(59,130,246,.28); background: rgba(59,130,246,.06); }
 .toolbar-pill-active-blue { color: #93c5fd; border-color: rgba(96,165,250,.25); background: rgba(96,165,250,.05); }
 .live-dot {
@@ -184,7 +232,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   box-shadow: 0 0 0 4px rgba(96,165,250,.08), 0 0 14px rgba(96,165,250,.45);
 }
 
-/* TradingView-style desktop watchlist rail injected by workspaceHotfix.ts. */
+/* TradingView-style desktop watchlist rail provided by the workspace runtime bridge. */
 .tco-watchlist-source-hidden { display: none !important; }
 .tco-watchlist-rail {
   margin: -4px -4px 14px;
@@ -340,3 +388,50 @@ html[data-tco-fast="1"] .tct-chart canvas {
     box-shadow: 0 12px 30px rgba(0,0,0,.28);
   }
 }
+
+
+/* Theme-aware overrides for utility colors used widely across workspace/landing markup. */
+html[data-tco-theme="white"] .text-white { color: var(--tco-strong) !important; }
+html[data-tco-theme="white"] .hover\:text-white:hover { color: var(--tco-text) !important; }
+html[data-tco-theme="white"] .text-black { color: #ffffff !important; }
+html[data-tco-theme="white"] .bg-black { background: #111827 !important; }
+html[data-tco-theme="white"] .divide-\[\#222636\] > :not(:last-child) { border-color: var(--tco-border) !important; }
+html[data-tco-theme="white"] .border-white\/\[0\.06\],
+html[data-tco-theme="white"] .border-white\/\[0\.08\],
+html[data-tco-theme="white"] .border-white\/\[0\.09\],
+html[data-tco-theme="white"] .border-white\/\[0\.15\] { border-color: var(--tco-border) !important; }
+html[data-tco-theme="white"] input,
+html[data-tco-theme="white"] select,
+html[data-tco-theme="white"] textarea { color: var(--tco-text) !important; }
+html[data-tco-theme="white"] ::selection { background: rgba(37,99,235,.18); color: #0f172a; }
+
+html[data-tco-theme="white"] .text-\[\#dbe4ee\] { color: var(--tco-code-text) !important; }
+html[data-tco-theme="white"] .text-\[\#94a3b8\] { color: var(--tco-code-muted) !important; }
+
+html[data-tco-theme="white"] .bg-\[\#111722\],
+html[data-tco-theme="white"] .bg-\[\#171b27\],
+html[data-tco-theme="white"] .bg-\[\#090c12\],
+html[data-tco-theme="white"] .bg-\[\#0c1728\],
+html[data-tco-theme="white"] .bg-\[\#06080d\] { background: var(--tco-surface-3) !important; }
+html[data-tco-theme="white"] .text-\[\#dbe4ee\] { color: var(--tco-code-text) !important; }
+html[data-tco-theme="white"] .text-\[\#94a3b8\] { color: var(--tco-code-muted) !important; }
+html[data-tco-theme="white"] .border-\[\#252b3a\] { border-color: var(--tco-axis) !important; }
+html[data-tco-theme="white"] .chart-grid,
+html[data-tco-theme="white"] .section-grid,
+html[data-tco-theme="white"] .hero-grid { background-image: linear-gradient(rgba(15,23,42,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,.045) 1px, transparent 1px); }
+
+html[data-tco-theme="white"] .text-\[\#d1d5db\],
+html[data-tco-theme="white"] .text-\[\#cbd5e1\],
+html[data-tco-theme="white"] .text-\[\#e5e7eb\],
+html[data-tco-theme="white"] .text-\[\#f3f4f6\] { color: var(--tco-text-2) !important; }
+html[data-tco-theme="white"] .bg-\[\#10141d\],
+html[data-tco-theme="white"] .bg-\[\#11151f\],
+html[data-tco-theme="white"] .bg-\[\#0d1119\],
+html[data-tco-theme="white"] .bg-\[\#0e121a\] { background: var(--tco-surface-3) !important; }
+html[data-tco-theme="white"] .border-\[\#202532\],
+html[data-tco-theme="white"] .border-\[\#252b38\],
+html[data-tco-theme="white"] .border-\[\#2b3241\],
+html[data-tco-theme="white"] .border-\[\#313949\] { border-color: var(--tco-border) !important; }
+html[data-tco-theme="white"] .bg-\[\#080b11\],
+html[data-tco-theme="white"] .bg-\[\#0b0e14\],
+html[data-tco-theme="white"] .bg-\[\#161108\] { background: var(--tco-surface-3) !important; }

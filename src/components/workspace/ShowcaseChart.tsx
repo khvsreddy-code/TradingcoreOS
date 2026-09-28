@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { getCurrentTheme, getThemePalette } from '../../theme/theme';
 import {
   CandlestickSeries,
   ColorType,
@@ -59,16 +60,17 @@ export function ShowcaseChart({ basePrice, timeframe, showLevels, showForecast }
 
   useEffect(() => {
     if (!host.current) return;
+    const palette = getThemePalette(getCurrentTheme());
     const chart = createChart(host.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: '#090d14' }, textColor: '#657087', fontFamily: 'JetBrains Mono, monospace', fontSize: 10 },
-      grid: { vertLines: { color: 'rgba(255,255,255,0.035)' }, horzLines: { color: 'rgba(255,255,255,0.035)' } },
+      layout: { background: { type: ColorType.Solid, color: palette.surface2 }, textColor: palette.muted, fontFamily: 'JetBrains Mono, monospace', fontSize: 10 },
+      grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
       crosshair: {
-        vertLine: { color: 'rgba(148,163,184,0.42)', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#18202d' },
-        horzLine: { color: 'rgba(148,163,184,0.42)', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#18202d' },
+        vertLine: { color: palette.axis, width: 1, style: LineStyle.Dashed, labelBackgroundColor: palette.surface3 },
+        horzLine: { color: palette.axis, width: 1, style: LineStyle.Dashed, labelBackgroundColor: palette.surface3 },
       },
-      rightPriceScale: { borderColor: '#252b3a', scaleMargins: { top: 0.08, bottom: 0.23 }, minimumWidth: 74 },
-      timeScale: { borderColor: '#252b3a', timeVisible: true, secondsVisible: false, rightOffset: 8, barSpacing: 7, minBarSpacing: 3 },
+      rightPriceScale: { borderColor: palette.axis, scaleMargins: { top: 0.08, bottom: 0.23 }, minimumWidth: 74 },
+      timeScale: { borderColor: palette.axis, timeVisible: true, secondsVisible: false, rightOffset: 8, barSpacing: 7, minBarSpacing: 3 },
       localization: { priceFormatter: (value) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
     });
 
@@ -82,6 +84,23 @@ export function ShowcaseChart({ basePrice, timeframe, showLevels, showForecast }
     const forecast = chart.addSeries(LineSeries, { color: '#60a5fa', lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, title: 'Projection' });
 
     chartRef.current = chart; candleRef.current = candles; volumeRef.current = volume; vwapRef.current = vwap; forecastRef.current = forecast;
+
+    const applyTheme = () => {
+      const next = getThemePalette(getCurrentTheme());
+      try {
+        chart.applyOptions({
+          layout: { background: { type: ColorType.Solid, color: next.surface2 }, textColor: next.muted },
+          grid: { vertLines: { color: next.grid }, horzLines: { color: next.grid } },
+          crosshair: {
+            vertLine: { color: next.axis, labelBackgroundColor: next.surface3 },
+            horzLine: { color: next.axis, labelBackgroundColor: next.surface3 },
+          },
+          rightPriceScale: { borderColor: next.axis },
+          timeScale: { borderColor: next.axis },
+        } as any);
+      } catch {}
+    };
+    window.addEventListener('tradingcore:theme-change', applyTheme);
 
     const data = buildCandles(basePrice, timeframe);
     candles.setData(data);
@@ -116,7 +135,7 @@ export function ShowcaseChart({ basePrice, timeframe, showLevels, showForecast }
 
     const observer = new ResizeObserver(() => chart.timeScale().fitContent());
     observer.observe(host.current);
-    return () => { observer.disconnect(); chart.remove(); chartRef.current = undefined; candleRef.current = undefined; volumeRef.current = undefined; vwapRef.current = undefined; forecastRef.current = undefined; };
+    return () => { observer.disconnect(); window.removeEventListener('tradingcore:theme-change', applyTheme); chart.remove(); chartRef.current = undefined; candleRef.current = undefined; volumeRef.current = undefined; vwapRef.current = undefined; forecastRef.current = undefined; };
   }, [basePrice, timeframe, showLevels, showForecast]);
 
   return <div ref={host} className="absolute inset-0" aria-label="Interactive TradingCore chart preview" />;

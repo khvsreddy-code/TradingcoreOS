@@ -134,7 +134,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#8c93a6]/10 text-[#8c93a6] border border-[#222636]">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[var(--tco-muted)]/10 text-[var(--tco-muted)] border border-[var(--tco-border)]">
             {status}
           </span>
         );
@@ -143,18 +143,18 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans">
-      <div className="w-full max-w-4xl rounded-2xl border border-[#222636] bg-[#0c0e15] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-4xl rounded-2xl border border-[var(--tco-border)] bg-[var(--tco-surface)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#222636] flex items-center justify-between bg-[#11131c]">
+        <div className="px-6 py-4 border-b border-[var(--tco-border)] flex items-center justify-between bg-[var(--tco-surface-3)]">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-[#3b82f6]/10 border border-[#3b82f6]/20 text-[#3b82f6]">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#f3f4f6]">
+              <h2 className="text-base font-bold text-[var(--tco-text)]">
                 Broker Runtime Settings
               </h2>
-              <p className="text-xs font-mono text-[#8c93a6]">
+              <p className="text-xs font-mono text-[var(--tco-muted)]">
                 Manage active broker endpoints, capabilities & connection health
               </p>
             </div>
@@ -164,7 +164,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             <button
               onClick={handleSyncPortfolio}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#222636] bg-[#181b28] text-xs font-mono text-[#f3f4f6] hover:bg-[#222636] transition-colors cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-hover)] text-xs font-mono text-[var(--tco-text)] hover:bg-[var(--tco-border)] transition-colors cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 text-[#3b82f6] ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing...' : 'Sync All'}</span>
@@ -172,7 +172,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[#8c93a6] hover:text-[#f3f4f6] hover:bg-[#222636] transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-[var(--tco-muted)] hover:text-[var(--tco-text)] hover:bg-[var(--tco-border)] transition-colors cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
@@ -182,9 +182,9 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         {/* Content Body */}
         <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-[#222636] flex-1 overflow-y-auto">
           {/* Left Column: Connected Brokers */}
-          <div className="md:col-span-5 p-5 space-y-4 bg-[#090a0f]">
+          <div className="md:col-span-5 p-5 space-y-4 bg-[var(--tco-surface-2)]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono text-[#8c93a6] uppercase tracking-wider font-bold">
+              <span className="text-xs font-mono text-[var(--tco-muted)] uppercase tracking-wider font-bold">
                 Connected Brokers ({connections.length})
               </span>
               {onNavigateToConnect && (
@@ -202,11 +202,11 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
             </div>
 
             {connections.length === 0 ? (
-              <div className="p-6 border border-dashed border-[#222636] rounded-xl text-center space-y-3 bg-[#0c0e15]">
-                <Radio className="h-8 w-8 text-[#8c93a6] mx-auto" />
+              <div className="p-6 border border-dashed border-[var(--tco-border)] rounded-xl text-center space-y-3 bg-[var(--tco-surface)]">
+                <Radio className="h-8 w-8 text-[var(--tco-muted)] mx-auto" />
                 <div>
-                  <p className="text-xs font-bold text-[#f3f4f6]">No Brokers Connected</p>
-                  <p className="text-[11px] font-mono text-[#8c93a6] mt-0.5">
+                  <p className="text-xs font-bold text-[var(--tco-text)]">No Brokers Connected</p>
+                  <p className="text-[11px] font-mono text-[var(--tco-muted)] mt-0.5">
                     Connect your broker account to authorize live execution.
                   </p>
                 </div>
@@ -216,7 +216,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                       onClose();
                       onNavigateToConnect();
                     }}
-                    className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[#090a0f] hover:bg-[#2563eb] transition-colors cursor-pointer"
+                    className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[var(--tco-surface-2)] hover:bg-[#2563eb] transition-colors cursor-pointer"
                   >
                     Connect Broker Now
                   </button>
@@ -234,8 +234,8 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                       onClick={() => setSelectedBrokerId(conn.brokerId)}
                       className={`p-4 rounded-xl border transition-all cursor-pointer space-y-3 ${
                         isSelected
-                          ? 'border-[#3b82f6]/50 bg-[#11131c]'
-                          : 'border-[#222636] bg-[#0c0e15] hover:border-[#33384f]'
+                          ? 'border-[#3b82f6]/50 bg-[var(--tco-surface-3)]'
+                          : 'border-[var(--tco-border)] bg-[var(--tco-surface)] hover:border-[#33384f]'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -246,7 +246,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                                 type="text"
                                 value={tempName}
                                 onChange={(e) => setTempName(e.target.value)}
-                                className="px-2 py-0.5 text-xs font-mono bg-[#181b28] border border-[#3b82f6] rounded text-[#f3f4f6] focus:outline-none"
+                                className="px-2 py-0.5 text-xs font-mono bg-[var(--tco-hover)] border border-[#3b82f6] rounded text-[var(--tco-text)] focus:outline-none"
                               />
                               <button
                                 onClick={() => handleRename(conn.brokerId)}
@@ -257,7 +257,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-bold text-[#f3f4f6]">
+                              <span className="text-sm font-bold text-[var(--tco-text)]">
                                 {conn.nickname || conn.name}
                               </span>
                               <button
@@ -266,7 +266,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                                   setIsEditingName(conn.brokerId);
                                   setTempName(conn.nickname || conn.name);
                                 }}
-                                className="text-[#8c93a6] hover:text-[#f3f4f6]"
+                                className="text-[var(--tco-muted)] hover:text-[var(--tco-text)]"
                               >
                                 <Edit2 className="h-3 w-3" />
                               </button>
@@ -283,7 +283,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                         {renderStatusBadge(conn.status)}
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] font-mono text-[#8c93a6]">
+                      <div className="flex items-center justify-between text-[11px] font-mono text-[var(--tco-muted)]">
                         <span>Broker: {conn.name}</span>
                         <span>
                           Latency:{' '}
@@ -294,7 +294,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                       </div>
 
                       {/* Action buttons inside card */}
-                      <div className="pt-2 border-t border-[#222636]/60 flex items-center justify-between text-xs font-mono">
+                      <div className="pt-2 border-t border-[var(--tco-border)]/60 flex items-center justify-between text-xs font-mono">
                         {!conn.isPrimary ? (
                           <button
                             onClick={(e) => {
@@ -306,7 +306,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                             Set Primary
                           </button>
                         ) : (
-                          <span className="text-[11px] text-[#8c93a6]">Active Route</span>
+                          <span className="text-[11px] text-[var(--tco-muted)]">Active Route</span>
                         )}
 
                         <div className="flex items-center gap-2">
@@ -316,7 +316,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                               handleTestConnectivity(conn.brokerId);
                             }}
                             disabled={isTesting[conn.brokerId]}
-                            className="text-[#8c93a6] hover:text-[#f3f4f6] text-[11px] flex items-center gap-1"
+                            className="text-[var(--tco-muted)] hover:text-[var(--tco-text)] text-[11px] flex items-center gap-1"
                           >
                             <Activity className="h-3 w-3" />
                             <span>Ping</span>
@@ -342,51 +342,51 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
           </div>
 
           {/* Right Column: Broker Details & Capability Matrix */}
-          <div className="md:col-span-7 p-6 space-y-6 bg-[#0c0e15]">
+          <div className="md:col-span-7 p-6 space-y-6 bg-[var(--tco-surface)]">
             {activeConnectionInfo ? (
               <>
-                <div className="p-4 rounded-xl border border-[#222636] bg-[#11131c] space-y-3">
+                <div className="p-4 rounded-xl border border-[var(--tco-border)] bg-[var(--tco-surface-3)] space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-bold text-[#f3f4f6]">
+                      <h3 className="text-base font-bold text-[var(--tco-text)]">
                         {activeConnectionInfo.nickname || activeConnectionInfo.name}
                       </h3>
-                      <p className="text-xs font-mono text-[#8c93a6]">
+                      <p className="text-xs font-mono text-[var(--tco-muted)]">
                         Adapter ID: {activeConnectionInfo.brokerId}
                       </p>
                     </div>
 
                     <button
                       onClick={() => handleRefreshSession(activeConnectionInfo.brokerId)}
-                      className="px-3 py-1.5 rounded-lg border border-[#222636] bg-[#181b28] text-xs font-mono text-[#3b82f6] hover:bg-[#222636] flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-hover)] text-xs font-mono text-[#3b82f6] hover:bg-[var(--tco-border)] flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       <span>Refresh Session</span>
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono pt-2 border-t border-[#222636]">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono pt-2 border-t border-[var(--tco-border)]">
                     <div>
-                      <span className="text-[#8c93a6] block text-[10px]">Status</span>
-                      <span className="text-[#f3f4f6] font-bold">{activeConnectionInfo.status}</span>
+                      <span className="text-[var(--tco-muted)] block text-[10px]">Status</span>
+                      <span className="text-[var(--tco-text)] font-bold">{activeConnectionInfo.status}</span>
                     </div>
                     <div>
-                      <span className="text-[#8c93a6] block text-[10px]">Last Synced</span>
-                      <span className="text-[#f3f4f6]">
+                      <span className="text-[var(--tco-muted)] block text-[10px]">Last Synced</span>
+                      <span className="text-[var(--tco-text)]">
                         {activeConnectionInfo.lastSyncedAt
                           ? new Date(activeConnectionInfo.lastSyncedAt).toLocaleTimeString()
                           : 'Just now'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[#8c93a6] block text-[10px]">Token Expiry</span>
+                      <span className="text-[var(--tco-muted)] block text-[10px]">Token Expiry</span>
                       <span className="text-[#3b82f6]">24h Active</span>
                     </div>
                   </div>
 
                   {activeAdapter?.developerPortalUrl && (
-                    <div className="pt-2 border-t border-[#222636] flex items-center justify-between text-xs font-mono">
-                      <span className="text-[#8c93a6]">Official API Documentation:</span>
+                    <div className="pt-2 border-t border-[var(--tco-border)] flex items-center justify-between text-xs font-mono">
+                      <span className="text-[var(--tco-muted)]">Official API Documentation:</span>
                       <a
                         href={activeAdapter.developerPortalUrl}
                         target="_blank"
@@ -402,7 +402,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
 
                 {/* Permissions Grant */}
                 <div className="space-y-2">
-                  <span className="text-xs font-mono text-[#8c93a6] uppercase tracking-wider font-bold">
+                  <span className="text-xs font-mono text-[var(--tco-muted)] uppercase tracking-wider font-bold">
                     Granted API Permissions
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -410,7 +410,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                       (p) => (
                         <span
                           key={p}
-                          className="px-2.5 py-1 rounded-lg bg-[#181b28] border border-[#222636] text-xs font-mono text-[#f3f4f6] flex items-center gap-1.5"
+                          className="px-2.5 py-1 rounded-lg bg-[var(--tco-hover)] border border-[var(--tco-border)] text-xs font-mono text-[var(--tco-text)] flex items-center gap-1.5"
                         >
                           <ShieldCheck className="h-3.5 w-3.5 text-[#3b82f6]" />
                           <span>{p}</span>
@@ -422,7 +422,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
 
                 {/* Capability Matrix */}
                 <div className="space-y-3">
-                  <span className="text-xs font-mono text-[#8c93a6] uppercase tracking-wider font-bold">
+                  <span className="text-xs font-mono text-[var(--tco-muted)] uppercase tracking-wider font-bold">
                     Broker Capabilities Matrix
                   </span>
 
@@ -446,21 +446,21 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                           key={item.label}
                           className={`p-2.5 rounded-lg border flex items-center justify-between ${
                             item.supported
-                              ? 'bg-[#3b82f6]/5 border-[#3b82f6]/20 text-[#f3f4f6]'
-                              : 'bg-[#181b28]/40 border-[#222636] text-[#8c93a6] opacity-60'
+                              ? 'bg-[#3b82f6]/5 border-[#3b82f6]/20 text-[var(--tco-text)]'
+                              : 'bg-[var(--tco-hover)]/40 border-[var(--tco-border)] text-[var(--tco-muted)] opacity-60'
                           }`}
                         >
                           <span>{item.label}</span>
                           {item.supported ? (
                             <CheckCircle2 className="h-4 w-4 text-[#3b82f6]" />
                           ) : (
-                            <X className="h-4 w-4 text-[#8c93a6]" />
+                            <X className="h-4 w-4 text-[var(--tco-muted)]" />
                           )}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs font-mono text-[#8c93a6]">
+                    <p className="text-xs font-mono text-[var(--tco-muted)]">
                       No capability metadata available for this adapter.
                     </p>
                   )}
@@ -468,9 +468,9 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
               </>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
-                <Building2 className="h-10 w-10 text-[#8c93a6]" />
-                <p className="text-sm font-bold text-[#f3f4f6]">Select a broker from the left list</p>
-                <p className="text-xs font-mono text-[#8c93a6] max-w-sm">
+                <Building2 className="h-10 w-10 text-[var(--tco-muted)]" />
+                <p className="text-sm font-bold text-[var(--tco-text)]">Select a broker from the left list</p>
+                <p className="text-xs font-mono text-[var(--tco-muted)] max-w-sm">
                   View real-time connection status, API ping times, token expiration, and feature capabilities.
                 </p>
               </div>
@@ -479,7 +479,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-[#222636] bg-[#11131c] flex items-center justify-between text-xs font-mono text-[#8c93a6]">
+        <div className="px-6 py-3 border-t border-[var(--tco-border)] bg-[var(--tco-surface-3)] flex items-center justify-between text-xs font-mono text-[var(--tco-muted)]">
           <div className="flex items-center gap-2">
             <Zap className="h-3.5 w-3.5 text-[#3b82f6]" />
             <span>TradingCore OS Runtime</span>

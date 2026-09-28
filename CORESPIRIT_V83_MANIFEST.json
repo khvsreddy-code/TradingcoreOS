@@ -1,0 +1,49 @@
+{
+  "release": "CoreSpirit v83 \u2014 chart renderer instrumentation + terminal consolidation",
+  "baseline": "v82",
+  "roadmap_range": "1\u201359",
+  "kind": "frontend_runtime_hardening",
+  "chart_runtime": {
+    "imperative_controller": "ChartController + useChartLifecycle",
+    "high_frequency_path": "TradingCoreRuntime \u2192 ChartMarketStore \u2192 useChartRealtimeFeed \u2192 imperative renderer",
+    "react_policy": "market ticks remain outside LiveChart React state; React subscriptions are frame-coalesced",
+    "performance_observability": [
+      "packets",
+      "rendererUpdates",
+      "reactFrames",
+      "coalescedReactNotifications",
+      "averageRendererMs",
+      "worstRendererMs",
+      "packetsPerRendererUpdate",
+      "reactCoalescingRate"
+    ]
+  },
+  "terminal_runtime": {
+    "canonical": "src/LiveTradingTerminal.tsx",
+    "workspace_composition": "src/LiveTradingWorkspace.tsx",
+    "retired_generations": [
+      "LiveTradingTerminalV2.tsx",
+      "LiveTradingTerminalV3.tsx",
+      "LiveTradingTerminalV4.tsx",
+      "LiveTradingTerminalV5.tsx"
+    ],
+    "fallback_policy": "no generation fallback; canonical terminal owns the live module boundary"
+  },
+  "hotfix_retirement": {
+    "deleted_workflow": ".github/workflows/fix-layout-duplicate-slots.yml",
+    "policy": "temporary repair \u2192 canonical source \u2192 test \u2192 delete automation"
+  },
+  "invariants": [
+    "one canonical live terminal implementation exists in production source",
+    "chart high-frequency updates use the external market-data store and imperative renderer path",
+    "React is not the transport for per-tick chart updates",
+    "performance metrics are observational and do not alter chart semantics",
+    "layout correctness is owned by canonical source and tests rather than a self-mutating workflow",
+    "CoreSpirit VM/runtime architecture remains unchanged"
+  ],
+  "verification": [
+    "stage85ChartPerformance.test.ts",
+    "LiveTradingTerminalConsolidation.test.mjs",
+    "terminalHotfixRetirement.test.mjs"
+  ]
+}

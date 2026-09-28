@@ -1,19 +1,26 @@
 {
-  "release": "CoreSpirit v74 — Language Simplification cycle + Supabase user-settings ACL repair",
+  "release": "CoreSpirit v74 \u2014 Language Simplification cycle + Supabase user-settings ACL repair",
   "baseline": "v73",
-  "roadmap_range": "1–59",
+  "roadmap_range": "1\u201359",
   "kind": "reduction_cycle_and_backend_access_correction",
   "focus": [
-    "reduce author-facing syntax complexity without adding roadmap stage 60",
+    "reduce author-facing syntax complexity without adding a new roadmap stage",
     "compiler absorbs source-sugar complexity into one semantic model",
-    "preserve show/when/emit/automate as primary user concepts",
+    "preserve show/when/emit/automate as the primary user concepts",
     "freeze one language -> one compiler -> one stable IR -> one VM",
     "repair authenticated PostgREST access for browser-facing user-owned tables"
   ],
-  "invariants": [
-    "simple/advanced/professional authoring levels share one execution substrate",
-    "renderer, broker, model transport and risk-policy plumbing remain hidden infrastructure",
-    "RLS remains the row-level authority for user-owned persistence",
+  "architecture_invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "simple/advanced/professional authoring levels do not create separate runtimes",
+    "renderer, broker, model transport, execution planner and risk-policy plumbing remain hidden infrastructure",
+    "RLS remains the row-level authority for user-owned tables",
     "no anonymous DML access was added"
-  ]
+  ],
+  "verification_notes": {
+    "roadmap": "59 stages; v74 is a cross-cutting reduction cycle, not stage 60",
+    "supabase": "public.user_settings exists; authenticated SELECT/INSERT/UPDATE privileges verified after migration; PostgREST schema reload issued",
+    "docs": "CORESPIRIT.md and CORESPIRIT_BUILD_TRACKER.md updated for #23/#24",
+    "build": "full Vite production build remains environment-dependent; this release does not claim a clean production build solely from source inspection"
+  }
 }

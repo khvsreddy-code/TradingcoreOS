@@ -26,6 +26,7 @@ export class CoreDrawingStore {
   list(includeDeleted = false): CoreDrawing[] {
     return [...this.drawings.values()]
       .filter(d => includeDeleted || d.lifecycle !== 'deleted')
+      .sort((a, b) => a.zIndex - b.zIndex || String(a.id).localeCompare(String(b.id)))
       .map(cloneCoreDrawing);
   }
 
@@ -36,7 +37,7 @@ export class CoreDrawingStore {
 
   add(input: unknown): CoreDrawing | null {
     const drawing = normalizeCoreDrawing(input);
-    if (!drawing) return null;
+    if (!drawing || this.drawings.has(drawing.id)) return null;
     this.commit();
     this.drawings.set(drawing.id, drawing);
     this.redoStack = [];
@@ -54,6 +55,23 @@ export class CoreDrawingStore {
     return cloneCoreDrawing(candidate);
   }
 
+  setPoints(id: string, points: CoreDrawing['points']): CoreDrawing | undefined { return this.update(id, { points }); }
+  setProperties(id: string, properties: Partial<Pick<CoreDrawing, 'style' | 'label' | 'metadata'>>): CoreDrawing | undefined { return this.update(id, properties); }
+  setVisible(id: string, visible: boolean): CoreDrawing | undefined { return this.update(id, { visible, lifecycle: visible ? 'active' : 'hidden' }); }
+  setSelectionEnabled(id: string, enabled: boolean): CoreDrawing | undefined { return this.update(id, { selectionEnabled: enabled }); }
+  setLocked(id: string, locked: boolean): CoreDrawing | undefined { return this.update(id, { locked }); }
+  setGroup(id: string, groupId?: string): CoreDrawing | undefined { return this.update(id, { groupId }); }
+
+  bringToFront(id: string): CoreDrawing | undefined {
+    const max = Math.max(0, ...this.list(true).map(d => d.zIndex));
+    return this.update(id, { zIndex: max + 1 });
+  }
+
+  sendToBack(id: string): CoreDrawing | undefined {
+    const min = Math.min(0, ...this.list(true).map(d => d.zIndex));
+    return this.update(id, { zIndex: min - 1 });
+  }
+
   remove(id: string): boolean {
     const current = this.drawings.get(id);
     if (!current || current.lifecycle === 'deleted') return false;
@@ -69,10 +87,7 @@ export class CoreDrawingStore {
       .map(d => d.id);
     if (!ids.length) return 0;
     this.commit();
-    for (const id of ids) {
-      const current = this.drawings.get(id)!;
-      this.drawings.set(id, markDrawingDeleted(current));
-    }
+    for (const id of ids) this.drawings.set(id, markDrawingDeleted(this.drawings.get(id)!));
     this.redoStack = [];
     return ids.length;
   }
@@ -93,14 +108,12 @@ export class CoreDrawingStore {
     return true;
   }
 
-  toCollection(): CoreDrawingCollection {
-    return drawingCollection(this.list());
-  }
+  toCollection(): CoreDrawingCollection { return drawingCollection(this.list()); }
 
   load(collection: unknown): void {
-    const value = collection as CoreDrawingCollection;
+    const value = collection as CoreDrawingCollection | { version: 1; drawings: unknown[] };
     this.drawings.clear();
-    if (value?.version === 1 && Array.isArray(value.drawings)) {
+    if ((value?.version === 1 || value?.version === 2) && Array.isArray(value.drawings)) {
       for (const raw of value.drawings) {
         const drawing = normalizeCoreDrawing(raw);
         if (drawing) this.drawings.set(drawing.id, drawing);
@@ -110,9 +123,7 @@ export class CoreDrawingStore {
     this.redoStack = [];
   }
 
-  private snapshot(): CoreDrawingStoreSnapshot {
-    return { drawings: this.list(true) };
-  }
+  private snapshot(): CoreDrawingStoreSnapshot { return { drawings: this.list(true) }; }
 
   private restore(snapshot: CoreDrawingStoreSnapshot): void {
     this.drawings.clear();

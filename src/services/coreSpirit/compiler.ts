@@ -1,5 +1,5 @@
 import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
-import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
+import { CoreSpiritIrInstruction, CoreSpiritIrProgram, coreSpiritSourceMapFromInstructions } from './ir';
 import { analyzeCoreSpirit, CoreSpiritDiagnostic } from './semanticAnalyzer';
 import { CoreSpiritExecutableArtifact, makeExecutableArtifact } from './artifact';
 import { resolveCoreSpiritNames } from './nameResolver';
@@ -10,6 +10,9 @@ import { buildCoreSpiritGraphBundle } from './semanticGraph';
 import { getCoreSpiritBuiltin } from './standardLibrary';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
+import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreSpiritComponents';
+import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
+import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
 import { createCoreSpiritCompilationUnit } from './compilerPipeline';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
@@ -18,18 +21,18 @@ export class CoreSpiritCompiler {
   compileSource(
     source: string,
     sourceId = 'coreSpirit',
-    options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata } = {},
+    options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata; components?: CoreSpiritComponentRegistryLike } = {},
   ): CoreSpiritCompileResult {
     const unit = createCoreSpiritCompilationUnit(source, options);
-    const errors = unit.diagnostics.filter(d => d.severity === 'error');
-    if (errors.length || !unit.semantic) return { diagnostics: unit.diagnostics };
+    if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) return { diagnostics: unit.diagnostics };
     return this.compile(unit.ast, sourceId, options);
   }
 
-  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata } = {}): CoreSpiritCompileResult {
+  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata; components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritCompileResult {
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
-    const names = resolveCoreSpiritNames(ast);
-    const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface });
+    const componentSource = options.components ?? coreSpiritComponentRegistry;
+    const names = resolveCoreSpiritNames(ast, { components: componentSource });
+    const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface, components: componentSource });
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
     if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics };
     const instructions: CoreSpiritIrInstruction[] = [];
@@ -47,6 +50,7 @@ export class CoreSpiritCompiler {
     };
     const dataRefRegisters = new Map<string, string>();
     const modelRefRegisters = new Map<string, string>();
+    const componentRefRegisters = new Map<string, string>();
     const dataMemberSources = new Map<CoreSpiritAstNode, { ref: string; field: 'open'|'high'|'low'|'close'|'volume'|'time' }>();
     let temp = 0;
 
@@ -70,7 +74,18 @@ export class CoreSpiritCompiler {
           const args=n.args.map(expr),dest=`t${temp++}`;
           const seriesArgs=n.args.filter(a=>a.type==='identifier'&&['open','high','low','close','volume','time'].includes(a.name)).map(a=>(a as any).name);
           const seriesSources = n.args.flatMap(arg => { const source = dataMemberSources.get(arg); return source ? [source] : []; });
-          emitInstruction(n, {op:'call',dest,name:n.name,args,seriesArgs,seriesSources:seriesSources.length ? seriesSources : undefined,callId:`${n.name}:${n.span?.start ?? temp}`});
+          const component = resolveCoreSpiritComponent(componentSource,n.name);
+          emitInstruction(n, {
+            op:'call',
+            dest,
+            name:n.name,
+            args,
+            seriesArgs,
+            seriesSources:seriesSources.length ? seriesSources : undefined,
+            ...(component ? { componentId:component.id, componentPure:component.deterministic && !component.stateful, componentStateful:component.stateful, componentDeterministic:component.deterministic } : {}),
+            callId:`${n.name}:${n.span?.start ?? temp}`,
+          });
+          if (component && component.outputs.length > 1) componentRefRegisters.set(dest,component.id);
           const builtin = getCoreSpiritBuiltin(n.name);
           if (builtin?.emitKind) {
             emitInstruction(n, {op:'emit',kind:builtin.emitKind,args:[dest,...args],outputId:`${builtin.emitKind}:${n.span?.start ?? temp}`});
@@ -79,6 +94,34 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
+          if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+            const resolved = resolveCoreSpiritLibraryCall(n.target.name, n.member, componentSource);
+            if (!resolved) throw new Error(`Unknown standard-library member '${n.target.name}.${n.member}'.`);
+            if (resolved.entry.status === 'catalog') throw new Error(`Standard-library member '${n.target.name}.${n.member}' is cataloged but not registered for execution.`);
+            const args = n.args.map(expr);
+            const dest = `t${temp++}`;
+            if (resolved.component) {
+              emitInstruction(n, {
+                op:'call',
+                dest,
+                name:resolved.component.name,
+                args,
+                componentId:resolved.component.id,
+                componentPure:resolved.component.deterministic && !resolved.component.stateful,
+                componentStateful:resolved.component.stateful,
+                componentDeterministic:resolved.component.deterministic,
+                callId:`${resolved.entry.qualifiedName}:${n.span?.start ?? temp}`,
+              });
+              if (resolved.component.outputs.length > 1) componentRefRegisters.set(dest, resolved.component.id);
+              return dest;
+            }
+            const builtinName = resolved.builtin?.name;
+            if (!builtinName) throw new Error(`Standard-library member '${n.target.name}.${n.member}' has no executable lowering.`);
+            const seriesArgs = n.args.filter(a => a.type === 'identifier' && ['open','high','low','close','volume','time'].includes(a.name)).map(a => (a as any).name);
+            emitInstruction(n, { op:'call', dest, name:builtinName, args, seriesArgs, callId:`${n.target.name}.${n.member}:${n.span?.start ?? temp}` });
+            if (resolved.builtin?.emitKind) emitInstruction(n, { op:'emit', kind:resolved.builtin.emitKind, args:[dest,...args], outputId:`${resolved.builtin.emitKind}:${n.span?.start ?? temp}` });
+            return dest;
+          }
           const rootNamespace = n.target.type === 'identifier' && CORE_SPIRIT_ROOT_NAMESPACES.includes(n.target.name as any) ? n.target.name : undefined;
           const namespace = rootNamespace || 'panel';
           const contract = getCoreSpiritMemberContract(namespace, n.member);
@@ -105,6 +148,16 @@ export class CoreSpiritCompiler {
             const memberDest=`t${temp++}`; const areaDest=`t${temp++}`;
             emitInstruction(n, { op:'const', dest:areaDest, value:n.member });
             emitInstruction(n, { op:'call', dest:memberDest, name:'visual.area', args:[areaDest], callId:`chart.area:${n.member}:${n.span?.start ?? temp}` });
+            return memberDest;
+          }
+          const directComponent = n.target.type === 'call' ? resolveCoreSpiritComponent(componentSource,n.target.name) : undefined;
+          const isComponentRef = directComponent && directComponent.outputs.length > 1 ||
+            (n.target.type === 'identifier' && componentRefRegisters.has(n.target.name));
+          if (isComponentRef) {
+            const target = expr(n.target);
+            const memberDest=`t${temp++}`; const memberName=`t${temp++}`;
+            emitInstruction(n, { op:'const', dest:memberName, value:n.member });
+            emitInstruction(n, { op:'call', dest:memberDest, name:'__component_get', args:[target,memberName], callId:`component:${n.member}:${n.span?.start ?? temp}` });
             return memberDest;
           }
           const isModelRef = (n.target.type === 'call' && n.target.name === 'model') ||
@@ -149,6 +202,8 @@ export class CoreSpiritCompiler {
           const isModelRef = n.expression.type === 'call' && n.expression.name === 'model';
           if (isDataRef) dataRefRegisters.set(n.name, source);
           if (isModelRef) modelRefRegisters.set(n.name, source);
+          const component = n.expression.type === 'call' ? resolveCoreSpiritComponent(componentSource,n.expression.name) : undefined;
+          if (component && component.outputs.length > 1) componentRefRegisters.set(n.name, component.id);
           emitInstruction(n, {op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef});
           if(!locals.includes(n.name))locals.push(n.name);
           break;
@@ -166,18 +221,9 @@ export class CoreSpiritCompiler {
     };
     try {
       stmt(ast);
-      const rawIr:CoreSpiritIrProgram={
-        version:1,
-        sourceId,
-        entry:{instructions},
-        locals,
-        maxLookback:semantic.maxLookback,
-        diagnostics:[],
-        sourceMap:coreSpiritSourceMapFromInstructions(sourceId,instructions),
-        ...(options.surface ? { surface: options.surface } : {}),
-      };
+      const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:coreSpiritSourceMapFromInstructions(sourceId,instructions),...(options.surface ? { surface: options.surface } : {})};
       const optimized = optimizeCoreSpiritIr(rawIr);
-      const ir = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), graphs: buildCoreSpiritGraphBundle(optimized) } as CoreSpiritIrProgram;
+      const ir = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), graphs: buildCoreSpiritGraphBundle(optimized, { components: componentSource }) } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {

@@ -9,6 +9,8 @@
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritExecutionTarget } from './executionTarget';
 import type { CoreSpiritComputeBackend } from './executionPlanner';
+import type { CoreSpiritEnvironmentCapability, CoreSpiritEnvironmentName } from './executionEnvironment';
+import { CORE_SPIRIT_EXECUTION_ENVIRONMENTS } from './executionEnvironment';
 
 export type CoreSpiritSandboxCapability =
   | 'market-data'
@@ -51,6 +53,7 @@ export interface CoreSpiritCapabilitySandboxOptions {
   target: CoreSpiritExecutionTarget;
   granted?: readonly CoreSpiritSandboxCapability[];
   limits?: Partial<CoreSpiritSandboxLimits>;
+  environment?: CoreSpiritEnvironmentName;
 }
 
 export const CORE_SPIRIT_SANDBOX_LIMITS: Readonly<CoreSpiritSandboxLimits> = Object.freeze({
@@ -114,6 +117,16 @@ export class CoreSpiritCapabilitySandbox {
     const intersection = [...layerAllowed].filter(capability => targetAllowed.has(capability));
     const safeDefaults = new Set(intersection.filter(capability => capability === 'compute-cpu' || !capability.startsWith('compute-')));
     const requested = options.granted ? new Set(options.granted) : safeDefaults;
+    if (options.environment) {
+      const environment = CORE_SPIRIT_EXECUTION_ENVIRONMENTS[options.environment];
+      for (const capability of requested) {
+        const required = environmentCapabilityForSandbox(capability);
+        if (required) {
+          const allowed = environment.capabilities.includes(required) || (required === 'simulated-orders' && environment.capabilities.includes('real-orders'));
+          if (!allowed) throw new CoreSpiritCapabilityDeniedError(capability, options.layer, options.target);
+        }
+      }
+    }
     for (const capability of requested) {
       if (!layerAllowed.has(capability)) throw new CoreSpiritCapabilityDeniedError(capability, options.layer, options.target);
       if (!targetAllowed.has(capability)) throw new CoreSpiritCapabilityDeniedError(capability, options.layer, options.target);
@@ -140,6 +153,12 @@ export class CoreSpiritCapabilitySandbox {
     this.usage.set(quota, next);
   }
 
+  requireEnvironmentCapability(capability: CoreSpiritEnvironmentCapability, environment: CoreSpiritEnvironmentName): void {
+    if (!CORE_SPIRIT_EXECUTION_ENVIRONMENTS[environment].capabilities.includes(capability)) {
+      throw new CoreSpiritCapabilityDeniedError(capability, this.layer, this.target);
+    }
+  }
+
   resetRevision(): void { this.usage.clear(); }
 
   usageSnapshot(): Readonly<Record<string, number>> {
@@ -159,6 +178,17 @@ export function validateCoreSpiritSandboxArchitecture(): string[] {
     if ((LAYER_CAPABILITY_MAP as any)[name]) errors.push(`forbidden capability '${name}' leaked into layer capability map`);
   }
   return errors;
+}
+
+function environmentCapabilityForSandbox(capability: CoreSpiritSandboxCapability): CoreSpiritEnvironmentCapability | undefined {
+  if (capability === 'market-data') return 'market-data';
+  if (capability === 'models') return 'models';
+  if (capability === 'visuals') return 'visuals';
+  if (capability === 'webhooks') return 'webhooks';
+  if (capability === 'risk-queries') return 'risk';
+  if (capability === 'policy-evaluation') return 'policy';
+  if (capability === 'order-intents') return 'simulated-orders';
+  return undefined;
 }
 
 export function computeCapabilityForBackend(backend: CoreSpiritComputeBackend): CoreSpiritSandboxCapability {

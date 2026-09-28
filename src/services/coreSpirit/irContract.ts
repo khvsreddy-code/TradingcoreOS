@@ -20,27 +20,14 @@ function hasValidInstructionOrigin(value: unknown): boolean {
   const end=origin.end;
   const line=origin.line;
   const column=origin.column;
-  return typeof origin.sourceNodeId === 'string' &&
-    typeof start === 'number' &&
-    typeof end === 'number' &&
-    typeof line === 'number' &&
-    typeof column === 'number' &&
-    Number.isInteger(start) &&
-    Number.isInteger(end) &&
-    start >= 0 &&
-    end >= start &&
-    Number.isInteger(line) &&
-    line >= 1 &&
-    Number.isInteger(column) &&
-    column >= 1;
+  return typeof origin.sourceNodeId === 'string' && typeof start === 'number' && typeof end === 'number' && typeof line === 'number' && typeof column === 'number' && Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start && Number.isInteger(line) && line >= 1 && Number.isInteger(column) && column >= 1;
 }
 
 export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIrInstruction {
   const instruction = value as CoreSpiritIrInstruction | undefined;
   return !!instruction && typeof instruction === 'object' &&
     typeof (instruction as any).op === 'string' &&
-    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op) &&
-    ((instruction as any).origin === undefined || hasValidInstructionOrigin((instruction as any).origin));
+    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op) && ((instruction as any).origin === undefined || hasValidInstructionOrigin((instruction as any).origin));
 }
 
 export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrProgram {

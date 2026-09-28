@@ -7,6 +7,7 @@ export * from './semanticAnalyzer';
 export * from './ir';
 export * from './compiler';
 export * from './standardLibrary';
+export * from './standardLibraryNamespaces';
 export * from './callContract';
 export * from './memberRegistry';
 export * from './surfaceForms';
@@ -34,6 +35,8 @@ export * from './languageSpec';
 
 export * from './executionContext';
 export * from './seriesEngine';
+export * from './seriesVector';
+export * from './seriesFusion';
 export * from './session';
 export * from './irContract';
 export * from './replay';
@@ -103,4 +106,35 @@ export * from './composability';
 
 export * from './surfaceCst';
 export * from './compilerPipeline';
+
 export * from './semanticDependencyGraph';
+
+export * from './sourceInspector';
+export * from './artifactIdentity';
+export * from './runManifest';
+export * from './executionEnvironment';
+export * from './sessionCalendar';
+export * from './storageSchema';
+
+export * from './deploymentLifecycle';
+
+export * from './reconciliation';
+
+export * from './coreSpiritExecutionModel';
+
+export * from './coreSpiritPerformance';
+
+export * from './coreSpiritComponents';
+
+export * from './incrementalCompiler';
+
+export * from './artifactCache';
+
+export * from './coreSpiritLineage';
+
+export * from './coreSpiritPackage';
+
+export * from './coreSpiritAuthoring';
+export * from './coreSpiritComplexityAbsorber';
+export * from './semanticComponentAdapters';
+

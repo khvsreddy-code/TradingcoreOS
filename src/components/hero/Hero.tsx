@@ -113,7 +113,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
               ].map(([n, title, copy]) => (
                 <div key={n} className="pr-4 last:pr-0">
                   <div className="font-mono text-[9px] tracking-[0.18em] text-[#596175]">{n}</div>
-                  <div className="mt-1 text-sm font-semibold text-[#f3f4f6]">{title}</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--tco-text)]">{title}</div>
                   <div className="mt-1 text-[10px] leading-4 text-[#687187]">{copy}</div>
                 </div>
               ))}
@@ -134,7 +134,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                   <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]/70" />
                 </div>
-                <div className="flex h-6 flex-1 items-center rounded-md border border-white/[0.06] bg-[#0b0e15] px-3 font-mono text-[9px] text-[#5d667a]">
+                <div className="flex h-6 flex-1 items-center rounded-md border border-white/[0.06] bg-[var(--tco-surface-2)] px-3 font-mono text-[9px] text-[#5d667a]">
                   tradingcoreos.vercel.app / workspace
                 </div>
                 <div className="hidden items-center gap-1.5 font-mono text-[9px] text-[#6f7890] sm:flex">
@@ -146,7 +146,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                 <div className="flex items-center gap-3">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#3b82f6]/30 bg-[#3b82f6]/10 text-xs font-black text-[#3b82f6]">TC</div>
                   <div>
-                    <div className="text-[11px] font-bold text-[#f3f4f6]">TradingCore OS</div>
+                    <div className="text-[11px] font-bold text-[var(--tco-text)]">TradingCore OS</div>
                     <div className="font-mono text-[8px] text-[#687187]">NIFTY 50 · NSE · 5m</div>
                   </div>
                 </div>
@@ -178,7 +178,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                 <div className="relative min-h-[350px] overflow-hidden">
                   <div className="absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] [background-size:42px_42px]" />
                   <div className="absolute left-3 right-3 top-3 flex items-center justify-between font-mono text-[8px] text-[#667086]">
-                    <span>O 24,091 · H 24,212 · L 24,040 · <b className="text-[#f3f4f6]">C 24,175</b></span>
+                    <span>O 24,091 · H 24,212 · L 24,040 · <b className="text-[var(--tco-text)]">C 24,175</b></span>
                     <span className="text-[#60a5fa]">+84.80</span>
                   </div>
                   <svg viewBox="0 0 600 150" preserveAspectRatio="none" className="absolute inset-x-0 top-10 h-52 w-full">
@@ -202,20 +202,20 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
                   </div>
                 </div>
 
-                <div className="border-l border-[#222636] bg-[#090a0f]">
+                <div className="border-l border-[var(--tco-border)] bg-[var(--tco-surface-2)]">
                   <div className="flex border-b border-white/[0.06] font-mono text-[8px]">
-                    <span className="flex-1 border-b border-[#3b82f6] bg-[#3b82f6]/[0.05] py-2 text-center text-[#f3f4f6]">ORDER</span>
+                    <span className="flex-1 border-b border-[#3b82f6] bg-[#3b82f6]/[0.05] py-2 text-center text-[var(--tco-text)]">ORDER</span>
                     <span className="flex-1 py-2 text-center text-[#69748a]">POSITIONS</span>
                   </div>
                   <div className="space-y-3 p-3 font-mono">
                     <div className="text-[8px] uppercase tracking-[0.14em] text-[#69748a]">NIFTY 50</div>
-                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.06] bg-[#0b0e15] p-1">
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.06] bg-[var(--tco-surface-2)] p-1">
                       <div className="rounded bg-[#3b82f6]/15 py-1.5 text-center text-[9px] font-bold text-[#60a5fa]">BUY</div>
                       <div className="py-1.5 text-center text-[9px] text-[#69748a]">SELL</div>
                     </div>
-                    <div className="rounded-lg border border-white/[0.06] bg-[#0b0e15] p-2.5">
-                      <div className="flex justify-between text-[8px] text-[#69748a]"><span>Qty</span><span className="text-[#e5e7eb]">25</span></div>
-                      <div className="mt-2 flex justify-between text-[8px] text-[#69748a]"><span>Margin</span><span className="text-[#e5e7eb]">₹1.25L</span></div>
+                    <div className="rounded-lg border border-white/[0.06] bg-[var(--tco-surface-2)] p-2.5">
+                      <div className="flex justify-between text-[8px] text-[#69748a]"><span>Qty</span><span className="text-[var(--tco-text-2)]">25</span></div>
+                      <div className="mt-2 flex justify-between text-[8px] text-[#69748a]"><span>Margin</span><span className="text-[var(--tco-text-2)]">₹1.25L</span></div>
                     </div>
                     <div className="rounded-lg bg-[#3b82f6] py-2 text-center text-[8px] font-black tracking-wider text-[#06100c]">BUY MARKET</div>
                     <div className="border-t border-white/[0.06] pt-3">
@@ -233,7 +233,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
               className="absolute -bottom-5 -left-5 hidden rounded-xl border border-white/[0.08] bg-[#10203a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
             >
               <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#687187]">Signal engine</div>
-              <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[#f3f4f6]"><span className="h-2 w-2 rounded-full bg-[#3b82f6]" /> Bullish confluence <span className="font-mono text-[#60a5fa]">84%</span></div>
+              <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[var(--tco-text)]"><span className="h-2 w-2 rounded-full bg-[#3b82f6]" /> Bullish confluence <span className="font-mono text-[#60a5fa]">84%</span></div>
             </motion.div>
 
             <motion.div
@@ -242,7 +242,7 @@ export const Hero: React.FC<HeroProps> = ({ onLaunch }) => {
               className="absolute -right-4 top-20 hidden rounded-xl border border-white/[0.08] bg-[#10203a]/95 px-4 py-3 shadow-2xl backdrop-blur-xl sm:block"
             >
               <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#687187]">Execution</div>
-              <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[#f3f4f6]"><span className="h-2 w-2 rounded-full bg-[#60a5fa]" /> Broker connected</div>
+              <div className="mt-1 flex items-center gap-2 text-sm font-bold text-[var(--tco-text)]"><span className="h-2 w-2 rounded-full bg-[#60a5fa]" /> Broker connected</div>
             </motion.div>
           </motion.div>
         </div>

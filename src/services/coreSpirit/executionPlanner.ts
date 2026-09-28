@@ -13,6 +13,9 @@
  */
 import type { CoreSpiritIrProgram } from './ir';
 import type { CoreSpiritGraphNode } from './semanticGraph';
+import { coreSpiritChecksum } from './artifact';
+import { executionLaneForNode } from './coreSpiritExecutionModel';
+import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 
 export type CoreSpiritComputeBackend = 'cpu' | 'wasm' | 'gpu';
 
@@ -77,6 +80,10 @@ export interface CoreSpiritExecutionPlan {
   deterministic: boolean;
   explanation: readonly string[];
   hostOwned: true;
+  cacheKey: string;
+  lanes: Readonly<{ hot: readonly string[]; warm: readonly string[]; cold: readonly string[] }>;
+  barriers: readonly string[];
+  seriesFusion: CoreSpiritSeriesFusionPlan;
 }
 
 export const CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS: readonly CoreSpiritComputeBackendProfile[] = Object.freeze([
@@ -97,7 +104,7 @@ function nodesFrom(program: CoreSpiritIrProgram): CoreSpiritGraphNode[] {
     sourceInputs: [],
     pure: ['const','loadSeries','move','unary','binary','index'].includes(instruction.op),
     effectful: !['const','loadSeries','move','unary','binary','index'].includes(instruction.op),
-  } as CoreSpiritGraphNode));
+  } as unknown as CoreSpiritGraphNode));
 }
 
 export function estimateCoreSpiritWorkload(
@@ -186,6 +193,7 @@ export function planCoreSpiritExecution(
   const effectNodes = nodes.filter(node => node.effectful);
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
   const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits });
+  const seriesFusion = planCoreSpiritSeriesFusion(program);
 
   const explanation: string[] = [
     `workload=${workload.workUnits} units (${workload.symbols} symbols × ${workload.timeframes} timeframes × ${workload.bars} bars × ${Math.max(1, workload.pureInstructionCount)} pure instructions)`,
@@ -242,6 +250,20 @@ export function planCoreSpiritExecution(
     return planCoreSpiritExecution(program, { ...options, backends: profiles.map(p => p.backend === 'gpu' ? { ...p, available: false } : p) });
   }
 
+  const lanes = {
+    hot: nodes.filter(node => executionLaneForNode({ effectful: node.effectful, stateful: node.stateful, latencyClass: node.latencyClass, kind: node.kind }) === 'hot').map(node => node.id),
+    warm: nodes.filter(node => executionLaneForNode({ effectful: node.effectful, stateful: node.stateful, latencyClass: node.latencyClass, kind: node.kind }) === 'warm').map(node => node.id),
+    cold: nodes.filter(node => executionLaneForNode({ effectful: node.effectful, stateful: node.stateful, latencyClass: node.latencyClass, kind: node.kind }) === 'cold').map(node => node.id),
+  } as const;
+  const cacheKey = coreSpiritChecksum({
+    sourceId: program.sourceId,
+    irVersion: program.version,
+    semanticGraph: program.graphs?.semantic.checksum ?? '',
+    dimensions: { symbols: workload.symbols, timeframes: workload.timeframes, bars: workload.bars },
+    strategy,
+  });
+  explanation.push(`execution lanes: hot=${lanes.hot.length}, warm=${lanes.warm.length}, cold=${lanes.cold.length}`);
+  if (seriesFusion.groups.length) explanation.push(`series fusion: ${seriesFusion.groups.length} group(s), ${seriesFusion.fusedInstructionCount} instruction(s) lowered to single-pass kernels`);
   return {
     version: 1,
     strategy,
@@ -251,6 +273,10 @@ export function planCoreSpiritExecution(
     deterministic,
     explanation,
     hostOwned: true,
+    cacheKey,
+    lanes,
+    barriers: effectNodes.map(node => node.id),
+    seriesFusion,
   };
 }
 

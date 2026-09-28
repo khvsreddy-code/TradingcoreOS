@@ -6,15 +6,128 @@
 
 ## Current release
 
-**Release:** CoreSpirit v78 — P0 source provenance / source-map hardening
+**Release:** CoreSpirit v98 — user-authored indicators, Supabase versioning, and public indicator community
 
 **Tracker state:** restored as a first-class project document.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
-**Machine release record:** `CORESPIRIT_V78_MANIFEST.json`
+**Machine release record:** `CORESPIRIT_V98_MANIFEST.json`
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments.
+
+
+
+### v98 implementation record — 2026-09-27
+
+- [x] Added a shared indicator settings contract for Inputs / Style / Display, including scale, pane, precision, visibility and opacity.
+- [x] Integrated the shared settings surface into the protected Indicators workspace.
+- [x] Added editable CoreSpirit starter source for supported native indicators and a clear scaffold boundary for native-only studies.
+- [x] Added Indicator Studio for source editing, canonical compilation, copy/reset, Supabase version saves and public publication metadata.
+- [x] Added Supabase-backed immutable indicator source/version persistence using the existing CoreSpirit script/version tables.
+- [x] Added `indicator_publications` with public-read/owner-write RLS, source snapshots, author metadata, tags, category, license, usage counters and stable slugs.
+- [x] Added dedicated `indicator-covers` storage with public reads and authenticated owner-scoped writes.
+- [x] Added public `/explore/indicators` catalog with visual cards, search, filters, sorting and source inspection.
+- [x] Added direct `/explore/indicators/<slug>` resolution for shareable publication pages.
+- [x] Added public view/install counter RPCs and kept the public route outside protected workspace redirects.
+- [x] Added workspace/live-dock entry points to the same source authoring flow.
+- [x] Added indicator community architecture, user-authoring documentation and v98 history record.
+- [x] CoreSpirit roadmap extended from 112 to 130 stages.
+- [x] Supabase migration `20260927140500_tradingcoreos_v98_user_indicator_publications.sql` applied successfully to project `atoxvshsefhouadmunos`.
+- [x] Hardened public usage counters to use an RLS-gated event table and database trigger rather than exposed SECURITY DEFINER RPCs.
+- [x] Added a renderer-neutral public indicator settings snapshot so published cards/details can describe inputs/display state without exposing private runtime fields.
+- [x] Preserved existing cover assets when a published indicator is re-versioned without uploading a replacement image.
+- [x] Hardened public usage counters into an RLS-gated event table + database trigger; exposed SECURITY DEFINER RPCs are not required by the client.
+- [x] Added indexes for publication ownership/version and event actor lookup to avoid introducing new unindexed foreign keys.
+
+### v97 implementation record — 2026-09-27
+
+- [x] Renderer-neutral `CoreDrawingApi` now owns single-point, multipoint data-coordinate and normalized viewport-anchored drawing creation.
+- [x] Canonical drawing state now includes visibility, selectionEnabled, lock state, z-order and optional grouping while preserving owner/source identity.
+- [x] Drawing tool definitions now carry category, interaction type, coordinate space, point cardinality and validation semantics across trend, geometry, Fibonacci, Gann, annotation, measurement and prediction families.
+- [x] `CoreDrawingToolSession` provides renderer/React-independent draft → validated → committed point collection.
+- [x] Production LiveChart drawing creation now enters through the CoreDrawing API while its existing Lightweight Charts overlay remains the current renderer.
+- [x] Renderer-neutral `ChartNavigationApi` provides time spacing, horizontal offset, visible range, time/X and price/Y conversion, price scale controls and pan/zoom gating.
+- [x] `ChartGestureController` translates pointer drag, wheel and pinch input into navigation mutations without React state as the hot-path authority.
+- [x] `TradingCoreChartEngine` exposes the new navigation/drawing contract alongside its native renderer foundation.
+- [x] `ChartController` exposes a production navigation facade so feature code does not need direct Lightweight Charts navigation calls.
+- [x] Chart drawing/interaction architecture and migration documentation updated to explicitly prohibit vendor implementation copying.
+- [x] CoreSpirit roadmap extended from 100 to 112 stages.
+- [x] Focused v97 drawing/navigation TypeScript contract passes.
+
+
+### v93 current implementation record — 2026-09-27
+
+- [x] First-class dense numeric series execution uses `Float64Array` where a compatible dense buffer is appropriate.
+- [x] Vector/fusion metadata is declared by canonical builtin contracts instead of a second hard-coded planner registry.
+- [x] Added deterministic series extensions: `pctchange`, `zscore`, `normalize`, and `persistence`.
+- [x] Fusion planner follows transparent `move`/`setLocal` aliases and identifies maximal safe pure-series chains.
+- [x] Fusion rejects unsafe fan-out and stateful recursive boundaries such as EMA/RMA.
+- [x] Fused execution uses one chronological pass with bounded stage-local rolling state and no full-length intermediate series buffers.
+- [x] Existing host-owned execution planner now carries the series-fusion plan and backend eligibility.
+- [x] Focused v93 TypeScript compile + runtime contract passes.
+- [x] CoreSpirit roadmap extended from 70 to 76 stages.
+
+
+
+### v92 implementation record — 2026-09-27
+
+- [x] CoreSpirit complexity absorber profile keeps the public surface fixed at six concepts while tracking hidden semantic, component, model-ABI, dependency, execution, reactive and backend layers.
+- [x] Standard-library namespace registry adds qualified discovery paths (`market.*`, `series.*`, `math.*`, `stats.*`, `time.*`, `structure.*`, `volatility.*`, `liquidity.*`, `probability.*`, `model.*`, `visual.*`, `automation.*`, `data.*`, `state.*`).
+- [x] Qualified namespace calls lower to canonical builtins or explicitly registered semantic components; the 30-primitive core registry remains unchanged.
+- [x] Catalog-only namespace members are distinguishable from executable members, preventing documentation from becoming a false runtime guarantee.
+- [x] Strict MODEL ABI manifests can be projected into the same typed semantic component vocabulary, including backend eligibility, state lifecycle, determinism and capabilities.
+- [x] Deep composability contract covers nested component calls, multi-output component values, reusable graph boundaries and retained component identity through IR/semantic graph.
+- [x] Progressive Simple / Advanced / Professional authoring now includes standard-library discovery, complexity-layer inspection and model-component ABI visibility without a grammar fork.
+- [x] Roadmap extended from 65 to 70 stages with explicit complexity-absorption and namespace/component convergence gates.
+- [x] v92 source-level TypeScript compile and focused semantic/runtime contract tests pass.
+- [x] v92 release manifest and documentation governance updated.
+
+### v88 implementation record — 2026-09-27
+
+- [x] Complexity-absorption execution model: one semantic vocabulary with explicit authoring levels, execution contexts, value kinds, execution classes and hot/warm/cold lanes.
+- [x] Reusable typed semantic component/pipeline contracts derived from the existing composition graph.
+- [x] Bounded incremental compiler cache with AST structural reuse and changed semantic-node reporting.
+- [x] Bounded executable artifact cache contract plus canonical fast checksum serialization.
+- [x] Semantic dependency graph source-input reverse index for targeted reactive invalidation.
+- [x] Runtime performance budget monitor and public performance snapshot boundary.
+- [x] Reusable CoreSpirit worker pool replacing per-run worker creation.
+- [x] Realtime chart renderer frame coalescing on the existing renderer scheduler.
+- [x] Workspace market-tick React updates coalesced to animation-frame cadence while preserving partial-tick field merging.
+- [x] Realtime EMA/RSI/ATR developing-bar previews moved from repeated window recalculation to incremental committed-state previews.
+- [x] Shared history transport cache bounded with stale-while-revalidate and in-flight request deduplication retained.
+- [x] Generic semantic lineage and validated package/component registry contracts.
+- [x] Progressive Simple / Advanced / Professional authoring profile without a language fork.
+- [x] v88 architecture/performance contract test and TypeScript syntax parse coverage for changed files.
+
+### v91 implementation record — 2026-09-27
+
+- [x] Semantic component execution profile separated from source-language syntax.
+- [x] Component contracts can describe execution class, latency, estimated cost, cacheability, parallelism and eligible CPU/WASM/GPU/host/remote backends.
+- [x] Component state lifecycle metadata supports stateless, bar, window, session and external state plus snapshot/rollback semantics.
+- [x] Reusable component documentation metadata is optional and does not affect execution semantics.
+- [x] Validated composition graphs can be materialized into reusable typed component contracts.
+- [x] Explicit host registration helper turns a materialized graph into a callable runtime component without introducing a second evaluator.
+- [x] Progressive Simple / Advanced / Professional authoring profiles now expose feature sets, IR/runtime visibility and component-contract visibility while preserving one language.
+- [x] Professional depth is explicitly separated from execution authority; sandbox/host policy remains authoritative.
+- [x] v91 semantic component and authoring-level contract tests added.
+
+### v85 hardening record — 2026-09-27
+
+- [x] Durable SHA-256 source/IR/artifact identity and versioned artifact schema
+- [x] Deterministic dataset checksum fallback and immutable run-manifest contract
+- [x] Explicit research/backtest/paper/live execution environments and deployment lifecycle
+- [x] Capability sandbox validation against execution environment
+- [x] Semantic graph cost/latency/statefulness/determinism/parallelism metadata
+- [x] Request IDs, rate limiting, request metrics, split health endpoints, and security headers
+- [x] HMAC-authenticated FYERS fixed-IP execution gateway with nonce/timestamp replay protection
+- [x] Canonical SHA-256 order idempotency hashes with unknown/recovery-required states
+- [x] Atomic audit-log hash-chain append through a PostgreSQL transaction lock
+- [x] Market-data provenance and session-calendar metadata
+- [x] Reproducible Supabase base schema, broker UUID migration, ML lineage, and workspace tenancy foundation
+- [x] CoreSpirit check/normalize/inspect/graph CLI and CI contract workflow
+- [x] Removed duplicate legacy quick-order DOM entrypoint and renamed remaining runtime/order bridges away from hotfix nomenclature
+- [x] Versioned local-storage keys for CoreSpirit editor and prediction model state
 
 ## Current status
 
@@ -53,7 +166,6 @@
 - [x] Centralized SHOW coordinate inference helper with structural bracket parsing and explicit inference reasons
 - [x] Public visual projection summary boundary that hides Scene Graph nodes/topology from the primary runtime API
 - [x] MODEL and AUTOMATE declaration metadata attached to the same executable IR artifact
-- [x] Universal ORDER intent surface: direction + sizing + stop/target lower to one order-intent path
 - [x] Universal ORDER intent surface: direction + sizing + stop/target lower to one order-intent path
 - [x] Host-resolved `event("name")` query for automation WHEN triggers
 - [x] Language-service concept vocabulary surfaced as the primary user mental model
@@ -201,15 +313,32 @@
 | 48 | Scene graph encapsulation | ✅ |
 | 49 | Declarative MODEL surface | ✅ |
 | 50 | Declarative AUTOMATE surface | ✅ |
-| 51 | Universal ORDER intent surface | ✅ |
+| 51 | Universal ORDER intent | ✅ |
 | 52 | Universal EVENT emission and routing | ✅ |
 | 53 | WHEN as the central reactive construct | ✅ |
 | 54 | Composable language surfaces | ✅ |
 | 55 | Progressive simplicity | ✅ |
 | 56 | Standard library discoverability | ✅ |
 | 57 | Readable surface syntax | ✅ |
-| 58 | Compiler complexity absorption | ◐ |
-| 59 | Progressive authoring levels | ◐ |
+| 58 | Compiler complexity absorption | ✅ |
+| 59 | Progressive authoring levels | ✅ |
+| 60 | Reusable semantic components and pipelines | ✅ |
+| 61 | Execution planning and hot/warm/cold lanes | ✅ |
+| 62 | Incremental compilation and artifact caching | ✅ |
+| 63 | Realtime backpressure and render coalescing | ✅ |
+| 64 | Universal data lineage and package contracts | ✅ |
+| 65 | Measured performance budgets and reusable workers | ✅ |
+| 66 | CoreSpirit complexity absorber | ✅ |
+| 67 | Namespaced standard library architecture | ✅ |
+| 68 | Model ABI to semantic component convergence | ✅ |
+| 69 | Deep composable graph closure | ✅ |
+| 70 | Progressive authoring depth without language forks | ✅ |
+| 71 | First-class dense series representation | ✅ |
+| 72 | Vector operator execution contracts | ✅ |
+| 73 | Pure series operation fusion planner | ✅ |
+| 74 | Single-pass fused series kernels | ✅ |
+| 75 | Fusion-aware backend planning | ✅ |
+| 76 | Series fusion conformance and performance contract | ✅ |
 
 | 49 | Declarative MODEL surface | compiler | 18, 44, 45, 48 | ✅ |
 
@@ -685,6 +814,23 @@ The following supplied historical manifests are retained unchanged in the curren
 - [x] Focused TypeScript check passes for visual coordinates, runtime, compiler, semantic analysis and scene graph.
 - [x] v1 runtime, reactive graph, numerical planner and capability sandbox regression contracts remain compatible.
 - [x] Historical v62 verification recorded a 43-stage roadmap at that release; the active v73 roadmap now contains 59 stages.
+
+## v91 concrete implementation record
+
+### Deepening completed
+
+- The language surface remains six concepts: DATA, LET, WHEN, SHOW, MODEL and AUTOMATE.
+- Reuse is established first through semantic component contracts and graph materialization rather than user-defined function grammar.
+- Component contracts now carry enough execution/state metadata for the planner to make backend and caching decisions without leaking those decisions into source syntax.
+- Simple / Advanced / Professional is now a concrete progressive authoring profile with feature visibility and inspection depth, not merely three labels.
+
+### Deliberately not claimed
+
+- No public `fn` or `component` declaration syntax has been added.
+- No arbitrary higher-order function system has been introduced.
+- No automatic untrusted package discovery has been introduced.
+- No blanket guarantee that every pure component will execute on GPU/WASM has been introduced; eligibility remains planner/host dependent.
+- No change to broker, risk, filesystem, process or network authority boundaries.
 
 ## Next concrete work
 
@@ -1371,66 +1517,93 @@ The #21/#22 architecture is primarily a compiler/tooling contract in this releas
 
 ## v74 development cycle — #23/#24 CoreSpirit Language Simplification
 
-This release does not add roadmap stage 60. The active roadmap remains 59 stages. v74 treats #23 and #24 as a cross-cutting reduction/consolidation cycle over the existing architecture.
+This release does **not** add roadmap stage 60. The active roadmap remains 59 stages. v74 treats #23 and #24 as a cross-cutting reduction/consolidation cycle over the existing architecture.
 
 ### #23 — OS improvement priorities
 
-The priority map is based on author burden and semantic convergence, not the number of remaining subsystems.
+The priority map is now based on **author burden and semantic convergence**, not the number of subsystems still available to build.
 
 #### P0 — reduce public complexity
 
-- [ ] Simplify authoring where equivalent forms require too much ceremony.
+- [ ] Simplify the authoring surface where equivalent forms currently require too much ceremony.
 - [ ] Make the compiler the sole place where source sugar is unified into one semantic dependency model.
-- [ ] Keep `show` as the primary user-facing visual abstraction; renderer and scene mechanics remain hidden.
-- [x] Keep `when` + `emit` as the universal event boundary.
+- [ ] Keep `show` as the primary user-facing visual abstraction; renderer/scene mechanics remain hidden.
+- [x] Keep `when` + `emit` as the universal event boundary rather than feature-specific trigger languages.
 - [x] Keep automation centered on intent + risk, with broker/risk/policy plumbing outside the language runtime.
 
-#### P1 — improve the authoring experience
+#### P1 — improve the authoring experience around the existing architecture
 
 - [ ] Compact MODEL consumption and typed model-field discovery.
-- [ ] Make editor completion teach Simple CoreSpirit before implementation details.
-- [ ] Expand diagnostics so the compiler explains inferred semantics and normalization in user terms.
-- [x] Preserve deterministic replay as an artifact property.
+- [ ] Make editor completion teach Simple CoreSpirit before advanced implementation details.
+- [ ] Expand diagnostics so the compiler explains inferred semantics, normalization and missing context in user terms.
+- [x] Preserve deterministic replay as an artifact property rather than a special script type.
 - [ ] Close the remaining session/calendar semantic gap.
 - [ ] Finish production-renderer end-to-end validation.
-- [ ] Add production scanner scheduling, quotas, cancellation and deterministic backpressure.
+- [ ] Add production scanner worker scheduling, quotas, cancellation and deterministic backpressure.
 
 #### P2/P3 — expand only after consolidation
 
-- [ ] Expand indicator/reference-value coverage.
-- [ ] Add versioned artifact migration compatibility.
-- [ ] Profile before advanced GPU optimization.
-- [ ] Add new syntax only when repeated real authoring friction justifies it.
+- [ ] Expand mathematical indicator/reference-value coverage.
+- [ ] Add explicit artifact migration compatibility.
+- [ ] Profile before adding advanced GPU optimizations.
+- [ ] Add new syntax only when repeated real authoring friction demonstrates the need.
 
 ### #24 — reduction cycle instead of another giant stage
 
 - [x] Declared the 59-stage roadmap mature enough to pause structural accumulation.
-- [x] Defined the reduction workflow: inventory → canonical meaning → compiler normalization → editor → diagnostics → replay/regression → retire redundant forms.
+- [x] Defined the reduction workflow: inventory → unify meaning → compiler normalization → editor → diagnostics → replay/regression → retire redundant surface forms.
 - [x] Kept one language → one compiler → one stable IR → one VM.
-- [x] Kept one reactive runtime rather than simple/advanced/professional evaluators.
+- [x] Kept one reactive runtime rather than creating simple/advanced/professional evaluators.
 - [x] Kept authoring levels as presentation/discoverability profiles, not grammar forks.
-- [ ] Inventory duplicate public syntax and choose canonical forms.
-- [ ] Add conformance tests proving readable and explicit forms converge.
-- [ ] Add migration checks before retiring persisted source forms.
+- [ ] Inventory duplicate public syntax and choose canonical forms where existing normalization can absorb them.
+- [ ] Add conformance tests proving beginner-friendly and explicit forms converge to the same semantics.
+- [ ] Add migration/compatibility checks before retiring any previously persisted source form.
+
+### v74 architecture rule
+
+> **Reduction is now a first-class engineering activity.** A feature is not automatically an improvement merely because it adds expressive power. The next cycle is successful when common trading tasks require fewer concepts, fewer ceremony steps and fewer implementation terms while the underlying safety and determinism contracts become stronger.
 
 ### v74 Supabase persistence repair
 
-The live Supabase project was inspected directly. `public.user_settings` existed and its authenticated RLS policies were already correct, but the `authenticated` role had no table privileges. That prevented the browser PostgREST client from exposing the table and produced the observed 404.
+The live Supabase project was inspected directly. `public.user_settings` existed and already had the correct `authenticated` RLS policies, but the `authenticated` role had no table privileges. PostgREST therefore could not expose the relation to the browser client, producing the observed `POST /rest/v1/user_settings 404`.
 
-Applied migration: `20260927055419_grant_authenticated_user_owned_table_access`.
+Applied migration:
 
-Authenticated table access was added for the browser-facing user-owned tables already consumed by the client: `user_settings`, `profiles`, `workspace_layouts` and `workspace_layout_library`. Existing RLS policies remain the row-level authority, and no anonymous DML access was added.
+```text
+20260927055419_grant_authenticated_user_owned_table_access
+```
 
-Post-migration verification confirmed `authenticated` SELECT/INSERT/UPDATE privileges on `public.user_settings`, and the PostgREST schema was reloaded.
+The migration grants authenticated browser access to the user-owned tables already consumed directly by the client:
+
+```text
+public.user_settings
+public.profiles
+public.workspace_layouts
+public.workspace_layout_library
+```
+
+The existing RLS policies remain the row-level authority. No anonymous DML access was added.
+
+Verified live after migration:
+
+```text
+user_settings authenticated SELECT  = true
+user_settings authenticated INSERT  = true
+user_settings authenticated UPDATE  = true
+```
+
+PostgREST schema reload was also issued.
+
+This is a database-access correctness fix, not a relaxation of user isolation.
 
 
 ## v75 architecture direction — #25/#26 target syntax + #1 source-of-truth compiler
 
-v75 continues the v74 reduction cycle. It does not add roadmap stage 60; the active roadmap remains 59 stages.
+v75 continues the v74 reduction cycle. It does not add roadmap stage 60. The existing 59-stage roadmap remains the implementation history; this release defines the target language surface and the compiler-consolidation direction needed to support it cleanly.
 
 ### #25 — target language contract
 
-Minimal public vocabulary:
+Target minimal public vocabulary:
 
 ```text
 let
@@ -1442,42 +1615,48 @@ model
 automate
 ```
 
-Expressions such as `ema()`, `rsi()`, `atr()`, `market()` and `timeframe()` provide the computational vocabulary. The design goal is a small grammar with a large compositional ecosystem. New keywords should be rare and should only represent genuinely new semantic categories.
+Primary expression/library vocabulary includes `ema()`, `rsi()`, `atr()`, `market()` and `timeframe()` plus the existing discoverable library. The goal is a small grammar with a large compositional ecosystem.
+
+New keywords should be rare. Prefer expressions, members, model fields, event values, visual projections and host capabilities before adding another source-level control construct.
 
 ### #26 — ultimate one-file application contract
 
-The target is one `app` program combining configuration, data, calculations, models, visuals, WHEN/EVENT behavior and AUTOMATE intent. Its internal dependency, visual, event, model and automation views remain compiler projections over one semantic program and lower to the existing IR/VM path.
+The target end state is a single `app` source file combining configuration, data, calculations, models, visuals, WHEN/EVENT behavior and AUTOMATE intent. The compiler constructs internal dependency/visual/event/model/automation views from one program and lowers them to the existing IR/VM path.
 
-The complete Nifty AI Momentum example is documented as a target syntax contract, not as a claim that every final shorthand line is already accepted by the current parser.
+The full `app "Nifty AI Momentum"` example in `docs/CORESPIRIT.md` is a **target syntax contract**, not a claim that every shorthand line is already implemented. Existing semantic building blocks remain authoritative.
 
 ### #1 — compiler source-of-truth consolidation
 
-Desired pipeline:
+Current source-string utilities still include compatibility/surface scanning outside the canonical parser path. v75 establishes the desired migration:
 
 ```text
 SOURCE → TOKENS/CST → NORMALIZED AST → SEMANTIC MODEL → IR → OPTIMIZED IR → RUNTIME
 ```
 
-Some current compatibility/surface utilities still inspect source strings separately from the canonical parser. v75 therefore defines an incremental migration: normalize once at the compiler boundary; retain source spans; derive semantic metadata from AST + analysis; refactor composition/surface metadata and editor tooling to consume the same semantic model; then retire redundant source scanners.
+The semantic model should become the authority for diagnostics, composition graph, completion, hover, source maps and feature-specific dependency views. These are compiler/tooling projections, not runtimes.
 
-CST is authoring fidelity, AST is normalized language meaning, the semantic model is resolved program meaning, and IR is deterministic execution. None becomes a second runtime.
+Migration is intentionally incremental: retain existing surface sugar first, parse/normalize once at the compiler boundary, attach spans, derive semantic metadata from AST/analysis, refactor projections to consume that model, then retire redundant source-string scanners.
 
 ### v75 acceptance criteria
 
-- [x] Minimal target language vocabulary defined.
-- [x] One-file application contract defined without a new runtime.
-- [x] Single compiler source-of-truth pipeline defined.
+- [x] Target language vocabulary explicitly defined.
+- [x] One-file application contract defined without creating a new runtime.
+- [x] Compiler source-of-truth pipeline defined.
 - [x] CST/AST/semantic-model/IR responsibilities separated.
-- [ ] Composition metadata consumes canonical semantic data.
-- [ ] Surface metadata consumes canonical semantic data.
-- [ ] Completion and diagnostics consume the same semantic model.
+- [ ] Composition metadata consumes canonical semantic data instead of rescanning source.
+- [ ] Surface metadata consumes canonical semantic data instead of rescanning source.
+- [ ] Editor completion and diagnostics consume the same semantic model.
 - [ ] Equivalent source forms prove equivalent semantic/IR identities.
-- [ ] Redundant source-string scanners are retired where possible.
+- [ ] Independent source-string scanners are retired where redundant.
+
+### v75 hard boundary
+
+The objective is stronger compiler authority, not another runtime. The architecture remains: one language, one compiler, one stable IR, one VM and one reactive execution substrate.
 
 
 ## v76 implementation record — compiler source-of-truth + CST-aware normalization
 
-v76 is a hardening/consolidation release. It does not add roadmap stage 60. The active roadmap remains 59 stages.
+v76 is a hardening/consolidation release. It does not add roadmap stage 60; the active roadmap remains 59 stages.
 
 ### Built
 
@@ -1486,7 +1665,7 @@ v76 is a hardening/consolidation release. It does not add roadmap stage 60. The 
 - Removed `crossesAbove` / `crossesBelow` from the legacy regex transform list.
 - Added protected compatibility transformation so remaining line/regex helpers cannot rewrite strings or comments.
 - Added `src/services/coreSpirit/compilerPipeline.ts` as the canonical source-to-semantics gateway.
-- Added `CoreSpiritCompiler.compileSource()` so source compilation can begin from that gateway instead of requiring callers to construct an AST independently.
+- Added `CoreSpiritCompiler.compileSource()` so source compilation can begin from that gateway.
 - Routed editor diagnostics and type lookup through the canonical compilation unit.
 - Exported the new normalization/pipeline contracts from `src/services/coreSpirit/index.ts`.
 - Added `stage76CstPipeline.test.ts` covering nested expressions, functional crossing syntax, strings/comments and canonical source-unit normalization.
@@ -1516,13 +1695,12 @@ The remaining regex layer is compatibility infrastructure only. It is no longer 
 - [ ] Move SHOW/WHEN/INPUT/automation/model surface transforms from line regexes to token/AST transforms incrementally.
 - [ ] Build the full canonical semantic-program model consumed by diagnostics, completion, composition graphs and debugger views.
 - [ ] Remove remaining source-string metadata scanners after equivalent AST/semantic data exists.
-- [ ] Prove equivalent surface forms yield equivalent normalized AST/semantic fingerprints.
+- [ ] Prove equivalent surface forms yield equivalent semantic/IR fingerprints.
 - [ ] Add parser-aware preservation for all source trivia needed by formatter/refactor tooling.
 
-### Verification note
+### Verification
 
-The new Stage 76 fixture is intended as a focused contract. Full application/Vite build status remains dependent on the deployment dependency environment.
-
+`tsc -p tsconfig.stage76-isolated.json` passes for the focused CoreSpirit compilation graph, and the emitted Stage 76 fixture executes successfully. The full project build remains dependent on the frontend dependency environment.
 
 ## v77 implementation record — semantic composability redesign
 
@@ -1530,16 +1708,16 @@ v77 continues the existing 59-stage reduction/consolidation cycle. It does not a
 
 ### #1 — source-of-truth architecture
 
-- [x] Existing lexer/parser confirmed as the language foundation.
+- [x] Existing lexer/parser remains the language foundation.
 - [x] Canonical source compilation unit established in v76.
 - [x] Semantic dependency graph added as a source-level semantic projection.
-- [x] Composition tooling now consumes AST + semantic result + explicit surface declarations.
+- [x] Composition tooling consumes AST + semantic result + explicit surface declarations.
 - [ ] Link every IR node to a stable semantic entity ID.
 - [ ] Migrate execution/reactive/visual/debug graph views to semantic IDs.
 
 ### #3 — normalization boundary
 
-- [x] Readable crossing normalization remains token-aware.
+- [x] Readable crossing normalization is token-aware.
 - [x] Strings/comments are protected from legacy compatibility transforms.
 - [x] New language semantics are prohibited from the regex compatibility list.
 - [ ] Move remaining SHOW/WHEN/INPUT/model/automation shorthand transforms to AST/token-aware transforms.
@@ -1549,17 +1727,17 @@ v77 continues the existing 59-stage reduction/consolidation cycle. It does not a
 
 Previous state:
 
-\`\`\`text
+```text
 source text
    ↓
 identifier regex
    ↓
 guessed relationships
-\`\`\`
+```
 
 v77 state:
 
-\`\`\`text
+```text
 source
   ↓
 normalized AST
@@ -1569,200 +1747,1115 @@ semantic analysis
 semantic dependency graph
   ↓
 composition projection
-\`\`\`
+```
 
 Added:
 
-\`\`\`text
+```text
 src/services/coreSpirit/semanticDependencyGraph.ts
-\`\`\`
+```
 
-The graph resolves semantic entities including:
+The graph resolves semantic entities including data sources, symbols/values, models, model outputs, conditions, events, visuals, automations and order intents. Relations are `depends-on`, `emits`, `triggers`, `renders`, and `contains`.
 
-\`\`\`text
-data sources
-symbols / values
-models
-model outputs
-conditions
-events
-visuals
-automations
-order intents
-\`\`\`
-
-and relations:
-
-\`\`\`text
-depends-on
-emits
-triggers
-renders
-contains
-\`\`\`
-
-The composability engine in:
-
-\`\`\`text
-src/services/coreSpirit/composability.ts
-\`\`\`
-
-now projects this semantic graph instead of scanning identifiers with regular expressions.
+The composability engine now projects this graph instead of scanning identifiers with regular expressions.
 
 ### Regression coverage
 
 Added:
 
-\`\`\`text
+```text
 src/services/coreSpirit/stage77SemanticComposability.test.ts
-\`\`\`
+```
 
-The fixture specifically proves:
+The fixture proves that strings/comments are not dependencies, market aliases preserve data identity, model aliases preserve model identity, model outputs feed conditions, and conditions trigger events/order intents.
 
-- \`close\` in an actual expression creates a data dependency.
-- \`"hello close"\` does not create a data dependency.
-- \`market("NIFTY").close\` preserves data-reference semantics.
-- \`regime = model("Regime")\` followed by \`regime.confidence\` resolves to the same model entity.
-- model output feeds a condition.
-- a condition triggers an emitted event.
-- composition validation sees only real graph nodes/edges.
+### Automation ownership boundary
 
-### Model alias consistency
-
-v77 also aligns semantic analysis and compilation for model aliases.
-
-\`\`\`corespirit
-regime = model("Regime")
-when regime.confidence > 0.8:
-    emit "LONG"
-\`\`\`
-
-The semantic analyzer records the model binding and the compiler preserves the model-reference register so member access remains an actual MODEL output lookup.
-
-### Architecture status
-
-The semantic graph is now the source-level authority for composability. The existing IR graph remains execution-specific. The next migration should connect IR nodes to semantic identities rather than independently reconstructing source meaning.
-
-### Verification boundary
-
-The focused semantic-composability regression is the primary v77 contract. Full application/Vite build verification remains deployment-environment dependent.
-
-
-### v77 refinement — automation ownership boundary
-
-The semantic graph deliberately models the runtime dependency chain that can be proven from normalized AST semantics. For a named AUTOMATE container, event triggers are explicit surface declarations, while order intents are semantic action nodes. The current normalized AST does not yet preserve exact container ownership for every order intent, so v77 does not fabricate an `AUTOMATION → ORDER` edge. The next migration should preserve declaration ownership during normalization so that container-level projections can be produced from the same semantic graph without lexical guessing.
+For named AUTOMATE containers, event triggers are explicit surface declarations. The current normalized AST does not yet preserve exact container ownership for every order intent, so v77 does not fabricate an `AUTOMATION → ORDER` edge. The next migration should preserve declaration ownership during normalization so the container projection can be produced from the same semantic graph.
 
 
 ## v78 implementation record — P0 source provenance / source-map hardening
 
 v78 continues the existing 59-stage reduction/consolidation cycle. No roadmap stage 60 is added.
 
-### #1 / #3 / #4 consolidation carried forward
-
-- [x] Source compilation has a canonical source-to-semantics gateway.
-- [x] Readable crossing normalization uses the existing lexer.
-- [x] Legacy regex normalization is compatibility-only and protected from strings/comments.
-- [x] Composability derives from semantic entities rather than lexical identifier scans.
-- [x] Model/data aliases preserve semantic entity identity.
-
 ### #5 — instruction-origin tracking
 
 Previous state:
 
-\`\`\`text
-AST node index
-      ↓
-approximate instruction index
-      ↓
-source map
-\`\`\`
+```text
+AST node index → approximate instruction index → source map
+```
 
 v78 state:
 
-\`\`\`text
-AST node
-   ↓
-compiler emission
-   ↓
-IR instruction { origin: ... }
-   ↓
-optimizer preserves origin
-   ↓
-optimized IR
-   ↓
-source map regenerated from instructions
-\`\`\`
+```text
+AST node → compiler emission → IR instruction origin → optimizer preserves origin → optimized IR → source map regenerated from instructions
+```
 
-Added to the IR contract:
+Added to IR:
 
-\`\`\`text
+```text
 origin.sourceNodeId
 origin.start
 origin.end
 origin.line
 origin.column
-\`\`\`
+```
 
-Added:
+The compiler no longer reconstructs source ownership from AST/instruction position. The centralized `coreSpiritSourceMapFromInstructions()` helper builds the map from instruction provenance.
 
-\`\`\`text
-coreSpiritSourceMapFromInstructions(...)
-\`\`\`
+### Remaining provenance work
 
-The compiler now attaches origin metadata at instruction emission rather than reconstructing ownership later. The old unused \`mark()\` helper and AST-index source-map construction are removed from the compiler path.
+- [ ] stable semantic-node IDs independent of source offsets where required
+- [ ] semantic entity IDs alongside sourceNodeId
+- [ ] merged provenance for multi-source optimization rewrites
+- [ ] debugger/profiler/replay UI consumption
 
-### Optimizer contract
 
-The constant-folding optimizer now preserves instruction origins when replacing:
+## v79 implementation record — #6 runtime decomposition / #7 realtime transaction semantics
 
-\`\`\`text
-unary → const
-binary → const
-move  → const
-\`\`\`
+v79 remains a hardening/consolidation cycle. The roadmap remains **1–70**; no Stage 60 is introduced.
 
-The optimizer also regenerates the source map from its actual output instruction sequence. This removes the pre-optimization index-staleness problem.
+### #6 — runtime responsibility split
 
-### IR validation
+- [x] Introduce `CoreSpiritRuntimeFacade` as the implementation coordinator.
+- [x] Preserve `CoreSpiritRuntime` as the public compatibility class.
+- [x] Extract instruction stepping and builtin execution into the single `CoreSpiritVM`.
+- [x] Centralize mutable state/history/committed snapshots in `RuntimeStateStore`.
+- [x] Centralize data resolution in `DataResolver` service boundaries.
+- [x] Centralize model reference/output resolution in `ModelResolver`.
+- [x] Centralize host event emission in `EventRouter`.
+- [x] Centralize debugger trace ownership in `RuntimeDiagnostics`.
+- [x] Centralize reactive scheduling/reuse in `ReactiveScheduler`.
+- [x] Keep the VM network-free and capability-gated through injected host services.
 
-The IR contract validates provenance shape when \`origin\` is present without breaking existing version-1 artifacts that may not contain it.
+### #7 — transactional realtime semantics
 
-### Semantic graph integration
-
-The IR-derived semantic graph now reads the instruction's direct \`origin\` first and only falls back to the source map when necessary. It no longer assumes the nearest earlier source-map entry owns an instruction.
+- [x] Treat a realtime bar as a speculative transaction over the committed baseline.
+- [x] Restore the original same-bar snapshot before each revision.
+- [x] Reset transaction-local caches before revised evaluation.
+- [x] Reset staged event effects for each same-bucket revision.
+- [x] Flush only the latest staged effects on commit.
+- [x] Discard staged effects on rollback.
+- [x] Clear ephemeral caches after commit and rollback.
+- [x] Reset speculative execution counters on rollback.
+- [x] Restore the execution context/frame after rollback.
+- [x] Clear speculative debugger traces on rollback.
+- [x] Document state ownership as committed / transaction-local / cache / derived / ephemeral UI.
 
 ### Regression coverage
 
 Added:
 
-\`\`\`text
-src/services/coreSpirit/stage78SourceMapOrigins.test.ts
-\`\`\`
+```text
+src/services/coreSpirit/stage79RuntimeTransaction.test.ts
+```
 
-The contract covers:
+The fixture proves that realtime signal events are withheld during speculative evaluation, same-bar revisions replace prior staged effects, commit flushes exactly the latest revision, rollback emits nothing, the execution frame returns to confirmed state, and speculative debug traces are cleared.
 
-- one AST construct producing multiple IR instructions;
-- model member lowering;
-- IF/WHEN control-flow origins;
-- event/body origins;
-- optimizer-preserved origin metadata;
-- one source-map entry per origin-bearing optimized instruction;
-- source-map entries agreeing with instruction origins.
+### Remaining follow-up work
 
-### #5 acceptance boundary
+The runtime split is structurally in place, but future hardening can still move lower-level rich-data capability adapters (depth, footprint, intrabars and lower-timeframe transport) behind narrower resolver interfaces so the VM host surface becomes smaller without changing execution semantics. Those are follow-up boundary refinements, not additional runtimes.
 
-\`\`\`text
-No instruction-index guessing
-No pre-optimization source-map authority
-No downstream lexical ownership reconstruction
-Every compiler instruction has provenance
-Every optimization replacement preserves provenance
-\`\`\`
 
-### Remaining provenance work
+## v80 implementation record — deeper #6 runtime decomposition / #7 realtime transaction semantics
 
-- [ ] Introduce stable semantic-node IDs independent of only source spans where refactors require identity continuity.
-- [ ] Carry semantic entity IDs alongside sourceNodeId on IR instructions.
-- [ ] Preserve merged provenance when an optimization combines multiple source-originated operations into one instruction.
-- [ ] Expose origin data to debugger/profiler/replay UI.
-- [ ] Add end-to-end source-map tests after every future IR optimization pass.
+v80 is a hardening/consolidation cycle. The roadmap remains **1–70**; no Stage 60 is introduced.
+
+### #6 — runtime decomposition
+
+- [x] Keep `CoreSpiritRuntime` as the public compatibility class.
+- [x] Keep `CoreSpiritRuntimeFacade` as the service-composition boundary.
+- [x] Move chronological bar/tick/historical execution lifecycle into `CoreSpiritRuntimeExecutionCoordinator`.
+- [x] Keep instruction stepping and builtin execution exclusively in `CoreSpiritVM`.
+- [x] Keep mutable execution state in `RuntimeStateStore`.
+- [x] Keep realtime lifecycle in `RealtimeTransaction`.
+- [x] Keep data/model/event/diagnostics/reactive concerns behind their existing services.
+- [x] Preserve network-free VM and host capability boundaries.
+
+### #7 — stronger transactional semantics
+
+- [x] Every active realtime transaction has a stable ID and revision counter.
+- [x] Event buffers are tagged with the active transaction ID.
+- [x] Event commit rejects stale transaction IDs.
+- [x] Reactive reuse is transaction-scoped and reset at transaction boundaries.
+- [x] Debugger traces are transaction-scoped derived state and promote only on commit.
+- [x] Speculative snapshot now includes execution counters and lifecycle flags.
+- [x] Same-bucket revisions restore the full transaction baseline before re-evaluation.
+- [x] Historical execution explicitly promotes confirmed state into the committed baseline.
+- [x] Rollback restores the confirmed execution frame without deleting already-committed debugger traces.
+- [x] Ephemeral indicator/data/reference caches are cleared on revision and final transaction completion.
+
+### New code
+
+```text
+src/services/coreSpirit/runtimeExecutionCoordinator.ts
+src/services/coreSpirit/stage80RuntimeSemantics.test.ts
+```
+
+The following existing boundaries were hardened rather than replaced:
+
+```text
+runtimeStateStore.ts
+realtimeTransaction.ts
+eventRouter.ts
+reactiveScheduler.ts
+runtimeDiagnostics.ts
+vm.ts
+runtime.ts
+```
+
+### Verification target
+
+```text
+STAGE79_RUNTIME_TRANSACTION_OK
+STAGE80_RUNTIME_SEMANTICS_OK
+```
+
+The full application build remains dependent on the archive's frontend dependency environment. Focused CoreSpirit TypeScript checks are the acceptance gate for this hardening cycle.
+
+### Remaining #6/#7 follow-up
+
+- [ ] Narrow the VM host capability interface further so rich-data adapters and runtime utility functions are grouped behind explicit service contracts.
+- [ ] Add transaction-aware replay/profiler provenance consumers above the runtime layer.
+- [ ] Add deterministic transaction checksums to the persisted realtime/replay session record.
+
+
+## v81 implementation record — deeper #8 timeframe completeness / #9 reactive measurement
+
+v81 is a runtime-semantics hardening cycle. The roadmap remains **1–70**; no new public roadmap stage is introduced.
+
+### #8 — intrabar completeness hardening
+
+- [x] Remove the tautological `lastTimestamp < end` completeness inference.
+- [x] Add explicit lower-timeframe completion evidence fields (`endTimestamp`, `isClosing`, `isFinal`).
+- [x] Allow parent bars to carry `expectedIntrabars` and `sourceFinal` metadata.
+- [x] Make `groupIntrabars()` completeness policy explicit and configurable.
+- [x] Keep completeness false when no trusted evidence exists.
+- [x] Add regression coverage for expected-count, closing-marker, boundary-coverage, and false-positive cases.
+
+### #9 — reactive measurement hardening
+
+- [x] Preserve existing reactive reuse behavior.
+- [x] Add revision-local cache hits/misses and hit-rate measurement.
+- [x] Add measured per-revision execution duration.
+- [x] Add cumulative recomputed/reused totals.
+- [x] Add cumulative hit-rate, average execution time, and worst execution time.
+- [x] Measure from reactive revision start through VM execution completion.
+- [x] Expose metrics through the existing `getReactiveExecutionStats()` API without adding another runtime.
+- [x] Add focused regression coverage for first-pass misses, subsequent reuse, and timing metrics.
+
+
+### #66 — first-class typed composability
+
+- [x] Preserve the six-concept CoreSpirit surface without adding function/pipeline-specific keywords.
+- [x] Make registered components callable from ordinary expressions.
+- [x] Map single-output components to normal language values.
+- [x] Map multi-output components to typed component references with named output access.
+- [x] Carry component identity and execution metadata into stable IR and semantic graphs.
+- [x] Include component contract identity in incremental compiler cache keys.
+- [x] Execute registered components only through the explicit VM host component boundary.
+- [x] Document small-surface/deep-composition as the canonical language rule.
+
+### v88 files changed
+
+```text
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/coreSpiritExecutionModel.ts
+src/services/coreSpirit/coreSpiritPerformance.ts
+src/services/coreSpirit/coreSpiritComponents.ts
+src/services/coreSpirit/incrementalCompiler.ts
+src/services/coreSpirit/artifactCache.ts
+src/services/coreSpirit/coreSpiritLineage.ts
+src/services/coreSpirit/coreSpiritPackage.ts
+src/services/coreSpirit/coreSpiritAuthoring.ts
+src/services/coreSpirit/coreSpiritWorkerPool.ts
+src/services/coreSpirit/semanticGraph.ts
+src/services/coreSpirit/reactiveEngine.ts
+src/services/coreSpirit/dataCache.ts
+src/services/coreSpirit/dataPlanner.ts
+src/services/coreSpirit/artifact.ts
+src/services/coreSpirit/coreSpiritPipeline.ts
+src/services/coreSpirit/executionPlanner.ts
+src/services/coreSpirit/runtime.ts
+src/services/coreSpirit/editorModel.ts
+src/services/coreSpirit/index.ts
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/stage82ReactiveMetrics.test.ts
+src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts
+src/services/core/calculation/realtimeCalculationEngine.ts
+src/services/core/chart/chartUpdateScheduler.ts
+src/services/runtime/historyRequestGuard.ts
+src/components/workspace/LiveChart.tsx
+src/LiveTradingWorkspace.tsx
+src/coreSpiritV88PerformanceCompositionContract.test.mjs
+package.json
+CORESPIRIT_V88_MANIFEST.json
+docs/CORESPIRIT_BUILD_TRACKER.md
+docs/CORESPIRIT.md
+```
+
+### v88 verification targets
+
+```text
+STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK
+STAGE89_SPA_ROUTE_CONTRACT_OK
+STAGE_V85_HARDENING_CONTRACT_OK
+V85_LEGACY_BRIDGE_CLEANUP_OK
+CORESPIRIT_V88_COMPLEXITY_ABSORPTION_PERFORMANCE_CONTRACT_OK
+```
+
+### Files changed
+
+```text
+src/services/coreSpirit/types.ts
+src/services/coreSpirit/timeframeAlignment.ts
+src/services/coreSpirit/reactiveEngine.ts
+src/services/coreSpirit/reactiveScheduler.ts
+src/services/coreSpirit/runtimeExecutionCoordinator.ts
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/stage81TimeframeCompleteness.test.ts
+src/services/coreSpirit/stage82ReactiveMetrics.test.ts
+CORESPIRIT_V81_MANIFEST.json
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+```
+
+### Verification targets
+
+```text
+STAGE81_TIMEFRAME_COMPLETENESS_OK
+STAGE82_REACTIVE_METRICS_OK
+```
+
+Existing v79/v80 runtime transaction contracts remain part of the acceptance surface.
+
+### Remaining follow-up after v81
+
+- [ ] Add source-provided parent close/finality metadata to live broker adapters where available, so `sourceFinal` is driven by real feed semantics instead of adapter-local assumptions.
+- [ ] Add profiler attribution from reactive node IDs to IR/source provenance so expensive nodes can be explained back to CoreSpirit source locations.
+- [ ] Add replay snapshots for reactive metrics to compare optimization behavior across runs while keeping metrics observational rather than semantic.
+
+
+## v82 implementation record — deeper #10 LiveChart decomposition / #11 data-render separation
+
+v82 is a frontend architecture hardening cycle. The roadmap remains **1–70**; no public language/runtime stage is added.
+
+### #10 — LiveChart decomposition
+
+Baseline measurement:
+
+```text
+LiveChart.tsx v81: 123,968 bytes
+LiveChart.tsx v82: 117,242 bytes
+```
+
+The size reduction is secondary. The important result is that explicit boundaries now exist for the data feed, workspace commands, drawing toolbar, and depth UI.
+
+- [x] Memoize `LiveChart` so unrelated parent React updates do not automatically re-render the chart.
+- [x] Remove high-frequency `tick` props from current `LiveChart` call sites.
+- [x] Add `useChartRealtimeFeed` as the imperative market-data subscription boundary.
+- [x] Add `useChartUiEvents` as the workspace-to-chart command boundary.
+- [x] Extract drawing-tool presentation into `ChartToolbar`.
+- [x] Extract L2/depth rendering into `ChartDepthPanel`.
+- [ ] Extract chart construction/resize/dispose into `useChartLifecycle`.
+- [ ] Extract historical loading/pagination into `useHistoryData`.
+- [ ] Extract indicator workers/studies into `useIndicators`.
+- [ ] Extract OI lifecycle into `useOpenInterest`.
+- [ ] Extract drawing state/rendering into `useDrawings`.
+- [ ] Extract prediction overlays into `usePredictionOverlay`.
+- [ ] Extract CoreSpirit scene lifecycle into `useCoreSpiritScene`.
+- [ ] Introduce a narrow `ChartController` without duplicating the renderer.
+
+The unchecked items are deliberately left as follow-up work so behavior is not rewritten solely to reduce file size.
+
+### #11 — separate market data from React rendering
+
+- [x] Add `src/services/marketData/chartMarketStore.ts`.
+- [x] Publish broker ticks into the chart store from the central `TradingCoreRuntime` relay.
+- [x] Key chart data by broker + instrument.
+- [x] Maintain a bounded 2,048-tick recent ring per chart key.
+- [x] Provide immediate imperative subscriptions for chart rendering.
+- [x] Provide a separate React-facing subscription with animation-frame coalescing.
+- [x] Add `useChartRealtimeFeed` so high-frequency ticks do not enter LiveChart React state.
+- [x] Keep `ChartDepthPanel` as an isolated React consumer for depth UI.
+- [x] Clear chart market data on hard broker data-boundary changes.
+
+The intended runtime path is now:
+
+```text
+Broker transport
+      ↓
+TradingCoreRuntime
+      ↓
+ChartMarketStore
+   ┌──┴───────────────┐
+   ↓                  ↓
+immediate           rAF-coalesced
+subscriber          React snapshot
+   ↓                  ↓
+chart renderer     small UI island
+```
+
+### Verification
+
+Passed:
+
+```text
+STAGE83_CHART_DATA_ISOLATION_OK
+STAGE84_CHART_STRUCTURE_OK
+```
+
+The chart-store test was compiled to JavaScript with the global TypeScript compiler and executed successfully. The structural test confirms the new LiveChart boundaries and the central runtime publication path.
+
+The full frontend build is still not claimed because the project archive does not contain its installed React/lightweight-charts dependency environment.
+
+### v88 files changed
+
+```text
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/coreSpiritExecutionModel.ts
+src/services/coreSpirit/coreSpiritPerformance.ts
+src/services/coreSpirit/coreSpiritComponents.ts
+src/services/coreSpirit/incrementalCompiler.ts
+src/services/coreSpirit/artifactCache.ts
+src/services/coreSpirit/coreSpiritLineage.ts
+src/services/coreSpirit/coreSpiritPackage.ts
+src/services/coreSpirit/coreSpiritAuthoring.ts
+src/services/coreSpirit/coreSpiritWorkerPool.ts
+src/services/coreSpirit/semanticGraph.ts
+src/services/coreSpirit/reactiveEngine.ts
+src/services/coreSpirit/dataCache.ts
+src/services/coreSpirit/dataPlanner.ts
+src/services/coreSpirit/artifact.ts
+src/services/coreSpirit/coreSpiritPipeline.ts
+src/services/coreSpirit/executionPlanner.ts
+src/services/coreSpirit/runtime.ts
+src/services/coreSpirit/editorModel.ts
+src/services/coreSpirit/index.ts
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/stage82ReactiveMetrics.test.ts
+src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts
+src/services/core/calculation/realtimeCalculationEngine.ts
+src/services/core/chart/chartUpdateScheduler.ts
+src/services/runtime/historyRequestGuard.ts
+src/components/workspace/LiveChart.tsx
+src/LiveTradingWorkspace.tsx
+src/coreSpiritV88PerformanceCompositionContract.test.mjs
+package.json
+CORESPIRIT_V88_MANIFEST.json
+docs/CORESPIRIT_BUILD_TRACKER.md
+docs/CORESPIRIT.md
+```
+
+### v88 verification targets
+
+```text
+STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK
+STAGE89_SPA_ROUTE_CONTRACT_OK
+STAGE_V85_HARDENING_CONTRACT_OK
+V85_LEGACY_BRIDGE_CLEANUP_OK
+CORESPIRIT_V88_COMPLEXITY_ABSORPTION_PERFORMANCE_CONTRACT_OK
+```
+
+### Files changed
+
+```text
+src/services/marketData/chartMarketStore.ts
+src/services/marketData/stage83ChartDataIsolation.test.ts
+src/services/runtime/TradingCoreRuntime.ts
+src/components/workspace/hooks/useChartRealtimeFeed.ts
+src/components/workspace/hooks/useChartUiEvents.ts
+src/components/workspace/ChartDepthPanel.tsx
+src/components/workspace/ChartToolbar.tsx
+src/components/workspace/LiveChart.tsx
+
+src/LiveTradingTerminal.tsx
+src/LiveTradingTerminalV2.tsx
+src/LiveTradingTerminalV3.tsx
+src/LiveTradingTerminalV4.tsx
+src/TradingCoreProWorkspace.tsx
+src/components/workspace/FullWorkspaceView.tsx
+
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/stage84ChartStructure.test.mjs
+CORESPIRIT_V82_MANIFEST.json
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+```
+
+### Remaining #10/#11 follow-up
+
+- [ ] Complete the remaining domain-hook extraction from LiveChart.
+- [ ] Add measured chart update duration and React-render attribution.
+- [ ] Compare packet rate vs renderer update rate under burst conditions.
+- [ ] Add frontend performance telemetry for worst frame duration and chart update duration.
+- [ ] Keep the chart external store observational; historical/replay semantics remain owned by the existing trading/runtime data contracts.
+
+
+## v83 implementation record — deeper #10/#11 + #12/#13 consolidation
+
+v83 is a frontend architecture hardening cycle. The roadmap remains **1–70**; no public language/runtime stage is added.
+
+### #10 — LiveChart deeper decomposition
+
+- [x] Add `ChartController` as the imperative renderer mutation boundary.
+- [x] Add `useChartLifecycle` as the controller lifetime boundary.
+- [x] Route realtime candle/volume mutations through `ChartController`.
+- [x] Route historical `setData` operations through `ChartController`.
+- [x] Route chart-type, candle-appearance, volume-visibility, resize, and disposal through the renderer boundary where applicable.
+- [x] Preserve existing LiveChart behavior for history, indicators, drawings, OI, prediction overlays, and CoreSpirit scene execution.
+- [ ] Extract `useHistoryData` fully from LiveChart.
+- [ ] Extract `useIndicators` fully from LiveChart.
+- [ ] Extract `useOpenInterest` fully from LiveChart.
+- [ ] Extract `useDrawings` fully from LiveChart.
+- [ ] Extract `usePredictionOverlay` fully from LiveChart.
+- [ ] Extract `useCoreSpiritScene` fully from LiveChart.
+- [ ] Introduce a broader `ChartController` only where the boundary removes real cross-domain coupling; do not create a second renderer.
+
+### #11 — data/render separation measurement
+
+- [x] Add independent `chartPerformanceTelemetry`.
+- [x] Count incoming market packets per broker+instrument chart key.
+- [x] Measure actual imperative renderer callback duration.
+- [x] Count React notification requests and animation-frame notifications.
+- [x] Measure coalesced React notifications.
+- [x] Calculate average and worst renderer callback duration.
+- [x] Calculate packets-per-renderer-update and React coalescing rate.
+- [x] Keep telemetry external to React state and non-semantic.
+- [x] Reset telemetry with chart-store data-boundary clears.
+- [ ] Add a development-only profiler surface that can read snapshots without subscribing the chart itself.
+- [ ] Add burst-load replay fixtures to compare packet rate, renderer update rate, and frame coalescing.
+
+### #12 — terminal generations retired
+
+- [x] Promote `src/LiveTradingTerminal.tsx` to the sole canonical production terminal.
+- [x] Move the former V4 workspace implementation into neutral `src/LiveTradingWorkspace.tsx`.
+- [x] Preserve the former V5 terminal shell features in the canonical terminal without retaining versioned wrapper names.
+- [x] Remove `LiveTradingTerminalV2.tsx`.
+- [x] Remove `LiveTradingTerminalV3.tsx`.
+- [x] Remove `LiveTradingTerminalV4.tsx`.
+- [x] Remove `LiveTradingTerminalV5.tsx`.
+- [x] Update `App.tsx` to load only the canonical terminal.
+- [x] Remove the V5→V4 runtime fallback.
+- [x] Add regression coverage that no versioned terminal generation remains in production source.
+
+### #13 — automatic layout fix retired
+
+- [x] Delete `.github/workflows/fix-layout-duplicate-slots.yml` and prevent scheduled callbacks from restoring cleared chart telemetry state.
+- [x] Keep duplicate-slot behavior in canonical workspace source.
+- [x] Add a regression check for hotfix workflow retirement.
+- [x] Make canonical source + tests the only accepted path for fixing duplicate-slot behavior.
+- [x] Remove source mutation by post-push regex automation.
+
+### v88 files changed
+
+```text
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/coreSpiritExecutionModel.ts
+src/services/coreSpirit/coreSpiritPerformance.ts
+src/services/coreSpirit/coreSpiritComponents.ts
+src/services/coreSpirit/incrementalCompiler.ts
+src/services/coreSpirit/artifactCache.ts
+src/services/coreSpirit/coreSpiritLineage.ts
+src/services/coreSpirit/coreSpiritPackage.ts
+src/services/coreSpirit/coreSpiritAuthoring.ts
+src/services/coreSpirit/coreSpiritWorkerPool.ts
+src/services/coreSpirit/semanticGraph.ts
+src/services/coreSpirit/reactiveEngine.ts
+src/services/coreSpirit/dataCache.ts
+src/services/coreSpirit/dataPlanner.ts
+src/services/coreSpirit/artifact.ts
+src/services/coreSpirit/coreSpiritPipeline.ts
+src/services/coreSpirit/executionPlanner.ts
+src/services/coreSpirit/runtime.ts
+src/services/coreSpirit/editorModel.ts
+src/services/coreSpirit/index.ts
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/stage82ReactiveMetrics.test.ts
+src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts
+src/services/core/calculation/realtimeCalculationEngine.ts
+src/services/core/chart/chartUpdateScheduler.ts
+src/services/runtime/historyRequestGuard.ts
+src/components/workspace/LiveChart.tsx
+src/LiveTradingWorkspace.tsx
+src/coreSpiritV88PerformanceCompositionContract.test.mjs
+package.json
+CORESPIRIT_V88_MANIFEST.json
+docs/CORESPIRIT_BUILD_TRACKER.md
+docs/CORESPIRIT.md
+```
+
+### v88 verification targets
+
+```text
+STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK
+STAGE89_SPA_ROUTE_CONTRACT_OK
+STAGE_V85_HARDENING_CONTRACT_OK
+V85_LEGACY_BRIDGE_CLEANUP_OK
+CORESPIRIT_V88_COMPLEXITY_ABSORPTION_PERFORMANCE_CONTRACT_OK
+```
+
+### Files changed
+
+```text
+src/LiveTradingTerminal.tsx
+src/LiveTradingWorkspace.tsx
+src/LiveTradingTerminalConsolidation.test.mjs
+src/terminalHotfixRetirement.test.mjs
+src/App.tsx
+
+src/components/workspace/LiveChart.tsx
+src/components/workspace/chartController.ts
+src/components/workspace/hooks/useChartLifecycle.ts
+src/components/workspace/hooks/useChartRealtimeFeed.ts
+src/services/marketData/chartMarketStore.ts
+src/services/marketData/chartPerformanceTelemetry.ts
+src/services/coreSpirit/VERSION.ts
+src/components/workspace/stage85ChartPerformance.test.ts
+
+CORESPIRIT_V83_MANIFEST.json
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+.github/workflows/fix-layout-duplicate-slots.yml (deleted)
+```
+
+### Verification targets
+
+```text
+STAGE85_CHART_PERFORMANCE_OK
+STAGE86_TERMINAL_CONSOLIDATION_OK
+STAGE87_LAYOUT_HOTFIX_RETIRED_OK
+```
+
+Focused TypeScript compilation remains the acceptance gate for changed frontend/core contracts because the archive does not include the installed dependency environment required for the full Vite application build.
+
+### Remaining #10/#11 follow-up
+
+- [ ] Finish domain-by-domain LiveChart extraction without changing chart semantics.
+- [ ] Add renderer frame-duration telemetry from actual lightweight-charts update boundaries.
+- [ ] Add burst replay fixtures and compare incoming packet rate versus imperative renderer work.
+- [ ] Add a read-only performance diagnostics surface for development builds.
+
+### Remaining #12/#13 follow-up
+
+- [ ] Monitor canonical terminal bundle boundaries after consolidation.
+- [ ] Remove any additional version-numbered terminal references that surface outside historical source-control context.
+- [ ] Keep layout correctness covered by repository tests rather than CI source mutation.
+
+
+## v84 implementation record — deeper #12/#13 + #14/#15
+
+v84 is an architecture hardening cycle. The roadmap remains **1–70**.
+
+### #12 — deeper terminal consolidation
+
+- [x] Extract terminal state/lifecycle orchestration into `useLiveTradingTerminalController`.
+- [x] Move portfolio polling/sync orchestration out of the canonical terminal component.
+- [x] Move order-ticket pin/close/drag lifecycle into the controller hook.
+- [x] Preserve `src/LiveTradingTerminal.tsx` as the only public terminal component.
+- [x] Add a repository guard against V2–V5 generation resurrection.
+- [x] Keep old generation history only in source control.
+
+### #13 — deeper hotfix retirement
+
+- [x] Keep `.github/workflows/fix-layout-duplicate-slots.yml` deleted.
+- [x] Add workflow scanning to the architecture guard.
+- [x] Reject source-mutating regex/perl/python repair patterns in workflows.
+- [x] Reject reintroduction of retired terminal generations in workflows.
+- [x] Keep canonical source + tests as the accepted layout-fix lifecycle.
+
+### #14 — canonical route contract
+
+- [x] Add `src/routing/appRoutes.ts` as the canonical workspace-route registry.
+- [x] Keep `/corespirit` in the same route registry as `/dashboard`, `/live`, `/models`, `/predictions`, `/automations`, `/indicators`, `/portfolio`, and `/profile`.
+- [x] Make `App.tsx` consume the shared registry rather than a second local copy.
+- [x] Keep `/models` and `/predictions` as aliases to the existing Prediction Center surface without creating a second page implementation.
+- [x] Simplify `vercel.json` to `/api/:path* → /api/index` plus `/(.*) → /`.
+- [x] Add a route contract regression test.
+
+### #15 — boundary-first type hardening
+
+- [x] Add a dependency-free runtime validation layer for broker API JSON.
+- [x] Parse remote JSON as `unknown` before accepting typed data.
+- [x] Validate profile, funds, holdings, positions, orders, trades, market quotes, historical candles, option chains, order results, and cancellation responses.
+- [x] Add explicit broker server contracts rather than `Promise<any>` at the BaseBroker boundary.
+- [x] Type TradingCoreRuntime event payloads with `RuntimeEventPayloads`.
+- [x] Type portfolio synchronization as `PortfolioSnapshot`.
+- [x] Replace the high-value runtime/engine tick callback `any` with `NormalizedMarketTick`.
+- [x] Validate CoreSpirit worker result envelopes and `CoreSpiritObject[]` before main-thread consumption.
+- [ ] Continue removing `any` from LiveChart and LiveTradingWorkspace feature domains.
+- [ ] Continue typing broker raw API adapter internals at the JSON-to-normalized mapping boundary.
+- [ ] Evaluate a schema dependency such as Zod after the repository dependency strategy permits adding it cleanly.
+
+### v88 files changed
+
+```text
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/coreSpiritExecutionModel.ts
+src/services/coreSpirit/coreSpiritPerformance.ts
+src/services/coreSpirit/coreSpiritComponents.ts
+src/services/coreSpirit/incrementalCompiler.ts
+src/services/coreSpirit/artifactCache.ts
+src/services/coreSpirit/coreSpiritLineage.ts
+src/services/coreSpirit/coreSpiritPackage.ts
+src/services/coreSpirit/coreSpiritAuthoring.ts
+src/services/coreSpirit/coreSpiritWorkerPool.ts
+src/services/coreSpirit/semanticGraph.ts
+src/services/coreSpirit/reactiveEngine.ts
+src/services/coreSpirit/dataCache.ts
+src/services/coreSpirit/dataPlanner.ts
+src/services/coreSpirit/artifact.ts
+src/services/coreSpirit/coreSpiritPipeline.ts
+src/services/coreSpirit/executionPlanner.ts
+src/services/coreSpirit/runtime.ts
+src/services/coreSpirit/editorModel.ts
+src/services/coreSpirit/index.ts
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/stage82ReactiveMetrics.test.ts
+src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts
+src/services/core/calculation/realtimeCalculationEngine.ts
+src/services/core/chart/chartUpdateScheduler.ts
+src/services/runtime/historyRequestGuard.ts
+src/components/workspace/LiveChart.tsx
+src/LiveTradingWorkspace.tsx
+src/coreSpiritV88PerformanceCompositionContract.test.mjs
+package.json
+CORESPIRIT_V88_MANIFEST.json
+docs/CORESPIRIT_BUILD_TRACKER.md
+docs/CORESPIRIT.md
+```
+
+### v88 verification targets
+
+```text
+STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK
+STAGE89_SPA_ROUTE_CONTRACT_OK
+STAGE_V85_HARDENING_CONTRACT_OK
+V85_LEGACY_BRIDGE_CLEANUP_OK
+CORESPIRIT_V88_COMPLEXITY_ABSORPTION_PERFORMANCE_CONTRACT_OK
+```
+
+### Files changed
+
+```text
+src/routing/appRoutes.ts
+src/components/workspace/WorkspaceModuleShellTypes.ts
+src/App.tsx
+src/components/workspace/WorkspaceModuleShell.tsx
+vercel.json
+
+src/services/brokers/BrokerAdapter.ts
+src/services/brokers/BaseBrokerAdapter.ts
+src/services/engine/TradingEngine.ts
+src/services/runtime/TradingCoreRuntime.ts
+src/services/boundary/brokerApiValidation.ts
+src/services/boundary/stage90BoundaryValidation.test.ts
+src/server/brokers/contracts.ts
+src/server/brokers/adapters/BaseBroker.ts
+src/server/routes/trading.routes.ts
+
+src/components/workspace/hooks/useLiveTradingTerminalController.ts
+src/LiveTradingTerminal.tsx
+src/architectureConsolidationGuard.test.mjs
+src/routeContract.test.mjs
+src/services/coreSpirit/VERSION.ts
+CORESPIRIT_V84_MANIFEST.json
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+```
+
+### Verification targets
+
+```text
+STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK
+STAGE89_SPA_ROUTE_CONTRACT_OK
+STAGE90_BOUNDARY_VALIDATION_OK
+```
+
+### v84 boundary notes
+
+The dependency-free validators intentionally sit at the trust boundary. They are not a substitute for full broker-specific schema modeling inside raw adapter parsing; that remains follow-up work. The route fallback is intentionally generic so new SPA routes do not require a deployment-file edit.
+
+
+
+## v93 implementation record — #8/#9 first-class series execution + operation fusion
+
+v93 deepens CoreSpirit numerical execution without adding language syntax. DATA, LET, WHEN, SHOW, MODEL and AUTOMATE remain the author-facing concepts. The compiler/runtime now carry explicit vector and fusion metadata underneath that same surface.
+
+### #8 — First-class vector/series operations
+
+- [x] Add dense numeric series representation using `Float64Array` for vector kernels.
+- [x] Preserve zero-copy typed-array reuse when the supplied input is already a compatible `Float64Array`.
+- [x] Define `NaN` as the internal dense-series missing/warm-up sentinel.
+- [x] Add deterministic vector contracts for rolling and elementwise series transforms.
+- [x] Add executable `pctchange`, `zscore`, `normalize`, and `persistence` series operations to the extension library without changing the six-concept language surface.
+- [x] Keep stateful EMA/RMA vector-capable but explicitly non-fusible.
+
+### #9 — Operation fusion
+
+- [x] Add machine-readable `seriesExecution` metadata to builtin contracts.
+- [x] Discover maximal pure-series chains from canonical IR.
+- [x] Follow transparent `move`/`setLocal` aliases so normal LET composition remains fusible.
+- [x] Reject unsafe fan-out where an intermediate series has multiple semantic consumers.
+- [x] Execute safe chains with a single chronological pass.
+- [x] Keep only bounded stage-local rolling workspace; do not allocate full intermediate series buffers.
+- [x] Attach fusion groups to the existing execution planner rather than creating a second planner/runtime.
+- [x] Preserve CPU fallback and future WASM/GPU backend eligibility as host-owned decisions.
+
+### v93 files changed
+
+```text
+src/services/coreSpirit/seriesVector.ts
+src/services/coreSpirit/seriesFusion.ts
+src/services/coreSpirit/standardLibrary.ts
+src/services/coreSpirit/standardLibraryNamespaces.ts
+src/services/coreSpirit/indicatorEngine.ts
+src/services/coreSpirit/executionPlanner.ts
+src/services/coreSpirit/index.ts
+src/services/coreSpirit/VERSION.ts
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/stage93SeriesVectorFusion.test.ts
+package.json
+
+docs/CORESPIRIT_BUILD_TRACKER.md
+docs/CORESPIRIT.md
+docs/CORESPIRIT_COMPOSABILITY.md
+docs/CORESPIRIT_SCRIPTING.md
+CORESPIRIT_V93_RELEASE_NOTES.md
+```
+
+### v93 verification targets
+
+```text
+STAGE93_FIRST_CLASS_SERIES_OK
+STAGE93_OPERATION_FUSION_OK
+STAGE93_SERIES_BACKEND_METADATA_OK
+```
+
+### v93 performance invariant
+
+The key invariant is not "always one pass". It is:
+
+```text
+pure compatible series chain
+        ↓
+maximal safe fusion group
+        ↓
+single chronological pass
+        ↓
+bounded rolling workspace
+        ↓
+final output series
+```
+
+The canonical scalar VM remains available as the semantic fallback. Fusion is an optimization layer over the same contracts, not a second numerical language or evaluator.
+
+## v94 implementation record — #10/#11 zero-copy canonical chart data plane
+
+v94 deepens the performance architecture beneath CoreSpirit and the native chart foundation. CoreSpirit's public language remains unchanged at the v93 six-concept surface. The change is in shared numeric storage, chart LOD, GPU staging and timeline alignment.
+
+### #10 — Zero-copy realtime chart architecture
+
+- [x] Promote `MarketDataStore` to the canonical columnar chart data plane.
+- [x] Keep `ColumnarCandleStore` as a compatibility name over the canonical store.
+- [x] Add OI, bid, ask, bid volume, ask volume, trades, session and metadata columns.
+- [x] Add stable typed-array views for native consumers.
+- [x] Add explicit dirty source ranges so realtime updates can remain incremental.
+- [x] Replace native `ChartCore` object-row materialization with retained store + LOD index inputs.
+- [x] Isolate JavaScript object materialization to the Lightweight Charts compatibility boundary.
+- [x] Add incremental retained LOD capacity so ordinary realtime updates do not allocate a new bucket array each tick.
+- [x] Add retained packed GPU candle storage.
+- [x] Add WebGL2 instanced candle rendering and partial buffer updates in the experimental native path.
+
+### #11 — Unified canonical chart data model
+
+- [x] Define a single market timeline as the alignment authority.
+- [x] Add timeline-aligned `IndicatorStore`.
+- [x] Add timeline-aligned `ModelStore`.
+- [x] Add timeline-aligned `StructureStore`.
+- [x] Add timeline-aligned `LiquidityStore`.
+- [x] Add timeline-aligned `OrderFlowStore`.
+- [x] Prevent derived stores from maintaining duplicate timestamp columns.
+- [x] Document the data-plane ownership rule for future shared memory / worker transport.
+
+### v94 files changed
+
+```text
+src/services/core/chart/chartDataModel.ts
+src/services/core/chart/chartViewport.ts
+src/services/core/chart/chartLevelOfDetail.ts
+src/services/core/chart/chartGpuBuffer.ts
+src/services/core/chart/chartRenderer.ts
+src/services/core/chart/chartCore.ts
+src/services/core/chart/canvas2dChartRenderer.ts
+src/services/core/chart/webgl2ChartRenderer.ts
+src/services/core/chart/derivedDataStores.ts
+src/services/core/chart/stage94ZeroCopyCanonicalDataPlane.test.ts
+src/services/core/chart/stage94ZeroCopyCanonicalDataPlane.test.mjs
+src/components/workspace/chartController.ts
+package.json
+
+CORESPIRIT_V94_MANIFEST.json
+CORESPIRIT_V94_DATA_PLANE_RELEASE_NOTES.md
+docs/CHART_ENGINE_ARCHITECTURE.md
+docs/CHART_RENDERER_MIGRATION.md
+docs/CHART_DATA_PLANE_ARCHITECTURE.md
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+```
+
+### v94 validation targets
+
+```text
+STAGE94_ZERO_COPY_CANONICAL_DATA_PLANE_OK
+STAGE94_INCREMENTAL_LOD_OK
+STAGE94_RETAINED_GPU_BUFFER_OK
+STAGE94_ZERO_COPY_SOURCE_CONTRACT_OK
+STAGE94_CHART_DOCUMENTATION_CONTRACT_OK
+STAGE94_TRACKER_CONTRACT_OK
+```
+
+### v94 invariant
+
+```text
+canonical typed market store
+        ↓
+viewport-aware retained LOD
+        ↓
+retained packed GPU buffer
+        ↓
+native renderer
+```
+
+The invariant is **zero repeated application-level object conversion on the native hot path**. It is not a claim that GPU drivers perform literally zero physical memory copies during API upload.
+
+Lightweight Charts remains production. Its object materialization is a deliberate compatibility boundary until the native renderer reaches parity and passes the existing production migration gates.
+
+## v95 implementation record — #12/#13/#14 shared canonical data plane + chart engine decomposition
+
+v95 extends the v94 zero-copy work into a shared consumer architecture and makes the native chart foundation a real multi-subsystem engine. CoreSpirit language syntax remains unchanged, and Lightweight Charts remains the production renderer.
+
+### #12 — Shared canonical market history
+
+- [x] Establish `CanonicalDataPlane` as the ownership point for one symbol/timeframe market timeline.
+- [x] Add canonical consumer registry for chart, indicator, model and derived domains.
+- [x] Make indicator inputs borrow `Float64Array` market columns rather than accepting copied candle history as the primary architecture.
+- [x] Make model feature bindings borrow canonical typed columns and the canonical timeline.
+- [x] Keep derived stores responsible only for derived values/state; they do not duplicate timestamp history.
+- [x] Preserve revision and dirty-range semantics as the canonical invalidation authority.
+- [x] Keep legacy object arrays only as compatibility boundaries.
+
+### #13 — Chart engine decomposition
+
+- [x] Add `ChartDataEngine` between canonical data ownership and chart rendering.
+- [x] Add `ChartInteractionEngine` for renderer-neutral pointer, wheel/pinch and hit-testing semantics.
+- [x] Add `ChartScaleModel` for time, price, volume, percent and logarithmic transforms.
+- [x] Add `ChartViewportController` for renderer-neutral pan/zoom/width state.
+- [x] Add retained `ChartRenderingEngine` above concrete renderers.
+
+### #14 — Chart architecture progression
+
+- [x] Add explicit semantic chart layer ordering.
+- [x] Add a pane registry with price/volume foundations and extensible custom/oscillator panes.
+- [x] Make ChartCore a backward-compatible facade over the deeper chart data/rendering architecture.
+- [x] Keep Lightweight Charts behind `ChartController` as the production backend.
+- [x] Preserve WebGL2/Canvas2D as experimental native backends.
+- [x] Document renderer-parity gates before any production migration.
+
+### v95 files changed
+
+```text
+src/services/core/data/canonicalDataPlane.ts
+src/services/core/data/indicatorDataPlane.ts
+src/services/core/data/modelDataPlane.ts
+src/services/core/chart/chartDataEngine.ts
+src/services/core/chart/chartInteraction.ts
+src/services/core/chart/chartScales.ts
+src/services/core/chart/chartLayers.ts
+src/services/core/chart/chartPane.ts
+src/services/core/chart/chartViewportController.ts
+src/services/core/chart/chartRenderingEngine.ts
+src/services/core/chart/chartEngine.ts
+src/services/core/chart/chartCore.ts
+src/services/coreSpirit/indicatorEngine.ts
+src/services/coreSpirit/index.ts
+src/services/coreSpirit/VERSION.ts
+src/components/workspace/chartController.ts
+src/components/workspace/LiveChart.tsx
+src/services/core/chart/stage95CanonicalDataPlaneChartEngine.test.ts
+src/services/core/chart/stage95CanonicalDataPlaneChartEngine.test.mjs
+package.json
+
+CORESPIRIT_V95_RELEASE_NOTES.md
+CORESPIRIT_V95_MANIFEST.json
+docs/CHART_DATA_PLANE_ARCHITECTURE.md
+docs/CHART_ENGINE_ARCHITECTURE.md
+docs/CHART_RENDERER_MIGRATION.md
+docs/CORESPIRIT.md
+docs/CORESPIRIT_COMPOSABILITY.md
+docs/CORESPIRIT_SCRIPTING.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+```
+
+### v95 validation targets
+
+```text
+STAGE95_CANONICAL_DATA_PLANE_OK
+STAGE95_INDICATOR_MODEL_SHARED_HISTORY_OK
+STAGE95_CHART_INTERACTION_SCALES_OK
+STAGE95_ZERO_COPY_SOURCE_CONTRACT_OK
+```
+
+### v95 architectural invariant
+
+```text
+one canonical timeline
+        ↓
+read-only typed consumer views
+        ↓
+indicators / models / chart / structure / liquidity / order flow
+        ↓
+derived outputs + local execution state only
+```
+
+and:
+
+```text
+Chart Data Engine
+       ↓
+Interaction + Viewport + Scales
+       ↓
+Retained Scene / Panes / Layers
+       ↓
+Rendering Coordinator
+       ↓
+Lightweight Charts (production) / Native renderer (experimental)
+```
+
+The chart engine is now decomposed enough that the future native renderer can replace the final pixel backend without moving data ownership, interaction semantics, scales or scene contracts back into React.
+
+
+### v96 implementation record — #15/#16 chart viewport and scale engines — 2026-09-27
+
+- [x] Replace the minimal viewport shape with an explicit renderer-neutral state: first/last visible bar, pixels-per-bar, price domain, zoom, fractional scroll, pixel width and device-pixel ratio.
+- [x] Add cached affine bar-index ↔ pixel transforms with no per-call allocations.
+- [x] Add deterministic pixel/bar panning, anchor-preserving zoom and resize semantics.
+- [x] Add a dedicated `ChartTimeScale` with continuous, compressed and session-compressed coordinate modes.
+- [x] Add explicit IANA timezone handling and injectable trading-day/session-window calendar callbacks.
+- [x] Add holiday/special-session support through the calendar contract without embedding an exchange-wide holiday database in the renderer.
+- [x] Add timeframe parsing so interpolation safety can adapt to 1m/3m/5m/10m/15m and broader timeframes without hard-coding one interval.
+- [x] Add dedicated `ChartPriceScaleEngine` for linear, logarithmic, percent and indexed modes.
+- [x] Add auto/manual/locked price-domain policy with deterministic visible-domain padding and cached forward/inverse transforms.
+- [x] Coordinate the chart engine with viewport-aware price autoscaling while keeping scale semantics renderer-neutral.
+- [x] Extend chart contracts and documentation for panes sharing one horizontal time authority while retaining independent vertical scales.
+- [x] Add focused stage96 viewport/time/price transform conformance tests.
+- [x] CoreSpirit roadmap advanced from 88 to 100 stages to record the viewport/scale foundation and migration gates.
+
+### v96 files changed
+
+```text
+src/services/core/chart/chartViewport.ts
+src/services/core/chart/chartViewportController.ts
+src/services/core/chart/chartTimeScale.ts
+src/services/core/chart/chartPriceScale.ts
+src/services/core/chart/chartScales.ts
+src/services/core/chart/chartEngine.ts
+src/services/core/chart/stage96ViewportScaleEngine.test.ts
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/VERSION.ts
+package.json
+
+CORESPIRIT_V96_RELEASE_NOTES.md
+CORESPIRIT_V96_MANIFEST.json
+docs/CHART_ENGINE_ARCHITECTURE.md
+docs/CHART_DATA_PLANE_ARCHITECTURE.md
+docs/CHART_RENDERER_MIGRATION.md
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+```
+
+### v96 validation targets
+
+```text
+STAGE96_VIEWPORT_ENGINE_OK
+STAGE96_FAST_BAR_PIXEL_TRANSFORMS_OK
+STAGE96_SESSION_AWARE_TIME_SCALE_OK
+STAGE96_PRICE_SCALE_MODES_OK
+STAGE96_AUTOSCALE_MANUAL_LOCK_CONTRACT_OK
+```
+
+### v96 architectural invariant
+
+```text
+canonical timeline
+      ↓
+viewport state
+      ↓
+bar/time coordinate transform
+      ↓
+price transform
+      ↓
+retained chart scene
+      ↓
+renderer backend
+```
+
+Viewport and scale math must not depend on Lightweight Charts or React. Lightweight Charts remains the production backend until the native migration gates are independently satisfied.
+
+
+### v97 files changed
+
+Core Chart/drawing contracts added or deepened:
+
+```text
+src/services/core/drawing/drawingApi.ts
+src/services/core/drawing/drawingToolSession.ts
+src/services/core/drawing/coreDrawing.ts
+src/services/core/drawing/coreDrawingStore.ts
+src/services/core/drawing/drawingTools.ts
+src/services/core/drawing/drawingGeometry.ts
+src/services/core/drawing/index.ts
+src/services/core/chart/chartApi.ts
+src/services/core/chart/chartNavigationApi.ts
+src/services/core/chart/chartGestureController.ts
+src/services/core/chart/chartViewportController.ts
+src/services/core/chart/chartEngine.ts
+src/services/core/chart/chartLevelOfDetail.ts
+src/services/core/chart/index.ts
+src/components/workspace/chartController.ts
+src/components/workspace/LiveChart.tsx
+src/services/coreSpirit/coreSpiritRoadmap.ts
+src/services/coreSpirit/VERSION.ts
+src/coreSpiritV92DeepContract.test.mjs
+```
+
+Documentation/release records:
+
+```text
+docs/CHART_DRAWING_INTERACTION_ARCHITECTURE.md
+docs/CHART_INTERACTION_API.md
+docs/CHART_ENGINE_ARCHITECTURE.md
+docs/CHART_RENDERER_MIGRATION.md
+docs/CORESPIRIT.md
+docs/CORESPIRIT_BUILD_TRACKER.md
+CORESPIRIT_V97_RELEASE_NOTES.md
+CORESPIRIT_V97_MANIFEST.json
+```
+
+### v97 validation targets
+
+```text
+STAGE97_DRAWING_API_METHODS_OK
+STAGE97_DRAWING_TOOL_CATALOG_OK
+STAGE97_NAVIGATION_METHODS_OK
+STAGE97_PAN_ZOOM_GATING_OK
+STAGE97_ANCHORED_DRAWING_OK
+STAGE97_PRODUCTION_DRAWING_API_INTEGRATION_OK
+STAGE97_ROADMAP_112_STAGE_OK
+NO_VENDOR_SOURCE_COPIED
+```
+
+### v97 architectural invariant
+
+Drawing and navigation semantics belong to TradingCoreOS contracts. Lightweight Charts may be the production adapter, but it is not the owner of CoreDrawing state, tool contracts, viewport state or coordinate semantics.

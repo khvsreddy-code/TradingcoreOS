@@ -16,7 +16,7 @@ export class OAuthStateRepository {
 
   private static createClient() {
     const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
     return url && key
       ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
       : null;

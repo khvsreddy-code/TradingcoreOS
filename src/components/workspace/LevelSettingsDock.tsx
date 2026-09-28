@@ -9,13 +9,13 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   </label>
 );
 
-const input = 'w-full rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#3b82f6]/60';
+const input = 'w-full rounded-md border border-[var(--tco-control)] bg-[var(--tco-bg)] px-2 py-1.5 text-[10px] text-white outline-none focus:border-[#3b82f6]/60';
 const select = input;
 
 const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
-  <button type="button" onClick={() => onChange(!value)} className="flex w-full items-center justify-between rounded-md border border-[#252b38] bg-[#080a10] px-2 py-1.5 text-[9px] text-[#cbd5e1]">
+  <button type="button" onClick={() => onChange(!value)} className="flex w-full items-center justify-between rounded-md border border-[var(--tco-control)] bg-[var(--tco-bg)] px-2 py-1.5 text-[9px] text-[var(--tco-text-2)]">
     <span>{label}</span>
-    <span className={`h-3.5 w-6 rounded-full p-0.5 ${value ? 'bg-[#3b82f6]' : 'bg-[#252b38]'}`}>
+    <span className={`h-3.5 w-6 rounded-full p-0.5 ${value ? 'bg-[#3b82f6]' : 'bg-[var(--tco-control)]'}`}>
       <span className={`block h-2.5 w-2.5 rounded-full bg-white transition-transform ${value ? 'translate-x-2.5' : ''}`} />
     </span>
   </button>
@@ -40,22 +40,22 @@ export function LevelSettingsDock() {
   return (
     <div className="fixed z-[85] top-[185px] right-[660px] max-w-[330px] max-[1500px]:right-[360px] max-[900px]:top-[120px] max-[900px]:right-3 font-mono text-[10px]">
       {!open ? (
-        <button onClick={() => setOpen(true)} className="flex h-8 items-center gap-2 rounded-md border border-[#222636] bg-[#0b0e15]/95 px-3 text-[#cbd5e1] shadow-2xl backdrop-blur hover:border-[#3b82f6]/50 hover:text-white">
+        <button onClick={() => setOpen(true)} className="flex h-8 items-center gap-2 rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)]/95 px-3 text-[var(--tco-text-2)] shadow-2xl backdrop-blur hover:border-[#3b82f6]/50 hover:text-white">
           <Settings2 className="h-3.5 w-3.5" />
           <span>LEVEL SETTINGS</span>
         </button>
       ) : (
-        <div className="w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-[#2a3040] bg-[#0b0e15]/98 shadow-2xl backdrop-blur">
-          <div className="flex items-center justify-between border-b border-[#222636] px-3 py-2.5">
+        <div className="w-[330px] max-w-[calc(100vw-24px)] rounded-xl border border-[#2a3040] bg-[var(--tco-surface-2)]/98 shadow-2xl backdrop-blur">
+          <div className="flex items-center justify-between border-b border-[var(--tco-border)] px-3 py-2.5">
             <div>
-              <div className="text-[9px] uppercase tracking-widest text-[#64748b]">Price Action Feature</div>
+              <div className="text-[9px] uppercase tracking-widest text-[var(--tco-dim)]">Price Action Feature</div>
               <div className="mt-0.5 text-xs font-semibold text-white">Support & Resistance Levels</div>
             </div>
-            <button onClick={() => setOpen(false)} className="rounded-md p-1 text-[#64748b] hover:text-white"><X className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setOpen(false)} className="rounded-md p-1 text-[var(--tco-dim)] hover:text-white"><X className="h-3.5 w-3.5" /></button>
           </div>
 
           <div className="max-h-[520px] space-y-3 overflow-y-auto p-3">
-            <div className="rounded-md border border-[#252b38] bg-[#0d1119] px-2.5 py-2 text-[8px] leading-4 text-[#64748b]">
+            <div className="rounded-md border border-[var(--tco-control)] bg-[var(--tco-surface-3)] px-2.5 py-2 text-[8px] leading-4 text-[var(--tco-dim)]">
               This is a chart feature, not an indicator. Turn <span className="text-white">Levels</span> on from the chart toolbar to display price-action support and resistance. Use these settings only to control how the feature finds and displays levels.
             </div>
 
@@ -85,11 +85,11 @@ export function LevelSettingsDock() {
               </div>
             </div>
 
-            <div className="rounded-md border border-[#252b38] bg-[#0d1119] px-2.5 py-2 text-[8px] leading-4 text-[#64748b]">
+            <div className="rounded-md border border-[var(--tco-control)] bg-[var(--tco-surface-3)] px-2.5 py-2 text-[8px] leading-4 text-[var(--tco-dim)]">
               Levels come from confirmed price pivots and price action. ATR is used for spacing/merging and optional breakout buffering; it does not manufacture directional levels.
             </div>
 
-            <button onClick={() => { saveDynamicLevelSettings(DEFAULT_DYNAMIC_LEVEL_SETTINGS); setS({ ...DEFAULT_DYNAMIC_LEVEL_SETTINGS }); }} className="w-full rounded-md border border-[#252b38] px-2 py-1.5 text-[9px] text-[#94a3b8] hover:border-[#3b82f6]/50 hover:text-white">
+            <button onClick={() => { saveDynamicLevelSettings(DEFAULT_DYNAMIC_LEVEL_SETTINGS); setS({ ...DEFAULT_DYNAMIC_LEVEL_SETTINGS }); }} className="w-full rounded-md border border-[var(--tco-control)] px-2 py-1.5 text-[9px] text-[var(--tco-code-muted)] hover:border-[#3b82f6]/50 hover:text-white">
               Reset Level Feature Defaults
             </button>
           </div>

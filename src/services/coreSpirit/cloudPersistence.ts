@@ -1,5 +1,8 @@
 import { getSupabaseClient } from '../auth/supabaseClient';
 import type { CoreSpiritCompileResult } from './compiler';
+import { buildCoreSpiritArtifactIdentity } from './artifactIdentity';
+import { CORE_SPIRIT_VERSION, CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION, CORE_SPIRIT_ARTIFACT_SCHEMA_VERSION } from './VERSION';
+import { versionedStorageKey } from './storageSchema';
 
 export type CoreSpiritScript = {
   id: string;
@@ -24,10 +27,13 @@ export type CoreSpiritScriptVersion = {
   compile_status: string;
   compile_errors: unknown[];
   source_hash: string | null;
+  artifact_identity?: string | null;
+  ir_version?: number | null;
+  artifact_schema_version?: number | null;
 };
 
-const SCRIPT_ID_KEY = 'tradingcore:corespirit:editor-script-id';
-const COMPILER_VERSION = 'corespirit-v26';
+const SCRIPT_ID_KEY = versionedStorageKey('editor-script-id');
+const LEGACY_SCRIPT_ID_KEY = 'tradingcore:corespirit:editor-script-id';
 
 async function hashSource(source: string) {
   const bytes = new TextEncoder().encode(source);
@@ -45,7 +51,8 @@ export async function loadEditorScript(): Promise<CoreSpiritScript | null> {
   const user = await getCurrentUser();
   if (!user) return null;
   const client = getSupabaseClient();
-  const savedId = localStorage.getItem(SCRIPT_ID_KEY);
+  const savedId = localStorage.getItem(SCRIPT_ID_KEY) || localStorage.getItem(LEGACY_SCRIPT_ID_KEY);
+  if (savedId && !localStorage.getItem(SCRIPT_ID_KEY)) { try { localStorage.setItem(SCRIPT_ID_KEY, savedId); } catch { /* storage boundary */ } }
 
   if (savedId) {
     const { data } = await client.from('corespirit_scripts').select('*').eq('id', savedId).eq('user_id', user.id).maybeSingle();
@@ -74,7 +81,7 @@ async function ensureEditorScript(source: string): Promise<CoreSpiritScript> {
 
   const { data, error } = await getSupabaseClient()
     .from('corespirit_scripts')
-    .insert({ user_id: user.id, name: 'CoreSpirit Trend', source, language_version: '1', status: 'draft' })
+    .insert({ user_id: user.id, name: 'CoreSpirit Trend', source, language_version: CORE_SPIRIT_VERSION, status: 'draft' })
     .select('*')
     .single();
   if (error) throw error;
@@ -99,6 +106,7 @@ export async function saveEditorScript(source: string, compile?: CoreSpiritCompi
   const nextVersion = (latest?.version ?? 0) + 1;
   const compileSucceeded = Boolean(compile?.ir && !(compile.diagnostics || []).some((d) => d.severity === 'error'));
   const diagnostics = (compile?.diagnostics || []).filter((d) => d.severity === 'error');
+  const artifactIdentity = compileSucceeded && compile?.ir ? await buildCoreSpiritArtifactIdentity(compile.ir, source) : null;
 
   const { data: version, error: versionError } = await client
     .from('corespirit_script_versions')
@@ -108,10 +116,13 @@ export async function saveEditorScript(source: string, compile?: CoreSpiritCompi
       version: nextVersion,
       source,
       compiled_ir: compileSucceeded ? compile?.ir ?? null : null,
-      compiler_version: compile ? COMPILER_VERSION : null,
+      compiler_version: compile ? CORE_SPIRIT_COMPILER_VERSION : null,
       compile_status: compile ? (compileSucceeded ? 'success' : 'error') : 'pending',
       compile_errors: diagnostics,
       source_hash: hash,
+      artifact_identity: artifactIdentity?.artifactHash ?? null,
+      ir_version: compileSucceeded ? CORE_SPIRIT_IR_VERSION : null,
+      artifact_schema_version: compileSucceeded ? CORE_SPIRIT_ARTIFACT_SCHEMA_VERSION : null,
     })
     .select('*')
     .single();
@@ -148,6 +159,7 @@ export async function saveExecutionRun(input: {
   webhookCount?: number;
   error?: string | null;
   metrics?: Record<string, unknown>;
+  manifest?: Record<string, unknown> | null;
 }) {
   const user = await getCurrentUser();
   if (!user) return null;
@@ -167,6 +179,7 @@ export async function saveExecutionRun(input: {
     webhook_count: input.webhookCount ?? 0,
     error: input.error ?? null,
     metrics: input.metrics ?? {},
+    manifest: input.manifest ?? null,
   }).select('*').single();
   if (error) throw error;
   return data;

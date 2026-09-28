@@ -1,4 +1,4 @@
-import { OptionChain } from '../../types/market';
+import type { OptionChain, NormalizedMarketTick } from '../../types/market';
 
 export interface OrderRequest {
   symbol: string;
@@ -80,6 +80,15 @@ export interface HistoricalCandle {
   volume: number;
 }
 
+
+export interface PortfolioSnapshot {
+  funds: AccountFunds | null;
+  holdings: Holding[];
+  positions: Position[];
+  orders: OrderResult[];
+  trades: TradeRecord[];
+}
+
 export type BrokerConnectionStatus =
   | 'Connected'
   | 'Refreshing Session'
@@ -135,6 +144,6 @@ export interface BrokerAdapter {
   squareOff(positionId: string): Promise<{ success: boolean; message?: string }>;
   exitAll(): Promise<{ success: boolean; closedCount: number }>;
   getOptionChain(instrumentKey: string, expiryDate?: string): Promise<OptionChain>;
-  subscribeWebSocket(symbols: string[], callback: (tick: any) => void): () => void;
+  subscribeWebSocket(symbols: string[], callback: (tick: NormalizedMarketTick) => void): () => void;
   logout(): Promise<void>;
 }

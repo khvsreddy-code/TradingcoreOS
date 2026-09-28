@@ -1,0 +1,25 @@
+{
+  "version": "v95-platform",
+  "theme": "canonical-shared-data-plane-and-chart-engine-decomposition",
+  "coreSpiritLanguageVersion": "v95",
+  "productionChartBackend": "lightweight-charts",
+  "nativeBackends": ["webgl2", "canvas2d"],
+  "nativeBackendsProductionEnabled": false,
+  "features": [
+    "canonical-data-plane-registry",
+    "shared-indicator-model-typed-views",
+    "single-timeline-derived-stores",
+    "chart-data-engine",
+    "chart-interaction-engine",
+    "renderer-neutral-chart-scales",
+    "retained-chart-scene-and-layers",
+    "chart-pane-registry",
+    "lightweight-charts-production-bridge"
+  ],
+  "validation": [
+    "STAGE95_CANONICAL_DATA_PLANE_OK",
+    "STAGE95_INDICATOR_MODEL_SHARED_HISTORY_OK",
+    "STAGE95_CHART_INTERACTION_SCALES_OK",
+    "STAGE95_ZERO_COPY_SOURCE_CONTRACT_OK"
+  ]
+}

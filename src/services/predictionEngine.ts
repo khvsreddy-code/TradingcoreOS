@@ -46,8 +46,10 @@ export const PREDICTION_MODELS:PredictionModelDefinition[] = [
 ];
 export const DEFAULT_PREDICTION_MODEL_IDS=['production-xgboost-direction','production-lstm-sequence','production-transformer','xgb-breakout','trend-strength'];
 export const getPredictionModel=(id:string)=>PREDICTION_MODELS.find(m=>m.id===id)||PREDICTION_MODELS[0];
-export function getSavedPredictionModelIds(){try{if(typeof window==='undefined')return DEFAULT_PREDICTION_MODEL_IDS;const raw=window.localStorage.getItem('tradingcore_prediction_models');const ids=raw?JSON.parse(raw):DEFAULT_PREDICTION_MODEL_IDS;return Array.isArray(ids)&&ids.length?ids.filter((id:string)=>PREDICTION_MODELS.some(m=>m.id===id)):DEFAULT_PREDICTION_MODEL_IDS;}catch{return DEFAULT_PREDICTION_MODEL_IDS;}}
-export function savePredictionModelIds(ids:string[]){try{if(typeof window==='undefined')return;window.localStorage.setItem('tradingcore_prediction_models',JSON.stringify(ids));window.dispatchEvent(new CustomEvent('tradingcore:prediction-models-changed',{detail:ids}));}catch{}}
+const PREDICTION_STORAGE_KEY = 'tradingcore:prediction-models:v2';
+const PREDICTION_LEGACY_STORAGE_KEY = 'tradingcore_prediction_models';
+export function getSavedPredictionModelIds(){try{if(typeof window==='undefined')return DEFAULT_PREDICTION_MODEL_IDS;const raw=window.localStorage.getItem(PREDICTION_STORAGE_KEY) || window.localStorage.getItem(PREDICTION_LEGACY_STORAGE_KEY);const ids=raw?JSON.parse(raw):DEFAULT_PREDICTION_MODEL_IDS;if(!window.localStorage.getItem(PREDICTION_STORAGE_KEY) && raw) window.localStorage.setItem(PREDICTION_STORAGE_KEY, JSON.stringify(ids));return Array.isArray(ids)&&ids.length?ids.filter((id:string)=>PREDICTION_MODELS.some(m=>m.id===id)):DEFAULT_PREDICTION_MODEL_IDS;}catch{return DEFAULT_PREDICTION_MODEL_IDS;}}
+export function savePredictionModelIds(ids:string[]){try{if(typeof window==='undefined')return;window.localStorage.setItem(PREDICTION_STORAGE_KEY,JSON.stringify(ids));window.dispatchEvent(new CustomEvent('tradingcore:prediction-models-changed',{detail:ids}));}catch{}}
 
 export interface PredictionFeature { name:string; value:number; weight:number; contribution:number; direction:'bullish'|'bearish'|'neutral'; }
 export interface PredictionResult {

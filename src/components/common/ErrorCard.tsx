@@ -65,7 +65,7 @@ export const ErrorCard: React.FC<ErrorCardProps> = ({
             {onDismiss && (
               <button
                 onClick={onDismiss}
-                className="text-[#8c93a6] hover:text-[#f3f4f6] transition-colors p-1"
+                className="text-[var(--tco-muted)] hover:text-[var(--tco-text)] transition-colors p-1"
                 aria-label="Dismiss error"
               >
                 <XCircle className="h-4 w-4" />

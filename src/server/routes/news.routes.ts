@@ -1,5 +1,7 @@
 import { Router } from 'express';
 
+type JsonRecord = Record<string, unknown>;
+
 type NewsItem = {
   id: string;
   title: string;
@@ -37,16 +39,20 @@ async function fetchGdelt(rawSymbol: string): Promise<NewsItem[]> {
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error(`GDELT news request failed (${response.status})`);
-  const payload: any = await response.json();
-  const rows = Array.isArray(payload?.articles) ? payload.articles : [];
-  return rows.map((row: any, index: number) => ({
-    id: String(row?.url || row?.title || index),
-    title: String(row?.title || 'Untitled market article'),
-    source: String(row?.domain || row?.sourcecountry || 'GDELT'),
-    url: String(row?.url || ''),
-    publishedAt: String(row?.seendate || row?.date || new Date().toISOString()),
-    snippet: String(row?.socialimage || ''),
-  })).filter((item: NewsItem) => item.title && item.url);
+  const payload: unknown = await response.json();
+  const payloadRecord = payload && typeof payload === 'object' ? payload as JsonRecord : {};
+  const rows = Array.isArray(payloadRecord.articles) ? payloadRecord.articles : [];
+  return rows.map((row: unknown, index: number) => {
+    const item = row && typeof row === 'object' ? row as JsonRecord : {};
+    return ({
+    id: String(item.url || item.title || index),
+    title: String(item.title || 'Untitled market article'),
+    source: String(item.domain || item.sourcecountry || 'GDELT'),
+    url: String(item.url || ''),
+    publishedAt: String(item.seendate || item.date || new Date().toISOString()),
+    snippet: String(item.socialimage || ''),
+    });
+  }).filter((item: NewsItem) => item.title && item.url);
 }
 
 async function getNews(symbol: string): Promise<NewsItem[]> {
@@ -70,8 +76,9 @@ router.get('/news', async (req, res) => {
   try {
     const items = await getNews(symbol);
     res.json({ success: true, provider: 'GDELT', symbol, items, fetchedAt: new Date().toISOString() });
-  } catch (error: any) {
-    res.status(502).json({ success: false, provider: 'GDELT', symbol, items: [], error: error?.message || 'News unavailable' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'News unavailable';
+    res.status(502).json({ success: false, provider: 'GDELT', symbol, items: [], error: message });
   }
 });
 

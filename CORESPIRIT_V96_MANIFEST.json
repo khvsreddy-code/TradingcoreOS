@@ -1,0 +1,27 @@
+{
+  "version": "v96-platform",
+  "theme": "canonical-viewport-and-dedicated-scale-engines",
+  "coreSpiritLanguageVersion": "v96",
+  "productionChartBackend": "lightweight-charts",
+  "nativeBackends": ["webgl2", "canvas2d"],
+  "nativeBackendsProductionEnabled": false,
+  "features": [
+    "canonical-data-plane",
+    "renderer-neutral-viewport-state",
+    "fast-bar-pixel-transform",
+    "session-aware-time-scale",
+    "compressed-time-mapping",
+    "multi-timeframe-coordinate-contract",
+    "dedicated-price-scale-engine",
+    "linear-log-percent-indexed-price-modes",
+    "auto-manual-locked-scale-policy",
+    "shared-pane-horizontal-coordinate"
+  ],
+  "validation": [
+    "STAGE96_VIEWPORT_ENGINE_OK",
+    "STAGE96_FAST_BAR_PIXEL_TRANSFORMS_OK",
+    "STAGE96_SESSION_AWARE_TIME_SCALE_OK",
+    "STAGE96_PRICE_SCALE_MODES_OK",
+    "STAGE96_AUTOSCALE_MANUAL_LOCK_CONTRACT_OK"
+  ]
+}

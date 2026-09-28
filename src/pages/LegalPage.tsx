@@ -6,14 +6,14 @@ type Props = { kind: 'privacy' | 'terms' };
 export function LegalPage({ kind }: Props) {
   const privacy = kind === 'privacy';
   return (
-    <div className="min-h-screen bg-[#070a10] text-[#f3f4f6] font-sans">
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#070a10]/90 backdrop-blur-xl">
+    <div className="min-h-screen bg-[var(--tco-bg)] text-[var(--tco-text)] font-sans">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[var(--tco-bg)]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5 sm:px-8">
           <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:text-[#60a5fa] transition-colors">
             <span className="flex h-7 w-7 items-center justify-center rounded-md border border-[#3b82f6]/30 bg-[#3b82f6]/10 text-[10px] font-black text-[#60a5fa]">TC</span>
             TradingCore OS
           </a>
-          <a href="/" className="inline-flex items-center gap-2 rounded-lg border border-[#222636] bg-[#11131c] px-3 py-2 text-xs font-mono text-[#9aa3b5] hover:border-[#3a4358] hover:text-white transition-colors">
+          <a href="/" className="inline-flex items-center gap-2 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-3)] px-3 py-2 text-xs font-mono text-[#9aa3b5] hover:border-[#3a4358] hover:text-white transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Home
           </a>
         </div>
@@ -25,7 +25,7 @@ export function LegalPage({ kind }: Props) {
           TRADINGCORE · {privacy ? 'PRIVACY' : 'TERMS'}
         </div>
         <h1 className="section-title">{privacy ? 'Privacy Policy' : 'Terms of Service'}</h1>
-        <p className="mt-4 text-sm leading-7 text-[#8c93a6]">Last updated September 1, 2026. This page is a product-policy placeholder and should be reviewed by qualified legal counsel before public launch.</p>
+        <p className="mt-4 text-sm leading-7 text-[var(--tco-muted)]">Last updated September 1, 2026. This page is a product-policy placeholder and should be reviewed by qualified legal counsel before public launch.</p>
 
         {privacy ? (
           <div className="mt-10 space-y-8 text-sm leading-7 text-[#aeb4c4]">

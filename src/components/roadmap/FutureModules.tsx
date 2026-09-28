@@ -14,57 +14,57 @@ const ROADMAP_ITEMS = [
     name: 'Scalper Overdrive Engine',
     details: 'Direct binary WebSocket streaming bypassing browser overhead',
     status: 'Coming Soon',
-    statusBg: 'bg-[#11131c] text-[#8c93a6] border-[#1e2230]'
+    statusBg: 'bg-[var(--tco-surface-3)] text-[var(--tco-muted)] border-[#1e2230]'
   },
   {
     phase: 'PHASE 04',
     name: 'AI Trading Co-Pilot',
     details: 'Natural language trade journaling & automated risk warnings',
     status: 'Coming Soon',
-    statusBg: 'bg-[#11131c] text-[#8c93a6] border-[#1e2230]'
+    statusBg: 'bg-[var(--tco-surface-3)] text-[var(--tco-muted)] border-[#1e2230]'
   },
   {
     phase: 'PHASE 05',
     name: 'Institutional Market Models',
     details: 'Volume Profile, Order Flow Footprint charts & Delta indicators',
     status: 'Coming Soon',
-    statusBg: 'bg-[#11131c] text-[#8c93a6] border-[#1e2230]'
+    statusBg: 'bg-[var(--tco-surface-3)] text-[var(--tco-muted)] border-[#1e2230]'
   },
   {
     phase: 'PHASE 06',
     name: 'CoreSpirit Scripting Runtime',
     details: 'TypeScript algorithmic execution running in WebWorkers',
     status: 'In R&D',
-    statusBg: 'bg-[#11131c] text-[#8c93a6] border-[#1e2230]'
+    statusBg: 'bg-[var(--tco-surface-3)] text-[var(--tco-muted)] border-[#1e2230]'
   },
   {
     phase: 'PHASE 07',
     name: 'CoreSpirit Strategy Marketplace',
     details: 'Monetize verified algorithmic execution models with revenue share',
     status: 'Planned',
-    statusBg: 'bg-[#11131c] text-[#585e72] border-[#1e2230]'
+    statusBg: 'bg-[var(--tco-surface-3)] text-[#585e72] border-[#1e2230]'
   }
 ];
 
 export const FutureModules: React.FC = () => {
   return (
-    <section id="future-modules" className="py-28 bg-[#090a0f] border-t border-[#1e2230]">
+    <section id="future-modules" className="py-28 bg-[var(--tco-surface-2)] border-t border-[#1e2230]">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#1e2230] bg-[#11131c] px-3 py-1 font-mono text-[11px] text-[#8c93a6] uppercase tracking-wider mb-4">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#1e2230] bg-[var(--tco-surface-3)] px-3 py-1 font-mono text-[11px] text-[var(--tco-muted)] uppercase tracking-wider mb-4">
             PLATFORM ROADMAP
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#f3f4f6] tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-[var(--tco-text)] tracking-tight">
             Future Modules & Evolution
           </h2>
-          <p className="mt-4 text-sm sm:text-base text-[#8c93a6]">
+          <p className="mt-4 text-sm sm:text-base text-[var(--tco-muted)]">
             Our frozen development timeline for upcoming core OS expansions.
           </p>
         </div>
 
         {/* Clean Linear-style List Layout */}
-        <div className="rounded-xl border border-[#1e2230] bg-[#0c0e15] divide-y divide-[#1e2230]">
+        <div className="rounded-xl border border-[#1e2230] bg-[var(--tco-surface)] divide-y divide-[#1e2230]">
           {ROADMAP_ITEMS.map((item, index) => (
             <motion.div
               key={item.phase}
@@ -75,13 +75,13 @@ export const FutureModules: React.FC = () => {
               className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#11141d] transition-colors"
             >
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <span className="font-mono text-xs text-[#8c93a6] shrink-0 font-bold">
+                <span className="font-mono text-xs text-[var(--tco-muted)] shrink-0 font-bold">
                   {item.phase}
                 </span>
                 <span className="hidden sm:inline text-[#1e2230]">·</span>
                 <div>
-                  <h3 className="text-sm font-bold text-[#f3f4f6]">{item.name}</h3>
-                  <p className="text-xs text-[#8c93a6] mt-0.5">{item.details}</p>
+                  <h3 className="text-sm font-bold text-[var(--tco-text)]">{item.name}</h3>
+                  <p className="text-xs text-[var(--tco-muted)] mt-0.5">{item.details}</p>
                 </div>
               </div>
 

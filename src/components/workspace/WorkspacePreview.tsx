@@ -111,8 +111,8 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
             <div className="flex items-center gap-3">
               <div className="brand-chip">TC</div>
               <div>
-                <div className="text-[11px] font-bold text-[#f3f4f6]">TradingCore <span className="text-[#60a5fa]">OS</span></div>
-                <div className="font-mono text-[8px] text-[#59647a]">PROFESSIONAL TRADING TERMINAL</div>
+                <div className="text-[11px] font-bold text-[var(--tco-text)]">TradingCore <span className="text-[#60a5fa]">OS</span></div>
+                <div className="font-mono text-[8px] text-[var(--tco-faint)]">PROFESSIONAL TRADING TERMINAL</div>
               </div>
             </div>
             <div className="hidden items-center gap-1 md:flex">
@@ -123,7 +123,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 ['PORTFOLIO', Wallet],
               ].map(([label, Icon], i) => {
                 const I = Icon as typeof Activity;
-                return <button key={label as string} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-mono text-[9px] ${i === 2 ? 'bg-white/[0.05] text-[#f3f4f6]' : 'text-[#69748a] hover:text-white'}`}><I className="h-3 w-3" />{label as string}</button>;
+                return <button key={label as string} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-mono text-[9px] ${i === 2 ? 'bg-white/[0.05] text-[var(--tco-text)]' : 'text-[#69748a] hover:text-white'}`}><I className="h-3 w-3" />{label as string}</button>;
               })}
             </div>
             <button className="hidden rounded-md border border-white/[0.07] p-1.5 text-[#69748a] hover:text-white sm:block"><Settings className="h-3.5 w-3.5" /></button>
@@ -133,7 +133,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
             <aside className="hidden border-r border-white/[0.06] bg-[#0b0e16] lg:block">
               <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-3">
                 <div className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#8a94a9]">Markets</div>
-                <div className="flex gap-2 text-[#59647a]"><Plus className="h-3.5 w-3.5" /><Search className="h-3.5 w-3.5" /></div>
+                <div className="flex gap-2 text-[var(--tco-faint)]"><Plus className="h-3.5 w-3.5" /><Search className="h-3.5 w-3.5" /></div>
               </div>
               <div className="border-b border-white/[0.05] px-3 py-2 font-mono text-[8px] text-[#566177]">WATCHLIST · 8</div>
               <div>
@@ -142,8 +142,8 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                   return (
                     <button key={item.symbol} onClick={() => setSelectedSymbol(item.symbol)} className={`flex w-full items-center justify-between border-b border-white/[0.035] px-3 py-2.5 text-left transition ${active ? 'bg-[#3b82f6]/[0.08]' : 'hover:bg-white/[0.025]'}`}>
                       <div>
-                        <div className={`font-mono text-[9px] font-semibold ${active ? 'text-[#f3f4f6]' : 'text-[#b6bdcb]'}`}>{item.symbol}</div>
-                        <div className="mt-0.5 text-[8px] text-[#59647a]">NSE · F&amp;O</div>
+                        <div className={`font-mono text-[9px] font-semibold ${active ? 'text-[var(--tco-text)]' : 'text-[#b6bdcb]'}`}>{item.symbol}</div>
+                        <div className="mt-0.5 text-[8px] text-[var(--tco-faint)]">NSE · F&amp;O</div>
                       </div>
                       <div className="text-right font-mono">
                         <div className="text-[9px] text-[#e6e9ef]">{fmt(item.ltp)}</div>
@@ -158,20 +158,20 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 <div className="space-y-1">
                   {DEPTH_DATA.map((row, i) => (
                     <div key={i} className="grid grid-cols-2 gap-2 font-mono text-[8px]">
-                      <span className="text-right text-[#60a5fa]">{row.bidPrice.toFixed(2)} <em className="not-italic text-[#59647a]">{row.bidQty}</em></span>
-                      <span className="text-[#fb7185]">{row.askPrice.toFixed(2)} <em className="not-italic text-[#59647a]">{row.askQty}</em></span>
+                      <span className="text-right text-[#60a5fa]">{row.bidPrice.toFixed(2)} <em className="not-italic text-[var(--tco-faint)]">{row.bidQty}</em></span>
+                      <span className="text-[#fb7185]">{row.askPrice.toFixed(2)} <em className="not-italic text-[var(--tco-faint)]">{row.askQty}</em></span>
                     </div>
                   ))}
                 </div>
               </div>
             </aside>
 
-            <main className="min-w-0 bg-[#070a10]">
+            <main className="min-w-0 bg-[var(--tco-bg)]">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5 sm:px-4">
                 <div className="flex items-center gap-3">
                   <div>
-                    <div className="font-mono text-[11px] font-bold text-[#f3f4f6]">{selectedSymbol}</div>
-                    <div className="mt-0.5 font-mono text-[8px] text-[#59647a]">NSE · F&amp;O · INDEX</div>
+                    <div className="font-mono text-[11px] font-bold text-[var(--tco-text)]">{selectedSymbol}</div>
+                    <div className="mt-0.5 font-mono text-[8px] text-[var(--tco-faint)]">NSE · F&amp;O · INDEX</div>
                   </div>
                   <div className="font-mono text-[12px] font-semibold text-[#e8ebf1]">{fmt(selected.ltp)}</div>
                   <div className="rounded-md bg-[#3b82f6]/10 px-1.5 py-1 font-mono text-[8px] text-[#60a5fa]">+{selected.changePercent.toFixed(2)}%</div>
@@ -192,7 +192,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-3 py-3 sm:px-4">
                   <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0a0d14]/88 px-2.5 py-1.5 font-mono text-[8px] backdrop-blur-xl shadow-lg">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#60a5fa] shadow-[0_0_10px_rgba(96,165,250,.7)]" />
-                    <span className="text-[#60a5fa]">BUY</span><span className="text-[#f3f4f6]">82%</span><span className="text-[#515c71]">•</span><span className="text-[#8b95a9]">BOS CONFIRMED</span>
+                    <span className="text-[#60a5fa]">BUY</span><span className="text-[var(--tco-text)]">82%</span><span className="text-[#515c71]">•</span><span className="text-[#8b95a9]">BOS CONFIRMED</span>
                   </div>
                   <div className="flex items-center gap-2 rounded-lg border border-[#a78bfa]/15 bg-[#0a0d14]/88 px-2.5 py-1.5 font-mono text-[8px] text-[#c4b5fd] backdrop-blur-xl shadow-lg">
                     <Sparkles className="h-3 w-3" /> MODEL CONFLUENCE
@@ -200,7 +200,7 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 </div>
                 <ShowcaseChart basePrice={selected.ltp} timeframe={selectedTimeframe} showLevels={showLevels} showForecast={showForecast} />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-20 bg-gradient-to-t from-[#090d14] via-[#090d14]/55 to-transparent" />
-                <div className="pointer-events-none absolute bottom-3 left-3 z-10 hidden items-center gap-3 rounded-md border border-white/[0.05] bg-[#090d14]/70 px-2 py-1.5 font-mono text-[7px] text-[#59647a] backdrop-blur sm:flex">
+                <div className="pointer-events-none absolute bottom-3 left-3 z-10 hidden items-center gap-3 rounded-md border border-white/[0.05] bg-[#090d14]/70 px-2 py-1.5 font-mono text-[7px] text-[var(--tco-faint)] backdrop-blur sm:flex">
                   <span>SCROLL TO ZOOM</span><span>DRAG TO PAN</span><span>CROSSHAIR ACTIVE</span>
                 </div>
               </div>
@@ -211,11 +211,11 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                   <button onClick={() => setShowForecast(v => !v)} className={`toolbar-pill ${showForecast ? 'toolbar-pill-active-blue' : ''}`}><Crosshair className="h-3 w-3" /> Forecast</button>
                   <span className="toolbar-pill"><Activity className="h-3 w-3 text-[#c084fc]" /> VWAP</span>
                 </div>
-                <div className="font-mono text-[8px] text-[#59647a]">15:25:30 IST · AUTO SCALE</div>
+                <div className="font-mono text-[8px] text-[var(--tco-faint)]">15:25:30 IST · AUTO SCALE</div>
               </div>
             </main>
 
-            <aside className="border-t border-[#222636] bg-[#090a0f] lg:border-l lg:border-t-0">
+            <aside className="border-t border-[var(--tco-border)] bg-[var(--tco-surface-2)] lg:border-l lg:border-t-0">
               <div className="flex border-b border-white/[0.06] font-mono text-[9px]">
                 <button onClick={() => setActiveTab('Order')} className={`flex-1 py-3 ${activeTab === 'Order' ? 'border-b border-[#60a5fa] bg-[#3b82f6]/[0.04] text-white' : 'text-[#667188]'}`}>ORDER</button>
                 <button onClick={() => setActiveTab('Positions')} className={`flex-1 py-3 ${activeTab === 'Positions' ? 'border-b border-[#60a5fa] bg-[#3b82f6]/[0.04] text-white' : 'text-[#667188]'}`}>POSITIONS <span className="text-[#60a5fa]">(2)</span></button>
@@ -223,30 +223,30 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
 
               {activeTab === 'Order' ? (
                 <div className="space-y-4 p-4 font-mono">
-                  <div className="rounded-xl border border-white/[0.06] bg-[#0b0e15] p-3">
+                  <div className="rounded-xl border border-white/[0.06] bg-[var(--tco-surface-2)] p-3">
                     <div className="flex items-center justify-between text-[8px] text-[#667188]"><span>INSTRUMENT</span><span className="text-[#60a5fa]">NSE F&amp;O</span></div>
-                    <div className="mt-1.5 text-[11px] font-bold text-[#f3f4f6]">{selectedSymbol}</div>
-                    <div className="mt-1 text-[9px] text-[#59647a]">LTP ₹{fmt(selected.ltp)}</div>
+                    <div className="mt-1.5 text-[11px] font-bold text-[var(--tco-text)]">{selectedSymbol}</div>
+                    <div className="mt-1 text-[9px] text-[var(--tco-faint)]">LTP ₹{fmt(selected.ltp)}</div>
                   </div>
                   <div>
-                    <div className="mb-1.5 text-[8px] uppercase tracking-[0.14em] text-[#59647a]">Side</div>
+                    <div className="mb-1.5 text-[8px] uppercase tracking-[0.14em] text-[var(--tco-faint)]">Side</div>
                     <div className="grid grid-cols-2 gap-1.5">
                       <button onClick={() => setOrderSide('Buy')} className={`rounded-lg py-2 text-[9px] font-bold ${orderSide === 'Buy' ? 'bg-[#3b82f6]/15 text-[#60a5fa] ring-1 ring-[#3b82f6]/40' : 'border border-white/[0.06] text-[#657087]'}`}>BUY</button>
                       <button onClick={() => setOrderSide('Sell')} className={`rounded-lg py-2 text-[9px] font-bold ${orderSide === 'Sell' ? 'bg-[#ef4444]/15 text-[#fb7185] ring-1 ring-[#ef4444]/40' : 'border border-white/[0.06] text-[#657087]'}`}>SELL</button>
                     </div>
                   </div>
                   <div>
-                    <div className="mb-1.5 flex justify-between text-[8px] text-[#59647a]"><span>QUANTITY</span><span>LOT 15</span></div>
+                    <div className="mb-1.5 flex justify-between text-[8px] text-[var(--tco-faint)]"><span>QUANTITY</span><span>LOT 15</span></div>
                     <div className="flex items-center gap-2">
-                      <input value={quantity} onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))} type="number" className="w-20 rounded-lg border border-white/[0.07] bg-[#070a10] px-2.5 py-2 text-[10px] text-white outline-none focus:border-[#3b82f6]/50" />
+                      <input value={quantity} onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))} type="number" className="w-20 rounded-lg border border-white/[0.07] bg-[var(--tco-bg)] px-2.5 py-2 text-[10px] text-white outline-none focus:border-[#3b82f6]/50" />
                       <div className="flex gap-1">
                         {[25, 50, 100].map(q => <button key={q} onClick={() => setQuantity(q)} className="rounded-md border border-white/[0.06] px-2 py-1.5 text-[8px] text-[#687187] hover:text-white">+{q}</button>)}
                       </div>
                     </div>
                   </div>
                   <div className="border-t border-white/[0.06] pt-3">
-                    <div className="flex justify-between text-[8px] text-[#59647a]"><span>EST. MARGIN</span><span className="text-[#e5e7eb]">₹1,25,650</span></div>
-                    <button onClick={onLaunch} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[9px] font-black tracking-[0.12em] ${orderSide === 'Buy' ? 'bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-[#090a0f]' : 'bg-gradient-to-r from-[#ef4444] to-[#f43f5e] text-white'}`}>
+                    <div className="flex justify-between text-[8px] text-[var(--tco-faint)]"><span>EST. MARGIN</span><span className="text-[var(--tco-text-2)]">₹1,25,650</span></div>
+                    <button onClick={onLaunch} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[9px] font-black tracking-[0.12em] ${orderSide === 'Buy' ? 'bg-gradient-to-r from-[#3b82f6] to-[#2563eb] text-[var(--tco-surface-2)]' : 'bg-gradient-to-r from-[#ef4444] to-[#f43f5e] text-white'}`}>
                       <Zap className="h-3.5 w-3.5" /> {orderSide.toUpperCase()} MARKET
                     </button>
                   </div>
@@ -260,16 +260,16 @@ export const WorkspacePreview: React.FC<{ onLaunch?: () => void }> = ({ onLaunch
                 <div className="divide-y divide-white/[0.05] p-3 font-mono">
                   {POSITIONS_DATA.map(pos => (
                     <div key={pos.id} className="py-3">
-                      <div className="flex items-start justify-between gap-2 text-[9px]"><span className="font-bold text-[#e5e7eb]">{pos.symbol}</span><span className={pos.pnl >= 0 ? 'text-[#60a5fa]' : 'text-[#fb7185]'}>{pos.pnl >= 0 ? '+' : '-'}₹{Math.abs(pos.pnl).toFixed(2)}</span></div>
-                      <div className="mt-1 flex justify-between text-[8px] text-[#59647a]"><span>{pos.type} · {pos.lots} lots</span><span>₹{pos.ltp.toFixed(2)}</span></div>
+                      <div className="flex items-start justify-between gap-2 text-[9px]"><span className="font-bold text-[var(--tco-text-2)]">{pos.symbol}</span><span className={pos.pnl >= 0 ? 'text-[#60a5fa]' : 'text-[#fb7185]'}>{pos.pnl >= 0 ? '+' : '-'}₹{Math.abs(pos.pnl).toFixed(2)}</span></div>
+                      <div className="mt-1 flex justify-between text-[8px] text-[var(--tco-faint)]"><span>{pos.type} · {pos.lots} lots</span><span>₹{pos.ltp.toFixed(2)}</span></div>
                     </div>
                   ))}
                 </div>
               )}
 
-              <div className="mt-auto border-t border-white/[0.06] bg-[#070a10] p-3">
-                <div className="flex items-center justify-between font-mono"><span className="text-[8px] text-[#59647a]">TOTAL NET P&amp;L</span><span className="text-[11px] font-bold text-[#60a5fa]">+₹1,725.00</span></div>
-                <div className="mt-2 flex items-center justify-between text-[8px] text-[#59647a]"><span className="inline-flex items-center gap-1"><TrendingUp className="h-3 w-3 text-[#60a5fa]" /> Confluence 84%</span><button onClick={onLaunch} className="text-[#60a5fa] hover:text-white">Launch full OS →</button></div>
+              <div className="mt-auto border-t border-white/[0.06] bg-[var(--tco-bg)] p-3">
+                <div className="flex items-center justify-between font-mono"><span className="text-[8px] text-[var(--tco-faint)]">TOTAL NET P&amp;L</span><span className="text-[11px] font-bold text-[#60a5fa]">+₹1,725.00</span></div>
+                <div className="mt-2 flex items-center justify-between text-[8px] text-[var(--tco-faint)]"><span className="inline-flex items-center gap-1"><TrendingUp className="h-3 w-3 text-[#60a5fa]" /> Confluence 84%</span><button onClick={onLaunch} className="text-[#60a5fa] hover:text-white">Launch full OS →</button></div>
               </div>
             </aside>
           </div>

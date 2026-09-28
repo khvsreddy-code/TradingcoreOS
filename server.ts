@@ -16,16 +16,28 @@ import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 import { newsRoutes } from './src/server/routes/news.routes.js';
+import { requestContext, type TradingCoreRequest } from './src/server/middleware/requestContext.js';
+import { createRateLimiter } from './src/server/middleware/rateLimit.js';
+import { recordRequest, getRequestMetrics } from './src/server/observability/requestMetrics.js';
 
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+app.use(requestContext);
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   next();
 });
 
+app.use((req: TradingCoreRequest, res, next) => {
+  res.on('finish', () => {
+    recordRequest(res.statusCode, Date.now() - (req.tradingCoreStartedAt || Date.now()));
+  });
+  next();
+});
+
 app.use(express.json({ limit: '32kb' }));
+app.use(createRateLimiter({ windowMs: 60_000, max: 180, name: 'api', key: (req) => req.ip || 'unknown' }));
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -34,17 +46,49 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  const scriptPolicy = process.env.NODE_ENV === 'production' ? "'self'" : "'self' 'unsafe-inline' 'unsafe-eval'";
+  res.setHeader('Content-Security-Policy', [
+    `default-src 'self'`,
+    `script-src ${scriptPolicy}`,
+    `style-src 'self' 'unsafe-inline' https:`,
+    `img-src 'self' data: blob: https:`,
+    `font-src 'self' data: https:`,
+    `connect-src 'self' https: wss: ws:`,
+    `worker-src 'self' blob:`,
+    `frame-ancestors 'self'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+  ].join('; '));
   if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
 
-app.get('/api/health', (_req, res) => {
-  const checks = {
-    database: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+function healthChecks() {
+  return {
+    database: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     encryption: Boolean(process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.length >= 32),
     upstox: Boolean(process.env.UPSTOX_CLIENT_ID && process.env.UPSTOX_CLIENT_SECRET && process.env.UPSTOX_REDIRECT_URI),
     fyers: Boolean(process.env.FYERS_CLIENT_ID && process.env.FYERS_CLIENT_SECRET && process.env.FYERS_REDIRECT_URI),
   };
+}
+
+app.get('/api/health/live', (_req, res) => {
+  res.status(200).json({ status: 'ok', system: 'TradingCore OS', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/health/ready', (_req, res) => {
+  const checks = healthChecks();
+  const ready = checks.database && checks.encryption && (checks.upstox || checks.fyers);
+  res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', checks, timestamp: new Date().toISOString() });
+});
+
+app.get('/api/health/diagnostics', (_req, res) => {
+  const checks = healthChecks();
+  res.status(200).json({ system: 'TradingCore OS', version: '0.5.0', checks, metrics: getRequestMetrics(), timestamp: new Date().toISOString() });
+});
+
+app.get('/api/health', (_req, res) => {
+  const checks = healthChecks();
   const ready = checks.database && checks.encryption && (checks.upstox || checks.fyers);
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', version: '0.5.0', checks, timestamp: new Date().toISOString() });
 });
@@ -80,11 +124,14 @@ app.use('/api', (req, res) => {
   res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
 });
 
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (res.headersSent) return next(err);
   if (req.path.startsWith('/api')) {
-    console.error('[TradingCore API]', err);
-    return res.status(Number(err?.statusCode || err?.status || 500)).json({ success: false, error: err?.message || 'Internal TradingCore API error' });
+    const record = err && typeof err === 'object' ? err as Record<string, unknown> : {};
+    console.error('[TradingCore API]', { requestId: req.get('x-request-id'), error: err });
+    const status = Number(record.statusCode || record.status || 500);
+    const message = typeof record.message === 'string' ? record.message : 'Internal TradingCore API error';
+    return res.status(status).json({ success: false, error: message, requestId: req.get('x-request-id') || null });
   }
   return next(err);
 });

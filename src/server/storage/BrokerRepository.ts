@@ -19,13 +19,13 @@ export class BrokerRepository {
 
   private static requireSupabaseForProduction(): void {
     if (!this.supabase && !(process.env.NODE_ENV !== 'production' && process.env.TRADINGCORE_ALLOW_IN_MEMORY_SESSIONS === 'true')) {
-      throw new Error('Broker session database is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+      throw new Error('Broker session database is not configured. Set SUPABASE_URL and a server-side Supabase key.');
     }
   }
 
   private static createSupabaseClient() {
     const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
     if (!url || !key) return null;
     return createClient(url, key, {
       auth: {

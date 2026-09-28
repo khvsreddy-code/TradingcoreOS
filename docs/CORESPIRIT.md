@@ -109,6 +109,179 @@ CoreSpirit source
 
 The VM is a producer of deterministic facts and intents. The host is the owner of side effects.
 
+## 1.2 User-authored indicators and public composition
+
+TradingCoreOS can expose native indicator starters as editable CoreSpirit source without turning indicators into a separate language. The authoring path is:
+
+```text
+indicator settings
+      ↓
+starter CoreSpirit source
+      ↓
+Indicator Studio
+      ↓
+canonical compiler
+      ↓
+versioned script
+      ↓
+optional public publication
+```
+
+Private ownership and versioning use the existing CoreSpirit persistence boundary. Public discovery uses a separate `indicator_publications` projection so an unpublished draft never becomes public merely because a script exists.
+
+The public catalog intentionally shows the published source. Public code is inspectable but remains sandboxed; publication does not grant broker/network/filesystem authority. See `docs/INDICATORS_USER_AUTHORING.md` and `docs/INDICATOR_COMMUNITY_ARCHITECTURE.md`.
+
+## 1.1 Small surface, deep composition
+
+The six concepts are the user-facing mental model, not six separate execution systems:
+
+```text
+DATA · LET · WHEN · SHOW · MODEL · AUTOMATE
+```
+
+CoreSpirit should resist the temptation to add keywords whenever a new capability appears. A new quantitative module, model, indicator, visual capability, or automation primitive should normally enter through an existing expression, a typed registered component, a model binding, a `SHOW` projection, or an `AUTOMATE` event boundary.
+
+For example:
+
+```corespirit
+data = close
+motionValue = motion(data)
+vol = volatility(data)
+reg = regime(motionValue, vol)
+signal = setup(reg, liquidity, structure)
+show signal
+```
+
+The implementation may expand this into:
+
+```text
+AST
+ ↓
+semantic analysis + component binding
+ ↓
+semantic dependency graph
+ ↓
+typed stable IR
+ ↓
+execution graph + reactive plan
+ ↓
+backend planner
+ ↓
+CPU / WASM / GPU-capable execution host
+```
+
+That implementation complexity is intentionally hidden from the author. Components carry explicit type, determinism, statefulness, and capability metadata so the planner can schedule them without changing the language surface.
+
+The boundary matters: component registration makes a capability composable, but it does not grant unrestricted host authority. Side effects remain governed by the existing host, risk, policy, and execution boundaries.
+
+### 1.2 The five-layer deepening rule
+
+The next layer of CoreSpirit design is not five new language systems. It is deeper semantics behind the same source mental model:
+
+```text
+1. Small surface
+2. First-class values
+3. Semantic components
+4. Typed reusable graphs
+5. One runtime / many execution backends
+```
+
+These layers should compose monotonically. A value can become a component result; a component can become part of a graph; the graph can become a reusable component; and the same component contract can be planned for CPU, WASM, GPU or host execution. No step requires a new source keyword.
+
+### 1.3 Reusable functions: semantic component first
+
+Traditional declarations such as `fn volatilityExpansion(price)` or `component volatilityExpansion(price)` are **not** the current foundation. The semantic component system is the foundation. It supplies typed ports, lineage, state lifecycle, execution metadata and backend eligibility before any public declaration syntax is considered.
+
+A future declaration, if eventually added, should be syntactic sugar over an already-existing component contract rather than a second programming model.
+
+### 1.4 Authoring depth is a view, not a language fork
+
+CoreSpirit has three progressive authoring levels:
+
+| Level | Primary experience | Deeper surfaces |
+|---|---|---|
+| Simple | DATA / LET / WHEN / SHOW | hidden |
+| Advanced | composition, MODEL, multi-symbol/MTF, automation | selected graph/library discovery |
+| Professional | research, optimization, execution inspection | component contracts, IR, runtime, backend planning |
+
+All three compile through the same frontend, stable IR and runtime. The level changes what is visible and inspectable; it does not create professional-only semantics or extra authority.
+
+### 1.5 Complexity absorber
+
+The governing rule is:
+
+> **Source complexity stays small; semantic complexity may become arbitrarily deep.**
+
+The internal fabric is therefore allowed to grow through:
+
+```text
+CoreSpirit source
+      ↓
+semantic graph
+      ↓
+typed component graph
+      ↓
+MODEL / indicator / automation contracts
+      ↓
+dependency graph
+      ↓
+execution plan
+      ↓
+reactive scheduler
+      ↓
+CPU / WASM / GPU / host backend
+```
+
+This is a deliberate complexity absorber. The compiler, IR, planner and host contracts absorb implementation complexity so source authors do not have to learn it merely to use advanced capability.
+
+### 1.6 Namespaced standard library
+
+Namespaces are a discovery and semantic-addressing layer above the canonical builtin/component registries:
+
+```text
+market.*
+series.*
+math.*
+stats.*
+time.*
+structure.*
+volatility.*
+liquidity.*
+probability.*
+model.*
+visual.*
+automation.*
+data.*
+state.*
+```
+
+For example:
+
+```corespirit
+let expansion = volatility.expansion(close)
+let persistence = stats.persistence(expansion)
+let regime = market.regime(...)
+show visual.show(regime)
+```
+
+The important rule is that a qualified member lowers to an existing canonical builtin or an explicitly registered semantic component. Namespaces never create duplicate mathematical implementations or a namespace-specific runtime. Some members can be cataloged before their executable component is registered; the compiler must distinguish cataloged capability from executable capability.
+
+### 1.7 MODEL is another semantic component source
+
+A strict MODEL ABI manifest can be projected into the same semantic component vocabulary:
+
+```text
+MODEL ABI manifest
+      ↓
+validated typed component contract
+      ↓
+semantic graph
+      ↓
+execution planner
+```
+
+This keeps model inputs/outputs, state, determinism, backend eligibility and capabilities visible to the same planning machinery used by other reusable computation. Python, native RPC and WASM remain adapters below the ABI; the VM still does not gain arbitrary external authority.
+
 ## 2. The four capability layers
 
 CoreSpirit remains one language and runtime, but programs are assigned a capability layer.
@@ -389,9 +562,29 @@ The debugger must not create a second runtime whose behavior can diverge from pr
 
 ## 11. Standard library philosophy
 
-Keep the deterministic semantic core small and trustworthy. The current core registry intentionally remains at 30 primitives; the rest of the supported ecosystem stays in extension contracts.
+Keep the deterministic semantic core small and trustworthy. The canonical executable core remains at 30 primitives. Namespace expansion is a **catalog and lowering mechanism**, not permission to grow the primitive core indefinitely.
 
-Platform-specific extensions can exist, but they should not silently become part of the language core. The human-facing catalog may group core and extension capabilities together for discoverability without changing their authority or execution class.
+The preferred scaling mechanism is:
+
+```text
+namespace
+   ↓
+qualified member
+   ├── canonical builtin
+   ├── registered component
+   └── catalog-only future capability
+```
+
+This permits an enormous discoverable library while keeping one mathematical implementation per primitive and one runtime path.
+
+The standard library namespace architecture is currently organized around:
+
+```text
+market · series · math · stats · time · structure · volatility
+liquidity · probability · model · visual · automation · data · state
+```
+
+A member documented in the catalog is not automatically executable. Execution requires a registered builtin/component contract. That distinction keeps the manual honest as the library grows.
 
 Avoid:
 
@@ -431,7 +624,7 @@ This example is valuable because it can certify compilation, indicators, visuals
 
 ## 13. Roadmap acceptance model
 
-The architectural roadmap is now 59 stages. The first 18 establish the language/runtime/governance foundation; later stages extend that same contract across visuals, UI, execution targets, scanner/data, models/AI, explainability/debugging, graph compilation, reactive scheduling, numerical planning, capability security, v1 convergence, language unification, universal SHOW, the declarative MODEL surface, library discoverability and readable syntax.
+The architectural roadmap is now 100 stages. The first 18 establish the language/runtime/governance foundation; later stages extend that same contract across visuals, UI, execution targets, scanner/data, models/AI, explainability/debugging, graph compilation, reactive scheduling, numerical planning, capability security, v1 convergence, language unification, universal SHOW, the declarative MODEL surface, library discoverability and readable syntax.
 
 The v1 convergence milestone is:
 
@@ -1756,6 +1949,197 @@ Renderer implementations remain outside CoreSpirit. The realtime engine does not
 
 The same mechanism is also suitable for replay: the scene revision and checksum become part of the replay trace, so a visual divergence can be inspected at the exact revision where it occurred.
 
+
+
+## #23 — CoreSpirit Language Simplification development cycle
+
+CoreSpirit has accumulated a substantial implementation surface: stable IR/VM execution, reactive scheduling, persistent scenes, models, multi-symbol/timeframe data, automation, risk/policy boundaries, replay, scanners and host adapters. The architecture is now mature enough that the next useful move is **reduction of author-facing complexity rather than another large architectural layer**.
+
+This is deliberately a **development cycle, not a new roadmap stage**. The active roadmap remains at 59 stages. The cycle operates across those existing contracts and measures progress by how much complexity disappears from ordinary authoring without weakening the internal architecture.
+
+### Objective
+
+> **Move complexity downward: from source syntax into compiler normalization, semantic analysis, diagnostics and host orchestration.**
+
+The public language should answer:
+
+```text
+What data do I want?
+What value am I calculating?
+What should I show?
+When should something happen?
+What model fact do I consume?
+What automation intent should follow?
+```
+
+The public language should not require authors to understand:
+
+```text
+ASTs
+IR blocks
+dependency planner internals
+scene node identity
+render patches
+transport selection
+capability negotiation
+broker adapters
+risk policy plumbing
+worker scheduling
+GPU/WASM execution
+```
+
+### Priority map
+
+| Priority | Area | Current direction | Exit condition |
+| --- | --- | --- | --- |
+| **P0** | Language | Reduce ceremony, increase readable forms, preserve one canonical lowering path | Common trading tasks require fewer source constructs and no semantic fork is introduced |
+| **P0** | Compiler | Normalize all surface sugar into one semantic model before IR lowering | Equivalent source forms produce equivalent semantic/IR results and source maps |
+| **P0** | Visuals | Make `show` the primary visual surface and keep scene machinery hidden | Simple visuals need no scene/renderer knowledge while advanced visuals still converge on the same scene graph |
+| **P0** | Events | Treat `when` + `emit` as universal reactive language primitives | Named events, conditions and bar/replay events share one runtime contract |
+| **P0** | Automation | Keep source focused on intent, sizing and risk; hide lifecycle/plumbing | Authoring an automation does not require broker, transport or lifecycle implementation knowledge |
+| **P1** | Models | Make model consumption compact and typed | A model can be consumed with a small source expression while ABI details remain inspectable but hidden |
+| **P1** | Editor | Teach the simple language first | Completion, templates and hover start from user concepts rather than implementation terminology |
+| **P1** | Diagnostics | Explain inferred semantics, not compiler machinery | Errors say what CoreSpirit understood, what is missing and how to fix it |
+| **P1** | Replay | Make replay a property of every executable artifact | Any valid script can be replayed with stable source, dataset and configuration identity |
+| **P1** | Session/calendar | Keep as a real open semantic area | Session boundaries, holidays, exchange clocks and partial sessions have explicit deterministic policy |
+| **P1** | Production renderer | Finish the real host path after semantic contracts are stable | Scene contracts are proven end-to-end with the production renderer without leaking renderer concepts into the language |
+| **P1** | Scanner workers | Add production scheduling/backpressure around the existing scanner contract | Concurrency, quotas, cancellation and deterministic collection are observable host behavior |
+| **P2** | Indicator corpus | Expand mathematical/reference coverage | Core indicators have reference-value and edge-case tests across supported input shapes |
+| **P2** | Artifact migration | Add versioned migration compatibility | Old compiled/script artifacts can be opened, validated and migrated without semantic ambiguity |
+| **P2** | Advanced GPU | Optimize only from profiling evidence | GPU/accelerator work demonstrates measured bottlenecks and preserves replay/authority invariants |
+| **P3** | More syntax | Add only when repeated real authoring cases justify it | New syntax removes repeated friction and lowers to already-established semantics |
+
+### What “simplification” actually means
+
+Simplification is not deleting expressive power. It is reducing the number of concepts a user must hold simultaneously.
+
+For example, these are intentionally equivalent authoring surfaces:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+and the more explicit compiler-facing form:
+
+```text
+crossover(fast, slow)
+→ conditional dependency
+→ event emission
+```
+
+The second representation remains useful for diagnostics and tooling, but it does not become a second language that beginners must learn.
+
+### Simplification acceptance test
+
+A proposed public feature should survive all of the following checks:
+
+```text
+1. Can the same user task be expressed with less ceremony?
+2. Does it lower into an existing semantic contract?
+3. Does it avoid a new runtime or evaluator?
+4. Is its behavior deterministic in history, replay and realtime?
+5. Does it preserve broker/risk/policy boundaries?
+6. Can the editor explain it in user terminology?
+7. Can advanced users still inspect the underlying meaning?
+8. Does it remove a repeated source of confusion rather than add another option?
+```
+
+If a feature fails these tests, it belongs below the language surface or should remain an implementation detail.
+
+## #24 — Stop architectural accumulation; enter a reduction cycle
+
+The instruction for the next development cycle is intentionally negative:
+
+> **Do not respond to every remaining gap with another giant architectural stage.**
+
+The roadmap already has 59 stages and a large compatibility/test corpus. At this maturity level, quality comes from consolidation, semantic unification, documentation clarity and removal of redundant authoring paths.
+
+### Reduction-cycle workflow
+
+```text
+Inventory public surface
+        ↓
+Find duplicate / verbose forms
+        ↓
+Choose one canonical meaning
+        ↓
+Normalize at the compiler boundary
+        ↓
+Improve editor discoverability
+        ↓
+Improve diagnostics
+        ↓
+Replay / realtime / authority regression
+        ↓
+Retire unnecessary surface forms
+```
+
+The reduction cycle therefore prioritizes **fewer ways to express the same thing**, not more ways.
+
+### What should be frozen underneath
+
+During this cycle, the following remain architectural constants:
+
+```text
+one language
+      ↓
+one compiler
+      ↓
+one stable IR
+      ↓
+one VM
+      ↓
+one reactive execution substrate
+      ↓
+one renderer-neutral scene model
+      ↓
+one broker/risk/policy authority boundary
+```
+
+The cycle may simplify syntax, compiler passes and editor presentation, but it must not create a “simple runtime” beside the existing runtime or a “professional runtime” beside it.
+
+### The practical end state
+
+A trader should be able to begin with:
+
+```corespirit
+show ema(close, 20)
+```
+
+then grow naturally into:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+show fast, slow
+
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+then into model-aware and automated programs without learning a second language:
+
+```corespirit
+model "Regime":
+    use "regime-v3"
+
+when fast crossesAbove slow and Regime.confidence > 0.8:
+    emit "LONG"
+
+automate:
+    when "LONG":
+        order long 1% risk
+```
+
+The compiler absorbs the additional structure; the author does not need to learn the compiler's internal graph vocabulary.
+
+### #23/#24 boundary
+
+This cycle is a **reduction and consolidation program** over existing stages 1–59. It is not permission to reopen foundational runtime architecture casually. New runtime primitives, new execution authorities, or parallel language layers require a separate architectural decision rather than appearing as side effects of “simplification.”
 
 ## 25. Documentation and build-status boundary
 
@@ -5999,187 +6383,9 @@ professional trading system without a professional-only language
 ```
 
 
-
-## #23 — CoreSpirit Language Simplification development cycle
-
-CoreSpirit has accumulated a substantial implementation surface: stable IR/VM execution, reactive scheduling, persistent scenes, models, multi-symbol/timeframe data, automation, risk/policy boundaries, replay, scanners and host adapters. The architecture is now mature enough that the next useful move is **reduction of author-facing complexity rather than another large architectural layer**.
-
-This is deliberately a **development cycle, not a new roadmap stage**. The active roadmap remains at 59 stages. The cycle operates across those existing contracts and measures progress by how much complexity disappears from ordinary authoring without weakening the internal architecture.
-
-### Objective
-
-> **Move complexity downward: from source syntax into compiler normalization, semantic analysis, diagnostics and host orchestration.**
-
-The public language should answer:
-
-```text
-What data do I want?
-What value am I calculating?
-What should I show?
-When should something happen?
-What model fact do I consume?
-What automation intent should follow?
-```
-
-The public language should not require authors to understand ASTs, IR blocks, dependency planner internals, scene node identity, render patches, transport selection, capability negotiation, broker adapters, risk policy plumbing, worker scheduling or GPU/WASM execution.
-
-### Priority map
-
-| Priority | Area | Current direction | Exit condition |
-| --- | --- | --- | --- |
-| **P0** | Language | Reduce ceremony, increase readable forms, preserve one canonical lowering path | Common trading tasks require fewer source constructs and no semantic fork is introduced |
-| **P0** | Compiler | Normalize all surface sugar into one semantic model before IR lowering | Equivalent source forms produce equivalent semantic/IR results and source maps |
-| **P0** | Visuals | Make `show` the primary visual surface and keep scene machinery hidden | Simple visuals need no scene/renderer knowledge while advanced visuals still converge on the same scene graph |
-| **P0** | Events | Treat `when` + `emit` as universal reactive language primitives | Named events, conditions and bar/replay events share one runtime contract |
-| **P0** | Automation | Keep source focused on intent, sizing and risk; hide lifecycle/plumbing | Authoring an automation does not require broker, transport or lifecycle implementation knowledge |
-| **P1** | Models | Make model consumption compact and typed | A model can be consumed with a small source expression while ABI details remain inspectable but hidden |
-| **P1** | Editor | Teach the simple language first | Completion, templates and hover start from user concepts rather than implementation terminology |
-| **P1** | Diagnostics | Explain inferred semantics, not compiler machinery | Errors say what CoreSpirit understood, what is missing and how to fix it |
-| **P1** | Replay | Make replay a property of every executable artifact | Any valid script can be replayed with stable source, dataset and configuration identity |
-| **P1** | Session/calendar | Keep as a real open semantic area | Session boundaries, holidays, exchange clocks and partial sessions have explicit deterministic policy |
-| **P1** | Production renderer | Finish the real host path after semantic contracts are stable | Scene contracts are proven end-to-end with the production renderer without leaking renderer concepts into the language |
-| **P1** | Scanner workers | Add production scheduling/backpressure around the existing scanner contract | Concurrency, quotas, cancellation and deterministic collection are observable host behavior |
-| **P2** | Indicator corpus | Expand mathematical/reference coverage | Core indicators have reference-value and edge-case tests across supported input shapes |
-| **P2** | Artifact migration | Add versioned migration compatibility | Old compiled/script artifacts can be opened, validated and migrated without semantic ambiguity |
-| **P2** | Advanced GPU | Optimize only from profiling evidence | GPU/accelerator work demonstrates measured bottlenecks and preserves replay/authority invariants |
-| **P3** | More syntax | Add only when repeated real authoring cases justify it | New syntax removes repeated friction and lowers to already-established semantics |
-
-### What “simplification” actually means
-
-Simplification is not deleting expressive power. It is reducing the number of concepts a user must hold simultaneously.
-
-For example, these are intentionally equivalent authoring surfaces:
-
-```corespirit
-fast = ema(close, 20)
-slow = ema(close, 50)
-
-when fast crossesAbove slow:
-    emit "LONG"
-```
-
-and the more explicit compiler-facing representation:
-
-```text
-crossover(fast, slow)
-→ conditional dependency
-→ event emission
-```
-
-The second representation remains useful for diagnostics and tooling, but it does not become a second language that beginners must learn.
-
-### Simplification acceptance test
-
-A proposed public feature should survive all of the following checks:
-
-```text
-1. Can the same user task be expressed with less ceremony?
-2. Does it lower into an existing semantic contract?
-3. Does it avoid a new runtime or evaluator?
-4. Is its behavior deterministic in history, replay and realtime?
-5. Does it preserve broker/risk/policy boundaries?
-6. Can the editor explain it in user terminology?
-7. Can advanced users still inspect the underlying meaning?
-8. Does it remove a repeated source of confusion rather than add another option?
-```
-
-If a feature fails these tests, it belongs below the language surface or should remain an implementation detail.
-
-## #24 — Stop architectural accumulation; enter a reduction cycle
-
-The instruction for the next development cycle is intentionally negative:
-
-> **Do not respond to every remaining gap with another giant architectural stage.**
-
-The roadmap already has 59 stages and a large compatibility/test corpus. At this maturity level, quality comes from consolidation, semantic unification, documentation clarity and removal of redundant authoring paths.
-
-### Reduction-cycle workflow
-
-```text
-Inventory public surface
-        ↓
-Find duplicate / verbose forms
-        ↓
-Choose one canonical meaning
-        ↓
-Normalize at the compiler boundary
-        ↓
-Improve editor discoverability
-        ↓
-Improve diagnostics
-        ↓
-Replay / realtime / authority regression
-        ↓
-Retire unnecessary surface forms
-```
-
-The reduction cycle therefore prioritizes **fewer ways to express the same thing**, not more ways.
-
-### What should be frozen underneath
-
-During this cycle, the following remain architectural constants:
-
-```text
-one language
-      ↓
-one compiler
-      ↓
-one stable IR
-      ↓
-one VM
-      ↓
-one reactive execution substrate
-      ↓
-one renderer-neutral scene model
-      ↓
-one broker/risk/policy authority boundary
-```
-
-The cycle may simplify syntax, compiler passes and editor presentation, but it must not create a “simple runtime” beside the existing runtime or a “professional runtime” beside it.
-
-### The practical end state
-
-A trader should be able to begin with:
-
-```corespirit
-show ema(close, 20)
-```
-
-then grow naturally into:
-
-```corespirit
-fast = ema(close, 20)
-slow = ema(close, 50)
-show fast, slow
-
-when fast crossesAbove slow:
-    emit "LONG"
-```
-
-then into model-aware and automated programs without learning a second language:
-
-```corespirit
-model "Regime":
-    use "regime-v3"
-
-when fast crossesAbove slow and Regime.confidence > 0.8:
-    emit "LONG"
-
-automate:
-    when "LONG":
-        order long 1% risk
-```
-
-The compiler absorbs the additional structure; the author does not need to learn the compiler's internal graph vocabulary.
-
-### #23/#24 boundary
-
-This cycle is a **reduction and consolidation program** over existing stages 1–59. It is not permission to reopen foundational runtime architecture casually. New runtime primitives, new execution authorities, or parallel language layers require a separate architectural decision rather than appearing as side effects of “simplification.”
-
-
 ## v75 target language contract — #25
 
-The long-term CoreSpirit language should remain teachable from a deliberately small public vocabulary. The implementation can remain rich; the author-facing grammar should remain small.
+The long-term CoreSpirit language should be teachable from a very small public vocabulary. The implementation may remain large, but the author-facing grammar should be deliberately small.
 
 ### Minimal semantic vocabulary
 
@@ -6193,11 +6399,50 @@ model
 automate
 ```
 
-The expression ecosystem supplies capabilities such as `ema()`, `rsi()`, `atr()`, `market()` and `timeframe()`, plus the existing discoverable standard-library catalog. The goal is a small grammar with a large compositional ecosystem.
+These are the primary source concepts. They cover state/value binding, conditional logic, reactive behavior, visualization, event emission, external model consumption and downstream automation.
 
-A new keyword should be rare. Prefer expressions, members, model fields, event values, visual projections and host capabilities before adding another source-level control construct.
+The surrounding expression library supplies the computational vocabulary:
 
-### Small grammar, large platform
+```text
+ema()
+rsi()
+atr()
+market()
+timeframe()
+```
+
+and the existing discoverable standard-library catalog can grow without expanding the language's conceptual core every time a new mathematical or market capability is added.
+
+### What “almost enough” means
+
+The goal is not to forbid advanced capabilities. It is to make most capabilities compositional expressions and declarations rather than new language control structures.
+
+For example:
+
+```corespirit
+fast = ema(close, 20)
+slow = ema(close, 50)
+
+when fast crossesAbove slow:
+    emit "LONG"
+```
+
+uses the core language to combine values, expressions and events. The author does not need a special `crossover` language, signal language, alert language or broker language.
+
+Similarly:
+
+```corespirit
+regime = model "Regime"
+
+when regime.confidence > 0.8:
+    emit "HIGH_CONFIDENCE"
+```
+
+uses MODEL as a source of typed facts and WHEN as the common reactive boundary.
+
+### Minimal grammar versus large ecosystem
+
+The distinction is:
 
 ```text
 small grammar
@@ -6205,13 +6450,29 @@ small grammar
 small platform
 ```
 
-CoreSpirit can expose a large mathematical/market/model/visual ecosystem without requiring a new keyword for every capability. Most functionality should be composition over the existing concepts.
+CoreSpirit can have hundreds of library functions, model backends, visual projections and host capabilities while keeping the source grammar small. New functionality should normally appear as one of:
 
-Before adding a keyword, ask whether an existing value, declaration, event, projection or expression can express the behavior. This protects the six-concept foundation while allowing the ecosystem to grow.
+```text
+expression
+function
+member
+model field
+visual projection
+event value
+host capability
+```
+
+rather than another keyword that users must memorize.
+
+### Public-language design test
+
+Before adding a keyword, ask whether an existing concept can express the same behavior compositionally. A new keyword is justified only when it introduces a genuinely new semantic category that cannot be explained as an existing value, event, declaration or projection.
+
+That rule protects the six-concept language foundation while allowing the practical vocabulary to evolve.
 
 ## v75 ultimate application contract — #26
 
-The intended end state is one declarative `app` source file that can describe configuration, data, calculations, models, visuals, reactive events and automation intent without forcing authors to split the program into separate languages.
+The ultimate CoreSpirit script is a single declarative application that can describe the complete trading program without forcing the author to split logic into indicator scripts, model definitions, alert scripts and automation scripts.
 
 ```corespirit
 app "Nifty AI Momentum":
@@ -6246,30 +6507,82 @@ app "Nifty AI Momentum":
             close position
 ```
 
-Internally this is still one program identity:
+This is the architectural dream because it composes existing semantics rather than inventing one runtime per feature.
+
+### What the single file means internally
+
+The source file is one program and therefore one semantic identity:
 
 ```text
-ONE SOURCE PROGRAM
-      ↓
-normalized syntax
-      ↓
-semantic program model
-      ↓
- ┌────┬────┬─────┬──────┐
- ↓    ↓    ↓     ↓      ↓
-data visuals events models automation
- \     \    |     /      /
-  \     \   |    /      /
-       stable IR
-           ↓
-           VM
+app
+ │
+ ├── inputs / configuration
+ ├── data dependencies
+ ├── calculations
+ ├── model dependencies
+ ├── visual projections
+ ├── reactive conditions
+ ├── event emissions
+ └── automation intents
 ```
 
-The internal views are compiler projections, not independent programs or runtimes. The full example is a target syntax contract; existing v64–v74 semantic building blocks remain authoritative until each remaining shorthand is implemented.
+The compiler can then construct internal views:
+
+```text
+                    ONE SOURCE PROGRAM
+                           │
+                    normalized AST / CST
+                           │
+                    semantic model
+                           │
+          ┌────────────────┼─────────────────┐
+          ↓                ↓                 ↓
+    dependency view   visual view       event view
+          │                │                 │
+          └──────────┬─────┴─────┬───────────┘
+                     ↓           ↓
+                model view   automation view
+                     \           /
+                      \         /
+                       ↓       ↓
+                        stable IR
+                           ↓
+                           VM
+```
+
+These are compiler projections, not independent programs with separate evaluators.
+
+### One-file does not mean one giant execution blob
+
+The source is unified for the author, but internally the compiler still preserves boundaries such as:
+
+```text
+calculation dependency
+model ABI
+visual scene projection
+EVENT emission
+automation intent
+risk/policy
+execution host
+```
+
+The purpose of the compiler is to make those boundaries explicit and enforceable without requiring the author to manually assemble them.
+
+### Configuration versus behavior
+
+The `app` envelope may contain declarative configuration such as inputs, visual placement, model binding and automation mode. Behavior remains expressed through the same values, WHEN conditions and events used outside the envelope.
+
+This prevents `app` from becoming a second programming language hidden inside a declaration.
+
+### Current implementation status
+
+The exact full `app` shorthand above is a **target syntax contract**, not a claim that every line of this final surface is already accepted by the current parser. Existing v64–v74 work provides the semantic building blocks—six concepts, SHOW, MODEL, AUTOMATE, universal EVENT/WHEN, readable syntax, composition and one compiler/IR/VM path. Future implementation work should add the remaining sugar by lowering it into those established contracts rather than introducing another runtime.
 
 ## v75 compiler source-of-truth consolidation — #1
 
-The strongest version of “one language” is implementation-level unity. CoreSpirit should converge on:
+The next architectural improvement is to make the compiler pipeline the literal source of truth for all derived language information.
+
+The desired pipeline is:
 
 ```text
 SOURCE
@@ -6287,7 +6600,13 @@ OPTIMIZED IR
 RUNTIME
 ```
 
-The current risk is that some compatibility/surface utilities still inspect source strings separately from the canonical parser. That can produce:
+The critical shift is that parsing and semantic analysis happen once for an executable program. Tooling and feature projections consume the resulting structures rather than independently rediscovering the meaning of the source text.
+
+### Why the current model is the risk
+
+CoreSpirit already has a real parser/compiler pipeline, but some surface metadata and composition utilities still operate directly on source strings. For example, `surfaceForms.ts` performs line-oriented normalization and metadata work, while `composability.ts` can inspect source text separately from the canonical AST.
+
+That creates a subtle failure mode:
 
 ```text
 same source
@@ -6299,44 +6618,145 @@ same source
  └── IR compiler
 ```
 
-The desired authority model is:
+The implementations can disagree about what the same program means even though the architecture says there is one language.
+
+### The desired authority model
 
 ```text
-                 SOURCE
-                   ↓
-               Lexer / CST
-                   ↓
-             Normalized AST
-                   ↓
-           Semantic Program Model
-              /    |    |    \\
-             ↓     ↓    ↓     ↓
-      diagnostics graph completion source maps
-              \\     |     /
-               \\    |    /
-                editor/debugger
-                   ↓
-                  IR
-                   ↓
-                  VM
+                 SOURCE TEXT
+                      │
+                      ↓
+                 Lexer / CST
+                      │
+                      ↓
+             Normalized Core AST
+                      │
+                      ↓
+             Semantic Program Model
+                 /    |     |    \
+                /     |     |     \
+               ↓      ↓     ↓      ↓
+          diagnostics graph completion source maps
+               │      │     │
+               └──────┴─────┴──────┐
+                                   ↓
+                                 editor
+
+             Semantic Program Model
+                       ↓
+                  IR lowering
+                       ↓
+                  Optimized IR
+                       ↓
+                     VM
 ```
 
-The semantic program model should own resolved declarations, names, types, members, dependencies, event relationships, visual projections, model references, automation intents and source spans. Diagnostics, completion, hover, composition graphs, debugger data and dependency views should be projections of that model.
+The semantic program model is the key abstraction. It should own resolved declarations, identifiers, types, member access, dependencies, event relationships, visual outputs, model references, automation intents and source spans.
 
-CST is for authoring fidelity—comments, formatting and exact spans. AST is for normalized language meaning. The semantic model is for resolved meaning. IR is for deterministic execution. None of CST/AST/semantic model becomes a runtime.
+### What becomes a projection
 
-### Incremental migration
+The following should eventually be derived from the semantic program model or its canonical AST:
 
-1. Keep compatibility sugar, but normalize once at the compiler entry point.
-2. Preserve source spans and original surface-form identity on normalized nodes.
-3. Build semantic metadata from AST + semantic analysis.
-4. Refactor `describeCoreSpiritSurface` and composition metadata to consume canonical semantics.
-5. Refactor editor completion, hover and diagnostics to consume the same semantic model.
-6. Retire redundant source-string scanners once equivalent semantic data is available.
+```text
+composition graph
+surface metadata
+editor completion
+hover information
+diagnostics
+source maps
+visual dependency graph
+event dependency graph
+model dependency graph
+automation dependency graph
+debugger inspection data
+```
 
-This is intentionally incremental rather than a flag-day parser rewrite.
+These are views of one semantic program. None should parse the original source independently to rediscover program meaning.
 
-### #1 acceptance test
+### CST versus AST
+
+The CST exists for authoring fidelity:
+
+```text
+comments
+whitespace
+exact token spans
+formatting-sensitive diagnostics
+editor ranges
+```
+
+The normalized AST exists for language meaning:
+
+```text
+let bindings
+if conditions
+calls
+members
+literals
+expressions
+blocks
+```
+
+The semantic model exists for resolved meaning:
+
+```text
+symbol identity
+types
+dependencies
+capability requirements
+model fields
+event contracts
+visual projections
+automation intents
+source-to-semantic mapping
+```
+
+The IR then exists for deterministic execution—not for authoring, completion or language discovery.
+
+### Migration path from the current implementation
+
+This consolidation should happen incrementally:
+
+```text
+Phase 1
+Keep current surface sugar for compatibility.
+Normalize once at the compiler entry point.
+
+Phase 2
+Attach source-span/source-form metadata to normalized AST nodes.
+
+Phase 3
+Build semantic program metadata from AST + semantic analysis.
+
+Phase 4
+Refactor composition and surface-description utilities to consume the semantic model.
+
+Phase 5
+Refactor editor completion/hover/diagnostics to consume the same model.
+
+Phase 6
+Retire independent source-string scanners where equivalent semantic information exists.
+```
+
+This avoids a flag-day parser rewrite and preserves existing release compatibility.
+
+### Important constraint
+
+This is **not** permission to create a CST runtime, semantic-model runtime or graph runtime. These are compiler representations. The executable authority remains:
+
+```text
+one normalized program
+        ↓
+one semantic model
+        ↓
+one stable IR
+        ↓
+one VM
+```
+
+### Acceptance test for #1
+
+CoreSpirit should eventually be able to demonstrate:
 
 ```text
 one source
@@ -6354,9 +6774,13 @@ one IR
 one runtime
 ```
 
-Equivalent source sugar should produce equivalent semantic and IR identities, while source maps still point back to the exact text the author wrote.
+with equivalent source sugar producing equivalent semantic and IR identities, while source maps still point back to the exact text the author wrote.
 
-The direction is therefore:
+That is the strongest version of “one language” because the unity is no longer just conceptual; it is enforced by the implementation structure.
+
+### v75 architectural boundary
+
+#25 and #26 define the target authoring surface. #1 defines how the implementation must support it. Together they establish the direction:
 
 ```text
 SMALL PUBLIC LANGUAGE
@@ -6369,6 +6793,8 @@ ONE STABLE IR
         ↓
 ONE VM / REACTIVE RUNTIME
 ```
+
+The language becomes smaller at the top while the compiler becomes stronger underneath.
 
 
 ## v76 compiler architecture hardening — #1 and #3
@@ -6397,13 +6823,7 @@ OPTIMIZED IR
 VM / REACTIVE RUNTIME
 ```
 
-CoreSpirit already had a real lexer and parser. The architectural defect was that some user-facing tooling and compatibility layers could still derive meaning directly from raw source text. v76 therefore introduces a canonical source-to-semantics gateway:
-
-```text
-createCoreSpiritCompilationUnit(source)
-```
-
-This produces the normalized source, AST, syntax diagnostics and semantic result as one coherent compilation unit. The compiler now exposes `compileSource()` through the same gateway, while editor diagnostics/type information consume the same unit.
+CoreSpirit already had a real lexer and parser. The architectural defect was that some user-facing tooling and compatibility layers could still derive meaning directly from raw source text. v76 introduces `createCoreSpiritCompilationUnit(source)` as the canonical source-to-semantics gateway. It produces normalized source, AST, syntax diagnostics and semantic analysis as one coherent compilation unit. The compiler now exposes `compileSource()` through the same gateway, while editor diagnostics/type information consume the same unit.
 
 The long-term rule is:
 
@@ -6413,9 +6833,7 @@ The same semantic model should feed diagnostics, composition graphs, completion,
 
 ### #3 — regex must stop being the language parser
 
-The current lexer is now used for structural readable-operator normalization. `crossesAbove` / `crossesBelow` are normalized from token spans rather than regex matching. The structural pass supports balanced call/index/member expressions and the equivalent functional spelling.
-
-Examples:
+Readable `crossesAbove` / `crossesBelow` syntax is now normalized from token spans using the existing CoreSpirit lexer. The structural pass understands balanced call/index/member expressions and the equivalent functional spelling.
 
 ```corespirit
 ema(close, 20) crossesAbove ema(close, 50)
@@ -6427,33 +6845,13 @@ becomes:
 crossover(ema(close, 20), ema(close, 50))
 ```
 
-and:
-
-```corespirit
-crossesAbove(ema(close, 20), ema(close, 50))
-```
-
-also converges to the same canonical call.
-
-Strings and comments containing syntax-like text are not treated as source operators. Nested parentheses are handled through token balance rather than a regex approximation.
+Strings and comments containing syntax-like text are not treated as operators. Parentheses and nested calls are handled by token balance rather than regex approximation.
 
 ### Legacy compatibility containment
 
-Some older surface conveniences still require line-oriented transforms. v76 does not pretend those are already a full AST rewrite. Instead they are explicitly quarantined behind a protected-text boundary so legacy regex transforms cannot inspect or rewrite string literals and comments.
+Some older surface conveniences still require line-oriented transforms. v76 quarantines those transforms behind a protected-text boundary so they cannot inspect or rewrite string literals and comments. New language semantics should not be added to that regex layer.
 
-That creates a migration path:
-
-```text
-legacy line transforms
-        ↓
-protected compatibility boundary
-        ↓
-canonical parser
-```
-
-New language features should not be added to that regex layer. New syntax is expected to become a token/AST transformation or a semantic grammar feature.
-
-### The end-state migration
+### End-state migration
 
 ```text
 TODAY
@@ -6468,7 +6866,7 @@ normalized AST as the only language meaning source
 semantic model as the only resolved meaning source
 ```
 
-This is intentionally incremental. Removing the legacy surface layer is a migration task, not a flag-day parser rewrite.
+This is intentionally incremental; removing the legacy surface layer is a migration task rather than a flag-day parser rewrite.
 
 ### v76 acceptance boundary
 
@@ -6488,16 +6886,13 @@ semantically convergent
 
 If a rule needs unbounded regex knowledge of nested language syntax, it belongs in the lexer/parser/AST layers instead.
 
-
 ## v77 semantic graph consolidation — #1, #3 and #4
 
 v77 deepens the v76 compiler-hardening cycle by moving the composition model from lexical source discovery to resolved semantic entities.
 
-### #1 — the architecture is now defined around one semantic program
+### #1 — one semantic program
 
-The current pipeline is:
-
-\`\`\`text
+```text
 SOURCE
   ↓
 LEXER / CST-aware surface boundary
@@ -6515,216 +6910,94 @@ IR
 OPTIMIZED IR
   ↓
 VM / REACTIVE RUNTIME
-\`\`\`
+```
 
-The semantic dependency graph is the bridge between language meaning and the many views the platform needs.
+The semantic dependency graph is now the source-level authority for language meaning used by composition tooling. It answers which symbols produce values, which data/model entities they depend on, which conditions gate outputs, and which events/visuals/automation intents are downstream.
 
-It answers:
+The intended projection model is:
 
-\`\`\`text
-What is this symbol?
-What produces it?
-What data does it depend on?
-Which model output does it consume?
-Which condition gates it?
-Which event does it emit?
-Which visual does it feed?
-Which automation/order intent is downstream?
-\`\`\`
+```text
+SEMANTIC PROGRAM MODEL
+          ↓
+SEMANTIC DEPENDENCY GRAPH
+     /       |        \
+ diagnostics graph  completion / composition
+        ↓       ↓
+       editor / debugger
+              ↓
+             IR
+              ↓
+ execution / reactive / replay projections
+```
 
-The graph is semantic data. It does not execute code, access a broker, or become another runtime.
+The execution-specific IR graph remains useful for instruction ordering and runtime performance. The consolidation target is to attach stable semantic IDs to those execution nodes rather than independently rediscovering language meaning.
 
-### One source, many projections
+### #3 — regex is compatibility only
 
-The intended projection tree is:
+Readable crossing syntax is structurally normalized through the existing lexer. The legacy line-oriented layer is protected from strings/comments and is no longer the place for new language semantics.
 
-\`\`\`text
-                 SEMANTIC PROGRAM MODEL
-                          │
-                 SEMANTIC DEPENDENCY GRAPH
-              ┌───────────┼────────────┐
-              ↓           ↓            ↓
-        diagnostics   completion    composition
-              ↓           ↓            ↓
-           editor      language UI   architecture view
-                          │
-                          ↓
-                         IR
-                          │
-          ┌───────────────┼─────────────────┐
-          ↓               ↓                 ↓
-      execution        reactive           replay
-       projection       projection        projection
-\`\`\`
-
-The source semantic graph is therefore the authoring/dependency authority. The existing IR graph remains useful for execution-specific instruction ordering and performance analysis; the migration goal is to link that execution graph back to semantic identities rather than independently rediscovering language meaning.
-
-### #3 — regex is now compatibility infrastructure
-
-The existing lexer is the structural authority for readable syntax such as:
-
-\`\`\`corespirit
-ema(close, 20) crossesAbove ema(close, 50)
-\`\`\`
-
-The token-aware layer handles balanced nested expressions and protects strings/comments.
-
-Legacy line transforms remain only for compatibility spellings that have not yet received first-class AST forms. They are explicitly behind a protected boundary.
-
-New language constructs must not be added by growing unbounded regex rules.
-
-The migration order remains:
-
-\`\`\`text
+```text
 regex compatibility
-       ↓
+      ↓
 token-aware transform
-       ↓
+      ↓
 AST transform
-       ↓
+      ↓
 semantic lowering
-\`\`\`
+```
 
-### #4 — composability is now semantic, not lexical
+### #4 — composability is semantic
 
-The old composition question was effectively:
+The previous composition implementation searched identifiers in source lines. v77 replaces that with a semantic dependency graph containing:
 
-\`\`\`text
-"What words appear in this source?"
-\`\`\`
+```text
+data sources
+symbols / values
+models
+model outputs
+conditions
+events
+visuals
+automations
+order intents
+```
 
-The new question is:
+Relations are explicit:
 
-\`\`\`text
-"What resolved semantic entities depend on what other semantic entities?"
-\`\`\`
-
-A semantic dependency graph now contains entities such as:
-
-\`\`\`text
-data source
-symbol / value
-model
-model output
-condition
-event
-visual
-automation
-order intent
-\`\`\`
-
-and edges such as:
-
-\`\`\`text
+```text
 depends-on
 emits
 triggers
 renders
 contains
-\`\`\`
+```
 
-### Why this matters
+This means:
 
-Consider:
-
-\`\`\`corespirit
+```corespirit
 let value = close
 let closeText = "hello close"
-\`\`\`
+```
 
-The semantic graph contains:
+creates a dependency from `data:close` to `symbol:value`, but the word `close` inside the string creates no dependency.
 
-\`\`\`text
-data:close ──depends-on──> symbol:value
-\`\`\`
+Likewise `obj.close` resolves the target object first; the member name is not treated as a standalone market-data symbol. `function(close)` makes `close` a dependency because the AST identifies it as an actual argument.
 
-but it does not create a dependency from \`close\` to \`closeText\`.
+Model aliases retain identity:
 
-Likewise:
-
-\`\`\`corespirit
-obj.close
-\`\`\`
-
-resolves the target object first. The member name \`close\` is not automatically treated as a market-data dependency.
-
-And:
-
-\`\`\`corespirit
-function(close)
-\`\`\`
-
-makes the \`close\` argument a real dependency because the AST identifies it as an expression argument.
-
-This is the difference between lexical matching and semantic dependency construction.
-
-### Model aliases are one semantic identity
-
-The semantic analyzer and compiler now preserve model binding identity through assignments:
-
-\`\`\`corespirit
+```corespirit
 regime = model("Regime")
-
 when regime.confidence > 0.8:
     emit "LONG"
-\`\`\`
+```
 
-The identifier \`regime\` is resolved to the same MODEL entity rather than being treated as an unrelated variable whose member access happens to contain the word \`confidence\`.
+The semantic analyzer records the model binding and the compiler preserves the same model reference for member lookup.
 
-The compiler uses the same binding for \`__model_get\`, keeping model semantics aligned between analysis, composition and execution.
+The user-facing composition graph is a projection over this semantic graph. Intermediate arithmetic/comparison expression nodes can remain in the internal graph while being collapsed from the author-facing projection.
 
-### Composability projections
+### Remaining migration
 
-The user-facing composition graph is now deliberately smaller than the internal semantic graph.
-
-\`\`\`text
-semantic dependency graph
-          ↓
-composition projection
-          ↓
-value / data / model / model-output
-condition / event / show
-automation / order-intent
-\`\`\`
-
-The semantic graph retains resolved dependency information; the composition projection exists for language inspection, editor visualization, documentation and future graph tooling.
-
-### #4 acceptance test
-
-A composability implementation is not considered semantic unless:
-
-\`\`\`text
-strings are ignored as identifiers
-comments are ignored as identifiers
-member names are not mistaken for symbols
-function arguments are real dependencies
-model aliases preserve entity identity
-data references preserve field identity
-conditions create explicit dependency nodes
-events/visuals/order intents are explicit output entities
-duplicate edges are deterministic
-\`\`\`
-
-### Remaining migration work
-
-v77 is intentionally not claiming that every graph view has already been moved to the same source graph.
-
-The next consolidation steps are:
-
-\`\`\`text
-semantic dependency graph
-        ↓
-attach stable semantic IDs to IR nodes
-        ↓
-execution graph references semantic IDs
-        ↓
-reactive graph references semantic IDs
-        ↓
-visual / automation / debugger projections reference semantic IDs
-\`\`\`
-
-That gives CoreSpirit one true meaning graph while still allowing execution-specific representations underneath.
-
+The current normalized AST does not preserve exact named-AUTOMATE container ownership for every order intent. v77 therefore deliberately does not fabricate an `AUTOMATION → ORDER` relationship. The next migration should preserve declaration ownership during normalization so container-level views can remain semantic without lexical guessing.
 
 
 ## v78 P0 source provenance hardening — #5
@@ -6733,41 +7006,13 @@ Source mapping is now treated as a compiler correctness contract rather than a b
 
 ### Previous failure mode
 
-The compiler previously collected AST nodes and assigned instruction indexes approximately:
-
-\`\`\`text
-AST node 0 → instruction 0
-AST node 1 → instruction 1
-AST node 2 → instruction 2
-...
-\`\`\`
-
-That is invalid whenever one source construct emits multiple IR instructions.
-
-Examples include:
-
-\`\`\`corespirit
-model("Regime").confidence
-\`\`\`
-
-which can require multiple instructions, and:
-
-\`\`\`corespirit
-when condition:
-    emit "LONG"
-\`\`\`
-
-which lowers to control-flow plus body instructions.
-
-The old approach could therefore highlight the wrong source span.
-
-A second failure occurred across optimization: if the source map is finalized before constant folding or any future instruction transformation, instruction indexes can change while the map stays stale.
+The compiler previously approximated instruction ownership by AST-node position. That fails whenever one source construct emits multiple instructions and becomes stale when optimization changes the instruction stream.
 
 ### New rule — origin travels with the instruction
 
-Every compiler-emitted IR instruction can now carry:
+Every compiler-emitted IR instruction can carry:
 
-\`\`\`text
+```text
 origin:
 {
     sourceNodeId
@@ -6776,63 +7021,15 @@ origin:
     line
     column
 }
-\`\`\`
+```
 
-The \`sourceNodeId\` is a deterministic identity derived from the originating AST node kind and source span.
-
-The important relationship is now:
-
-\`\`\`text
-AST node
-   ↓
-one or more IR instructions
-   ↓
-each instruction keeps the AST origin
-\`\`\`
-
-This is a many-to-one source-to-instruction relationship, not an assumed one-to-one mapping.
-
-### Source map generation
-
-Source maps are now generated from the actual IR instruction stream:
-
-\`\`\`text
-IR instructions
-      ↓
-instruction.origin
-      ↓
-source map entries
-\`\`\`
-
-The centralized helper:
-
-\`\`\`text
-coreSpiritSourceMapFromInstructions(...)
-\`\`\`
-
-constructs the mapping from instruction provenance rather than AST position.
+The relationship is explicitly many-instruction-to-one-source-node: an AST node can emit several IR instructions and each retains the same source origin.
 
 ### Optimization rule
 
-Optimization passes must preserve or intentionally transform provenance.
+Optimizer replacements preserve the originating instruction's provenance, and the source map is regenerated from the optimized instruction sequence.
 
-For constant folding:
-
-\`\`\`text
-binary AST node
-     ↓
-binary IR instruction
-     ↓
-constant-folded IR instruction
-\`\`\`
-
-the replacement constant keeps the original binary instruction's \`origin\`.
-
-The optimized program then receives a freshly generated source map from the optimized instruction list.
-
-Therefore:
-
-\`\`\`text
+```text
 raw IR
   ↓
 optimizer
@@ -6840,82 +7037,1140 @@ optimizer
 optimized IR + preserved origins
   ↓
 fresh source map
-\`\`\`
+```
 
-### Control-flow correctness
+### Applications
 
-For:
+Instruction origin is the common provenance source for debugger highlighting, diagnostics, visual graph selection, replay diagnostics, profiler attribution, execution explanations and runtime error localization.
 
-\`\`\`corespirit
-when close > 1:
-    emit "LONG"
-\`\`\`
+### Acceptance boundary
 
-the generated \`jumpIfFalse\` retains the \`if\` source node origin, while the emitted event retains the source node for the corresponding body expression.
+No AST-index source-map approximation remains. Compiler-generated instructions carry provenance; optimization replacements preserve it; final source maps use optimized instruction indexes.
 
-This lets debugger/profiler/replay tooling distinguish:
 
-\`\`\`text
-condition source
-vs.
-body source
-\`\`\`
+## v79 runtime decomposition + transactional realtime hardening — #6 and #7
 
-even though both belong to the same lowered control-flow region.
+v79 makes the existing runtime architecture explicit in code without creating a second runtime, changing the language model, or changing the public `CoreSpiritRuntime` API.
 
-### Provenance applications
+### #6 — the runtime is now a facade, not the VM
 
-Instruction origin is intended to become the common provenance source for:
+The production boundary is now:
 
-\`\`\`text
-debugger highlighting
-compiler diagnostics
-visual graph selection
-replay diagnostics
-profiler attribution
-execution explanations
-runtime error localization
-\`\`\`
+```text
+CoreSpiritRuntime (compatibility API)
+        │
+        ▼
+CoreSpiritRuntimeFacade
+        │
+        ├── CoreSpiritVM
+        │     └── instruction stepping + builtin execution
+        │
+        ├── RuntimeStateStore
+        │     └── mutable execution state + committed snapshots + history
+        │
+        ├── RealtimeTransaction
+        │     └── begin / revise / commit / rollback
+        │
+        ├── DataResolver
+        │     └── normal data resolution + series references
+        │
+        ├── ModelResolver
+        │     └── model references + output resolution
+        │
+        ├── EventRouter
+        │     └── host event boundary + speculative buffering
+        │
+        ├── RuntimeDiagnostics
+        │     └── debugger trace ownership + source provenance lookup
+        │
+        └── ReactiveScheduler
+              └── dependency-aware reuse + revision scheduling
+```
 
-No downstream tool should reconstruct source ownership by instruction index heuristics.
+The important rule is that there is still **one executable VM**. The split is organizational: the facade coordinates services and the VM remains the only instruction executor.
 
-### IR contract
+The external entry point remains `CoreSpiritRuntime`, which extends the new `CoreSpiritRuntimeFacade`. Existing callers therefore keep the same public class name while the implementation gains explicit ownership boundaries.
 
-The IR remains version 1 for compatibility. Provenance is an optional backward-compatible field in the serialized instruction contract, but compiler-generated CoreSpirit artifacts now populate it.
+The large runtime-side implementations for instruction stepping, builtin calls, output/intent emission, model lookup and visual builtin handling now live with `CoreSpiritVM`. The facade retains only orchestration, lifecycle, state bridging, checkpoints, loading, validation and host-facing coordination.
 
-The IR validator also verifies the shape of any supplied provenance:
+### #7 — realtime execution is an explicit transaction
 
-\`\`\`text
-sourceNodeId = string
-start/end = valid ordered offsets
-line/column = valid positive locations
-\`\`\`
+Realtime bars are treated as speculative transactions over a committed baseline:
 
-### v78 acceptance test
+```text
+                 COMMITTED STATE
+                       │
+                 begin transaction
+                       │
+                       ▼
+               SPECULATIVE STATE
+                       │
+            ┌──────────┼──────────┐
+            │          │          │
+          tick 1     tick 2     tick 3
+            │          │          │
+            └──── same-bar revisions ────┘
+                       │
+                 replace/revise
+                       │
+                  ┌────┴────┐
+                  │         │
+               COMMIT    ROLLBACK
+                  │         │
+                  ▼         ▼
+          new committed    restore
+             baseline      baseline
+```
 
-\`\`\`text
-1. Multiple instructions from one AST node share its sourceNodeId.
-2. Control-flow instructions point to the correct IF/WHEN source node.
-3. Optimized replacements retain the originating source node.
-4. Final source maps reference optimized instruction indexes.
-5. Source map entries agree with instruction.origin.
-6. No AST-index approximation remains.
-\`\`\`
+A same-bucket revision restores the original bar snapshot before evaluation. Its staged host effects are also replaced rather than accumulated, so an earlier signal/order/event from the same bar cannot survive merely because a later tick revises the bar.
 
-### Boundary with #1/#3/#4
+At commit, the transaction copies the speculative series/local/cross state into the committed baseline and flushes the current staged event buffer. At rollback, the speculative state, UI/workspace state and staged event effects are discarded together.
 
-This P0 work strengthens the same single-source architecture:
+### Runtime state ownership contract
 
-\`\`\`text
-#1  one semantic source of truth
+| State class | Examples | Transaction rule |
+|---|---|---|
+| **Committed** | `committedSeriesState`, `committedLocalSeries`, `committedCrossState` | Authoritative baseline; changed only by commit/restore |
+| **Transaction-local** | `state.seriesState`, `state.localSeries`, `crossState`, `history`, realtime lifecycle/revision counters, current bar snapshot | May mutate during speculative evaluation; restored on revision/rollback |
+| **Cache** | `indicatorMemo`, `dataMemo`, `lastRuntimeCallRefs` | Disposable; cleared on revision and after commit/rollback |
+| **Derived** | reactive scheduler cache, debugger bar traces | Recomputable; reset/cleared when speculative state is abandoned |
+| **Ephemeral UI** | `uiRuntime`, `workspaceRuntime` state | Snapshot with the transaction and restored on rollback/revision |
+
+This classification is part of the runtime contract: a new mutable field should be assigned to one of these categories before it is added to realtime execution.
+
+### Event side-effect invariant
+
+The VM is still network-free. Runtime events and execution intents cross the host boundary only through `CoreSpiritEventRouter`.
+
+```text
+VM emit
+   ↓
+EventRouter
+   ├── historical/replay → immediate host event
+   └── realtime → transaction buffer
+                    ├── revision → discard old buffer
+                    ├── commit   → flush latest buffer
+                    └── rollback → discard buffer
+```
+
+This makes signal, event, alert, webhook and execution-intent emission rollback-safe without moving broker/network ownership into the VM.
+
+### Checkpoint boundary
+
+Checkpoints capture the durable runtime baseline and history required to resume execution. Transaction-local caches are not checkpoint authority; they are rebuilt after restore. Reactive and debug state is treated as derived rather than persisted execution truth.
+
+### Acceptance boundary
+
+- The public `CoreSpiritRuntime` API remains available.
+- `CoreSpiritRuntimeFacade` is the coordinator, not a second runtime.
+- `CoreSpiritVM` is the single instruction executor.
+- Runtime state has explicit committed/transaction-local/cache/derived/ephemeral ownership.
+- Same-bucket realtime revisions replace both speculative state and staged host effects.
+- Commit flushes only the latest staged effects.
+- Rollback restores the committed baseline and emits nothing from the abandoned revision.
+- Speculative debugger traces do not survive rollback.
+
+
+## v80 runtime decomposition + transactional state semantics — deeper #6 and #7
+
+v80 deepens the existing v79 hardening without adding another runtime, another VM, or another language surface. The purpose is to make the ownership and transaction rules executable rather than merely documented.
+
+### #6 — the facade now delegates execution lifecycle
+
+The runtime boundary is now split at two levels:
+
+```text
+CoreSpiritRuntime
+      │
+      ▼
+CoreSpiritRuntimeFacade
+      │
+      ├── service construction / public compatibility API
+      ├── checkpoint + loaded-artifact ownership
+      │
+      └── CoreSpiritRuntimeExecutionCoordinator
+                 │
+                 ├── bar/tick lifecycle
+                 ├── historical execution
+                 ├── realtime commit / rollback coordination
+                 └── execution-frame preparation
+
+CoreSpiritRuntimeFacade services
+   ├── CoreSpiritVM
+   ├── RuntimeStateStore
+   ├── RealtimeTransaction
+   ├── DataResolver
+   ├── ModelResolver
+   ├── EventRouter
+   ├── RuntimeDiagnostics
+   └── ReactiveScheduler
+```
+
+The coordinator is not a second runtime. It is a lifecycle component that sequences the existing services. Instruction execution still occurs in exactly one place: `CoreSpiritVM.executeBlock()`.
+
+This removes a particularly dangerous responsibility combination from the facade: deciding transaction state *and* directly owning the per-bar execution algorithm. The facade is now an API boundary and service composition point; the coordinator owns chronological execution orchestration.
+
+The VM host contract remains injected. CoreSpirit therefore keeps the same security boundary: the VM does not gain network, filesystem, broker or process access merely because responsibilities were split.
+
+### #7 — transaction identity and ownership are explicit
+
+A realtime transaction now has a stable identity:
+
+```text
+rtx:<monotonic-sequence>:<base-bar-index>
+```
+
+and a revision counter:
+
+```text
+transaction rtx:17:842
+    revision 0
+    revision 1
+    revision 2
+```
+
+The identity is shared by the transaction services:
+
+```text
+RealtimeTransaction
+      │
+      ├── EventRouter       → buffered host effects
+      ├── ReactiveScheduler → derived reuse cache
+      └── RuntimeDiagnostics→ speculative debugger trace
+```
+
+This closes a subtle failure class: a stale transaction must never be able to flush, clear or promote data belonging to a newer transaction.
+
+### State classes
+
+The realtime model is now explicit:
+
+```text
+COMMITTED
+    authoritative confirmed state
+
+TRANSACTION-LOCAL
+    developing bar, revision counters, mutable series/local/cross state
+
+CACHE
+    indicator/data/reference memoization
+
+DERIVED
+    reactive reuse + debugger trace materialization
+
+EPHEMERAL-UI
+    UI/workspace state that follows the speculative revision
+```
+
+The transaction boundary applies the same rules to every class:
+
+```text
+BEGIN
+  create transaction identity
+  snapshot confirmed baseline
+  start speculative event/reactive/debug scopes
+
+REVISE
+  restore baseline
+  increment revision
+  clear disposable caches
+  re-evaluate
+  replace staged effects
+
+COMMIT
+  promote state
+  promote latest diagnostics
+  end derived transaction scope
+  flush only matching event buffer
+  clear disposable caches
+
+ROLLBACK
+  restore baseline counters/state
+  discard matching event/reactive/debug scopes
+  clear disposable caches
+  restore confirmed execution frame
+```
+
+### Counter/state completeness
+
+The transaction snapshot now includes the execution counters that affect observable runtime behavior:
+
+```text
+executionRevision
+plotOrdinal
+outputCount
+realtime
+lastBarWasRealtime
+realtimeLifecycle
+```
+
+Previously these were reset procedurally during rollback. They are now part of the transaction contract, so rollback restores the baseline rather than relying on a hard-coded zero.
+
+### Confirmed historical baseline
+
+Historical execution now explicitly promotes each confirmed bar into the committed state store. This matters when a host performs:
+
+```text
+history preload
+    ↓
+confirmed state
+    ↓
+realtime transaction
+```
+
+The first live transaction therefore begins from an explicit confirmed baseline rather than assuming that the durable committed fields happen to match the mutable working state.
+
+### Debugger consistency
+
+Debugger traces are now treated as transaction-scoped derived state. Speculative traces stay invisible to `getDebugTrace()` until commit. Rollback discards only the speculative trace for that transaction instead of clearing an already-confirmed trace for the same bar index.
+
+### Event consistency
+
+Event buffers now carry their transaction ID. Commit requires the matching active transaction ID. Rollback may discard the matching transaction, while a stale transaction ID is rejected instead of being allowed to affect a newer transaction.
+
+### Acceptance boundary
+
+The runtime architecture is considered structurally hardened for #6/#7 when:
+
+- the public `CoreSpiritRuntime` API remains unchanged;
+- instruction stepping remains exclusive to `CoreSpiritVM`;
+- lifecycle orchestration lives outside the facade's execution algorithm;
+- committed/transaction-local/cache/derived/UI ownership is explicit;
+- realtime transaction identity is propagated to side-effect and derived-state services;
+- same-bar revisions replace earlier staged effects;
+- commit promotes only the active transaction;
+- rollback cannot erase already-confirmed debugger state;
+- confirmed historical execution establishes the committed baseline.
+
+
+## v81 timeframe completeness + measured reactive execution — deeper #8 and #9
+
+v81 hardens two execution-semantic boundaries without adding another runtime, another VM, or another language surface:
+
+1. lower-timeframe / intrabar alignment must not invent completeness from a tautological timestamp check;
+2. reactive execution must expose measured evidence of recomputation and reuse instead of treating optimization as an assumption.
+
+### #8 — intrabar completeness is explicit, not inferred
+
+The previous grouping logic effectively evaluated:
+
+```text
+points = observations where timestamp < parentEnd
+complete = lastPoint.timestamp < parentEnd
+```
+
+The second line is not evidence of completeness because the first line already guaranteed it. It collapses the meaning of `complete` into "at least one point exists".
+
+The contract is now evidence-based:
+
+```text
+Parent interval
+      │
+      ├── expected intrabar count reached
+      ├── closing/final intrabar marker
+      ├── source explicitly says parent is final
+      └── an intrabar's endTimestamp reaches the parent boundary
+                         │
+                         ▼
+                     complete = true
+```
+
+When none of those facts is available:
+
+```text
+complete = false
+```
+
+CoreSpirit therefore prefers an explicit unknown/incomplete state over manufacturing a completed higher-timeframe value from incomplete lower-timeframe observations.
+
+The `CoreSpiritIntrabar` host contract now permits optional `endTimestamp`, `isClosing`, and `isFinal` evidence. Parent bars may provide `expectedIntrabars` or `sourceFinal`. `groupIntrabars()` accepts an explicit policy controlling which evidence classes are trusted and returns a machine-readable `completenessReason` plus observed/expected counts for diagnostics.
+
+This boundary matters because completeness can change the interpretation of:
+
+```text
+higher-timeframe values
+signals
+replay results
+model inputs
+automation conditions
+visual state
+```
+
+The alignment layer should therefore answer **"do we have enough evidence to call this parent complete?"**, not **"did we receive at least one observation before the parent end?"**.
+
+### #9 — reactive execution is measured
+
+Reactive reuse is now treated as an observable runtime optimization. The engine records both revision-local and cumulative measurements.
+
+Per revision:
+
+```text
+revision
+ dirtyNodes
+ recomputed
+ reused
+ effects
+ cacheHits
+ cacheMisses
+ cacheHitRate
+ executionTimeMs
+```
+
+Cumulative runtime view:
+
+```text
+revisionCount
+ totalRecomputed
+ totalReused
+ cumulativeCacheHitRate
+ averageExecutionTimeMs
+ worstExecutionTimeMs
+```
+
+The measurement window begins with `beginRevision()` and ends after the corresponding VM `executeBlock()` completes. This captures the actual reactive execution interval rather than measuring an unrelated application/UI duration.
+
+A representative runtime report is therefore:
+
+```text
+bar revision
+------------
+nodes:          148
+ dirty:          31
+ recomputed:     31
+ reused:        117
+ cache hit:      79.1%
+ execution:      0.84 ms
+```
+
+The percentage is a measurement, not a confidence score or prediction. It answers a systems question:
+
+```text
+How much work did reactive reuse actually avoid?
+```
+
+This also provides the basis for future profiling by symbol, timeframe, node kind, model call, data request, and replay/realtime mode without changing CoreSpirit semantics.
+
+### v81 acceptance boundary
+
+- Intrabar completeness cannot be inferred from the filtered last timestamp alone.
+- Missing completeness evidence remains `complete = false`.
+- Completion evidence comes from explicit host/adapter metadata or interval coverage.
+- Reactive cache hits and misses are separately counted.
+- Current revision and cumulative reactive metrics are observable through the existing runtime statistics API.
+- Reactive execution timing is recorded around the actual VM revision.
+- No second reactive engine or alternate execution path is introduced.
+
+## v82 chart architecture hardening — deeper #10 and #11
+
+v82 continues the architecture-hardening policy without creating another runtime, another chart engine, or another market-data authority. The change is about making the frontend/data boundary match the execution architecture that CoreSpirit already claims to have.
+
+### #10 — LiveChart decomposition: make the component a composition boundary
+
+`src/components/workspace/LiveChart.tsx` was measured at **123,968 bytes** in the v81 baseline. The important issue is not the exact number; it is that the same React component currently contains chart construction, history acquisition, realtime reconciliation, indicator rendering, OI, drawings, predictions, CoreSpirit scene output, UI command wiring, and editor panels.
+
+The desired decomposition is:
+
+```text
+LiveChart
+  │
+  ├── useChartLifecycle
+  ├── useHistoryData
+  ├── useRealtimeFeed
+  ├── useIndicators
+  ├── useOpenInterest
+  ├── useDrawings
+  ├── usePredictionOverlay
+  ├── useCoreSpiritScene
+  └── ChartToolbar
+```
+
+with an internal controller boundary:
+
+```text
+ChartController
+      ↓
+ChartState
+      ↓
+Renderer
+```
+
+v82 implements the first structural seams rather than pretending the entire 124 KB component has already been rewritten:
+
+```text
+LiveChart
+  │
+  ├── useChartRealtimeFeed       ← high-frequency data boundary
+  ├── useChartUiEvents           ← workspace command boundary
+  ├── ChartToolbar               ← drawing-tool presentation boundary
+  └── ChartDepthPanel             ← isolated high-frequency UI consumer
+```
+
+The chart remains the owner of the imperative `lightweight-charts` renderer and its existing refs. React state remains appropriate for human-facing controls such as timeframe, menus, indicator configuration, chart style, CoreSpirit editor state, and error/status presentation.
+
+The critical architectural rule is now explicit:
+
+```text
+UI state
+   ≠
+renderer state
+   ≠
+market-data transport state
+```
+
+A future extraction of `useHistoryData`, `useIndicators`, `useDrawings`, `usePredictionOverlay`, and `useCoreSpiritScene` should preserve this same rule. Those extractions are intentionally follow-up work so that the current chart behavior is not rewritten merely for file-size reduction.
+
+### #11 — market ticks are external data, not React render state
+
+The previous shape allowed a tick to cross the application boundary as a React prop:
+
+```text
+tick
+  ↓
+workspace setState
+  ↓
+LiveChart prop
+  ↓
+LiveChart render/effects
+```
+
+That couples transport frequency to the render lifecycle of a large component.
+
+v82 changes the chart data path to:
+
+```text
+Broker feed
+    ↓
+TradingCoreRuntime
+    ↓
+ChartMarketStore
+    ├── immediate imperative subscribers
+    │        ↓
+    │   useChartRealtimeFeed
+    │        ↓
+    │   candle / series renderer
+    │
+    └── animation-frame-coalesced React subscribers
+             ↓
+        ChartDepthPanel
+```
+
+`ChartMarketStore` is keyed by:
+
+```text
+broker + instrument
+```
+
+so NIFTY data cannot accidentally feed a BANKNIFTY chart and broker switches can clear the entire chart-data boundary.
+
+The store keeps:
+
+```text
+latest tick
+revision counter
+bounded recent-tick ring
+```
+
+The ring is deliberately bounded at 2,048 ticks per instrument. It is observational chart data, not a replacement for the canonical historical/replay data store.
+
+Two notification classes now have different semantics:
+
+```text
+imperative subscriber
+→ immediate per-packet delivery
+
+React snapshot subscriber
+→ requestAnimationFrame-coalesced delivery
+```
+
+This distinction is important. The chart renderer should see a fresh tick as soon as the transport accepts it, while secondary React UI should not render once per broker packet during a burst.
+
+`LiveChart` is also memoized and its chart call sites no longer pass `tick` as a prop. Existing workspace state may still retain ticks for watchlists and other non-chart UI, but the chart is no longer structurally dependent on that React state.
+
+For the chart itself, the high-frequency loop is therefore:
+
+```text
+transport packet
+    ↓
+external market store
+    ↓
+imperative chart subscription
+    ↓
+reconcile current bar
+    ↓
+update series
+```
+
+and not:
+
+```text
+transport packet
+    ↓
+React state
+    ↓
+large component render
+    ↓
+imperative chart mutation
+```
+
+### Performance semantics
+
+The architecture now separates **data freshness** from **React rendering cadence**. It does not yet claim a measured frame-rate improvement from this refactor alone.
+
+The next measurement layer should record:
+
+```text
+market packets received
+packets coalesced for React
+imperative chart updates
+chart update duration
+React renders attributable to chart UI
+worst frame time
+```
+
+That will allow the frontend to prove whether the data/render separation is actually reducing UI work rather than assuming it.
+
+### v82 acceptance boundary
+
+- `LiveChart` no longer receives high-frequency ticks through its React props at current chart call sites.
+- Broker/runtime market data is published once into the chart external store.
+- Imperative chart consumers receive immediate tick notifications.
+- React-facing chart data consumers receive animation-frame-coalesced notifications.
+- Chart data is isolated by broker + instrument key.
+- A bounded recent-tick ring exists for observational chart consumers.
+- Drawing-toolbar presentation and workspace-command wiring have explicit component/hook boundaries.
+- No second chart renderer, second market-data authority, or alternate execution runtime is introduced.
+- Full extraction of every remaining LiveChart domain remains follow-up work rather than being claimed complete.
+
+
+## v83 hardening — chart renderer observability + terminal consolidation
+
+v83 continues the frontend consolidation without changing CoreSpirit language semantics or the one-runtime architecture.
+
+### #10 — LiveChart deeper decomposition
+
+`LiveChart.tsx` remains the composition surface for the chart, but imperative renderer ownership is now explicit:
+
+```text
+LiveChart
+   │
+   ├── useChartLifecycle
+   │       ↓
+   │   ChartController
+   │       ↓
+   │   lightweight-charts
+   │
+   ├── useChartRealtimeFeed
+   ├── useChartUiEvents
+   ├── ChartToolbar
+   └── ChartDepthPanel
+```
+
+`ChartController` owns the mutation boundary for the main chart series: realtime bar updates, history setData, candle appearance, chart type visibility, volume visibility, resize, and renderer disposal. This keeps the component focused on orchestration, semantic state, and feature composition rather than scattering imperative renderer operations throughout the render function.
+
+`useChartLifecycle` owns the controller lifetime. The existing history, indicators, drawings, prediction, OI, and CoreSpirit scene code remains in LiveChart until each domain can be extracted without changing behavior. The goal is architectural seams first, then safe migration.
+
+### #11 — high-frequency data is now measurable
+
+The external chart market store remains outside React state. v83 adds an observational performance telemetry boundary:
+
+```text
+market packet
+    ↓
+ChartMarketStore
+    ├── immediate renderer subscriber
+    └── frame-coalesced React subscriber
+
+telemetry observes both paths without driving either one
+```
+
+Per chart key the telemetry records:
+
+```text
+packets
+rendererUpdates
+reactNotificationRequests
+reactFrames
+coalescedReactNotifications
+totalRendererMs
+averageRendererMs
+worstRendererMs
+packetsPerRendererUpdate
+reactCoalescingRate
+```
+
+Renderer duration is measured around the real chart subscriber callback, not inferred from React render timing. This makes the performance question empirical: how many incoming packets arrive, how many renderer callbacks execute, how much work each callback takes, and how much React notification coalescing occurs.
+
+The telemetry store is observational only. It cannot mutate market data, chart semantics, historical/replay behavior, or CoreSpirit execution.
+
+### #12 — terminal generations consolidated
+
+The production source now has one canonical terminal:
+
+```text
+src/LiveTradingTerminal.tsx
+```
+
+The implementation is composed from:
+
+```text
+LiveTradingTerminal
+       ↓
+LiveTradingWorkspace
+       ↓
+LiveChart / workspace surfaces
+```
+
+The former `LiveTradingTerminalV2`–`V5` generation files are retired from production source. Their history remains available through source control rather than as competing live implementations.
+
+The application no longer chooses one terminal generation with a fallback to another generation. The live module boundary now loads the canonical terminal directly. This removes ambiguity about which terminal is authoritative.
+
+### #13 — self-mutating layout hotfix retired
+
+`.github/workflows/fix-layout-duplicate-slots.yml` is removed. Layout behavior is now controlled by canonical source and regression tests.
+
+The lifecycle is intentionally: 
+
+```text
+temporary repair
+      ↓
+canonical source change
+      ↓
+test
+      ↓
+remove repair automation
+```
+
+The repository no longer has a workflow that edits application source with regex after pushes.
+
+### v83 boundaries
+
+v83 does not introduce another chart renderer, React runtime, terminal runtime, or CoreSpirit VM. It converts existing architecture into clearer production-code boundaries and adds measurement around the existing high-frequency path.
+
+
+## v84 hardening — terminal/routing consolidation and typed boundaries
+
+v84 deepens the frontend consolidation from v83 and applies the same single-authority principle to application routing and external data contracts. This is a hardening cycle; the public roadmap remains **1–59**.
+
+### #12 — canonical terminal is now guarded, not merely selected
+
+The production terminal boundary remains:
+
+```text
+LiveTradingTerminal
+       ↓
+LiveTradingWorkspace
+       ↓
+LiveChart / workspace modules
+```
+
+The terminal's modal/panel lifecycle is now isolated in:
+
+```text
+useLiveTradingTerminalController
+```
+
+The controller owns portfolio polling, order-ticket state, modal panel state, drag lifecycle, keyboard dismissal, pin state, and order submission orchestration. `LiveTradingTerminal.tsx` remains the only public terminal component and the only terminal generation referenced by `App.tsx`.
+
+A repository-level architecture guard now fails if any retired V2–V5 production file is recreated or if an automation workflow starts mutating application source or reintroducing retired terminal generations. Git history remains the preservation mechanism for those generations.
+
+### #13 — hotfix retirement becomes a repository invariant
+
+The layout hotfix workflow remains deleted. v84 adds a guard that scans workflow definitions for source-mutating repair patterns and retired terminal-generation references. The acceptable lifecycle is now machine-checkable:
+
+```text
+temporary repair
+      ↓
+canonical source
+      ↓
+regression test
+      ↓
+retire the repair mechanism
+```
+
+The repository does not depend on a bot to rewrite source after a push.
+
+### #14 — one SPA routing contract
+
+Routing is now described by a canonical workspace route registry containing:
+
+```text
+/dashboard
+/live
+/models
+/predictions
+/automations
+/indicators
+/portfolio
+/profile
+/corespirit
+```
+
+`App.tsx` and the workspace navigation share the same route type, while `vercel.json` now follows the simpler deployment rule:
+
+```text
+/api/*
+    ↓
+/api/index
+
+all non-API paths
+    ↓
+/
+```
+
+This means `/corespirit` no longer depends on a hand-maintained deployment rewrite entry. The deployment layer is intentionally unaware of individual SPA modules unless a path truly requires a server handler.
+
+`/models` and `/predictions` still resolve to the existing Prediction Center implementation; they are route-level product aliases, not separate execution systems.
+
+### #15 — boundary typing is now explicit where data becomes trusted
+
+The project does not attempt to remove every `any` in one pass. The v84 rule is instead:
+
+```text
+external JSON / broker payload
         ↓
-#3  safe normalization → canonical AST
+unknown
         ↓
-#4  semantic dependency graph
+runtime validation
         ↓
-#5  instruction provenance
+typed internal contract
         ↓
-one coherent compiler artifact
-\`\`\`
+CoreSpirit / UI / execution
+```
 
-The result is that the compiler no longer has to guess where its own generated instructions came from.
+A dependency-free boundary validation layer was added for broker API envelopes and the highest-value response contracts: profile, funds, holdings, positions, orders, trades, market quotes, historical candles, option chains, and order mutations.
+
+The runtime event bus was also converted to an explicit event→payload map, so events such as `TICK_UPDATE`, `PORTFOLIO_SYNCED`, `ORDER_EXECUTED`, broker connection changes, and status changes no longer use an untyped payload at the runtime boundary.
+
+This is deliberately a boundary-first typing strategy. A future schema library such as Zod can replace the local guards without changing the surrounding contracts; no new runtime validation dependency is required for v84.
+
+CoreSpirit worker messages are also treated as an untrusted serialization boundary. `chartRunner` validates the worker result envelope and `CoreSpiritObject[]` before results enter the main-thread chart/output pipeline. This keeps a serialization boundary from weakening the VM's typed execution contract.
+
+### v84 acceptance boundary
+
+- exactly one production LiveTradingTerminal implementation exists
+- retired terminal generations are guarded against reintroduction
+- source-mutating layout hotfix automation is guarded against reintroduction
+- SPA routing has one API rule and one fallback rule
+- `/corespirit` is part of the same canonical workspace route registry as the other protected modules
+- broker JSON is validated before becoming typed internal data
+- runtime event payloads are explicitly typed
+- no second runtime, terminal runtime, chart renderer, or CoreSpirit VM is introduced
+
+## v88 — complexity absorption, incremental execution, and realtime performance
+
+CoreSpirit v88 freezes the next architectural principle: **the author-facing language stays small while the compiler/runtime absorb increasing complexity underneath it**. The source vocabulary remains DATA, LET, WHEN, SHOW, MODEL and AUTOMATE. Complexity is represented as typed semantic composition rather than as a growing collection of feature-specific language constructs.
+
+The same executable artifact can now be described through reusable component/pipeline contracts, semantic value lineage, execution lanes, and host-owned execution contexts. These are compiler/runtime views of the same program; they do not form second runtimes.
+
+### Complexity absorption
+
+A CoreSpirit program may be projected as:
+
+```text
+source → normalized AST → semantic dependency graph → composition graph → execution plan → stable IR → VM
+```
+
+Simple source such as `show ema(close, 20)` and larger indicator/model/automation graphs therefore share the same compilation and execution substrate. Progressive Simple, Advanced and Professional authoring profiles are presentation/inspection profiles, not grammar forks.
+
+### Incremental execution
+
+Reactive plans carry a reverse source-input index so a changed market input can begin invalidation from only the directly affected semantic nodes. Dependent propagation continues through the existing graph. Pure deterministic nodes remain cacheable; effectful and authority nodes remain barriers.
+
+Compilation also gains bounded source/result reuse and structural AST reuse. Artifact cache identity includes compiler version, IR version, source identity and semantic identity. Canonical serialization prevents object key order from changing the fast checksum.
+
+### Realtime performance
+
+The high-frequency web path remains external-store driven. Market ticks do not require one React state update per broker packet. Workspace updates are frame-coalesced, chart renderer mutations are frame-coalesced by key, and the realtime calculation engine maintains committed indicator state with developing-bar previews instead of repeated O(window) recalculation.
+
+Historical transport retains shared in-flight requests and stale-while-revalidate behavior while bounding the browser cache. CoreSpirit worker execution uses a reusable bounded pool rather than creating a worker for every run.
+
+### Execution planning
+
+Semantic nodes expose deterministic execution class and hot/warm/cold lane metadata. The execution planner records lane membership, barriers, batching and host accelerator assignments. The planner remains host-owned: GPU/WASM selection never changes semantic meaning and never gains broker, risk or policy authority.
+
+### Lineage and reusable composition
+
+Any semantic dependency graph can be projected into a renderer-neutral lineage graph. Reusable components and pipelines expose typed ports, source identity, deterministic/stateful metadata and capabilities. Package manifests validate those contracts before registry admission.
+
+### v88 boundaries
+
+- No seventh top-level source-language concept was introduced.
+- No second CoreSpirit evaluator, VM, runtime or reactive engine was introduced.
+- Broker, risk, policy and renderer authority remains host-owned.
+- Large datasets are not discarded to create artificial speed; caching, incremental updates and rendering coalescing absorb workload instead.
+- Performance telemetry is observational and does not become trading logic.
+
+
+## v90 — first-class composability without language growth
+
+CoreSpirit v90 deepens the v88 rule: **more expressive programs must not require a proportionally larger language**. DATA, LET, WHEN, SHOW, MODEL and AUTOMATE remain the public authoring model.
+
+### Component composition
+
+A registered typed component is callable from an ordinary expression. Its contract supplies input/output types, determinism, statefulness and capability metadata to the compiler and runtime.
+
+```corespirit
+data = close
+motionValue = motion(data)
+vol = volatility(data)
+reg = regime(motionValue, vol)
+signal = setup(reg, liquidity, structure)
+show signal
+```
+
+A single-output component becomes the corresponding CoreSpirit value. A multi-output component becomes a typed component reference, so named output access such as `reg.trendProbability` is resolved through the component contract rather than through a new tuple or component-specific language construct.
+
+### Complexity moves downward
+
+The author should not have to reason about the implementation layers needed to execute a composition:
+
+```text
+CoreSpirit source
+      ↓
+normalized AST
+      ↓
+semantic typing + component binding
+      ↓
+semantic dependency graph
+      ↓
+stable IR
+      ↓
+execution graph + reactive plan
+      ↓
+backend planner
+      ↓
+CPU / WASM / GPU-capable host execution
+```
+
+The execution layers can become more sophisticated while the authoring model remains stable. Component contracts also participate in compilation/cache identity, so a changed contract cannot silently reuse an incompatible compiled result.
+
+### Composability boundaries
+
+- Components are explicit registered capabilities; they are not arbitrary host-code injection.
+- Component registration does not grant broker, filesystem, network, DOM or unrestricted process authority.
+- Stateful/effectful components remain visible to the scheduler and are not treated as pure cacheable computation.
+- GPU/WASM are execution targets, not language concepts.
+- Formal user-defined function syntax remains unnecessary for this composition model.
+
+The canonical detailed reference is `docs/CORESPIRIT_COMPOSABILITY.md`.
+
+
+## v91 — semantic component system and progressive authoring depth
+
+CoreSpirit v91 deepens the v90 composition model without expanding the source grammar. The important abstraction is now a **semantic component system**: reusable computations are represented by contracts and composition graphs first, while formal user-defined function syntax remains deliberately deferred.
+
+### Semantic components before language functions
+
+A reusable component is described by a stable contract:
+
+```text
+Component
+├── identity
+├── inputs
+├── outputs
+├── types
+├── state lifecycle
+├── dependencies
+├── execution class
+├── latency / cost
+├── determinism
+├── cacheability
+├── parallelism
+├── backend eligibility
+└── documentation metadata
+```
+
+The public language does not need `FUNCTION`, `COMPONENT`, or `PIPELINE` keywords to make these reusable. A registered component is simply callable from `LET`, and a composition graph can be materialized as another typed component at the host/compiler boundary.
+
+### Reusable graph materialization
+
+The same graph that drives one program can become a reusable component boundary:
+
+```text
+composition graph
+      ↓
+identify public inputs/outputs
+      ↓
+materialize typed component contract
+      ↓
+validate execution/state metadata
+      ↓
+register at explicit host boundary
+      ↓
+call through ordinary LET expressions
+```
+
+This creates reusable graphs without creating a second evaluator. Components still lower through the canonical semantic graph, IR, execution graph and VM.
+
+### Execution and state semantics
+
+Components can now describe where they are eligible to execute and how their state behaves. Pure deterministic components can be marked cacheable, parallelizable and eligible for CPU/WASM/GPU scheduling. Stateful, effectful, I/O and authority components remain constrained to appropriate execution classes and host boundaries.
+
+State is explicit metadata rather than an invisible implementation detail. Bar/window/session/external state can declare snapshot and rollback requirements so realtime revision semantics remain compatible with component reuse.
+
+### Three authoring levels, one language
+
+Progressive authoring is now defined as an explicit feature profile rather than only a UI visibility switch:
+
+```text
+Level 1 — Simple
+    DATA + LET + SHOW + WHEN
+
+Level 2 — Advanced
+    Simple + components + models + multi-symbol/timeframe + richer visuals/automation
+
+Level 3 — Professional
+    Advanced + component contracts + execution targets + IR/runtime inspection
+              + research + backtesting + optimization + performance controls
+```
+
+These levels do **not** create three grammars. A Simple program can grow into an Advanced or Professional artifact by adding more declarations, composition and inspection detail while remaining the same CoreSpirit source language and execution model.
+
+Professional visibility is also not authority escalation. Broker, filesystem, network, process, risk and policy boundaries remain controlled by the host/runtime sandbox.
+
+### v91 invariant
+
+> **Make reusable capability more powerful before making the grammar larger.**
+
+Only add source syntax when a real authoring problem cannot be solved cleanly by typed components, the standard library, models, visuals, automation or host capability contracts.
+
+
+## v93 — first-class series execution and operation fusion
+
+### Standard library discoverability
+
+The standard library remains discoverable through canonical namespaces while the vector/fusion metadata stays beneath the authoring surface.
+
+Readable surface syntax remains the default: vectorization and fusion are invisible unless an authoring/inspection profile chooses to expose their execution metadata. The same complexity firewall prevents backend and memory machinery from leaking into source syntax.
+
+
+CoreSpirit v93 makes `series<T>` an execution-level abstraction rather than only a type-system label. Numeric series kernels use dense typed storage (`Float64Array`) when appropriate, with `NaN` representing internal missing/warm-up values. A compatible typed buffer can be consumed without another numeric copy.
+
+### Vector execution contracts
+
+Series-capable library members now declare execution metadata:
+
+```text
+vectorizable
+fusible
+strategy = elementwise | rolling | stateful
+```
+
+This is deliberately metadata on the canonical builtin contract. It is not new language syntax and it does not create a second indicator/runtime implementation.
+
+### Operation fusion
+
+A chain such as:
+
+```text
+let x = sma(close, 20)
+let y = stdev(x, 20)
+let z = zscore(y, 50)
+```
+
+can be represented internally as:
+
+```text
+load close
+   ↓
+SMA → STDEV → ZSCORE
+   ↓
+maximal safe fusion group
+   ↓
+single chronological kernel
+```
+
+Transparent `LET` aliasing is followed, so the author does not need pipeline-specific syntax. The fusion planner refuses unsafe fan-out and stateful/effectful operations.
+
+### Memory rule
+
+The fused executor does not create:
+
+```text
+full SMA array
+full STDEV array
+full ZSCORE input array
+```
+
+just to pass values between stages. Each stage keeps bounded rolling workspace, while the final dense result is the primary full-length allocation.
+
+### Stateful boundary
+
+EMA and RMA remain vector-capable but are not marked fusible because the canonical runtime treats them as stateful recursive series operations. This distinction prevents an optimization from changing realtime/replay semantics.
+
+### Execution planner
+
+The existing host-owned execution planner now includes the series-fusion plan. Backend eligibility can say `CPU/WASM/GPU`, but availability and authority remain host-controlled. An unavailable accelerator falls back to canonical CPU execution.
+
+## v94 platform data-plane relationship
+
+CoreSpirit series execution and chart execution should converge on the same canonical numeric data plane. The chart-native path now exposes `MarketDataStore` typed-array views and timeline-aligned derived stores instead of requiring object-row conversion. This supports the same general principle already used by CoreSpirit vector execution: values remain dense and reusable until a specific host/API boundary requires materialization.
+
+```text
+MarketDataStore
+      ↓
+Timeline-aligned derived data
+      ↓
+CoreSpirit series / models / visuals
+      ↓
+chart LOD / GPU staging
+```
+
+The production Lightweight Charts adapter is still an explicit object boundary. It does not redefine the canonical data representation.
+
+## v95 — canonical data plane and chart-platform convergence
+
+CoreSpirit v95 extends the zero-copy work into a shared consumer architecture. Market history has one canonical ownership point per timeline, while indicators, models and charting borrow typed views and own only derived outputs/state.
+
+The same principle applies to the chart engine: CoreSpirit and chart consumers depend on semantic chart/data contracts rather than a renderer API.
+
+```text
+CoreSpirit / indicators / models
+             ↓
+       canonical data plane
+             ↓
+     Chart Data Engine
+             ↓
+ viewport + scales + scene
+             ↓
+    rendering coordinator
+       ↙           ↘
+Lightweight       native WebGL2
+ production        experimental
+```
+
+This preserves the six-concept CoreSpirit surface and the staged Lightweight Charts production policy while establishing the platform boundaries required for a future native renderer.
+
+
+## v96 chart-coordinate foundation
+
+CoreSpirit's chart platform now treats viewport and scale mathematics as renderer-independent contracts. The viewport is the single horizontal/visible-state authority, while dedicated time and price scale engines own reversible coordinate transforms.
+
+```text
+CoreSpirit / indicators / models
+          ↓
+    canonical data plane
+          ↓
+       viewport
+          ↓
+   time + price scales
+          ↓
+     retained scene
+          ↓
+ Lightweight Charts (production)
+       or native renderer
+```
+
+The public CoreSpirit language remains unchanged. Chart complexity is absorbed underneath the language and the renderer.
+
+
+## v97 chart interaction boundary
+
+CoreSpirit visual outputs may target the canonical chart drawing model, but CoreSpirit does not import renderer APIs. Chart navigation and drawing behavior are controlled by Core Chart contracts. This preserves the one-language/one-IR architecture while allowing the chart to evolve from Lightweight Charts to the native renderer later.
+
+
+## 1.7 User indicator settings and public source truth
+
+Indicator settings are renderer-neutral input/style/display metadata attached to the same CoreSpirit authoring artifact. The public indicator projection stores the settings snapshot next to the source snapshot so the public page can describe how the script was authored without depending on a particular renderer.
+
+v98 intentionally separates **source publication** from **arbitrary source execution**. A published script is a compiled, versioned CoreSpirit artifact and public source listing; the current workspace continues to use the registered native indicator executor until the user-component runtime gate is complete.

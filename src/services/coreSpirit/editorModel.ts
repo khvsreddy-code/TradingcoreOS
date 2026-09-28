@@ -1,4 +1,4 @@
-import { compileCoreSpirit } from './coreSpiritPipeline';
+import { CoreSpiritIncrementalCompiler } from './incrementalCompiler';
 import { CoreSpiritIncrementalAst } from './incrementalAst';
 import { getCoreSpiritEditorSnapshot, getCoreSpiritHover, getCoreSpiritCompletionContext, getCoreSpiritDefinitionAt, getCoreSpiritCodeActions, type CoreSpiritCompletion, type CoreSpiritEditorDiagnostic, type CoreSpiritSemanticToken, type CoreSpiritDefinition, type CoreSpiritCodeAction, type CoreSpiritFoldingRange } from './languageService';
 
@@ -30,10 +30,11 @@ export class CoreSpiritEditorModel {
   private version = 0;
   private snapshot: CoreSpiritEditorModelSnapshot;
   private lastCompileSource = '';
-  private lastCompile: ReturnType<typeof compileCoreSpirit> | null = null;
+  private lastCompile: ReturnType<CoreSpiritIncrementalCompiler['compile']> | null = null;
   private undoStack: string[] = [];
   private redoStack: string[] = [];
   private readonly incrementalAst = new CoreSpiritIncrementalAst();
+  private readonly incrementalCompiler = new CoreSpiritIncrementalCompiler();
 
   constructor(source = '') {
     this.source = source;
@@ -72,7 +73,7 @@ export class CoreSpiritEditorModel {
   compile() {
     if (this.lastCompileSource === this.source && this.lastCompile) return this.lastCompile;
     this.lastCompileSource = this.source;
-    this.lastCompile = compileCoreSpirit(this.source, `editor-v${this.version}`);
+    this.lastCompile = this.incrementalCompiler.compile(this.source, 'editor');
     return this.lastCompile;
   }
 

@@ -19,7 +19,7 @@ export type CoreSpiritIrInstruction =
   | { op:'move'; dest:string; source:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'unary'; dest:string; operator:'!'|'+'|'-'; operand:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'binary'; dest:string; operator:string; left:string; right:string; origin?:CoreSpiritIrInstructionOrigin }
-  | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[]; seriesSources?:Array<{ ref:string; field:'open'|'high'|'low'|'close'|'volume'|'time' }>; callId?:string; origin?:CoreSpiritIrInstructionOrigin }
+  | { op:'call'; dest:string; name:string; args:string[]; seriesArgs?:string[]; seriesSources?:Array<{ ref:string; field:'open'|'high'|'low'|'close'|'volume'|'time' }>; callId?:string; componentId?:string; componentPure?:boolean; componentStateful?:boolean; componentDeterministic?:boolean; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'index'; dest:string; target:string; index:string; seriesName?:string; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'setLocal'; name:string; source:string; series?: boolean; origin?:CoreSpiritIrInstructionOrigin }
   | { op:'jumpIfFalse'; condition:string; target:number; origin?:CoreSpiritIrInstructionOrigin }
@@ -35,21 +35,15 @@ export function coreSpiritSourceMapFromInstructions(
   return {
     version: 1,
     sourceId,
-    entries: instructions.flatMap((instruction,index) => instruction.origin
-      ? [{
-          instruction: index,
-          sourceNodeId: instruction.origin.sourceNodeId,
-          start: instruction.origin.start,
-          end: instruction.origin.end,
-          line: instruction.origin.line,
-          column: instruction.origin.column,
-          kind: instruction.op === 'emit'
-            ? 'emit:' + instruction.kind
-            : instruction.op === 'call'
-              ? 'call:' + instruction.name
-              : instruction.op,
-        }]
-      : []),
+    entries: instructions.flatMap((instruction,index) => instruction.origin ? [{
+      instruction:index,
+      sourceNodeId:instruction.origin.sourceNodeId,
+      start:instruction.origin.start,
+      end:instruction.origin.end,
+      line:instruction.origin.line,
+      column:instruction.origin.column,
+      kind:instruction.op === 'emit' ? 'emit:' + instruction.kind : instruction.op === 'call' ? 'call:' + instruction.name : instruction.op,
+    }] : []),
   };
 }
 

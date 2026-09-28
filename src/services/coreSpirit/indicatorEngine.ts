@@ -1,5 +1,6 @@
 import type { CoreSpiritMarketBar } from './marketData';
 import { emaStep, rsiFromAverages, sma, highest, lowest, trueRange } from './indicatorKernel';
+import type { IndicatorInputBinding } from '../core/data/indicatorDataPlane';
 
 /** Single deterministic primitive indicator implementation shared by CoreSpirit/runtime hosts. */
 export type NativeIndicatorState = Record<string, number[]>;
@@ -43,6 +44,21 @@ export function calculateNativeIndicator(name:string,args:unknown[],history:numb
       ctx.push(gKey,avgGain); ctx.push(lKey,avgLoss); return rsiFromAverages(avgGain,avgLoss);
     }
     case 'change': return history.length>period ? current-history[period] : null;
+    case 'pctchange': return history.length>period && Number(history[period]) !== 0 ? current/Number(history[period]) - 1 : null;
+    case 'zscore': {
+      if (history.length < period) return null;
+      const window = history.slice(0,period); const m = mean(window, period); if (m == null) return null;
+      const d = Math.sqrt(window.reduce((a,v)=>a+(v-m)**2,0)/period); return d === 0 ? 0 : (current-m)/d;
+    }
+    case 'normalize': {
+      if (history.length < period) return null; const window = history.slice(0,period);
+      const lo = Math.min(...window), hi = Math.max(...window); return hi === lo ? 0 : (current-lo)/(hi-lo);
+    }
+    case 'persistence': {
+      if (history.length < period) return null; const window = history.slice(0,period).reverse();
+      let same = 0, comparisons = 0; for (let i=1;i<window.length;i++) { const d = window[i]-window[i-1]; if (d===0) continue; const pd = i>1 ? window[i-1]-window[i-2] : d; if (pd!==0 && Math.sign(d)===Math.sign(pd)) same++; comparisons++; }
+      return comparisons ? same/comparisons : 0;
+    }
     default: return null;
   }
 }
@@ -70,3 +86,16 @@ function hma(history:number[],period:number):number|null {
 }
 function averageGain(history:number[],period:number):number { let total=0; for(let i=0;i<period;i++)total+=Math.max(0,history[i]-history[i+1]); return total/period; }
 function averageLoss(history:number[],period:number):number { let total=0; for(let i=0;i<period;i++)total+=Math.max(0,history[i+1]-history[i]); return total/period; }
+
+
+/** Stage 95 shared-data entry point: indicator kernels borrow canonical series inputs. */
+export type CoreSpiritCanonicalIndicatorInput = Readonly<{
+  values: Float64Array;
+  timeline: Float64Array;
+  revision: number;
+  timelineKey: string;
+}>;
+
+export function bindCanonicalIndicatorInput(input: IndicatorInputBinding): CoreSpiritCanonicalIndicatorInput {
+  return Object.freeze({ values: input.values, timeline: input.time, revision: input.revision, timelineKey: input.timelineKey });
+}

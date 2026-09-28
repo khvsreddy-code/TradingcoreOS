@@ -74,7 +74,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 bg-[#090a0f]/80 backdrop-blur-md"
+            className="fixed inset-0 bg-[var(--tco-surface-2)]/80 backdrop-blur-md"
             onClick={onClose}
           />
 
@@ -84,12 +84,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-md overflow-hidden rounded-xl border border-[#222636] bg-[#11131c] p-6 shadow-2xl"
+            className="relative w-full max-w-md overflow-hidden rounded-xl border border-[var(--tco-border)] bg-[var(--tco-surface-3)] p-6 shadow-2xl"
           >
             {/* Header Close Button */}
             <button
               onClick={onClose}
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-[#8c93a6] transition-colors hover:bg-[#181b28] hover:text-[#f3f4f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] cursor-pointer"
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-[var(--tco-muted)] transition-colors hover:bg-[var(--tco-hover)] hover:text-[var(--tco-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] cursor-pointer"
               aria-label="Close authentication modal"
             >
               <X className="h-4 w-4" />
@@ -105,7 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
             {/* 1. TradingCore Logo */}
             <div className="flex flex-col items-center text-center pt-2">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#090a0f] border border-[#222636] text-[#3b82f6] shadow-inner mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--tco-surface-2)] border border-[var(--tco-border)] text-[#3b82f6] shadow-inner mb-4">
                 <svg
                   width="24"
                   height="24"
@@ -126,11 +126,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               {/* 2. Welcome Title & Subtitle */}
               <h2
                 id="auth-modal-title"
-                className="text-xl font-extrabold text-[#f3f4f6] tracking-tight"
+                className="text-xl font-extrabold text-[var(--tco-text)] tracking-tight"
               >
                 Welcome to TradingCore
               </h2>
-              <p className="mt-1 text-xs text-[#8c93a6] font-mono">
+              <p className="mt-1 text-xs text-[var(--tco-muted)] font-mono">
                 Browser Trading Operating System
               </p>
             </div>
@@ -157,8 +157,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 disabled={isLoading}
                 className={`flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] cursor-pointer ${
                   isLoading
-                    ? 'border-[#222636] bg-[#181b28] text-[#8c93a6] cursor-not-allowed opacity-80'
-                    : 'border-[#222636] bg-[#181b28] text-[#f3f4f6] hover:border-[#33384f] hover:bg-[#222636]'
+                    ? 'border-[var(--tco-border)] bg-[var(--tco-hover)] text-[var(--tco-muted)] cursor-not-allowed opacity-80'
+                    : 'border-[var(--tco-border)] bg-[var(--tco-hover)] text-[var(--tco-text)] hover:border-[#33384f] hover:bg-[var(--tco-border)]'
                 }`}
               >
                 {isLoading ? (
@@ -196,22 +196,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               </button>
 
               {/* 4. Security Notice */}
-              <div className="rounded-lg border border-[#222636] bg-[#090a0f] p-3.5 flex items-start gap-2.5">
+              <div className="rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3.5 flex items-start gap-2.5">
                 <ShieldCheck className="h-4 w-4 text-[#3b82f6] shrink-0 mt-0.5" />
-                <div className="text-[11px] text-[#8c93a6] leading-relaxed">
-                  <span className="font-semibold text-[#f3f4f6]">Non-Custodial Architecture:</span> TradingCore never stores your broker credentials or capital. Session is tokenized via encrypted Google OAuth.
+                <div className="text-[11px] text-[var(--tco-muted)] leading-relaxed">
+                  <span className="font-semibold text-[var(--tco-text)]">Non-Custodial Architecture:</span> TradingCore never stores your broker credentials or capital. Session is tokenized via encrypted Google OAuth.
                 </div>
               </div>
             </div>
 
             {/* 5. Terms & Privacy */}
-            <div className="mt-6 border-t border-[#222636] pt-4 text-center font-mono text-[10px] text-[#8c93a6] space-x-1">
+            <div className="mt-6 border-t border-[var(--tco-border)] pt-4 text-center font-mono text-[10px] text-[var(--tco-muted)] space-x-1">
               <span>By signing in, you agree to TradingCore's</span>
-              <a href="/terms" className="text-[#f3f4f6] underline hover:text-[#3b82f6] transition-colors">
+              <a href="/terms" className="text-[var(--tco-text)] underline hover:text-[#3b82f6] transition-colors">
                 Terms of Service
               </a>
               <span>&</span>
-              <a href="/privacy" className="text-[#f3f4f6] underline hover:text-[#3b82f6] transition-colors">
+              <a href="/privacy" className="text-[var(--tco-text)] underline hover:text-[#3b82f6] transition-colors">
                 Privacy Policy
               </a>
             </div>

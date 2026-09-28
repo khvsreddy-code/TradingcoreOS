@@ -6,6 +6,8 @@ export type CoordinateAdapter = {
   priceToY: (price: number) => number | null;
   xToTime: (x: number) => number | null;
   yToPrice: (y: number) => number | null;
+  viewportWidth?: number;
+  viewportHeight?: number;
 };
 export type DrawingHandle = { drawingId: string; index: number; point: ScreenPoint };
 export type DrawingHit = { drawingId: string; distance: number; handle?: DrawingHandle };
@@ -14,6 +16,12 @@ const dist = (a: ScreenPoint, b: ScreenPoint) => Math.hypot(a.x - b.x, a.y - b.y
 const point = (p: CoreDrawingPoint, c: CoordinateAdapter): ScreenPoint | null => {
   const x = c.timeToX(p.time), y = c.priceToY(p.price);
   return x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y) ? null : { x, y };
+};
+const screenPoint = (drawing: CoreDrawing, c: CoordinateAdapter): ScreenPoint | null => {
+  if (drawing.coordinateSpace === 'viewport' && drawing.anchor && Number.isFinite(c.viewportWidth) && Number.isFinite(c.viewportHeight)) {
+    return { x: drawing.anchor.x * Number(c.viewportWidth), y: drawing.anchor.y * Number(c.viewportHeight) };
+  }
+  return drawing.points[0] ? point(drawing.points[0], c) : null;
 };
 const segmentDistance = (p: ScreenPoint, a: ScreenPoint, b: ScreenPoint) => {
   const dx = b.x - a.x, dy = b.y - a.y;
@@ -33,6 +41,10 @@ function segments(d: CoreDrawing, c: CoordinateAdapter): Array<[ScreenPoint, Scr
 }
 
 export function drawingHandles(drawing: CoreDrawing, adapter: CoordinateAdapter): DrawingHandle[] {
+  if (drawing.coordinateSpace === 'viewport') {
+    const screen = screenPoint(drawing, adapter);
+    return screen ? [{ drawingId: drawing.id, index: 0, point: screen }] : [];
+  }
   return drawing.points.map((p,index) => {
     const screen = point(p, adapter);
     return screen ? { drawingId: drawing.id, index, point: screen } : null;
@@ -40,7 +52,7 @@ export function drawingHandles(drawing: CoreDrawing, adapter: CoordinateAdapter)
 }
 
 export function hitTestDrawing(drawing: CoreDrawing, cursor: ScreenPoint, adapter: CoordinateAdapter, tolerance = 8): DrawingHit | null {
-  if (drawing.lifecycle !== 'active') return null;
+  if (drawing.lifecycle !== 'active' || !drawing.visible || !drawing.selectionEnabled) return null;
   const handles = drawingHandles(drawing, adapter);
   const handle = handles.find(h => dist(h.point, cursor) <= tolerance);
   if (handle) return { drawingId: drawing.id, distance: dist(handle.point, cursor), handle };
@@ -59,6 +71,12 @@ export function hitTestDrawings(drawings: CoreDrawing[], cursor: ScreenPoint, ad
 }
 
 export function moveDrawingHandle(drawing: CoreDrawing, index: number, screen: ScreenPoint, adapter: CoordinateAdapter): CoreDrawing | null {
+  if (drawing.locked) return null;
+  if (drawing.coordinateSpace === 'viewport') {
+    const width = Math.max(1, Number(adapter.viewportWidth) || 1);
+    const height = Math.max(1, Number(adapter.viewportHeight) || 1);
+    return { ...drawing, anchor: { x: Math.max(0, Math.min(1, screen.x / width)), y: Math.max(0, Math.min(1, screen.y / height)) }, updatedAt: Date.now() };
+  }
   const time = adapter.xToTime(screen.x), price = adapter.yToPrice(screen.y);
   if (time == null || price == null || !Number.isFinite(time) || !Number.isFinite(price) || index < 0 || index >= drawing.points.length) return null;
   const points = drawing.points.map((p,i) => i === index ? { time, price } : p);
