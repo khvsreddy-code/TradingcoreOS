@@ -85,9 +85,9 @@ const AUTOMATION_EMITS = new Set(['entry','exit','buy','sell']);
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return \`[\${value.map(stableStringify).join(',')}]\`;
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   const object = value as Record<string, unknown>;
-  return \`{\${Object.keys(object).sort().map(key => \`\${JSON.stringify(key)}:\${stableStringify(object[key])}\`).join(',')}}\`;
+  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
 }
 
 function stableChecksum(value: unknown): string {
@@ -170,7 +170,7 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options
 
   for (let instruction = 0; instruction < program.entry.instructions.length; instruction++) {
     const ins = program.entry.instructions[instruction];
-    const id = \`i:\${instruction}\`;
+    const id = `i:${instruction}`;
     const dependencies = registerDeps(ins).map(reg => producer.get(reg)).filter((value): value is string => Boolean(value));
     const inputs = sourceInputs(ins);
     const component = ins.op === 'call' && ins.componentId
