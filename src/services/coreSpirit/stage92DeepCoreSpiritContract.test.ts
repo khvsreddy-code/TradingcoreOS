@@ -47,7 +47,7 @@ const source = [
   'show reg.trendProbability',
   'when reg.noiseProbability < 0.2:',
   '  emit "CLEAN"',
-].join('\\n');
+].join('\n');
 
 const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
 assert(parsed.diagnostics.length===0,parsed.diagnostics.map(d=>d.message).join('; '));
@@ -73,7 +73,7 @@ const namespaceSource = [
   'let anchor = market.vwap()',
   'let p = probability.sigmoid(spread)',
   'show visual.show(p)',
-].join('\\n');
+].join('\n');
 const namespaceParsed = new CoreSpiritParser(normalizeCoreSpiritSource(namespaceSource)).parseDetailed();
 assert(namespaceParsed.diagnostics.length===0,namespaceParsed.diagnostics.map(d=>d.message).join('; '));
 const namespaceSurface = describeCoreSpiritSurface(namespaceSource,{components:registry});
