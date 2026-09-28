@@ -47,8 +47,7 @@ const source = [
   'show reg.trendProbability',
   'when reg.noiseProbability < 0.2:',
   '  emit "CLEAN"',
-].join('
-');
+].join('\\n');
 
 const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
 assert(parsed.diagnostics.length===0,parsed.diagnostics.map(d=>d.message).join('; '));
