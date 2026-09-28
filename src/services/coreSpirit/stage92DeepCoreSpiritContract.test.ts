@@ -49,7 +49,7 @@ const source = [
   '  emit "CLEAN"',
 ].join('\n');
 
-const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+const normalizedStage92 = normalizeCoreSpiritSource(source);\nconsole.log('STAGE92_NORMALIZED_SOURCE_START');\nconsole.log(normalizedStage92);\nconsole.log('STAGE92_NORMALIZED_SOURCE_END');\nconst parsed = new CoreSpiritParser(normalizedStage92).parseDetailed();
 assert(parsed.diagnostics.length===0,parsed.diagnostics.map(d=>d.message).join('; '));
 const surface = describeCoreSpiritSurface(source,{components:registry});
 const compiler = new CoreSpiritCompiler();
