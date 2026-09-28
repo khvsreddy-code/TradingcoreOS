@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Activity, Bot, BrainCircuit, Gauge, BriefcaseBusiness, UserCircle, SlidersHorizontal, LayoutDashboard, Code2 } from 'lucide-react';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
+import { ThemeToggle } from '../common/ThemeToggle';
 export type WorkspaceRoute = '/dashboard' | '/live' | '/models' | '/predictions' | '/automations' | '/indicators' | '/portfolio' | '/profile' | '/corespirit';
 const nav: Array<{ path: WorkspaceRoute; label: string; icon: typeof Activity }> = [
  {path:'/dashboard',label:'Home',icon:LayoutDashboard},{path:'/live',label:'Live Trading',icon:Activity},{path:'/models',label:'Models',icon:BrainCircuit},{path:'/predictions',label:'Predictions',icon:BrainCircuit},{path:'/automations',label:'Automations',icon:Bot},{path:'/indicators',label:'Indicators',icon:Gauge},{path:'/portfolio',label:'Portfolio',icon:BriefcaseBusiness},{path:'/profile',label:'Profile',icon:UserCircle},{path:'/corespirit',label:'CoreSpirit',icon:Code2},
