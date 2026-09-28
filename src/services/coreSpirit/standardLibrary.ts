@@ -1,86 +1,155 @@
+import type { CoreSpiritType } from './typeSystem';
+import type { CoreSpiritIrEmitKind } from './callContract';
+
 export type CoreSpiritBuiltin = {
   name: string;
   minArgs: number;
   maxArgs?: number;
-  returnType: 'number' | 'boolean' | 'event' | 'string' | 'series<number>' | 'unknown';
+  returnType: CoreSpiritType | 'event' | 'unknown';
   pure: boolean;
   capability?: 'alert' | 'webhook' | 'market' | 'ai';
+  emitKind?: CoreSpiritIrEmitKind;
+  category: 'series' | 'math' | 'condition' | 'market' | 'state' | 'output' | 'extension';
+  seriesExecution?: Readonly<{ vectorizable: boolean; fusible: boolean; strategy: 'elementwise' | 'rolling' | 'stateful' }>;
 };
 
-export const CORE_SPIRIT_STDLIB: readonly CoreSpiritBuiltin[] = [
-  { name:'sma', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'ema', minArgs:1, maxArgs:2, returnType:'number', pure:false },
-  { name:'rsi', minArgs:1, maxArgs:2, returnType:'number', pure:false },
-  { name:'atr', minArgs:0, maxArgs:1, returnType:'number', pure:false },
-  { name:'vwap', minArgs:0, maxArgs:1, returnType:'number', pure:false },
-  { name:'highest', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'lowest', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'change', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'crossover', minArgs:2, maxArgs:2, returnType:'boolean', pure:true },
-  { name:'crossunder', minArgs:2, maxArgs:2, returnType:'boolean', pure:true },
-  { name:'nz', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'isNa', minArgs:1, maxArgs:1, returnType:'boolean', pure:true },
-  { name:'max', minArgs:2, maxArgs:2, returnType:'number', pure:true },
-  { name:'min', minArgs:2, maxArgs:2, returnType:'number', pure:true },
-  { name:'abs', minArgs:1, maxArgs:1, returnType:'number', pure:true },
-  { name:'sqrt', minArgs:1, maxArgs:1, returnType:'number', pure:true },
-  { name:'pow', minArgs:2, maxArgs:2, returnType:'number', pure:true },
-  { name:'exp', minArgs:1, maxArgs:1, returnType:'number', pure:true },
-  { name:'log', minArgs:1, maxArgs:1, returnType:'number', pure:true },
-  { name:'tanh', minArgs:1, maxArgs:1, returnType:'number', pure:true },
-  { name:'clamp', minArgs:3, maxArgs:3, returnType:'number', pure:true },
-  { name:'sigmoid', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'probability', minArgs:1, maxArgs:2, returnType:'number', pure:true },
-  { name:'predict', minArgs:3, maxArgs:15, returnType:'number', pure:true },
-  { name:'score', minArgs:3, maxArgs:15, returnType:'number', pure:true },
-  { name:'request', minArgs:3, maxArgs:4, returnType:'number', pure:false, capability:'market' },
-  { name:'requestBatch', minArgs:3, maxArgs:15, returnType:'number', pure:false, capability:'market' },
-  { name:'bid', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'ask', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'spread', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'mid', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'intrabarCount', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'intrabarSum', minArgs:2, maxArgs:2, returnType:'number', pure:false, capability:'market' },
-  { name:'intrabarHigh', minArgs:2, maxArgs:2, returnType:'number', pure:false, capability:'market' },
-  { name:'intrabarLow', minArgs:2, maxArgs:2, returnType:'number', pure:false, capability:'market' },
-  { name:'intrabarDelta', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'lowerTf', minArgs:2, maxArgs:2, returnType:'unknown', pure:false, capability:'market' },
-  { name:'depthImbalance', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintDelta', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintBuy', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintSell', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintPoc', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintVah', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintVal', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintRows', minArgs:0, maxArgs:0, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintRowPrice', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintRowBuy', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintRowSell', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintRowDelta', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'footprintRowImbalance', minArgs:1, maxArgs:1, returnType:'number', pure:false, capability:'market' },
-  { name:'plot', minArgs:1, maxArgs:5, returnType:'event', pure:true },
-  { name:'marker', minArgs:1, maxArgs:4, returnType:'event', pure:true },
-  { name:'label', minArgs:1, maxArgs:8, returnType:'event', pure:true },
-  { name:'labelAt', minArgs:2, maxArgs:9, returnType:'event', pure:true },
-  { name:'line', minArgs:4, maxArgs:5, returnType:'event', pure:true },
-  { name:'zone', minArgs:4, maxArgs:8, returnType:'event', pure:true },
-  { name:'box', minArgs:4, maxArgs:8, returnType:'event', pure:true },
-  { name:'band', minArgs:2, maxArgs:4, returnType:'event', pure:true },
-  { name:'fill', minArgs:2, maxArgs:4, returnType:'event', pure:true },
-  { name:'gradient', minArgs:2, maxArgs:5, returnType:'event', pure:true },
-  { name:'arrow', minArgs:4, maxArgs:6, returnType:'event', pure:true },
-  { name:'shape', minArgs:2, maxArgs:5, returnType:'event', pure:true },
-  { name:'heatmap', minArgs:2, maxArgs:5, returnType:'event', pure:true },
-  { name:'polyline', minArgs:6, maxArgs:20, returnType:'event', pure:true },
-  { name:'hline', minArgs:1, maxArgs:4, returnType:'event', pure:true },
-  { name:'bg', minArgs:1, maxArgs:2, returnType:'event', pure:true },
-  { name:'barcolor', minArgs:1, maxArgs:2, returnType:'event', pure:true },
-  { name:'table', minArgs:4, maxArgs:7, returnType:'event', pure:true },
-  { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false },
-  { name:'entry', minArgs:2, maxArgs:6, returnType:'event', pure:false },
-  { name:'exit', minArgs:1, maxArgs:2, returnType:'event', pure:false },
-  { name:'alert', minArgs:0, returnType:'event', pure:false, capability:'alert' },
-  { name:'webhook', minArgs:1, returnType:'event', pure:false, capability:'webhook' },
+export type CoreSpiritLibraryGroupId =
+  | 'price'|'math'|'trend'|'momentum'|'volatility'|'structure'|'market'|'models'|'visual'|'events'|'data'|'state';
+
+export type CoreSpiritLibraryGroup = {
+  id: CoreSpiritLibraryGroupId;
+  label: string;
+  description: string;
+  names: readonly string[];
+};
+
+export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
+  { name:'sma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'ema', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
+  { name:'hma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'rolling'} },
+  { name:'highest', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'lowest', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'sum', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'mean', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'stdev', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'wma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'rma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
+  { name:'median', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'abs', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'min', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'max', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'sqrt', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'pow', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'round', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'sign', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'cross', minArgs:2, maxArgs:2, returnType:'boolean', pure:false, category:'condition' },
+  { name:'crossover', minArgs:2, maxArgs:2, returnType:'boolean', pure:false, category:'condition' },
+  { name:'crossunder', minArgs:2, maxArgs:2, returnType:'boolean', pure:false, category:'condition' },
+  { name:'rising', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
+  { name:'falling', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
+  { name:'vwap', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'market' },
+  { name:'market', minArgs:1, maxArgs:1, returnType:'market:ref', pure:false, category:'market', capability:'market' },
+  { name:'timeframe', minArgs:1, maxArgs:1, returnType:'timeframe:ref', pure:false, category:'market', capability:'market' },
+  { name:'nz', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'state' },
+  { name:'na', minArgs:1, maxArgs:1, returnType:'boolean', pure:true, category:'state' },
+  { name:'bar_index', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'state' },
+  { name:'time', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'state' },
 ];
 
+export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
+  { name:'plot', minArgs:1, maxArgs:10, returnType:'event', pure:true, category:'extension', emitKind:'plot' },
+  { name:'panel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
+  { name:'sidePanel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
+  { name:'floatingArea', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
+  { name:'point', minArgs:2, maxArgs:3, returnType:'visual:point', pure:true, category:'extension' },
+  { name:'range', minArgs:2, maxArgs:2, returnType:'visual:range', pure:true, category:'extension' },
+  { name:'above_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
+  { name:'below_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
+  { name:'at_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
+  { name:'meta', minArgs:2, maxArgs:undefined, returnType:'unknown', pure:true, category:'extension' },
+  { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'signal' },
+  { name:'emit', minArgs:1, maxArgs:1, returnType:'event', pure:false, category:'extension', emitKind:'event' },
+  { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension' },
+  { name:'event', minArgs:1, maxArgs:1, returnType:'boolean', pure:false, category:'extension' },
+  { name:'model', minArgs:1, maxArgs:1, returnType:'model:ref', pure:false, category:'extension' },
+  { name:'variance', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension' },
+  { name:'change', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'elementwise'} },
+  { name:'pctchange', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'elementwise'} },
+  { name:'zscore', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'normalize', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'persistence', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'isNa', minArgs:1, maxArgs:1, returnType:'boolean', pure:true, category:'extension' },
+  { name:'exp', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
+  { name:'log', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
+  { name:'tanh', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
+  { name:'clamp', minArgs:3, maxArgs:3, returnType:'number', pure:true, category:'extension' },
+  { name:'sigmoid', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'extension' },
+  { name:'probability', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'extension' },
+  { name:'predict', minArgs:3, maxArgs:15, returnType:'number', pure:true, category:'extension', capability:'ai' },
+  { name:'score', minArgs:3, maxArgs:15, returnType:'number', pure:true, category:'extension', capability:'ai' },
+  { name:'request', minArgs:3, maxArgs:4, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'requestBatch', minArgs:3, maxArgs:15, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'bid', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'ask', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'spread', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'mid', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'intrabarCount', minArgs:1, maxArgs:1, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'intrabarSum', minArgs:2, maxArgs:2, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'intrabarHigh', minArgs:2, maxArgs:2, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'intrabarLow', minArgs:2, maxArgs:2, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'intrabarDelta', minArgs:1, maxArgs:1, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'lowerTf', minArgs:2, maxArgs:2, returnType:'unknown', pure:false, category:'extension', capability:'market' },
+  { name:'show', minArgs:1, maxArgs:16, returnType:'event', pure:true, category:'output', emitKind:'show' },
+  { name:'marker', minArgs:1, maxArgs:7, returnType:'event', pure:true, category:'extension', emitKind:'marker' },
+  { name:'label', minArgs:1, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'label' },
+  { name:'labelAt', minArgs:2, maxArgs:9, returnType:'event', pure:true, category:'extension', emitKind:'labelAt' },
+  { name:'line', minArgs:2, maxArgs:7, returnType:'event', pure:true, category:'extension', emitKind:'line' },
+  { name:'zone', minArgs:4, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'zone' },
+  { name:'box', minArgs:2, maxArgs:8, returnType:'event', pure:true, category:'extension', emitKind:'box' },
+  { name:'band', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension', emitKind:'band' },
+  { name:'fill', minArgs:2, maxArgs:4, returnType:'event', pure:true, category:'extension', emitKind:'fill' },
+  { name:'gradient', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension', emitKind:'gradient' },
+  { name:'arrow', minArgs:4, maxArgs:6, returnType:'event', pure:true, category:'extension', emitKind:'arrow' },
+  { name:'shape', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension', emitKind:'shape' },
+  { name:'heatmap', minArgs:2, maxArgs:5, returnType:'event', pure:true, category:'extension', emitKind:'heatmap' },
+  { name:'polyline', minArgs:6, maxArgs:20, returnType:'event', pure:true, category:'extension', emitKind:'polyline' },
+  { name:'hline', minArgs:1, maxArgs:4, returnType:'event', pure:true, category:'extension', emitKind:'hline' },
+  { name:'bg', minArgs:1, maxArgs:2, returnType:'event', pure:true, category:'extension', emitKind:'bg' },
+  { name:'barcolor', minArgs:1, maxArgs:2, returnType:'event', pure:true, category:'extension', emitKind:'barcolor' },
+  { name:'table', minArgs:4, maxArgs:7, returnType:'event', pure:true, category:'extension', emitKind:'table' },
+  { name:'entry', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension', emitKind:'entry' },
+  { name:'exit', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'exit' },
+  { name:'buy', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension', emitKind:'buy' },
+  { name:'sell', minArgs:0, maxArgs:3, returnType:'event', pure:false, category:'extension', emitKind:'sell' },
+  { name:'order', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension', emitKind:'orderIntent' },
+  { name:'alert', minArgs:0, returnType:'event', pure:false, category:'extension', capability:'alert', emitKind:'alert' },
+  { name:'webhook', minArgs:1, returnType:'event', pure:false, category:'extension', capability:'webhook', emitKind:'webhook' },
+];
+
+export const CORE_SPIRIT_LIBRARY_GROUPS: readonly CoreSpiritLibraryGroup[] = [
+  { id:'price', label:'Price', description:'Current-bar market series.', names:['open','high','low','close','volume'] },
+  { id:'math', label:'Math', description:'Deterministic scalar and numerical helpers.', names:['abs','min','max','sqrt','pow','round','sign','exp','log','tanh','clamp','sigmoid'] },
+  { id:'trend', label:'Trend', description:'Smoothing and trend-oriented series transforms.', names:['sma','ema','hma','wma','rma'] },
+  { id:'momentum', label:'Momentum', description:'Momentum, change and persistence transforms backed by deterministic runtime contracts.', names:['rsi','change','pctchange','persistence','probability'] },
+  { id:'volatility', label:'Volatility', description:'Volatility, dispersion and normalization measurements.', names:['atr','stdev','variance','zscore','normalize'] },
+  { id:'structure', label:'Structure', description:'Range, extrema and crossing conditions.', names:['highest','lowest','cross','crossover','crossunder','rising','falling'] },
+  { id:'market', label:'Market', description:'Instrument, timeframe and session-aware market references.', names:['market','timeframe','vwap'] },
+  { id:'models', label:'Models', description:'Typed model references and host-bound model inference.', names:['model','predict','score'] },
+  { id:'visual', label:'Visual', description:'Primary visual projection surface.', names:['show'] },
+  { id:'events', label:'Events', description:'Reactive event emission and event queries.', names:['emit','event','signal','alert','webhook'] },
+  { id:'data', label:'Data', description:'Advanced host-provided market-data access.', names:['request','requestBatch','lowerTf','bid','ask','spread','mid','intrabarCount','intrabarSum','intrabarHigh','intrabarLow','intrabarDelta','depthImbalance','footprintDelta','footprintBuy','footprintSell','footprintPoc','footprintVah','footprintVal','footprintRows','footprintRowPrice','footprintRowBuy','footprintRowSell','footprintRowDelta','footprintRowImbalance'] },
+  { id:'state', label:'State', description:'Execution-frame and missing-value helpers.', names:['nz','na','isNa','bar_index','time'] },
+];
+
+const CORE_SPIRIT_LIBRARY_GROUP_BY_NAME = new Map<string, CoreSpiritLibraryGroup>(CORE_SPIRIT_LIBRARY_GROUPS.flatMap(group => group.names.map(name => [name, group] as const)));
+export function getCoreSpiritLibraryGroup(name: string): CoreSpiritLibraryGroup | undefined { return CORE_SPIRIT_LIBRARY_GROUP_BY_NAME.get(name); }
+export function getCoreSpiritLibraryCatalog(): readonly CoreSpiritLibraryGroup[] { return CORE_SPIRIT_LIBRARY_GROUPS; }
+
+export const CORE_SPIRIT_STDLIB: readonly CoreSpiritBuiltin[] = [...CORE_SPIRIT_STANDARD_LIBRARY, ...CORE_SPIRIT_EXTENSION_LIBRARY];
 export const CORE_SPIRIT_BUILTINS = new Map(CORE_SPIRIT_STDLIB.map(x => [x.name, x]));
+export const CORE_SPIRIT_CORE_BUILTINS = new Map(CORE_SPIRIT_STANDARD_LIBRARY.map(x => [x.name, x]));
+
+export function getCoreSpiritBuiltin(name: string): CoreSpiritBuiltin | undefined {
+  return CORE_SPIRIT_BUILTINS.get(name);
+}
