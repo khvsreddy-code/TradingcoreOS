@@ -3,6 +3,7 @@ import type { CoreSpiritAst, CoreSpiritAstNode } from './ast';
 import type { CoreSpiritSemanticResult } from './semanticAnalyzer';
 import type { CoreSpiritSurfaceDeclaration, CoreSpiritSurfaceMetadata } from './languageConcepts';
 import type { CoreSpiritType } from './typeSystem';
+import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreSpiritComponents';
 
 export type CoreSpiritSemanticDependencyNodeKind =
   | 'data-source'
@@ -10,6 +11,7 @@ export type CoreSpiritSemanticDependencyNodeKind =
   | 'model'
   | 'model-output'
   | 'expression'
+  | 'component'
   | 'condition'
   | 'event'
   | 'visual'
@@ -23,6 +25,7 @@ export type CoreSpiritSemanticDependencyNode = {
   type?: CoreSpiritType | 'event' | 'visual' | 'order-intent';
   source?: { start:number; end:number; line:number; column:number };
   declarationKind?: CoreSpiritSurfaceDeclaration['kind'];
+  componentId?: string;
 };
 
 export type CoreSpiritSemanticDependencyEdge = {
@@ -232,6 +235,21 @@ export function buildCoreSpiritSemanticDependencyGraph(
             type:node.name === 'market' ? 'market:ref' : 'timeframe:ref',
             source:sourceSpan(node),
           });
+        }
+
+        const component = resolveCoreSpiritComponent(coreSpiritComponentRegistry,node.name);
+        if (component) {
+          const componentId = `component-call:${component.id}:${node.span?.start ?? nodes.size}`;
+          const componentNode = addNode({
+            id:componentId,
+            kind:'component',
+            name:component.name,
+            type:component.outputs.length === 1 ? undefined : `udt:component:${component.id}`,
+            componentId:component.id,
+            source:sourceSpan(node),
+          });
+          for (const arg of node.args) addEdge(expression(arg,conditionOwner),componentNode,'depends-on');
+          return componentNode;
         }
 
         if (node.name === 'model') {
