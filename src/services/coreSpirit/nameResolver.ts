@@ -13,7 +13,7 @@ export type CoreSpiritNameResolution = {
   declarations:Map<string,CoreSpiritType>;
 };
 
-const builtinSeries=new Set(['open','high','low','volume','time']);
+const builtinSeries=new Set(['open','high','low','close','volume','time']);
 const builtinState=new Set(['na','bar_index']);
 const builtinNamespaces=new Set(['ui','visual','app','scan','chart',...CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES]);
 
