@@ -242,7 +242,7 @@ export function buildCoreSpiritSemanticDependencyGraph(
           const componentId = `component-call:${component.id}:${node.span?.start ?? nodes.size}`;
           const componentNode = addNode({
             id:componentId,
-            kind:'component',
+            kind: 'component',
             name:component.name,
             type:component.outputs.length === 1 ? undefined : `udt:component:${component.id}`,
             componentId:component.id,
