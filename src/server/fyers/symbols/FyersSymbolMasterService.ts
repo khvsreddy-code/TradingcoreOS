@@ -21,7 +21,7 @@ export class FyersSymbolMasterService {
       if(!row || typeof row!=='object') continue;
       const rowRecord = row as FyersSymbolRecord;
       const symbol=String(rowRecord.symbol ?? rowRecord.symbol_ticker ?? rowRecord.fyToken ?? rowRecord.fytoken ?? '').trim();
-      if(symbol) records.set(symbol,row);
+      if(symbol) records.set(symbol,rowRecord);
     }
     this.cache.set(master,{records,expiresAt:Date.now()+24*60*60*1000});
     return records;

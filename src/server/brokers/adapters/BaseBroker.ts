@@ -1,3 +1,6 @@
+import type { BrokerHistory, BrokerMarketQuotes, BrokerOptionChain, BrokerOrderPayload, BrokerProfile, CancelResult, OrderMutationResult } from '../contracts.js';
+import type { AccountFunds, Holding, Position, OrderResult, TradeRecord } from '../../../services/brokers/BrokerAdapter.js';
+
 export interface TokenExchangeResult {
   success: boolean;
   rawAccessToken?: string;
