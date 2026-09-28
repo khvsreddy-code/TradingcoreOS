@@ -48,6 +48,7 @@ const source = [
   'if (reg.noiseProbability < 0.2) { signal("CLEAN"); }',
 ].join('\n');
 
+const normalizedStage92 = normalizeCoreSpiritSource(source);
 const parsed = new CoreSpiritParser(normalizedStage92).parseDetailed();
 assert(parsed.diagnostics.length===0,parsed.diagnostics.map(d=>d.message).join('; '));
 const surface = describeCoreSpiritSurface(source,{components:registry});
