@@ -1,5 +1,8 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { getCoreSpiritBuiltin } from './standardLibrary';
+import { deriveCoreSpiritNodeExecutionDescriptor, type CoreSpiritExecutionLane, type CoreSpiritNodeClass } from './coreSpiritExecutionModel';
+import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreSpiritComponents';
+import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 
 export type CoreSpiritGraphNodeKind =
   | 'input'
@@ -18,11 +21,20 @@ export type CoreSpiritGraphNode = {
   op: CoreSpiritIrInstruction['op'];
   name?: string;
   dest?: string;
+  componentId?: string;
   dependencies: string[];
   sourceInputs: string[];
   pure: boolean;
   effectful: boolean;
   source?: { start: number; end: number; line: number; column: number };
+  estimatedCost: 'constant'|'low'|'medium'|'high'|'external';
+  latencyClass: 'instant'|'fast'|'normal'|'slow'|'external';
+  stateful: boolean;
+  deterministic: boolean;
+  parallelizable: boolean;
+  executionLane?: CoreSpiritExecutionLane;
+  executionClass?: CoreSpiritNodeClass;
+  cacheable?: boolean;
 };
 
 export type CoreSpiritSemanticGraph = {
@@ -52,6 +64,7 @@ export type CoreSpiritReactivePlan = {
   version: 1;
   nodeByInstruction: Record<string, number>;
   sourceInputs: Record<string, string[]>;
+  sourceDependents: Record<string, string[]>;
   dependencies: Record<string, string[]>;
   dependents: Record<string, string[]>;
   alwaysRecompute: string[];
@@ -72,9 +85,9 @@ const AUTOMATION_EMITS = new Set(['entry','exit','buy','sell']);
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (Array.isArray(value)) return \`[\${value.map(stableStringify).join(',')}]\`;
   const object = value as Record<string, unknown>;
-  return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
+  return \`{\${Object.keys(object).sort().map(key => \`\${JSON.stringify(key)}:\${stableStringify(object[key])}\`).join(',')}}\`;
 }
 
 function stableChecksum(value: unknown): string {
@@ -86,19 +99,13 @@ function stableChecksum(value: unknown): string {
 
 function asSource(program: CoreSpiritIrProgram, instruction: number) {
   const current = program.entry.instructions[instruction];
-  if (current?.origin) {
-    return {
-      start: current.origin.start,
-      end: current.origin.end,
-      line: current.origin.line,
-      column: current.origin.column,
-    };
-  }
+  if (current?.origin) return { start:current.origin.start, end:current.origin.end, line:current.origin.line, column:current.origin.column };
   const entry = program.sourceMap.entries.find(item => item.instruction === instruction);
   return entry ? { start: entry.start, end: entry.end, line: entry.line, column: entry.column } : undefined;
 }
 
-function builtinPurity(name: string): boolean {
+function builtinPurity(name: string, component?: import('./coreSpiritExecutionModel').CoreSpiritComponentContract): boolean {
+  if (component) return component.deterministic && !component.stateful;
   if (name.startsWith('ui.') || name.startsWith('visual.') || name.startsWith('app.') || name.startsWith('scan.')) return false;
   return getCoreSpiritBuiltin(name)?.pure ?? false;
 }
@@ -156,30 +163,49 @@ function classify(ins: CoreSpiritIrInstruction): CoreSpiritGraphNodeKind {
   return 'compute';
 }
 
-export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram): CoreSpiritGraphBundle {
+export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritGraphBundle {
   const producer = new Map<string, string>();
   const nodes: CoreSpiritGraphNode[] = [];
   const instructionByNode: Record<string, number> = {};
 
   for (let instruction = 0; instruction < program.entry.instructions.length; instruction++) {
     const ins = program.entry.instructions[instruction];
-    const id = `i:${instruction}`;
+    const id = \`i:\${instruction}\`;
     const dependencies = registerDeps(ins).map(reg => producer.get(reg)).filter((value): value is string => Boolean(value));
     const inputs = sourceInputs(ins);
-    const pure = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'index' || (ins.op === 'call' && builtinPurity(ins.name));
+    const component = ins.op === 'call' && ins.componentId
+      ? resolveCoreSpiritComponent(options.components ?? coreSpiritComponentRegistry, ins.componentId)
+      : undefined;
+    const pure = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'index' ||
+      (ins.op === 'call' && builtinPurity(ins.name, component));
     const effectful = ins.op === 'emit' || ins.op === 'setLocal' || ins.op === 'jump' || (ins.op === 'call' && !pure);
+    const kind = classify(ins);
+    const name = instructionName(ins);
+    const external = ins.op === 'emit' || (ins.op === 'call' && !pure);
+    const stateful = ins.op === 'setLocal' || Boolean(component?.stateful) || (ins.op === 'call' && /^(ema|rsi|atr|vwap|highest|lowest|sma|valuewhen|bar_index)$/.test(ins.name));
+    const deterministic = component ? component.deterministic : !external;
+    const estimatedCost: CoreSpiritGraphNode['estimatedCost'] = external ? 'external' : ins.op === 'const' || ins.op === 'move' ? 'constant' : ins.op === 'call' ? (/^(model\\.|model$|predict|inference)/.test(ins.name) ? 'high' : 'medium') : 'low';
+    const latencyClass: CoreSpiritGraphNode['latencyClass'] = estimatedCost === 'external' ? 'external' : estimatedCost === 'high' ? 'slow' : estimatedCost === 'medium' ? 'normal' : estimatedCost === 'constant' ? 'instant' : 'fast';
+    const parallelizable = deterministic && !stateful && !effectful;
     const node: CoreSpiritGraphNode = {
       id,
       instruction,
-      kind: classify(ins),
+      kind,
       op: ins.op,
-      name: instructionName(ins),
+      name,
       dest: instructionDest(ins),
+      ...(component ? { componentId: component.id } : {}),
       dependencies: Array.from(new Set(dependencies)),
       sourceInputs: inputs,
       pure,
       effectful,
       source: asSource(program, instruction),
+      estimatedCost,
+      latencyClass,
+      stateful,
+      deterministic,
+      parallelizable,
+      ...(() => { const descriptor = deriveCoreSpiritNodeExecutionDescriptor({ nodeId: id, effectful, stateful, latencyClass, kind, parallelizable, deterministic }); return { executionLane: descriptor.lane, executionClass: descriptor.class, cacheable: descriptor.cacheable }; })(),
     };
     nodes.push(node);
     instructionByNode[id] = instruction;
@@ -225,10 +251,14 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram): CoreSp
   const sourceInputsByNode: Record<string, string[]> = Object.fromEntries(nodes.map(node => [node.id, [...node.sourceInputs]]));
   const dependencies: Record<string, string[]> = Object.fromEntries(nodes.map(node => [node.id, [...node.dependencies]]));
   const dependentsByNode = Object.fromEntries(nodes.map(node => [node.id, [...(dependents[node.id] || [])]]));
+  const sourceDependentsMutable: Record<string, string[]> = {};
+  for (const node of nodes) for (const input of node.sourceInputs) (sourceDependentsMutable[input] ||= []).push(node.id);
+  const sourceDependents = Object.fromEntries(Object.entries(sourceDependentsMutable).map(([key, ids]) => [key, [...new Set(ids)]]));
   const reactive: CoreSpiritReactivePlan = {
     version: 1,
     nodeByInstruction: instructionByNode,
     sourceInputs: sourceInputsByNode,
+    sourceDependents,
     dependencies,
     dependents: dependentsByNode,
     alwaysRecompute,
