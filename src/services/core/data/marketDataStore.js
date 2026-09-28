@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ColumnarCandleStore = exports.MarketDataStore = void 0;
-class MarketDataStore {
+export class MarketDataStore {
   _timelineKey; _metadata={}; _time=new Float64Array(0); _open=new Float64Array(0); _high=new Float64Array(0);
   _low=new Float64Array(0); _close=new Float64Array(0); _volume=new Float64Array(0); _oi=new Float64Array(0); _bid=new Float64Array(0);
   _ask=new Float64Array(0); _bidVolume=new Float64Array(0); _askVolume=new Float64Array(0); _trades=new Float64Array(0); _session=new Float64Array(0);
@@ -30,3 +27,5 @@ class MarketDataStore {
 exports.MarketDataStore=MarketDataStore;
 class ColumnarCandleStore extends MarketDataStore {}
 exports.ColumnarCandleStore=ColumnarCandleStore;
+
+export class ColumnarCandleStore extends MarketDataStore {}
