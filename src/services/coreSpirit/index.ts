@@ -111,14 +111,11 @@ export * from './semanticDependencyGraph';
 
 export * from './sourceInspector';
 export * from './artifactIdentity';
-export * from './runManifest';
 export * from './executionEnvironment';
-export * from './sessionCalendar';
 export * from './storageSchema';
 
 export * from './deploymentLifecycle';
 
-export * from './reconciliation';
 
 export * from './coreSpiritExecutionModel';
 
