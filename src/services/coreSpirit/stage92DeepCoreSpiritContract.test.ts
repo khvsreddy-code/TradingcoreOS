@@ -49,7 +49,7 @@ const source = [
 ].join('\n');
 
 const normalizedStage92 = normalizeCoreSpiritSource(source);
-const parsed = new CoreSpiritParser(normalizedStage92).parseDetailed();
+const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
 assert(parsed.diagnostics.length===0,parsed.diagnostics.map(d=>d.message).join('; '));
 const surface = describeCoreSpiritSurface(source,{components:registry});
 const compiler = new CoreSpiritCompiler();
