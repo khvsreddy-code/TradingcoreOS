@@ -44,7 +44,7 @@ const source = [
   'let motionValue = motion(close)',
   'let volatilityValue = volatility(motionValue)',
   'let reg = regime(motionValue, volatilityValue)',
-  'show reg.trendProbability',
+  'show(reg.trendProbability)',
   'if (reg.noiseProbability < 0.2) { signal("CLEAN"); }',
 ].join('\n');
 
