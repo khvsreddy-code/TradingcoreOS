@@ -52,6 +52,9 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'wma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'rma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
   { name:'median', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'zscore', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'normalize', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
+  { name:'persistence', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   // Math
   { name:'abs', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'min', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
