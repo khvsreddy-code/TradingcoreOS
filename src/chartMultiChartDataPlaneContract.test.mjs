@@ -1,0 +1,51 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const liveChart = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
+const dataPlane = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
+const sharedFeed = fs.readFileSync(path.join(root, 'src/services/marketData/sharedChartMarketFeed.ts'), 'utf8');
+const manager = fs.readFileSync(path.join(root, 'src/services/marketData/PersistentMarketSubscriptionManager.ts'), 'utf8');
+const coordinator = fs.readFileSync(path.join(root, 'src/services/marketData/chartComputeCoordinator.ts'), 'utf8');
+const prediction = fs.readFileSync(path.join(root, 'src/services/marketData/chartPredictionCoordinator.ts'), 'utf8');
+const controller = fs.readFileSync(path.join(root, 'src/components/workspace/chartController.ts'), 'utf8');
+const history = fs.readFileSync(path.join(root, 'src/services/marketData/HistoryStore.ts'), 'utf8');
+const historyPolicy = fs.readFileSync(path.join(root, 'src/services/marketData/chartHistoryPolicy.ts'), 'utf8');
+const historyCoordinator = fs.readFileSync(path.join(root, 'src/services/marketData/chartHistoryCoordinator.ts'), 'utf8');
+const runtime = fs.readFileSync(path.join(root, 'src/services/runtime/TradingCoreRuntime.ts'), 'utf8');
+const brokerAdapter = fs.readFileSync(path.join(root, 'src/services/brokers/BaseBrokerAdapter.ts'), 'utf8');
+const tradingRoute = fs.readFileSync(path.join(root, 'src/server/routes/trading.routes.ts'), 'utf8');
+
+if (/new Worker\s*\(/.test(liveChart)) throw new Error('LiveChart still creates a dedicated worker');
+if (/useChartRealtimeFeed/.test(liveChart)) throw new Error('LiveChart still owns the legacy per-chart realtime hook');
+if (!/getChartDataPlane\(brokerId,resolvedInstrumentKey,timeframe\)/.test(liveChart)) throw new Error('LiveChart does not consume the shared chart data plane');
+if (!/chartDataPlaneKey\(brokerId,resolvedInstrumentKey,timeframe\)/.test(liveChart)) throw new Error('LiveChart dataset key is not canonical');
+if (!/subscribe\(app?lySnapshot\)/.test(liveChart)) throw new Error('LiveChart is missing data-plane snapshot subscription');
+
+if (!/chartDataPlaneKey\(brokerId: string, instrumentKey: string, timeframe: string\)/.test(dataPlane)) throw new Error('Chart data plane key is not broker:symbol:timeframe scoped');
+if (!/registry = new Map<ChartDataPlaneKey, ChartDataPlane>/.test(dataPlane)) throw new Error('Chart data plane registry missing');
+if (!/historyPromise/.test(dataPlane) || !/olderHistoryPromise/.test(dataPlane)) throw new Error('History request single-flight state missing');
+if (!/extendHistoryInBackground\(\): void/.test(dataPlane)) throw new Error('Chart data plane history policy marker missing');
+if (!/target-sized multi-page crawl/.test(dataPlane)) throw new Error('Background history crawl was reintroduced');
+if (!/subscribeSharedSymbol/.test(sharedFeed) || !/chartMarketStore\.publish/.test(sharedFeed)) throw new Error('Shared symbol feed does not fan out through chartMarketStore');
+if (!/sharedSymbols = new Map/.test(manager) || !/subscribeSharedSymbol/.test(manager)) throw new Error('Shared symbol subscription registry missing');
+if (!/MAX_ANALYTICS_WORKERS = 2/.test(coordinator) || !/MAX_INDICATOR_WORKERS = 2/.test(coordinator)) throw new Error('Shared compute worker budget is not bounded to 2+2');
+if (!/analyticsCache/.test(coordinator) || !/indicatorCache/.test(coordinator)) throw new Error('Shared compute cache missing');
+if (!/runLocal\(/.test(prediction) || !/runProduction\(/.test(prediction)) throw new Error('Dataset-scoped prediction coordination missing');
+if (!/chartPredictionCoordinator/.test(liveChart)) throw new Error('LiveChart still computes prediction work directly');
+if (!/consumerId/.test(controller) || !/attachConsumer\(consumerId, 'chart'\)/.test(controller)) throw new Error('Chart controller does not identify canonical consumer ownership');
+if (!/upsertLatest\(/.test(history) || !/mutateExisting = false/.test(history)) throw new Error('O(1) forming-candle/history update path missing');
+if (!/getBefore\(/.test(history)) throw new Error('HistoryStore older-page cache lookup missing');
+if (!/1_500/.test(historyPolicy) || !/300/.test(historyPolicy) || /25_000/.test(historyPolicy)) throw new Error('Demand-driven initial history policy is invalid');
+if (!/maxConcurrent = 2/.test(historyCoordinator)) throw new Error('Global history request budget missing');
+if (!/chartHistoryCoordinator\.request/.test(dataPlane)) throw new Error('Global history request coordinator is not used');
+if (!/requestWarmHistory\(/.test(dataPlane) || !/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm history stage missing');
+if (!/shouldLoadOlderHistory/.test(liveChart)) throw new Error('Visible-range history trigger policy missing');
+if (/HISTORY_PREFETCH_THRESHOLD/.test(liveChart)) throw new Error('Fixed 1000-bar history threshold remains');
+if (/setVisibleRange\(previousLogicalRange\)/.test(liveChart)) throw new Error('Logical range is restored through time-range API');
+if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial history request is not explicitly bounded');
+if (!/limit=\$\{safeLimit\}/.test(brokerAdapter)) throw new Error('Client broker history request does not forward limit');
+if (!/req\.query\.limit/.test(tradingRoute)) throw new Error('History route does not accept bounded limit');
+if (!/requestedLimit/.test(runtime)) throw new Error('Runtime history limit contract missing');
+
+console.log('TRADINGCORE_V103_MULTI_CHART_SHARED_DATA_PLANE_CONTRACT_OK');

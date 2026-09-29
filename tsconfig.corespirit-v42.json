@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {"noEmit": true, "skipLibCheck": true},
+  "include": [
+    "src/services/coreSpirit/visualIdentity.ts",
+    "src/services/coreSpirit/visualScene.ts",
+    "src/services/coreSpirit/indicatorContract.ts",
+    "src/services/coreSpirit/executionTransaction.ts",
+    "src/services/coreSpirit/stage42To45DeepContract.test.ts",
+    "src/services/coreSpirit/artifact.ts",
+    "src/services/coreSpirit/types.ts"
+  ],
+  "exclude": []
+}

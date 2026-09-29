@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "outDir": ".stage44_v63_cjs",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": []
+  },
+  "files": [
+    "src/services/coreSpirit/stage44LanguageUnification.test.ts",
+    "src/services/coreSpirit/compiler.ts",
+    "src/services/coreSpirit/semanticAnalyzer.ts",
+    "src/services/coreSpirit/standardLibrary.ts",
+    "src/services/coreSpirit/callContract.ts",
+    "src/services/coreSpirit/memberRegistry.ts",
+    "src/services/coreSpirit/surfaceForms.ts",
+    "src/services/coreSpirit/syntax.ts",
+    "src/services/coreSpirit/languageService.ts",
+    "src/services/coreSpirit/parser.ts",
+    "src/services/coreSpirit/lexer.ts",
+    "src/services/coreSpirit/ast.ts",
+    "src/services/coreSpirit/ir.ts",
+    "src/services/coreSpirit/typeSystem.ts",
+    "src/services/coreSpirit/nameResolver.ts",
+    "src/services/coreSpirit/optimizer.ts",
+    "src/services/coreSpirit/irContract.ts",
+    "src/services/coreSpirit/artifact.ts",
+    "src/services/coreSpirit/semanticGraph.ts",
+    "src/services/coreSpirit/languageSpec.ts"
+  ]
+}

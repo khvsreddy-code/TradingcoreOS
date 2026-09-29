@@ -1,0 +1,33 @@
+{
+  "release": "CoreSpirit v73 — compiler complexity absorption + progressive authoring levels + black primary UI / blue accent",
+  "baseline": "v72",
+  "runtime_baseline": "v68 declarative AUTOMATE + universal ORDER intent",
+  "kind": "compiler_architecture_and_authoring_levels",
+  "roadmap_range": "1–59",
+  "focus": [
+    "compiler absorbs semantic and dependency complexity",
+    "one semantic program with compiler projections rather than parallel runtimes",
+    "progressive Simple / Advanced / Professional authoring levels",
+    "same language/compiler/IR/VM at every authoring level",
+    "black remains the primary website UI color",
+    "blue replaces green as the product accent",
+    "red and other colors remain semantic rather than product-accent substitutions"
+  ],
+  "architecture_invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "AST/semantic/dependency/visual/event/model/automation graphs are compiler representations, not separate runtimes",
+    "compiler optimization must preserve observable CoreSpirit semantics and deterministic replay",
+    "authoring level is presentation/discoverability, not a grammar fork",
+    "authoring level does not expand broker/network/filesystem/account authority",
+    "risk -> policy -> execution remains host-owned",
+    "VM, model and indicator remain broker-forbidden",
+    "black is the primary UI surface family; blue is the product accent"
+  ],
+  "verification_notes": {
+    "docs": "CORESPIRIT.md and CORESPIRIT_BUILD_TRACKER.md contain the deeper #21/#22 architecture and current UI palette contract",
+    "roadmap": "59 stages with backward-only dependencies",
+    "language": "existing v72/v71 executable contracts remain the runtime baseline; #21/#22 primarily formalize compiler/tooling behavior",
+    "ui": "v72 blue/navy panel treatment was reverted so black remains the main UI while blue is retained as the accent",
+    "build": "full Vite production build is not claimed when dependencies are absent from the archive"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "release": "CoreSpirit v64 \u2014 six-concept language surface over the converged v1 runtime",
+  "baseline": "v63",
+  "runtime_baseline": "v63 unified language surface, v62 visual coordinates, v61 converged v1 runtime",
+  "kind": "six_concept_language_surface",
+  "roadmap_range": "1-45",
+  "focus": [
+    "six semantic user concepts: DATA, LET, WHEN, SHOW, MODEL and AUTOMATE",
+    "WHEN indentation/colon syntax lowers to the existing if control-flow ABI",
+    "quoted WHEN event names lower to host-resolved event queries",
+    "SHOW multi-value and area forms lower to the existing plot/scene placement contract",
+    "MODEL and AUTOMATE declarations become stable metadata on the same executable artifact",
+    "no second AST, parser, evaluator, model runtime or broker execution path",
+    "host-owned event input remains explicit and replayable",
+    "editor presents the six concepts as the primary source-language vocabulary",
+    "two-document CoreSpirit documentation split"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/languageConcepts.ts",
+    "src/services/coreSpirit/stage45SixConceptLanguage.test.ts",
+    "tsconfig.stage45-v64-run.json",
+    "CORESPIRIT_V64_MANIFEST.json",
+    "tsconfig.stage61-v64-run.json"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/surfaceForms.ts",
+    "src/services/coreSpirit/types.ts",
+    "src/services/coreSpirit/ir.ts",
+    "src/services/coreSpirit/compiler.ts",
+    "src/services/coreSpirit/coreSpiritPipeline.ts",
+    "src/services/coreSpirit/runtime.ts",
+    "src/services/coreSpirit/standardLibrary.ts",
+    "src/services/coreSpirit/semanticAnalyzer.ts",
+    "src/services/coreSpirit/languageSpec.ts",
+    "src/services/coreSpirit/languageService.ts",
+    "src/services/coreSpirit/index.ts",
+    "src/services/coreSpirit/executionTarget.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts",
+    "src/services/coreSpirit/VERSION.ts",
+    "docs/CORESPIRIT.md",
+    "docs/CORESPIRIT_BUILD_TRACKER.md"
+  ],
+  "architecture_invariants": [
+    "the user mental model has six semantic concepts, not a list of subsystem-specific functions",
+    "the executable parser remains the existing small grammar",
+    "WHEN and SHOW are source conveniences that lower into existing semantics",
+    "MODEL/AUTOMATE declarations are serializable metadata on the same executable artifact",
+    "incoming automation events are host-supplied and cannot become broker authority",
+    "MODEL remains behind the strict host-owned model ABI",
+    "AUTOMATE remains behind order-intent, risk, policy and host execution boundaries",
+    "all six concepts use the same AST, stable IR and VM",
+    "surface semantics never grant host capabilities",
+    "CORESPIRIT.md remains the stable architecture brain",
+    "CORESPIRIT_BUILD_TRACKER.md remains the living implementation truth",
+    "CORESPIRIT_Vxx_MANIFEST.json remains the machine release record"
+  ],
+  "tests": [
+    "STAGE45_SIX_CONCEPT_LANGUAGE_OK",
+    "STAGE44_LANGUAGE_UNIFICATION_OK",
+    "STAGE43_VISUAL_COORDINATE_SYSTEM_OK",
+    "STAGE42_CORESPIRIT_V1_RUNTIME_OK",
+    "STAGE73_74_VISUAL_COMPILER_REACTIVE_OK",
+    "STAGE75_76_EXECUTION_PLANNER_SANDBOX_OK",
+    "STAGE61_CORESPIRIT_DOC_SPLIT_OK",
+    "roadmap validates at 45 stages"
+  ],
+  "documentation_policy": {
+    "architecture": "docs/CORESPIRIT.md",
+    "tracker": "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "machine_release": "CORESPIRIT_V64_MANIFEST.json",
+    "no_version_specific_CoreSpirit_markdown": true
+  }
+}

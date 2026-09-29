@@ -1,0 +1,54 @@
+{
+  "release": "CoreSpirit v81 — timeframe completeness + measured reactive runtime",
+  "baseline": "v80",
+  "roadmap_range": "1–59",
+  "kind": "runtime_semantics_hardening",
+  "timeframe_alignment": {
+    "grouping": "groupIntrabars",
+    "completeness": "explicit evidence only",
+    "evidence": [
+      "expected intrabar count",
+      "closing/final marker",
+      "source-final metadata",
+      "intrabar end reaches parent boundary"
+    ],
+    "false_positive_prevention": "last point being timestamp < end is never sufficient"
+  },
+  "reactive_measurement": {
+    "per_revision": [
+      "revision",
+      "dirtyNodes",
+      "recomputed",
+      "reused",
+      "effects",
+      "cacheHits",
+      "cacheMisses",
+      "cacheHitRate",
+      "executionTimeMs"
+    ],
+    "cumulative": [
+      "revisionCount",
+      "totalRecomputed",
+      "totalReused",
+      "cumulativeCacheHitRate",
+      "averageExecutionTimeMs",
+      "worstExecutionTimeMs"
+    ],
+    "measurement_boundary": "reactive beginRevision through VM executeBlock completion"
+  },
+  "architecture_invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "timeframe completeness is evidence-based and explicit",
+    "unknown parent completeness remains incomplete rather than inferred",
+    "reactive performance is measured rather than assumed",
+    "CoreSpiritRuntime remains the external compatibility API",
+    "CoreSpiritVM remains the single instruction executor"
+  ],
+  "verification": [
+    "stage81TimeframeCompleteness.test.ts",
+    "stage82ReactiveMetrics.test.ts",
+    "stage79RuntimeTransaction.test.ts",
+    "stage80RuntimeSemantics.test.ts",
+    "focused TypeScript compile"
+  ]
+}

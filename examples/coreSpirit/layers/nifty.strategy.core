@@ -1,0 +1,6 @@
+// CoreSpirit Strategy: consumes a model output and emits strategy intent
+strategy NiftyMomentum:
+    if probability_up > 0.72:
+        entry("long")
+    if probability_up < 0.40:
+        exit("long")

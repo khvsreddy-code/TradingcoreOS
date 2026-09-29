@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.corespirit-v42.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/services/coreSpirit/visualRenderer.ts",
+    "src/services/coreSpirit/eventSystem.ts",
+    "src/services/coreSpirit/outputDispatcher.ts",
+    "src/services/coreSpirit/stage46RendererEventBusContract.test.ts",
+    "src/services/coreSpirit/visualIdentity.ts",
+    "src/services/coreSpirit/visualScene.ts",
+    "src/services/coreSpirit/indicatorContract.ts",
+    "src/services/coreSpirit/executionTransaction.ts",
+    "src/services/coreSpirit/artifact.ts",
+    "src/services/coreSpirit/types.ts"
+  ]
+}

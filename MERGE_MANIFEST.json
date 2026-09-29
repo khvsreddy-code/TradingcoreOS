@@ -1,0 +1,45 @@
+{
+  "release": "TradingCoreOS v109 schema-driven indicator architecture",
+  "updated": "2026-09-29",
+  "baseline": "TradingCoreOS v108 CoreSpirit + Vela architecture lock",
+  "architecture": {
+    "language": "CoreSpirit",
+    "chartBackend": "vela-native",
+    "dataPlane": "TCO canonical columnar market data",
+    "compute": "TCO CoreSpirit / indicator / model execution",
+    "execution": "TCO-owned risk / policy / broker authorization",
+    "indicatorSettings": "Versioned IndicatorSettingsSchema consumed by universal editor, workspace normalization, publication and render projection"
+  },
+  "removed": [
+    "indicator-kind-specific settings UI branches",
+    "duplicate /live embedded manual settings form",
+    "lightweight-charts application dependency",
+    "external scripting compatibility translator/runtime/catalog"
+  ],
+  "added": [
+    "src/services/coreSpirit/indicatorSettingsSchema.ts",
+    "docs/INDICATOR_SETTINGS_SCHEMA.md",
+    "CORESPIRIT_V109_MANIFEST.json",
+    "CORESPIRIT_V109_RELEASE_NOTES.md",
+    "src/indicatorSettingsSchemaContract.test.mjs"
+  ],
+  "boundary": {
+    "productionRenderer": "src/services/core/chart/chartRendererFactory.ts",
+    "backendPolicy": "src/services/core/chart/chartBackendPolicy.ts",
+    "indicatorSchema": "src/services/coreSpirit/indicatorSettingsSchema.ts",
+    "settingsEditor": "src/components/indicators/IndicatorSettingsPanel.tsx",
+    "vendorAccessPolicy": "Only the TCO Vela adapter and native renderer implementation may import vendor/vela."
+  },
+  "roadmap": {
+    "stages": 145,
+    "newRange": "131-145"
+  },
+  "validation": {
+    "indicatorSchemaContract": "PENDING",
+    "velaBoundaryContract": "PASS_FROM_V108",
+    "focusedSchemaTypecheck": "PASS",
+    "fullApplicationBuild": "NOT_CLAIMED",
+    "browserSmoke": "NOT_RUN"
+  },
+  "status": "IMPLEMENTED_SCHEMA_BOUNDARY__Vela_DATA_DEEPENING_PENDING"
+}

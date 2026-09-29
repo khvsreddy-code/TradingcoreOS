@@ -1,0 +1,40 @@
+{
+  "version": "v98",
+  "theme": "user-authored-indicators-public-community",
+  "generatedAt": "2026-09-27T14:19:37.172Z",
+  "roadmapStages": 130,
+  "productionChartBackend": "lightweight-charts",
+  "supabaseProjectRef": "atoxvshsefhouadmunos",
+  "files": {
+    "docs/CORESPIRIT.md": "21c433e9486fbb5c98a8aaad2e2b2f2d31f04f35a9200322dd3ddb3c550bfbca",
+    "docs/CORESPIRIT_BUILD_TRACKER.md": "dbd90ea82246fbf9ea3bef815877edf55b4532efe2247bc55a74c623e162ae77",
+    "docs/CORESPIRIT_COMPOSABILITY.md": "7506c20577debc3a075197d009e91728b455c4a7ad39f612cfb91747465b90e4",
+    "docs/CORESPIRIT_SCRIPTING.md": "e74623a087a0c1571371cec74388a444f175f075f90caff24095bc02504f6cf1",
+    "docs/history/v98-user-indicator-authoring-community.md": "d93ab0166758ced628e2ff90e8e8b0e5a51a581f8d3ef113a1c9c346087cae5c",
+    "src/components/indicators/IndicatorSettingsPanel.tsx": "e28b86861045d0cc4324949b47f2249d9af6ac845801a99d3dae8518cc8caeb8",
+    "src/components/indicators/IndicatorSourceEditor.tsx": "45d7bf2688a165cea53ef8ddb1ba57a52833afabb538f5bac86b0036b296fba8",
+    "src/pages/IndicatorExplorePage.tsx": "8de63850f1f76d6cce07de4565f15a5f32181757945af6434ebdc0a9d0a47826",
+    "src/pages/IndicatorsPage.tsx": "f16ff4ab63e452226011c4710253856d5a2d7c34b9eaa7305a4c30fda5096d38",
+    "src/services/coreSpirit/indicatorContract.ts": "cb074bee66e2fd9f5792f5f5a6f0b64c3a03d49e498d0990408d998fb8a0fe95",
+    "src/services/coreSpirit/indicatorEngine.ts": "00cf72b754321e9c5733f40ec409364150ba74cf8b77bd88243429230bba9292",
+    "src/services/coreSpirit/indicatorKernel.ts": "255ec2a1726c546bbb28c6dc8a35cf7e571cc9903098d77d931505268144cdce",
+    "src/services/coreSpirit/indicatorPublicationService.ts": "ccf003f207121a3d372b8c7fbe0ffe2af2ba1b98301b2a9114bbe54875c06031",
+    "src/services/coreSpirit/indicatorSourceTemplates.ts": "b74026ae88b47a729ba426bdd50c8549a988b516f9c9e60bfc86f47420a60e17",
+    "src/services/coreSpirit/nativeIndicatorRegistry.ts": "ef5b1d9b9a090f6de275c33839dd6b8946f2008992c9ef55e5f7ff9cae7722a2",
+    "supabase/migrations/20260927140500_tradingcoreos_v98_user_indicator_publications.sql": "b5a2412e29dc59452f90eca0c4779ce9cbcc48cb5a5c0d4524eee6275079738f",
+    "supabase/migrations/20260927141327_harden_indicator_publication_counters.sql": "1ccee9bdc78ac5069e669a9da1c9cebe2578fe656caff9f5ed217d414661fa6e",
+    "supabase/migrations/20260927141354_optimize_indicator_publication_rls_indexes.sql": "21a4b2bae814b4a66be9150a0ed5579b55b952fde79804e2f7ed6918d04c6b75",
+    "supabase/migrations/20260927142500_add_indicator_settings_snapshot.sql": "626d6ed2c3f2a5c8557e225a5d994d049a4a84225b2ef5bc5e196d85d4545236",
+    "src/App.tsx": "e53a38a65dd4cf1287eeeee795ed4d26ebd569a68ca91c2b32ed14674100ebef",
+    "src/components/navigation/Navbar.tsx": "bcafe1aac8b4fef29bb4b18cc11f00b26cd5befa54510a568c6ddf51d8cf3d2e",
+    "package.json": "bf25efb6c780913ff645a979100e32245a837b1744e3fa2319d50697c2646210",
+    "src/indicatorCommunityContract.test.mjs": "bf8c2e2ec02686960ac74f6165bd2e39aa521595b8c5e1a4b8099333cb73fedb",
+    "docs/CHART_ENGINE_ARCHITECTURE.md": "55960721406d49180ac5dac411ac0efb9bc89d08cd375d96dff5e5e28c61e006",
+    "docs/CHART_DATA_PLANE_ARCHITECTURE.md": "2f366460f7d97502a096b7467b12eb4a56529305fde17980e0b2ccc284fedd03"
+  },
+  "validation": {
+    "contract": "STAGE98_INDICATOR_COMMUNITY_CONTRACT",
+    "typescriptSyntax": "V98_INDICATOR_TS_SYNTAX_OK",
+    "vendorGuard": "V98_NO_TRADINGVIEW_IMPLEMENTATION_COPY_OK"
+  }
+}

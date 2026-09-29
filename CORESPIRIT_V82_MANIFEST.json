@@ -1,0 +1,31 @@
+{
+  "release": "CoreSpirit v82 — chart runtime decomposition + external high-frequency data path",
+  "baseline": "v81",
+  "roadmap_range": "1–59",
+  "kind": "frontend_runtime_hardening",
+  "chart_runtime": {
+    "component_role": "compatibility-facing chart composition",
+    "high_frequency_path": "TradingCoreRuntime → ChartMarketStore → imperative chart subscription",
+    "react_policy": "market ticks do not enter LiveChart React state",
+    "memoization": "LiveChart is memoized and tick prop wiring has been removed from chart call sites",
+    "isolated_react_consumers": ["ChartDepthPanel"]
+  },
+  "decomposition_boundaries": {
+    "realtime_feed": "useChartRealtimeFeed",
+    "workspace_commands": "useChartUiEvents",
+    "drawing_toolbar": "ChartToolbar",
+    "depth_ui": "ChartDepthPanel"
+  },
+  "architecture_invariants": [
+    "one market-data publication path feeds chart consumers",
+    "high-frequency ticks bypass React state for the chart renderer",
+    "React remains responsible for controls, layout, settings, and low-frequency UI",
+    "chart consumers are isolated by broker + instrument key",
+    "CoreSpirit runtime and VM architecture remain unchanged"
+  ],
+  "verification": [
+    "stage83ChartDataIsolation.test.ts",
+    "stage84ChartStructure.test.mjs",
+    "focused TypeScript checks where frontend dependencies are available"
+  ]
+}

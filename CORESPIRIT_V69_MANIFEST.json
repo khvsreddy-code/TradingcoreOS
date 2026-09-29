@@ -1,0 +1,70 @@
+{
+  "release": "CoreSpirit v69 — universal EVENT boundary + central WHEN",
+  "baseline": "v68",
+  "runtime_baseline": "v68 declarative AUTOMATE + universal ORDER intent",
+  "kind": "universal_event_boundary_and_central_when",
+  "roadmap_range": "1-53",
+  "focus": [
+    "universal EVENT emission and declarative routing",
+    "central WHEN normalization across event sources and ordinary expressions",
+    "host-owned event detection and destination execution",
+    "deterministic replay compatibility"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/eventSurface.ts",
+    "src/services/coreSpirit/eventEngine.ts",
+    "src/services/coreSpirit/stage52_53EventWhenSurface.test.ts",
+    "tsconfig.stage52_53-v69-run.json",
+    "tsconfig.stage61-v69-run.json",
+    "CORESPIRIT_V69_MANIFEST.json"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/eventSystem.ts",
+    "src/services/coreSpirit/languageConcepts.ts",
+    "src/services/coreSpirit/surfaceForms.ts",
+    "src/services/coreSpirit/callContract.ts",
+    "src/services/coreSpirit/standardLibrary.ts",
+    "src/services/coreSpirit/types.ts",
+    "src/services/coreSpirit/runtime.ts",
+    "src/services/coreSpirit/semanticAnalyzer.ts",
+    "src/services/coreSpirit/languageSpec.ts",
+    "src/services/coreSpirit/coreSpiritV1Runtime.ts",
+    "src/services/coreSpirit/index.ts",
+    "src/services/coreSpirit/VERSION.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts",
+    "src/services/core/event/eventBus.ts",
+    "docs/CORESPIRIT.md",
+    "docs/CORESPIRIT_BUILD_TRACKER.md"
+  ],
+  "architecture_invariants": [
+    "emit creates one immutable EVENT semantic emission",
+    "route is serializable metadata; host routing owns destination execution",
+    "event queries are host-resolved and side-effect-free inside the VM",
+    "legacy signal/alert/webhook remain compatibility paths to the EVENT boundary",
+    "WHEN lowers to the existing conditional IR path; no event-specific executor",
+    "EVENT is a cross-cutting runtime value, not a seventh top-level block",
+    "one language -> one compiler -> one stable IR -> one VM -> multiple host execution environments",
+    "no raw network, filesystem, process or broker authority is added to CoreSpirit"
+  ],
+  "tests": [
+    "STAGE52_53_EVENT_WHEN_OK",
+    "STAGE50_51_AUTOMATION_ORDER_SURFACE_OK",
+    "STAGE49_DECLARATIVE_MODEL_SURFACE_OK",
+    "STAGE48_SCENE_GRAPH_ENCAPSULATION_OK",
+    "STAGE47_UNIVERSAL_SHOW_SURFACE_OK",
+    "STAGE45_SIX_CONCEPT_LANGUAGE_OK",
+    "STAGE44_LANGUAGE_UNIFICATION_OK",
+    "STAGE42_CORESPIRIT_V1_RUNTIME_OK",
+    "STAGE73_74_VISUAL_COMPILER_REACTIVE_OK",
+    "STAGE75_76_EXECUTION_PLANNER_SANDBOX_OK",
+    "STAGE61_CORESPIRIT_DOC_SPLIT_OK",
+    "roadmap validates at 53 stages"
+  ],
+  "verification_notes": {
+    "event_when_typescript_compile": "passed",
+    "event_when_runtime_test": "passed",
+    "documentation_governance": "passed",
+    "preexisting_barrel_duplicate_exports": "not modified by this release; focused builds avoid that legacy aggregate-export issue"
+  }
+}

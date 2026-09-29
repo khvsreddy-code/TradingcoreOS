@@ -1,0 +1,27 @@
+{
+  "contractVersion": 2,
+  "abiVersion": 1,
+  "modelId": "trend-probability",
+  "version": "2.0.0",
+  "implementation": "python",
+  "transport": "host",
+  "deterministic": true,
+  "state": "stateless",
+  "rollbackSafe": true,
+  "inputSchema": [
+    {"name":"returns20","dtype":"f64","shape":[1],"required":true,"semantic":"feature","representation":"tensor"},
+    {"name":"volatility20","dtype":"f64","shape":[1],"required":true,"semantic":"feature","representation":"tensor"}
+  ],
+  "outputSchema": [
+    {"name":"prediction","dtype":"f64","shape":[1],"required":true,"semantic":"prediction","representation":"tensor"},
+    {"name":"confidence","dtype":"f64","shape":[],"required":true,"semantic":"confidence","representation":"scalar"}
+  ],
+  "primaryPredictionField": "prediction",
+  "confidenceField": "confidence",
+  "metadataFields": ["reason"],
+  "maxMemoryBytes": 1048576,
+  "maxSteps": 10000,
+  "maxInputBytes": 65536,
+  "maxOutputBytes": 65536,
+  "capabilities": ["read-features","read-market-state","write-output"]
+}

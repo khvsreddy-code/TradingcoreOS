@@ -1,0 +1,26 @@
+{
+  "release": "CoreSpirit v85 — semantic, runtime, execution, data, and deployment hardening",
+  "baseline": "v84",
+  "kind": "architecture_consolidation_operational_hardening",
+  "implemented": {
+    "durable_identity": ["SHA-256 source/IR/artifact hashes", "versioned artifact schema", "dataset checksum fallback", "run manifests"],
+    "runtime": ["explicit research/backtest/paper/live environments", "deployment lifecycle", "capability-aware sandbox", "semantic node cost/latency metadata"],
+    "execution": ["canonical idempotency hashes", "unknown/recovery-required order states", "broker reconciliation utility", "atomic audit-log hash chain", "HMAC gateway authentication", "request IDs", "rate limits"],
+    "data": ["market-data provenance", "calendar metadata", "reproducible Supabase base schema", "workspace tenancy foundation"],
+    "developer_tools": ["CoreSpirit check/normalize/inspect/graph CLI", "CI contract workflow", "legacy DOM bridge cleanup", "versioned local storage"],
+    "observability": ["health live/ready/diagnostics", "request metrics", "runtime reactive metrics"]
+  },
+  "verified": [
+    "STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK",
+    "STAGE89_SPA_ROUTE_CONTRACT_OK",
+    "STAGE_V85_HARDENING_CONTRACT_OK",
+    "V85_LEGACY_BRIDGE_CLEANUP_OK"
+  ],
+  "not_claimed": [
+    "Full Vite production build in a fully installed dependency environment",
+    "Production distributed scanner cluster",
+    "Full named-argument/record/user-function language semantics",
+    "Complete ML model drift service",
+    "Full multi-user workspace UI and role-management UX"
+  ]
+}

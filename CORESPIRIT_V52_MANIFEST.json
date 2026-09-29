@@ -1,0 +1,64 @@
+{
+  "release": "CoreSpirit v52 — declarative visuals + visual applications",
+  "baseline": "v51",
+  "focus": [
+    "renderer-neutral declarative visual specifications",
+    "runtime-owned visual state with realtime rollback/checkpoint compatibility",
+    "declarative trading workspace / visual application manifests",
+    "same compiler, IR and VM for language-driven visual/app declarations",
+    "host-owned rendering and layout projection",
+    "single authoritative CoreSpirit Markdown document with version history"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/declarativeVisual.ts",
+    "src/services/coreSpirit/visualApp.ts",
+    "src/services/coreSpirit/workspaceRuntime.ts",
+    "src/services/coreSpirit/stage60DeclarativeVisualApp.test.ts",
+    "src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts",
+    "CORESPIRIT_V52_MANIFEST.json"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/compiler.ts",
+    "src/services/coreSpirit/semanticAnalyzer.ts",
+    "src/services/coreSpirit/nameResolver.ts",
+    "src/services/coreSpirit/typeSystem.ts",
+    "src/services/coreSpirit/runtime.ts",
+    "src/services/coreSpirit/chartRegistry.ts",
+    "src/services/coreSpirit/ideRuntimeBridge.ts",
+    "src/services/coreSpirit/languageService.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/coreSpirit/index.ts",
+    "docs/CORESPIRIT.md"
+  ],
+  "removed_docs": [
+    "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "CORESPIRIT_PROJECT_TASKS.md"
+  ],
+  "architecture_invariants": [
+    "no second compiler, IR or VM introduced",
+    "declarative visuals lower into the existing persistent scene graph",
+    "visual/app declarations contain no renderer objects or executable callbacks",
+    "visual/app state participates in realtime rollback and checkpoint semantics",
+    "visual application actions remain host/control-plane references",
+    "visual applications cannot bypass risk, policy or execution authority",
+    "legacy visual outputs remain compatible"
+  ],
+  "roadmap_range": "1-26",
+  "tests": [
+    "STAGE53_AUTOMATION_LIFECYCLE_RISK_OK",
+    "STAGE54_DEEP_14_17_OK",
+    "STAGE55_ARCHITECTURE_18_OK",
+    "STAGE56_TRADING_SYSTEM_VISUAL_OK",
+    "STAGE57_INTERACTIVE_UI_METADATA_OK",
+    "STAGE58_ADVANCED_VISUALS_OK",
+    "STAGE59_REALTIME_VISUAL_ENGINE_OK",
+    "STAGE60_DECLARATIVE_VISUAL_APP_OK",
+    "STAGE61_SINGLE_CORESPIRIT_DOC_OK"
+  ],
+  "documentation_policy": {
+    "canonical": "docs/CORESPIRIT.md",
+    "version_history_inside_canonical": true,
+    "no_version_specific_CoreSpirit_markdown": true,
+    "machine_release_manifests": "JSON"
+  }
+}

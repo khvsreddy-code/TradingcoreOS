@@ -1,0 +1,57 @@
+{
+  "release": "CoreSpirit v60 \u2014 numerical execution planner + capability sandbox",
+  "baseline": "v59",
+  "runtime_baseline": "v58 visual compiler graph + reactive runtime",
+  "kind": "runtime_planning_and_sandbox",
+  "roadmap_range": "1-41",
+  "focus": [
+    "host-side CPU/WASM/GPU numerical workload planning",
+    "deterministic backend eligibility and CPU fallback",
+    "bounded symbol \u00d7 timeframe \u00d7 bar batching",
+    "hybrid pure-work accelerator placement with CPU effect barriers",
+    "capability-based sandbox allow-list",
+    "per-revision resource quotas",
+    "explicit absence of OS/network/broker/native authority in CoreSpirit capabilities",
+    "stable two-document CoreSpirit documentation split"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/executionPlanner.ts",
+    "src/services/coreSpirit/capabilitySandbox.ts",
+    "src/services/coreSpirit/stage75_76ExecutionPlannerSandbox.test.ts",
+    "CORESPIRIT_V60_MANIFEST.json"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/platformRuntime.ts",
+    "src/services/coreSpirit/runtimeKernel.ts",
+    "src/services/coreSpirit/index.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/coreSpirit/VERSION.ts",
+    "docs/CORESPIRIT.md",
+    "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts"
+  ],
+  "architecture_invariants": [
+    "GPU/WASM/CPU selection is a host planner decision, not language semantics",
+    "deterministic execution must use a backend that explicitly declares deterministic behavior",
+    "effectful/stateful work remains ordered in the CoreSpirit runtime",
+    "accelerator backends never receive broker/risk/policy authority",
+    "sandbox capabilities are the intersection of program layer, execution target and explicit host grant",
+    "raw network, filesystem, process, native-call, broker credential and direct account capabilities are absent from the sandbox vocabulary",
+    "per-revision sandbox quotas bound compute and external resource consumption",
+    "CORESPIRIT.md remains the stable architecture brain",
+    "CORESPIRIT_BUILD_TRACKER.md remains the living implementation truth",
+    "CORESPIRIT_Vxx_MANIFEST.json remains the machine release record"
+  ],
+  "tests": [
+    "STAGE75_76_EXECUTION_PLANNER_SANDBOX_OK",
+    "historical manifest byte-for-byte checks v37-v45",
+    "documentation split remains CORESPIRIT.md + CORESPIRIT_BUILD_TRACKER.md",
+    "roadmap validates at 41 stages"
+  ],
+  "documentation_policy": {
+    "architecture": "docs/CORESPIRIT.md",
+    "tracker": "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "machine_release": "CORESPIRIT_V60_MANIFEST.json",
+    "no_version_specific_CoreSpirit_markdown": true
+  }
+}

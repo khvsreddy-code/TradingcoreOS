@@ -1,0 +1,16 @@
+{
+  "release": "CoreSpirit v40",
+  "focus": "trading-native layered programming platform",
+  "layers": ["script", "model", "strategy", "automation"],
+  "shared_runtime": ["compiler", "IR", "artifact", "VM", "series", "indicator engine", "replay", "debugger"],
+  "hard_boundary": "no direct broker API in any CoreSpirit layer",
+  "new_files": [
+    "src/services/coreSpirit/layeredPlatformContract.ts",
+    "src/services/coreSpirit/stage40LayeredPlatformContract.test.ts",
+    "examples/coreSpirit/layers/script.core",
+    "examples/coreSpirit/layers/momentum.model.core",
+    "examples/coreSpirit/layers/nifty.strategy.core",
+    "examples/coreSpirit/layers/nifty.automation.core",
+    "CORESPIRIT_LAYERED_PLATFORM_V40.md"
+  ]
+}

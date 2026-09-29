@@ -1,0 +1,13 @@
+{
+  "release": "CoreSpirit v39",
+  "focus": "Deep stages 1-16 architecture contract",
+  "newContracts": [
+    "coreSpiritRoadmap.ts",
+    "executionProtocol.ts",
+    "sandboxPolicy.ts",
+    "sourceMetadata.ts",
+    "stage1To16Contract.test.ts"
+  ],
+  "majorInvariant": "one language -> one compiler -> one stable IR -> one VM -> multiple execution environments",
+  "baseline": "CoreSpirit v38"
+}

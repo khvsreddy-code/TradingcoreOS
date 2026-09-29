@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "features": [
+    "market reference",
+    "cross-symbol synchronization",
+    "higher-timeframe confirmed alignment",
+    "external-series indicator input",
+    "same Core IR and VM"
+  ],
+  "default_alignment": "last-confirmed",
+  "lookahead_allowed": false
+}

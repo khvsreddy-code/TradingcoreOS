@@ -1,0 +1,6 @@
+// CoreSpirit Automation: policy-driven orchestration; execution is mediated
+automation NiftyExecution:
+    when signal("LONG"):
+        risk = portfolio.risk(0.5%)
+        intent = market.buy(symbol = instrument, quantity = risk.quantity())
+        execute(intent)

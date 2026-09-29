@@ -1,0 +1,92 @@
+import type {
+  CoreSpiritDataAlignment,
+  CoreSpiritDataRequest,
+  CoreSpiritDataResolver,
+  CoreSpiritDataResolutionContext,
+  CoreSpiritDataSnapshot,
+  CoreSpiritExecutionContext,
+} from './types';
+
+/** Host-owned market/data access. The VM asks; the host decides how data is fulfilled. */
+export class CoreSpiritDataResolverService {
+  constructor(
+    private readonly resolver: CoreSpiritDataResolver | undefined,
+    private readonly context: () => CoreSpiritExecutionContext,
+    private readonly currentBarAt: (index: number) => { timestamp: string } | undefined,
+    private readonly toEpoch: (timestamp: string) => number,
+    private readonly dataMemo: Map<string, unknown>,
+    private readonly revision: () => number,
+  ) {}
+
+  resolutionContext(index: number, alignment: CoreSpiritDataAlignment = 'last-confirmed', maxStalenessMs?: number): CoreSpiritDataResolutionContext {
+    const bar = this.currentBarAt(index);
+    return {
+      asOfTimestamp: bar ? this.toEpoch(bar.timestamp) : 0,
+      baseSymbol: this.context().symbol,
+      baseTimeframe: this.context().timeframe,
+      executionMode: this.context().mode,
+      revision: this.revision(),
+      alignment,
+      ...(maxStalenessMs != null ? { maxStalenessMs } : {}),
+    };
+  }
+
+  resolveValue(symbol: string, timeframe: string, field: any, index: number, offset = 0): number | null {
+    const resolverAt = this.resolver?.requestAt;
+    const resolver = this.resolver?.request;
+    if (!resolverAt && !resolver) return null;
+    const key = `request:${index}:${symbol}:${timeframe}:${field}:${offset}`;
+    if (this.dataMemo.has(key)) return this.dataMemo.get(key) as number | null;
+    const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset };
+    const value = resolverAt ? resolverAt(request, this.resolutionContext(index, 'last-confirmed')) : resolver!(request);
+    if (value && typeof (value as any).then === 'function') return null;
+    const snapshot = value as CoreSpiritDataSnapshot | undefined;
+    const asOf = this.resolutionContext(index).asOfTimestamp;
+    if (snapshot?.timestamp != null && Number(snapshot.timestamp) > asOf) return null;
+    const resolved = snapshot?.value ?? null;
+    this.dataMemo.set(key, resolved);
+    return resolved;
+  }
+
+  resolveSeries(ref: any, field: any, index: number, length: number): number[] | null {
+    const symbol = ref.__coreSpiritDataRef === 'market' ? String(ref.symbol) : this.context().symbol;
+    const timeframe = ref.__coreSpiritDataRef === 'timeframe' ? String(ref.timeframe) : this.context().timeframe;
+    const resolver = this.resolver?.series;
+    if (resolver) {
+      const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset: 0 };
+      const values = resolver(request, this.resolutionContext(index, 'last-confirmed'));
+      if (values && typeof (values as any).then === 'function') return null;
+      const series = (values as number[]).filter(Number.isFinite);
+      return series.length ? series : null;
+    }
+    const values: number[] = [];
+    const max = Math.max(1, Math.floor(length));
+    for (let offset = 0; offset < max; offset++) {
+      const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset };
+      const resolverAt = this.resolver?.requestAt;
+      const resolverCurrent = this.resolver?.request;
+      if (!resolverAt && !resolverCurrent) break;
+      const snapshot = resolverAt
+        ? resolverAt(request, this.resolutionContext(index, 'last-confirmed'))
+        : resolverCurrent!(request);
+      if (snapshot && typeof (snapshot as any).then === 'function') return null;
+      const resolved = snapshot as CoreSpiritDataSnapshot | undefined;
+      if (resolved?.timestamp != null && Number(resolved.timestamp) > this.resolutionContext(index).asOfTimestamp) return null;
+      const value = Number(resolved?.value);
+      if (Number.isFinite(value)) values.push(value);
+    }
+    return values.length ? values.reverse() : null;
+  }
+
+  seriesKey(ref: any, field: string): string {
+    if (ref?.__coreSpiritDataRef === 'market') return `market:${String(ref.symbol)}:${this.context().timeframe}:${field}`;
+    if (ref?.__coreSpiritDataRef === 'timeframe') return `timeframe:${this.context().symbol}:${String(ref.timeframe)}:${field}`;
+    return `data:${field}`;
+  }
+
+  getRuntimeRefFromCallArg(refRegister: string, locals: Record<string, unknown>, lastRuntimeCallRefs: Map<string, any>): any {
+    const local = locals[refRegister];
+    if ((local as any)?.__coreSpiritDataRef) return local;
+    return lastRuntimeCallRefs.get(refRegister);
+  }
+}
