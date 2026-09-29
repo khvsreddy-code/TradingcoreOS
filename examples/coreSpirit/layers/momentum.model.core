@@ -1,6 +1,0 @@
-// CoreSpirit Model: deterministic feature definitions + typed model output
-model MomentumModel:
-    feature returns20 = returns(close, 20)
-    feature volatility20 = stdev(close, 20)
-    feature volumeZ = volume_zscore(volume, 30)
-    output probability_up
