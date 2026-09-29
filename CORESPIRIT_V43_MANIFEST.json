@@ -1,0 +1,25 @@
+{
+  "release": "CoreSpirit v43",
+  "focus": [
+    "renderer-neutral scene ABI",
+    "native event bus",
+    "webhook fan-out",
+    "idempotent consumer delivery"
+  ],
+  "baseline": "CoreSpirit v42",
+  "new_files": [
+    "src/services/coreSpirit/visualRenderer.ts",
+    "src/services/coreSpirit/eventSystem.ts",
+    "src/services/coreSpirit/stage46RendererEventBusContract.test.ts",
+    "CORESPIRIT_STAGES_46_47_DEEP.md",
+    "CORESPIRIT_V43_MANIFEST.json"
+  ],
+  "integrations": [
+    "CoreSpiritOutputDispatcher publishes signal events through the new event system and bridges to the legacy CoreEventBus."
+  ],
+  "verification": {
+    "focused_tsc": "passed",
+    "stage46_47_contract": "passed",
+    "stage46_47_result": "STAGE46_47_RENDERER_EVENT_BUS_OK"
+  }
+}

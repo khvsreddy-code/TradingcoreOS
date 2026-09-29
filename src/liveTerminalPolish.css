@@ -1,0 +1,28 @@
+.tcv3-toolbar{height:52px;min-height:52px;gap:8px;padding:7px 10px;background:linear-gradient(180deg,#0e121a,#0b0e15);border-bottom:1px solid #242a36}.tcv3-toolbar>.tcv3-btn,.tcv3-toolbar>button{height:34px;min-width:92px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 11px;border-radius:7px;border:1px solid #2a3140;background:#111620;color:#aeb8c9;font-size:10px;font-weight:700;letter-spacing:.02em}.tcv3-toolbar>.tcv3-btn:hover,.tcv3-toolbar>button:hover{border-color:#3b4658;background:#151b27;color:#fff}.tcv3-toolbar>.tcv3-btn.active{border-color:#3b82f666;background:#090a0f;color:#dbeafe}.tcv3-toolbar .tcv3-spacer{gap:8px;align-items:center}.tcv3-toolbar .tcv3-spacer>.tcv3-btn{min-width:86px}.tcv3-layoutpop{top:58px;width:318px;padding:12px}.tcv3-layouts button{height:52px;min-width:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}.tcv3-bottom{height:42px;min-height:42px;gap:6px;padding:4px 8px}.tcv3-bottom button{height:32px;min-width:86px;padding:0 10px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700}.tcv3-bottom button:hover{border-color:#2a3140;background:#111620;color:#dbe4f0}.tcv3-bottom button.active{border-color:#3b82f644;background:#090a0f;color:#60a5fa}.tcv3-panel{top:120px}.tcv3-panelhead{min-height:46px}.tcv3-panelhead .tcv3-btn{height:32px;min-width:86px;display:inline-flex;align-items:center;justify-content:center}.tcv3-control-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tcv3-control-row>*{height:34px}.tcv3-control-row select,.tcv3-control-row input{min-width:110px}.tcv3-control-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em}@media(max-width:900px){.tcv3-toolbar>.tcv3-btn,.tcv3-toolbar>button{min-width:78px}.tcv3-bottom button{min-width:74px}}
+
+/* v100 terminal visual-density contract — scoped to terminal surfaces only. */
+.tc4 .tc4-chart,.tc4 .tc4-card,.tc4 .tc4-bottom-card,.tc4 .tc4-metric{border-radius:0!important;box-shadow:none!important}
+.tc4 .tco-drawing-rail,.tc4 .tc4-watch-closed-tab{border-radius:2px!important;box-shadow:none!important;backdrop-filter:none!important}
+.tc4 .tc4-layoutpop,.tc4 .tc4-morepop,.tc4 .tc4-charttypemenu,.tc4 .tc4-drawpop{border-radius:6px!important;box-shadow:none!important}
+
+
+/* v101 terminal-system depth contract: flat chrome, chart-first canvas, first-class right dock. */
+.tc4 .tc4-workarea{background:#080a0d}
+.tc4 .tco-terminal-shell{height:40px;min-height:40px;padding:0 8px;gap:6px;box-shadow:none}
+.tc4 .tco-command-button{height:30px;border-color:transparent;background:transparent;border-radius:2px;box-shadow:none}
+.tc4 .tc4-toolbar{height:32px;min-height:32px;padding:0 8px;background:#0a0c10;border-bottom:1px solid #171c23;box-shadow:none}
+.tc4 .tc4-grid{padding:0;gap:1px;background:#1b2028}
+.tc4 .tc4-chart{border:0!important;border-radius:0!important;box-shadow:none!important}
+.tc4 .tc4-head{height:30px;min-height:30px;border-radius:0!important;background:#0a0c10!important}
+.tc4 .tco-drawing-rail{left:0;top:0;bottom:0;width:34px;border:0;border-right:1px solid #20252d;border-radius:0!important;background:#090b0f;box-shadow:none!important;backdrop-filter:none!important}
+.tc4 .tct-rightdock{background:#090b0f;border-left:1px solid #20252d;box-shadow:none!important}
+.tc4 .tct-dock-tabs{background:#0b0d11;border-bottom:1px solid #20252d}
+.tc4 .tct-dock-tabs button,.tc4 .tct-right-rail-btn{border-radius:0!important;box-shadow:none!important}
+.tc4 .tct-dock-status{height:24px;display:flex;align-items:center;gap:8px;padding:0 8px;border-top:1px solid #20252d;background:#0a0c10;color:#687184;font:8px ui-monospace,monospace}
+.tc4 .tct-dock-status>span:first-child{color:#75aef8}.tc4 .tct-status-key{margin-left:auto;color:#4f5869}
+.tc4 .tct-status-dot{display:inline-block;width:5px;height:5px;margin-right:3px;background:#60a5fa;border-radius:50%}
+.tc4 .tct-wl-search{border-radius:0!important;border:0!important;border-bottom:1px solid #232933!important;background:transparent!important}
+.tc4 .tct-wl-row,.tc4 .tct-wl-section,.tc4 .tct-alert-row,.tc4 .tct-ob-row{border-radius:0!important}
+.tc4 .tct-wl-row.selected{box-shadow:inset 2px 0 #3b82f6!important}
+.tc4 .tct-ticker-card,.tc4 .tct-news{border-radius:0!important;box-shadow:none!important}
+.tc4 .tc4-bottom-dock{box-shadow:none!important;border-radius:0!important}

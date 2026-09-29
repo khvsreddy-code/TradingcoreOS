@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root = process.cwd();
+const historyStore = fs.readFileSync(path.join(root, 'src/services/marketData/HistoryStore.ts'), 'utf8');
+const plane = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
+const live = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
+const graph = fs.readFileSync(path.join(root, 'src/services/marketData/indicatorDependencyGraph.ts'), 'utf8');
+const kernel = fs.readFileSync(path.join(root, 'src/services/marketData/coreIndicatorKernel.ts'), 'utf8');
+const settings = fs.readFileSync(path.join(root, 'src/components/indicators/IndicatorSettingsPanel.tsx'), 'utf8');
+const tracker = fs.readFileSync(path.join(root, 'TRADINGCORE_REPAIR_TRACKER.md'), 'utf8');
+
+if (!/maxBuckets = 32/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore LRU residency guard missing');
+if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/CHART_HISTORY_DEMAND_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
+if (!/const previousLength = this\.state\.candles\.length/.test(plane) || !/olderAdded = Math\.max\(0, merged\.length - previousLength\)/.test(plane)) throw new Error('Actual older prepend count missing');
+if (!/requestWarmHistory\(visibleBars\?: number\)/.test(plane) || !/this\.state\.warmHistoryRequested = false/.test(plane)) throw new Error('Warm history viewport/retry contract missing');
+if (!/requestWarmHistory\(Math\.max\(1,Math\.abs/.test(live)) throw new Error('Live chart does not pass visible range demand to warm history');
+if (!/order: string\[\]/.test(graph) || !/contains a cycle/.test(graph) || !/source:\$\{source\}.*sma:\$\{source\}:\$\{p\}/s.test(graph)) throw new Error('Transitive/topological indicator graph contract missing');
+if (!/rolling-sum|rolling sum|rollingSum/.test(kernel) && !/rollingSum/.test(graph)) throw new Error('Rolling kernel marker missing');
+if (!/while \(highHead < highDeque\.length/.test(graph) || !/sumSquares/.test(graph)) throw new Error('Linear rolling Donchian/Bollinger kernel markers missing');
+for (const token of ['Signal color','Upper color','Lower color','Line width','Line style','Opacity']) if (!settings.includes(token)) throw new Error(`Style control missing: ${token}`);
+for (const token of ['TC-PERF-33','TC-PERF-36','TC-PERF-38','TC-PERF-39','TC-PERF-40','TC-PERF-41']) if (!tracker.includes(token)) throw new Error(`Tracker item missing: ${token}`);
+console.log('TRADINGCORE_V106_HISTORY_INDICATOR_DEPTH_CONTRACT_OK');

@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "../js"
+  },
+  "files": [
+    "src/services/coreSpirit/layeredPlatformContract.ts",
+    "src/services/coreSpirit/modelAbi.ts",
+    "src/services/coreSpirit/runtimeKernel.ts",
+    "src/services/coreSpirit/stage48_49RuntimeModelContract.test.ts"
+  ]
+}

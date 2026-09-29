@@ -1,0 +1,39 @@
+{
+  "release": "CoreSpirit v92 \u2014 complexity absorption, namespaced standard library, deep semantic composition, and progressive authoring",
+  "baseline": "CoreSpirit v91 \u2014 semantic components and progressive authoring depth",
+  "kind": "language_architecture",
+  "implemented": {
+    "complexity_absorber": [
+      "fixed six-concept source surface with hidden semantic/component/model-ABI/dependency/execution/reactive/backend layers",
+      "complexity inspection profile without source grammar growth"
+    ],
+    "standard_library": [
+      "qualified namespace registry across market/series/math/stats/time/structure/volatility/liquidity/probability/model/visual/automation/data/state",
+      "canonical builtin lowering without duplicate runtime implementations",
+      "catalog-only versus executable namespace distinction",
+      "editor namespace-root and namespace-member completion from the same namespace catalog"
+    ],
+    "composition": [
+      "deep nested component composition validation and canonical IR retention",
+      "MODEL ABI manifest projection into semantic component contracts",
+      "progressive authoring feature/inspection depth"
+    ],
+    "governance": [
+      "roadmap extended to 70 validated stages",
+      "v92 build tracker and CoreSpirit architecture/scripting/composability docs updated"
+    ]
+  },
+  "verified": [
+    "STAGE92_CORESPIRIT_DEEP_COMPOSITION_OK",
+    "STAGE92_CORESPIRIT_NAMESPACE_LIBRARY_OK",
+    "STAGE92_CORESPIRIT_COMPLEXITY_ABSORBER_OK",
+    "CORESPIRIT_STAGE92_DEEP_CONTRACT_OK",
+    "focused TypeScript compile of stage92DeepCoreSpiritContract.test.ts"
+  ],
+  "not_claimed": [
+    "public user-defined fn/component declaration syntax",
+    "unimplemented catalog-only namespace members as executable",
+    "production GPU/WASM execution of arbitrary future components",
+    "full production Vite build in a fully installed dependency environment"
+  ]
+}

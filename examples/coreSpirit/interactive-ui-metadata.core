@@ -1,0 +1,14 @@
+// CoreSpirit v50: one indicator can define both chart visuals and analytical UI.
+let panel = ui.panel("Market Structure")
+panel.number("ATR", atr(14))
+panel.button("Recalculate", recalibrate)
+panel.toggle("Show Liquidity", true, toggle_liquidity)
+panel.slider("Sensitivity", 1, 10, 5, set_sensitivity)
+
+let resistance = 25200
+line(time, resistance, time, resistance, meta(
+    "strength", 87,
+    "touches", 6,
+    "volume", 184000,
+    "source", "market_structure"
+))

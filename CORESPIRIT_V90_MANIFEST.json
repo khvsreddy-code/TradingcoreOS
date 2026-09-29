@@ -1,0 +1,42 @@
+{
+  "release": "CoreSpirit v90 — small language surface, first-class composability, and backend-transparent execution",
+  "baseline": "v89 chart migration stage",
+  "kind": "language_composability",
+  "implemented": {
+    "language_surface": [
+      "six-concept authoring surface preserved: DATA, LET, WHEN, SHOW, MODEL, AUTOMATE",
+      "no new component/function/pipeline keywords introduced",
+      "component calls compose through ordinary LET expressions"
+    ],
+    "composability": [
+      "typed component contracts with callable aliases",
+      "atomic component registry registration",
+      "single-output components behave as normal typed values",
+      "multi-output components behave as typed component references with member access",
+      "component-aware semantic dependency graph",
+      "component metadata carried into stable IR calls",
+      "component-aware execution graph and reactive invalidation metadata",
+      "incremental compiler/cache identity includes component contracts"
+    ],
+    "runtime": [
+      "VM component execution boundary with host-supplied executors",
+      "component statefulness/determinism metadata preserved for scheduling and caching",
+      "no broker or unrestricted host authority granted by component registration"
+    ],
+    "documentation": [
+      "first-class CoreSpirit composability reference",
+      "small-surface/deep-composition language guidance",
+      "component authoring and execution-boundary documentation"
+    ]
+  },
+  "verified": [
+    "CORESPIRIT_STAGE90_COMPONENT_COMPOSABILITY_SOURCE_CHECK_OK",
+    "CORESPIRIT_STAGE90_COMPONENT_REGISTRY_ATOMICITY_CHECK_OK"
+  ],
+  "not_claimed": [
+    "Full production Vite build in a fully installed dependency environment; the provided environment had an incomplete node_modules install and missing vite/client declarations.",
+    "User-authored function syntax or arbitrary higher-order functions; reusable composition is supplied through typed registered components and the existing semantic graph.",
+    "Production GPU/WASM component backends; backend planning remains an execution-host concern.",
+    "Automatic arbitrary component discovery from untrusted packages; registration remains an explicit host boundary."
+  ]
+}

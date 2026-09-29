@@ -1,0 +1,24 @@
+{
+  "release": "CoreSpirit v75 — target syntax + compiler source-of-truth consolidation",
+  "baseline": "v74",
+  "roadmap_range": "1–59",
+  "kind": "language_end_state_and_compiler_consolidation",
+  "focus": [
+    "define the minimal public target language vocabulary",
+    "define the one-file CoreSpirit application end state",
+    "make compiler semantic representations the source of truth for tooling projections",
+    "reduce independent source-string rescanning without creating another runtime"
+  ],
+  "target_language": ["let", "when", "if", "show", "emit", "model", "automate"],
+  "architecture_invariants": [
+    "one language -> one compiler -> one stable IR -> one VM",
+    "CST/AST/semantic model are compiler representations, not runtimes",
+    "diagnostics, completion, composition and feature graphs are projections of canonical semantics",
+    "simple/advanced/professional authoring profiles do not create grammar or runtime forks"
+  ],
+  "implementation_status": {
+    "target_syntax": "defined",
+    "ultimate_one_file_contract": "defined target; not every shorthand is implemented",
+    "compiler_source_of_truth": "architecture direction and incremental migration plan defined"
+  }
+}

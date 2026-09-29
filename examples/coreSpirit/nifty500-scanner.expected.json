@@ -1,0 +1,6 @@
+{
+  "target": "scanner",
+  "universe": "NIFTY500",
+  "output": "ranked candidates",
+  "execution": "no visuals, no broker access, no order intents"
+}

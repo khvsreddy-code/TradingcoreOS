@@ -1,0 +1,64 @@
+{
+  "release": "CoreSpirit v57 — automation explainability + visual debugger",
+  "baseline": "v56",
+  "focus": [
+    "versioned automation explanation records with deterministic decision paths",
+    "retained automation explainability store keyed by intent and automation",
+    "optional per-instruction runtime tracing with zero production overhead when disabled",
+    "bar-level visual debugger sessions over the same executable artifact and dataset",
+    "source-map highlighting from debugger execution back to CoreSpirit source",
+    "chart-click-to-debug host event and IDE debugger surface",
+    "restored architecture/tracker/manifest documentation split"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/visualDebugger.ts",
+    "src/services/coreSpirit/stage71_72ExplainabilityDebugger.test.ts",
+    "CORESPIRIT_V57_MANIFEST.json"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/runtime.ts",
+    "src/services/coreSpirit/debuggerContract.ts",
+    "src/services/coreSpirit/explainability.ts",
+    "src/services/coreSpirit/ideRuntimeBridge.ts",
+    "src/services/coreSpirit/chartRegistry.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/coreSpirit/index.ts",
+    "src/components/workspace/LiveChart.tsx",
+    "src/pages/CoreSpiritEditorPage.tsx",
+    "docs/CORESPIRIT.md",
+    "docs/CORESPIRIT_BUILD_TRACKER.md"
+  ],
+  "architecture_invariants": [
+    "automation explanations observe the execution authority path and cannot grant execution authority",
+    "runtime debugger tracing is optional and disabled by default",
+    "visual debugger replays the existing executable artifact rather than creating a second VM",
+    "source highlights come from the stable Core IR source map",
+    "chart debug events are host/UI events and cannot mutate risk/policy/execution state",
+    "docs/CORESPIRIT.md remains the stable architecture brain",
+    "docs/CORESPIRIT_BUILD_TRACKER.md remains the living implementation truth",
+    "CORESPIRIT_Vxx_MANIFEST.json remains the machine release record"
+  ],
+  "roadmap_range": "1-37",
+  "tests": [
+    "STAGE53_AUTOMATION_LIFECYCLE_RISK_OK",
+    "STAGE54_DEEP_14_17_OK",
+    "STAGE55_ARCHITECTURE_18_OK",
+    "STAGE56_TRADING_SYSTEM_VISUAL_OK",
+    "STAGE57_INTERACTIVE_UI_METADATA_OK",
+    "STAGE58_ADVANCED_VISUALS_OK",
+    "STAGE59_REALTIME_VISUAL_ENGINE_OK",
+    "STAGE60_DECLARATIVE_VISUAL_APP_OK",
+    "STAGE61_CORESPIRIT_DOC_SPLIT_OK",
+    "STAGE62_64_EXECUTION_TARGETS_SCANNER_OK",
+    "STAGE65_66_MULTI_SYMBOL_TIMEFRAME_OK",
+    "STAGE67_68_EXTERNAL_MODEL_ABI_OK",
+    "STAGE69_70_AI_MODEL_VISUALIZATION_OK",
+    "STAGE71_72_AUTOMATION_EXPLAINABILITY_VISUAL_DEBUGGER_OK"
+  ],
+  "documentation_policy": {
+    "architecture": "docs/CORESPIRIT.md",
+    "tracker": "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "machine_release": "CORESPIRIT_V57_MANIFEST.json",
+    "no_version_specific_CoreSpirit_markdown": true
+  }
+}

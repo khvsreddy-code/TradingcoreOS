@@ -1,0 +1,15 @@
+// CoreSpirit v54 — native multi-symbol + multi-timeframe example
+let nifty = market("NIFTY")
+let banknifty = market("BANKNIFTY")
+let spread = nifty.close - banknifty.close
+
+let daily = timeframe("1D")
+let hourly = timeframe("1H")
+let trend = ema(daily.close, 20)
+let intraday = crossover(timeframe("5m").close, hourly.close)
+
+plot(spread)
+plot(trend)
+if (intraday) {
+  signal("MTF_BREAKOUT")
+}

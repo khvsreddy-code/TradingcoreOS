@@ -1,0 +1,59 @@
+{
+  "release": "CoreSpirit v61 \u2014 converged reactive runtime + visual scene graph + deterministic replay",
+  "baseline": "v60",
+  "runtime_baseline": "v60 execution planner + capability sandbox over v58 reactive/visual graph runtime",
+  "kind": "v1_runtime_convergence",
+  "roadmap_range": "1-42",
+  "focus": [
+    "one executable artifact across historical, replay and realtime hosts",
+    "existing reactive runtime as the single execution/reuse substrate",
+    "persistent renderer-neutral scene projection",
+    "transactional realtime scene revisions with diff/patch/commit/rollback",
+    "stable replay identity and deterministic repeated execution",
+    "reactive recompute/reuse/effect statistics exposed at the v1 runtime boundary",
+    "signal projection remains downstream and broker-neutral",
+    "two-document CoreSpirit documentation split"
+  ],
+  "new_files": [
+    "src/services/coreSpirit/coreSpiritV1Runtime.ts",
+    "src/services/coreSpirit/stage42CoreSpiritV1Runtime.test.ts",
+    "tsconfig.stage42-v61-run.json",
+    "CORESPIRIT_V61_MANIFEST.json"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/executionHost.ts",
+    "src/services/coreSpirit/replay.ts",
+    "src/services/coreSpirit/index.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/coreSpirit/VERSION.ts",
+    "src/services/coreSpirit/stage61SingleCoreSpiritDoc.test.ts",
+    "docs/CORESPIRIT.md",
+    "docs/CORESPIRIT_BUILD_TRACKER.md"
+  ],
+  "architecture_invariants": [
+    "CoreSpirit v1 is orchestration over the existing compiler/IR/VM, not a second evaluator",
+    "historical, replay and realtime hosts consume the same validated executable artifact",
+    "reactive cache reuse is an optimization; stateful/effectful semantics remain ordered",
+    "scene state is renderer-neutral and realtime scene revisions share the runtime transaction boundary",
+    "deterministic replay uses stable program, dataset and replay-run identity",
+    "scene and signal projections carry runtime facts but do not gain broker/risk/policy authority",
+    "host adapters own rendering, data acquisition, model transports, network, process lifecycle and broker connectivity",
+    "CORESPIRIT.md remains the stable architecture brain",
+    "CORESPIRIT_BUILD_TRACKER.md remains the living implementation truth",
+    "CORESPIRIT_Vxx_MANIFEST.json remains the machine release record"
+  ],
+  "tests": [
+    "STAGE42_CORESPIRIT_V1_RUNTIME_OK",
+    "STAGE61_CORESPIRIT_DOC_SPLIT_OK",
+    "STAGE73_74_VISUAL_COMPILER_REACTIVE_OK",
+    "STAGE75_76_EXECUTION_PLANNER_SANDBOX_OK",
+    "historical multi-symbol/MTF and model/AI regression contracts",
+    "roadmap validates at 42 stages"
+  ],
+  "documentation_policy": {
+    "architecture": "docs/CORESPIRIT.md",
+    "tracker": "docs/CORESPIRIT_BUILD_TRACKER.md",
+    "machine_release": "CORESPIRIT_V61_MANIFEST.json",
+    "no_version_specific_CoreSpirit_markdown": true
+  }
+}

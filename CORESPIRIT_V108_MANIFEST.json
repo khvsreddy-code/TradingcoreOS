@@ -1,0 +1,43 @@
+{
+  "release": "CoreSpirit v108",
+  "date": "2026-09-29",
+  "theme": "CoreSpirit-first platform + Vela production chart engine",
+  "productionChartBackend": "vela-native",
+  "language": "CoreSpirit",
+  "rendererBoundary": "TCO chart contracts -> velaChartFacade -> Vela NativeRenderer",
+  "removedSurfaces": [
+    "external scripting compatibility translator",
+    "external scripting runtime helper",
+    "external public-script catalog/import path",
+    "lightweight-charts dependency",
+    "direct vendor chart imports from React/CoreSpirit feature modules"
+  ],
+  "communityIndicatorUnit": {
+    "name": "CoreSpirit Community Indicator",
+    "requirements": [
+      "CoreSpirit source",
+      "immutable version metadata",
+      "settings schema",
+      "compiled artifact identity",
+      "author",
+      "license",
+      "documentation",
+      "preview",
+      "install/import metadata"
+    ]
+  },
+  "vela": {
+    "source": "vendor/vela",
+    "license": "Apache-2.0",
+    "attribution": "Upstream NOTICE retained; native visible attribution remains enabled"
+  },
+  "deepening": [
+    "D1 typed-array ingress",
+    "D2 viewport-driven renderer LOD",
+    "D3 stable CoreSpirit render packets",
+    "D4 retained native drawings",
+    "D5 multi-chart synchronization",
+    "D6 GPU/frame regression budgets"
+  ],
+  "validationTarget": "TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK"
+}

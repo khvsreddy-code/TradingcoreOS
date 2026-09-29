@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
+  },
+  "include": [
+    "src/services/core/data/derivedDataStores.ts",
+    "src/services/core/data/marketDataStore.ts",
+    "src/services/core/data/canonicalDataPlane.ts",
+    "src/services/core/data/indicatorDataPlane.ts",
+    "src/services/core/data/modelDataPlane.ts",
+    "src/services/core/chart/chartDataEngine.ts",
+    "src/services/core/chart/chartInteraction.ts",
+    "src/services/core/chart/chartScales.ts",
+    "src/services/core/chart/chartLayers.ts",
+    "src/services/core/chart/chartPane.ts",
+    "src/services/core/chart/chartViewportController.ts",
+    "src/services/core/chart/chartRenderingEngine.ts",
+    "src/services/core/chart/chartEngine.ts",
+    "src/services/core/chart/chartCore.ts",
+    "src/services/core/chart/chartScene.ts",
+    "src/services/core/chart/chartRenderer.ts",
+    "src/services/core/chart/chartLevelOfDetail.ts",
+    "src/services/coreSpirit/indicatorEngine.ts"
+  ]
+}

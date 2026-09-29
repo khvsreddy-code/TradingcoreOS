@@ -1,0 +1,41 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+const app = read('src/App.tsx');
+const page = read('src/pages/IndicatorsPage.tsx');
+const studio = read('src/components/indicators/IndicatorSourceEditor.tsx');
+const explore = read('src/pages/IndicatorExplorePage.tsx');
+const service = read('src/services/coreSpirit/indicatorPublicationService.ts');
+const settingsMigration = read('supabase/migrations/20260927142500_add_indicator_settings_snapshot.sql');
+const settings = read('src/components/indicators/IndicatorSettingsPanel.tsx');
+const roadmap = read('src/services/coreSpirit/coreSpiritRoadmap.ts');
+const migration = read('supabase/migrations/20260927140500_tradingcoreos_v98_user_indicator_publications.sql');
+const counterMigration = read('supabase/migrations/20260927141327_harden_indicator_publication_counters.sql');
+
+assert(page.includes('IndicatorSettingsPanel'), 'settings panel is not integrated into the indicator workspace');
+assert(page.includes('IndicatorSourceEditor'), 'source studio is not integrated into the indicator workspace');
+assert(page.includes('Open CoreSpirit source') || page.includes('Edit CoreSpirit source'), 'workspace does not expose source editing');
+assert(studio.includes('saveUserIndicatorDraft') && studio.includes('publishUserIndicator'), 'indicator studio does not persist through the canonical publication service');
+assert(studio.includes('compileCoreSpirit'), 'indicator studio does not compile through CoreSpirit');
+assert(service.includes("from('corespirit_scripts')") && service.includes("from('corespirit_script_versions')"), 'private script/version persistence missing');
+assert(service.includes("from('indicator_publications')"), 'public publication persistence missing');
+assert(service.includes("from('indicator_publication_events')"), 'usage counters are not event based');
+assert(service.includes('indicatorSettingsSnapshot'), 'public settings snapshot sanitization missing');
+assert(settingsMigration.includes('indicator_settings jsonb'), 'public settings snapshot migration missing');
+assert(service.includes('getPublicIndicatorPublicationBySlug'), 'shareable public indicator lookup missing');
+assert(explore.includes('explore/indicators/') && explore.includes('source_snapshot'), 'public detail/source surface missing');
+assert(settings.includes('Inputs') && settings.includes('Style') && settings.includes('Display'), 'shared settings categories missing');
+assert(app.includes("/explore/indicators") && app.includes('publicIndicatorRoute'), 'public indicator route is not protected from auth redirects');
+assert(migration.includes('indicator_publications_select') && migration.includes('indicator_publications_insert_own'), 'publication RLS boundary missing');
+assert(migration.includes('indicator-covers'), 'indicator cover storage migration missing');
+assert(counterMigration.includes('indicator_publication_events_insert_public') && counterMigration.includes('handle_indicator_publication_event'), 'counter event migration missing');
+assert(!counterMigration.includes('increment_indicator_publication_views') && !counterMigration.includes('increment_indicator_publication_installs'), 'legacy exposed counter RPCs remain in hardening migration');
+assert((roadmap.match(/id: 130,/g) || []).length === 1 && roadmap.includes('length !== 130'), 'CoreSpirit roadmap was not advanced to 130 stages');
+console.log('STAGE98_INDICATOR_SETTINGS_SOURCE_STUDIO_OK');
+console.log('STAGE98_SUPABASE_PUBLICATION_CONTRACT_OK');
+console.log('STAGE98_PUBLIC_EXPLORE_ROUTE_OK');
+console.log('STAGE98_SECURITY_COUNTER_EVENT_OK');

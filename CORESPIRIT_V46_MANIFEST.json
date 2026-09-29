@@ -1,0 +1,57 @@
+{
+  "release": "CoreSpirit v47 platform-depth update",
+  "focus": [
+    "Stage 14 risk boundary hardening",
+    "Stage 15 explicit automation lifecycle",
+    "Stage 16 visual IDE/runtime surface",
+    "Stage 17 signal explainability",
+    "execution authority chain and auditability"
+  ],
+  "baseline": "CoreSpirit v46",
+  "new_files": [
+    "src/services/coreSpirit/automationLifecycle.ts",
+    "src/services/coreSpirit/stage53AutomationLifecycleRisk.test.ts",
+    "supabase/automation_lifecycle.sql",
+    "docs/CORESPIRIT.md",
+    "src/services/coreSpirit/executionAuthority.ts",
+    "src/services/coreSpirit/explainability.ts",
+    "src/services/coreSpirit/ideRuntimeBridge.ts",
+    "src/services/coreSpirit/stage54Deep14To17.test.ts"
+  ],
+  "changed_files": [
+    "src/services/coreSpirit/automationPipeline.ts",
+    "src/services/coreSpirit/semanticAnalyzer.ts",
+    "src/services/coreSpirit/compiler.ts",
+    "src/services/coreSpirit/runtime.ts",
+    "src/services/coreSpirit/standardLibrary.ts",
+    "src/services/coreSpirit/ir.ts",
+    "src/services/coreSpirit/coreSpiritRoadmap.ts",
+    "src/services/automationEngine.ts",
+    "src/pages/AutomationsPage.tsx",
+    "src/services/coreSpirit/outputDispatcher.ts",
+    "src/services/coreSpirit/automationLifecycle.ts",
+    "src/services/coreSpirit/chartRegistry.ts",
+    "src/components/workspace/LiveChart.tsx",
+    "src/pages/CoreSpiritEditorPage.tsx",
+    "src/services/coreSpirit/index.ts",
+    "src/services/coreSpirit/signalBoundary.ts",
+    "docs/CORESPIRIT.md"
+  ],
+  "documentation_policy": {
+    "canonical": "docs/CORESPIRIT.md",
+    "kept": "CORESPIRIT_PROJECT_TASKS.md",
+    "removed": "versioned/duplicated CoreSpirit Markdown design notes"
+  },
+  "safety_invariants": [
+    "script/model layers cannot call buy/sell order-intent primitives",
+    "script layer rejects entry/exit execution primitives",
+    "automation buy/sell creates only an order-intent object",
+    "risk evaluation is mandatory before policy and execution",
+    "PAPER and ARMED cannot submit broker execution",
+    "LIVE requires explicit lifecycle activation plus host live-execution guard",
+    "system actor cannot activate LIVE",
+    "execution intent is an authority record, not a broker request",
+    "IDE automation preview is paper-only and never submits broker execution",
+    "signals carry explainability provenance without altering runtime semantics"
+  ]
+}

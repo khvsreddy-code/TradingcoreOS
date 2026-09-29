@@ -1,0 +1,33 @@
+{
+  "contractVersion": 2,
+  "abiVersion": 1,
+  "modelId": "NiftyRegimeModel",
+  "version": "1.0.0",
+  "modelKind": "ai",
+  "aiOutput": {
+    "directionMetadataKey": "direction",
+    "regimeMetadataKey": "regime",
+    "longProbabilityMetadataKey": "p_long",
+    "shortProbabilityMetadataKey": "p_short"
+  },
+  "implementation": "python",
+  "transport": "host",
+  "deterministic": true,
+  "state": "stateless",
+  "rollbackSafe": true,
+  "inputSchema": [
+    {"name":"price","dtype":"f64","shape":[1],"required":true,"semantic":"feature","representation":"tensor"},
+    {"name":"volatility","dtype":"f64","shape":[1],"required":true,"semantic":"feature","representation":"tensor"},
+    {"name":"volume","dtype":"f64","shape":[1],"required":true,"semantic":"feature","representation":"tensor"}
+  ],
+  "outputSchema": [
+    {"name":"probability","dtype":"f64","shape":[1],"required":true,"semantic":"prediction","representation":"tensor"}
+  ],
+  "primaryPredictionField": "probability",
+  "metadataFields": ["direction","regime","p_long","p_short"],
+  "maxMemoryBytes": 1048576,
+  "maxSteps": 10000,
+  "maxInputBytes": 65536,
+  "maxOutputBytes": 65536,
+  "capabilities": ["read-features","write-output"]
+}

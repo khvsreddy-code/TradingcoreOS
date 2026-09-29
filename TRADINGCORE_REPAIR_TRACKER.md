@@ -1,0 +1,453 @@
+# TradingCore Repair Tracker
+
+Updated: 2026-09-29
+Source build: `TradingcoreOS-fast-reactive-live-price-v4-10k-LIVE-CANDLE-HARD-FIXED.zip`
+
+## Purpose
+
+This file tracks the current repair pass across the market-data pipeline. Each defect is fixed and verified separately so a later repair does not silently undo an earlier one.
+
+## Current overall status
+
+- Repair pass: **ACTIVE**
+- Patched: **4**
+- Parser-verified: **4**
+- Runtime-verified: **0**
+- Confirmed pending defects: **4**
+- Verification rule: a repair is only marked complete after static/type/build verification and, where broker credentials permit, runtime verification.
+
+## Repair queue
+
+| ID | Area | Severity | Defect | Status | Evidence / file |
+|---|---|---:|---|---|---|
+| TC-R01 | FYERS historical data | Critical | Client sends `before`, but the FYERS history route ignored it and always requested a window ending at current time. Older-history pagination therefore returned the same recent dataset and the chart filtered it away. | **FIXED — VERIFY RUNTIME** | `src/server/routes/fyers-history.routes.ts` |
+| TC-R02 | Live subscriptions | Critical | FYERS/Upstox shared broker transports remove an instrument from the broker subscription when one consumer unsubscribes, without checking whether another consumer still needs it. | **FIXED — STATIC VERIFY** | `src/server/marketData/FyersMarketDataTransport.ts`, `src/server/marketData/UpstoxMarketDataTransport.ts` |
+| TC-R03 | FYERS REST fallback | High | Stale-tick fallback can trigger REST quote polling at a very short cadence, competing with history/other broker requests. | **FIXED — STATIC VERIFY** | `src/services/marketData/BrokerMarketDataClient.ts` |
+| TC-R04 | Chart diagnostics | Medium | There are numerous local cleanup/optional-feature catches, but the main historical-load path already logs the real error and sets chart error state. This is now treated as diagnostic debt rather than a confirmed chart-data blocker. | **DEFERRED / RECLASSIFIED** | `src/components/workspace/LiveChart.tsx` |
+| TC-R05 | Upstox live feed | High | No equivalent silent-feed watchdog/recovery path. A stream can remain connected while ticks stop arriving. | **PATCHED — STATIC VERIFY** | `src/services/marketData/UpstoxMarketDataClient.ts` |
+| TC-R06 | Option chain | Medium | Some option-chain UI paths read `changeOi`, while normalized contracts expose `previousOi` / `oiChange` / derived deltas. This creates zero/missing ΔOI in affected UI paths. | **FIXED — STATIC VERIFY** | `src/components/workspace/FullWorkspaceView.tsx` |
+| TC-R07 | History architecture | Medium | Initial history is bounded to 10k while the runtime target is higher; progressive backfill must be reliable before the larger history target is meaningful. | **PENDING / depends on R01** | `BaseBrokerAdapter.ts`, `TradingCoreRuntime.ts`, `LiveChart.tsx` |
+| TC-R08 | Route duplication | Medium | Multiple broker/history/option-chain routes and legacy/generic paths increase the chance that a fix is applied to one route while another route handles the request. | **PENDING — AUDIT AFTER HIGHER PRIORITY FIXES** | `server.ts`, `src/server/routes/*`, broker adapters |
+
+## Renderer/language boundary cutover — 2026-09-29
+
+This repair pass now includes the chart backend cutover as a protected boundary. The existing market-data fixes remain in force; this section tracks the renderer/language change separately so it cannot regress history, live-feed or broker behavior.
+
+- [x] Production chart backend locked to `vela-native`.
+- [x] External scripting compatibility translator/runtime/catalog removed from application source.
+- [x] Existing TCO chart controller/navigation contracts preserved.
+- [x] Vela vendored with `LICENSE` + `NOTICE`; native attribution remains enabled.
+- [x] `/live` and oscillator chart switched to the Vela-backed facade.
+- [x] CoreSpirit community catalog now uses versioned TCO publications.
+- [ ] Full browser smoke verification against the live deployment.
+- [ ] D1 typed-array Vela ingestion.
+- [ ] D2 viewport-aware Vela LOD binding.
+
+## TC-R01 — Detailed repair
+
+### Root cause
+
+`BaseBrokerAdapter.getHistoricalDataBefore()` already sent:
+
+`before=<oldest candle timestamp>`
+
+but `fyers-history.routes.ts` did not consume that query parameter. It always used `now` as the history end date.
+
+### Repair
+
+The FYERS route now:
+
+1. Parses and validates `before` as an ISO timestamp.
+2. Includes the `before` value in the cache/in-flight key.
+3. Sets the broker history end timestamp to **one second before `before`**.
+4. Uses epoch (`date_format=0`) so the boundary is exact instead of being truncated to an India calendar date.
+5. Keeps the existing bounded lookback window based on resolution.
+6. Does **not** fall back to the current live quote when processing a paged `before` request.
+7. Returns `before`, `oldestTimestamp`, and `newestTimestamp` metadata for diagnostics.
+
+FYERS documents the History API as date-range based and supports epoch or date-string ranges; FYERS also documents that history candle timestamps represent the start of each candle interval. citeturn180028search0turn180028search6
+
+### Verification status
+
+- [x] Client already passes `before`.
+- [x] Server now parses `before`.
+- [x] Server now builds an older date window from `before`.
+- [x] Cache key separates paged requests from latest-history requests.
+- [x] Current-quote seed is disabled for paged requests.
+- [ ] Runtime call against a connected FYERS account.
+
+## TC-R02 — Detailed repair
+
+### Root cause
+
+The shared FYERS and Upstox server transports stored broker subscriptions as one global `Set`. When one HTTP consumer disconnected, its symbols were removed from that global set even when another active consumer still used them.
+
+### Repair
+
+Each server transport now records a per-listener symbol ownership map and recomputes the broker-level union after a consumer disconnects. A broker unsubscribe is sent only for symbols that no remaining listener owns. FYERS depth requests are tracked separately as well.
+
+### Verification status
+
+- [x] Per-listener ownership map added to FYERS transport.
+- [x] Per-listener ownership map added to Upstox transport.
+- [x] Broker unsubscribe now uses remaining-consumer union.
+- [ ] Runtime two-consumer test with one subscriber disconnecting.
+
+## TC-R03 — Detailed repair
+
+### Root cause
+
+The browser FYERS fallback checked staleness every 350 ms and could issue another REST quote request as soon as the previous request finished. A stale stream could therefore create repeated quote traffic while history and option-chain requests were competing for broker quota.
+
+### Repair
+
+The fallback now considers a stream stale after 3 seconds and limits quote fallback requests to one attempt every 3 seconds per shared stream. The scheduler itself runs at a 1-second cadence without sending REST traffic while the stream is healthy.
+
+### Verification status
+
+- [x] Added `lastQuotePollAt` throttle.
+- [x] Increased stale threshold from 650 ms to 3 seconds.
+- [x] Reduced scheduler frequency from 350 ms to 1 second.
+- [ ] Runtime request-volume verification during a real stale-feed condition.
+
+## TC-R06 — Detailed repair
+
+### Root cause
+
+`FullWorkspaceView` rendered `changeOi`, while current normalized option contracts expose `oiChange` or `previousOi`. This made affected rows/aggregates read as zero even when OI deltas existed.
+
+### Repair
+
+Added one display-boundary `oiChange()` normalizer with this precedence:
+
+`oiChange` → `changeInOI` → legacy `changeOi` → `oi - previousOi` → `0`
+
+The aggregate and row-level ΔOI values now both use that canonical calculation.
+
+### Verification status
+
+- [x] Aggregate Call ΔOI fixed.
+- [x] Aggregate Put ΔOI fixed.
+- [x] Row-level Call ΔOI fixed.
+- [x] Row-level Put ΔOI fixed.
+- [ ] Live option-chain payload verification for both brokers.
+
+## TC-R05 — Detailed repair
+
+### Root cause
+
+The browser-side Upstox normalized stream relied on the HTTP stream closing to trigger recovery. A connected-but-silent stream had no health check.
+
+### Repair
+
+Added a 2-second watchdog that only activates recovery after the shared stream has previously delivered at least one tick and then produces no stream event for 15 seconds. This avoids reconnect loops for symbols that are simply illiquid or have not traded yet.
+
+### Verification status
+
+- [x] Watchdog lifecycle tied to the shared stream.
+- [x] Silent-stream timeout set to 15 seconds after proven activity.
+- [x] No watchdog churn before the first tick.
+- [ ] Runtime stale-stream simulation.
+
+## Next repair order
+
+1. **TC-R01 runtime verification**
+2. **TC-R02 runtime two-consumer subscription test**
+3. **TC-R03 runtime fallback request-volume verification**
+4. **TC-R05 runtime stale-stream simulation**
+5. **TC-R06 live option-chain payload verification**
+6. **TC-R07 end-to-end history target behavior**
+7. **TC-R08 route consolidation/audit**
+
+
+## Validation run — 2026-09-24
+
+- TypeScript/TSX parser transpilation check: **PASS** for all 6 modified source files.
+- Full `tsc --noEmit`: **NOT RUN TO COMPLETION** because the supplied ZIP does not include dependencies and the attempted dependency install was interrupted by the execution environment timeout.
+- Full Vite production build: **NOT VERIFIED** for the same dependency reason.
+- Broker runtime verification: **NOT YET AVAILABLE** from this offline source audit because no connected broker session is exposed in the archive.
+
+The repair pass therefore distinguishes **patched/parser-verified** from **runtime-verified**.
+
+## Repair discipline
+
+- Do not rewrite unrelated UI while repairing the market-data pipeline.
+- Do not mark a defect fixed because a build passes alone.
+- Preserve previously repaired behavior while changing the next layer.
+- Record the exact root cause, code location, fix, and verification state here after every repair.
+
+
+## Repair pass — 2026-09-24 (FYERS feed stall + top toolbar)
+
+- **TC-R09 — FYERS long-lived stream lifecycle**: PATCHED — runtime pending. Browser stream now rotates before the Vercel function ceiling and server listeners clean up on response close. Files: `src/services/marketData/BrokerMarketDataClient.ts`, `src/server/routes/broker-market-data.routes.ts`.
+- **TC-R10 — stale feed fallback request pressure**: PATCHED — runtime pending. REST quote fallback waits for 3s of tick silence and is throttled to one attempt per second per shared stream. File: `src/services/marketData/BrokerMarketDataClient.ts`.
+- **TC-R11 — top toolbar menus disconnected from chart UI**: PATCHED — deployment/runtime pending. AI opens model selection, Indicators opens its chooser, and Draw opens drawing tools even when the embedded chart toolbar is hidden. Files: `src/components/workspace/LiveChart.tsx`, `src/LiveTradingTerminalV4.tsx`.
+- **Validation**: GitHub main updated; Vercel deployment for the toolbar patch was building and the subsequent feed-throttle deployment was queued at last check. No successful production build or connected-FYERS runtime test is claimed yet.
+- **Reliability limitation**: continuous feed is best-effort; no client can guarantee ticks during broker outages, network loss, market closure, expired authorization, or symbol/subscription errors. UI should communicate stale/disconnected status rather than imply fresh prices.
+
+- **TC-R12 — candle heartbeat**: PATCHED 2026-09-24. FYERS Quotes API now runs every ~3.5s as an explicit chart recovery heartbeat rather than only after detected staleness. Each request has a ~2.5s broker timeout; the next heartbeat retries.
+- **TC-R13 — browser tab recovery**: PATCHED 2026-09-24. Returning to the TradingCore browser tab/focus immediately triggers a quote refresh and stale-stream reconnect instead of waiting for throttled background timers.
+- **TC-R14 — quote starvation**: PATCHED 2026-09-24. The fast FYERS quote heartbeat no longer waits behind the heavier shared REST queue; this prevents historical/portfolio/options calls from starving chart price refreshes. The heartbeat remains low-frequency (~17 requests/minute per connected terminal), far below the documented Quotes batch size of 50 symbols/request.
+- **TC-R15 — long-lived Vercel stream**: The WebSocket relay remains an acceleration/depth path, but chart correctness no longer depends on it staying alive for five minutes. Production timeout logs still exist for older live-stream requests and will be checked against the new deployment after rollout.
+
+
+- **TC-R16 — focus-driven market-stream churn**: PATCHED 2026-09-24. Removed `focused` from the `LiveTradingTerminalV4` market-data subscription effect so changing chart focus no longer unsubscribes/resubscribes the terminal feed. File: `src/LiveTradingTerminalV4.tsx`.
+- **TC-R17 — React/remount stream teardown churn**: PATCHED 2026-09-24. Added a 4s terminal-stream unsubscribe grace period plus centralized FYERS stream disposal, so transient chart/layout remounts can reuse the existing transport instead of opening another HTTP stream. File: `src/services/marketData/BrokerMarketDataClient.ts`.
+- **TC-R18 — single-symbol watchdog false reconnects**: PATCHED 2026-09-24. Watchdog now uses shared feed activity (WebSocket tick or quote-heartbeat activity) instead of treating any quiet instrument as a dead terminal stream. This prevents one inactive/illiquid symbol from restarting the entire feed. File: `src/services/marketData/BrokerMarketDataClient.ts`.
+
+
+## Terminal shell consolidation — 2026-09-28
+
+This UI pass is intentionally outside the market-data repair queue. The chart/feed runtime remains the existing repaired path; the change is limited to the live terminal composition and workspace chrome.
+
+- **TC-UI-99 — canonical terminal shell:** PATCHED. `/live` now has one shell owner (`LiveTradingTerminal` → `LiveTradingWorkspace`) instead of a terminal host plus a second modal/controller layer.
+- **TC-UI-100 — chart-first layout:** PATCHED. The persistent left-side watchlist/drawing rail is no longer mounted by the live workspace. The chart occupies the central work area.
+- **TC-UI-101 — right dock consolidation:** PATCHED. Watchlist, Level 2, and alerts share one resizable/collapsible right dock.
+- **TC-UI-102 — bottom terminal dock:** PATCHED. Positions, orders, trades, activity, strategy log, and order ticket are docked beneath the chart rather than opened as separate workspace modals.
+- **TC-UI-103 — duplicate Pro workspace:** PATCHED. `src/TradingCoreProWorkspace.tsx` was removed because no source imports it and the canonical workspace already owns `/live`.
+- **TC-UI-104 — workspace persistence:** PATCHED. Right-dock tab and bottom-dock tab are now snapshot-compatible.
+
+### UI-shell validation
+
+- [x] Source/TSX parser validation for all modified TS/TSX files.
+- [x] Existing architecture, route, hardening, CoreSpirit, and indicator community contract tests pass.
+- [x] New `terminalShellContract.test.mjs` passes.
+- [ ] Full `tsc --noEmit` in this archive environment; npm dependency installation could not complete because registry access/install execution timed out.
+- [ ] Full Vite production build in this archive environment for the same dependency limitation.
+- [ ] Browser/runtime visual verification after deployment.
+
+**Non-interference rule:** no feed subscription, history pagination, quote fallback, chart-data, or CoreSpirit runtime path was intentionally altered in TC-UI-99 through TC-UI-104.
+
+
+## Terminal visual-density pass — 2026-09-29
+
+This UI pass follows the v99 terminal-shell consolidation and changes presentation only. The intent is to remove the SaaS-style “card everywhere” treatment from `/live` while preserving the terminal hierarchy and all existing functional contracts.
+
+- **TC-UI-105 — terminal surface flattening:** PATCHED. Chart infrastructure, right dock, bottom dock and workspace chrome no longer use decorative cards, large radii or drop shadows.
+- **TC-UI-106 — radius policy:** PATCHED. Infrastructure is 0–2px; controls are 0–4px; popovers are capped at 6px; major dialogs retain their existing higher-level allowance outside the live terminal.
+- **TC-UI-107 — separator-first density:** PATCHED. Information grouping now relies on thin dividers, typography and spacing instead of nested bordered cards.
+- **TC-UI-108 — terminal-only scope:** PATCHED. The visual layer is scoped to `.tc4` / live terminal surfaces so the landing page retains its premium/glow design.
+- **TC-UI-109 — visual regression guard:** PATCHED. Added `src/terminalVisualDensityContract.test.mjs` to guard the terminal radius/shadow contract.
+
+### v100 UI validation
+
+- [x] v100 visual-density CSS contract added to the canonical live workspace.
+- [x] Standalone terminal polish stylesheet aligned with the same rules.
+- [x] Terminal-only scope verified; no landing-page selectors were rewritten.
+- [x] `terminalVisualDensityContract.test.mjs` passes with Node-level static assertions.
+- [ ] Full dependency-backed typecheck/build in this archive environment.
+- [ ] Browser/runtime visual verification after deployment.
+
+**Non-interference rule:** v100 does not alter broker transport, history pagination, quote fallback, chart data-plane logic, CoreSpirit compiler/IR/VM, or execution behavior.
+
+## Terminal hierarchy + right dock system — 2026-09-29
+
+This is the requested continuation of the v99/v100 live-terminal work. It is deliberately isolated from the market-data repair queue.
+
+- **TC-UI-110 — two-level chrome still read as separate dashboard containers:** PATCHED. Terminal command chrome and chart-tool chrome now form a continuous compact infrastructure stack with reduced height, minimal borders, and no decorative surface treatment.
+- **TC-UI-111 — chart grid retained card semantics:** PATCHED. Chart cells no longer use outer borders/radius; multi-chart layouts use a 1px separator field and a shared canvas background.
+- **TC-UI-112 — floating drawing rail visual language:** PATCHED. Drawing infrastructure is now integrated into the chart edge with no shadow/backdrop blur and a thin separator.
+- **TC-UI-113 — right dock state was component-local:** PATCHED. `rightDockOpen`, `rightDockTab`, and `rightDockWidth` are now workspace-owned and snapshot/cloud persisted.
+- **TC-UI-114 — right dock was still named around watchlist:** PATCHED. Canonical implementation is now `RightTerminalDock`; `WatchlistDock` remains a compatibility export so existing imports do not break.
+- **TC-UI-115 — dock interaction contract was implicit:** PATCHED. Added a right-dock tab registry, ARIA tab/tabpanel wiring, shortcut labels, and Alt+1/2/3 + Alt+0 keyboard controls.
+- **TC-UI-116 — dock lifecycle/status was visually ambiguous:** PATCHED. Added a compact status footer and kept panel content within one dock surface rather than modal windows.
+
+### v101 non-interference assertions
+
+- [x] No new market-data subscription is created per right-dock panel.
+- [x] Watchlist, Order Book and Alerts consume existing selected-instrument/tick context.
+- [x] Historical candle request ownership remains in the chart/data plane.
+- [x] CoreSpirit/compiler/IR/VM execution boundaries are unchanged.
+- [x] Broker execution remains behind the existing runtime contracts.
+
+### v101 validation
+
+- [x] Node-level terminal shell contract passes.
+- [x] Node-level visual density contract passes.
+- [x] Node-level right dock system contract passes.
+- [ ] Dependency-backed TypeScript/Vite build in the offline archive environment.
+- [ ] Connected FYERS runtime smoke test after deployment.
+- [ ] Browser visual verification at desktop/tablet/mobile widths.
+
+## Terminal dock subsystem + React-root consolidation — 2026-09-29
+
+This is the direct continuation of TC-UI-110 through TC-UI-116. The work is UI/lifecycle architecture only and remains outside the market-data repair queue.
+
+- **TC-UI-117 — right dock internals were monolithic:** PATCHED. `RightTerminalDock` is now the canonical shell with independently renderable `WatchlistSurface`, `OrderBookSurface`, and `AlertsSurface` surfaces.
+- **TC-UI-118 — compatibility naming obscured canonical ownership:** PATCHED. `LiveTradingWorkspace` imports `RightTerminalDock` directly; `WatchlistDock` is reduced to a compatibility re-export.
+- **TC-UI-119 — dock keyboard model was shallow:** PATCHED. Added roving tab focus plus Arrow/Home/End tab navigation while preserving Alt+1/2/3 and Alt+0 terminal shortcuts.
+- **TC-UI-120 — dock width bounds were duplicated in event/UI paths:** PATCHED. Width clamping is centralized in the canonical dock shell and the workspace remains the persistence authority.
+- **TC-UI-121 — terminal still exposed legacy HTML bootstrap bridges:** PATCHED. Removed the index-loaded `workspaceRuntimeBridge`, `workspaceChromeStyle`, and `workspaceOrderBridge`; also retired the remaining unused hotfix files.
+- **TC-UI-122 — route had an extra live-only error lifecycle:** PATCHED. Removed `LiveModuleBoundary`; the canonical workspace `RouteErrorBoundary` remains the route-level failure boundary.
+- **TC-UI-123 — single React-root rule was implicit:** PATCHED. Added `terminalReactRootContract.test.mjs` asserting one `createRoot(...)`, owned by `src/main.tsx`, and a single module entrypoint from `index.html`.
+- **TC-UI-124 — right-dock architecture was not independently guarded:** PATCHED. Added `terminalDockArchitectureContract.test.mjs` for surface isolation, ARIA relationships, canonical file ownership and the compatibility adapter.
+
+### v102 validation
+
+- [x] `TRADINGCORE_V101_RIGHT_DOCK_SYSTEM_CONTRACT_OK`
+- [x] `TRADINGCORE_V102_RIGHT_DOCK_ARCHITECTURE_CONTRACT_OK`
+- [x] `TRADINGCORE_V102_SINGLE_REACT_ROOT_CONTRACT_OK`
+- [x] Existing terminal shell and visual-density contracts remain passing.
+- [x] Modified TS/TSX files syntax-transpiled successfully with TypeScript 5.8.x.
+- [ ] Dependency-backed `tsc --noEmit` in the archive environment.
+- [ ] Vite production build in the archive environment.
+- [ ] Connected-broker browser smoke verification after deployment.
+
+**Non-interference rule:** TC-UI-117 through TC-UI-124 do not intentionally modify broker transport, historical candle request ownership, canonical chart data-plane storage, CoreSpirit compiler/runtime, or broker execution semantics.
+
+- **TC-UI-125 — dock resize could update workspace state at raw pointer frequency:** PATCHED. Right-dock resizing is requestAnimationFrame-coalesced before calling the workspace width setter.
+- **TC-UI-126 — global dock shortcuts could steal form focus:** PATCHED. Alt+1/2/3/0 now yield to input/select/textarea/contenteditable targets.
+
+
+## Multi-chart performance + shared chart data plane — 2026-09-29
+
+This repair pass addresses the chart-runtime multiplication problem identified after the terminal shell/dock consolidation. The goal is to make multi-chart layouts scale expensive resources by unique dataset and symbol rather than by chart count.
+
+- **TC-PERF-01 — per-chart analytics workers:** PATCHED. `LiveChart` no longer constructs an analytics worker; `ChartComputeCoordinator` owns a lazy pool capped at 2 workers.
+- **TC-PERF-02 — per-chart indicator workers:** PATCHED. Indicator execution now uses the same bounded coordinator with a maximum of 2 workers.
+- **TC-PERF-03 — per-chart realtime subscriptions:** PATCHED. `ChartDataPlane` acquires one shared broker/symbol feed and fans ticks into the shared `chartMarketStore`.
+- **TC-PERF-04 — per-chart history lifecycle:** PATCHED. History and older-history requests are single-flight per `broker:symbol:timeframe` dataset.
+- **TC-PERF-05 — eager background history multiplication:** PATCHED. The shared data plane does not start a multi-page crawl for every chart; pagination begins from the left-edge demand signal.
+- **TC-PERF-06 — duplicate indicator computation:** PATCHED. Result cache identity excludes presentation-only indicator fields and is keyed by dataset revision plus computational configuration.
+- **TC-PERF-07 — duplicate analytics computation:** PATCHED. Analytics are deduplicated by dataset revision and current spot.
+- **TC-PERF-08 — duplicate prediction work:** PATCHED. Local fallback compute and production prediction requests are dataset-scoped through `ChartPredictionCoordinator`.
+- **TC-PERF-09 — forming-candle allocation churn:** PATCHED. Shared reconciliation can update the current candle in place; `HistoryStore.upsertLatest()` avoids rebuilding the entire 50k-candle map for ordinary latest updates.
+- **TC-PERF-10 — canonical-store disposal hazard:** PATCHED. Chart-controller disposal detaches only its named consumer and does not clear the shared canonical dataset.
+- **TC-PERF-11 — regression guard:** PATCHED. Added `chartMultiChartDataPlaneContract.test.mjs` and registered it in `test:contracts`.
+
+### v103 resource-scaling contract
+
+For `N` chart cells, `D` unique broker/symbol/timeframe datasets and `S` unique broker/symbol feeds:
+
+```text
+renderer instances        ≈ N
+canonical datasets         ≈ D
+history lifecycles         ≈ D
+realtime symbol feeds      ≈ S
+analytics workers          ≤ 2
+indicator workers          ≤ 2
+prediction compute         ≈ unique dataset revision/model set
+```
+
+### v103 validation
+
+- [x] `TRADINGCORE_V103_MULTI_CHART_SHARED_DATA_PLANE_CONTRACT_OK`
+- [x] Modified market-data helpers transpile/parser-check without new source errors; missing installed dependencies still prevent a dependency-backed full project typecheck.
+- [ ] Full `tsc --noEmit` after dependency installation.
+- [ ] Full Vite production build after dependency installation.
+- [ ] Connected FYERS multi-chart runtime test.
+- [ ] Browser stress test with 16 chart cells across repeated symbol/timeframe changes.
+- [ ] Verify worker count, history request count and subscription count from production telemetry.
+
+**Non-interference rule:** CoreSpirit language/compiler/IR/VM, broker execution/risk authority, terminal dock ownership and drawing semantics were not intentionally changed by TC-PERF-01 through TC-PERF-11.
+
+## v104 demand-driven history + deeper multi-chart budget — 2026-09-29
+
+This pass is the direct continuation of TC-PERF-01 through TC-PERF-11. It focuses on the remaining fixed-history and concurrent-request costs without changing the shared realtime feed or CoreSpirit execution boundaries.
+
+- **TC-PERF-12 — large initial history windows still scaled by chart cell:** PATCHED. Each timeframe now starts from a bounded 300–1,500 candle request instead of a 25k-style target.
+- **TC-PERF-13 — large cached histories were materialized into the active chart on mount:** PATCHED. `ChartDataPlane` slices cached retention to the recent active window while `HistoryStore` keeps reusable retention.
+- **TC-PERF-14 — unique chart datasets could burst history requests concurrently:** PATCHED. `ChartHistoryCoordinator` limits browser history requests to two concurrent operations and prioritizes initial > visible > warm.
+- **TC-PERF-15 — older pages were unnecessarily network-bound:** PATCHED. `HistoryStore.getBefore()` serves cached older ranges via binary search before the broker is contacted.
+- **TC-PERF-16 — fixed 1,000-bar left-edge trigger did not scale with viewport:** PATCHED. `shouldLoadOlderHistory()` derives the trigger from visible logical range and page size.
+- **TC-PERF-17 — warm history could reintroduce an eager crawl:** PATCHED. Only one low-priority warm page is permitted, and only the active chart is eligible. Deep history remains user-scroll driven.
+- **TC-PERF-18 — initial history limit was not propagated end-to-end:** PATCHED. Client adapter, runtime, HTTP route and server Fyers adapter now honor a bounded request limit.
+- **TC-PERF-19 — deep history could force renderer/viewport jumps:** PATCHED. Logical ranges are restored through `setVisibleLogicalRange` after older pages are prepended.
+- **TC-PERF-20 — deep-history compute can become expensive after genuine deep scrolling:** TRACKED. No semantic truncation was introduced; the next optimization is viewport-aware incremental indicator/analytics computation so correctness is preserved while only visible/warm ranges are processed.
+- **TC-PERF-21 — demand-driven history contract was not independently guarded:** PATCHED. Added `chartHistoryDemandContract.test.mjs`.
+
+### v104 resource contract
+
+```text
+N chart cells
+  ↓
+D dataset planes
+  ↓
+S broker:symbol feeds
+  ↓
+initial candles/chart ≤ 1500
+active history requests ≤ 2
+analytics workers ≤ 2
+indicator workers ≤ 2
+```
+
+### v104 validation
+
+- [x] `TRADINGCORE_V104_DEMAND_DRIVEN_HISTORY_CONTRACT_OK`
+- [x] v103 shared-data-plane contract remains present and was extended with v104 guards.
+- [x] Parser/static contract checks pass for the modified history/data-plane files.
+- [ ] Dependency-backed full TypeScript typecheck.
+- [ ] Vite production build with installed dependencies.
+- [ ] Connected-broker 16-chart browser test with request/worker telemetry.
+- [ ] Verify active-chart warm behavior under real focus/symbol switching.
+
+**Non-interference rule:** TC-PERF-12 through TC-PERF-21 do not intentionally modify CoreSpirit grammar/compiler/IR/VM, broker order/risk authority, right-dock ownership, or realtime symbol subscription architecture.
+
+
+## Chart performance + indicator graph depth pass — 2026-09-29 (v105)
+
+- **TC-PERF-22 — viewport-sized older-history demand:** PATCHED. Older-page size now derives from visible logical bars and remains bounded by timeframe policy.
+- **TC-PERF-23 — prepend viewport jump:** PATCHED. `olderAdded` is carried with the data-plane event and the chart shifts the prior logical range before restoring it.
+- **TC-PERF-24 — repeated left-edge request burst:** PATCHED. Same dataset/oldest-anchor/page tuple receives a short cooldown in addition to existing single-flight behavior.
+- **TC-PERF-25 — worker compute residency:** PATCHED. Indicator worker input is selected from a viewport-centered compute window with warmup and a 10,000-candle hard ceiling. The retained history store is not truncated.
+- **TC-PERF-26 — indicator worker cache/window correctness:** PATCHED. Compute-window identity is part of indicator cache identity and worker dataset affinity, preventing partial-window reuse across viewports.
+- **TC-PERF-27 — explicit indicator dependency graph:** PATCHED. Shared graph planner now covers EMA/SMA/WMA/HMA/VWAP/TR/ATR/Bollinger/Keltner/RSI/MACD/Supertrend/Donchian paths.
+- **TC-PERF-28 — reusable ATR/TR primitives:** PATCHED. True range is one dataset-level primitive and ATR is reused by Keltner/Supertrend/ATR requests.
+- **TC-PERF-29 — appearance-only indicator edits:** PATCHED. Color, component colors, line width, line style and opacity are excluded from mathematical compute signatures.
+- **TC-PERF-30 — first-class chart indicator style editor:** PATCHED. The terminal indicator menu now exposes the shared `IndicatorSettingsPanel` so styling is available without leaving `/live`.
+- **TC-PERF-31 — dependency-graph contract guard:** PATCHED. Added `indicatorDependencyGraphContract.test.mjs`.
+- **TC-PERF-32 — history-depth contract guard:** PATCHED. Added `chartHistoryDemandDeepContract.test.mjs`.
+
+### v105 validation
+
+- [x] Static contract checks for deeper history demand, compute-window safety, dependency graph and indicator settings.
+- [x] Selected TypeScript/TSX transpilation check.
+- [ ] Full dependency-backed `tsc --noEmit` and Vite production build in this archive environment.
+- [ ] Connected FYERS 16-chart runtime stress test with telemetry.
+
+**Non-interference:** this pass does not alter CoreSpirit language/runtime authority, execution/risk boundaries, shared broker:symbol feed ownership or terminal dock ownership.
+
+## v106 deeper demand history + indicator dependency execution — 2026-09-29
+
+- **TC-PERF-33 — retained history cache growth across many datasets:** PATCHED. `HistoryStore` now maintains LRU ordering with a 32-dataset bucket ceiling.
+- **TC-PERF-34 — warm history used a generic page instead of current viewport demand:** PATCHED. Active-chart warm requests accept visible bar count and use the bounded demand page policy.
+- **TC-PERF-35 — failed warm request could permanently suppress future warm attempts:** PATCHED. Warm failures clear the request latch.
+- **TC-PERF-36 — older prepend count could exaggerate viewport shift:** PATCHED. `ChartDataPlane.mergeOlder()` reports actual net dataset growth after normalization/retention.
+- **TC-PERF-37 — dependency planner omitted transitive source/base edges:** PATCHED. Composite graph nodes now include explicit source → primitive → composite paths.
+- **TC-PERF-38 — dependency planner did not expose an execution order:** PATCHED. `buildIndicatorDependencyGraph()` now returns deterministic topological order and rejects cycles.
+- **TC-PERF-39 — rolling WMA/Bollinger/Donchian math rescanned windows:** PATCHED. Shared kernels now use rolling recurrences/deques for linear-pass behavior.
+- **TC-PERF-40 — indicator presentation and computation could become coupled:** PATCHED. Appearance fields remain outside mathematical cache identity; style changes update renderer options only.
+- **TC-PERF-41 — v106 regression guard:** PATCHED. Added history-cache/dependency-plan/style-boundary checks.
+
+### v106 validation
+
+- [x] v103/v104/v105 contracts remain in `test:contracts`.
+- [x] v106 history/dependency/style contract passed.
+- [x] Selected TypeScript/TSX transpilation/parser validation passed for changed files.
+- [ ] Dependency-backed full `tsc --noEmit`.
+- [ ] Vite production build with installed dependencies.
+- [ ] Connected FYERS 16-chart browser stress test with request, worker and retained-bucket telemetry.
+
+**Non-interference:** CoreSpirit v98 semantics, broker execution/risk authority, realtime symbol feed ownership, terminal dock ownership, and chart-local drawing semantics remain unchanged.
+
+## v107 incremental indicator execution — 2026-09-29
+
+- **TC-PERF-42 — same-bar revision cache reuse could serve stale indicator values:** PATCHED. Indicator snapshot cache identity now includes the active tail OHLCV tuple; forming-bar updates use a separate incremental path.
+- **TC-PERF-43 — repeated period-window scans remained in hot indicator math:** PATCHED. Added reusable rolling mean/variance/min-max/sum/absolute-deviation/EMA/Wilder/ATR/WMA/VWAP session states and refactored the named batch paths.
+- **TC-PERF-44 — CCI exact deviation required an O(period) rescan:** PATCHED. Exact rolling absolute deviation now uses an ordered multiset with expected O(log period) insert/delete/rank work.
+- **TC-PERF-45 — forming ticks could not update worker-resident indicator state:** PATCHED. Worker supports `snapshot`, `replace`, and `append` execution modes with explicit seed/resync semantics.
+- **TC-PERF-46 — snapshot priming and tick updates could land on different indicator workers:** PATCHED. Incremental chart requests use a stable worker affinity key shared by the priming snapshot and later updates.
+- **TC-PERF-47 — incremental results could still replace whole chart series:** PATCHED. Supported line/channel/MACD/Stochastic/Supertrend/Ichimoku/Ribbon outputs use tail `series.update()`.
+- **TC-PERF-48 — indicator dialogue did not expose compact gear/code affordances:** PATCHED. Live chart indicator rows now have settings and `Code` actions; settings panels expose the source action; a read-only source viewer was added.
+- **TC-PERF-49 — v107 incremental contract coverage:** PATCHED. Added `indicatorIncrementalContract.test.mjs` and included it in the contract suite.
+
+### v107 validation
+
+- [x] Standard-indicator numerical parity and same-bar replacement checks completed.
+- [x] v107 static contract executed.
+- [x] Architecture/tracker/docs updated after the v106 baseline review.
+- [ ] Dependency-backed full `tsc --noEmit`.
+- [ ] Vite production build with a complete dependency install.
+- [ ] Connected-broker/browser performance stress test with tick-rate and FPS telemetry.
+
+**Non-interference:** v107 does not alter CoreSpirit v98 language/runtime authority, order/risk authority, shared broker:symbol subscriptions, terminal dock ownership, or drawing semantics.

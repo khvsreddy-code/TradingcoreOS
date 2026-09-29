@@ -1,0 +1,49 @@
+{
+  "release": "TradingCoreOS v108 architecture lock",
+  "updated": "2026-09-29",
+  "baseline": "TradingCoreOS-v107-incremental-indicator-execution",
+  "architecture": {
+    "language": "CoreSpirit",
+    "chartBackend": "vela-native",
+    "dataPlane": "TCO canonical columnar market data",
+    "compute": "TCO CoreSpirit / indicator / model execution",
+    "execution": "TCO-owned risk / policy / broker authorization"
+  },
+  "removed": [
+    "lightweight-charts application dependency",
+    "external scripting compatibility translator/runtime/catalog",
+    "external public-script catalog dependency",
+    "direct vendor chart imports from workspace/CoreSpirit feature code"
+  ],
+  "added": [
+    "vendor/vela with upstream LICENSE and NOTICE",
+    "src/services/core/chart/velaChartFacade.ts",
+    "src/services/core/chart/velaNativeChartRenderer.ts",
+    "src/velaV108BoundaryContract.test.mjs",
+    "docs/VELA_INTEGRATION.md",
+    "CORESPIRIT_V108_MANIFEST.json",
+    "CORESPIRIT_V108_RELEASE_NOTES.md"
+  ],
+  "boundary": {
+    "productionRenderer": "src/services/core/chart/chartRendererFactory.ts",
+    "backendPolicy": "src/services/core/chart/chartBackendPolicy.ts",
+    "workspaceBoundary": "src/components/workspace/chartController.ts",
+    "coreSpiritBoundary": "src/services/coreSpirit/chartOutputController.ts",
+    "vendorAccessPolicy": "Only the TCO Vela adapter and native renderer implementation may import vendor/vela."
+  },
+  "deepening": {
+    "D1": "typed-array Vela ingress",
+    "D2": "viewport-driven renderer LOD",
+    "D3": "stable CoreSpirit render packets with tail updates",
+    "D4": "retained native drawings",
+    "D5": "multi-chart crosshair/range synchronization",
+    "D6": "frame/GPU allocation regression budgets"
+  },
+  "validation": {
+    "velaBoundaryContract": "PASS",
+    "focusedVelaTypecheck": "PASS with validation-only missing Zag declarations stubbed",
+    "fullApplicationBuild": "NOT_CLAIMED; dependency installation in the offline archive environment timed out",
+    "browserSmoke": "NOT_RUN"
+  },
+  "status": "IMPLEMENTED_BOUNDARY_LOCK__DEEPENING_PENDING"
+}
