@@ -625,10 +625,444 @@ TradingCoreOS began as the initial project scaffold and rapidly evolved into a b
 - `e709917` — Delete all files
 - `2e754d8` — v109 vela chart engine
 
-## Notes
 
-- This file records the repository's actual Git commit subjects; it does not invent feature details for commits whose messages are vague (for example, `test`, `deleted`, or `Add files via upload`).
-- Commit subjects are preserved as written in Git, with the commit SHA abbreviated to seven characters for readability.
-- The changelog is chronological: oldest commits first, newest commits last.
-- The act of creating this file produces a new Git commit. That changelog-creation commit is intentionally not included in the historical section above because the history was reconstructed immediately before this file was written.
+## Detailed Architecture Milestones
+
+The commit-by-commit list above is the authoritative chronological record. The sections below provide additional context for the major architectural phases without replacing the actual Git history.
+
+### 1. Repository foundation — 2026-08-03
+
+The project starts as a trading application scaffold and immediately establishes the first major platform boundaries.
+
+The first functional commits introduce Supabase authentication, protected user state, broker onboarding, broker capability tracking, broker settings, and OAuth integration. The early architecture moves away from a purely demo-oriented experience toward a real broker-connected workflow.
+
+Important early transitions include:
+
+- Supabase SDK/authentication integration;
+- user profile/session management;
+- protected routes;
+- broker connection requirements;
+- broker capability metadata;
+- trade-record modeling;
+- broker OAuth callback handling;
+- Vercel/serverless deployment support.
+
+The initial deployment work also establishes an early pattern that remains throughout the repository: browser-facing UI and server-side broker operations are deliberately separated.
+
+### 2. Broker-aware market-data foundation — 2026-09-02
+
+The September 2 development burst establishes much of the broker-aware market-data architecture.
+
+The repository introduces and repairs:
+
+- FYERS low-latency market-data transport;
+- broker-selected streaming clients;
+- broker-specific market-data routes;
+- broker-aware chart ticks;
+- broker-selected live feeds;
+- current-session FYERS candles;
+- broker-aware portfolio synchronization;
+- active-broker state;
+- chart indicator management;
+- OI-level ranking;
+- option/OI preferences;
+- portfolio daily P&L and snapshot history;
+- initial CE/PE automation templates;
+- workspace navigation optimizations;
+- code splitting and request caching;
+- stale tick/response rejection.
+
+This phase is important because it establishes that a connected broker is not merely an order destination: it also determines the correct market-data source, instrument identity, history route, and portfolio context.
+
+### 3. Vercel/API recovery and broker transport consolidation — 2026-09-12 to 2026-09-13
+
+A large portion of the September 12–13 history is dedicated to making production API routing explicit and recoverable.
+
+The work restores or introduces:
+
+- TradingCoreRuntime;
+- OAuth popup and broker OAuth services;
+- workspace state;
+- Upstox market-data client;
+- explicit OAuth login/callback functions;
+- shared market-feed types;
+- explicit broker market-stream functions;
+- explicit Express API entrypoint;
+- streaming-capable API routing;
+- broker-specific history routes;
+- rate gates;
+- option-chain routing;
+- instrument search;
+- historical payload limits;
+- stale Vite chunk handling.
+
+The architecture then removes conflicting nested/catch-all Vercel functions in favor of a single explicit Express API boundary.
+
+This period also restores major production-source modules that had been lost or displaced during rapid refactoring. Those restoration commits are intentionally retained in the changelog because they are part of the repository's actual history.
+
+### 4. Trading workspace and terminal expansion — 2026-09-13
+
+The September 13 sequence expands the application from a broker/data shell into a fuller trading workspace.
+
+The history includes:
+
+- command-center home;
+- live trading terminal;
+- pro watchlist;
+- multi-chart workspace;
+- option scalper surfaces;
+- trading panels;
+- option-chain UX;
+- risk-aware order ticket;
+- target/stop/trailing-risk fields;
+- chart-focused rendering;
+- broker-correct instrument selection;
+- dynamic price levels;
+- indicator settings;
+- watchlist search;
+- watchlist rename/persistence;
+- draggable/resizable workspace modules;
+- pinned advanced order ticket;
+- Supabase workspace settings persistence.
+
+The terminal architecture also undergoes several restorations and consolidations. The later architecture work explicitly retires multiple V2/V3/V4/V5 terminal implementations so the application does not continue carrying parallel production paths.
+
+### 5. Indicator settings and quantitative chart features
+
+Indicator development progresses from fixed studies toward configurable, reusable indicator metadata.
+
+The repository history records work for:
+
+- indicator anchor settings;
+- universal indicator settings;
+- source selection;
+- line width/style;
+- periods and multipliers;
+- multi-line color settings;
+- Dynamic LVLS settings;
+- chart indicator manager;
+- user-added study visibility;
+- quantitative level validation.
+
+The settings architecture later becomes schema-driven, which is a major architectural step: the UI can consume a declared indicator contract instead of hard-coding each indicator's controls.
+
+### 6. History reliability and first-paint recovery — 2026-09-19 to 2026-09-21
+
+The September 19–21 history contains an extensive series of chart-history repairs.
+
+The work explicitly targets:
+
+- progressive history loading;
+- large-history validation;
+- request-limit protection;
+- NIFTY/FNO history;
+- FYERS history recovery;
+- pagination;
+- date formatting;
+- intraday range timestamps;
+- completed trading-day ranges;
+- no-data handling;
+- normalization-loss diagnosis;
+- first-paint transport;
+- history request guards;
+- startup fanout reduction;
+- automatic backfill suppression;
+- restoration of proven transport paths;
+- saved symbol normalization;
+- cached 304 handling.
+
+This phase is particularly important to the current chart architecture because it demonstrates why live quote transport, historical-demand scheduling, and rendering must remain separately observable systems.
+
+### 7. Live feed lifecycle and heartbeat hardening — 2026-09-24
+
+The September 24 work focuses on realtime reliability after the history path had been stabilized.
+
+The repository records:
+
+- FYERS v3 stream lifecycle stabilization;
+- official subscription wire-format alignment;
+- cleanup on response close;
+- faster stale quote fallback;
+- quote heartbeat;
+- timeout-aware heartbeat;
+- dedicated fast-lane heartbeat;
+- tab recovery;
+- focused-chart-independent subscriptions;
+- live-stream watchdog behavior;
+- chart/toolbar repair.
+
+The architectural consequence is that a live quote must remain available even when a chart's historical state or focused layout is changing.
+
+### 8. CoreSpirit architecture consolidation — 2026-09-18 onward
+
+The CoreSpirit line starts appearing as an explicit staged architecture and rapidly becomes one of the repository's largest engineering tracks.
+
+The project moves through:
+
+- AST/IR foundations;
+- language simplification;
+- canonical surface normalization;
+- token-aware parsing;
+- canonical compilation units;
+- CST-aware normalization;
+- semantic dependency graphs;
+- model alias resolution;
+- composability metadata;
+- semantic graph lineage;
+- source provenance;
+- optimized-IR source maps;
+- vectorized series primitives;
+- fusion metadata;
+- reactive dependency indexing;
+- component semantic binding;
+- standard-library catalogs;
+- namespace/member-call parsing;
+- production CoreSpirit contracts.
+
+The central architectural rule is repeatedly reinforced:
+
+    source
+      -> canonical compiler
+      -> stable IR
+      -> VM
+      -> reactive runtime
+
+rather than multiple incompatible language or execution paths.
+
+### 9. CoreSpirit semantic composability — v76/v77 era
+
+The v76/v77 work is a major shift from syntax-level convenience toward semantic composition.
+
+The history includes:
+
+- token-aware crossing/call detection;
+- canonical normalization;
+- semantic dependency graph creation;
+- semantic graph contracts;
+- model alias resolution;
+- model output resolution;
+- AST-derived composition metadata;
+- market/timeframe alias identity preservation;
+- expression-node collapsing;
+- semantic event direction;
+- automation ownership boundaries.
+
+The resulting design lets the compiler understand what a component depends on rather than merely copying source fragments.
+
+### 10. CoreSpirit source provenance — v78 era
+
+The v78 sequence adds source provenance directly to IR instructions.
+
+The work includes:
+
+- instruction origins;
+- centralized source-map generation;
+- provenance preservation after optimization;
+- direct optimized-IR origins;
+- semantic graph source attribution;
+- optional provenance validation;
+- regression contracts.
+
+This makes optimized execution compatible with meaningful editor diagnostics and runtime inspection.
+
+### 11. CoreSpirit performance and canonical data-plane hardening — v88 onward
+
+Later CoreSpirit work targets actual runtime cost instead of only language features.
+
+The history includes:
+
+- reactive source dependency indexing;
+- removal of avoidable O(n) queue shifts;
+- removal of spread-based min/max work over history;
+- vectorized z-score primitives;
+- pct-change fusion;
+- series vector runtime contracts;
+- series fusion planner;
+- standard-library execution metadata;
+- canonical library catalog;
+- production build validation.
+
+These changes are part of the larger goal of making CoreSpirit both expressive and efficient under live reactive workloads.
+
+### 12. Production-source recovery and architecture consolidation — 2026-09-28
+
+The September 28 sequence contains a significant production hardening/recovery pass.
+
+It restores or repairs:
+
+- ThemeContext/theme module;
+- production source tree;
+- CoreSpirit storage schema;
+- namespace registry;
+- vector runtime contract;
+- series fusion planner;
+- model component adapter;
+- source inspector;
+- version contracts;
+- run manifest;
+- session calendar;
+- reconciliation;
+- public CoreSpirit barrels;
+- reactive dependency index;
+- VM component contract;
+- semantic graph nodes;
+- type algebra;
+- standard-library metadata;
+- builtin resolver;
+- chart market store;
+- chart performance telemetry;
+- canonical marketDataStore ESM compatibility;
+- workspace ThemeToggle;
+- route error recovery;
+- broker validation import resolution.
+
+At the same time, retired terminal implementations and a retired duplicate-slot workflow are removed.
+
+The architectural intent is not simply to make the build pass; it is to ensure production code converges on one implementation rather than silently retaining historical forks.
+
+### 13. Canonical chart/data-plane direction — v94/v95/v96/v97 line
+
+The later chart architecture moves ownership toward a canonical market-data plane and renderer-neutral chart engine.
+
+The relevant history establishes contracts for:
+
+- zero-copy canonical data;
+- chart market store;
+- chart performance telemetry;
+- canonical data-plane chart engine;
+- viewport/scale engine;
+- drawing/navigation API;
+- chart interaction;
+- history demand;
+- multi-chart coordination.
+
+The Vela decision then places the external renderer behind this TCO-owned boundary.
+
+### 14. Indicator schema and community architecture — v98 onward
+
+The repository moves toward a universal indicator definition model.
+
+The resulting design separates:
+
+- calculation metadata;
+- settings schema;
+- persisted settings;
+- visual outputs;
+- capabilities;
+- publication metadata;
+- compiled-artifact identity.
+
+This supports a future in which native and community indicators share the same contract rather than receiving separate UI/runtime implementations.
+
+### 15. V100–V108 terminal/chart/data-plane refinement
+
+The v100+ history concentrates on terminal density, right-side dock architecture, React-root consolidation, shared chart data, multi-chart computation, history-demand scheduling, and incremental indicator execution.
+
+The architectural direction is increasingly explicit:
+
+- one terminal shell;
+- one chart ownership boundary;
+- one canonical market store;
+- one indicator execution graph;
+- demand-driven history;
+- incremental updates;
+- bounded multi-chart computation.
+
+### 16. V109 — Vela chart engine — 2026-09-29
+
+Commit 2e754d8 records the V109 Vela chart-engine direction.
+
+The corresponding repository documentation locks the intended boundary:
+
+    TradingCoreOS
+      |
+      +-- CoreSpirit
+      +-- TCO data/compute/broker systems
+      +-- TCO Chart API
+                 |
+             Vela renderer
+                 |
+          WebGL2 / Canvas2D
+
+The documented Vela integration also removes the production architecture's dependency on Lightweight Charts and explicitly rejects PineScript/PineTS compatibility as the platform's scripting model.
+
+CoreSpirit remains the user-facing language.
+
+### 17. Changelog and repository documentation — 2026-09-29
+
+The repository history then adds:
+
+- 2e754d8 — v109 vela chart engine
+- bf6e2da — docs: add complete repository changelog
+- cdebd2d — docs: add comprehensive TradingCoreOS README
+
+The README is intentionally descriptive rather than promotional. It explains current architecture, development commands, environment configuration, validation, documentation, ownership boundaries, performance direction, and roadmap status.
+
+## Current Repository State
+
+At the time this changelog was expanded, the repository contains a documented CoreSpirit-first platform with:
+
+- CoreSpirit compiler/runtime contracts;
+- semantic composability;
+- IR provenance/source maps;
+- incremental/reactive execution work;
+- canonical chart/data-plane architecture;
+- Vela renderer integration;
+- broker-neutral FYERS/Upstox infrastructure;
+- live-stream and historical-data recovery mechanisms;
+- schema-driven indicator configuration;
+- indicator dependency/community contracts;
+- terminal/workspace components;
+- ML/research infrastructure;
+- authentication/security/storage boundaries;
+- extensive executable architecture contracts.
+
+The project should be read as a layered platform rather than as a single chart application.
+
+## Changelog Accuracy Policy
+
+This changelog intentionally uses three levels of historical description:
+
+1. **Exact Git commit subject** — preserved verbatim in the chronological history.
+2. **Documented architectural interpretation** — used only where the repository's release notes, architecture documents, manifests, or surrounding commit sequence support the interpretation.
+3. **Explicit future direction** — identified as roadmap/follow-up rather than represented as already implemented.
+
+No vague commit such as "fixed", "test", "deleted", or "huge improvement" is given an invented technical explanation.
+
+The detailed milestone sections are therefore a contextual map, while the chronological commit list remains the immutable historical index.
+
+## Documentation Index
+
+The repository now has several layers of documentation:
+
+- CHANGELOG.md — complete Git history and architectural evolution;
+- README.md — project overview, architecture, development, validation, and current direction;
+- docs/CORESPIRIT.md — CoreSpirit architecture and runtime principles;
+- docs/CORESPIRIT_SCRIPTING.md — CoreSpirit authoring;
+- docs/CORESPIRIT_COMPOSABILITY.md — semantic composition;
+- docs/CORESPIRIT_BUILD_TRACKER.md — CoreSpirit implementation tracking;
+- docs/CHART_ENGINE_ARCHITECTURE.md — chart engine ownership;
+- docs/CHART_DATA_PLANE_ARCHITECTURE.md — canonical chart data plane;
+- docs/CHART_HISTORY_DEMAND_ARCHITECTURE.md — demand-driven history;
+- docs/CHART_INTERACTION_API.md — chart interaction contracts;
+- docs/CHART_DRAWING_INTERACTION_ARCHITECTURE.md — drawing architecture;
+- docs/CHART_MULTI_CHART_ARCHITECTURE.md — multi-chart architecture;
+- docs/CHART_RENDERER_MIGRATION.md — renderer migration;
+- docs/VELA_INTEGRATION.md — current Vela boundary;
+- docs/INDICATORS_USER_AUTHORING.md — user indicator authoring;
+- docs/INDICATOR_SETTINGS_SCHEMA.md — universal settings schema;
+- docs/INDICATOR_DEPENDENCY_GRAPH_ARCHITECTURE.md — indicator dependency graph;
+- docs/INDICATOR_COMMUNITY_ARCHITECTURE.md — community indicator model;
+- docs/history/ — selected historical architecture records;
+- docs/fyers/ — FYERS-specific operational history and state;
+- TRADINGCORE_REPAIR_TRACKER.md — repair/hardening tracking.
+
+## Historical Coverage
+
+- Initial commit: ac7f47f — 2026-08-03
+- Latest pre-changelog commit: 2e754d8 — 2026-09-29
+- Changelog creation: bf6e2da — 2026-09-29
+- README creation: cdebd2d — 2026-09-29
+
+The original repository history contained 531 commits before the changelog was created. The two documentation commits are now themselves part of Git history and are recorded in the detailed milestone section above.
 
