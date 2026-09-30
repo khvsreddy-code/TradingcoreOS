@@ -9,6 +9,7 @@ import {
   writeIndicatorSettingValue,
   type IndicatorSettingField,
   type IndicatorSettingPrimitive,
+  type IndicatorSettingValue,
   type IndicatorSettingsSection,
 } from '../../services/coreSpirit/indicatorSettingsSchema';
 
@@ -54,13 +55,27 @@ function renderField(
   if (!matchesVisibility(item, field)) return null;
   const value = fieldValue(item, field);
   const fieldClass = `mt-1 w-full rounded-md border border-[var(--tco-control)] bg-[var(--tco-bg)] ${compact ? 'px-2 py-1.5 text-[10px]' : 'px-2.5 py-2 text-[10px]'} text-white outline-none focus:border-[#3b82f6]/50 disabled:cursor-not-allowed disabled:opacity-60`;
-  const patchValue = (next: IndicatorSettingPrimitive) => onChange(writeIndicatorSettingValue(item as Record<string, unknown>, field.path, next) as Partial<IndicatorConfig>);
+  const patchValue = (next: IndicatorSettingValue) => onChange(writeIndicatorSettingValue(item as Record<string, unknown>, field.path, next) as Partial<IndicatorConfig>);
   const description = field.description ? <span className="mt-0.5 block text-[8px] leading-3 text-[var(--tco-dim)]">{field.description}</span> : null;
 
   if (field.kind === 'boolean') {
     return <label key={field.id} className="flex min-h-9 items-center gap-2 rounded border border-[var(--tco-border)] bg-[var(--tco-bg)] px-2 py-2 text-[9px] text-[var(--tco-text-2)]">
       <input type="checkbox" checked={Boolean(value)} disabled={field.readonly} onChange={event => patchValue(event.target.checked)} />
       <span className="min-w-0 flex-1">{field.label}{description}</span>
+    </label>;
+  }
+
+  if (field.kind === 'multi-select') {
+    const selected = Array.isArray(value) ? value.map(String) : [];
+    return <label key={field.id} className="block text-[9px] font-mono text-[var(--tco-muted)]">
+      {field.label}
+      <select multiple value={selected} disabled={field.readonly} onChange={event => {
+        const next = Array.from(event.currentTarget.selectedOptions).map(option => option.value).slice(0, 32);
+        patchValue(next);
+      }} className={`${fieldClass} min-h-20`}>
+        {(field.options || []).map(option => <option key={`${field.id}:${String(option.value)}`} value={String(option.value)}>{option.label}</option>)}
+      </select>
+      {description}
     </label>;
   }
 
@@ -173,6 +188,7 @@ export function IndicatorSettingsPanel({ item, compact = false, onChange, onOpen
         <div className="min-w-0 flex-1">
           <div className="text-[9px] font-semibold text-[var(--tco-text-2)]">{section.label}</div>
           <div className="mt-0.5 text-[8px] leading-3 text-[var(--tco-dim)]">{section.description}</div>
+          {section.id === 'style' && <div className="mt-1 text-[8px] font-mono text-[#60a5fa]">APPEARANCE-ONLY · changing these values does not recompute indicator math</div>}
         </div>
         {advancedCount > 0 && <button type="button" onClick={() => setShowAdvanced(value => !value)} className="shrink-0 rounded border border-[var(--tco-border)] px-2 py-1 text-[8px] font-mono text-[var(--tco-dim)] hover:text-white">{showAdvanced ? 'Basic' : `Advanced · ${advancedCount}`}</button>}
       </div>

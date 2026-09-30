@@ -21,7 +21,7 @@ import type { VelaTheme } from '../../core/options';
 import type { OHLCV } from '../../core/model/ohlcv';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
-import type { Pane, PriceLine } from '../../core/model/scene';
+import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
@@ -39,7 +39,7 @@ import {
 } from '../../core/options';
 import type { Unsubscribe } from '../../core/util/types';
 import { SecondClock, type WallClock } from '../../core/util/wall-clock';
-import { isLineLikeSeries, seriesShownOn, type SeriesSurface } from '../../core/model/series';
+import { isLineLikeSeries, seriesShownOn, type SeriesSurface, type SeriesPoint } from '../../core/model/series';
 import { InputsUI, type LegendPlotValue } from '../shared/InputsUI';
 import { PaneControls } from './chrome/PaneControls';
 import { AxisScaleButtons, type AxisScaleView } from './chrome/AxisScaleButtons';
@@ -2204,10 +2204,51 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     /** Host bridge: replace a model's renderer-owned price-line collection without exposing SceneGraph. */
+    /** TCO renderer-only pane controls. These alter presentation/scale state and never touch indicator values. */
+    configurePaneAppearance(paneId: string, opts: { scale?: 'price' | 'percent' | 'indexed'; log?: boolean; scaleMode?: 'auto' | 'manual'; auto?: boolean; min?: number | null; max?: number | null; inverted?: boolean }): void {
+        const pane = this.scene.panes.get(paneId);
+        if (!pane) return;
+        if (opts.scaleMode) this.setPaneScaleMode(paneId, opts.scaleMode === 'manual' ? 'price' : opts.scale);
+        if (opts.log !== undefined) this.setPaneLog(paneId, Boolean(opts.log));
+        if (opts.inverted !== undefined) this.setPaneInvert(paneId, Boolean(opts.inverted));
+        const wantsAuto = opts.auto !== false && opts.scaleMode !== 'manual';
+        if (wantsAuto) pane.manualScale = null;
+        else {
+            const current = pane.manualScale ?? { ...pane.scale };
+            pane.manualScale = {
+                ...current,
+                min: opts.min != null && Number.isFinite(opts.min) ? Number(opts.min) : current.min,
+                max: opts.max != null && Number.isFinite(opts.max) ? Number(opts.max) : current.max,
+                log: opts.log ?? current.log,
+                invert: opts.inverted ?? current.invert,
+            };
+        }
+        this.scheduler?.invalidate(InvalidateLevel.Full);
+    }
+
     setIndicatorPriceLines(indicatorId: string, lines: PriceLine[]): void {
         const model = this.scene.indicators.get(indicatorId);
         if (!model) return;
         model.priceLines = lines;
+        this.scheduler.invalidate(InvalidateLevel.Light);
+    }
+
+    /** TCO bridge: mutate presentation-only fill state without running indicator math. */
+    setIndicatorFills(indicatorId: string, fills: Fill[]): void {
+        const model = this.scene.indicators.get(indicatorId);
+        if (!model) return;
+        model.fills = fills;
+        this.scheduler.invalidate(InvalidateLevel.Light);
+    }
+
+    /** TCO bridge: update renderer-owned fill anchor points only. */
+    setIndicatorSeriesPoints(indicatorId: string, updates: Array<{ seriesId: string; points: SeriesPoint[] }>): void {
+        const model = this.scene.indicators.get(indicatorId);
+        if (!model) return;
+        for (const update of updates) {
+            const series = model.series.find((candidate) => candidate.id === update.seriesId);
+            if (series && isLineLikeSeries(series)) series.points = update.points;
+        }
         this.scheduler.invalidate(InvalidateLevel.Light);
     }
 

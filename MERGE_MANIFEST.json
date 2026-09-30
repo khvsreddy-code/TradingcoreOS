@@ -1,14 +1,15 @@
 {
-  "release": "TradingCoreOS v109 schema-driven indicator architecture",
-  "updated": "2026-09-29",
-  "baseline": "TradingCoreOS v108 CoreSpirit + Vela architecture lock",
+  "release": "CoreSpirit v111",
+  "updated": "2026-09-30",
+  "baseline": "TradingCoreOS v109 CoreSpirit + Vela architecture lock + v110 indicator appearance schema",
   "architecture": {
     "language": "CoreSpirit",
     "chartBackend": "vela-native",
     "dataPlane": "TCO canonical columnar market data",
     "compute": "TCO CoreSpirit / indicator / model execution",
     "execution": "TCO-owned risk / policy / broker authorization",
-    "indicatorSettings": "Versioned IndicatorSettingsSchema consumed by universal editor, workspace normalization, publication and render projection"
+    "indicatorSettings": "Versioned IndicatorSettingsSchema consumed by universal editor, workspace normalization, publication and render projection",
+    "indicatorComponents": "CoreSpiritIndicatorComponent with typed ports, declarative lifecycle projections and existing CoreSpirit execution hosts"
   },
   "removed": [
     "indicator-kind-specific settings UI branches",
@@ -18,10 +19,22 @@
   ],
   "added": [
     "src/services/coreSpirit/indicatorSettingsSchema.ts",
+    "src/services/coreSpirit/indicatorAppearance.ts",
+    "src/components/indicators/IndicatorSettingsPanel.tsx",
+    "src/services/core/chart/velaChartFacade.ts",
+    "vendor/vela/src/renderers/native/NativeRenderer.ts",
     "docs/INDICATOR_SETTINGS_SCHEMA.md",
-    "CORESPIRIT_V109_MANIFEST.json",
-    "CORESPIRIT_V109_RELEASE_NOTES.md",
-    "src/indicatorSettingsSchemaContract.test.mjs"
+    "CORESPIRIT_V110_MANIFEST.json",
+    "CORESPIRIT_V110_RELEASE_NOTES.md",
+    "src/indicatorAppearanceContract.test.mjs",
+    "docs/history/v110-indicator-appearance-schema-v2.md",
+    "src/services/coreSpirit/coreSpiritIndicatorComponent.ts",
+    "src/coreSpiritIndicatorComponentContract.test.mjs",
+    "src/coreSpiritIndicatorDeclarativeExecutionContract.test.mjs",
+    "src/velaFacadeRuntimeExportContract.test.mjs",
+    "CORESPIRIT_V111_MANIFEST.json",
+    "CORESPIRIT_V111_RELEASE_NOTES.md",
+    "docs/history/v111-first-class-indicator-components.md"
   ],
   "boundary": {
     "productionRenderer": "src/services/core/chart/chartRendererFactory.ts",
@@ -31,15 +44,22 @@
     "vendorAccessPolicy": "Only the TCO Vela adapter and native renderer implementation may import vendor/vela."
   },
   "roadmap": {
-    "stages": 145,
-    "newRange": "131-145"
+    "stages": 154,
+    "newRange": "146-154"
   },
   "validation": {
-    "indicatorSchemaContract": "PENDING",
+    "indicatorSchemaContract": "PASS",
     "velaBoundaryContract": "PASS_FROM_V108",
-    "focusedSchemaTypecheck": "PASS",
+    "focusedSchemaTypecheck": "PASS_FOR_NODE_CONTRACTS; TSX_UNAVAILABLE",
     "fullApplicationBuild": "NOT_CLAIMED",
-    "browserSmoke": "NOT_RUN"
+    "browserSmoke": "NOT_RUN",
+    "indicatorComponentContract": "PASS",
+    "indicatorDeclarativeExecutionContract": "PASS",
+    "velaRuntimeExportContract": "PASS"
   },
-  "status": "IMPLEMENTED_SCHEMA_BOUNDARY__Vela_DATA_DEEPENING_PENDING"
+  "status": "IMPLEMENTED_FIRST_CLASS_CORESPIRIT_INDICATOR_COMPONENTS__DECLARATIVE_EXECUTION_HOSTS__VELA_RUNTIME_EXPORT_REPAIR",
+  "stage": "v111",
+  "indicatorSettingsSchemaVersion": 2,
+  "workspaceIndicatorSettingsVersion": "indicator-settings-v8",
+  "validationTarget": "TCO_V110_INDICATOR_APPEARANCE_CONTRACT_OK"
 }

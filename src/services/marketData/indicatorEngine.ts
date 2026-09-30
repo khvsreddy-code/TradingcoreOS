@@ -1,3 +1,4 @@
+import type { IndicatorAppearanceConfig } from '../coreSpirit/indicatorAppearance';
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { buildTradingCoreVStructure } from './structureEngine';
 import { sma, ema, rma as wilder, trueRanges, atr, wma as weightedMovingAverage } from './coreIndicatorKernel';

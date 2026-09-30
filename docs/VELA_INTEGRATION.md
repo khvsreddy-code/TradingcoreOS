@@ -133,3 +133,66 @@ A style-only change must therefore update renderer state without invalidating in
 - No broker capability exposed through Vela.
 - No renderer-specific language keywords in CoreSpirit.
 - No second production chart vendor.
+
+
+## v110 indicator presentation bridge
+
+The Vela adapter now consumes the same renderer-neutral appearance contract used by the universal indicator editor.
+
+```text
+IndicatorAppearanceConfig
+├── line → Vela series style + visibility
+├── fill → Vela Fill primitive between hidden anchor series
+├── marker → renderer-neutral marker projection
+├── levels → level line presentation
+└── pane → pane ownership + scale presentation
+```
+
+Appearance-only changes invalidate the native renderer at Light/Full presentation levels as required by the affected operation, but they never invoke the indicator worker.
+
+### Fill ownership
+
+Band fills are mounted as renderer-owned indicator models. Their source series are hidden anchor series containing existing computed points. A fill update can therefore swap color, opacity, gradient or conditional coloring without rebuilding the source indicator.
+
+### Pane ownership
+
+Separate panes are keyed by `tco-indicator-pane:<indicatorId>` and shared by all outputs belonging to one indicator. `auto` retains the indicator's current host pane; `overlay` explicitly returns to the price pane.
+
+### Worker isolation
+
+The chart compute coordinator strips appearance-only fields before worker dispatch. This both enforces the architectural invariant and reduces structured-clone payload size as appearance schemas become richer.
+
+## v111 build-boundary repair — 2026-09-30
+
+`ShowcaseChart.tsx` exposed a renderer migration defect: it used `LineStyle.Dashed`, `LineStyle.Solid` and `LineStyle.Dotted` as runtime values while `velaChartFacade.ts` exported `LineStyle` only as a type alias. TypeScript erased the type export, so Vite/Rollup correctly reported that `LineStyle` was not an exported runtime symbol.
+
+The facade now exposes a runtime-safe `LineStyle` object and a separate `LineStyleValue` type:
+
+```ts
+export const LineStyle = Object.freeze({
+  Solid: 0,
+  Dashed: 1,
+  Dotted: 2,
+});
+```
+
+The chart contract remains TCO-owned; this is not a reintroduction of a legacy renderer API. A dedicated contract test prevents another type-only/runtime export mismatch.
+
+## v111.1 — Vela remains a renderer projection, never indicator truth
+
+First-class indicator components deliberately stop before the Vela boundary. Their plot/visual declarations are renderer-neutral. The TCO chart API decides how those outputs become Vela series, fills, markers, levels and pane projections.
+
+```text
+CoreSpirit indicator declaration
+        ↓
+renderer-neutral visual outputs
+        ↓
+TCO Chart API
+        ↓
+Vela adapter
+        ↓
+Vela NativeRenderer
+```
+
+This is important for portability: an indicator can run in historical, replay or realtime hosts without knowing which renderer is currently presenting it. Vela is a production rendering backend, not the source of indicator semantics.
+

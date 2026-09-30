@@ -451,3 +451,72 @@ indicator workers ≤ 2
 - [ ] Connected-broker/browser performance stress test with tick-rate and FPS telemetry.
 
 **Non-interference:** v107 does not alter CoreSpirit v98 language/runtime authority, order/risk authority, shared broker:symbol subscriptions, terminal dock ownership, or drawing semantics.
+
+
+## Indicator presentation plane — v110 — 2026-09-29
+
+The indicator settings/renderer work is tracked separately from broker/data defects so appearance hardening cannot regress the existing market-data repairs.
+
+| ID | Area | Severity | Defect / hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-PERF-50 | Indicator schema | High | Appearance was only partially declarative and could not express rich fills, markers, level styling or pane/scale presentation. | **FIXED — STATIC VERIFY** | `src/services/coreSpirit/indicatorSettingsSchema.ts`, `src/services/coreSpirit/indicatorAppearance.ts` |
+| TC-PERF-51 | Compute invalidation | Critical | Appearance settings must never participate in mathematical indicator invalidation. | **FIXED — STATIC CONTRACT** | `buildIndicatorComputationSignature`, `LiveChart` compute/appearance effect split, `incrementalIndicatorEngine.ts` |
+| TC-PERF-52 | Worker payload | Medium | Rich appearance metadata should not be structured-cloned into indicator workers when only calculation inputs are required. | **FIXED — STATIC VERIFY** | `chartComputeCoordinator.ts` |
+| TC-PERF-53 | Vela renderer | High | Fill and pane presentation needed native adapter paths that mutate renderer state without re-running indicator math. | **FIXED — STATIC VERIFY** | `velaChartFacade.ts`, `NativeRenderer.ts` |
+| TC-PERF-54 | Compatibility | Medium | Published v1 custom indicator schemas must remain loadable after the v2 appearance contract. | **FIXED — STATIC VERIFY** | `indicatorSettingsSchema.ts` v1→v2 envelope migration |
+| TC-PERF-55 | Marker presentation | Medium | Marker identity was not associated with the originating indicator, making universal appearance application unreliable. | **FIXED — STATIC VERIFY** | `LiveChart.tsx` marker grouping / schema appearance |
+| TC-PERF-56 | Regression guard | High | Rich appearance paths need a contract proving they remain outside calculation invalidation. | **FIXED — STATIC CONTRACT** | `src/indicatorAppearanceContract.test.mjs` |
+
+### v110 verification note
+
+Node-based contracts can run from the extracted tree. A dependency-backed full TypeScript/Vite build and live WebGL2/Canvas2D browser smoke test remain explicitly unclaimed until a complete dependency environment is available.
+
+
+## v111 — CoreSpirit programmable indicators + Vela build repair — 2026-09-30
+
+### Production build defect
+
+- **TC-BUILD-01 — `LineStyle` runtime export:** **PATCHED.** `ShowcaseChart.tsx` imported `LineStyle` from the TCO Vela facade and used it as a runtime object. The facade had only `export type LineStyle`, so Rollup could not find a runtime export. It now exposes `LineStyle` as an immutable runtime object with `Solid`, `Dashed`, and `Dotted`, plus the separate `LineStyleValue` type.
+- **TC-BUILD-02 — runtime export regression guard:** **PATCHED.** Added `src/velaFacadeRuntimeExportContract.test.mjs` and added it to `test:contracts`.
+
+### CoreSpirit indicator model
+
+| ID | Area | Severity | Defect / hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-CS-01 | Indicator artifact | Critical | Indicators were still primarily a native-indicator concept rather than an explicit first-class programmable CoreSpirit component artifact. | **FIXED — STATIC VERIFY** | `src/services/coreSpirit/coreSpiritIndicatorComponent.ts` |
+| TC-CS-02 | Typed ports | High | Indicator composition needed stable typed public inputs/outputs instead of indicator-specific plumbing. | **FIXED — STATIC VERIFY** | first-class indicator component contract |
+| TC-CS-03 | Lifecycle | High | Inputs/calculation/state/events/plots/visuals/alerts/metadata needed one self-describing contract. | **FIXED — STATIC VERIFY** | `CoreSpiritIndicatorComponent` |
+| TC-CS-04 | Execution | High | Planner-facing determinism/state/backend/caching metadata needed to travel with programmable indicators. | **FIXED — STATIC VERIFY** | component execution/state profiles |
+| TC-CS-05 | Composition | High | Indicator outputs needed to reuse the existing component graph instead of a separate indicator invocation system. | **FIXED — STATIC VERIFY** | component registry integration + existing member composition |
+| TC-CS-06 | Security | Critical | Public authored source must not become host/broker authority merely because it is represented as an indicator component. | **FIXED — STATIC VERIFY** | validation/registration boundary + publication docs |
+| TC-CS-07 | Language surface | Medium | Future `indicator "Name"` syntax must remain sugar over the existing artifact/component model rather than adding a second language. | **ROADMAP / CONTRACTED** | CoreSpirit roadmap stage 152 |
+
+### v111 verification
+
+- [x] Vela runtime export regression contract passes.
+- [x] First-class indicator component contract passes.
+- [x] Existing appearance/computation isolation remains intact.
+- [x] Roadmap now validates at 154 stages.
+- [ ] Dependency-complete Vite build in this extracted environment; npm installation timed out.
+- [ ] Post-push GitHub Actions and Vercel production build confirmation.
+
+## v111.1 — CoreSpirit indicator component depth
+
+| Item | Status | Implementation boundary |
+|---|---|---|
+| First-class indicator declaration envelope | **PATCHED** | `CoreSpiritIndicatorDeclaration` projects one compiled artifact |
+| Explicit typed public inputs | **PATCHED** | canonical data + parameter/component ports |
+| Explicit public output selection | **PATCHED** | authoring option rejects unknown output names |
+| Historical indicator execution | **PATCHED** | existing `CoreSpiritHistoricalExecutionHost` |
+| Realtime indicator host | **PATCHED** | existing `CoreSpiritRealtimeExecutionHost` |
+| No second indicator runtime | **LOCKED** | compiler → IR → artifact → existing hosts |
+| Registry unregister / alias cleanup | **PATCHED** | indicator registry + component registry |
+| Declaration/component consistency | **PATCHED** | validator checks identity, ports and calculation reference |
+| Scoped community install/uninstall | **NEXT** | capability/dependency lease lifecycle |
+| Zero-copy component output views | **NEXT** | shared canonical series references |
+| Stateful checkpoint manifests | **NEXT** | replayable component state ABI |
+
+### v111.1 non-interference rule
+
+Indicator declaration metadata, public port metadata and execution host helpers must not alter the v105/v106/v110 appearance-vs-computation invalidation rule. A style-only setting remains renderer-only; a mathematical input change is the only kind of setting change allowed to enter the computation invalidation path.
+

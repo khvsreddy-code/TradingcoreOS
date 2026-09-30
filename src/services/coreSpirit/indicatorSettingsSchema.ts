@@ -6,11 +6,14 @@
  * Runtime computation remains separate from this metadata contract.
  */
 
-export const INDICATOR_SETTINGS_SCHEMA_VERSION = 1 as const;
+import { buildIndicatorAppearanceSnapshot } from './indicatorAppearance';
+
+export const INDICATOR_SETTINGS_SCHEMA_VERSION = 2 as const;
 
 export type IndicatorJsonValue = string | number | boolean | null | IndicatorJsonValue[] | { [key: string]: IndicatorJsonValue };
 export type IndicatorSettingPrimitive = string | number | boolean;
-export type IndicatorSettingFieldKind = 'integer' | 'number' | 'select' | 'color' | 'range' | 'boolean' | 'text';
+export type IndicatorSettingValue = IndicatorSettingPrimitive | readonly string[];
+export type IndicatorSettingFieldKind = 'integer' | 'number' | 'select' | 'multi-select' | 'color' | 'range' | 'boolean' | 'text';
 export type IndicatorSettingsSectionId = 'inputs' | 'style' | 'display' | 'behavior' | 'alerts' | 'visualization';
 export type IndicatorPaneMode = 'auto' | 'overlay' | 'separate';
 export type IndicatorScaleMode = 'price' | 'percent' | 'indexed' | 'log';
@@ -30,7 +33,7 @@ export type IndicatorSettingField = Readonly<{
   path: string;
   label: string;
   kind: IndicatorSettingFieldKind;
-  defaultValue: IndicatorSettingPrimitive;
+  defaultValue: IndicatorSettingValue;
   description?: string;
   min?: number;
   max?: number;
@@ -196,6 +199,9 @@ function numberField(path: string, label: string, defaultValue: number, min = 0.
 function selectField(path: string, label: string, defaultValue: IndicatorSettingPrimitive, options: readonly IndicatorSettingOption[], description?: string): IndicatorSettingField {
   return { id: fieldId(path), path, label, kind: 'select', defaultValue, options, description };
 }
+function multiSelectField(path: string, label: string, defaultValue: readonly string[], options: readonly IndicatorSettingOption[], description?: string): IndicatorSettingField {
+  return { id: fieldId(path), path, label, kind: 'multi-select', defaultValue, options, description };
+}
 function colorField(path: string, label: string, defaultValue: string, description?: string): IndicatorSettingField {
   return { id: fieldId(path), path, label, kind: 'color', defaultValue, description };
 }
@@ -239,24 +245,82 @@ function nativeSchema(kind: string, item?: Record<string, unknown>): IndicatorSe
   if (kind === 'Anchored VWAP') inputs.push(integerField('lookback', 'Swing lookback', 5, 2, 100));
 
   const primary = DEFAULT_COLORS[kind] || '#94a3b8';
+  const timeframeOptions: readonly IndicatorSettingOption[] = [
+    { value: '1m', label: '1m' }, { value: '3m', label: '3m' }, { value: '5m', label: '5m' }, { value: '10m', label: '10m' },
+    { value: '15m', label: '15m' }, { value: '30m', label: '30m' }, { value: '1h', label: '1h' }, { value: '4h', label: '4h' }, { value: '1D', label: '1D' },
+  ];
+  const markerKinds = new Set(['Market Structure','BOS / CHOCH','Fair Value Gaps','FVG + Mitigation','Order Blocks','Order Blocks + Mitigation','Signals','Rejection Candles','Inside Bar Breakout','Engulfing Patterns','Pin Bars','NR7 Volatility Contraction','Liquidity Sweeps','Equal Highs/Lows','LTF Volume Microburst Bubbles']);
+  const levelKinds = new Set(['Pivot Points','CPR','Key Levels','Opening Range','Opening Range Pro','Weekly Levels','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots','Developing Day High/Low','Dynamic Support/Resistance','Liquidity Pools']);
   const style: IndicatorSettingField[] = [
-    colorField('color', 'Primary color', primary),
-    integerField('lineWidth', 'Line width', 2, 1, 6),
-    advanced(selectField('lineStyle', 'Line style', 0, LINE_STYLES)),
-    advanced(numberField('display.opacity', 'Opacity', 1, 0.15, 1, 0.05)),
+    colorField('appearance.line.color', 'Line color', primary),
+    advanced(numberField('appearance.line.opacity', 'Line opacity', 1, 0.05, 1, 0.05)),
+    integerField('appearance.line.width', 'Line width', 2, 1, 8),
+    selectField('appearance.line.style', 'Line style', 'solid', [
+      { value: 'solid', label: 'Solid' }, { value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' },
+    ]),
+    booleanField('appearance.line.gradient', 'Line gradient', false),
+    advanced(colorField('appearance.line.gradientColor', 'Gradient end color', '#60a5fa')),
+    booleanField('appearance.line.glow', 'Glow', false),
+    advanced(numberField('appearance.line.glowStrength', 'Glow strength', 0.35, 0.05, 1, 0.05)),
+    advanced(integerField('appearance.line.zoomMinBars', 'Show when ≥ bars', 0, 0, 50000)),
+    advanced(integerField('appearance.line.zoomMaxBars', 'Show when ≤ bars', 0, 0, 50000)),
+    advanced(multiSelectField('appearance.line.timeframes', 'Visible timeframes', [], timeframeOptions, 'Empty means every timeframe.')),
   ];
   if (SIGNAL_COLOR_KINDS.has(kind)) style.push(colorField('signalColor', 'Signal color', '#c084fc'));
   if (CHANNEL_COLOR_KINDS.has(kind)) {
     style.push(colorField('upperColor', 'Upper color', '#60a5fa'));
     style.push(colorField('lowerColor', 'Lower color', '#60a5fa'));
+    style.push(booleanField('appearance.fill.enabled', 'Fill enabled', true));
+    style.push(colorField('appearance.fill.upperColor', 'Fill upper color', '#60a5fa'));
+    style.push(colorField('appearance.fill.lowerColor', 'Fill lower color', '#60a5fa'));
+    style.push(advanced(numberField('appearance.fill.opacity', 'Fill opacity', 0.18, 0.02, 1, 0.02)));
+    style.push(booleanField('appearance.fill.gradient', 'Fill gradient', true));
+    style.push(advanced(booleanField('appearance.fill.conditional', 'Conditional coloring', false)));
+    style.push(advanced(colorField('appearance.fill.bullishColor', 'Bullish fill', '#22c55e')));
+    style.push(advanced(colorField('appearance.fill.bearishColor', 'Bearish fill', '#ef4444')));
+  }
+  if (markerKinds.has(kind) || outputs.includes('markers')) {
+    style.push(booleanField('appearance.marker.enabled', 'Markers enabled', markerKinds.has(kind)));
+    style.push(selectField('appearance.marker.shape', 'Marker shape', 'circle', [
+      { value: 'circle', label: 'Circle' }, { value: 'square', label: 'Square' }, { value: 'diamond', label: 'Diamond' },
+      { value: 'triangleUp', label: 'Triangle up' }, { value: 'triangleDown', label: 'Triangle down' }, { value: 'arrowUp', label: 'Arrow up' },
+      { value: 'arrowDown', label: 'Arrow down' }, { value: 'cross', label: 'Cross' }, { value: 'star', label: 'Star' },
+    ]));
+    style.push(integerField('appearance.marker.size', 'Marker size', 6, 2, 18));
+    style.push(selectField('appearance.marker.position', 'Marker position', 'aboveBar', [
+      { value: 'aboveBar', label: 'Above bar' }, { value: 'belowBar', label: 'Below bar' }, { value: 'inBar', label: 'In bar' },
+    ]));
+    style.push(colorField('appearance.marker.color', 'Marker color', primary));
+    style.push(advanced({ ...integerField('appearance.marker.textSize', 'Marker text size', 10, 6, 24), unit: 'px' }));
+    style.push(advanced({ ...integerField('appearance.marker.offset', 'Marker offset', 0, -24, 24), unit: 'px' }));
+    style.push(advanced({ id: fieldId('appearance.marker.text'), path: 'appearance.marker.text', label: 'Marker text', kind: 'text', defaultValue: '' }));
+  }
+  if (levelKinds.has(kind)) {
+    style.push(colorField('appearance.levels.color', 'Level color', primary));
+    style.push(integerField('appearance.levels.width', 'Level width', 1, 1, 6));
+    style.push(selectField('appearance.levels.style', 'Level style', 'dashed', [
+      { value: 'solid', label: 'Solid' }, { value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' },
+    ]));
+    style.push(selectField('appearance.levels.extension', 'Level extension', 'both', [
+      { value: 'none', label: 'None' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }, { value: 'both', label: 'Both' },
+    ]));
+    style.push(booleanField('appearance.levels.label', 'Level label', true));
+    style.push(advanced(selectField('appearance.levels.labelPlacement', 'Label placement', 'axis', [
+      { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }, { value: 'axis', label: 'Axis' }, { value: 'inline', label: 'Inline' },
+    ])));
   }
 
   const display: IndicatorSettingField[] = [
     booleanField('enabled', 'Visible', true),
     booleanField('display.showLegend', 'Show legend', true),
     booleanField('display.showValues', 'Show values', true),
-    selectField('display.pane', 'Pane', 'auto', PANE_MODES),
-    advanced(selectField('display.scale', 'Scale', 'price', SCALE_MODES)),
+    selectField('appearance.pane.mode', 'Pane', 'auto', PANE_MODES),
+    selectField('appearance.pane.scale', 'Scale', 'price', SCALE_MODES),
+    advanced(selectField('appearance.pane.scaleMode', 'Scale mode', 'auto', [{ value: 'auto', label: 'Auto' }, { value: 'manual', label: 'Manual' }])),
+    advanced({ ...numberField('appearance.pane.min', 'Minimum', 0, -1_000_000_000, 1_000_000_000, 0.01), visibleWhen: { path: 'appearance.pane.scaleMode', equals: 'manual' }, description: 'Manual pane range lower bound.' }),
+    advanced({ ...numberField('appearance.pane.max', 'Maximum', 100, -1_000_000_000, 1_000_000_000, 0.01), visibleWhen: { path: 'appearance.pane.scaleMode', equals: 'manual' }, description: 'Manual pane range upper bound.' }),
+    advanced(booleanField('appearance.pane.auto', 'Autoscale', true)),
+    advanced(booleanField('appearance.pane.inverted', 'Invert scale', false)),
     advanced({ ...integerField('display.precision', 'Precision', 2, 0, 8), visibleWhen: { path: 'display.showValues', equals: true }, description: 'Only relevant when value labels are visible.' }),
   ];
 
@@ -264,8 +328,8 @@ function nativeSchema(kind: string, item?: Record<string, unknown>): IndicatorSe
   const multiOutput = outputs.length > 1;
   const sections: IndicatorSettingsSection[] = [
     { id: 'inputs', label: 'Inputs', description: 'Parameters consumed by the indicator calculation.', fields: inputs },
-    { id: 'style', label: 'Style', description: 'Renderer-neutral appearance controls. These do not change calculation identity.', fields: style },
-    { id: 'display', label: 'Display', description: 'Visibility, pane, scale and value presentation.', fields: display },
+    { id: 'style', label: 'Style', description: 'Renderer-only line, fill, marker and level presentation. Changing these values never changes calculation identity.', fields: style },
+    { id: 'display', label: 'Display', description: 'Renderer-only visibility, pane, scale and value presentation. Appearance changes do not recompute indicator math.', fields: display },
     { id: 'behavior', label: 'Behavior', description: 'Lifecycle controls that affect how the host presents or updates the study.', fields: [], notes: [
       'Behavior overrides are intentionally capability-gated. Realtime/incremental execution is owned by the indicator runtime, not the settings UI.',
     ] },
@@ -283,7 +347,7 @@ function nativeSchema(kind: string, item?: Record<string, unknown>): IndicatorSe
   const allowedScales: readonly IndicatorScaleMode[] = ['price', 'percent', 'indexed', 'log'];
   return Object.freeze({
     version: INDICATOR_SETTINGS_SCHEMA_VERSION,
-    id: `native:${slug(kind)}@1`,
+    id: `native:${slug(kind)}@2`,
     identity: { kind, title: String(currentValue(item, 'customName') ?? kind), definitionVersion: 1, source: 'native' as const },
     layout: { defaultPane, allowedPanes, defaultScale: 'price' as const, allowedScales },
     outputs,
@@ -329,7 +393,7 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
       if (paths.has(field.path)) errors.push(`duplicate setting path '${field.path}'`);
       fieldIds.add(field.id);
       paths.add(field.path);
-      if (field.kind === 'select' && (!field.options || field.options.length === 0)) errors.push(`select setting '${field.path}' has no options`);
+      if ((field.kind === 'select' || field.kind === 'multi-select') && (!field.options || field.options.length === 0)) errors.push(`${field.kind} setting '${field.path}' has no options`);
       if ((field.kind === 'integer' || field.kind === 'number' || field.kind === 'range') && typeof field.defaultValue !== 'number') errors.push(`numeric setting '${field.path}' needs numeric default`);
       if (field.min != null && field.max != null && field.min > field.max) errors.push(`invalid range for '${field.path}'`);
       if (field.min != null && typeof field.defaultValue === 'number' && field.defaultValue < field.min) errors.push(`default for '${field.path}' is below min`);
@@ -338,6 +402,9 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
       if (field.options) {
         const optionValues = new Set(field.options.map((option: IndicatorSettingOption) => String(option.value)));
         if (optionValues.size !== field.options.length) errors.push(`duplicate options for '${field.path}'`);
+        if (field.kind === 'multi-select' && Array.isArray(field.defaultValue)) {
+          for (const selected of field.defaultValue) if (!optionValues.has(String(selected))) errors.push(`default for '${field.path}' contains an undeclared option`);
+        }
       }
       if (field.visibleWhen && (!field.visibleWhen.path || typeof field.visibleWhen.path !== 'string')) errors.push(`invalid visibility dependency for '${field.path}'`);
     }
@@ -349,7 +416,10 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
 function customSchemaFor(kind: string, item?: Record<string, unknown>): IndicatorSettingsSchema | undefined {
   const candidate = item?.settingsSchema;
   if (!candidate || typeof candidate !== 'object') return undefined;
-  const schema = candidate as IndicatorSettingsSchema;
+  const raw = candidate as Record<string, unknown>;
+  // v1 custom publications remain readable: v2 only changes the schema envelope
+  // and adds presentation fields; existing v1 sections/defaults remain valid.
+  const schema = (raw.version === 1 ? { ...raw, version: INDICATOR_SETTINGS_SCHEMA_VERSION } : raw) as IndicatorSettingsSchema;
   if (validateIndicatorSettingsSchema(schema).length || schema.identity.kind !== kind) return undefined;
   return schema;
 }
@@ -362,7 +432,7 @@ export function readIndicatorSettingValue(item: Record<string, unknown>, path: s
   return currentValue(item, path);
 }
 
-export function writeIndicatorSettingValue(item: Record<string, unknown>, path: string, value: IndicatorSettingPrimitive): Record<string, unknown> {
+export function writeIndicatorSettingValue(item: Record<string, unknown>, path: string, value: IndicatorSettingValue): Record<string, unknown> {
   if (!isSafeSettingPath(path)) return {};
   const [head, ...tail] = path.split('.');
   if (!head) return {};
@@ -389,6 +459,28 @@ export function getIndicatorDefaultPatch(item: Record<string, unknown>, kind: st
   return patch;
 }
 
+export function buildIndicatorComputationSnapshot(item: Record<string, unknown>): Record<string, unknown> {
+  const kind = String(item.kind ?? 'Custom');
+  const schema = getIndicatorSettingsSchema(kind, item);
+  const inputs: Record<string, unknown> = {};
+  for (const section of schema.sections) if (section.id === 'inputs') for (const field of section.fields) {
+    const value = readIndicatorSettingValue(item, field.path);
+    inputs[field.path] = value === undefined ? field.defaultValue : value;
+  }
+  const legacyMath = ['period','fast','slow','signal','smooth','displacement','multiplier','lookback','source','anchor','mtf'].reduce<Record<string, unknown>>((out, key) => {
+    if (item[key] !== undefined && out[key] === undefined) out[key] = item[key];
+    return out;
+  }, {});
+  const sourceIdentity = item.sourceHash ?? item.coreSpiritSourceHash ?? item.compiledArtifactHash ?? item.scriptHash ?? item.artifactHash ?? null;
+  return { schemaVersion: schema.version, definitionVersion: schema.identity.definitionVersion, kind, id: String(item.id ?? ''), enabled: item.enabled !== false, inputs, legacyMath, sourceIdentity };
+}
+
+export function buildIndicatorComputationSignature(item: Record<string, unknown>): string {
+  return JSON.stringify(buildIndicatorComputationSnapshot(item));
+}
+
+export { buildIndicatorAppearanceSnapshot };
+
 export function buildIndicatorSettingsSnapshot(item: Record<string, unknown>): Record<string, unknown> {
   const kind = String(item.kind ?? 'Custom');
   const schema = getIndicatorSettingsSchema(kind, item);
@@ -407,5 +499,7 @@ export function buildIndicatorSettingsSnapshot(item: Record<string, unknown>): R
     outputs: schema.outputs,
     capabilities: schema.capabilities,
     values,
+    computation: buildIndicatorComputationSnapshot(item),
+    appearance: buildIndicatorAppearanceSnapshot(item),
   };
 }

@@ -1,6 +1,7 @@
 import type { HistoricalCandle } from '../brokers/BrokerAdapter';
 import type { IndicatorConfig, IndicatorKind } from './indicatorEngine';
 import { EMAState, ATRState, RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingAbsoluteDeviation, WMAState, VWAPSessionState, sourceValue, WilderState } from './incrementalIndicatorKernel';
+import { buildIndicatorComputationSignature } from '../coreSpirit/indicatorSettingsSchema';
 
 export type IncrementalMode = 'seed' | 'replace' | 'append';
 export type IncrementalPatch = { id: string; kind: IndicatorKind; data: any[]; mode: 'full' | 'update'; };
@@ -29,9 +30,9 @@ export const INCREMENTAL_INDICATOR_KINDS = new Set<IndicatorKind>([...standardIn
 export const isIncrementalIndicatorSupported = (kind: IndicatorKind) => INCREMENTAL_INDICATOR_KINDS.has(kind);
 
 function configSignature(configs: IndicatorConfig[]) {
-  return JSON.stringify(configs.filter(x=>x.enabled&&isIncrementalIndicatorSupported(x.kind)).map(x=>({
-    id:x.id,kind:x.kind,period:x.period,fast:x.fast,slow:x.slow,signal:x.signal,multiplier:x.multiplier,smooth:x.smooth,displacement:x.displacement,source:x.source,
-  })));
+  return JSON.stringify(configs
+    .filter(x=>x.enabled&&isIncrementalIndicatorSupported(x.kind))
+    .map(x=>buildIndicatorComputationSignature(x as unknown as Record<string, unknown>)));
 }
 function timestamp(c:HistoricalCandle){return Math.floor(new Date(c.timestamp).getTime()/1000);}
 function point(c:HistoricalCandle,value:number|null){return value==null?null:{time:timestamp(c),value};}

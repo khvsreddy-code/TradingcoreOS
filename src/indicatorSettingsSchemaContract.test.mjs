@@ -19,7 +19,7 @@ const roadmap = read('src/services/coreSpirit/coreSpiritRoadmap.ts');
 assert(exists('docs/INDICATOR_SETTINGS_SCHEMA.md'), 'canonical indicator settings schema document missing');
 for (const section of ['inputs', 'style', 'display', 'behavior', 'alerts', 'visualization']) assert(schema.includes(`id: '${section}'`), `schema section ${section} missing`);
 for (const contract of ['identity', 'layout', 'outputs', 'capabilities', 'sections']) assert(schema.includes(contract), `schema contract member ${contract} missing`);
-for (const kind of ['integer', 'number', 'select', 'color', 'range', 'boolean', 'text']) assert(schema.includes(`'${kind}'`), `schema field kind ${kind} missing`);
+for (const kind of ['integer', 'number', 'select', 'multi-select', 'color', 'range', 'boolean', 'text']) assert(schema.includes(`'${kind}'`), `schema field kind ${kind} missing`);
 assert(schema.includes('visibleWhen'), 'schema conditional visibility missing');
 assert(schema.includes('advanced?: boolean'), 'schema advanced-level field missing');
 assert(schema.includes('SAFE_SETTING_PATH') && schema.includes('UNSAFE_SETTING_SEGMENTS'), 'schema path hardening missing');
@@ -37,13 +37,16 @@ for (const forbidden of ["x.kind === 'MACD'", "x.kind==='MACD'", 'periodKinds', 
 assert(dock.includes('IndicatorSettingsPanel'), 'indicator dock lost universal settings panel');
 assert(!dock.includes('periodKinds') && !dock.includes('sourceKinds'), 'indicator dock retains manual settings category lists');
 assert(live.includes('IndicatorSettingsPanel'), 'live chart is not using the universal settings panel');
-assert(live.includes('buildIndicatorSettingsSnapshot'), 'live chart does not observe schema-derived settings changes');
+assert(live.includes('buildIndicatorComputationSignature'), 'live chart does not use canonical computation identity');
+assert(live.includes('buildIndicatorAppearanceSnapshot'), 'live chart does not use canonical appearance identity');
+assert(live.includes('indicatorComputeKey') && live.includes('indicatorAppearanceKey'), 'live chart compute/appearance invalidation keys are not split');
+assert(!live.includes('buildIndicatorSettingsSnapshot'), 'live chart still uses complete persisted settings snapshot as a computation trigger');
 assert(!live.includes('Chart indicators · TradingView-style settings'), 'live chart still labels settings as vendor-specific');
 assert(!live.includes('supportsSource('), 'live chart still has a second manual source-settings registry');
 
 assert(engine.includes('settingsSchema?: IndicatorSettingsSchema'), 'indicator config lacks schema attachment contract');
 assert(engine.includes('CORE_PRICE_SOURCE_OPTIONS'), 'engine and schema do not share price-source options');
-assert(workspace.includes("indicator-settings-v7"), 'workspace indicator settings version was not advanced');
+assert(workspace.includes("indicator-settings-v8"), 'workspace indicator settings version was not advanced');
 assert(workspace.includes('getIndicatorSettingsSchema') && workspace.includes('writeIndicatorSettingValue'), 'workspace normalization is not schema-driven');
 
 assert(publication.includes('buildIndicatorSettingsSnapshot'), 'publication service does not build canonical settings schema snapshots');
@@ -53,6 +56,9 @@ assert(studio.includes('getIndicatorSettingsSchema'), 'indicator studio does not
 
 const stageIds = [...roadmap.matchAll(/id:\s*(\d+),/g)].map(m => Number(m[1]));
 assert(stageIds.includes(145), 'roadmap stage 145 missing');
-assert(roadmap.includes('CORE_SPIRIT_STAGES.length !== 145'), 'roadmap length gate was not updated to 145');
+assert(roadmap.includes('CORE_SPIRIT_STAGES.length !== 154'), 'roadmap length gate was not updated to 154');
 assert(stageIds.filter(id => id >= 131 && id <= 145).length === 15, 'roadmap stages 131-145 are incomplete');
-console.log('TCO_V109_INDICATOR_SCHEMA_CONTRACT_OK');
+assert(schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION = 2'), 'indicator settings schema is not v2');
+assert(schema.includes('raw.version === 1') && schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION }'), 'v1 custom schema migration is missing');
+assert(schema.includes('buildIndicatorComputationSignature'), 'canonical computation signature missing');
+console.log('TCO_V110_INDICATOR_SCHEMA_CONTRACT_OK');

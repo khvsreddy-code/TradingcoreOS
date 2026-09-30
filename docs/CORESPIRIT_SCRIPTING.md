@@ -546,3 +546,62 @@ show regime
 ```
 
 The runtime is now designed so `close` resolves to a canonical series view rather than an indicator-owned history array. This distinction is invisible at Level 1 and inspectable at Professional level.
+
+## v111 — First-class programmable indicators
+
+The recommended mental model for an indicator is now:
+
+```text
+source
+ ↓
+calculation
+ ↓
+state
+ ↓
+plots / visuals / events / alerts
+```
+
+All of these come from one CoreSpirit executable artifact.
+
+### Example
+
+```corespirit
+let basis = ema(close, 20)
+let volatility = atr(14)
+let expansion = volatility / sma(volatility, 50)
+
+if expansion > 1.5 {
+  show(basis)
+}
+
+show(basis)
+```
+
+The author does not need to learn compiler IR, worker affinity, renderer APIs or Vela objects to write the calculation.
+
+### Indicator component identity
+
+A compiled CoreSpirit indicator exposes typed inputs and outputs, state requirements, calculation metadata and renderer-neutral visual/event descriptors. This makes it reusable in another CoreSpirit graph without inventing an indicator-specific function system.
+
+### Future declaration syntax
+
+`indicator "Name"` is intentionally treated as future metadata/identity sugar over the existing artifact/component model. It is not a second language and should not change VM semantics.
+
+## v111.1 — Programmable indicators without keyword expansion
+
+A first-class indicator is authored with the same small language surface already used for calculations and visuals. The platform adds capability through its artifact/component model rather than by adding indicator-specific keywords.
+
+```text
+DATA → LET → WHEN → SHOW
+          ↓
+   typed graph / IR
+          ↓
+   indicator component declaration
+```
+
+The declaration is an ABI-level object containing `inputs`, `outputs`, `calculation`, `state`, `events`, `plots`, `visuals`, `alerts` and `metadata`. Settings remain a separate schema because changing appearance must not invalidate the calculation graph.
+
+A host can run the same artifact historically or through a realtime execution host. The user does not write host constructors, worker messages or Vela operations in CoreSpirit.
+
+The optional surface form `indicator "Name"` remains declaration sugar only. It must lower into this same component/artifact representation if enabled; it must not become a new evaluator or VM.
+

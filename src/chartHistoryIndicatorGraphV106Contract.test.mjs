@@ -18,6 +18,6 @@ if (!/requestWarmHistory\(Math\.max\(1,Math\.abs/.test(live)) throw new Error('L
 if (!/order: string\[\]/.test(graph) || !/contains a cycle/.test(graph) || !/source:\$\{source\}.*sma:\$\{source\}:\$\{p\}/s.test(graph)) throw new Error('Transitive/topological indicator graph contract missing');
 if (!/rolling-sum|rolling sum|rollingSum/.test(kernel) && !/rollingSum/.test(graph)) throw new Error('Rolling kernel marker missing');
 if (!/while \(highHead < highDeque\.length/.test(graph) || !/sumSquares/.test(graph)) throw new Error('Linear rolling Donchian/Bollinger kernel markers missing');
-for (const token of ['Signal color','Upper color','Lower color','Line width','Line style','Opacity']) if (!settingsSchema.includes(token)) throw new Error(`Schema style control missing: ${token}`);
+for (const token of ['appearance.line.color','appearance.fill.upperColor','appearance.fill.lowerColor','appearance.line.width','appearance.line.style','appearance.line.opacity']) if (!settingsSchema.includes(token)) throw new Error(`Schema appearance control missing: ${token}`);
 for (const token of ['TC-PERF-33','TC-PERF-36','TC-PERF-38','TC-PERF-39','TC-PERF-40','TC-PERF-41']) if (!tracker.includes(token)) throw new Error(`Tracker item missing: ${token}`);
 console.log('TRADINGCORE_V106_HISTORY_INDICATOR_DEPTH_CONTRACT_OK');

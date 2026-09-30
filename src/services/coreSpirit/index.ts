@@ -138,3 +138,5 @@ export * from './coreSpiritAuthoring';
 export * from './coreSpiritComplexityAbsorber';
 export * from './semanticComponentAdapters';
 
+
+export * from './coreSpiritIndicatorComponent';

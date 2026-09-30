@@ -13,7 +13,8 @@ import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import { NormalizedMarketTick } from '../../types/market';
 import { ChartDepthPanel } from './ChartDepthPanel';
 import { IndicatorSettingsPanel } from '../indicators/IndicatorSettingsPanel';
-import { getIndicatorDefaultPatch, getIndicatorSettingsSchema, buildIndicatorSettingsSnapshot } from '../../services/coreSpirit/indicatorSettingsSchema';
+import { getIndicatorDefaultPatch, getIndicatorSettingsSchema, buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot } from '../../services/coreSpirit/indicatorSettingsSchema';
+import { resolveIndicatorAppearance } from '../../services/coreSpirit/indicatorAppearance';
 import { IndicatorCodeViewer } from '../indicators/IndicatorCodeViewer';
 import { ChartToolbar } from './ChartToolbar';
 import { useChartUiEvents } from './hooks/useChartUiEvents';
@@ -107,11 +108,44 @@ function markerForAutomation(a:AutomationConfig,c:HistoricalCandle[]):{time:numb
 }
 
 const line=(chart:IChartApi,color:string,width=1,lineStyle:0|1|2=0)=>chart.addSeries(LineSeries,{color,lineWidth:width,lineStyle,priceLineVisible:false,lastValueVisible:true});
+const registerIndicatorSeries=(indicatorId:string,s:ISeriesApi<'Line'>)=>{indicatorSeries.current.push(s);const group=indicatorSeriesMap.current.get(indicatorId)||[];group.push(s);indicatorSeriesMap.current.set(indicatorId,group);return s;};
+const appearanceVisibleBars=()=>{const r=visibleLogicalRangeRef.current;return r?Math.max(1,Math.abs(Number(r.to)-Number(r.from))):candles.current.length;};
+const LEVEL_APPEARANCE_KINDS=new Set(['Dynamic Support/Resistance','CPR','Key Levels','Opening Range','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range Pro','Developing Day High/Low','Equal Highs/Lows','Liquidity Pools','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots']);
+const applyIndicatorAppearanceOnly=()=>{
+  if(!chart.current)return;
+  const visibleBars=appearanceVisibleBars();
+  for(const cfg of indicators){
+    const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
+    const options={color:appearance.line.color,lineWidth:appearance.line.width,lineStyle:appearance.line.style==='solid'?0:appearance.line.style==='dashed'?1:2,opacity:appearance.line.opacity,gradient:appearance.line.gradient,gradientColor:appearance.line.gradientColor,glow:appearance.line.glow,glowStrength:appearance.line.glowStrength,visible:appearance.visible,lastValueVisible:cfg.display?.showValues!==false};
+    const group=indicatorSeriesMap.current.get(cfg.id)||[];
+    const isLevelIndicator=LEVEL_APPEARANCE_KINDS.has(String(cfg.kind));
+    for(const series of group){try{(series as any).applyOptions(options); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}}
+    const worker=workerSeriesMap.current.get(cfg.id)||[];
+    for(const series of worker){try{(series as any).applyOptions({...options, ...(isLevelIndicator?{visible:appearance.visible&&appearance.levels.enabled}: {})}); if(isLevelIndicator){(series as any).setPaneAppearance(appearance.pane,targetPaneId);}}catch{}}
+  }
+  for(const cfg of indicators){
+    const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
+    const targetPaneId=appearance.pane.mode==='separate'?`tco-indicator-pane:${cfg.id}`:undefined;
+    const group=indicatorSeriesMap.current.get(cfg.id)||[];
+    for(const series of group){try{(series as any).setPaneAppearance(appearance.pane,targetPaneId);}catch{}}
+    const fills=indicatorFillMap.current.get(cfg.id)||[];
+    for(const handle of fills){try{handle.setOptions({enabled:appearance.visible&&appearance.fill.enabled,upperColor:appearance.fill.upperColor,lowerColor:appearance.fill.lowerColor,opacity:appearance.fill.opacity,gradient:appearance.fill.gradient,conditional:appearance.fill.conditional,bullishColor:appearance.fill.bullishColor,bearishColor:appearance.fill.bearishColor});}catch{}}
+  }
+  const markerStyles:any[]=[];
+  for(const [indicatorId,rawMarkers] of markerDataByIndicator.current){
+    const cfg=indicators.find(x=>x.id===indicatorId); if(!cfg)continue;
+    const a=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
+    if(!a.marker.enabled||!a.visible)continue;
+    const size=a.marker.size<=4?'tiny':a.marker.size<=6?'small':a.marker.size<=10?'normal':a.marker.size<=14?'large':'huge';
+    for(const marker of rawMarkers.slice(-100)) markerStyles.push({...marker,position:a.marker.position,color:a.marker.color,shape:a.marker.shape,text:a.marker.text||marker.text,size,textSize:a.marker.textSize,offset:a.marker.offset});
+  }
+  setChartMarkers(markerStyles);
+};
 
 export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=true}:Props){
  const resolvedInstrumentKey=canonicalInstrumentKey(brokerId,instrumentKey);
  const rendererController=useChartLifecycle();
- const host=useRef<HTMLDivElement>(null),oscHost=useRef<HTMLDivElement>(null); const chart=useRef<IChartApi>(); const oscChart=useRef<IChartApi>(); const candle=useRef<ISeriesApi<'Candlestick'>>(); const closeLine=useRef<ISeriesApi<'Line'>>(); const volume=useRef<ISeriesApi<'Histogram'>>(); const indicatorSeries=useRef<ISeriesApi<'Line'>[]>([]);
+ const host=useRef<HTMLDivElement>(null),oscHost=useRef<HTMLDivElement>(null); const chart=useRef<IChartApi>(); const oscChart=useRef<IChartApi>(); const candle=useRef<ISeriesApi<'Candlestick'>>(); const closeLine=useRef<ISeriesApi<'Line'>>(); const volume=useRef<ISeriesApi<'Histogram'>>(); const indicatorSeries=useRef<ISeriesApi<'Line'>[]>([]); const indicatorSeriesMap=useRef(new Map<string, ISeriesApi<'Line'>[]>()); const markerDataByIndicator=useRef(new Map<string, any[]>()); const indicatorFillMap=useRef(new Map<string, any[]>());
  const markerPlugin=useRef<any>(null); const oscSeries=useRef<ISeriesApi<'Line'>[]>([]); const candles=useRef<HistoricalCandle[]>([]); const visibleLogicalRangeRef=useRef<{from:number;to:number}|null>(null);
  const lifecycle=useRef(new ChartLifecycle()); const indicatorRequestSeq=useRef(0); const chartUpdateScheduler=useRef(new ChartUpdateScheduler()); const chartId=useRef(`chart-${Math.random().toString(36).slice(2,10)}`); const calculationEngine=useRef(new RealtimeCalculationEngine()); const workerSeriesMap=useRef(new Map<string, Array<ISeriesApi<'Line'>|ISeriesApi<'Histogram'>>>());
  const coreSpiritOutput=useRef<CoreSpiritChartOutputController>(); const coreSpiritRunId=useRef(0);
@@ -208,9 +242,9 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
      const target=targetOsc?oscChart.current:chart.current; if(!target)continue;
      if(result.kind==='MACD'){const [s1,s2,h]=(()=>{const c1=primary||'#38bdf8',c2=signalColor,w=cfg.lineWidth||1,ls=cfg.lineStyle||0;let g=workerSeriesMap.current.get(result.id);if(!g||g.length!==3){g=[line(target,c1,w,ls),line(target,c2,w,ls),target.addSeries(HistogramSeries,{priceFormat:{type:'price'},priceScaleId:'right'}) as any];workerSeriesMap.current.set(result.id,g);}else{try{(g[0] as any).applyOptions({color:c1,lineWidth:w,lineStyle:ls});(g[1] as any).applyOptions({color:c2,lineWidth:w,lineStyle:ls});}catch{}}return g as any[];})();const rows=Array.isArray(result.data)?result.data:[];const macdPts=safeNamedPoints(rows,'macd');const signalPts=safeNamedPoints(rows,'signal');const histPts=rows.map((x:any)=>({time:x?.time as Time,value:finiteNumber(x?.histogram),color:Number(x?.histogram)>=0?colorWithOpacity(cfg.color,Math.min(1,(opacity??1)*.35),'#3b82f6'):colorWithOpacity(cfg.signalColor,Math.min(1,(opacity??1)*.35),'#ef4444')})).filter((x:any)=>x.time!=null&&x.value!=null);updateOrSet(s1,macdPts,incremental);updateOrSet(s2,signalPts,incremental);updateOrSet(h,histPts,incremental);continue;}
      if(result.kind==='Stochastic'){const g=getGroup(result.id,2,target,[primary||'#38bdf8',signalColor||'#f59e0b'],cfg.lineWidth||1,cfg.lineStyle||0);updateOrSet(g[0],safeNamedPoints(result.data,'k'),incremental);updateOrSet(g[1],safeNamedPoints(result.data,'d'),incremental);continue;}
-     if(result.kind==='Bollinger Bands'||result.kind==='Keltner Channels'||result.kind==='Donchian Channels'){const colorsFor=[upperColor,colorWithOpacity(cfg.signalColor,opacity,'#64748b'),lowerColor];const g=getGroup(result.id,3,target,colorsFor,cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<3;i++){const key=['upper','middle','lower'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}continue;}
+     if(result.kind==='Bollinger Bands'||result.kind==='Keltner Channels'||result.kind==='Donchian Channels'){const colorsFor=[upperColor,colorWithOpacity(cfg.signalColor,opacity,'#64748b'),lowerColor];const g=getGroup(result.id,3,target,colorsFor,cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<3;i++){const key=['upper','middle','lower'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}try{indicatorFillMap.current.set(cfg.id,[chart.current?.addFillBetweenSeries(g[0] as any,g[2] as any,{id:`indicator-fill:${cfg.id}`,enabled:false})].filter(Boolean));}catch{}continue;}
      if(result.kind==='Supertrend'){const g=getGroup(result.id,2,target,[primary||'#3b82f6',signalColor||'#ef4444'],cfg.lineWidth||2,cfg.lineStyle||0);if(incremental){const point=result.data[result.data.length-1];const t=point?.time as Time;if(point?.direction===1){g[0].update({time:t,value:finiteNumber(point.value)} as any);updateWhitespace(g[1],t);}else{updateWhitespace(g[0],t);g[1].update({time:t,value:finiteNumber(point.value)} as any);} }else{g[0].setData(safeLinePoints(result.data,'value').filter((x:any,i:number)=>Array.isArray(result.data)&&result.data[i]?.direction===1) as any);g[1].setData(safeLinePoints(result.data,'value').filter((x:any,i:number)=>Array.isArray(result.data)&&result.data[i]?.direction===-1) as any);}continue;}
-     if(result.kind==='Ichimoku Cloud'){const g=getGroup(result.id,4,target,[primary||'#38bdf8',signalColor||'#f59e0b',upperColor||'#3b82f6',lowerColor||'#ef4444'],cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<4;i++){const key=['tenkan','kijun','spanA','spanB'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}continue;}
+     if(result.kind==='Ichimoku Cloud'){const g=getGroup(result.id,4,target,[primary||'#38bdf8',signalColor||'#f59e0b',upperColor||'#3b82f6',lowerColor||'#ef4444'],cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<4;i++){const key=['tenkan','kijun','spanA','spanB'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}try{indicatorFillMap.current.set(cfg.id,[chart.current?.addFillBetweenSeries(g[2] as any,g[3] as any,{id:`indicator-fill:${cfg.id}`,enabled:false})].filter(Boolean));}catch{}continue;}
      if(result.kind==='Trend Target Ribbon'){const g=getGroup(result.id,5,target,[primary,'#a78bfa',signalColor,'#3b82f6','#e879f9'],cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<5;i++){const key=['fast','mid','slow','Target+','Target-'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}continue;}
      const s=getSeries(result.id,target,'line',primary,cfg.lineWidth||2,cfg.lineStyle||0);updateOrSet(s,safeLinePoints(result.data,'value'),incremental);
    }
@@ -226,7 +260,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
  const renderStudies=(data:HistoricalCandle[], preserveWorkerSeries=false)=>{
    clearChartMarkers();
 
-   indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
+   indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];indicatorSeriesMap.current.clear();markerDataByIndicator.current.clear();indicatorFillMap.current.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.current.clear();oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
    if(!preserveWorkerSeries){workerSeriesMap.current.forEach(group=>group.forEach(s=>{try{chart.current?.removeSeries(s as any)}catch{} try{oscChart.current?.removeSeries(s as any)}catch{}})); workerSeriesMap.current.clear();}
    const active=indicators.filter(x=>x.enabled); const needsOsc=oscillatorKinds(active); const chartMarkers:any[]=[];
    if(needsOsc&&oscHost.current&&!oscChart.current){const p=getThemePalette(getCurrentTheme());oscChart.current=createChart(oscHost.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:p.surface2},textColor:p.muted,fontFamily:'JetBrains Mono, monospace',fontSize:9},grid:{vertLines:{color:p.grid},horzLines:{color:p.grid}},rightPriceScale:{borderColor:p.axis},timeScale:{visible:false}})};
@@ -234,15 +268,15 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
    for(const cfg of active){
      if(!chart.current)continue;
      if(['EMA','SMA','HMA','ATR','RSI','ADX','CCI','OBV','MFI','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','Supertrend','Ichimoku Cloud'].includes(cfg.kind))continue;
-     if(cfg.kind==='Market Structure'){const ms=marketStructure(data,cfg.period||3);const latest=ms.slice(-6);for(const x of latest){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.type.includes('H')?'#ef4444':'#3b82f6'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle||0,priceLineVisible:true,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time,value:x.price}] as any);indicatorSeries.current.push(s);}continue;}
-     if(cfg.kind==='Fair Value Gaps'){const zones=fairValueGaps(data);for(const z of zones.slice(-8)){for(const price of [z.upper,z.lower]){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(z.kind==='bullish'?'#3b82f666':'#ef444466'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??2,priceLineVisible:false,lastValueVisible:false});const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;s.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);indicatorSeries.current.push(s);}}continue;}
-     if(cfg.kind==='Dynamic Support/Resistance'){const levels=dynamicSupportResistance(data,cfg.period||5).slice(-10);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of levels){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':'#ef4444'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??2,priceLineVisible:false,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);indicatorSeries.current.push(s);}continue;}
-     if(cfg.kind==='Liquidity Sweeps'){const sweeps=liquiditySweeps(data,cfg.period||5).slice(-12);for(const x of sweeps){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='sell-side'?'#3b82f6':'#f59e0b'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||2)),lineStyle:cfg.lineStyle??0,priceLineVisible:false,lastValueVisible:false});const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);indicatorSeries.current.push(s);}continue;}
-     if(cfg.kind==='Order Blocks'){const zones=orderBlocks(data,cfg.period||5).slice(-8);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const z of zones){for(const price of [z.upper,z.lower]){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(z.kind==='bullish'?'#38bdf8':'#fb7185'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??1,priceLineVisible:false,lastValueVisible:false});s.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);indicatorSeries.current.push(s);}}continue;}
+     if(cfg.kind==='Market Structure'){const ms=marketStructure(data,cfg.period||3);const latest=ms.slice(-6);for(const x of latest){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.type.includes('H')?'#ef4444':'#3b82f6'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle||0,priceLineVisible:true,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time,value:x.price}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
+     if(cfg.kind==='Fair Value Gaps'){const zones=fairValueGaps(data);for(const z of zones.slice(-8)){for(const price of [z.upper,z.lower]){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(z.kind==='bullish'?'#3b82f666':'#ef444466'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??2,priceLineVisible:false,lastValueVisible:false});const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;s.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);registerIndicatorSeries(cfg.id,s);}}continue;}
+     if(cfg.kind==='Dynamic Support/Resistance'){const levels=dynamicSupportResistance(data,cfg.period||5).slice(-10);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of levels){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':'#ef4444'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??2,priceLineVisible:false,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
+     if(cfg.kind==='Liquidity Sweeps'){const sweeps=liquiditySweeps(data,cfg.period||5).slice(-12);for(const x of sweeps){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='sell-side'?'#3b82f6':'#f59e0b'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||2)),lineStyle:cfg.lineStyle??0,priceLineVisible:false,lastValueVisible:false});const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
+     if(cfg.kind==='Order Blocks'){const zones=orderBlocks(data,cfg.period||5).slice(-8);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const z of zones){for(const price of [z.upper,z.lower]){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(z.kind==='bullish'?'#38bdf8':'#fb7185'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??1,priceLineVisible:false,lastValueVisible:false});s.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);registerIndicatorSeries(cfg.id,s);}}continue;}
      if(cfg.kind==='CPR' || cfg.kind==='Key Levels' || cfg.kind==='Opening Range' || cfg.kind==='Weekly Levels' || cfg.kind==='Swing Levels' || cfg.kind==='Gap Levels'){
        const levels=cfg.kind==='CPR'?cpr(data):cfg.kind==='Key Levels'?indianKeyLevels(data):cfg.kind==='Opening Range'?openingRange(data,cfg.period||15):cfg.kind==='Swing Levels'?swingLevels(data,cfg.period||3):gapLevels(data);
        const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       for(const x of levels){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':x.side==='resistance'?'#ef4444':'#60a5fa'),lineWidth:x.label.includes('CPR')?2:1,lineStyle: x.label.includes('GAP')?1:2,priceLineVisible:false,lastValueVisible:true});s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);indicatorSeries.current.push(s);}
+       for(const x of levels){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':x.side==='resistance'?'#ef4444':'#60a5fa'),lineWidth:x.label.includes('CPR')?2:1,lineStyle: x.label.includes('GAP')?1:2,priceLineVisible:false,lastValueVisible:true});s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,s);}
        continue;
      }
      if(['Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range Pro','Developing Day High/Low','Equal Highs/Lows','Liquidity Pools','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots'].includes(cfg.kind)){
@@ -260,11 +294,11 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
        else if(cfg.kind==='Weekly Pivots') levels=periodPivots(data,'week','classic');
        else if(cfg.kind==='Monthly Pivots') levels=periodPivots(data,'month','classic');
        const start=Math.floor(new Date(data[0].timestamp).getTime()/1000) as Time,end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       for(const x of levels){const ss=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':x.side==='resistance'?'#ef4444':'#60a5fa'),lineWidth:x.label==='P'||x.label==='TC'||x.label==='BC'?2:1,lineStyle:2,priceLineVisible:false,lastValueVisible:true});ss.setData([{time:(x.time||start) as Time,value:x.price},{time:end,value:x.price}] as any);indicatorSeries.current.push(ss);} continue;
+       for(const x of levels){const ss=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':x.side==='resistance'?'#ef4444':'#60a5fa'),lineWidth:x.label==='P'||x.label==='TC'||x.label==='BC'?2:1,lineStyle:2,priceLineVisible:false,lastValueVisible:true});ss.setData([{time:(x.time||start) as Time,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,ss);} continue;
      }
      if(cfg.kind==='Gap Zones'){
        const zones=gapZones(data); const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       for(const z of zones){for(const price of [z.upper,z.lower]){const ss=chart.current.addSeries(LineSeries,{color:z.kind==='bullish'?'#3b82f699':'#ef444499',lineWidth:2,lineStyle:1,priceLineVisible:false,lastValueVisible:false});ss.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);indicatorSeries.current.push(ss);}}
+       for(const z of zones){for(const price of [z.upper,z.lower]){const ss=chart.current.addSeries(LineSeries,{color:z.kind==='bullish'?'#3b82f699':'#ef444499',lineWidth:2,lineStyle:1,priceLineVisible:false,lastValueVisible:false});ss.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);registerIndicatorSeries(cfg.id,ss);}}
        continue;
      }
      if(['BOS / CHOCH','Breakout / Retest','Failed Breakout','Rejection Candles','Inside Bar Breakout','Engulfing Patterns','Pin Bars','NR7 Volatility Contraction'].includes(cfg.kind)){
@@ -272,32 +306,32 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
        if(cfg.kind==='NR7 Volatility Contraction') all=nr7(data);
        if(cfg.kind==='Breakout / Retest' || cfg.kind==='Failed Breakout'){const sw=dynamicSupportResistance(data,cfg.period||5);for(let i=1;i<data.length;i++){const prev=data[i-1],cur=data[i],t=Math.floor(new Date(cur.timestamp).getTime()/1000);for(const lv of sw.slice(-12)){if(prev.close<=lv.price&&cur.close>lv.price)all.push({time:t,price:lv.price,label:'BREAK ↑',side:'bullish'});if(prev.close>=lv.price&&cur.close<lv.price)all.push({time:t,price:lv.price,label:'BREAK ↓',side:'bearish'});if(cfg.kind==='Failed Breakout'){if(prev.high>lv.price&&prev.close<lv.price&&cur.close<lv.price)all.push({time:t,price:lv.price,label:'FAILED ↓',side:'bearish'});if(prev.low<lv.price&&prev.close>lv.price&&cur.close>lv.price)all.push({time:t,price:lv.price,label:'FAILED ↑',side:'bullish'});}}}}
        const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       for(const x of all.slice(-30)){ chartMarkers.push({time:x.time as Time,position:x.side==='bullish'?'belowBar':'aboveBar',color:cfg.color||(x.side==='bullish'?'#3b82f6':'#ef4444'),shape:x.side==='bullish'?'arrowUp':'arrowDown',text:x.label}); }
+       for(const x of all.slice(-30)){ chartMarkers.push({indicatorId:cfg.id,time:x.time as Time,position:x.side==='bullish'?'belowBar':'aboveBar',color:cfg.color||(x.side==='bullish'?'#3b82f6':'#ef4444'),shape:x.side==='bullish'?'arrowUp':'arrowDown',text:x.label}); }
        continue;
      }
      if(cfg.kind==='FVG + Mitigation' || cfg.kind==='Order Blocks + Mitigation'){
        const zones=cfg.kind==='FVG + Mitigation'?fairValueGaps(data):orderBlocks(data,cfg.period||5); const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
-       for(const z of zones.slice(-10)){let mitigated=false;const zi=data.findIndex(x=>Math.floor(new Date(x.timestamp).getTime()/1000)===z.time);for(let i=Math.max(0,zi);i<data.length;i++){if(data[i].low<=z.upper&&data[i].high>=z.lower){mitigated=true;break;}}const alpha=mitigated?'44':'99';for(const price of [z.upper,z.lower]){const ss=chart.current.addSeries(LineSeries,{color:cfg.color||`#94a3b8${alpha}`,lineWidth:mitigated?1:2,lineStyle:mitigated?2:0,priceLineVisible:false,lastValueVisible:false});ss.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);indicatorSeries.current.push(ss);}} continue;
+       for(const z of zones.slice(-10)){let mitigated=false;const zi=data.findIndex(x=>Math.floor(new Date(x.timestamp).getTime()/1000)===z.time);for(let i=Math.max(0,zi);i<data.length;i++){if(data[i].low<=z.upper&&data[i].high>=z.lower){mitigated=true;break;}}const alpha=mitigated?'44':'99';for(const price of [z.upper,z.lower]){const ss=chart.current.addSeries(LineSeries,{color:cfg.color||`#94a3b8${alpha}`,lineWidth:mitigated?1:2,lineStyle:mitigated?2:0,priceLineVisible:false,lastValueVisible:false});ss.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);registerIndicatorSeries(cfg.id,ss);}} continue;
      }
      if(cfg.kind==='VWAP Deviation Bands'){
-       const bands=vwapDeviationBands(data,cfg.multiplier||1,cfg.source||'hlc3');for(const key of ['middle','upper','lower'] as const){const ss=line(chart.current,key==='middle'?(cfg.color||'#c084fc'):(key==='upper'?(cfg.upperColor||cfg.color||'#a78bfa'):(cfg.lowerColor||cfg.color||'#a78bfa')),key==='middle'?(cfg.lineWidth||2):Math.max(1,(cfg.lineWidth||2)-1),cfg.lineStyle||0);ss.setData(bands.map(x=>({time:x.time as Time,value:x[key]})) as any);indicatorSeries.current.push(ss);}continue;
+       const bands=vwapDeviationBands(data,cfg.multiplier||1,cfg.source||'hlc3');for(const key of ['middle','upper','lower'] as const){const ss=line(chart.current,key==='middle'?(cfg.color||'#c084fc'):(key==='upper'?(cfg.upperColor||cfg.color||'#a78bfa'):(cfg.lowerColor||cfg.color||'#a78bfa')),key==='middle'?(cfg.lineWidth||2):Math.max(1,(cfg.lineWidth||2)-1),cfg.lineStyle||0);ss.setData(bands.map(x=>({time:x.time as Time,value:x[key]})) as any);registerIndicatorSeries(cfg.id,ss);}continue;
      }
-     if(cfg.kind==='Anchored VWAP'){const ss=line(chart.current,cfg.color||'#f97316',cfg.lineWidth||2,cfg.lineStyle||0);ss.setData(anchoredVwap(data,cfg.period||5,cfg.source||'hlc3') as any);indicatorSeries.current.push(ss);continue;}
+     if(cfg.kind==='Anchored VWAP'){const ss=line(chart.current,cfg.color||'#f97316',cfg.lineWidth||2,cfg.lineStyle||0);ss.setData(anchoredVwap(data,cfg.period||5,cfg.source||'hlc3') as any);registerIndicatorSeries(cfg.id,ss);continue;}
      if(['Adaptive Ehlers','ATR Percentile Bands','CVD Profiles','Delta Sigma Heatmap','Dual Phase Reversal','Fractional EMA Kalman Filter','Harmonic Lab','HTF 3 Candle System','HTF Volume Spike & Imbalance Projection','Initial Balance Auction Intelligence','LTF Volume Microburst Bubbles','Market Structure Dashboard','Neural Weight Oscillator','OrderBlock AI','Pivot Consolidation Zone','Stoploss Cascades','Trend Pressure','Trend Target Ribbon','Trinity','Volatility Shock Half Life Monitor','Volume Delta Footprint','Wyckoff'].includes(cfg.kind)){
        const result=advancedIndicatorModel(data,cfg.kind,cfg);
        const lineColors=[cfg.color||'#38bdf8',cfg.upperColor||'#a78bfa',cfg.lowerColor||'#f59e0b','#3b82f6','#e879f9'];
        Object.entries(result.lines).forEach(([name,pts],idx)=>{
          const ss=line(chart.current,lineColors[idx%lineColors.length],cfg.lineWidth||2,cfg.lineStyle||0);
-         ss.applyOptions({title:`${cfg.kind} · ${name}`}); ss.setData(pts.map(x=>({time:x.time as Time,value:x.value})) as any); indicatorSeries.current.push(ss);
+         ss.applyOptions({title:`${cfg.kind} · ${name}`}); ss.setData(pts.map(x=>({time:x.time as Time,value:x.value})) as any); registerIndicatorSeries(cfg.id,ss);
        });
        const start=Math.floor(new Date(data[0].timestamp).getTime()/1000) as Time,end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
        for(const z of result.zones.slice(-20)){
          const col=z.side==='bull'?'#3b82f6':z.side==='bear'?'#ef4444':'#60a5fa';
          const outline=[{time:Math.max(Number(z.startTime),Number(start)) as Time,value:z.lower},{time:end,value:z.lower},{time:end,value:z.upper},{time:Math.max(Number(z.startTime),Number(start)) as Time,value:z.upper},{time:Math.max(Number(z.startTime),Number(start)) as Time,value:z.lower}];
-         const ss=line(chart.current,`${col}99`,1,1); ss.setData(outline as any); indicatorSeries.current.push(ss);
+         const ss=line(chart.current,`${col}99`,1,1); ss.setData(outline as any); registerIndicatorSeries(cfg.id,ss);
        }
        for(const m of result.markers.slice(-40)){
-         chartMarkers.push({time:m.time as Time,position:m.side==='bull'?'belowBar':'aboveBar',color:m.side==='bull'?'#3b82f6':m.side==='bear'?'#ef4444':'#f59e0b',shape:m.side==='bull'?'arrowUp':m.side==='bear'?'arrowDown':'circle',text:`${cfg.kind} · ${m.label}`});
+         chartMarkers.push({indicatorId:cfg.id,time:m.time as Time,position:m.side==='bull'?'belowBar':'aboveBar',color:m.side==='bull'?'#3b82f6':m.side==='bear'?'#ef4444':'#f59e0b',shape:m.side==='bull'?'arrowUp':m.side==='bear'?'arrowDown':'circle',text:`${cfg.kind} · ${m.label}`});
        }
        continue;
      }
@@ -307,20 +341,20 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
        for(const x of result.levels.slice(0,12)){
          const col=x.side==='support'?'#3b82f6':x.side==='resistance'?'#ef4444':'#60a5fa';
          const ss=chart.current.addSeries(LineSeries,{color:cfg.color||col,lineWidth:x.score>=.8?2:1,lineStyle:x.score>=.8?0:2,priceLineVisible:false,lastValueVisible:true,title:`${x.label} · ${Math.round(x.score*100)}%`});
-         ss.setData([{time:start,value:x.price},{time:end,value:x.price}] as any);indicatorSeries.current.push(ss);
+         ss.setData([{time:start,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,ss);
        }
        for(const z of result.zones){
          const col=z.kind==='Demand'?'#3b82f6':'#ef4444';
          const st=Math.max(Number(z.startTime),Number(start));
          const outline=[{time:st as Time,value:z.lower},{time:end,value:z.lower},{time:end,value:z.upper},{time:st as Time,value:z.upper},{time:st as Time,value:z.lower}];
          const ss=chart.current.addSeries(LineSeries,{color:cfg.color||col,lineWidth:z.score>=.8?2:1,lineStyle:z.mitigated?2:1,priceLineVisible:false,lastValueVisible:false,title:`${z.kind} · ${Math.round(z.score*100)}%`});
-         ss.setData(outline as any);indicatorSeries.current.push(ss);
+         ss.setData(outline as any);registerIndicatorSeries(cfg.id,ss);
        }
        continue;
      }
-     if(cfg.kind==='Pivot Points'){const pv=classicPivots(data).length?classicPivots(data):pivots(data),start=Math.floor(new Date(data[0].timestamp).getTime()/1000) as Time,end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of pv){const s=chart.current.addSeries(LineSeries,{color:cfg.color||'#f59e0b',lineWidth:cfg.lineWidth||1,lineStyle:cfg.lineStyle??2,priceLineVisible:true,lastValueVisible:true});s.setData([{time:start,value:x.value},{time:end,value:x.value}] as any);indicatorSeries.current.push(s);}continue;}
+     if(cfg.kind==='Pivot Points'){const pv=classicPivots(data).length?classicPivots(data):pivots(data),start=Math.floor(new Date(data[0].timestamp).getTime()/1000) as Time,end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of pv){const s=chart.current.addSeries(LineSeries,{color:cfg.color||'#f59e0b',lineWidth:cfg.lineWidth||1,lineStyle:cfg.lineStyle??2,priceLineVisible:true,lastValueVisible:true});s.setData([{time:start,value:x.value},{time:end,value:x.value}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
    }
-   setChartMarkers(chartMarkers);
+   const markerGroups=new Map<string,any[]>(); for(const marker of chartMarkers){const id=String(marker.indicatorId||'');if(!id)continue;const arr=markerGroups.get(id)||[];arr.push(marker);markerGroups.set(id,arr);} markerDataByIndicator.current=markerGroups; setChartMarkers(chartMarkers.map(({indicatorId:_id,...marker})=>marker)); applyIndicatorAppearanceOnly();
  };
  const renderOI=(oi:OIChartAnalytics|null)=>{
    oiLines.current.forEach(x=>{try{candle.current?.removePriceLine(x)}catch{}}); oiLines.current=[];
@@ -653,6 +687,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
    if(!range)return;
    const normalizedRange={from:Number(range.from),to:Number(range.to)};
    visibleLogicalRangeRef.current=normalizedRange;
+   applyIndicatorAppearanceOnly();
    requestIndicatorWorker(candles.current,normalizedRange,'snapshot','replace');
    if(ignoreRangeEvents>0){ignoreRangeEvents-=1;previousLogicalRange=normalizedRange;return;}
    const movingBackward=previousLogicalRange&&Number(range.from)<Number(previousLogicalRange.from)-2;
@@ -663,10 +698,13 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
  c.timeScale().subscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange);
  publishChartLifecycle('loading');
  const stopDataPlane=chartDataPlane.subscribe(applySnapshot);
- return()=>{try{c.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange)}catch{}stopDataPlane();publishChartLifecycle('disposed');lifecycle.current.invalidate();if(analyticsTimer.current){clearTimeout(analyticsTimer.current);analyticsTimer.current=null;}try{resizeObserver?.disconnect()}catch{} window.removeEventListener('tradingcore:theme-change',applyChartTheme); chartUpdateScheduler.current.cancel();try{c.unsubscribeClick(onChartClick)}catch{} try{host.current?.removeEventListener('pointerdown',onPointerDown);host.current?.removeEventListener('pointermove',onPointerMove);host.current?.removeEventListener('pointerup',onPointerUp);host.current?.removeEventListener('pointercancel',onPointerUp)}catch{} try{markerPlugin.current?.detach?.()}catch{}markerPlugin.current=null;workerSeriesMap.current.clear();predictionLines.current=[];predictionJob.current++;drawingSeries.current=[];drawingPoints.current=[];};
+ return()=>{try{c.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleLogicalRangeChange)}catch{}stopDataPlane();publishChartLifecycle('disposed');lifecycle.current.invalidate();if(analyticsTimer.current){clearTimeout(analyticsTimer.current);analyticsTimer.current=null;}try{resizeObserver?.disconnect()}catch{} window.removeEventListener('tradingcore:theme-change',applyChartTheme); chartUpdateScheduler.current.cancel();try{c.unsubscribeClick(onChartClick)}catch{} try{host.current?.removeEventListener('pointerdown',onPointerDown);host.current?.removeEventListener('pointermove',onPointerMove);host.current?.removeEventListener('pointerup',onPointerUp);host.current?.removeEventListener('pointercancel',onPointerUp)}catch{} try{markerPlugin.current?.detach?.()}catch{}markerPlugin.current=null;workerSeriesMap.current.clear();indicatorSeriesMap.current.clear();markerDataByIndicator.current.clear();predictionLines.current=[];predictionJob.current++;drawingSeries.current=[];drawingPoints.current=[];};
  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey]);
- useEffect(()=>()=>{try{oscChart.current?.remove()}catch{}coreSpiritOutput.current?.dispose();coreSpiritOutput.current=undefined;rendererController.detach();chart.current=undefined;oscChart.current=undefined;candle.current=undefined;closeLine.current=undefined;volume.current=undefined;indicatorSeries.current=[];oscSeries.current=[];markerPlugin.current=null;},[]);
- useEffect(()=>{if(candles.current.length&&chart.current){try{renderStudies(candles.current);requestIndicatorWorker(candles.current);}catch(indicatorError){console.warn('[TradingCore] Indicator update skipped invalid values:',indicatorError);}void renderPredictionOverlay(candles.current);}},[indicators.map(x=>JSON.stringify(buildIndicatorSettingsSnapshot(x as unknown as Record<string, unknown>))).join('|'),predictionModelIds.join('|')]);
+ useEffect(()=>()=>{try{oscChart.current?.remove()}catch{}coreSpiritOutput.current?.dispose();coreSpiritOutput.current=undefined;rendererController.detach();chart.current=undefined;oscChart.current=undefined;candle.current=undefined;closeLine.current=undefined;volume.current=undefined;indicatorSeries.current=[];indicatorSeriesMap.current.clear();markerDataByIndicator.current.clear();indicatorFillMap.current.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.current.clear();oscSeries.current=[];markerPlugin.current=null;},[]);
+ const indicatorComputeKey=useMemo(()=>indicators.map(x=>buildIndicatorComputationSignature(x as unknown as Record<string,unknown>)).join('|'),[indicators]);
+ const indicatorAppearanceKey=useMemo(()=>indicators.map(x=>JSON.stringify(buildIndicatorAppearanceSnapshot(x as unknown as Record<string,unknown>,{timeframe,visibleBars:appearanceVisibleBars()}))).join('|'),[indicators,timeframe,candles.current.length,visibleLogicalRangeRef.current?.from,visibleLogicalRangeRef.current?.to]);
+ useEffect(()=>{if(candles.current.length&&chart.current){try{renderStudies(candles.current);requestIndicatorWorker(candles.current);}catch(indicatorError){console.warn('[TradingCore] Indicator update skipped invalid values:',indicatorError);}void renderPredictionOverlay(candles.current);}},[indicatorComputeKey,predictionModelIds.join('|')]);
+ useEffect(()=>{if(candles.current.length&&chart.current)applyIndicatorAppearanceOnly();},[indicatorAppearanceKey]);
  useEffect(()=>{if(!candle.current||!showLevels||!analytics.current)return;const levels=[...analytics.current.support.slice(0,6),...analytics.current.resistance.slice(0,6)];const lines=levels.map(x=>{const broken=x.state==='BROKEN';const base=x.side==='support'?'#3b82f6':'#ef4444';return candle.current!.createPriceLine({price:x.price,color:broken?'#64748b':base,lineWidth:broken?1:Math.max(1,Math.min(3,Math.round((x.strength||.5)*3))),lineStyle:broken?2:0,axisLabelVisible:true,title:`${broken?'BROKEN · ':''}${x.side==='support'?'S':'R'}${x.strength!=null?` · ${Math.round(x.strength*100)}%`:''}`});});return()=>lines.forEach(x=>candle.current?.removePriceLine(x));},[showLevels]);
  useEffect(()=>{renderOI(oiAnalytics.current);},[showOI]);
  useEffect(()=>{if(!showOI)return;let dead=false; void refreshOI(); const id=window.setInterval(()=>{if(!dead)void refreshOI();},15000); return()=>{dead=true;window.clearInterval(id);};},[resolvedInstrumentKey,showOI,brokerId]);

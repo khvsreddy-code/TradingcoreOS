@@ -90,3 +90,78 @@ The architecture leaves room for editor picks, following, collections, forks, re
 ## Execution truthfulness
 
 The public community layer never implies that arbitrary edited source has already replaced the native chart implementation. v98 compiles and stores the source as a CoreSpirit artifact; the workspace keeps native registered execution until the user-component runtime contract is production-ready.
+
+
+## v110 publication rule — schema is part of the visual contract
+
+A CoreSpirit Community Indicator publication now captures the v2 settings schema and resolved settings so a client can reproduce the author's presentation semantics without importing application-specific React knowledge.
+
+```text
+source snapshot
+    + immutable version
+    + settings schema v2
+    + resolved values
+    + computation identity
+    + appearance identity
+    + compiled artifact identity
+```
+
+The publication is self-describing, but appearance remains non-executable metadata. It cannot contain a callback, renderer object, worker function or arbitrary JavaScript.
+
+An imported community indicator therefore has the same host pipeline as a native indicator:
+
+```text
+validated publication
+      ↓
+CoreSpirit compile/resolve
+      ↓
+calculation output
+      ├── computation plane
+      └── appearance plane
+               ↓
+          Vela adapter
+```
+
+## v111 — Self-describing community indicator artifact
+
+Community indicators are now modeled around the first-class CoreSpirit indicator component, while retaining the existing immutable-source publication model.
+
+A publication can describe:
+
+```text
+source
+version
+compiled artifact identity
+settings schema
+resolved settings
+component inputs
+component outputs
+calculation metadata
+state metadata
+visual/event projections
+publication metadata
+```
+
+The publication database row remains a transport/storage projection. The executable source/artifact contract remains governed by CoreSpirit compiler/runtime rules.
+
+A public publication is therefore **self-describing**, but not self-authorizing.
+
+## v111.1 — Community indicators as portable component artifacts
+
+The community unit is now a self-describing CoreSpirit component publication rather than a script plus ad-hoc UI configuration.
+
+```text
+CoreSpirit source
++ immutable source checksum
++ typed public declaration
++ settings schema v2
++ compiled artifact identity
++ author/license/docs
+        ↓
+CoreSpirit Community Indicator
+```
+
+The public declaration controls composition. The settings schema controls user-editable presentation and indicator parameters. The executable artifact controls calculation. These layers are versioned independently enough to permit appearance-only changes without mathematical recomputation.
+
+Installation should register the validated component contract in a scoped registry. Removing/uninstalling the publication must unregister its callable names as well as its catalog entry.
+

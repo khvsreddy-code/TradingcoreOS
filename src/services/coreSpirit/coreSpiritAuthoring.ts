@@ -21,6 +21,8 @@ export const CORE_SPIRIT_AUTHORING_FEATURES = Object.freeze([
   'complexity-absorber',
   'model-component-abi',
   'semantic-lineage',
+  'programmable-indicators',
+  'declarative-indicator-artifacts',
 ] as const);
 export type CoreSpiritAuthoringFeature = typeof CORE_SPIRIT_AUTHORING_FEATURES[number];
 
@@ -47,7 +49,7 @@ const ADVANCED_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
   ...SIMPLE_FEATURES, 'component-composition', 'model-declarations', 'multi-symbol', 'multi-timeframe', 'custom-visuals', 'automation', 'stdlib-namespaces',
 ]);
 const PROFESSIONAL_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
-  ...ADVANCED_FEATURES, 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
+  ...ADVANCED_FEATURES, 'programmable-indicators', 'declarative-indicator-artifacts', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
 ]);
 
 function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringProfile {

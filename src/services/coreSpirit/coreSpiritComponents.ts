@@ -223,6 +223,16 @@ export class CoreSpiritComponentRegistry {
     return Object.freeze([...this.registrations.values()].map(registration => registration.contract));
   }
 
+  unregister(id: string): boolean {
+    const registration = this.registrations.get(id);
+    if (!registration) return false;
+    this.registrations.delete(id);
+    for (const name of [registration.contract.name, ...(registration.contract.aliases ?? [])]) {
+      if (this.names.get(name) === id) this.names.delete(name);
+    }
+    return true;
+  }
+
   clear(): void {
     this.registrations.clear();
     this.names.clear();

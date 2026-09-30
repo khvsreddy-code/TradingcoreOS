@@ -26,6 +26,8 @@ export interface LineLikeStyle {
     color: string;
     width: number;
     lineStyle: LineStyle;
+    /** Renderer-only neon amount. Zero means this series does not participate in glow. */
+    glow?: number;
     /** Baseline for histogram/area; ignored by the line family. */
     base?: number;
 }
@@ -54,6 +56,8 @@ export interface MarkerPoint {
     color: string;
     text?: string;
     size?: 'tiny' | 'small' | 'normal' | 'large' | 'huge';
+    textSize?: number;
+    offset?: number;
 }
 
 /** A chart surface a series can show on (see {@link SeriesDisplay}). */

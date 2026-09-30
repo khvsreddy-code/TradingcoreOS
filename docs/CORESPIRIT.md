@@ -8,7 +8,7 @@ The core mental model is:
 
 Charting, replay, research, strategy evaluation, and automation should share the same semantics rather than growing separate mini-runtimes.
 
-## Current platform lock — v109
+## Current platform lock — v110
 
 TradingCoreOS is now committed to a **CoreSpirit-first platform + Vela production chart engine + TCO-owned data/compute/broker systems** boundary. CoreSpirit remains the only user-facing trading language; Vela is strictly a renderer behind TCO chart contracts.
 
@@ -39,7 +39,7 @@ Vela is isolated to the adapter boundary so CoreSpirit and React never become co
 Performance deepening continues without moving ownership: typed-array ingress, viewport-driven LOD, stable CoreSpirit render packets, retained drawings, renderer-neutral multi-chart synchronization and measurable frame/GPU budgets are tracked as explicit follow-up work in `docs/CORESPIRIT_BUILD_TRACKER.md` and `docs/VELA_INTEGRATION.md`.
 
 
-## v109 indicator definition and settings ABI
+## v110 indicator definition and settings ABI
 
 Indicator customization is now a **schema contract**, not a collection of UI conditionals. The canonical implementation is `src/services/coreSpirit/indicatorSettingsSchema.ts`. The same schema is used to describe native and user-authored indicator metadata before it reaches the editor, workspace persistence, public publication or the Vela adapter.
 
@@ -8379,3 +8379,222 @@ For older-history prepends, logical viewport state is restored with the logical-
 CoreSpirit indicators remain renderer-neutral mathematical outputs. The TradingCoreOS chart host may execute compatible built-in indicators through a shared dependency graph so common primitives are reused across studies and chart cells. This is an execution optimization at the host/data-plane boundary and does not introduce new CoreSpirit keywords or alter the language/IR/VM contract.
 
 Indicator appearance metadata (colors, line width, line style, opacity and related display settings) is renderer configuration and is intentionally separated from indicator computation identity.
+
+
+## v110 presentation/computation split
+
+The indicator architecture now treats presentation as a separate reactive plane. A setting editor can change line color, fill gradient, marker shape, pane scale, level extension or zoom visibility at 60+ FPS without invalidating the mathematical graph.
+
+```text
+                     ┌───────────────┐
+CoreSpirit inputs ──→│ compute graph │──→ worker state/results
+                     └───────────────┘
+
+                     ┌────────────────────┐
+appearance schema ──→│ render graph/state │──→ TCO Chart API → Vela
+                     └────────────────────┘
+```
+
+The two planes may consume the same immutable output series, but they do not share invalidation keys.
+
+### Render-only appearance lifecycle
+
+```text
+settings patch
+    ↓
+validated schema path
+    ↓
+appearance snapshot
+    ├── line options
+    ├── fill primitive
+    ├── marker presentation
+    ├── level presentation
+    └── pane/scale presentation
+    ↓
+Vela facade
+    ↓
+Light invalidation / repaint
+```
+
+No `indicatorEngine`, incremental state, worker seed, cache key or mathematical dependency graph is touched by the presentation path.
+
+### Output immutability
+
+Indicator outputs are treated as the source data for rendering. A renderer may project them into gradients, hidden fill anchors, markers, level segments or pane projections, but those projections must not mutate mathematical input/output ownership.
+
+This is the foundation for the next performance layer: zero-copy output views, viewport-aware LOD and stable render packets can be added without reopening the indicator calculation contract.
+
+## 55. v111 — Indicators are first-class programmable components
+
+The indicator system now follows the same principle as the rest of CoreSpirit: **one semantic computation fabric, many projections**.
+
+An indicator is not a special evaluator layered beside CoreSpirit. It is a compiled CoreSpirit artifact wrapped by a typed semantic component contract:
+
+```text
+CoreSpirit source
+      ↓
+parser / semantic analysis
+      ↓
+typed dependency + composition graph
+      ↓
+stable IR
+      ↓
+executable artifact
+      ↓
+CoreSpiritIndicatorComponent
+      ├── inputs
+      ├── calculation
+      ├── state
+      ├── events
+      ├── plots
+      ├── visuals
+      ├── alerts
+      ├── settings schema
+      └── metadata
+```
+
+The implementation lives in `src/services/coreSpirit/coreSpiritIndicatorComponent.ts`. It reuses `compileCoreSpirit()`, the existing executable artifact, semantic graphs and the existing component registry. There is no indicator-specific VM.
+
+### 55.1 Typed public ports
+
+Indicator inputs and outputs are component ports. Canonical market series become typed inputs; emitted visual/event outputs become stable output descriptors. A multi-output indicator therefore composes through the existing component member access path rather than requiring indicator-only syntax.
+
+```text
+indicator A
+   ├── upper
+   ├── lower
+   └── basis
+         ↓
+indicator B / component C
+```
+
+The public boundary retains names, types and source instruction identity so diagnostics, lineage and dependency planning survive composition.
+
+### 55.2 The declarative indicator object
+
+The logical indicator object has eight domain projections:
+
+```text
+inputs
+calculation
+state
+events
+plots
+visuals
+alerts
+metadata
+```
+
+These projections are descriptions of the same compiled program. They must never become separate stores of indicator truth.
+
+### 55.3 Calculation/state semantics
+
+Calculation metadata records instruction count, lookback, determinism and incremental eligibility. State metadata records persistence and snapshot/rollback requirements. This lets the runtime distinguish:
+
+```text
+pure deterministic indicator
+      → cache / parallel / accelerator candidate
+
+stateful developing-bar indicator
+      → ordered state + snapshot/rollback
+```
+
+Appearance remains outside calculation identity. The v110 appearance contract therefore remains binding.
+
+### 55.4 SHOW and WHEN remain the compositional surface
+
+The source model does not need a large indicator keyword family. The intended author experience is still:
+
+```corespirit
+let basis = ema(close, 20)
+let volatility = atr(14)
+let expansion = volatility / sma(volatility, 50)
+
+if expansion > 1.5 {
+  show(basis)
+}
+
+show(basis)
+```
+
+The implementation may represent the resulting calculation, control flow and visual emissions as a much larger graph. That complexity belongs below the authoring surface.
+
+### 55.5 Future `indicator` declaration is sugar, not a new language
+
+A future authoring form such as:
+
+```text
+indicator "Adaptive Trend"
+```
+
+may provide identity/metadata ergonomics. It must lower to the same first-class component/artifact contract and must not introduce a second parser, evaluator or VM. Calculation remains ordinary CoreSpirit composition.
+
+### 55.6 Security boundary
+
+A first-class indicator component is not an authority container. Registration and publication do not grant:
+
+```text
+broker credentials
+filesystem authority
+arbitrary network access
+risk-policy bypass
+process/DOM authority
+```
+
+Public source snapshots remain source-visible and sandboxed. Trusted/local registration and public-source execution admission are intentionally separate lifecycle gates.
+
+### 55.7 Public output boundaries stay explicit
+
+Not every internal `LET` binding has to be a public indicator output. First-class indicator construction can optionally provide an output-name selection at the artifact/host boundary. The compiler still retains every intermediate node for dependency planning, incremental execution and diagnostics.
+
+```text
+internal graph
+  basis
+  volatility
+  expansion
+     ↓
+public component ports
+  basis
+  expansion
+```
+
+This prevents a deep indicator from leaking every temporary calculation into its public API while keeping composition typed and deterministic.
+
+## v111.1 — First-class indicators as executable components
+
+The first-class indicator contract is now both **declarative and host-executable**. The component wrapper does not create an indicator VM. It points at the same compiled artifact that the historical/replay/realtime CoreSpirit hosts already execute.
+
+```text
+indicator source
+    ↓
+CoreSpirit compiler / IR / artifact
+    ↓
+CoreSpiritIndicatorComponent
+    ├── public inputs / outputs
+    ├── declarative calculation/state/events/plots/visuals/alerts
+    └── immutable metadata + settings schema
+          ↓
+      existing execution host
+      ├── historical
+      ├── replay
+      └── realtime
+```
+
+`runCoreSpiritIndicatorComponent()` uses `CoreSpiritHistoricalExecutionHost`; `createCoreSpiritIndicatorRealtimeHost()` uses `CoreSpiritRealtimeExecutionHost`. This is the execution bridge for first-class indicators and is intentionally not a second evaluator.
+
+### Public input discipline
+
+The component can expose compiler-derived canonical data ports (`open`, `high`, `low`, `close`, `volume`, `time`) and explicit parameter/component ports. Canonical-data ports keep their canonical type when host metadata adds a description; parameter ports can be declared without changing the language grammar.
+
+### Public output discipline
+
+Internal `LET` bindings remain graph nodes. Only selected names become public value ports when authoring requests an explicit output list. Emitted plots/events are exposed as typed projection outputs. An unknown requested output is rejected at component construction time rather than silently producing an incomplete API.
+
+### Declaration identity
+
+`CoreSpiritIndicatorDeclaration` is the serializable declaration envelope. It points to the canonical component inputs, outputs, calculation object, state, visual/event projections and metadata. The declaration is not a second source of truth; validation requires it to remain structurally and referentially aligned with the canonical component.
+
+### Runtime lifecycle
+
+Registry lifecycle is reversible. Registering an indicator registers its component contract; unregistering an indicator removes both the indicator registry entry and the corresponding component callable names. This prevents long-lived IDE/workspace sessions from accumulating stale component contracts.
+

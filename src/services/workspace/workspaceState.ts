@@ -2,7 +2,7 @@ import { IndicatorConfig } from '../marketData/indicatorEngine';
 import { getIndicatorSettingsSchema, readIndicatorSettingValue, writeIndicatorSettingValue } from '../coreSpirit/indicatorSettingsSchema';
 export type AutomationMode = 'Paper' | 'Live' | 'Off';
 export type AutomationConfig = { id:string; name:string; description:string; mode:AutomationMode; enabled:boolean; kind:'VWAP_RECLAIM'|'EMA_CROSS'|'OPENING_RANGE'|'RSI_REVERSAL'|'DONCHIAN_BREAKOUT'|'SUPERTREND_FLIP'|'BOLLINGER_BREAKOUT'|'CPR_BREAKOUT'|'PDH_PDL_SWEEP'; period?:number; fast?:number; slow?:number; multiplier?:number };
-const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='indicator-settings-v7';
+const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='indicator-settings-v8';
 
 export const defaultIndicators: IndicatorConfig[] = [
  {id:'ema20',kind:'EMA',period:20,enabled:false}, {id:'vwap',kind:'VWAP',enabled:false},
@@ -44,8 +44,29 @@ export const defaultAutomations: AutomationConfig[] = [
 function read<T>(key:string, fallback:T):T { try { const x=localStorage.getItem(key); return x?JSON.parse(x):fallback; } catch{return fallback;} }
 let indicatorStateCache: IndicatorConfig[] | null = null;
 const normalizeIndicator=(item: IndicatorConfig): IndicatorConfig => {
-  const schema = getIndicatorSettingsSchema(item.kind, item as Record<string, unknown>);
-  let normalized: IndicatorConfig = { ...item };
+  const legacyAppearance = item.appearance && typeof item.appearance === 'object' ? item.appearance as any : {};
+  const legacyLine = legacyAppearance.line && typeof legacyAppearance.line === 'object' ? legacyAppearance.line as any : {};
+  const legacyFill = legacyAppearance.fill && typeof legacyAppearance.fill === 'object' ? legacyAppearance.fill as any : {};
+  const normalizedSeed: IndicatorConfig = {
+    ...item,
+    appearance: {
+      ...legacyAppearance,
+      line: {
+        ...legacyLine,
+        ...(legacyLine.color == null && item.color != null ? { color: item.color } : {}),
+        ...(legacyLine.width == null && item.lineWidth != null ? { width: item.lineWidth } : {}),
+        ...(legacyLine.style == null && item.lineStyle != null ? { style: Number(item.lineStyle)===1?'dashed':Number(item.lineStyle)===2?'dotted':'solid' } : {}),
+        ...(legacyLine.opacity == null && item.display?.opacity != null ? { opacity: item.display.opacity } : {}),
+      },
+      fill: {
+        ...legacyFill,
+        ...(legacyFill.upperColor == null && item.upperColor != null ? { upperColor: item.upperColor } : {}),
+        ...(legacyFill.lowerColor == null && item.lowerColor != null ? { lowerColor: item.lowerColor } : {}),
+      },
+    },
+  };
+  const schema = getIndicatorSettingsSchema(item.kind, normalizedSeed as Record<string, unknown>);
+  let normalized: IndicatorConfig = normalizedSeed;
   for (const section of schema.sections) for (const field of section.fields) {
     if (readIndicatorSettingValue(normalized as Record<string, unknown>, field.path) === undefined) {
       normalized = { ...normalized, ...writeIndicatorSettingValue(normalized as Record<string, unknown>, field.path, field.defaultValue) } as IndicatorConfig;

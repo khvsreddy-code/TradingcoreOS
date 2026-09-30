@@ -1,5 +1,5 @@
 /**
- * CoreSpirit stages 1–145: architecture contract and release gates.
+ * CoreSpirit stages 1–154: architecture contract and release gates.
  * This file is intentionally data-first so tooling can render the roadmap,
  * check dependencies, and keep the language/runtime roadmap in sync.
  */
@@ -1501,6 +1501,87 @@ export const CORE_SPIRIT_STAGES: readonly CoreSpiritStage[] = [
     ],
     nonGoals: ['runtime execution of arbitrary untrusted public source', 'renderer-specific scripting syntax'],
   },
+  {
+    id: 146, name: 'First-class programmable indicator artifact', kind: 'platform',
+    goal: 'Make an indicator a first-class CoreSpirit executable artifact that carries its compiled program, typed component contract, settings schema and domain projections as one immutable object.', dependencies: [9, 136, 145],
+    gates: [
+      { id: 'cs146-artifact', statement: 'A CoreSpirit indicator component contains an executable artifact and deterministic source checksum.', automated: true },
+      { id: 'cs146-contract', statement: 'The indicator is represented as component kind indicator rather than a parallel indicator runtime.', automated: true },
+      { id: 'cs146-safety', statement: 'Published/user source is not automatically granted host or broker authority by becoming an indicator artifact.', automated: true },
+    ],
+  },
+  {
+    id: 147, name: 'Typed indicator public port model', kind: 'compiler',
+    goal: 'Give programmable indicators stable typed input/output ports so one indicator can be composed into another without special indicator syntax.', dependencies: [146, 69],
+    gates: [
+      { id: 'cs147-inputs', statement: 'Canonical data inputs are projected into typed component input ports.', automated: true },
+      { id: 'cs147-outputs', statement: 'Indicator outputs have stable IDs, names, roles and types.', automated: true },
+      { id: 'cs147-member', statement: 'Multi-output indicator values remain addressable through the existing component member path.', automated: true },
+    ],
+  },
+  {
+    id: 148, name: 'Declarative indicator lifecycle contract', kind: 'platform',
+    goal: 'Describe inputs, calculation, state, events, plots, visuals, alerts and metadata as projections of one CoreSpirit program graph.', dependencies: [146, 147],
+    gates: [
+      { id: 'cs148-sections', statement: 'Indicator artifacts expose inputs, calculation, state, events, plots, visuals, alerts and metadata without introducing a second evaluator.', automated: true },
+      { id: 'cs148-state', statement: 'State lifecycle remains explicit and aligns with snapshot/rollback requirements for developing bars.', automated: true },
+      { id: 'cs148-render', statement: 'Visual projections remain renderer-neutral until they cross the TCO Vela adapter boundary.', automated: true },
+    ],
+  },
+  {
+    id: 149, name: 'Indicator computation identity contract', kind: 'runtime',
+    goal: 'Keep source/artifact/calculation identity distinct from settings presentation identity so an indicator can be restyled without invalidating mathematical state.', dependencies: [146, 148, 140],
+    gates: [
+      { id: 'cs149-compute', statement: 'Indicator source/artifact identity is sufficient to address compiled calculation state.', automated: true },
+      { id: 'cs149-appearance', statement: 'Appearance metadata is not included in the indicator component calculation identity.', automated: true },
+      { id: 'cs149-incremental', statement: 'Incremental eligibility is derived from state/determinism metadata instead of from renderer settings.', automated: true },
+    ],
+  },
+  {
+    id: 150, name: 'Reusable indicator composition', kind: 'compiler',
+    goal: 'Allow a first-class indicator component to participate in ordinary CoreSpirit component composition, including nested and multi-output indicators.', dependencies: [147, 149, 69],
+    gates: [
+      { id: 'cs150-nested', statement: 'Indicator component outputs can feed registered components through the existing invocation validation path.', automated: true },
+      { id: 'cs150-lineage', statement: 'Nested indicator composition preserves component/node lineage for dependency and diagnostic inspection.', automated: true },
+      { id: 'cs150-runtime', statement: 'Composition does not introduce an indicator-specific VM or evaluator.', automated: true },
+    ],
+  },
+  {
+    id: 151, name: 'Declarative plot/event projection', kind: 'runtime',
+    goal: 'Project SHOW, event and alert emissions from indicator IR into stable domain descriptors so plots and events are data, not ad-hoc UI callbacks.', dependencies: [148, 150],
+    gates: [
+      { id: 'cs151-plots', statement: 'Plot descriptors retain source instruction and stable output IDs.', automated: true },
+      { id: 'cs151-events', statement: 'Event/alert descriptors retain event kind and source instruction without embedding broker or renderer calls.', automated: true },
+      { id: 'cs151-visuals', statement: 'Visual descriptors are explicitly renderer-neutral.', automated: true },
+    ],
+  },
+  {
+    id: 152, name: 'Indicator metadata as optional declaration sugar', kind: 'language',
+    goal: 'Keep any future `indicator "Name"` declaration as authoring sugar over the existing artifact/component model rather than creating a second indicator language.', dependencies: [148, 151],
+    gates: [
+      { id: 'cs152-sugar', statement: 'A future indicator declaration maps to the existing component/artifact contract without changing VM semantics.', automated: false },
+      { id: 'cs152-source', statement: 'Indicator calculation remains ordinary DATA/LET/WHEN/SHOW composition beneath the metadata declaration.', automated: false },
+    ],
+    nonGoals: ['a second indicator grammar', 'renderer-specific indicator syntax'],
+  },
+  {
+    id: 153, name: 'Trusted authored indicator registration boundary', kind: 'security',
+    goal: 'Permit trusted/native/local authored indicators to register as executable components while keeping public untrusted source behind explicit compile/runtime admission controls.', dependencies: [146, 150],
+    gates: [
+      { id: 'cs153-register', statement: 'Indicator registry admission validates the component contract before registration.', automated: true },
+      { id: 'cs153-public', statement: 'Public publication remains source-visible and sandboxed; publication alone does not register executable host authority.', automated: true },
+      { id: 'cs153-authority', statement: 'Indicator registration never creates broker, filesystem or arbitrary network capabilities.', automated: true },
+    ],
+  },
+  {
+    id: 154, name: 'First-class programmable indicator release gate', kind: 'governance',
+    goal: 'Freeze the first-class programmable indicator architecture only after artifact identity, ports, lifecycle projections, composition, appearance isolation and safety boundaries are covered by contracts.', dependencies: [146, 147, 148, 149, 150, 151, 153],
+    gates: [
+      { id: 'cs154-contract', statement: 'The first-class indicator component contract and runtime behavior checks pass.', automated: true },
+      { id: 'cs154-build', statement: 'The production Vite build resolves all TCO chart facade runtime exports without legacy renderer symbol leakage.', automated: true },
+      { id: 'cs154-docs', statement: 'CoreSpirit architecture, scripting, composability, indicator and repair tracker documentation describe the same first-class model.', automated: true },
+    ],
+  },
 ]
 
 export function getCoreSpiritStage(id: number): CoreSpiritStage | undefined {
@@ -1516,6 +1597,6 @@ export function validateCoreSpiritRoadmap(): string[] {
       if (dep >= stage.id) errors.push(`stage ${stage.id} has non-previous dependency ${dep}`);
     }
   }
-  if (CORE_SPIRIT_STAGES.length !== 145) errors.push('CoreSpirit roadmap must contain exactly 145 stages');
+  if (CORE_SPIRIT_STAGES.length !== 154) errors.push('CoreSpirit roadmap must contain exactly 154 stages');
   return errors;
 }

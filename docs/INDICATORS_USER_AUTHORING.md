@@ -126,3 +126,75 @@ Display
 The important rule for contributors is: **add a field to the schema, not a field to the React panel**. The panel already supports primitive controls, conditional visibility, advanced fields, nested paths and reset-from-defaults.
 
 Schema metadata is also persisted with user-authored indicator drafts and public publications. A public indicator therefore carries source + version + schema + resolved settings, making the artifact self-describing without making the renderer the authority.
+
+## v111 — Indicator component model
+
+A user-authored indicator is now conceptually one self-describing CoreSpirit component:
+
+```text
+Identity
+ └── source + immutable version
+Inputs
+ └── typed data/parameter ports
+Calculation
+ └── executable CoreSpirit artifact
+State
+ └── persistence + snapshot/rollback semantics
+Outputs
+ └── typed values / plots / events
+Visuals
+ └── renderer-neutral projection metadata
+Alerts
+ └── declared event/alert capability
+Metadata
+ └── title / description / tags / license / author / docs
+```
+
+The source remains the canonical mathematical program. Metadata describes the program; it does not duplicate its calculations.
+
+### What this changes for authors
+
+A custom indicator can become reusable by becoming a component contract. The author does not need to create a new language declaration or separate evaluator. The same CoreSpirit source compiles through the same compiler and produces the same stable artifact used elsewhere in the platform.
+
+### Publication rule
+
+Public publication carries the source snapshot and metadata. It does not implicitly promote the source into unrestricted production execution. Runtime admission remains an explicit trusted/local/public execution boundary.
+
+## v111.1 — Indicator authoring model
+
+The authoring mental model is now:
+
+```text
+inputs
+  ↓
+calculation
+  ↓
+state (only when required)
+  ├── events
+  ├── plots
+  ├── visuals
+  └── alerts
+       ↓
+metadata / publication
+```
+
+### Inputs
+
+Declare which inputs are public. Canonical market series are discovered from the compiled reactive graph; parameters or component dependencies may be explicitly added through the host-side input contract.
+
+### Calculation
+
+The calculation projection records the compiled artifact's instruction count, lookback, determinism, incremental eligibility, cacheability, parallelism and backend candidates. These are runtime planning metadata, not new source keywords.
+
+### State
+
+Stateful indicators must expose snapshot/rollback semantics compatible with realtime bar revision. Pure indicators remain eligible for cache and parallel execution. The indicator wrapper delegates actual execution to the existing CoreSpirit runtime.
+
+### Events and visuals
+
+`SHOW`-derived plots and visual emissions, plus `WHEN`/event/alert projections, remain outputs of the same graph. Visuals are renderer-neutral and are later projected through the TCO chart API into Vela.
+
+### Publication
+
+The saved indicator should contain source identity, component declaration, settings schema, compiled artifact identity, public port names/types, metadata and documentation. Publication does not automatically grant host authority.
+

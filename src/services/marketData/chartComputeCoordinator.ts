@@ -14,6 +14,7 @@ import {
   ichimoku,
 } from './indicatorEngine';
 import { isIncrementalIndicatorSupported } from './incrementalIndicatorEngine';
+import { buildIndicatorComputationSignature } from '../coreSpirit/indicatorSettingsSchema';
 
 type IndicatorWorkerResult = { id: string; kind: string; data: any[]; incremental?: boolean; incrementalMode?: 'update'|'reset'; updateCost?: string };
 type AnalyticsRequest = { requestId: number; candles: HistoricalCandle[]; spot: number };
@@ -32,8 +33,15 @@ const MAX_CACHE_ENTRIES = 48;
 const WORKER_TIMEOUT_MS = 15_000;
 
 function stableConfigSignature(config: IndicatorConfig): string {
-  const computeFields = {
+  return buildIndicatorComputationSignature(config as unknown as Record<string, unknown>);
+}
+
+function normalizeIndicatorConfigs(configs: IndicatorConfig[]): { signature: string; configs: IndicatorConfig[]; ids: string[] } {
+  const active = configs.filter(config => config.enabled);
+  const compute = active.map((config, index) => ({
+    id: `shared-${index}`,
     kind: config.kind,
+    enabled: config.enabled,
     period: config.period,
     fast: config.fast,
     slow: config.slow,
@@ -42,16 +50,10 @@ function stableConfigSignature(config: IndicatorConfig): string {
     smooth: config.smooth,
     displacement: config.displacement,
     source: config.source,
-  };
-  return JSON.stringify(computeFields);
-}
-
-function normalizeIndicatorConfigs(configs: IndicatorConfig[]): { signature: string; configs: IndicatorConfig[]; ids: string[] } {
-  const active = configs.filter(config => config.enabled);
-  const compute = active.map((config, index) => ({
-    ...config,
-    id: `shared-${index}`,
-  }));
+    lookback: config.lookback,
+    anchor: config.anchor,
+    mtf: config.mtf,
+  } as IndicatorConfig));
   return {
     signature: JSON.stringify(active.map(stableConfigSignature)),
     configs: compute,

@@ -6,15 +6,15 @@
 
 ## Current release
 
-**Release:** CoreSpirit v109 — schema-driven indicators on the CoreSpirit + Vela architecture
+**Release:** CoreSpirit v111 — first-class programmable indicators + Vela runtime-export build repair
 
-**Tracker state:** current implementation truth for the v109 schema/renderer boundary lock.
+**Tracker state:** current implementation truth for the v111 first-class indicator component model and Vela build boundary.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
-**Machine release record:** `CORESPIRIT_V109_MANIFEST.json`
+**Machine release record:** `CORESPIRIT_V111_MANIFEST.json`
 
-**Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments.
+**Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments; presentation state never invalidates mathematical state.
 
 ### v109 architecture lock — 2026-09-29
 
@@ -39,9 +39,9 @@ TradingCoreOS is locked to a **CoreSpirit-first + Vela chart engine + TCO-owned 
 
 **Renderer boundary validation target:** `TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK`.
 
-### v109 indicator schema architecture — 2026-09-29
+### v109 indicator schema architecture — 2026-09-29 (historical)
 
-This release deepens the CoreSpirit/Vela lock by making indicator customization declarative and schema-driven across the full product path.
+This release established the first declarative/schema-driven indicator settings boundary. v110 below supersedes its presentation invalidation details with schema v2 and a separate computation/appearance identity.
 
 - [x] Added `src/services/coreSpirit/indicatorSettingsSchema.ts` as the canonical versioned IndicatorSettingsSchema ABI.
 - [x] Schema covers identity, Inputs, Style, Display, Behavior, Alerts, Visualization, pane/scale layout, outputs and capabilities.
@@ -49,18 +49,19 @@ This release deepens the CoreSpirit/Vela lock by making indicator customization 
 - [x] Replaced the shared IndicatorSettingsPanel's per-indicator controls with a universal schema renderer.
 - [x] Added schema-driven conditional visibility and a generic Advanced/basic complexity switch scoped to the active section.
 - [x] Moved `/live` embedded indicator settings onto the same universal editor; no second manual settings form remains.
-- [x] Workspace normalization now hydrates missing settings from declared schema defaults and preserves nested sibling values; workspace storage contract is `indicator-settings-v7`.
+- [x] Workspace normalization now hydrates missing settings from declared schema defaults and preserves nested sibling values; workspace storage contract is `indicator-settings-v8`.
 - [x] Live indicator refresh now fingerprints the full schema-derived snapshot, including nested display/style state.
 - [x] Indicator publication snapshots now store schema metadata plus resolved values in the existing `indicator_settings` JSONB field while keeping legacy flat keys.
 - [x] Indicator Studio draft metadata carries the validated schema alongside the active settings.
 - [x] Added the canonical `docs/INDICATOR_SETTINGS_SCHEMA.md` contract.
 - [x] Extended CoreSpirit roadmap from 130 to 145 stages covering the schema ABI, universal editor, publication, Vela projection and governance gates.
+- [x] v111 extends the CoreSpirit roadmap from 145 to 154 stages for first-class programmable indicator artifacts, typed ports, lifecycle projections, composition and trusted registration gates.
 - [ ] D1–D6 remain the lower-level Vela/data-plane performance deepening work.
 - [ ] Full browser/deployed smoke validation remains required for the schema/UI path.
 
 **Schema validation target:** `TCO_V109_INDICATOR_SCHEMA_CONTRACT_OK`
 **Renderer boundary target:** `TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK`
-**Current schema contract:** `indicator-settings-v7` workspace state + `IndicatorSettingsSchema` v1
+**Current schema contract:** `indicator-settings-v8` workspace state + `IndicatorSettingsSchema` v2
 
 ### Historical records
 
@@ -3208,3 +3209,106 @@ new tick → update current bar/state → emit affected tail points → series.u
 - [ ] Connected FYERS/browser stress test measuring tick frequency, worker update cost, dropped/replaced updates, and chart FPS across multi-chart sessions.
 
 **Non-interference:** v107 changes indicator calculation and chart presentation plumbing only. CoreSpirit v98 semantics, compiler/IR/VM authority, broker execution/risk authority, shared realtime feed ownership, terminal dock ownership, and chart-local drawings remain unchanged.
+
+
+
+## v111 first-class programmable indicators + Vela build repair — 2026-09-30
+
+The v111 pass deepens the indicator model and fixes the concrete CI/Vercel production-build failure reported after the Vela migration.
+
+### Build failure diagnosis and repair
+
+- **TC-BUILD-01 — runtime-only `LineStyle` export:** **PATCHED.** `ShowcaseChart.tsx` consumed `LineStyle.Dashed/Solid/Dotted` as runtime values, while `velaChartFacade.ts` exported only a type alias. TypeScript erased that export, producing the Rollup error `"LineStyle" is not exported`. The facade now exports a runtime-safe `LineStyle` object plus `LineStyleValue`.
+- **TC-BUILD-02 — regression guard:** **PATCHED.** `velaFacadeRuntimeExportContract.test.mjs` checks that the facade exposes the runtime enum-like value and that `ShowcaseChart` consumes that runtime contract.
+
+### CoreSpirit indicator component depth
+
+- **TC-CS-01 — first-class programmable indicator artifact:** **PATCHED.** Added `coreSpiritIndicatorComponent.ts`, which wraps one compiled CoreSpirit executable artifact with a typed indicator component contract.
+- **TC-CS-02 — typed indicator ports:** **PATCHED.** Canonical data inputs and emitted outputs are exposed as stable typed ports; multi-output indicators use the existing component-member composition mechanism.
+- **TC-CS-03 — declarative lifecycle projection:** **PATCHED.** Indicators now expose calculation, state, events, plots, visuals, alerts and metadata as projections of one compiled graph.
+- **TC-CS-04 — execution metadata:** **PATCHED.** Indicator components carry determinism, incremental eligibility, estimated cost, cacheability, parallelizability and backend eligibility.
+- **TC-CS-05 — registry boundary:** **PATCHED.** `CoreSpiritIndicatorRegistry` validates and registers indicator components through the existing semantic component registry; it does not create a second VM/evaluator.
+- **TC-CS-06 — security boundary:** **PATCHED.** Indicator registration/publication remains separate from host authority; public source is not implicitly executable broker/network/filesystem authority.
+- **TC-CS-07 — roadmap depth:** **PATCHED.** CoreSpirit roadmap stages 146–154 define the artifact, ports, lifecycle, computation identity, reusable composition, plot/event projection, future declaration sugar, trusted registration and release gate.
+
+### v111 validation
+
+- [x] Existing v105/v106/v107/v110 contracts remain part of `test:contracts`.
+- [x] Added `coreSpiritIndicatorComponentContract.test.mjs`.
+- [x] Added `velaFacadeRuntimeExportContract.test.mjs`.
+- [x] Updated stale roadmap-length assertions from 145 to 154 stages.
+- [x] Repository-wide dependency-free contract inventory passes.
+- [ ] Dependency-complete `npm run build` in the current archive environment; npm dependency installation timed out before a usable Vite binary was available.
+- [ ] GitHub Actions/Vercel browser/WebGL smoke verification after the commit is pushed.
+
+**Non-interference:** the v111 indicator component pass does not replace the CoreSpirit compiler/IR/VM, broker/risk authority, market-data transport, or TCO Vela chart boundary. Appearance-only settings remain outside mathematical indicator invalidation.
+
+## v110 indicator appearance schema v2 — 2026-09-29
+
+CoreSpirit language/runtime semantics remain unchanged. v110 extends the v109 schema ABI from “generic settings” into a full presentation contract and makes the no-recompute rule mechanically visible in the compute/appearance dependency split.
+
+- [x] Advance `IndicatorSettingsSchema` from v1 to v2.
+- [x] Add renderer-only `IndicatorAppearanceConfig` with Line, Fill, Marker, Levels and Pane surfaces.
+- [x] Add line opacity, width, solid/dashed/dotted style, gradient, gradient color, glow, glow strength, zoom-range visibility and timeframe visibility.
+- [x] Add fill enable, upper/lower colors, opacity, gradient and conditional bullish/bearish coloring.
+- [x] Add marker shape, size, position, color, text, text size and offset metadata.
+- [x] Add level color, width, style, extension, label and label placement metadata.
+- [x] Add pane mode, scale, scale mode, min/max, auto/manual and inversion metadata.
+- [x] Separate `buildIndicatorComputationSignature()` from `buildIndicatorAppearanceSnapshot()`.
+- [x] Route incremental runtime and shared chart worker normalization through the canonical computation signature.
+- [x] Strip appearance-only fields from worker compute payloads.
+- [x] Split LiveChart indicator effects into computation and presentation invalidation paths.
+- [x] Add Vela renderer-only fill/pane mutation methods.
+- [x] Preserve existing computed series as fill anchors; no fill operation invokes indicator math.
+- [x] Add v1 custom-schema in-memory migration to v2.
+- [x] Add structural regression guards for appearance isolation.
+- [ ] Complete dependency-backed TypeScript build in a full dependency environment.
+- [ ] Browser verification of gradient/glow/marker-label rendering on WebGL2 and Canvas2D.
+
+### v110 invariant
+
+```text
+input/source/definition edit
+    → computation signature changes
+    → worker/incremental graph may reseed
+
+appearance edit
+    → computation signature unchanged
+    → no worker request
+    → no indicator kernel
+    → renderer-only mutation
+```
+
+This invariant extends the v105/v106 principle rather than replacing it.
+
+### v111 first-class indicator architecture detail
+
+The implementation intentionally deepens the six-concept language rather than adding a large indicator keyword family:
+
+```text
+DATA → LET → WHEN → SHOW
+          ↓
+   typed semantic graph
+          ↓
+   executable indicator artifact
+          ↓
+ inputs / calculation / state / events / plots / visuals / alerts / metadata
+```
+
+An optional host-side `outputs` selection can restrict which `LET` bindings become public value ports. This keeps the public component boundary explicit while retaining the full internal calculation graph for execution and diagnostics.
+
+## v111.1 deepening — programmable/declarative indicator contract
+
+- [x] Formalize `CoreSpiritIndicatorDeclaration` as the serializable declaration envelope for inputs, outputs, calculation, state, events, plots, visuals, alerts and metadata.
+- [x] Add explicit public input ports so canonical data, parameters and reusable component inputs have one typed ABI.
+- [x] Keep explicit output selection authoritative and reject unknown requested outputs.
+- [x] Add `runCoreSpiritIndicatorComponent()` through the existing historical execution host.
+- [x] Add `createCoreSpiritIndicatorRealtimeHost()` through the existing realtime execution host.
+- [x] Preserve one compiler → IR → artifact → runtime execution path; no indicator VM/evaluator was introduced.
+- [x] Separate calculation-planning metadata from renderer metadata and preserve appearance-only invalidation isolation.
+- [x] Add reversible indicator unregister semantics that also remove the underlying component callable aliases.
+- [x] Validate declaration identity/ports/calculation alignment against the canonical component object.
+- [ ] Add scoped publication lifecycle with capability manifest + dependency lease tracking for community component install/uninstall.
+- [ ] Add zero-copy component output views for multi-indicator composition so public series references never materialize duplicate arrays.
+- [ ] Add component-level incremental checkpoint manifests for stateful indicators and deterministic replay fixtures.
+

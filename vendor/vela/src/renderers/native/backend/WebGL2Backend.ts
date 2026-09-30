@@ -566,7 +566,7 @@ export class WebGL2Backend implements IRenderBackend {
      *  Routing mirrors the main pass: own series per pane, force_overlay series on the price pane. */
     private emitGlowSources(b: Batch, scene: SceneGraph, pane: PaneNode, coords: CoordinateSystem, i0: number, i1: number): void {
         const emitOne = (s: SeriesSpec, off: number): void => {
-            if (!isLineLikeSeries(s) || !seriesShownOn(s, 'pane')) return;
+            if (!isLineLikeSeries(s) || !seriesShownOn(s, 'pane') || !(Number(s.style.glow ?? 0) > 0)) return;
             if (s.kind === 'histogram' || s.kind === 'columns') return;
             if (s.kind === 'circles' || s.kind === 'cross') this.emitPointMarkers(b, s, pane, coords, i0, i1, off);
             else this.emitPolyline(b, s, pane, coords, i0, i1, s.kind === 'step', off);

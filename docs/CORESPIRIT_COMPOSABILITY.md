@@ -476,3 +476,56 @@ derived output ownership
 ```
 
 That distinction is required for large graphs containing many indicators and models over one market timeline.
+
+## v111 — Indicator components are ordinary semantic components
+
+CoreSpirit indicators now have a first-class domain contract layered over the existing reusable-component system.
+
+```text
+compiled CoreSpirit artifact
+        ↓
+indicator component
+        ↓
+ordinary component graph
+```
+
+The indicator contract exposes:
+
+```text
+inputs → calculation → state → outputs/events/visuals
+```
+
+A single-output indicator behaves as a normal value-producing component. A multi-output indicator exposes stable named ports and can be consumed through existing component member access.
+
+The new implementation is `coreSpiritIndicatorComponent.ts`. It does not create an indicator evaluator. It compiles through the canonical compiler, preserves the executable artifact, and registers the resulting typed component contract through the existing component registry boundary.
+
+### Composition rules
+
+1. Indicator outputs can feed other registered components.
+2. Nested indicator composition keeps output names/types and graph lineage.
+3. Stateful indicators retain explicit snapshot/rollback semantics.
+4. Visual/event outputs remain projections rather than side-effectful UI callbacks.
+5. Appearance never becomes calculation identity.
+6. Component registration never expands host authority.
+
+This is the intended path to very deep indicators without a large language vocabulary.
+
+## v111.1 — Indicator composition is ordinary component composition
+
+Indicators are reusable components, not privileged callable objects. Their public inputs/outputs are `CoreSpiritComponentPort` values and therefore use the same invocation/member-access validation as other reusable components.
+
+```text
+Indicator A
+  ├── basis
+  ├── upper
+  └── lower
+       ↓
+Indicator B / model / visual component
+```
+
+A deep indicator may contain hundreds of internal nodes while publishing only a small typed surface. The compiler keeps internal dependencies for optimization and lineage; the component contract controls what downstream programs may consume.
+
+Composition must not copy series merely because the producer is an indicator. The canonical data-plane and shared-series rules remain in force, while component metadata supplies execution/cache/parallelism hints to the existing planner.
+
+Registry removal is also compositional hygiene: removing an indicator removes its component callable names so a subsequent compile cannot accidentally resolve a stale publication.
+
