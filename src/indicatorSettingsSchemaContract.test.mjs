@@ -56,8 +56,8 @@ assert(studio.includes('getIndicatorSettingsSchema'), 'indicator studio does not
 
 const stageIds = [...roadmap.matchAll(/id:\s*(\d+),/g)].map(m => Number(m[1]));
 assert(stageIds.includes(145), 'roadmap stage 145 missing');
-assert(roadmap.includes('CORE_SPIRIT_STAGES.length !== 184'), 'roadmap length gate was not updated to 176');
-assert(stageIds.filter(id => id >= 131 stageIds.filter(id => id >= 131 && id <= 176).length === 29stageIds.filter(id => id >= 131 && id <= 176).length === 29 id <= 176).length === 46, 'roadmap stages 131-176 are incomplete');
+assert(roadmap.includes('CORE_SPIRIT_STAGES.length !== 184'), 'roadmap length gate was not updated to 184');
+assert(stageIds.filter(id => id >= 131 && id <= 176).length === 46, 'roadmap stages 131-176 are incomplete');
 assert(schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION = 3'), 'indicator settings schema is not v3');
 assert(schema.includes('v1/v2 custom publications remain readable') && schema.includes('parametersFromSections(sections)'), 'legacy custom schema migration/parameter projection is missing');
 assert(schema.includes('buildIndicatorComputationSignature'), 'canonical computation signature missing');
