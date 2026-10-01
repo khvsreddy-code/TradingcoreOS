@@ -39,7 +39,14 @@ const KEYWORDS: CoreSpiritCompletion[] = [
   { label: 'true', kind: 'keyword', detail: 'boolean literal' },
   { label: 'false', kind: 'keyword', detail: 'boolean literal' },
 ];
-const SERIES: CoreSpiritCompletion[] = ['open','high','low','close','volume','time'].map(label => ({ label, kind:'series', detail:'built-in market series' }));
+const SERIES: CoreSpiritCompletion[] = [
+  {label:'open',kind:'series',detail:'series<price> • current symbol • chart timeframe'},
+  {label:'high',kind:'series',detail:'series<price> • current symbol • chart timeframe'},
+  {label:'low',kind:'series',detail:'series<price> • current symbol • chart timeframe'},
+  {label:'close',kind:'series',detail:'series<price> • current symbol • chart timeframe'},
+  {label:'volume',kind:'series',detail:'series<volume> • current symbol • chart timeframe'},
+  {label:'time',kind:'series',detail:'series<time> • current symbol • chart timeframe'},
+];
 const UI_ROOT: CoreSpiritCompletion[] = [{ label:'ui', kind:'property', detail:'language-driven runtime UI namespace' }];
 const WORKSPACE_ROOTS: CoreSpiritCompletion[] = [
   { label:'app', kind:'property', detail:'declarative trading workspace namespace' },
@@ -84,7 +91,7 @@ export function getCoreSpiritTypeInfo(source:string, cursor:number):CoreSpiritTy
   }
 
   const builtin=SERIES.find(x=>x.label===word);
-  if(builtin) return {name:word,type:'series<number>',detail:'built-in market series'};
+  if(builtin) { const semantic = word === 'volume' ? 'series<volume>' : word === 'time' ? 'series<time>' : 'series<price>'; return {name:word,type:semantic,detail:`built-in market series • ${semantic}`}; }
 
   const udt=getCoreSpiritUdtInfos(source).find(x=>x.name===word);
   if(udt) return {name:word,type:`type ${udt.name}`,detail:`${udt.fields.length} field(s)`};

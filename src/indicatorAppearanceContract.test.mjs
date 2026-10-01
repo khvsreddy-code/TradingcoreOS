@@ -28,7 +28,7 @@ for (const token of ['mode','scale','scaleMode','min','max','auto','inverted']) 
 assert(appearance.includes('export function buildIndicatorAppearanceSnapshot'), 'appearance snapshot builder missing');
 assert(!appearance.includes("../marketData/") && !appearance.includes("indicatorEngine"), 'appearance module imports calculation code');
 
-assert(schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION = 2'), 'settings schema is not v2');
+assert(schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION = 3'), 'settings schema is not v3');
 assert(schema.includes("'multi-select'"), 'multi-select settings field missing');
 for (const token of ['appearance.line.color','appearance.fill.enabled','appearance.marker.shape','appearance.levels.extension','appearance.pane.mode']) assert(schema.includes(token), `schema appearance path missing ${token}`);
 assert(schema.includes('buildIndicatorComputationSignature'), 'schema computation signature builder missing');

@@ -99,7 +99,7 @@ A CoreSpirit Community Indicator publication now captures the v2 settings schema
 ```text
 source snapshot
     + immutable version
-    + settings schema v2
+    + settings schema v3
     + resolved values
     + computation identity
     + appearance identity
@@ -154,7 +154,7 @@ The community unit is now a self-describing CoreSpirit component publication rat
 CoreSpirit source
 + immutable source checksum
 + typed public declaration
-+ settings schema v2
++ settings schema v3
 + compiled artifact identity
 + author/license/docs
         ↓
@@ -165,3 +165,70 @@ The public declaration controls composition. The settings schema controls user-e
 
 Installation should register the validated component contract in a scoped registry. Removing/uninstalling the publication must unregister its callable names as well as its catalog entry.
 
+
+## v112 — Community indicator parameter contract
+
+A published CoreSpirit community indicator now exposes a stable parameter ABI through `settingsSchema.parameters` alongside its immutable source/version/artifact identity.
+
+The public artifact can therefore describe:
+
+```text
+parameter types
+constraints
+groups/tooltips
+conditional dependencies
+resolved values
+validation state
+```
+
+without exposing executable UI callbacks or renderer objects. This keeps community indicators portable across the TCO editor and Vela presentation boundary.
+
+## v113 — community presets and semantic contracts
+
+Community indicators may publish serializable presets alongside their parameter schema. A community preset contains parameter values plus immutable identity/version metadata; it is not executable code.
+
+The community boundary accepts a preset only when indicator kind and schema identity are compatible. Local users can select and apply community presets, but the local preset store does not treat community records as writable personal/workspace state.
+
+Community indicators also inherit the CoreSpirit semantic value contract. Their source may produce `series<price>`, `series<volume>`, `series<time>` and related semantic values through the same compiler that handles native indicators.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.

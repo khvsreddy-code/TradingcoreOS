@@ -8,13 +8,18 @@
 export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   userConcepts: Object.freeze(['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE'] as const),
   statements: Object.freeze(['let', 'if', 'else', 'type'] as const),
-  scalarTypes: Object.freeze(['int', 'float', 'number', 'boolean', 'string', 'null'] as const),
+  scalarTypes: Object.freeze(['int', 'float', 'number', 'boolean', 'string', 'null', 'price', 'volume', 'time', 'duration', 'currency'] as const),
   seriesTypes: Object.freeze([
     'series<int>',
     'series<float>',
     'series<number>',
     'series<boolean>',
     'series<string>',
+    'series<price>',
+    'series<volume>',
+    'series<time>',
+    'series<duration>',
+    'series<currency>',
   ] as const),
   builtInSeries: Object.freeze(['open', 'high', 'low', 'close', 'volume', 'time'] as const),
   standardLibrary: Object.freeze([
@@ -29,7 +34,7 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   ] as const),
   coreMath: Object.freeze([
     'nz', 'na', 'bar_index', 'time', 'cross', 'crossover', 'crossunder', 'rising', 'falling', 'max', 'min', 'abs', 'sqrt', 'pow', 'round', 'sign', 'isNa', 'exp', 'log', 'tanh',
-    'clamp', 'sigmoid', 'probability',
+    'clamp', 'sigmoid', 'probability', 'toNumber', 'toPrice', 'toVolume', 'toTime', 'toDuration', 'toCurrency',
   ] as const),
   surfaceRules: Object.freeze([
     'WHEN blocks are indentation/colon sugar for if blocks',

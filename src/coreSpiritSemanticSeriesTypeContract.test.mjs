@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root=path.resolve(path.dirname(new URL(import.meta.url).pathname),'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const assert=(v,m)=>{if(!v)throw new Error(m)};
+const analyzer=read('src/services/coreSpirit/semanticAnalyzer.ts');
+const types=read('src/services/coreSpirit/semanticTypeSystem.ts');
+const parser=read('src/services/coreSpirit/parser.ts');
+const spec=read('src/services/coreSpirit/languageSpec.ts');
+for(const token of ['semanticSymbols','inferSemantic','TYPE_SEMANTIC_ARITHMETIC','semanticSeriesField','semanticTypeForDeclaredName']) assert(analyzer.includes(token),`semantic analyzer missing ${token}`);
+for(const token of ['series<price>','series<volume>','series<time>','combineSemanticArithmetic','price','volume','time','duration']) assert(types.includes(token),`semantic type system missing ${token}`);
+assert(parser.includes('declaredType'),'parser does not preserve declared semantic types');
+assert(analyzer.includes('TYPE_SEMANTIC_COMPARISON'),'semantic comparison diagnostics missing');
+assert(spec.includes("'series<price>'") && spec.includes("'series<volume>'"),'language surface missing semantic series types');
+console.log('TCO_V114_CORESPIRIT_SEMANTIC_SERIES_TYPE_CONTRACT_OK');
+
+for(const token of ['toNumber','toPrice','toVolume','toTime','toDuration','toCurrency']) assert(analyzer.includes(token) && spec.includes(token),`explicit semantic conversion '${token}' missing`);
+assert(types.includes("operator === '*'"), 'semantic multiplication rules missing');
+assert(types.includes('currency'), 'currency/notional semantic domain missing');
+assert(types.includes('semanticTypeCompatible'), 'declaration compatibility function missing');
+const namespaces=read('src/services/coreSpirit/standardLibraryNamespaces.ts');
+for(const token of ['math.toNumber','math.toPrice','math.toVolume','math.toTime','math.toDuration','math.toCurrency']) assert(namespaces.includes(`b('math','${token.split('.')[1]}'`),`namespace conversion '${token}' missing`);

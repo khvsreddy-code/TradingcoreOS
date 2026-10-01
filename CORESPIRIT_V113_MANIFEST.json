@@ -1,0 +1,135 @@
+{
+  "release": "CoreSpirit v113",
+  "date": "2026-10-01",
+  "theme": "CoreSpirit-first platform + Vela production chart engine + universal parameters/presets + semantic series typing + build boundary repair",
+  "productionChartBackend": "vela-native",
+  "language": "CoreSpirit",
+  "rendererBoundary": "TCO chart contracts -> velaChartFacade -> Vela NativeRenderer",
+  "indicatorSettingsBoundary": "IndicatorSettingsSchema v3 -> Universal settings editor -> resolved parameter state -> preset/profile/configuration pipeline",
+  "indicatorSettingsSchemaVersion": 3,
+  "workspaceIndicatorSettingsVersion": "indicator-settings-v9",
+  "removedOrRetiredSurfaces": [
+    "indicator-kind-specific React settings forms",
+    "duplicate /live indicator settings editor",
+    "external scripting compatibility translator/runtime/catalog",
+    "lightweight-charts dependency",
+    "generated dist artifacts from source control"
+  ],
+  "communityIndicatorUnit": {
+    "name": "CoreSpirit Community Indicator",
+    "requirements": [
+      "CoreSpirit source",
+      "immutable version metadata",
+      "versioned settings schema",
+      "resolved settings values",
+      "compiled artifact identity",
+      "author",
+      "license",
+      "documentation",
+      "preview",
+      "install/import metadata",
+      "optional serializable preset templates"
+    ]
+  },
+  "vela": {
+    "source": "vendor/vela",
+    "license": "Apache-2.0",
+    "attribution": "Upstream NOTICE retained; native visible attribution remains enabled"
+  },
+  "roadmapStages": 176,
+  "roadmapRange": "167-176",
+  "deepening": [
+    "universal parameter dependency graph",
+    "deterministic preset layer resolution",
+    "profile-scoped persistence",
+    "semantic series algebra",
+    "semantic comparisons/declarations",
+    "domain-aware standard-library signatures",
+    "semantic metadata propagation",
+    "semantic type tooling",
+    "D7 universal parameter dependency graph",
+    "D8 deterministic preset/profile reconciliation",
+    "D9 semantic series conversion ABI"
+  ],
+  "validationTargets": [
+    "TCO_V113_BUILD_ANNOTATION_REGRESSION_CONTRACT_OK",
+    "TCO_V113_INDICATOR_PRESET_SYSTEM_CONTRACT_OK",
+    "TCO_V113_CORESPIRIT_SEMANTIC_SERIES_TYPE_CONTRACT_OK",
+    "TCO_V113_GENERATED_ARTIFACT_HYGIENE_OK",
+    "TCO_V112_UNIVERSAL_PARAMETER_SYSTEM_CONTRACT_OK",
+    "TCO_V112_CONDITIONAL_SETTINGS_CONTRACT_OK",
+    "TCO_V111_VELA_RUNTIME_EXPORT_CONTRACT_OK"
+  ],
+  "fullApplicationBuild": "NOT_CLAIMED__DEPENDENCY_TREE_UNAVAILABLE",
+  "browserSmoke": "NOT_RUN",
+  "buildAnnotationRepairs": [
+    "LiveChart indicatorSeries scope",
+    "LevelSettingsDock ReactNode import",
+    "IndicatorSourceEditor schema import",
+    "IndicatorSettingsPanel DOM option typing",
+    "RouteErrorBoundary explicit props",
+    "dist generated artifact isolation",
+    "Node 24 engine/CI alignment"
+  ],
+  "parameterSystem": {
+    "schemaVersion": 3,
+    "storageVersion": "indicator-settings-v8",
+    "dependencyGraph": "compiled dependencies + reverse dependents + deterministic evaluation order",
+    "conditionalState": "visible + enabled from default-hydrated values",
+    "valueValidation": "type/domain/constraints/options/format"
+  },
+  "presetSystem": {
+    "schemaVersion": 1,
+    "storageVersion": "indicator-presets-v1",
+    "layers": [
+      "factory",
+      "script",
+      "workspace",
+      "personal"
+    ],
+    "profileSelection": "activePresetByIndicator",
+    "communityWrite": "forbidden",
+    "profileFingerprint": "canonical JSON fingerprint"
+  },
+  "semanticTypeSystem": [
+    "semantic scalar/series atoms",
+    "symbol/timeframe/unit/currency/precision/scale metadata",
+    "arithmetic domain validation",
+    "comparison domain validation",
+    "declaration compatibility",
+    "domain-aware standard-library returns",
+    "editor tooling"
+  ],
+  "appearanceIsolation": "Appearance state remains outside mathematical computation signatures and is renderer-only.",
+  "workerPayloadPolicy": "Presentation-only state remains excluded from calculation worker payloads.",
+  "status": "IMPLEMENTED_BUILD_ANNOTATION_REPAIR__UNIVERSAL_PARAMETER_AND_PRESET_ARCHITECTURE__SEMANTIC_SERIES_TYPING",
+  "stage": "v113",
+  "semanticTypeVersion": 1,
+  "primaryContracts": [
+    "TCO_V113_BUILD_ANNOTATION_REGRESSION_CONTRACT_OK",
+    "TCO_V113_INDICATOR_PRESET_SYSTEM_CONTRACT_OK",
+    "TCO_V113_CORESPIRIT_SEMANTIC_SERIES_TYPE_CONTRACT_OK"
+  ],
+  "semanticSeries": {
+    "domains": [
+      "number",
+      "price",
+      "volume",
+      "time",
+      "duration",
+      "boolean",
+      "string",
+      "currency"
+    ],
+    "seriesForms": true,
+    "explicitConversions": [
+      "toNumber",
+      "toPrice",
+      "toVolume",
+      "toTime",
+      "toDuration",
+      "toCurrency"
+    ],
+    "implicitCrossDomainArithmetic": "rejected"
+  }
+}

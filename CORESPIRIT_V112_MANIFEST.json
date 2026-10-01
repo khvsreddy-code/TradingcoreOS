@@ -1,0 +1,139 @@
+{
+  "release": "v112",
+  "date": "2026-09-30",
+  "theme": "CoreSpirit-first platform + Vela production chart engine + universal indicator parameter/dependency system",
+  "productionChartBackend": "vela-native",
+  "language": "CoreSpirit",
+  "rendererBoundary": "TCO chart contracts -> velaChartFacade -> Vela NativeRenderer",
+  "indicatorSettingsBoundary": "IndicatorSettingsSchema -> Universal IndicatorSettingsPanel -> workspace/publication/render packet",
+  "indicatorSettingsSchemaVersion": 3,
+  "removedOrRetiredSurfaces": [
+    "indicator-kind-specific React settings forms",
+    "duplicate /live indicator settings editor paths",
+    "external scripting compatibility translator/runtime/catalog",
+    "lightweight-charts dependency"
+  ],
+  "communityIndicatorUnit": {
+    "name": "CoreSpirit Community Indicator",
+    "requirements": [
+      "CoreSpirit source",
+      "immutable version metadata",
+      "versioned settings schema",
+      "resolved settings values",
+      "compiled artifact identity",
+      "author",
+      "license",
+      "documentation",
+      "preview",
+      "install/import metadata"
+    ]
+  },
+  "vela": {
+    "source": "vendor/vela",
+    "license": "Apache-2.0",
+    "attribution": "Upstream NOTICE retained; native visible attribution remains enabled"
+  },
+  "roadmapStages": 159,
+  "deepening": [
+    "D1 typed-array ingress",
+    "D2 viewport-driven renderer LOD",
+    "D3 stable CoreSpirit render packets",
+    "D4 retained native drawings",
+    "D5 multi-chart synchronization",
+    "D6 GPU/frame regression budgets"
+  ],
+  "validationTarget": "TCO_V112_UNIVERSAL_PARAMETER_SYSTEM_CONTRACT_OK",
+  "rendererValidationTarget": "TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK",
+  "fullApplicationBuild": "NOT_CLAIMED_DUE_INCOMPLETE_DEPENDENCY_RESTORE",
+  "browserSmoke": "NOT_RUN",
+  "indicatorSettingsSchemaGuards": [
+    "identity/layout/default compatibility",
+    "bounded section/field/output identifiers",
+    "safe nested setting paths",
+    "custom schema kind matching",
+    "renderer-neutral capability gate"
+  ],
+  "workspaceIndicatorSettingsVersion": "indicator-settings-v9",
+  "validationRuntimeTarget": "TCO_V112_INDICATOR_DECLARATIVE_EXECUTION_CONTRACT_OK",
+  "appearanceBoundary": "IndicatorAppearanceConfig -> TCO Chart API -> Vela NativeRenderer; excluded from computation signatures",
+  "appearanceCapabilities": [
+    "line",
+    "fill",
+    "marker",
+    "levels",
+    "pane/scale",
+    "zoom visibility",
+    "timeframe visibility",
+    "glow",
+    "gradient",
+    "conditional coloring"
+  ],
+  "computationSignature": "buildIndicatorComputationSignature; presentation state never enters mathematical invalidation",
+  "workerPayloadPolicy": "appearance-only fields stripped before indicator worker dispatch",
+  "v1SchemaMigration": "v1/v2 custom schemas upgraded in memory to v3; missing parameters projected from Inputs fields",
+  "title": "Universal CoreSpirit indicator parameters + conditional settings",
+  "primaryContracts": [
+    "TCO_V112_UNIVERSAL_PARAMETER_SYSTEM_CONTRACT_OK",
+    "TCO_V112_CONDITIONAL_SETTINGS_CONTRACT_OK",
+    "TCO_V112_CORESPIRIT_INDICATOR_COMPONENT_CONTRACT_OK",
+    "TCO_V112_INDICATOR_DECLARATIVE_EXECUTION_CONTRACT_OK",
+    "TCO_V110_INDICATOR_APPEARANCE_CONTRACT_OK",
+    "TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK"
+  ],
+  "indicatorComponentModel": {
+    "declarationVersion": 1,
+    "publicInputs": "canonical-data + explicit parameter/component ports",
+    "publicOutputs": "explicit selection with construction-time unknown-output rejection",
+    "execution": "existing CoreSpiritHistoricalExecutionHost/CoreSpiritRealtimeExecutionHost",
+    "runtimeModel": "single compiler -> IR -> executable artifact -> existing CoreSpirit runtime",
+    "registryLifecycle": "register + unregister with semantic alias cleanup",
+    "appearanceIsolation": "presentation metadata excluded from mathematical invalidation"
+  },
+  "parameterSystem": {
+    "types": [
+      "number",
+      "integer",
+      "decimal",
+      "boolean",
+      "enum",
+      "color",
+      "source",
+      "timeframe",
+      "symbol",
+      "session",
+      "price",
+      "duration",
+      "string"
+    ],
+    "constraints": [
+      "min",
+      "max",
+      "step",
+      "defaultValue",
+      "group",
+      "tooltip",
+      "placeholder",
+      "unit",
+      "advanced",
+      "readonly",
+      "validation"
+    ],
+    "conditions": [
+      "equals",
+      "notEquals",
+      "greaterThan",
+      "greaterThanOrEqual",
+      "lessThan",
+      "lessThanOrEqual",
+      "in",
+      "notIn",
+      "truthy",
+      "falsy",
+      "all",
+      "any",
+      "not"
+    ],
+    "resolution": "values + visible + errors + valid; visibility evaluated against fully default-hydrated state",
+    "calculationIsolation": "parameters feed calculation identity; presentation does not; default hydration only affects configuration resolution"
+  }
+}

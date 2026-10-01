@@ -264,6 +264,7 @@ export class CoreSpiritRuntime {
     if (name==='max') return finish(Math.max(Number(args[0]), Number(args[1])));
     if (name==='min') return finish(Math.min(Number(args[0]), Number(args[1])));
     if (name==='abs') return finish(Math.abs(Number(args[0])));
+    if (name==='toNumber'||name==='toPrice'||name==='toVolume'||name==='toTime'||name==='toDuration'||name==='toCurrency') return finish(Number(args[0]));
     if (name==='sqrt') return finish(Math.sqrt(Number(args[0])));
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
     if (name==='crossover'||name==='crossunder') {

@@ -2,7 +2,7 @@ import { IndicatorConfig } from '../marketData/indicatorEngine';
 import { getIndicatorSettingsSchema, readIndicatorSettingValue, writeIndicatorSettingValue } from '../coreSpirit/indicatorSettingsSchema';
 export type AutomationMode = 'Paper' | 'Live' | 'Off';
 export type AutomationConfig = { id:string; name:string; description:string; mode:AutomationMode; enabled:boolean; kind:'VWAP_RECLAIM'|'EMA_CROSS'|'OPENING_RANGE'|'RSI_REVERSAL'|'DONCHIAN_BREAKOUT'|'SUPERTREND_FLIP'|'BOLLINGER_BREAKOUT'|'CPR_BREAKOUT'|'PDH_PDL_SWEEP'; period?:number; fast?:number; slow?:number; multiplier?:number };
-const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='indicator-settings-v8';
+const IND='tradingcore:indicators'; const AUTO='tradingcore:automations'; const IND_VERSION='indicator-settings-v9';
 
 export const defaultIndicators: IndicatorConfig[] = [
  {id:'ema20',kind:'EMA',period:20,enabled:false}, {id:'vwap',kind:'VWAP',enabled:false},

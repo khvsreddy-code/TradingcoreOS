@@ -140,3 +140,7 @@ export * from './semanticComponentAdapters';
 
 
 export * from './coreSpiritIndicatorComponent';
+
+export * from './semanticTypeSystem';
+
+export * from './indicatorPresetSystem';

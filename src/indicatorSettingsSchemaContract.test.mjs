@@ -20,7 +20,7 @@ assert(exists('docs/INDICATOR_SETTINGS_SCHEMA.md'), 'canonical indicator setting
 for (const section of ['inputs', 'style', 'display', 'behavior', 'alerts', 'visualization']) assert(schema.includes(`id: '${section}'`), `schema section ${section} missing`);
 for (const contract of ['identity', 'layout', 'outputs', 'capabilities', 'sections']) assert(schema.includes(contract), `schema contract member ${contract} missing`);
 for (const kind of ['integer', 'number', 'select', 'multi-select', 'color', 'range', 'boolean', 'text']) assert(schema.includes(`'${kind}'`), `schema field kind ${kind} missing`);
-assert(schema.includes('visibleWhen'), 'schema conditional visibility missing');
+assert(schema.includes('visibleWhen') && schema.includes('dependency?: IndicatorSettingCondition') && schema.includes('visibilityCondition?: IndicatorSettingCondition'), 'schema conditional visibility/dependency contract missing');
 assert(schema.includes('advanced?: boolean'), 'schema advanced-level field missing');
 assert(schema.includes('SAFE_SETTING_PATH') && schema.includes('UNSAFE_SETTING_SEGMENTS'), 'schema path hardening missing');
 assert(schema.includes('schema.identity.kind !== kind'), 'custom schema identity must match the indicator kind');
@@ -30,7 +30,7 @@ assert(schema.includes('const patch: Record<string, unknown> = {};') && schema.i
 
 assert(panel.includes('getIndicatorSettingsSchema'), 'universal panel is not schema-driven');
 assert(panel.includes('writeIndicatorSettingValue'), 'universal panel does not write by schema path');
-assert(panel.includes('matchesVisibility'), 'universal panel does not implement declarative visibility');
+assert(panel.includes('isIndicatorSettingFieldVisible'), 'universal panel does not implement declarative visibility');
 assert(panel.includes('showAdvanced'), 'universal panel does not expose advanced/basic complexity control');
 for (const forbidden of ["x.kind === 'MACD'", "x.kind==='MACD'", 'periodKinds', 'sourceKinds', 'supportsSource']) assert(!panel.includes(forbidden), `manual indicator UI branch remains in universal panel: ${forbidden}`);
 
@@ -46,7 +46,7 @@ assert(!live.includes('supportsSource('), 'live chart still has a second manual 
 
 assert(engine.includes('settingsSchema?: IndicatorSettingsSchema'), 'indicator config lacks schema attachment contract');
 assert(engine.includes('CORE_PRICE_SOURCE_OPTIONS'), 'engine and schema do not share price-source options');
-assert(workspace.includes("indicator-settings-v8"), 'workspace indicator settings version was not advanced');
+assert(workspace.includes("indicator-settings-v9"), 'workspace indicator settings version was not advanced');
 assert(workspace.includes('getIndicatorSettingsSchema') && workspace.includes('writeIndicatorSettingValue'), 'workspace normalization is not schema-driven');
 
 assert(publication.includes('buildIndicatorSettingsSnapshot'), 'publication service does not build canonical settings schema snapshots');
@@ -56,9 +56,9 @@ assert(studio.includes('getIndicatorSettingsSchema'), 'indicator studio does not
 
 const stageIds = [...roadmap.matchAll(/id:\s*(\d+),/g)].map(m => Number(m[1]));
 assert(stageIds.includes(145), 'roadmap stage 145 missing');
-assert(roadmap.includes('CORE_SPIRIT_STAGES.length !== 154'), 'roadmap length gate was not updated to 154');
-assert(stageIds.filter(id => id >= 131 && id <= 145).length === 15, 'roadmap stages 131-145 are incomplete');
-assert(schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION = 2'), 'indicator settings schema is not v2');
-assert(schema.includes('raw.version === 1') && schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION }'), 'v1 custom schema migration is missing');
+assert(roadmap.includes('CORE_SPIRIT_STAGES.length !== 184'), 'roadmap length gate was not updated to 176');
+assert(stageIds.filter(id => id >= 131 stageIds.filter(id => id >= 131 && id <= 176).length === 29stageIds.filter(id => id >= 131 && id <= 176).length === 29 id <= 176).length === 46, 'roadmap stages 131-176 are incomplete');
+assert(schema.includes('INDICATOR_SETTINGS_SCHEMA_VERSION = 3'), 'indicator settings schema is not v3');
+assert(schema.includes('v1/v2 custom publications remain readable') && schema.includes('parametersFromSections(sections)'), 'legacy custom schema migration/parameter projection is missing');
 assert(schema.includes('buildIndicatorComputationSignature'), 'canonical computation signature missing');
-console.log('TCO_V110_INDICATOR_SCHEMA_CONTRACT_OK');
+console.log('TCO_V112_INDICATOR_SCHEMA_CONTRACT_OK');

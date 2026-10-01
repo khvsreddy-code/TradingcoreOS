@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Settings2, X } from 'lucide-react';
 import { DEFAULT_DYNAMIC_LEVEL_SETTINGS, DynamicLevelSettings, getDynamicLevelSettings, saveDynamicLevelSettings } from '../../services/marketData/levelSettings';
 
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const Field = ({ label, children }: { label: string; children: ReactNode }) => (
   <label className="block text-[8px] uppercase tracking-wider text-[#7f8aa3]">
     <span>{label}</span>
     <div className="mt-1">{children}</div>

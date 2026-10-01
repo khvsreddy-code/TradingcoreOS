@@ -15,7 +15,8 @@ for (const token of [
   'unknown public output',
   'unregister(id: string): boolean',
   'indicator.declaration.calculation !== indicator.calculation',
+  'indicator.declaration.parameters !== indicator.parameters',
 ]) assert(src.includes(token), `declarative/executable indicator contract missing '${token}'`);
 assert(src.includes("coreSpiritComponentRegistry.unregister(id)"), 'indicator unregister must clean the semantic component registry');
 assert(src.includes("kind: 'indicator' as const"), 'declaration must retain indicator kind');
-console.log('TCO_V111_INDICATOR_DECLARATIVE_EXECUTION_CONTRACT_OK');
+console.log('TCO_V112_INDICATOR_DECLARATIVE_EXECUTION_CONTRACT_OK');

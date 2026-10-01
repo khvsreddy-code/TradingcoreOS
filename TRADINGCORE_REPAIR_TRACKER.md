@@ -520,3 +520,157 @@ Node-based contracts can run from the extracted tree. A dependency-backed full T
 
 Indicator declaration metadata, public port metadata and execution host helpers must not alter the v105/v106/v110 appearance-vs-computation invalidation rule. A style-only setting remains renderer-only; a mathematical input change is the only kind of setting change allowed to enter the computation invalidation path.
 
+
+## v112 — Universal parameter system + conditional settings — 2026-09-30
+
+| ID | Area | Severity | Defect / hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-CS-08 | Parameter ABI | Critical | Indicator configuration lacked an explicit universal typed parameter contract independent of UI implementation. | **FIXED — CONTRACT** | `indicatorSettingsSchema.ts`, `CoreSpiritIndicatorComponent` |
+| TC-CS-09 | Parameter types | High | Settings controls were limited to legacy control kinds and could not express trading-specific source/timeframe/symbol/session/price/duration semantics. | **FIXED — CONTRACT** | `IndicatorSettingFieldKind` v3 |
+| TC-CS-10 | Parameter metadata | High | Parameter constraints and editor guidance were fragmented across field constructors. | **FIXED — CONTRACT** | min/max/step/group/tooltip/validation fields |
+| TC-CS-11 | Conditional settings | Critical | Conditional settings were limited to simple equality visibility metadata. | **FIXED — CONTRACT** | `IndicatorSettingCondition`, canonical evaluator |
+| TC-CS-12 | Dependency safety | High | Complex visibility relationships needed safe path validation, bounded nesting and self-dependency rejection. | **FIXED — CONTRACT** | `validateCondition` |
+| TC-CS-13 | Resolved parameter state | High | Editor, workspace and publication paths could otherwise resolve defaults/visibility independently. | **FIXED — CONTRACT** | `resolveIndicatorParameterState` |
+| TC-CS-14 | Component ABI | High | First-class programmable indicators did not explicitly carry the canonical parameter projection. | **FIXED — CONTRACT** | `CoreSpiritIndicatorComponent.parameters` |
+| TC-CS-15 | Migration | High | Existing v1/v2 custom schemas needed a forward-compatible parameter projection. | **FIXED — STATIC VERIFY** | in-memory v1/v2 → v3 migration |
+| TC-CS-16 | Computation isolation | Critical | Universal parameter work must not reintroduce appearance-driven mathematical recomputation. | **LOCKED — CONTRACT** | `buildIndicatorComputationSnapshot`, appearance/computation separation |
+| TC-CS-17 | Default-resolved dependencies | High | Conditional visibility could otherwise evaluate against sparse persisted state and ignore schema defaults on first load. | **FIXED — CONTRACT** | `resolveIndicatorParameterState` default hydration + runtime test |
+
+### v112 verification
+
+- [x] `TCO_V112_UNIVERSAL_PARAMETER_SYSTEM_CONTRACT_OK`
+- [x] `TCO_V112_CONDITIONAL_SETTINGS_CONTRACT_OK`
+- [x] `TCO_V112_INDICATOR_SCHEMA_CONTRACT_OK`
+- [x] `TCO_V112_CORESPIRIT_INDICATOR_COMPONENT_CONTRACT_OK`
+- [x] `TCO_V112_INDICATOR_DECLARATIVE_EXECUTION_CONTRACT_OK`
+- [x] Existing v110 appearance isolation contracts remain green.
+- [ ] Dependency-complete Vite build in extracted environment; dependency tree is not installed.
+- [ ] Browser validation of dynamic conditional control transitions.
+
+## CoreSpirit v113 — build annotation repair + presets + semantic series typing — 2026-10-01
+
+### Build blockers repaired from GitHub/Vercel annotation set
+
+| ID | Severity | Status | Repair |
+|---|---:|---|---|
+| TC-BUILD-03 | High | **FIXED** | `LiveChart` indicator-series helper moved into component scope. |
+| TC-BUILD-04 | High | **FIXED** | `LevelSettingsDock` now imports `ReactNode` explicitly. |
+| TC-BUILD-05 | High | **FIXED** | `IndicatorSourceEditor` imports the canonical settings schema accessor. |
+| TC-BUILD-06 | High | **FIXED** | Universal panel consumes typed HTML option values and resolved parameter state. |
+| TC-BUILD-07 | High | **FIXED** | `RouteErrorBoundary` declares explicit React component props. |
+| TC-BUILD-08 | High | **FIXED** | Generated `dist` excluded from source/repo; stale worker modules cannot be compiler inputs. |
+| TC-BUILD-09 | Medium | **FIXED** | Node engine and GitHub Actions aligned to 24.x to match hosted Vercel configuration. |
+
+### Universal parameter / conditional system
+
+- [x] Conditional operator validation is target-field aware.
+- [x] Dependency graphs reject cycles and unsafe paths.
+- [x] Visibility and enabled state are separate resolved maps.
+- [x] Defaults are hydrated before condition evaluation.
+- [x] Hidden fields do not produce active validation errors.
+
+### Preset/profile architecture
+
+- [x] Factory Default, Script Defaults and built-in templates remain schema-derived.
+- [x] Artifact-declared `presetTemplates` are serializable parameter override definitions.
+- [x] Personal, workspace and community presets carry explicit scope/provenance.
+- [x] Local writes are limited to personal/workspace scope.
+- [x] Effective layer resolution is deterministic and observable.
+- [x] Active user/workspace profile persistence is isolated and bounded.
+- [x] Profiles can carry `activePresetByIndicator` metadata without adding a second configuration format.
+
+### Semantic series architecture
+
+- [x] `series<price>`, `series<volume>`, `series<time>` and related semantic domains are compiler-visible.
+- [x] Semantic metadata supports symbol/timeframe/unit/currency/precision/scale.
+- [x] Domain-invalid arithmetic produces stable compiler diagnostics.
+- [x] Domain-invalid ordered comparisons produce stable compiler diagnostics.
+- [x] Semantic declarations are checked against inferred values.
+- [x] Standard-library return domains are specialized where meaning is known.
+- [x] Editor completion/type information advertises domain-aware series values.
+
+### Validation status
+
+- [x] Dependency-free Node contract inventory for the new v113 contracts.
+- [ ] Full dependency-backed TypeScript check.
+- [ ] Full Vite production build.
+- [ ] Post-push GitHub Actions and Vercel confirmation.
+- [ ] Browser smoke for conditional parameter transitions and preset application.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## Parameter / preset / semantic-type depth — v113 — 2026-10-01
+
+| ID | Area | Severity | Hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-PARAM-01 | Universal parameter ABI | Critical | Parameter fields validate domain, constraints, options and format before persistence/application. | **FIXED — CONTRACT** | `indicatorSettingsSchema.ts`, `indicatorParameterSystemContract.test.mjs` |
+| TC-PARAM-02 | Conditional dependency graph | Critical | Dependency/visibility/enabled conditions compile into dependencies + reverse dependents with cycle/depth/group safety. | **FIXED — CONTRACT** | `buildIndicatorParameterDependencyGraph`, `getIndicatorParameterDependents`, conditional contracts |
+| TC-PARAM-03 | Preset layers | High | Factory/script/workspace/personal layers resolve deterministically; active profile selections override latest fallback. | **FIXED — STATIC VERIFY** | `indicatorPresetSystem.ts`, `indicatorPresetSystemContract.test.mjs` |
+| TC-PARAM-04 | Profile persistence | High | Profiles are bounded, user/workspace scoped, JSON-safe and fingerprintable for reconciliation. | **FIXED — STATIC VERIFY** | `createIndicatorPresetProfile`, `indicatorPresetProfileFingerprint` |
+| TC-TYPE-10 | Semantic series | Critical | CoreSpirit rejects implicit domain mixing while preserving symbol/timeframe metadata and semantic output domains. | **FIXED — RUNTIME CONTRACT** | `semanticTypeSystem.ts`, `semanticSeriesTypeRuntime.test.ts` |
+| TC-TYPE-11 | Explicit conversions | High | Pure `toNumber/toPrice/toVolume/toTime/toDuration/toCurrency` conversions provide the intentional semantic escape hatch. | **FIXED — RUNTIME/STATIC** | `semanticAnalyzer.ts`, `standardLibrary.ts`, `standardLibraryNamespaces.ts` |
+| TC-BUILD-01 | Build annotations | Critical | Ten reported source/generated errors are addressed; generated `dist` is excluded; Node 24 is aligned in package/CI. | **FIXED — STATIC CONTRACT** | `v113AnnotationRegressionContract.test.mjs`, `.gitignore`, `package.json`, CI workflow |
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.
+
+
+## v114 universal configuration and semantic typing — 2026-10-01
+
+| ID | Area | Severity | Hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-PARAM-05 | Parameter domain validation | Critical | Universal kinds enforce their own runtime value shape before persistence/preset application. | **FIXED — CONTRACT** | `validateIndicatorSettingValue`, `indicatorParameterSystemContract.test.mjs` |
+| TC-PARAM-06 | Dependency compilation | Critical | Schema dependencies compile into deterministic order + reverse dependents for targeted updates. | **FIXED — CONTRACT** | `buildIndicatorParameterDependencyGraph`, `getIndicatorParameterDependents` |
+| TC-PRESET-05 | Profile selection | High | `activePresetByIndicator` now participates in workspace/personal preset resolution. | **FIXED — STATIC VERIFY** | `resolveIndicatorPresetLayers`, `setActiveIndicatorPreset` |
+| TC-PRESET-06 | Reconciliation | Medium | Canonical profile fingerprint is stable across JSON object key ordering. | **FIXED — STATIC VERIFY** | `indicatorPresetProfileFingerprint` |
+| TC-TYPE-12 | Semantic dimensional algebra | Critical | Domain rules cover arithmetic, comparison, metadata and derived domains without collapsing everything to number. | **FIXED — RUNTIME CONTRACT** | `semanticTypeSystem.ts`, `semanticSeriesTypeRuntime.test.ts` |
+| TC-TYPE-13 | Explicit conversion ABI | High | Domain-changing operations are explicit pure conversions rather than implicit coercions. | **FIXED — RUNTIME/STATIC** | `semanticAnalyzer.ts`, `standardLibrary.ts`, `standardLibraryNamespaces.ts` |
+| TC-BUILD-02 | Release gate | High | Roadmap now ends at v114 stage 184 with parameter/preset/conditional/semantic-type and build-boundary contracts. | **FIXED — STATIC** | `coreSpiritRoadmap.ts`, v114 release manifest |
+
+
+## v114 release gate — 2026-10-01
+
+| ID | Area | Severity | Gate | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-REL-114-01 | Build | Critical | Ten reported source/generated annotations are covered by source-level regressions; generated `dist` is excluded. | **FIXED — STATIC** | `v113AnnotationRegressionContract.test.mjs`, `.gitignore` |
+| TC-REL-114-02 | Parameter ABI | Critical | Typed value-domain validation and compiled dependency graph are shared by editor, workspace and presets. | **FIXED — CONTRACT** | `indicatorSettingsSchema.ts`, parameter/conditional contracts |
+| TC-REL-114-03 | Presets | High | Explicit active profile selection and portable JSON bundles share one canonical preset validator. | **FIXED — STATIC VERIFY** | `indicatorPresetSystem.ts`, preset contract |
+| TC-REL-114-04 | Semantic typing | Critical | Domain arithmetic, comparison, metadata and explicit conversion ABI are compiler-visible and capability-neutral. | **FIXED — RUNTIME CONTRACT** | `semanticTypeSystem.ts`, `semanticSeriesTypeRuntime.test.ts` |

@@ -2,6 +2,7 @@ import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import { CoreSpiritType, compatible, isBooleanType, isNumericType, joinTypes } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
+import { combineSemanticArithmetic, compareSemanticTypes, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
 
 export type CoreSpiritDiagnostic = { severity:'error'|'warning'; message:string; line?:number; column?:number; start?:number; end?:number; code?:string };
 export type CoreSpiritUdt = { name:string; fields:Array<{name:string;type:CoreSpiritType}> };
@@ -13,6 +14,7 @@ export type CoreSpiritSemanticResult = {
   modelBindings:Map<string,unknown>;
   componentBindings:Map<string,string>;
   maxLookback:number;
+  semanticSymbols:Map<string,CoreSpiritSemanticType>;
 };
 
 const seriesNames=new Set(['open','high','low','close','volume','time']);
@@ -25,6 +27,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const udts=new Map<string,CoreSpiritUdt>();
   const modelBindings=new Map<string,unknown>();
   const componentBindings=new Map<string,string>();
+  const semanticSymbols=new Map<string,CoreSpiritSemanticType>();
   const componentSource=options.components;
   let maxLookback=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
@@ -36,6 +39,8 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
     if(name==='bool'||name==='boolean') return 'boolean';
     if(name==='string') return 'string';
     if(name==='null'||name==='na') return 'null';
+    if(name==='price'||name==='volume'||name==='time'||name==='duration') return 'number';
+    if(/^series<(number|float|int|price|volume|time|duration|currency|boolean|string)>$/.test(name)) return name.includes('boolean') ? 'series<boolean>' : name.includes('string') ? 'series<string>' : 'series<number>';
     if(name.startsWith('array<')) return name as CoreSpiritType;
     return `udt:${name}`;
   };
@@ -158,6 +163,86 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
     return undefined;
   };
 
+
+  const semanticBuiltinSeries = new Set(['sma','ema','hma','highest','lowest','sum','mean','stdev','wma','rma','median','rsi','atr','vwap','change','variance']);
+  const semanticNumericFunctions = new Set(['abs','min','max','sqrt','pow','round','sign','nz','clamp','exp','log','tanh','sigmoid','probability','normalize','zscore','pctchange']);
+  const semanticConversionFunctions = new Map([['toNumber','number'],['toPrice','price'],['toVolume','volume'],['toTime','time'],['toDuration','duration'],['toCurrency','currency']] as const);
+  const semanticBooleanFunctions = new Set(['cross','crossover','crossunder','rising','falling','isNa']);
+  const inferSemantic = (n:CoreSpiritAstNode, scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
+    switch(n.type){
+      case 'number': return semanticScalar('number');
+      case 'string': return semanticScalar('string');
+      case 'boolean': return semanticScalar('boolean');
+      case 'null': return undefined;
+      case 'identifier': {
+        if(n.name==='open'||n.name==='high'||n.name==='low'||n.name==='close'||n.name==='volume'||n.name==='time') return semanticSeriesField(n.name);
+        if(n.name==='bar_index') return semanticScalar('number');
+        if(n.name==='na') return undefined;
+        return scope.get(n.name) || semanticSymbols.get(n.name);
+      }
+      case 'member': {
+        if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe')) {
+          const symbol = n.target.name==='market' && n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'current';
+          const tf = n.target.name==='timeframe' ? (n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'requested') : 'chart';
+          return semanticSeriesField(n.member, symbol, tf);
+        }
+        const target=inferSemantic(n.target,scope);
+        if(target?.kind==='series' && ['open','high','low','close','volume','time'].includes(n.member)) return semanticSeriesField(n.member,target.symbol ?? 'current',target.timeframe ?? 'chart');
+        return undefined;
+      }
+      case 'index': {
+        const target=inferSemantic(n.target,scope); return target?.kind==='series' ? scalarize(target) : target;
+      }
+      case 'unary': {
+        const operand=inferSemantic(n.operand,scope); return n.operator==='!' ? semanticScalar('boolean') : operand;
+      }
+      case 'binary': {
+        const left=inferSemantic(n.left,scope), right=inferSemantic(n.right,scope);
+        if(n.operator==='and'||n.operator==='or') return semanticScalar('boolean');
+        if(comparisonOps.has(n.operator)) {
+          if(left && right) {
+            const comparison=compareSemanticTypes(n.operator as '=='|'!='|'<'|'<='|'>'|'>=',left,right);
+            if(!comparison.compatible) report(n,comparison.error ?? `semantic domains '${left.atom}' and '${right.atom}' cannot be compared`,'TYPE_SEMANTIC_COMPARISON');
+          }
+          return semanticScalar('boolean');
+        }
+        if(!left||!right) return undefined;
+        const combined=combineSemanticArithmetic(n.operator as '+'|'-'|'*'|'/'|'%',left,right);
+        if(combined.error) report(n,combined.error,'TYPE_SEMANTIC_ARITHMETIC');
+        return combined.type;
+      }
+      case 'call': {
+        const args=n.args.map(x=>inferSemantic(x,scope));
+        const component=resolveCoreSpiritComponent(componentSource,n.name);
+        if(component){
+          const result=componentResultLanguageType(component);
+          if(result.startsWith('series<')) return semanticSeries(result.slice(7,-1) as CoreSpiritSemanticType['atom']);
+          return result==='boolean' ? semanticScalar('boolean') : semanticScalar('number');
+        }
+        if(semanticBooleanFunctions.has(n.name)) return semanticScalar('boolean');
+        if(semanticConversionFunctions.has(n.name)) {
+          const source=args[0];
+          const atom=semanticConversionFunctions.get(n.name)! as CoreSpiritSemanticType['atom'];
+          const metadata=source ? {symbol: source.symbol, timeframe: source.timeframe, currency: atom === 'currency' ? source.currency : undefined, unit: atom === 'price' ? 'price' : atom === 'volume' ? 'volume' : atom === 'time' ? 'timestamp' : atom === 'duration' ? 'duration' : atom === 'currency' ? 'notional' : undefined, scale: source.scale} : {};
+          return source?.kind === 'series' ? semanticSeries(atom, metadata) : semanticScalar(atom, metadata);
+        }
+        if(n.name==='time') return semanticSeries('time',{unit:'timestamp'});
+        if(semanticBuiltinSeries.has(n.name)) {
+          const source=args[0];
+          if(n.name==='rsi' || n.name==='mfi' || n.name==='cci' || n.name==='roc' || n.name==='stoch') return semanticSeries('number',{unit:'percent'});
+          if(n.name==='atr' || n.name==='trueRange' || n.name==='tr') return semanticSeries('price',{unit:'price'});
+          if(n.name==='vwap') return semanticSeries('price',{unit:'price'});
+          if(source) return source.kind==='series' ? source : semanticSeries('number');
+          return semanticSeries('number');
+        }
+        if(semanticNumericFunctions.has(n.name)) return args[0];
+        return undefined;
+      }
+      case 'memberCall': return undefined;
+      default: return undefined;
+    }
+  };
+
   const visit=(n:CoreSpiritAstNode, scope=new Map(symbols))=>{
     switch(n.type){
       case 'program':
@@ -173,6 +258,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(symbols.has(n.name)) report(n,`Variable '${n.name}' is already declared`,'DUPLICATE_VARIABLE');
         const type=infer(n.expression,scope);
         visit(n.expression,scope);
+        const semanticType=inferSemantic(n.expression,semanticSymbols);
+        if(n.declaredType){
+          const declared=semanticTypeForDeclaredName(n.declaredType);
+          if(!declared) report(n,`Unsupported semantic type '${n.declaredType}'`,'TYPE_DECLARATION_SEMANTIC');
+          else if(semanticType && !semanticTypeCompatible(declared, semanticType)) report(n,`Declared type '${n.declaredType}' does not match inferred '${semanticTypeToString(semanticType)}'`,'TYPE_DECLARATION_MISMATCH');
+          semanticSymbols.set(n.name,declared ?? semanticType ?? semanticScalar('number'));
+        } else if(semanticType) semanticSymbols.set(n.name,semanticType);
         symbols.set(n.name,type);
         scope.set(n.name,type);
         if(n.expression.type==='call'){
@@ -211,5 +303,5 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   };
 
   visit(ast);
-  return {diagnostics,symbols,udts,modelBindings,componentBindings,maxLookback};
+  return {diagnostics,symbols,udts,modelBindings,componentBindings,maxLookback,semanticSymbols};
 }

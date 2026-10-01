@@ -8598,3 +8598,107 @@ Internal `LET` bindings remain graph nodes. Only selected names become public va
 
 Registry lifecycle is reversible. Registering an indicator registers its component contract; unregistering an indicator removes both the indicator registry entry and the corresponding component callable names. This prevents long-lived IDE/workspace sessions from accumulating stale component contracts.
 
+
+## v112 — Universal parameter ABI and conditional indicator configuration
+
+The first-class indicator component now carries an explicit calculation-parameter projection derived from its versioned settings schema.
+
+```text
+CoreSpiritIndicatorComponent
+├── executable artifact
+├── typed inputs / outputs
+├── calculation / state / events
+├── parameters              ← calculation configuration ABI
+├── settings schema         ← parameters + presentation metadata
+└── renderer-neutral visuals
+```
+
+The parameter ABI is not a second language. It is serializable metadata consumed by the existing CoreSpirit host, workspace and universal settings editor.
+
+### Parameter types
+
+Supported declarative types are:
+
+```text
+number · integer · decimal · boolean · enum · color
+source · timeframe · symbol · session · price · duration · string
+```
+
+Legacy control kinds remain accepted for compatibility.
+
+### Conditional settings
+
+A parameter may depend on other declared paths using bounded data conditions. Conditions support comparison, membership, truthiness and `all` / `any` / `not` composition. The evaluator contains no arbitrary executable functions.
+
+### Resolved parameter state
+
+The schema runtime can resolve:
+
+```text
+values + visible + validation errors + valid
+```
+
+from the same schema used by the UI. This prevents a settings editor, workspace migration and publication serializer from maintaining competing definitions of valid state.
+Visibility is evaluated against the fully resolved parameter view, including schema defaults, so dependency chains are deterministic on initial load as well as after persisted edits.
+
+### Performance boundary
+
+Parameter and appearance identity remain separate. Calculation parameters can invalidate computation; appearance parameters remain renderer-only. The first-class component therefore remains reusable across themes and layouts without reseeding mathematical state merely because presentation changed.
+
+## v113 — Configuration ABI and semantic value domains
+
+CoreSpirit indicators now sit on top of a single configuration ABI rather than a collection of editor conventions.
+
+```text
+indicator artifact
+   ├── parameter schema
+   ├── executable artifact
+   ├── semantic value types
+   └── renderer-neutral outputs
+```
+
+The parameter schema supports conditional visibility/enabled state, presets and profiles without introducing additional language keywords.
+
+The compiler also tracks semantic domains such as `price`, `volume`, `time` and `duration` on top of the structural VM types. This allows CoreSpirit to reject domain-invalid expressions such as `price + volume` before execution while preserving valid numeric broadcasting and ratio operations.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.

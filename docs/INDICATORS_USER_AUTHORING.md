@@ -198,3 +198,79 @@ Stateful indicators must expose snapshot/rollback semantics compatible with real
 
 The saved indicator should contain source identity, component declaration, settings schema, compiled artifact identity, public port names/types, metadata and documentation. Publication does not automatically grant host authority.
 
+
+## v112 — Rich configurable indicator parameters
+
+Indicator authors can expose a universal configuration surface without writing UI code. The schema supports typed numeric/context/text controls and declarative conditional settings.
+
+```text
+Method
+ ├─ Fixed
+ └─ Adaptive
+      ├─ Adaptation Length
+      ├─ Sensitivity
+      └─ Noise Filter
+```
+
+The visibility relationship is metadata. The author does not need React conditionals or indicator-specific settings components.
+
+## v113 — presets and semantic inputs
+
+The universal indicator editor now supports serializable preset layers rather than hardcoded per-indicator configuration forms.
+
+```text
+Factory Default
+Script Defaults
+Scalping / Intraday / Swing
+Personal
+Workspace
+Community
+```
+
+A published indicator can add declarative templates by providing parameter-path overrides. The editor validates those overrides against the same parameter schema as normal edits.
+
+Conditional parameters can be visible/hidden or visible-but-disabled based on other parameter values. Defaults are resolved before conditions are evaluated, so a newly installed indicator renders the same dependency tree as a restored one.
+
+For Professional-level CoreSpirit authoring, semantic annotations such as `series<price>` and `series<volume>` provide stronger intent. The compiler can reject domain-invalid operations before runtime.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.

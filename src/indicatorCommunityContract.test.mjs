@@ -39,7 +39,7 @@ assert(migration.includes('indicator-covers'), 'indicator cover storage migratio
 assert(counterMigration.includes('indicator_publication_events_insert_public') && counterMigration.includes('handle_indicator_publication_event'), 'counter event migration missing');
 assert(!counterMigration.includes('increment_indicator_publication_views') && !counterMigration.includes('increment_indicator_publication_installs'), 'legacy exposed counter RPCs remain in hardening migration');
 assert((roadmap.match(/id: 130,/g) || []).length === 1, 'historical stage 130 was not preserved');
-assert((roadmap.match(/id: 145,/g) || []).length === 1 && roadmap.includes('length !== 154'), 'CoreSpirit roadmap was not advanced to 154 stages');
+assert((roadmap.match(/id: 145,/g) || []).length === 1 && roadmap.includes('length !== 184'), 'CoreSpirit roadmap was not advanced to 184 stages');
 console.log('STAGE98_INDICATOR_SETTINGS_SOURCE_STUDIO_OK');
 console.log('STAGE98_SUPABASE_PUBLICATION_CONTRACT_OK');
 console.log('STAGE98_PUBLIC_EXPLORE_ROUTE_OK');

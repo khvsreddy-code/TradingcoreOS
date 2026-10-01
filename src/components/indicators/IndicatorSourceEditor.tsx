@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CheckCircle2, Code2, Cloud, Copy, Eye, ImagePlus, RotateCcw, Save, Upload, X } from 'lucide-react';
 import type { IndicatorConfig } from '../../services/marketData/indicatorEngine';
 import { getIndicatorSourceTemplate } from '../../services/coreSpirit/indicatorSourceTemplates';
+import { getIndicatorSettingsSchema } from '../../services/coreSpirit/indicatorSettingsSchema';
 import { compileCoreSpirit } from '../../services/coreSpirit/coreSpiritPipeline';
 import { publishUserIndicator, saveUserIndicatorDraft, type IndicatorPublication } from '../../services/coreSpirit/indicatorPublicationService';
 import type { UserProfile } from '../../auth/types';

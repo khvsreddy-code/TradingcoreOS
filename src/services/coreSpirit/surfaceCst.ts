@@ -207,9 +207,10 @@ export function withProtectedCoreSpiritSurfaceText<T extends string | { line: st
   masked+=source.slice(cursor);
   const transformed=transform(masked);
   if(typeof transformed==='string') return restore(transformed) as T;
+  const objectResult = transformed as { line: string; lines?: string[] };
   return {
-    ...transformed,
-    line: restore(transformed.line),
-    ...(transformed.lines ? {lines: transformed.lines.map(restore)} : {}),
+    ...objectResult,
+    line: restore(objectResult.line),
+    ...(objectResult.lines ? {lines: objectResult.lines.map(restore)} : {}),
   } as T;
 }

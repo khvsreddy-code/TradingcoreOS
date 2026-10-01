@@ -264,3 +264,201 @@ A parameter field can require computation invalidation when it changes. Appearan
 
 This separation lets a component be reused with different visual themes, pane layouts, marker styles, fill gradients or zoom/timeframe visibility without recompiling or reseeding the mathematical artifact.
 
+
+# v112 — Universal parameter system
+
+`IndicatorSettingsSchema` is now v3. The central extension is an explicit `parameters` array containing calculation-relevant fields from the Inputs section.
+
+## Parameter ABI
+
+Each parameter uses one common shape with declarative metadata:
+
+```text
+id / path / label
+kind / defaultValue
+min / max / step
+options
+group / tooltip / placeholder / unit
+advanced / readonly
+validation
+dependency / visibilityCondition
+```
+
+### Kinds
+
+```text
+number
+integer
+decimal
+boolean
+enum
+color
+source
+timeframe
+symbol
+session
+price
+duration
+string
+```
+
+Legacy `select`, `text`, `range`, and `multi-select` kinds remain supported for existing schema documents.
+
+## Dependency graph
+
+Dependencies are data expressions. They support:
+
+```text
+equals / notEquals
+greaterThan / greaterThanOrEqual
+lessThan / lessThanOrEqual
+in / notIn
+truthy / falsy
+all / any / not
+```
+
+Example:
+
+```json
+{
+  "path": "sensitivity",
+  "kind": "decimal",
+  "defaultValue": 1,
+  "dependency": {
+    "all": [
+      { "path": "method", "operator": "equals", "value": "adaptive" },
+      { "path": "adaptationLength", "operator": "greaterThan", "value": 10 }
+    ]
+  }
+}
+```
+
+The universal editor calls the canonical evaluator. It does not contain indicator-kind branches.
+
+## Validation
+
+Validation is declarative and serializable. Required values, string lengths and patterns are supported, while numeric/enum/membership constraints derive from the parameter type and bounds.
+
+## Resolution
+
+`resolveIndicatorParameterState(schema, item)` produces the canonical resolved state:
+
+```text
+values
+visible
+errors
+valid
+```
+
+This is the common state consumed by editor/persistence/publication layers.
+
+## Calculation isolation
+
+Only `schema.parameters` feed the calculation snapshot. Presentation sections are excluded from computation identity. Appearance changes therefore do not trigger indicator math.
+
+## Compatibility
+
+v1/v2 custom schemas remain readable. Missing v3 `parameters` are projected from the Inputs section in memory.
+
+## v113 — presets and parameter-dependency depth
+
+The parameter ABI is now the shared source of truth for four layers:
+
+```text
+CoreSpirit artifact
+      ↓
+parameter schema
+      ↓
+resolved parameter state
+      ├── universal editor
+      ├── preset/profile system
+      ├── workspace/publication snapshots
+      └── computation identity
+```
+
+A field can independently declare `visibilityCondition` and `enabledWhen`. Hidden fields are not validated as active configuration errors; disabled fields remain visible but cannot be edited. Both states come from the same resolved parameter evaluator.
+
+Preset values use the same parameter paths and validator as direct editor changes, which prevents a preset from becoming an alternate configuration language.
+
+### Preset layers
+
+```text
+Factory Default
+Script-embedded Defaults
+Workspace
+Personal
+```
+
+Community presets are catalog entries and are intentionally not writable through the local preset store.
+
+Built-in templates and artifact-declared `presetTemplates` are serialized parameter overrides. They do not contain executable callbacks.
+
+### Conditional dependency validation
+
+The schema validator now checks:
+
+- referenced path is declared and safe;
+- field cannot depend on itself;
+- dependency graph has no cycle;
+- numeric operators target numeric fields;
+- `matches` targets string-like fields;
+- membership operators target selectable/string-like fields;
+- nested condition depth and group size remain bounded.
+
+### Resolution invariant
+
+Defaults are hydrated before visibility/enabled conditions are evaluated. This makes:
+
+```text
+Method = Adaptive (schema default)
+        ↓
+Adaptive settings visible
+```
+
+behave identically on a clean workspace and a restored workspace.
+
+### Preset/profile persistence
+
+The local persistence layer isolates user/workspace context and bounds profiles to 128 entries. Factory and script-embedded defaults are generated rather than persisted as mutable user records.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.

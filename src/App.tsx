@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { Component, lazy, Suspense, useState, useEffect, useRef, type ReactNode } from 'react';
 import { AuthProvider } from './auth/context/AuthContext';
 import { useAuth } from './auth/hooks/useAuth';
 import { useProfile } from './auth/hooks/useProfile';
@@ -44,7 +44,8 @@ const viewFromPath = (path: string): 'landing' | 'login' | 'app' | 'broker-conne
   (path === '/' || path === '/landing') ? 'landing' :
   isWorkspaceRoute(path) ? 'app' : 'landing';
 
-class RouteErrorBoundary extends React.Component<{ children: React.ReactNode; onHome: () => void }, { error: Error | null }> {
+type RouteErrorBoundaryProps = { children: ReactNode; onHome: () => void };
+class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   render() { if (!this.state.error) return this.props.children; return <div className="min-h-screen bg-[var(--tco-bg)] p-8 text-[var(--tco-text)]"><div className="mx-auto max-w-xl rounded-2xl border border-[#3b2530] bg-[var(--tco-surface)] p-6"><div className="text-[9px] font-mono uppercase tracking-widest text-[#ef4444]">Workspace route error</div><h1 className="mt-2 text-xl font-bold">This module could not be loaded.</h1><p className="mt-2 text-xs leading-5 text-[var(--tco-muted)]">{this.state.error.message || 'Unknown runtime error'}</p><button type="button" onClick={this.props.onHome} className="mt-5 rounded-lg bg-[#3b82f6] px-4 py-2 text-xs font-bold text-[var(--tco-surface-2)]">Back to Command Center</button></div></div>; }

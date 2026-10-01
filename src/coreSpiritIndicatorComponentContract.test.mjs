@@ -19,6 +19,7 @@ for (const token of [
   'visuals:',
   'alerts:',
   'metadata:',
+  'parameters:',
   'createCoreSpiritIndicatorComponent',
   'CoreSpiritIndicatorRegistry',
   "kind: 'indicator'",
@@ -29,4 +30,4 @@ assert(src.includes("eligibleBackends: Object.freeze(stateful ? ['cpu']") && src
 assert(src.includes('incrementalEligible'), 'indicator incremental eligibility metadata missing');
 assert(src.includes('rendererNeutral: true'), 'renderer-neutral visual boundary missing');
 assert(src.includes('validateCoreSpiritIndicatorComponent'), 'indicator validation guard missing');
-console.log('CORESPIRIT_V111_INDICATOR_COMPONENT_CONTRACT_OK');
+console.log('TCO_V112_CORESPIRIT_INDICATOR_COMPONENT_CONTRACT_OK');

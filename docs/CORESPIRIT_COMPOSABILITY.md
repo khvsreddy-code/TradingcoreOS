@@ -529,3 +529,77 @@ Composition must not copy series merely because the producer is an indicator. Th
 
 Registry removal is also compositional hygiene: removing an indicator removes its component callable names so a subsequent compile cannot accidentally resolve a stale publication.
 
+
+## v112 — Parameters as part of the component boundary
+
+A programmable indicator now exposes two different reusable contracts:
+
+```text
+component inputs/outputs
+        ↓
+execution composition
+
+parameter schema
+        ↓
+configuration composition
+```
+
+This distinction is important. A component's typed ports describe values flowing between computations; parameters describe user-controlled configuration of that computation.
+
+Conditional parameter dependencies are resolved before the indicator host executes. They do not create runtime control flow and do not introduce a second VM.
+
+## v113 — typed indicator composition
+
+Composability now carries two layers of type information:
+
+```text
+structural component port type
+        +
+semantic value domain
+```
+
+A component port can therefore remain structurally `series<number>` for VM compatibility while being semantically `series<price>` for compiler validation and editor feedback.
+
+The composition engine continues to use the existing component registry and dependency graph. Semantic metadata does not create a second graph or runtime.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.

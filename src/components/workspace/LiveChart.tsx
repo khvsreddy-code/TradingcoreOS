@@ -108,39 +108,7 @@ function markerForAutomation(a:AutomationConfig,c:HistoricalCandle[]):{time:numb
 }
 
 const line=(chart:IChartApi,color:string,width=1,lineStyle:0|1|2=0)=>chart.addSeries(LineSeries,{color,lineWidth:width,lineStyle,priceLineVisible:false,lastValueVisible:true});
-const registerIndicatorSeries=(indicatorId:string,s:ISeriesApi<'Line'>)=>{indicatorSeries.current.push(s);const group=indicatorSeriesMap.current.get(indicatorId)||[];group.push(s);indicatorSeriesMap.current.set(indicatorId,group);return s;};
-const appearanceVisibleBars=()=>{const r=visibleLogicalRangeRef.current;return r?Math.max(1,Math.abs(Number(r.to)-Number(r.from))):candles.current.length;};
 const LEVEL_APPEARANCE_KINDS=new Set(['Dynamic Support/Resistance','CPR','Key Levels','Opening Range','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range Pro','Developing Day High/Low','Equal Highs/Lows','Liquidity Pools','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots']);
-const applyIndicatorAppearanceOnly=()=>{
-  if(!chart.current)return;
-  const visibleBars=appearanceVisibleBars();
-  for(const cfg of indicators){
-    const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
-    const options={color:appearance.line.color,lineWidth:appearance.line.width,lineStyle:appearance.line.style==='solid'?0:appearance.line.style==='dashed'?1:2,opacity:appearance.line.opacity,gradient:appearance.line.gradient,gradientColor:appearance.line.gradientColor,glow:appearance.line.glow,glowStrength:appearance.line.glowStrength,visible:appearance.visible,lastValueVisible:cfg.display?.showValues!==false};
-    const group=indicatorSeriesMap.current.get(cfg.id)||[];
-    const isLevelIndicator=LEVEL_APPEARANCE_KINDS.has(String(cfg.kind));
-    for(const series of group){try{(series as any).applyOptions(options); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}}
-    const worker=workerSeriesMap.current.get(cfg.id)||[];
-    for(const series of worker){try{(series as any).applyOptions({...options, ...(isLevelIndicator?{visible:appearance.visible&&appearance.levels.enabled}: {})}); if(isLevelIndicator){(series as any).setPaneAppearance(appearance.pane,targetPaneId);}}catch{}}
-  }
-  for(const cfg of indicators){
-    const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
-    const targetPaneId=appearance.pane.mode==='separate'?`tco-indicator-pane:${cfg.id}`:undefined;
-    const group=indicatorSeriesMap.current.get(cfg.id)||[];
-    for(const series of group){try{(series as any).setPaneAppearance(appearance.pane,targetPaneId);}catch{}}
-    const fills=indicatorFillMap.current.get(cfg.id)||[];
-    for(const handle of fills){try{handle.setOptions({enabled:appearance.visible&&appearance.fill.enabled,upperColor:appearance.fill.upperColor,lowerColor:appearance.fill.lowerColor,opacity:appearance.fill.opacity,gradient:appearance.fill.gradient,conditional:appearance.fill.conditional,bullishColor:appearance.fill.bullishColor,bearishColor:appearance.fill.bearishColor});}catch{}}
-  }
-  const markerStyles:any[]=[];
-  for(const [indicatorId,rawMarkers] of markerDataByIndicator.current){
-    const cfg=indicators.find(x=>x.id===indicatorId); if(!cfg)continue;
-    const a=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
-    if(!a.marker.enabled||!a.visible)continue;
-    const size=a.marker.size<=4?'tiny':a.marker.size<=6?'small':a.marker.size<=10?'normal':a.marker.size<=14?'large':'huge';
-    for(const marker of rawMarkers.slice(-100)) markerStyles.push({...marker,position:a.marker.position,color:a.marker.color,shape:a.marker.shape,text:a.marker.text||marker.text,size,textSize:a.marker.textSize,offset:a.marker.offset});
-  }
-  setChartMarkers(markerStyles);
-};
 
 export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=true}:Props){
  const resolvedInstrumentKey=canonicalInstrumentKey(brokerId,instrumentKey);
@@ -150,6 +118,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
  const lifecycle=useRef(new ChartLifecycle()); const indicatorRequestSeq=useRef(0); const chartUpdateScheduler=useRef(new ChartUpdateScheduler()); const chartId=useRef(`chart-${Math.random().toString(36).slice(2,10)}`); const calculationEngine=useRef(new RealtimeCalculationEngine()); const workerSeriesMap=useRef(new Map<string, Array<ISeriesApi<'Line'>|ISeriesApi<'Histogram'>>>());
  const coreSpiritOutput=useRef<CoreSpiritChartOutputController>(); const coreSpiritRunId=useRef(0);
  const historyPaintedRef=useRef(false);
+ const registerIndicatorSeries=(indicatorId:string,s:ISeriesApi<'Line'>)=>{indicatorSeries.current.push(s);const group=indicatorSeriesMap.current.get(indicatorId)||[];group.push(s);indicatorSeriesMap.current.set(indicatorId,group);return s;};
  const persistedChart=useMemo(()=>loadChartState(brokerId,resolvedInstrumentKey),[brokerId,resolvedInstrumentKey]); const [selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null); const [timeframe,setTimeframe]=useState(persistedChart.timeframe),[drawingTool,setDrawingTool]=useState<DrawingTool>('none'),[showDrawingMenu,setShowDrawingMenu]=useState(false),[crosshairVisible,setCrosshairVisible]=useState(true),[showLevels,setShowLevels]=useState(persistedChart.showLevels??false),[showVolume,setShowVolume]=useState(persistedChart.showVolume??false),[showOI,setShowOI]=useState(persistedChart.showOI??false),[showDepth,setShowDepth]=useState(persistedChart.showDepth??false),[showIndicatorMenu,setShowIndicatorMenu]=useState(false),[showPredictionMenu,setShowPredictionMenu]=useState(false),[editingIndicator,setEditingIndicator]=useState<string|null>(null),[viewingIndicatorCode,setViewingIndicatorCode]=useState<string|null>(null),[indicators,setIndicators]=useState<IndicatorConfig[]>(getIndicators),[automations,setAutomations]=useState<AutomationConfig[]>(getAutomations),[predictionModelIds,setPredictionModelIds]=useState<string[]>(getSavedPredictionModelIds()),[predictionQuery,setPredictionQuery]=useState(''),[chartType,setChartType]=useState<'candlestick'|'line'>('candlestick'),[error,setError]=useState(''),[historyLoading,setHistoryLoading]=useState(false),[showCandleSettings,setShowCandleSettings]=useState(false),[candleAppearance,setCandleAppearance]=useState<CandleAppearance>(()=>loadCandleAppearance(brokerId,resolvedInstrumentKey)),[coreSpiritOpen,setCoreSpiritOpen]=useState(false),[coreSpiritSource,setCoreSpiritSource]=useState(() => localStorage.getItem('tradingcore:corespirit:chart-source') || `fast = ema(close, 20)\nslow = ema(close, 50)\n\nshow fast, slow\n\nwhen fast crossesAbove slow:\n    emit "LONG"`),[coreSpiritStatus,setCoreSpiritStatus]=useState(''),[coreSpiritDiagnostics,setCoreSpiritDiagnostics]=useState<string[]>([]);
  const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
  const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
@@ -256,6 +225,37 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
      if(!markerPlugin.current) markerPlugin.current=createSeriesMarkers(candle.current,[]);
      markerPlugin.current.setMarkers(markers.slice(-100));
    }catch{}
+ };
+ const appearanceVisibleBars=()=>{const r=visibleLogicalRangeRef.current;return r?Math.max(1,Math.abs(Number(r.to)-Number(r.from))):candles.current.length;};
+ const applyIndicatorAppearanceOnly=()=>{
+   if(!chart.current)return;
+   const visibleBars=appearanceVisibleBars();
+   for(const cfg of indicators){
+     const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
+     const options={color:appearance.line.color,lineWidth:appearance.line.width,lineStyle:appearance.line.style==='solid'?0:appearance.line.style==='dashed'?1:2,opacity:appearance.line.opacity,gradient:appearance.line.gradient,gradientColor:appearance.line.gradientColor,glow:appearance.line.glow,glowStrength:appearance.line.glowStrength,visible:appearance.visible,lastValueVisible:cfg.display?.showValues!==false};
+     const group=indicatorSeriesMap.current.get(cfg.id)||[];
+     const isLevelIndicator=LEVEL_APPEARANCE_KINDS.has(String(cfg.kind));
+     for(const series of group){try{(series as any).applyOptions(options); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}}
+     const worker=workerSeriesMap.current.get(cfg.id)||[];
+     for(const series of worker){try{(series as any).applyOptions({...options, ...(isLevelIndicator?{visible:appearance.visible&&appearance.levels.enabled}: {})});}catch{}}
+   }
+   for(const cfg of indicators){
+     const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
+     const targetPaneId=appearance.pane.mode==='separate'?`tco-indicator-pane:${cfg.id}`:undefined;
+     const group=indicatorSeriesMap.current.get(cfg.id)||[];
+     for(const series of group){try{(series as any).setPaneAppearance(appearance.pane,targetPaneId);}catch{}}
+     const fills=indicatorFillMap.current.get(cfg.id)||[];
+     for(const handle of fills){try{handle.setOptions({enabled:appearance.visible&&appearance.fill.enabled,upperColor:appearance.fill.upperColor,lowerColor:appearance.fill.lowerColor,opacity:appearance.fill.opacity,gradient:appearance.fill.gradient,conditional:appearance.fill.conditional,bullishColor:appearance.fill.bullishColor,bearishColor:appearance.fill.bearishColor});}catch{}}
+   }
+   const markerStyles:any[]=[];
+   for(const [indicatorId,rawMarkers] of markerDataByIndicator.current){
+     const cfg=indicators.find(x=>x.id===indicatorId); if(!cfg)continue;
+     const a=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
+     if(!a.marker.enabled||!a.visible)continue;
+     const size=a.marker.size<=4?'tiny':a.marker.size<=6?'small':a.marker.size<=10?'normal':a.marker.size<=14?'large':'huge';
+     for(const marker of rawMarkers.slice(-100)) markerStyles.push({...marker,position:a.marker.position,color:a.marker.color,shape:a.marker.shape,text:a.marker.text||marker.text,size,textSize:a.marker.textSize,offset:a.marker.offset});
+   }
+   setChartMarkers(markerStyles);
  };
  const renderStudies=(data:HistoricalCandle[], preserveWorkerSeries=false)=>{
    clearChartMarkers();

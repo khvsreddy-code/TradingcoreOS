@@ -35,7 +35,7 @@ export function buildCoreSpiritCompositionGraph(
   surface: CoreSpiritSurfaceMetadata,
   options: { components?: CoreSpiritComponentRegistryLike } = {},
 ): CoreSpiritCompositionGraph {
-  const semanticGraph = buildCoreSpiritSemanticDependencyGraph(ast,semantic,surface,options);
+  const semanticGraph = buildCoreSpiritSemanticDependencyGraph(ast,semantic,surface);
   const projectedNodes = new Map<string,CoreSpiritComposableNode>();
 
   for(const node of semanticGraph.nodes) {

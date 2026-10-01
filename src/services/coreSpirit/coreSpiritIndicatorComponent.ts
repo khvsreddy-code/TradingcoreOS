@@ -20,7 +20,7 @@ import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritHistoricalExecutionHost, CoreSpiritRealtimeExecutionHost, type CoreSpiritHostRunResult } from './executionHost';
 import type { CoreSpiritExecutionTarget } from './executionTarget';
 import type { CoreSpiritMarketDataset } from './marketData';
-import type { IndicatorSettingsSchema } from './indicatorSettingsSchema';
+import type { IndicatorParameterDefinition, IndicatorSettingsSchema } from './indicatorSettingsSchema';
 import { getIndicatorSettingsSchema } from './indicatorSettingsSchema';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts';
@@ -94,6 +94,7 @@ export type CoreSpiritIndicatorDeclaration = Readonly<{
   visuals: readonly CoreSpiritIndicatorVisual[];
   alerts: readonly CoreSpiritIndicatorEvent[];
   metadata: CoreSpiritIndicatorMetadata;
+  parameters: readonly IndicatorParameterDefinition[];
 }>;
 
 export type CoreSpiritIndicatorMetadata = Readonly<{
@@ -127,6 +128,7 @@ export type CoreSpiritIndicatorComponent = Readonly<{
   visuals: readonly CoreSpiritIndicatorVisual[];
   alerts: readonly CoreSpiritIndicatorEvent[];
   metadata: CoreSpiritIndicatorMetadata;
+  parameters: readonly IndicatorParameterDefinition[];
   declaration: CoreSpiritIndicatorDeclaration;
 }>;
 
@@ -297,6 +299,7 @@ export function createCoreSpiritIndicatorComponent(
   }
   const component = deriveComponentContract(options.id, title, artifact, inputs, outputs, surface);
   const settingsSchema = options.settingsSchema ?? getIndicatorSettingsSchema(options.id, { kind: options.id });
+  const parameters = Object.freeze([...settingsSchema.parameters]);
   const events = deriveEvents(artifact);
   const plots = derivePlots(artifact);
   const alerts = Object.freeze(events.filter(event => ALERT_KINDS.has(event.kind)));
@@ -338,6 +341,7 @@ export function createCoreSpiritIndicatorComponent(
     visuals,
     alerts,
     metadata,
+    parameters,
     declaration: Object.freeze({
       version: 1,
       kind: 'indicator' as const,
@@ -345,6 +349,7 @@ export function createCoreSpiritIndicatorComponent(
       name: title,
       inputs,
       outputs,
+      parameters,
       calculation,
       state,
       events,
@@ -437,9 +442,11 @@ export function validateCoreSpiritIndicatorComponent(indicator: CoreSpiritIndica
   const componentIds = new Set(indicator.component.outputs.map(output => output.name));
   for (const output of indicator.outputs) if (!componentIds.has(output.name)) errors.push(`indicator output '${output.name}' is missing from its component contract`);
   if (indicator.component.inputs.length !== indicator.inputs.length) errors.push('indicator input ports diverge from its component contract');
+  if (indicator.parameters.length !== indicator.settingsSchema.parameters.length) errors.push('indicator parameter ABI diverges from its settings schema');
   if (indicator.component.inputs.some((port, index) => port.name !== indicator.inputs[index]?.name)) errors.push('indicator input ordering diverges from its component contract');
   if (indicator.declaration.kind !== 'indicator' || indicator.declaration.id !== indicator.id) errors.push('indicator declaration identity diverges from the component');
   if (indicator.declaration.inputs.length !== indicator.inputs.length || indicator.declaration.outputs.length !== indicator.outputs.length) errors.push('indicator declaration ports diverge from the component');
+  if (indicator.declaration.parameters !== indicator.parameters) errors.push('indicator declaration parameters must reference the canonical parameter ABI');
   if (indicator.declaration.calculation !== indicator.calculation) errors.push('indicator declaration calculation must reference the canonical calculation metadata');
   if (indicator.visuals.some(visual => visual.rendererNeutral !== true)) errors.push('indicator visuals must remain renderer-neutral');
   return errors;

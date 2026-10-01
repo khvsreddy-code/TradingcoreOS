@@ -100,6 +100,7 @@ function indicatorSettingsSnapshot(item?: IndicatorConfig) {
     customName: raw.customName,
     ...schemaSnapshot,
     settingsSchema: schemaSnapshot.schema,
+    parameterSchema: schemaSnapshot.parameters,
   };
 }
 
@@ -155,6 +156,7 @@ export async function saveUserIndicatorDraft(input: SaveIndicatorDraftInput) {
     ...input.metadata,
     settings: input.metadata?.settings || undefined,
     settingsSchema: draftSettings?.schema || undefined,
+    parameterSchema: draftSettings?.parameters || undefined,
   };
   let script: UserIndicatorScript | null = null;
   if (input.scriptId) {

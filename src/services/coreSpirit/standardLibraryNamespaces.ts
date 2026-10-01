@@ -44,6 +44,8 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('series','persistence','persistence','Rolling persistence.'),
   b('math','abs','abs','Absolute value.'), b('math','min','min','Minimum.'), b('math','max','max','Maximum.'),
   b('math','sqrt','sqrt','Square root.'), b('math','pow','pow','Power.'), b('math','round','round','Round.'), b('math','sign','sign','Sign.'),
+  b('math','toNumber','toNumber','Explicit semantic conversion to unitless number.'), b('math','toPrice','toPrice','Explicit semantic conversion to price.'), b('math','toVolume','toVolume','Explicit semantic conversion to volume.'),
+  b('math','toTime','toTime','Explicit semantic conversion to timestamp/time.'), b('math','toDuration','toDuration','Explicit semantic conversion to duration.'), b('math','toCurrency','toCurrency','Explicit semantic conversion to currency/notional.'),
   b('stats','mean','mean','Mean.'), b('stats','median','median','Median.'), b('stats','stdev','stdev','Standard deviation.'),
   b('stats','variance','variance','Variance.'), b('stats','zscore','zscore','Z-score.'), b('stats','persistence','persistence','Persistence.'),
   b('time','barIndex','bar_index','Current bar index.'), b('time','timestamp','time','Current timestamp.'), b('time','timeframe','timeframe','Timeframe reference.'),

@@ -1,5 +1,5 @@
 /**
- * CoreSpirit stages 1–154: architecture contract and release gates.
+ * CoreSpirit stages 1–184: architecture contract and release gates.
  * This file is intentionally data-first so tooling can render the roadmap,
  * check dependencies, and keep the language/runtime roadmap in sync.
  */
@@ -1582,6 +1582,277 @@ export const CORE_SPIRIT_STAGES: readonly CoreSpiritStage[] = [
       { id: 'cs154-docs', statement: 'CoreSpirit architecture, scripting, composability, indicator and repair tracker documentation describe the same first-class model.', automated: true },
     ],
   },
+  {
+    id: 155, name: 'Universal indicator parameter ABI', kind: 'platform',
+    goal: 'Promote calculation parameters into a first-class serializable ABI shared by CoreSpirit indicator artifacts, settings schemas, workspace state and public publications.', dependencies: [131, 146, 154],
+    gates: [
+      { id: 'cs155-types', statement: 'The parameter ABI supports number, integer, decimal, boolean, enum, color, source, timeframe, symbol, session, price, duration and string types.', automated: true },
+      { id: 'cs155-boundary', statement: 'Parameter definitions remain serializable metadata and never contain executable UI callbacks or renderer objects.', automated: true },
+      { id: 'cs155-identity', statement: 'Calculation snapshots are derived from declared parameters rather than presentation sections.', automated: true },
+    ],
+  },
+  {
+    id: 156, name: 'Universal parameter constraints and authoring metadata', kind: 'tooling',
+    goal: 'Give every parameter a common constraint and discovery vocabulary so the editor can render rich controls without indicator-kind branching.', dependencies: [155, 132],
+    gates: [
+      { id: 'cs156-constraints', statement: 'Parameters can declare min, max, step, default, group, tooltip, placeholder and declarative validation metadata.', automated: true },
+      { id: 'cs156-editor', statement: 'The universal settings editor renders the declared parameter kinds through one schema path.', automated: true },
+      { id: 'cs156-values', statement: 'Parameter values are validated against the same schema used to render them.', automated: true },
+    ],
+  },
+  {
+    id: 157, name: 'Conditional parameter dependency graph', kind: 'compiler',
+    goal: 'Treat settings as a dependency graph rather than a flat form, with bounded boolean conditions that control parameter visibility and applicability.', dependencies: [156, 133],
+    gates: [
+      { id: 'cs157-operators', statement: 'Dependencies support equality, inequality, numeric comparisons, membership, truthiness and bounded AND/OR/NOT composition.', automated: true },
+      { id: 'cs157-safety', statement: 'Dependencies reference only declared safe parameter paths and reject self-dependencies and excessive nesting.', automated: true },
+      { id: 'cs157-runtime', statement: 'Visibility is evaluated from current persisted values without executing arbitrary schema code.', automated: true },
+    ],
+  },
+  {
+    id: 158, name: 'Resolved parameter state and migration runtime', kind: 'runtime',
+    goal: 'Resolve defaults, visibility and validation into one deterministic parameter state that can be reused by the editor, workspace and publication pipeline.', dependencies: [155, 156, 157, 134, 135],
+    gates: [
+      { id: 'cs158-resolve', statement: 'Missing values resolve from parameter defaults while preserving existing sibling values.', automated: true },
+      { id: 'cs158-state', statement: 'Resolved parameter state reports values, visible paths, validation errors and overall validity deterministically.', automated: true },
+      { id: 'cs158-public', statement: 'Public settings snapshots retain parameter definitions and resolved parameter state beside immutable source/artifact identity.', automated: true },
+    ],
+  },
+  {
+    id: 159, name: 'Universal parameter system release gate', kind: 'governance',
+    goal: 'Freeze the parameter/dependency architecture only after component ABI, universal rendering, validation, conditional visibility, migration and computation isolation are contract-covered.', dependencies: [155, 156, 157, 158, 149],
+    gates: [
+      { id: 'cs159-contract', statement: 'Universal parameter and conditional settings contract tests pass.', automated: true },
+      { id: 'cs159-isolation', statement: 'Appearance changes remain renderer-only and parameter changes are classified through computation identity.', automated: true },
+      { id: 'cs159-docs', statement: 'CoreSpirit parameter, indicator, scripting and repair documentation describe one universal parameter/dependency model.', automated: true },
+    ],
+  },
+  {
+    id: 160, name: 'Universal parameter dependency graph', kind: 'compiler',
+    goal: 'Promote parameter visibility and enablement dependencies into a validated graph with typed conditions, safe paths and cycle detection.', dependencies: [157, 158],
+    gates: [
+      { id: 'cs160-typed', statement: 'Conditional operators are validated against the declared target parameter domain.', automated: true },
+      { id: 'cs160-cycle', statement: 'Dependency cycles are rejected before the schema reaches the universal editor.', automated: true },
+      { id: 'cs160-state', statement: 'Resolved parameter state exposes deterministic visible and enabled maps.', automated: true },
+    ],
+  },
+  {
+    id: 161, name: 'Universal preset ABI', kind: 'platform',
+    goal: 'Represent factory, script-embedded, template, personal, workspace and community indicator presets as immutable serializable parameter snapshots.', dependencies: [155, 158],
+    gates: [
+      { id: 'cs161-scope', statement: 'Preset scopes are explicit and non-executable.', automated: true },
+      { id: 'cs161-identity', statement: 'Factory/template preset IDs are deterministic across renders and sessions.', automated: true },
+      { id: 'cs161-serialization', statement: 'Preset payloads and profile envelopes round-trip through JSON validation.', automated: true },
+    ],
+  },
+  {
+    id: 162, name: 'Profile-scoped preset persistence', kind: 'runtime',
+    goal: 'Persist personal/workspace preset collections using isolated profile keys while retaining local fallback behavior.', dependencies: [161],
+    gates: [
+      { id: 'cs162-isolation', statement: 'Preset storage keys are isolated by user and workspace context.', automated: true },
+      { id: 'cs162-stack', statement: 'Factory/script/workspace/personal layers resolve into one deterministic parameter value set.', automated: true },
+    ],
+  },
+  {
+    id: 163, name: 'Semantic series value domains', kind: 'language',
+    goal: 'Distinguish scalar and series values by semantic domain so price, volume, time and duration carry meaning beyond the structural number type.', dependencies: [154, 159],
+    gates: [
+      { id: 'cs163-domains', statement: 'Core market fields infer series<price>, series<volume> and series<time> semantic types.', automated: true },
+      { id: 'cs163-metadata', statement: 'Semantic values can carry symbol, timeframe, unit, currency, precision and scale metadata.', automated: true },
+      { id: 'cs163-declared', statement: 'CoreSpirit accepts explicit semantic scalar and series type annotations.', automated: true },
+    ],
+  },
+  {
+    id: 164, name: 'Semantic domain arithmetic validation', kind: 'compiler',
+    goal: 'Reject domain-invalid arithmetic such as price + volume while allowing scalar-number broadcasting and valid ratio/difference operations.', dependencies: [163],
+    gates: [
+      { id: 'cs164-invalid', statement: 'price + volume produces a compiler diagnostic before IR generation.', automated: true },
+      { id: 'cs164-valid', statement: 'price - price, price + number and price / price remain valid semantic operations.', automated: true },
+      { id: 'cs164-time', statement: 'time + duration is valid while time + time is rejected.', automated: true },
+    ],
+  },
+  {
+    id: 165, name: 'Semantic type tooling surface', kind: 'tooling',
+    goal: 'Expose semantic series types through CoreSpirit completions and type information so editor feedback matches compiler behavior.', dependencies: [163, 164],
+    gates: [
+      { id: 'cs165-completion', statement: 'Market series completions advertise semantic types.', automated: true },
+      { id: 'cs165-info', statement: 'Type information reports series<price>, series<volume> and series<time> for built-in series.', automated: true },
+    ],
+  },
+  {
+    id: 166, name: 'Presets and semantic types release gate', kind: 'governance',
+    goal: 'Freeze the universal parameter/preset and semantic-series architecture only after serialization, dependency, compiler and editor boundaries are covered.', dependencies: [160, 161, 162, 163, 164, 165],
+    gates: [
+      { id: 'cs166-contracts', statement: 'Parameter, preset and semantic-series contracts pass.', automated: true },
+      { id: 'cs166-docs', statement: 'Current CoreSpirit docs and repair tracker describe the same parameter/dependency/preset/type model.', automated: true },
+    ],
+  },
+
+  {
+    id: 167, name: 'Universal preset source and template ABI', kind: 'platform',
+    goal: 'Allow indicators to publish factory, script-embedded, declarative template and community preset definitions as validated serializable data rather than UI branches.', dependencies: [161, 166],
+    gates: [
+      { id: 'cs167-template', statement: 'Indicators can publish validated declarative presetTemplates with parameter overrides and stable IDs.', automated: true },
+      { id: 'cs167-community', statement: 'Community presets are read-only in the local editor and are accepted only when their indicator/schema identity matches.', automated: true },
+      { id: 'cs167-serial', statement: 'Preset values contain only serializable parameter data; no executable callbacks are admitted.', automated: true },
+    ],
+  },
+  {
+    id: 168, name: 'Deterministic preset layer resolution', kind: 'runtime',
+    goal: 'Resolve Factory → Script → Workspace → Personal layers deterministically while exposing which layer supplied the effective preset values.', dependencies: [167],
+    gates: [
+      { id: 'cs168-order', statement: 'Layer precedence is explicit and stable: factory, script, workspace, personal.', automated: true },
+      { id: 'cs168-latest', statement: 'Multiple personal/workspace candidates resolve by deterministic updatedAt/id ordering.', automated: true },
+      { id: 'cs168-report', statement: 'Resolution returns effective values, applied preset IDs and per-layer identity.', automated: true },
+    ],
+  },
+  {
+    id: 169, name: 'Profile-scoped preset persistence', kind: 'runtime',
+    goal: 'Persist presets and active profile data with user/workspace isolation and bounded profile size.', dependencies: [162, 168],
+    gates: [
+      { id: 'cs169-scope', statement: 'Profile writes reject mismatched user/workspace scope and factory/script presets are not locally writable.', automated: true },
+      { id: 'cs169-active', statement: 'An active profile envelope can round-trip through JSON and carry activePresetByIndicator metadata.', automated: true },
+      { id: 'cs169-limit', statement: 'Profiles are bounded to 128 presets and malformed entries are ignored or rejected deterministically.', automated: true },
+    ],
+  },
+  {
+    id: 170, name: 'Universal preset editor lifecycle', kind: 'ui',
+    goal: 'Keep preset save/apply behavior inside the generic parameter editor so indicator-specific React branches never return.', dependencies: [169, 166],
+    gates: [
+      { id: 'cs170-editor', statement: 'The universal editor renders and applies presets using the parameter ABI only.', automated: true },
+      { id: 'cs170-save', statement: 'Personal/workspace saves route through the canonical preset service and active profile persistence.', automated: true },
+      { id: 'cs170-hidden', statement: 'Conditional visibility/enabled state remains derived from the resolved parameter state after preset application.', automated: true },
+    ],
+  },
+  {
+    id: 171, name: 'Semantic series algebra', kind: 'language',
+    goal: 'Make scalar/series semantic domains first-class in the compiler while retaining the existing structural VM type system.', dependencies: [163, 170],
+    gates: [
+      { id: 'cs171-atoms', statement: 'CoreSpirit distinguishes number, price, volume, time, duration, boolean and string semantic atoms.', automated: true },
+      { id: 'cs171-series', statement: 'Core market values infer series<price>, series<volume> and series<time> domains.', automated: true },
+      { id: 'cs171-metadata', statement: 'Semantic values carry optional symbol, timeframe, unit, currency, precision and scale metadata.', automated: true },
+    ],
+  },
+  {
+    id: 172, name: 'Semantic comparison and declaration compatibility', kind: 'compiler',
+    goal: 'Reject semantic comparison and declaration mismatches that structural number compatibility would otherwise allow.', dependencies: [171],
+    gates: [
+      { id: 'cs172-compare', statement: 'Cross-domain ordered comparisons such as price > volume produce a semantic compiler diagnostic.', automated: true },
+      { id: 'cs172-equality', statement: 'Equality/inequality comparisons remain permitted only for compatible domains or explicit generic numeric values.', automated: true },
+      { id: 'cs172-declare', statement: 'Explicit semantic declarations are checked against inferred semantic domains and metadata compatibility.', automated: true },
+    ],
+  },
+  {
+    id: 173, name: 'Domain-aware standard-library signatures', kind: 'compiler',
+    goal: 'Give common indicator/statistical functions semantically meaningful signatures, plus explicit domain-conversion primitives when authors intentionally erase or change a domain.', dependencies: [172],
+    gates: [
+      { id: 'cs173-price', statement: 'ATR/true-range/VWAP outputs retain a price semantic domain.', automated: true },
+      { id: 'cs173-stat', statement: 'RSI and analogous normalized oscillators expose a numeric/percent semantic domain.', automated: true },
+      { id: 'cs173-source', statement: 'Source-preserving rolling functions retain the input series domain where mathematically meaningful.', automated: true },
+      { id: 'cs173-conversion', statement: 'Explicit toNumber/toPrice/toVolume/toTime/toDuration/toCurrency conversions are registered as pure semantic escape hatches and do not weaken implicit arithmetic rules.', automated: true },
+    ],
+  },
+  {
+    id: 174, name: 'Semantic metadata propagation', kind: 'compiler',
+    goal: 'Preserve domain metadata through series indexing, market/timeframe references and valid arithmetic so multi-symbol/timeframe programs retain meaning.', dependencies: [171, 173],
+    gates: [
+      { id: 'cs174-index', statement: 'Indexing a series yields the same semantic atom as a scalar value with preserved relevant metadata.', automated: true },
+      { id: 'cs174-reference', statement: 'market(symbol).close and timeframe(tf).close carry symbol/timeframe metadata.', automated: true },
+      { id: 'cs174-arithmetic', statement: 'Valid arithmetic carries compatible symbol/timeframe metadata without silently discarding semantic units.', automated: true },
+    ],
+  },
+  {
+    id: 175, name: 'Semantic type tooling and diagnostics', kind: 'tooling',
+    goal: 'Expose the same semantic types and domain diagnostics to CoreSpirit completions and editor type information.', dependencies: [172, 174],
+    gates: [
+      { id: 'cs175-complete', statement: 'Editor completions expose semantic series domains for canonical market fields.', automated: true },
+      { id: 'cs175-info', statement: 'Type information reports domain-aware series types instead of generic series<number> where metadata is known.', automated: true },
+      { id: 'cs175-diagnostics', statement: 'Semantic arithmetic/comparison diagnostics share stable diagnostic codes with the compiler.', automated: true },
+    ],
+  },
+  {
+    id: 176, name: 'Presets and semantic typing release gate', kind: 'governance',
+    goal: 'Freeze the universal parameter/preset and domain-aware series architecture only when serialization, dependency safety, deterministic dependency resolution, runtime isolation, compiler semantics and tooling agree.', dependencies: [167, 168, 169, 170, 171, 172, 173, 174, 175],
+    gates: [
+      { id: 'cs176-contracts', statement: 'Preset, profile, parameter dependency and semantic series contracts pass.', automated: true },
+      { id: 'cs176-noninterference', statement: 'Preset/parameter changes do not reintroduce appearance-driven indicator recomputation or bypass TCO capability boundaries.', automated: true },
+      { id: 'cs176-docs', statement: 'Current CoreSpirit and repair documentation describes one parameter, preset, dependency and semantic type architecture.', automated: true },
+    ],
+  },
+
+  {
+    id: 177, name: 'Parameter value-domain ABI', kind: 'platform',
+    goal: 'Make every universal parameter kind carry executable value-domain validation before it can enter workspace state, presets or runtime configuration.', dependencies: [159, 170],
+    gates: [
+      { id: 'cs177-domain', statement: 'Universal kinds reject structurally incorrect values and enforce numeric, enum, color, timeframe, symbol, session and duration domain rules.', automated: true },
+      { id: 'cs177-defaults', statement: 'Schema defaults pass the same validator used for persisted and preset values.', automated: true },
+      { id: 'cs177-no-ui', statement: 'Value-domain validation has no dependency on React or editor components.', automated: true },
+    ],
+  },
+  {
+    id: 178, name: 'Incremental parameter dependency graph', kind: 'compiler',
+    goal: 'Compile parameter dependencies into forward and reverse graphs so a parameter edit can identify only the transitive affected settings.', dependencies: [160, 177],
+    gates: [
+      { id: 'cs178-order', statement: 'Dependency evaluation order is deterministic and cycle-safe.', automated: true },
+      { id: 'cs178-reverse', statement: 'Reverse dependent lookup returns the transitive affected parameter paths.', automated: true },
+      { id: 'cs178-fail', statement: 'Malformed dependency trees fail closed and never execute arbitrary predicates.', automated: true },
+    ],
+  },
+  {
+    id: 179, name: 'Conditional settings state machine', kind: 'runtime',
+    goal: 'Treat visible/enabled parameter state as resolved runtime configuration derived from default-hydrated values, not ad-hoc component conditions.', dependencies: [158, 178],
+    gates: [
+      { id: 'cs179-default-state', statement: 'Default-only dependency chains resolve correctly before persisted values exist.', automated: true },
+      { id: 'cs179-state', statement: 'Each field has deterministic visible/enabled/error state.', automated: true },
+      { id: 'cs179-editor', statement: 'The universal editor consumes resolved state and contains no indicator-kind-specific conditional branch.', automated: true },
+    ],
+  },
+  {
+    id: 180, name: 'Deterministic preset/profile selection', kind: 'runtime',
+    goal: 'Make selected profile presets participate in effective configuration resolution while preserving Factory → Script → Workspace → Personal precedence.', dependencies: [168, 169, 179],
+    gates: [
+      { id: 'cs180-selection', statement: 'activePresetByIndicator selects a matching workspace/personal preset when present.', automated: true },
+      { id: 'cs180-fallback', statement: 'Unselected layers fall back to deterministic latest-by-updatedAt/id resolution.', automated: true },
+      { id: 'cs180-lineage', statement: 'Effective configuration reports the selected preset IDs per layer.', automated: true },
+    ],
+  },
+  {
+    id: 181, name: 'Preset portability and reconciliation ABI', kind: 'platform',
+    goal: 'Make presets and profiles portable JSON artifacts with canonical fingerprints for safe import/export and change reconciliation.', dependencies: [167, 169, 180],
+    gates: [
+      { id: 'cs181-json', statement: 'Preset/profile serialization contains data only and round-trips through schema validation.', automated: true },
+      { id: 'cs181-fingerprint', statement: 'Profile fingerprints are deterministic across object key ordering.', automated: true },
+      { id: 'cs181-scope', statement: 'Imported profile scope is checked against active user/workspace context before persistence.', automated: true },
+    ],
+  },
+  {
+    id: 182, name: 'Semantic dimensional algebra', kind: 'language',
+    goal: 'Treat price, volume, time, duration, currency and unitless number as distinct semantic domains for scalar and series values.', dependencies: [171, 172, 174],
+    gates: [
+      { id: 'cs182-domain', statement: 'Implicit cross-domain arithmetic is rejected except for explicitly defined dimension-preserving operations.', automated: true },
+      { id: 'cs182-derived', statement: 'Valid products/ratios derive meaningful domains such as price × volume → currency and time − time → duration.', automated: true },
+      { id: 'cs182-metadata', statement: 'Symbol/timeframe metadata is retained where the operation remains semantically meaningful.', automated: true },
+    ],
+  },
+  {
+    id: 183, name: 'Explicit semantic conversion ABI', kind: 'compiler',
+    goal: 'Provide a small pure conversion surface for intentional domain changes without weakening implicit semantic validation.', dependencies: [173, 182],
+    gates: [
+      { id: 'cs183-conversions', statement: 'toNumber/toPrice/toVolume/toTime/toDuration/toCurrency are registered, typed and pure.', automated: true },
+      { id: 'cs183-explicit', statement: 'Explicit conversion can make an otherwise invalid domain operation intentional.', automated: true },
+      { id: 'cs183-host', statement: 'Conversions add no broker, network, filesystem or other host capability.', automated: true },
+    ],
+  },
+  {
+    id: 184, name: 'Universal configuration and semantic typing release gate', kind: 'governance',
+    goal: 'Freeze the v114 parameter/preset/dependency/type architecture only when editor, persistence, compiler, runtime and capability boundaries agree.', dependencies: [177, 178, 179, 180, 181, 182, 183],
+    gates: [
+      { id: 'cs184-contracts', statement: 'Parameter, conditional, preset/profile, semantic-series and build-annotation contracts pass.', automated: true },
+      { id: 'cs184-noninterference', statement: 'Configuration changes remain outside mathematical indicator recomputation unless a declared computation parameter changes.', automated: true },
+      { id: 'cs184-docs', statement: 'Current docs, release manifest and repair tracker describe the same v114 architecture and validation status.', automated: true },
+    ],
+  },
+
 ]
 
 export function getCoreSpiritStage(id: number): CoreSpiritStage | undefined {
@@ -1597,6 +1868,6 @@ export function validateCoreSpiritRoadmap(): string[] {
       if (dep >= stage.id) errors.push(`stage ${stage.id} has non-previous dependency ${dep}`);
     }
   }
-  if (CORE_SPIRIT_STAGES.length !== 154) errors.push('CoreSpirit roadmap must contain exactly 154 stages');
+  if (CORE_SPIRIT_STAGES.length !== 184) errors.push('CoreSpirit roadmap must contain exactly 184 stages');
   return errors;
 }

@@ -605,3 +605,91 @@ A host can run the same artifact historically or through a realtime execution ho
 
 The optional surface form `indicator "Name"` remains declaration sugar only. It must lower into this same component/artifact representation if enabled; it must not become a new evaluator or VM.
 
+
+## v112 — Parameters without grammar expansion
+
+CoreSpirit indicators can expose a universal parameter schema without adding parameter-specific keywords.
+
+Conceptually:
+
+```text
+CoreSpirit program
+    ↓
+compiled artifact
+    ↓
+indicator component
+    ↓
+parameter schema
+```
+
+The authoring surface remains `DATA`, `LET`, `WHEN`, `SHOW`, `MODEL`, `AUTOMATE`. Parameter metadata belongs to the artifact/component boundary, not to a parallel evaluator.
+
+A parameter can be typed as `number`, `integer`, `decimal`, `boolean`, `enum`, `color`, `source`, `timeframe`, `symbol`, `session`, `price`, `duration` or `string`, with constraints and conditional visibility.
+
+A future declaration such as:
+
+```text
+indicator "Adaptive Trend"
+```
+
+can carry or reference these definitions as metadata sugar. It does not become a new language runtime.
+
+## v113 — semantic series annotations
+
+CoreSpirit keeps its compact language surface while allowing explicit semantic type annotations when an author wants stronger guarantees:
+
+```text
+let basis: series<price> = close
+let traded: series<volume> = volume
+let stamp: series<time> = time
+```
+
+The compiler treats the annotation as semantic information; the existing VM still receives its compatible structural type. Built-in market fields expose domain-aware type information in the editor.
+
+A future conversion function can intentionally erase or change a semantic domain, but ordinary arithmetic does not silently coerce unrelated domains.
+
+## v113 — preset-aware authoring
+
+Indicator artifacts can declare parameter defaults and serializable templates without teaching authors a second configuration language. The universal editor consumes the same parameter schema used by CoreSpirit publication/runtime metadata.
+
+
+
+## v113 depth pass — parameter dependencies, presets and semantic series
+
+The current contract is no longer a flat parameter form. Universal parameters are typed, constrained and serializable; dependency conditions are validated against declared target fields and resolved from fully hydrated defaults. The parameter schema compiles into a dependency graph with deterministic evaluation order and reverse dependents for incremental UI updates.
+
+Preset configuration is layered and profile-aware: Factory → Script → Workspace → Personal. Profiles persist selected preset IDs per indicator, while community presets remain read-only. Preset/profile data is JSON-safe and validated against the current parameter schema.
+
+CoreSpirit semantic series types distinguish `series<price>`, `series<volume>`, `series<time>`, `series<number>` and related domains while retaining the structural VM type system. Explicit `toNumber`/`toPrice`/`toVolume`/`toTime`/`toDuration`/`toCurrency` conversions are the intentional escape hatch; implicit cross-domain arithmetic remains rejected.
+
+Appearance stays outside computation identity, so changing parameter UI state or presentation settings does not trigger indicator mathematical recomputation.
+
+
+## v114 depth pass
+
+The universal configuration architecture is now compiled rather than merely described. Parameter kinds validate their own value domains; conditions compile to dependencies and reverse dependents; preset profiles can select explicit active presets; and semantic conversions are explicit, pure and capability-neutral.
+
+The current configuration flow is:
+
+```text
+CoreSpirit indicator/component
+        ↓
+parameter schema v3
+        ↓
+validated parameter state + dependency graph
+        ↓
+preset/profile resolution
+        ↓
+universal editor / runtime configuration
+```
+
+Semantic series typing remains separate from VM structural typing:
+
+```text
+series<price> + series<volume>  → compile-time error
+toNumber(series<price>)        → explicit domain conversion
+price * volume                 → currency/notional
+time - time                   → duration
+```
+
+These systems do not grant host authority and remain outside appearance-driven invalidation.
