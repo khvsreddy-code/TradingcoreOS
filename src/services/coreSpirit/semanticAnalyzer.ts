@@ -216,7 +216,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
 
   const semanticBuiltinSeries = new Set(['sma','ema','hma','highest','lowest','sum','mean','stdev','wma','rma','median','rsi','atr','vwap','change','variance']);
   const semanticNumericFunctions = new Set(['abs','min','max','sqrt','pow','round','sign','nz','clamp','exp','log','tanh','sigmoid','probability','normalize','zscore','pctchange']);
-  const semanticConversionFunctions = new Map([['toNumber','number'],['toPrice','price'],['toVolume','volume'],['toTime','time'],['toDuration','duration'],['toCurrency','currency']] as const);
+  const semanticConversionFunctions: Readonly<Record<string, CoreSpiritSemanticType['atom']>> = Object.freeze({toNumber:'number',toPrice:'price',toVolume:'volume',toTime:'time',toDuration:'duration',toCurrency:'currency'});
   const semanticBooleanFunctions = new Set(['cross','crossover','crossunder','rising','falling','isNa']);
   const inferSemantic = (n:CoreSpiritAstNode, scope:Map<string,CoreSpiritSemanticType>):CoreSpiritSemanticType|undefined=>{
     switch(n.type){
@@ -277,9 +277,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return result==='boolean' ? semanticScalar('boolean') : semanticScalar('number');
         }
         if(semanticBooleanFunctions.has(n.name)) return semanticScalar('boolean');
-        if(semanticConversionFunctions.has(n.name)) {
+        if(Object.prototype.hasOwnProperty.call(semanticConversionFunctions,n.name)) {
           const source=args[0];
-          const atom=semanticConversionFunctions.get(n.name)! as CoreSpiritSemanticType['atom'];
+          const atom=semanticConversionFunctions[n.name]!;
           const metadata=source ? {symbol: source.symbol, timeframe: source.timeframe, currency: atom === 'currency' ? source.currency : undefined, unit: atom === 'price' ? 'price' : atom === 'volume' ? 'volume' : atom === 'time' ? 'timestamp' : atom === 'duration' ? 'duration' : atom === 'currency' ? 'notional' : undefined, scale: source.scale} : {};
           return source?.kind === 'series' ? semanticSeries(atom, metadata) : semanticScalar(atom, metadata);
         }
