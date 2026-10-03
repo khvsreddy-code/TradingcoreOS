@@ -5,8 +5,11 @@ import type {
   ExecutionSession,
   InputValue,
   PreparedScript,
-} from '../vendor/vela/src/index';
-import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec } from '../vendor/vela/src/core/model';
+  IndicatorMeta,
+  IndicatorModel,
+  SeriesPoint,
+  SeriesSpec,
+} from './services/core/chart/velaChartFacade';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
 import type { CoreSpiritMarketBar, CoreSpiritObject } from './services/coreSpirit/types';
