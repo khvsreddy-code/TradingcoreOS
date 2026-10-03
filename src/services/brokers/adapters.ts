@@ -14,22 +14,8 @@ export class FyersAdapter extends BaseBrokerAdapter {
   };
 }
 
-export class UpstoxAdapter extends BaseBrokerAdapter {
-  readonly id = 'upstox';
-  readonly name = 'Upstox';
-  readonly supportedSegments = ['Equity', 'F&O', 'Commodity', 'Currency'];
-  override readonly developerPortalUrl = 'https://upstox.com/developer/api-documentation';
-  override readonly capabilities: BrokerCapabilities = {
-    supportsEquity: true, supportsFO: true, supportsCommodity: true, supportsCurrency: true,
-    supportsBasketOrders: false, supportsGTT: true, supportsWebSocket: true, supportsHistoricalData: true,
-    supportsOrderModification: true, supportsOrderCancellation: true, supportsOptions: true,
-    supportsBracketOrders: false, supportsMarginTrading: true,
-  };
-}
-
 export class BrokerAdapterRegistry {
   private static adapters: Map<string, BaseBrokerAdapter> = new Map<string, BaseBrokerAdapter>([
-    ['upstox', new UpstoxAdapter()],
     ['fyers', new FyersAdapter()],
   ]);
 
