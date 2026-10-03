@@ -37,7 +37,7 @@ export function buildOIChartAnalytics(chain:OptionChain,spotOverride?:number,atr
  const fallback=(side:OILevelSide)=>walls.filter(w=>w.side===(side==='support'?'PUT':'CALL')).filter(w=>side==='support'?w.strike<spot:w.strike>spot).filter(w=>w.distanceStrikes>=1&&w.distanceStrikes<=7).filter(w=>w.state!=='MITIGATED').map(w=>({w,score:score(w)})).sort((a,b)=>b.score-a.score||a.w.distance-b.w.distance);
  const levelCount=getOILevelCount();
  const chooseSide=(side:OILevelSide)=>{
-  const target=Math.ceil(levelCount/2); const preferred=candidates(side); const pool=preferred.length>=target?preferred:fallback(side); const selected:Array<{w:OIWall;score:number}>[]=[];
+  const target=Math.ceil(levelCount/2); const preferred=candidates(side); const pool=preferred.length>=target?preferred:fallback(side); const selected: Array<{ w: OIWall; score: number }> = [];
   for(const c of pool){
    if(selected.some(x=>Math.abs(x.w.distanceStrikes-c.w.distanceStrikes)<2))continue;
    selected.push(c); if(selected.length>=target)break;
