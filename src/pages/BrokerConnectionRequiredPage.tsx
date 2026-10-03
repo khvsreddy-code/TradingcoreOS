@@ -297,7 +297,7 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
                       Broker selection
                     </span>
                   </h2>
-                  <p className="text-xs text-slate-400 mt-1">Choose the broker you actually use. TradingCore currently supports only Upstox and Fyers.</p>
+                  <p className="text-xs text-slate-400 mt-1">Connect your Fyers account to continue into the live trading workspace.</p>
                 </div>
 
                 <button
