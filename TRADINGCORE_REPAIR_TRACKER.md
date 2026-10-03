@@ -674,3 +674,14 @@ These systems do not grant host authority and remain outside appearance-driven i
 | TC-REL-114-02 | Parameter ABI | Critical | Typed value-domain validation and compiled dependency graph are shared by editor, workspace and presets. | **FIXED — CONTRACT** | `indicatorSettingsSchema.ts`, parameter/conditional contracts |
 | TC-REL-114-03 | Presets | High | Explicit active profile selection and portable JSON bundles share one canonical preset validator. | **FIXED — STATIC VERIFY** | `indicatorPresetSystem.ts`, preset contract |
 | TC-REL-114-04 | Semantic typing | Critical | Domain arithmetic, comparison, metadata and explicit conversion ABI are compiler-visible and capability-neutral. | **FIXED — RUNTIME CONTRACT** | `semanticTypeSystem.ts`, `semanticSeriesTypeRuntime.test.ts` |
+
+
+## v115 validator repair — 2026-10-03
+
+The indicator parameter validator had a two-step regression: an earlier repair introduced the fieldByPath declaration but left the original allSchemaFields declaration below it. The result was either a runtime ReferenceError in validateCondition(...) or, after the partial fix, an esbuild duplicate-const transform failure. v115 collapses dependency validation onto one canonical schema-field collection and one fieldByPath index reused by target/type validation and cycle detection.
+
+| ID | Area | Severity | Hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-BUILD-10 | Indicator dependency validator | Critical | The validator now constructs allSchemaFields and fieldByPath exactly once before validating dependency/visibility/enabled conditions. | **FIXED — SOURCE** | src/services/coreSpirit/indicatorSettingsSchema.ts |
+| TC-BUILD-11 | Regression prevention | Critical | Conditional-settings contract asserts exactly one canonical allSchemaFields declaration, one fieldByPath map declaration, and cycle detection reuse. | **FIXED — CONTRACT** | src/indicatorConditionalSettingsContract.test.mjs |
+| TC-BUILD-12 | CI gate | Critical | v115 must pass contracts before build/typecheck; no next architecture stage proceeds while this validator gate is red. | **IN PROGRESS — CI RUN 84** | GitHub Actions run 84 |
