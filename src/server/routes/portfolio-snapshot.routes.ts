@@ -20,7 +20,7 @@ const inflight = new Map<string, Promise<any>>();
  */
 portfolioSnapshotRoutes.get('/:brokerId/portfolio-snapshot', async (req: AuthenticatedRequest, res: Response, next) => {
   const brokerId = String(req.params.brokerId || '').toLowerCase();
-  if (brokerId !== 'fyers' && brokerId !== 'upstox') return next();
+  if (brokerId !== 'fyers') return next();
 
   const userId = req.tradingCoreUserId!;
   const session = await BrokerRepository.getSession(brokerId, userId);
@@ -46,7 +46,7 @@ portfolioSnapshotRoutes.get('/:brokerId/portfolio-snapshot', async (req: Authent
 
   try {
     const token = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const adapter = BrokerRegistry.getAdapter(brokerId);
+    const adapter = BrokerRegistry.getAdapter('fyers');
     if (!adapter) { res.status(400).json({ success: false, error: 'Unknown broker ID' }); return; }
 
     const task = (async () => {
@@ -54,11 +54,11 @@ portfolioSnapshotRoutes.get('/:brokerId/portfolio-snapshot', async (req: Authent
       // Each individual broker REST call enters the gate separately. Holding
       // one gate slot for the entire snapshot would still allow the five
       // upstream calls to burst together.
-      try { data.funds = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getFunds(token)); } catch { data.funds = null; }
-      try { data.holdings = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getHoldings(token)); } catch { data.holdings = []; }
-      try { data.positions = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getPositions(token)); } catch { data.positions = []; }
-      try { data.orders = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getOrders(token)); } catch { data.orders = []; }
-      try { data.trades = await withBrokerRequestGate(brokerId as 'fyers' | 'upstox', token, () => adapter.getTrades(token)); } catch { data.trades = []; }
+      try { data.funds = await withBrokerRequestGate('fyers', token, () => adapter.getFunds(token)); } catch { data.funds = null; }
+      try { data.holdings = await withBrokerRequestGate('fyers', token, () => adapter.getHoldings(token)); } catch { data.holdings = []; }
+      try { data.positions = await withBrokerRequestGate('fyers', token, () => adapter.getPositions(token)); } catch { data.positions = []; }
+      try { data.orders = await withBrokerRequestGate('fyers', token, () => adapter.getOrders(token)); } catch { data.orders = []; }
+      try { data.trades = await withBrokerRequestGate('fyers', token, () => adapter.getTrades(token)); } catch { data.trades = []; }
       cache.set(key, { data, expiresAt: Date.now() + 10_000 });
       return data;
     })();
