@@ -4,12 +4,12 @@ import { CoreSpiritType, compatible, isBooleanType, isNumericType, joinTypes } f
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
-import { canUseCapability } from './layeredPlatformContract';
+import { canUseCapability, type CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
 export type CoreSpiritDiagnostic = { severity:'error'|'warning'; message:string; line?:number; column?:number; start?:number; end?:number; code?:string };
 export type CoreSpiritUdt = { name:string; fields:Array<{name:string;type:CoreSpiritType}> };
-export type CoreSpiritSemanticOptions = { layer?:string; surface?:unknown; components?:CoreSpiritComponentRegistryLike };
+export type CoreSpiritSemanticOptions = { layer?:CoreSpiritProgramLayer; surface?:unknown; components?:CoreSpiritComponentRegistryLike };
 export type CoreSpiritSemanticResult = {
   diagnostics:CoreSpiritDiagnostic[];
   symbols:Map<string,CoreSpiritType>;
