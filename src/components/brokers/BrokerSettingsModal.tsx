@@ -106,7 +106,9 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
     await tradingCoreRuntime.syncPortfolio();
     setIsSyncing(false);
     reloadConnections();
-  };\n\n  const handleConnectFyers = async () => {
+  };
+
+  const handleConnectFyers = async () => {
     setIsConnectingFyers(true);
     setConnectError(null);
     const result = await BrokerOAuthService.initiateOAuth('fyers');
