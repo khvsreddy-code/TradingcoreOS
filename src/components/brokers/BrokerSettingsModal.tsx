@@ -253,15 +253,13 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                     Connect your broker account to authorize live execution.
                   </p>
                 </div>
-                {onNavigateToConnect && (
-                  <button
-                    onClick={() => void handleConnectFyers()}
-                    disabled={isConnectingFyers}
-                    className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[var(--tco-surface-2)] hover:bg-[#2563eb] transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {isConnectingFyers ? 'Opening Fyers…' : 'Connect Fyers'}
-                  </button>
-                )}
+                <button
+                  onClick={() => void handleConnectFyers()}
+                  disabled={isConnectingFyers}
+                  className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[var(--tco-surface-2)] hover:bg-[#2563eb] transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isConnectingFyers ? 'Opening Fyers…' : 'Connect Fyers'}
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
