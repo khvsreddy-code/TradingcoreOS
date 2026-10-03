@@ -125,6 +125,20 @@ export class TradingCoreRuntime {
   public async getTradeHistory(): Promise<TradeRecord[]> { return this.engine.getTradeHistory(); }
   public setMarketDataProvider(type: MarketDataProviderType): void { this.currentMarketDataProviderType = type; }
   public getMarketDataProviderType(): MarketDataProviderType { return this.currentMarketDataProviderType; }
+  /** Broker-routed quote snapshot used by Vela only as a last-resort seed. */
+  public async getMarketQuotes(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>> {
+    let brokerInfo = this.getPrimaryBrokerInfo();
+    if ((!brokerInfo || !this.getPrimaryBroker()) && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
+      try { await this.restoreBrokerConnections(); } catch {}
+      brokerInfo = this.getPrimaryBrokerInfo();
+    }
+    const broker = this.getPrimaryBroker();
+    if (!broker || !brokerInfo || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return {};
+    const unique = [...new Set(symbols.map(String).map((value) => value.trim()).filter(Boolean))].slice(0, 100);
+    if (!unique.length) return {};
+    return broker.getMarketData(unique);
+  }
+
   public async getOptionChain(instrumentKey: string, expiryDate = 'current_week') {
     const brokerInfo = this.getPrimaryBrokerInfo();
     const broker = this.brokerMgr.getPrimaryBroker();
