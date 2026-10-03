@@ -1,6 +1,5 @@
 import { tradingApi, readTradingApiJson } from '../http/tradingApi';
 import { MarketFeedEvent } from '../../types/market';
-import { upstoxMarketDataClient } from './UpstoxMarketDataClient';
 
 type Listener = (event: MarketFeedEvent) => void;
 
@@ -107,7 +106,7 @@ export class BrokerMarketDataClient {
     const now = Date.now();
     // REST is only a safety net. Keep it dormant while the stream is healthy,
     // but recover quickly when the socket is connected yet no ticks arrive.
-    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 650);
+    const stale = keys.some(key => now - (stream.lastTickAt.get(String(key)) || 0) > 1_500);
     if (stale && !stream.pollInFlight) {
       stream.pollInFlight = true;
       try {
@@ -144,14 +143,13 @@ export class BrokerMarketDataClient {
       } catch { /* websocket remains primary; retry on the next stale interval */ }
       finally { stream.pollInFlight = false; }
     }
-    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 350);
+    if (!stream.stopped) stream.pollTimer = window.setTimeout(() => void this.pollQuotes(stream), 1_000);
   }
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
     const id = brokerId.toLowerCase();
-    if (id === 'upstox') return upstoxMarketDataClient.subscribe(instrumentKeys, listener, 'full');
     if (id !== 'fyers') {
-      listener({ type: 'error', error: `Live market data is not implemented for ${brokerId}` });
+      listener({ type: 'error', error: 'TradingCore live market data is currently FYERS-only.' });
       return () => {};
     }
 
@@ -209,10 +207,6 @@ export class BrokerMarketDataClient {
 
   disconnect(brokerId: string): void {
     const id = brokerId.toLowerCase();
-    if (id === 'upstox') {
-      upstoxMarketDataClient.disconnect();
-      return;
-    }
     for (const [key, stream] of this.streams) {
       if (!key.startsWith(`${id}:`)) continue;
       stream.stopped = true;
