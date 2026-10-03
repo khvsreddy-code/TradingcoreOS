@@ -194,7 +194,7 @@ class SharedWorkerQueue<Payload extends object, Result> {
 
 export class ChartComputeCoordinator {
   private readonly analyticsQueue = new SharedWorkerQueue<AnalyticsRequest, { requestId: number; analytics: ChartAnalytics }>(new URL('./chartAnalytics.worker.ts', import.meta.url), MAX_ANALYTICS_WORKERS);
-  private readonly indicatorQueue = new SharedWorkerQueue<IndicatorRequest, { requestId: number; results: IndicatorWorkerResult[] }>(new URL('./indicator.worker.ts', import.meta.url), MAX_INDICATOR_WORKERS);
+  private readonly indicatorQueue = new SharedWorkerQueue<IndicatorRequest, { requestId: number; results: IndicatorWorkerResult[]; resetRequired?: boolean }>(new URL('./indicator.worker.ts', import.meta.url), MAX_INDICATOR_WORKERS);
   private analyticsCache = new Map<string, ChartAnalytics>();
   private indicatorCache = new Map<string, IndicatorWorkerResult[]>();
   private analyticsInflight = new Map<string, Promise<ChartAnalytics>>();
