@@ -685,3 +685,16 @@ The indicator parameter validator had a two-step regression: an earlier repair i
 | TC-BUILD-10 | Indicator dependency validator | Critical | The validator now constructs allSchemaFields and fieldByPath exactly once before validating dependency/visibility/enabled conditions. | **FIXED — SOURCE** | src/services/coreSpirit/indicatorSettingsSchema.ts |
 | TC-BUILD-11 | Regression prevention | Critical | Conditional-settings contract asserts exactly one canonical allSchemaFields declaration, one fieldByPath map declaration, and cycle detection reuse. | **FIXED — CONTRACT** | src/indicatorConditionalSettingsContract.test.mjs |
 | TC-BUILD-12 | CI gate | Critical | v115 must pass contracts before build/typecheck; no next architecture stage proceeds while this validator gate is red. | **IN PROGRESS — CI RUN 84** | GitHub Actions run 84 |
+
+## v115 validator hardening — 2026-10-03
+
+The historical GitHub Actions run #75 (commit 8596471) failed inside validateIndicatorSettingsSchema() because validateCondition() received an undefined fieldByPath. The current mainline repair already constructs the field index before dependency validation; this depth pass makes that invariant compile-time enforced and adds an independent regression contract.
+
+| ID | Area | Severity | Hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-BUILD-13 | Dependency field index | Critical | validateCondition() now requires a ReadonlyMap<string, IndicatorSettingField> instead of supplying an optional default. | **FIXED** | indicatorSettingsSchema.ts |
+| TC-BUILD-14 | Canonical index | Critical | buildIndicatorSettingsFieldIndex() is the single construction path used before visibility/dependency/enabled validation. | **FIXED** | indicatorSettingsSchema.ts |
+| TC-BUILD-15 | Regression guard | Critical | A dedicated contract verifies helper existence, declaration-before-use ordering, required map parameter, and removal of the unsafe optional map default. | **FIXED — CONTRACT** | indicatorDependencyFieldIndexContract.test.mjs |
+| TC-BUILD-16 | Historical run | High | Run #75 is superseded by the repaired mainline; current main run #87 passed npm run test:contracts. | **RESOLVED** | GitHub Actions runs #75 and #87 |
+
+**Invariant:** the dependency validator cannot compile if a caller omits the canonical field index. Runtime validation, type validation and cycle detection continue to operate from the same schema-field set.
