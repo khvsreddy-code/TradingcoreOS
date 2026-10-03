@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 
 /**
  * Safe FYERS historical-data route.
@@ -20,6 +20,7 @@ const resolutionMap: Record<string, string> = {
   '1minute': '1',
   '3minute': '3',
   '5minute': '5',
+  '10minute': '10',
   '15minute': '15',
   '30minute': '30',
   '60minute': '60',
@@ -83,29 +84,24 @@ function normalize(rows: any[], limit: number): any[] {
  * candle normally in the browser.
  */
 async function fallbackQuoteCandle(accessToken: string, symbol: string): Promise<any[]> {
-  const params = new URLSearchParams({ symbols: symbol });
-  const response = await fetch(`https://api-t1.fyers.in/data/quotes?${params.toString()}`, {
-    headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-  });
-  const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch { return []; }
-  if (!response.ok || payload?.s === 'error') return [];
-  const quote = Array.isArray(payload?.d) ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0] : undefined;
-  const value = quote?.v || {};
-  const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
-  if (!Number.isFinite(ltp) || ltp <= 0) return [];
-  const now = new Date();
-  const volume = Number(value.volume ?? value.vol ?? 0);
-  return [{
-    timestamp: now.toISOString(),
-    open: ltp,
-    high: ltp,
-    low: ltp,
-    close: ltp,
-    volume: Number.isFinite(volume) ? volume : 0,
-    liveSeed: true,
-  }];
+  try {
+    const payload: any = await new FyersApiClient(accessToken).dataGet('/quotes', { symbols: symbol });
+    const quote = Array.isArray(payload?.d)
+      ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0]
+      : undefined;
+    const value = quote?.v || {};
+    const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
+    if (!Number.isFinite(ltp) || ltp <= 0) return [];
+    const volume = Number(value.volume ?? value.vol ?? 0);
+    return [{
+      timestamp: new Date().toISOString(),
+      open: ltp, high: ltp, low: ltp, close: ltp,
+      volume: Number.isFinite(volume) ? volume : 0,
+      liveSeed: true,
+    }];
+  } catch {
+    return [];
+  }
 }
 
 const cache = new Map<string, { expiresAt: number; data: any[] }>();
@@ -163,29 +159,15 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const task = withBrokerRequestGate('fyers', accessToken, async () => {
-      const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
-      const lookbackDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 30;
-      const from = new Date(end.getTime() - lookbackDays * 86_400_000);
-      const params = new URLSearchParams({
-        symbol: instrumentKey,
-        resolution,
-        // Use epoch timestamps for paged history so `before` maps to an exact
-        // candle boundary instead of being truncated to an India calendar date.
-        date_format: '0',
-        range_from: String(Math.floor(from.getTime() / 1000)),
-        range_to: String(Math.floor(end.getTime() / 1000)),
-        cont_flag: '1',
-      });
-      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-        headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-      });
-      const text = await response.text();
-      let payload: any;
-      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-      if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
-        throw new Error(payload?.message || `Fyers history failed (${response.status})`);
-      }
+    const task = new FyersApiClient(accessToken).dataGet('/history', {
+      symbol: instrumentKey,
+      resolution,
+      date_format: '0',
+      range_from: Math.floor((beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date()).getTime() / 1000) -
+        (resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 30) * 86_400,
+      range_to: Math.floor((beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date()).getTime() / 1000),
+      cont_flag: '1',
+    }).then(async (payload: any) => {
       let data = normalize(payload?.candles || [], limit);
       if (!beforeDate && data.length < 2) {
         const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
@@ -194,7 +176,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       if (!data.length) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    });
+    }););
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
