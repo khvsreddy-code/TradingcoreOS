@@ -192,8 +192,8 @@ function indicatorOutputs(artifact: CoreSpiritExecutableArtifact, requestedNames
     const name = outputId;
     if (seen.has(name)) continue;
     seen.add(name);
-    const outputKind: CoreSpiritComponentPort['type']['kind'] = role === 'event' ? 'event' : 'visual';
-    outputs.push(Object.freeze({ id: outputId, name, type: { kind: outputKind }, role, sourceInstruction: instruction }));
+    const outputKind = (role === 'event' ? 'event' : 'visual') as CoreSpiritComponentPort['type']['kind'];
+    outputs.push(Object.freeze({ id: outputId, name, type: { kind: outputKind as 'event' | 'visual' }, role, sourceInstruction: instruction }));
   }
   return Object.freeze(outputs);
 }
