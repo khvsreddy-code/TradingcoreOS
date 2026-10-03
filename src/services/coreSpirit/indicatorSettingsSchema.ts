@@ -730,8 +730,12 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
       if (field.validation?.maxLength != null && field.validation.maxLength < (field.validation.minLength ?? 0)) errors.push(`invalid maxLength for '${field.path}'`);
     }
   }
+  // Build one canonical schema-field index for every dependency validation pass.
+  // The same index is reused for target/type validation and cycle detection.
   const allSchemaFields = schema.sections.flatMap(section => section.fields);
-  const fieldByPath = new Map<string, IndicatorSettingField>(allSchemaFields.map(field => [field.path, field]));
+  const fieldByPath = new Map<string, IndicatorSettingField>(
+    allSchemaFields.map(field => [field.path, field]),
+  );
 
   for (const section of schema.sections) for (const field of section.fields) {
     if (field.visibleWhen && !paths.has(field.visibleWhen.path)) errors.push(`visibility dependency '${field.visibleWhen.path}' for '${field.path}' is not declared`);
@@ -739,7 +743,6 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
     if (field.visibilityCondition) errors.push(...validateCondition(field.visibilityCondition, paths, field.path, 0, fieldByPath));
     if (field.enabledWhen) errors.push(...validateCondition(field.enabledWhen, paths, field.path, 0, fieldByPath));
   }
-  const allSchemaFields = schema.sections.flatMap(section => section.fields);
   errors.push(...detectConditionCycles(allSchemaFields));
   for (const section of schema.sections) for (const field of section.fields) {
     const defaultError = validateIndicatorSettingValue(field, field.defaultValue);
