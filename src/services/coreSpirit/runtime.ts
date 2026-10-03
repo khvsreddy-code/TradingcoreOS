@@ -371,16 +371,16 @@ export class CoreSpiritRuntime {
     if(name==='ui.panel.button') return finish(this.uiRuntime.button(args[0],String(args[1]??''),typeof args[2]==='string'?args[2]:undefined));
     if(name==='ui.panel.toggle') return finish(this.uiRuntime.toggle(args[0],String(args[1]??''),args[2],typeof args[3]==='string'?args[3]:undefined));
     if(name==='ui.panel.slider') return finish(this.uiRuntime.slider(args[0],String(args[1]??''),args[2],args[3],args[4],typeof args[5]==='string'?args[5]:undefined));
-    if(name==='app.create') return finish(this.appRuntime.create(String(args[0]??'Trading App'),String(args[1]??'main')));
-    if(name==='app.chart') return finish(this.appRuntime.chart(String(args[0]??'main'),String(args[1]??'main') as any,args[2]==null?undefined:String(args[2])));
-    if(name==='app.panel') return finish(this.appRuntime.panel(String(args[0]??'main'),String(args[1]??'custom') as any,args[2]==null?undefined:String(args[2]),args[3]==null?undefined:String(args[3]),args[4]==null?undefined:String(args[4])));
-    if(name==='app.overlay') return finish(this.appRuntime.overlay(String(args[0]??'custom') as any,args[1]==null?undefined:String(args[1]),args[2]==null?undefined:String(args[2])));
+    if(name==='app.create') return finish(this.appRuntime.create(String(args[0]??'Trading App'),String(args[1]??'main') as CoreSpiritWorkspaceSlot));
+    if(name==='app.chart') return finish(this.appRuntime.chart(String(args[0]??'main'),String(args[1]??'main') as CoreSpiritWorkspaceSlot,args[2]==null?undefined:String(args[2])));
+    if(name==='app.panel') return finish(this.appRuntime.panel(String(args[0]??'main'),String(args[1]??'custom') as CoreSpiritWorkspaceSlot,args[2]==null?undefined:String(args[2]),args[3]==null?undefined:String(args[3]),args[4]==null?undefined:String(args[4])));
+    if(name==='app.overlay') return finish(this.appRuntime.overlay(String(args[0]??'custom') as CoreSpiritChartAreaKind,args[1]==null?undefined:String(args[1]),args[2]==null?undefined:String(args[2])));
     if(name==='app.targets') { this.appRuntime.targets(...args.map(x=>String(x)).filter(x=>x) as CoreSpiritExecutionTarget[]); return finish(`app:${this.options.sourceId}`); }
     if(name==='app.require') { this.appRuntime.requireFeature(String(args[0]??'')); return finish(null); }
     if(name==='app.bind') { this.appRuntime.bind(String(args[0]??''),String(args[1]??''),args[2]==null?undefined:String(args[2])); return finish(null); }
     if(name==='visual.line' || name==='visual.liquidityZone' || name==='visual.zone') {
       const isLiquidity=name==='visual.liquidityZone'; const id=String(args[0]??`${name}:${index}`);
-      const properties=isLiquidity ? {top:Number(args[2]),bottom:Number(args[1]),strength:Number(args[3]),side:String(args[4]??'right'),...(typeof args[5]==='object'&&args[5]?args[5]:{})} : { ...(name==='visual.line'?{startTime:Number(args[1]),startPrice:Number(args[2]),endTime:Number(args[3]),endPrice:Number(args[4])}:{top:Number(args[2]??args[1]),bottom:Number(args[3]??args[1]),left:Number(args[1]??0),right:Number(args[2]??0)}), ...(typeof args.at(-1)==='object'&&args.at(-1)?args.at(-1):{})};
+      const properties=isLiquidity ? {top:Number(args[2]),bottom:Number(args[1]),strength:Number(args[3]),side:String(args[4]??'right'),...(typeof args[5]==='object'&&args[5]?args[5] as Record<string,unknown>:{ })} : { ...(name==='visual.line'?{startTime:Number(args[1]),startPrice:Number(args[2]),endTime:Number(args[3]),endPrice:Number(args[4])}:{top:Number(args[2]??args[1]),bottom:Number(args[3]??args[1]),left:Number(args[1]??0),right:Number(args[2]??0)}), ...(typeof args.at(-1)==='object'&&args.at(-1)?args.at(-1) as Record<string,unknown>:{ })};
       this.declarativeVisualState=replaceDeclarativeVisual(this.declarativeVisualState,{id,kind:isLiquidity?'liquidity_zone':name==='visual.line'?'line':'zone',properties,metadata:properties as any});
       return finish(`visual:${id}`);
     }
@@ -426,7 +426,7 @@ export class CoreSpiritRuntime {
           const field=member as CoreSpiritDataRequest['field'];
           if(['open','high','low','close','volume','time'].includes(field)) {
             const req={symbol,timeframe,field,offset:0};
-            const ctx: CoreSpiritDataResolutionContext={asOfTimestamp:this.toEpoch(bar.timestamp),baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.revision,alignment:'last-confirmed'};
+            const ctx: CoreSpiritDataResolutionContext={asOfTimestamp:this.toEpoch(bar.timestamp),baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment:'last-confirmed'};
             const resolver=this.dataResolver;
             const value=resolver?.requestAt ? resolver.requestAt(req,ctx) : resolver?.request?.(req);
             if(value && typeof (value as any).then==='function') return finish(null);
@@ -510,7 +510,7 @@ export class CoreSpiritRuntime {
           const k=String(areaRef.kind??'chart');
           const area=k==='panel'
             ? coreSpiritPanelArea(String(areaRef.title??areaRef.id??'Panel'))
-            : coreSpiritChartArea(String(areaRef.area??'price'),String(areaRef.id??areaRef.area??'price'));
+            : coreSpiritChartArea(String(areaRef.area??'price') as CoreSpiritChartAreaKind,String(areaRef.id??areaRef.area??'price'));
           return coreSpiritPlacement(area,space);
         };
         const pointFrom=(value:unknown):CoreSpiritVisualPoint|null=>{
@@ -541,7 +541,7 @@ export class CoreSpiritRuntime {
           outputs.push({kind:'label',id:`${this.options.sourceId}:show-signal:${idBase}:${type}`,time,price,text:type,position:relative.kind==='belowBar'?'below':'above',relativePosition:relative,visual:placement(area,'time'),style:{background:'#2563eb',color:'#ffffff',fontSize:12,shape:'pill'},metadata:{semanticRole:'signal',type,...metadata}});
         } else if(visualKind==='model'){
           const ref=args[1]; const modelName=ref&&typeof ref==='object'?String((ref as Record<string,unknown>).modelName??'model'):String(ref??'model');
-          const modelValue=this.modelOutputResolver?.({modelName,field:'*',binding:this.loadedSurface?.declarations.find(item=>item.kind==='model'&&item.name===modelName)?.binding}) ?? null;
+          const modelValue=this.modelOutputResolver?.({modelName,field:'*',binding:(()=>{const d=this.loadedSurface?.declarations.find((item): item is Extract<CoreSpiritSurfaceDeclaration,{kind:'model'}> => item.kind==='model'&&item.name===modelName);return d?.binding;})()}) ?? null;
           outputs.push({kind:'customVisual',id:`${this.options.sourceId}:show-model:${idBase}:${modelName}`,time,geometry:{kind:'point',point:coreSpiritTimePricePoint(time,Number.isFinite(Number(modelValue))?Number(modelValue):Number(bar.close))},visual:placement({kind:'chart',area:'price',id:'price'},'time'),metadata:{semanticRole:'model',model:modelName,value:typeof modelValue==='object'?JSON.stringify(modelValue):modelValue,...metadata}});
         }
       }
