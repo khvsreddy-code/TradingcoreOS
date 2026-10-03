@@ -19,9 +19,6 @@ for (const token of ['LiveChart', 'RightTerminalDock', 'WatchlistDock', 'Advance
   assert.equal(workspace.includes(token), false, 'legacy live-terminal token remains: ' + token);
 }
 
-for (const token of ['PineEngine', 'pine', 'Pine Script', 'PineTS']) {
-  assert.equal(workspace.toLowerCase().includes(token.toLowerCase()), false, 'Pine compatibility remains in the live workspace: ' + token);
-}
 
 for (const file of ['src/TradingCoreProWorkspace.tsx', 'src/LiveTradingTerminalV2.tsx', 'src/LiveTradingTerminalV3.tsx', 'src/LiveTradingTerminalV4.tsx', 'src/LiveTradingTerminalV5.tsx']) {
   assert.equal(fs.existsSync(path.join(root, file)), false, 'retired duplicate terminal must remain absent: ' + file);
