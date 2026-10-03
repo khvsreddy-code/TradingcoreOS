@@ -4,14 +4,12 @@ import path from 'node:path';
 import { brokerRoutes } from './src/server/routes/broker.routes.js';
 import { instrumentSearchPriorityRoutes } from './src/server/routes/instrument-search-priority.routes.js';
 import { workspaceFixRoutes } from './src/server/routes/workspace-fix.routes.js';
-import { upstoxOptionChainFixRoutes } from './src/server/routes/upstox-option-chain-fix.routes.js';
 import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
 import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
 import { fyersMarketRoutes } from './src/server/routes/fyers-market.routes.js';
 import { fyersOrderStreamRoutes } from './src/server/routes/fyers-order-stream.routes.js';
 import { fyersAccountRoutes } from './src/server/routes/fyers-account.routes.js';
 import { fyersSymbolRoutes } from './src/server/routes/fyers-symbol.routes.js';
-import { upstoxHistoryRoutes } from './src/server/routes/upstox-history.routes.js';
 import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
@@ -67,7 +65,6 @@ function healthChecks() {
   return {
     database: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     encryption: Boolean(process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.length >= 32),
-    upstox: Boolean(process.env.UPSTOX_CLIENT_ID && process.env.UPSTOX_CLIENT_SECRET && process.env.UPSTOX_REDIRECT_URI),
     fyers: Boolean(process.env.FYERS_CLIENT_ID && process.env.FYERS_CLIENT_SECRET && process.env.FYERS_REDIRECT_URI),
   };
 }
@@ -78,7 +75,7 @@ app.get('/api/health/live', (_req, res) => {
 
 app.get('/api/health/ready', (_req, res) => {
   const checks = healthChecks();
-  const ready = checks.database && checks.encryption && (checks.upstox || checks.fyers);
+  const ready = checks.database && checks.encryption && checks.fyers;
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', checks, timestamp: new Date().toISOString() });
 });
 
@@ -97,21 +94,17 @@ app.use('/api/auth/broker', brokerRoutes);
 // The prioritized FYERS search route must run before the broader workspace-fix
 // search route so plain "nifty" ranks NIFTY 50 ahead of FINNIFTY.
 app.use('/api/trading', instrumentSearchPriorityRoutes);
-// The Upstox option-chain expiry fix must run before the broader workspace-fix
-// route so relative expiries are resolved against active contracts locally.
-app.use('/api/trading', upstoxOptionChainFixRoutes);
 // Workspace-fix routes must run before the legacy market-data routes so their
 // improved suggestions and option-chain normalization win deterministically.
 app.use('/api/trading', workspaceFixRoutes);
 // Broker-specific routes must run before generic adapter routes.
-// Historical routes are deliberately mounted before brokerMarketDataRoutes so
-// the quota-safe implementations take precedence over legacy adapter paths.
+// Historical and market routes are deliberately mounted before generic adapter paths
+// so the quota-safe FYERS implementations take precedence.
 app.use('/api/trading', fyersHistoryRoutes);
 app.use('/api/trading', fyersMarketRoutes);
 app.use('/api/trading', fyersOrderStreamRoutes);
 app.use('/api/trading', fyersAccountRoutes);
 app.use('/api/trading', fyersSymbolRoutes);
-app.use('/api/trading', upstoxHistoryRoutes);
 app.use('/api/trading', brokerMarketDataRoutes);
 // Portfolio snapshots are also mounted before the generic trading route so the
 // serialized/cached implementation is used instead of the old Promise.all fan-out.
