@@ -11,6 +11,7 @@ export const BrokerConnection: React.FC<BrokerConnectionProps> = ({
 }) => {
   return (
     <BrokerConnectionRequiredPage
+      onBack={() => window.history.back()}
       onBrokerConnected={() => {
         if (onCompleteOnboarding) {
           onCompleteOnboarding();
