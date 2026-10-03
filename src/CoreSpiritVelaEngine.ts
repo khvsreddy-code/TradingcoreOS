@@ -1,0 +1,297 @@
+import type {
+  EngineCapabilities,
+  ExecutionHandlers,
+  ExecutionRequest,
+  ExecutionSession,
+  InputValue,
+  PreparedScript,
+} from '../vendor/vela/src/index';
+import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec } from '../vendor/vela/src/core/model';
+import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
+import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
+import type { CoreSpiritMarketBar, CoreSpiritObject } from './services/coreSpirit/types';
+
+type PreparedToken = {
+  sourceId: string;
+  source: string;
+  ir: NonNullable<ReturnType<typeof compileCoreSpirit>['ir']>;
+};
+
+const lineStyle = (value: unknown): 'solid' | 'dashed' | 'dotted' => {
+  const n = Number(value);
+  return n === 1 ? 'dashed' : n === 2 ? 'dotted' : 'solid';
+};
+
+function titleFromSource(source: string): string {
+  const match = source.match(/\b(?:indicator|study|component)\s+["']([^"']+)["']/i);
+  if (match?.[1]) return match[1].trim();
+  return 'CoreSpirit';
+}
+
+function objectToSeries(
+  sourceId: string,
+  points: Map<string, SeriesPoint[]>,
+  output: Extract<CoreSpiritObject, { kind: 'series' }>,
+): void {
+  const id = String(output.seriesId || output.name || `${sourceId}:series`);
+  const existing = points.get(id) || [];
+  const time = Number(output.time);
+  const value = output.value == null ? null : Number(output.value);
+  const index = existing.findIndex(point => Number(point.time) === time);
+  const point: SeriesPoint = { time: time as SeriesPoint['time'], value: Number.isFinite(Number(value)) ? value : null };
+  if (index >= 0) existing[index] = point;
+  else existing.push(point);
+  existing.sort((a, b) => Number(a.time) - Number(b.time));
+  points.set(id, existing);
+}
+
+function makeModel(
+  id: string,
+  meta: IndicatorMeta,
+  points: Map<string, SeriesPoint[]>,
+  markers: Map<string, {
+    time: number;
+    position: 'aboveBar' | 'belowBar' | 'inBar';
+    shape: string;
+    color: string;
+    text?: string;
+  }>,
+  priceLines: Array<{ id: string; paneId: string; price: number; color?: string; lineStyle?: 'solid' | 'dashed' | 'dotted'; width?: number; title?: string }>,
+  anchorTime?: number,
+): IndicatorModel {
+  const series: SeriesSpec[] = [...points.entries()].map(([seriesId, seriesPoints], index) => ({
+    id: `${id}:series:${seriesId}`,
+    title: seriesId.includes(':') ? seriesId.split(':').pop() || 'CoreSpirit' : seriesId,
+    paneId: 'price',
+    kind: 'line',
+    points: seriesPoints,
+    style: {
+      color: index === 0 ? '#60a5fa' : '#38bdf8',
+      width: 2,
+      lineStyle: 'solid',
+    },
+    visible: true,
+    overlay: true,
+  }));
+
+  const markerList = [...markers.values()].sort((a, b) => a.time - b.time);
+  if (markerList.length) {
+    series.push({
+      id: `${id}:signals`,
+      title: 'Signals',
+      paneId: 'price',
+      kind: 'markers',
+      markers: markerList,
+      visible: true,
+      overlay: true,
+    });
+  }
+
+  return {
+    id,
+    title: meta.title,
+    shorttitle: meta.shorttitle,
+    overlay: true,
+    paneHint: 'price',
+    legend: true,
+    anchorTime: anchorTime as IndicatorModel['anchorTime'],
+    series,
+    fills: [],
+    backgrounds: [],
+    priceLines,
+    inputs: [],
+    inputValues: {},
+  };
+}
+
+export class CoreSpiritVelaEngine {
+  readonly language = 'corespirit';
+
+  readonly capabilities: EngineCapabilities = {
+    streaming: true,
+    visibleRange: false,
+    inputs: false,
+    props: false,
+  };
+
+  async prepare(source: string, instanceId: string): Promise<PreparedScript> {
+    const normalized = normalizeCoreSpirit(source);
+    const compiled = compileCoreSpirit(normalized, instanceId);
+    const error = compiled.diagnostics?.find(diagnostic => diagnostic.severity === 'error');
+    if (!compiled.ir || error) {
+      throw new Error(error?.message || 'CoreSpirit compilation failed');
+    }
+    const meta: IndicatorMeta = {
+      title: titleFromSource(normalized),
+      overlay: true,
+    };
+    const token: PreparedToken = {
+      sourceId: instanceId,
+      source: normalized,
+      ir: compiled.ir,
+    };
+    return {
+      language: this.language,
+      inputs: [],
+      props: [],
+      meta,
+      reactsToViewport: false,
+      token,
+    };
+  }
+
+  execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
+    const token = req.prepared.token as PreparedToken;
+    const bars = req.bars as CoreSpiritMarketBar[];
+    const runtime = new CoreSpiritRuntime({
+      symbol: req.market.symbol,
+      timeframe: req.market.timeframe,
+      sourceId: token.sourceId,
+      executionMode: req.mode === 'live' ? 'realtime' : 'historical',
+      executionTarget: 'chart',
+    });
+    runtime.loadIr(token.ir);
+
+    const points = new Map<string, SeriesPoint[]>();
+    const markers = new Map<string, {
+      time: number;
+      position: 'aboveBar' | 'belowBar' | 'inBar';
+      shape: string;
+      color: string;
+      text?: string;
+    }>();
+    const priceLines: Array<{ id: string; paneId: string; price: number; color?: string; lineStyle?: 'solid' | 'dashed' | 'dotted'; width?: number; title?: string }> = [];
+    let stopped = false;
+    let liveStarted = false;
+    let lastTime = Number.NaN;
+
+    const collect = (objects: CoreSpiritObject[]) => {
+      for (const output of objects) {
+        if (output.kind === 'series') {
+          objectToSeries(token.sourceId, points, output);
+        } else if (output.kind === 'signal') {
+          const time = Number(output.time);
+          const key = `${output.type}:${time}`;
+          markers.set(key, {
+            time,
+            position: output.metadata?.position === 'below' ? 'belowBar' : 'aboveBar',
+            shape: output.metadata?.shape === 'arrowUp' ? 'arrowUp' : 'circle',
+            color: String(output.metadata?.color || '#60a5fa'),
+            text: String(output.type || 'SIGNAL'),
+          });
+        } else if (output.kind === 'hline') {
+          const price = Number(output.price);
+          if (!Number.isFinite(price)) continue;
+          const existing = priceLines.find(line => line.id === output.id);
+          const line = {
+            id: output.id || `${token.sourceId}:hline:${price}`,
+            paneId: 'price',
+            price,
+            color: output.style?.color,
+            lineStyle: lineStyle(output.style?.lineStyle),
+            width: output.style?.lineWidth,
+            title: output.style?.title,
+          };
+          if (existing) Object.assign(existing, line);
+          else priceLines.push(line);
+        }
+      }
+    };
+
+    const emitModel = () => {
+      const first = [...points.values()].flat()[0];
+      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markers, priceLines, first?.time));
+    };
+
+    try {
+      const initial = runtime.executeIr(token.ir, bars);
+      collect(initial.outputs);
+      lastTime = bars.length ? Number((bars[bars.length - 1] as unknown as { timestamp: string | number }).timestamp) : Number.NaN;
+      emitModel();
+      if (req.mode === 'static') handlers.onDone?.();
+    } catch (error) {
+      handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
+
+    const rehydrateForLive = () => {
+      const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
+      if (!currentBars.length) return;
+      if (liveStarted) return;
+      runtime.loadIr(token.ir);
+      runtime.executeIr(token.ir, currentBars.slice(0, -1));
+      const latest = currentBars.at(-1);
+      if (!latest) return;
+      const result = runtime.executeBar(latest);
+      collect(result.outputs);
+      liveStarted = true;
+      lastTime = Number(latest.timestamp);
+      emitModel();
+    };
+
+    if (req.mode === 'live') rehydrateForLive();
+
+    return {
+      async getContext() {
+        const state = runtime.getState();
+        return {
+          language: 'corespirit',
+          phase: req.mode === 'live' && !stopped ? 'streaming' : 'idle',
+          barIndex: state.barIndex,
+          meta: {
+            title: req.prepared.meta.title,
+            overlay: req.prepared.meta.overlay,
+            precision: req.prepared.meta.precision,
+            shorttitle: req.prepared.meta.shorttitle,
+          },
+          plots: Object.fromEntries([...points.entries()].map(([key, values]) => [key, values])),
+          variables: state.locals,
+          warnings: [],
+        };
+      },
+      stop() {
+        stopped = true;
+      },
+      update(_inputs: Record<string, InputValue>, _props?: Record<string, InputValue>) {
+        if (stopped) return;
+        const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
+        points.clear();
+        markers.clear();
+        priceLines.splice(0, priceLines.length);
+        runtime.loadIr(token.ir);
+        const result = runtime.executeIr(token.ir, currentBars);
+        collect(result.outputs);
+        emitModel();
+      },
+      setVisibleRange() {
+        // CoreSpirit currently has renderer-neutral range-insensitive execution.
+      },
+      notifyBars(reason) {
+        if (stopped) return;
+        const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
+        if (!currentBars.length) return;
+        if (reason === 'backfill' || reason === 'complete') {
+          points.clear();
+          markers.clear();
+          priceLines.splice(0, priceLines.length);
+          runtime.loadIr(token.ir);
+          const result = runtime.executeIr(token.ir, currentBars);
+          collect(result.outputs);
+          liveStarted = req.mode === 'live';
+          lastTime = Number(currentBars.at(-1)?.timestamp);
+          emitModel();
+          return;
+        }
+        if (!liveStarted) rehydrateForLive();
+        const latest = currentBars.at(-1);
+        if (!latest) return;
+        const latestTime = Number(latest.timestamp);
+        const result = runtime.executeBar(latest);
+        collect(result.outputs);
+        lastTime = latestTime;
+        emitModel();
+      },
+    };
+  }
+}
+
+export default CoreSpiritVelaEngine;
