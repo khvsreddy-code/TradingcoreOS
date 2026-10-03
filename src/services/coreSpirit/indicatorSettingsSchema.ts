@@ -747,7 +747,7 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
     if (field.visibilityCondition) errors.push(...validateCondition(field.visibilityCondition, paths, field.path, 0, fieldByPath));
     if (field.enabledWhen) errors.push(...validateCondition(field.enabledWhen, paths, field.path, 0, fieldByPath));
   }
-    errors.push(...detectConditionCycles(allSchemaFields));
+  errors.push(...detectConditionCycles(allSchemaFields));
   for (const section of schema.sections) for (const field of section.fields) {
     const defaultError = validateIndicatorSettingValue(field, field.defaultValue);
     if (defaultError) errors.push(`default validation for '${field.path}': ${defaultError}`);
