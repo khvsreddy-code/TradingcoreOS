@@ -3443,3 +3443,14 @@ These systems do not grant host authority and remain outside appearance-driven i
 Stages 177–184 close the next depth layer: typed parameter value-domain validation, compiled dependency/reverse-dependent graphs, default-hydrated conditional state, deterministic profile-selected preset resolution, portable preset bundles/fingerprints, semantic dimensional algebra, explicit pure conversions, and the release gate at stage 184.
 
 **Validation:** 30 Node-only repository contracts pass; semantic TypeScript runtime contract passes via Node type stripping; full dependency-backed TypeScript/Vite build remains unclaimed because this extracted environment lacks the complete npm dependency tree.
+
+
+## v115 validator hardening — 2026-10-03
+
+The indicator dependency validator is now protected by a mandatory field-index argument. validateCondition() no longer creates an optional fallback map; the validator constructs one canonical schema-field index before validating visibility/dependency/enabled conditions. This directly prevents the historical ReferenceError: fieldByPath is not defined failure mode.
+
+- [x] Canonical field-index helper added.
+- [x] Field index is initialized before all dependency validation calls.
+- [x] validateCondition() requires the field index at compile time.
+- [x] Dedicated TCO_V115_INDICATOR_DEPENDENCY_FIELD_INDEX_CONTRACT_OK regression guard added to test:contracts.
+- [x] Historical run #75 confirmed as superseded; current mainline run #87 passed npm run test:contracts.
