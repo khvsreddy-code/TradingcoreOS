@@ -12,6 +12,10 @@ export type CoreSpiritBarState = {
   isLast: boolean;
   isRealtime: boolean;
   isConfirmed: boolean;
+  symbol?: string;
+  timeframe?: string;
+  mode?: CoreSpiritExecutionMode;
+  revision?: number;
 };
 
 /** Shared output contract. Rendering remains owned by Core Chart. */
@@ -38,6 +42,8 @@ export type CoreSpiritObject =
   | { kind: 'arrow'; id: string; start: { time: number; price: number }; end: { time: number; price: number }; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'shape'; id: string; time: number; price: number; shape: NonNullable<CoreSpiritVisualStyle['shape']>; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'polyline'; id: string; points: CoreSpiritPoint[]; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
+  | { kind: 'polygon'; id: string; points: CoreSpiritPoint[]; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
+  | { kind: 'customVisual'; id: string; geometry: { kind: string; points?: readonly { x: number; y: number }[]; [key: string]: unknown }; visual?: unknown; relativePosition?: unknown; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'polygon'; id: string; points: CoreSpiritPoint[]; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'customVisual'; id: string; geometry: { kind: string; points?: readonly { x: number; y: number }[]; [key: string]: unknown }; visual?: unknown; relativePosition?: unknown; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
   | { kind: 'hline'; id: string; price: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown> }
