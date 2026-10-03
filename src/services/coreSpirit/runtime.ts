@@ -12,7 +12,7 @@ import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { CoreSpiritCompiler } from './compiler';
 import { createCoreSpiritExecutionContext, createCoreSpiritExecutionFrame } from './executionContext';
 import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritDataResolutionContext } from './types';
-import type { CoreSpiritWorkspaceSlot } from './visualApp';
+import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './visualApp';
 import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
 import { sma as kernelSma, highest as kernelHighest, lowest as kernelLowest, emaStep, trueRange, rsiFromAverages } from './indicatorKernel';
@@ -376,8 +376,8 @@ export class CoreSpiritRuntime {
     if(name==='ui.panel.slider') return finish(this.uiRuntime.slider(args[0],String(args[1]??''),args[2],args[3],args[4],typeof args[5]==='string'?args[5]:undefined));
     if(name==='app.create') return finish(this.appRuntime.create(String(args[0]??'Trading App'),String(args[1]??'main') as CoreSpiritWorkspaceSlot));
     if(name==='app.chart') return finish(this.appRuntime.chart(String(args[0]??'main'),String(args[1]??'main') as CoreSpiritWorkspaceSlot,args[2]==null?undefined:String(args[2])));
-    if(name==='app.panel') return finish(this.appRuntime.panel(String(args[0]??'main'),String(args[1]??'custom') as CoreSpiritWorkspaceSlot,args[2]==null?undefined:String(args[2]),args[3]==null?undefined:String(args[3]),args[4]==null?undefined:String(args[4])));
-    if(name==='app.overlay') return finish(this.appRuntime.overlay(String(args[0]??'custom') as CoreSpiritChartAreaKind,args[1]==null?undefined:String(args[1]),args[2]==null?undefined:String(args[2])));
+    if(name==='app.panel') return finish(this.appRuntime.panel(String(args[0]??'main') as CoreSpiritWorkspaceSlot,String(args[1]??'custom') as CoreSpiritWorkspaceWidgetKind,args[2]==null?undefined:String(args[2]),args[3]==null?undefined:String(args[3]),args[4]==null?undefined:String(args[4])));
+    if(name==='app.overlay') return finish(this.appRuntime.overlay(String(args[0]??'custom') as CoreSpiritWorkspaceWidgetKind | 'custom',args[1]==null?undefined:String(args[1]),args[2]==null?undefined:String(args[2])));
     if(name==='app.targets') { this.appRuntime.targets(...args.map(x=>String(x)).filter(x=>x) as CoreSpiritExecutionTarget[]); return finish(`app:${this.options.sourceId}`); }
     if(name==='app.require') { this.appRuntime.requireFeature(String(args[0]??'')); return finish(null); }
     if(name==='app.bind') { this.appRuntime.bind(String(args[0]??''),String(args[1]??''),args[2]==null?undefined:String(args[2])); return finish(null); }
