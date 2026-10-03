@@ -730,6 +730,9 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
       if (field.validation?.maxLength != null && field.validation.maxLength < (field.validation.minLength ?? 0)) errors.push(`invalid maxLength for '${field.path}'`);
     }
   }
+  const allSchemaFields = schema.sections.flatMap(section => section.fields);
+  const fieldByPath = new Map<string, IndicatorSettingField>(allSchemaFields.map(field => [field.path, field]));
+
   for (const section of schema.sections) for (const field of section.fields) {
     if (field.visibleWhen && !paths.has(field.visibleWhen.path)) errors.push(`visibility dependency '${field.visibleWhen.path}' for '${field.path}' is not declared`);
     if (field.dependency) errors.push(...validateCondition(field.dependency, paths, field.path, 0, fieldByPath));
