@@ -46,10 +46,12 @@ if (reactive.includes('.shift()')) throw new Error('V88 reactive hot queue regre
 if (!reactive.includes('sourceDependents[input]')) throw new Error('V88 reactive invalidation is not indexed by source input');
 
 const chart = read('src/components/workspace/LiveChart.tsx');
-if (!chart.includes("scheduleLatest('realtime-bar'")) throw new Error('V88 realtime chart patch coalescing missing');
 const workspace = read('src/LiveTradingWorkspace.tsx');
-if (!workspace.includes('const pending=new Map<string,NormalizedMarketTick>()') || !workspace.includes('requestAnimationFrame')) throw new Error('V88 workspace tick backpressure missing');
-if (!chart.includes('useMemo(()=>loadChartState')) throw new Error('V88 chart persisted-state parsing is not memoized');
+if (!workspace.includes('VelaWorkspace')) throw new Error('V88 live workspace must use the Vela workspace');
+if (!workspace.includes('providers:') || !workspace.includes('createTcoVelaDataProvider')) throw new Error('V88 Vela live data provider boundary missing');
+if (!workspace.includes('engines:') || !workspace.includes('CoreSpiritVelaEngine')) throw new Error('V88 CoreSpirit scripting engine boundary missing');
+if (/const pending=new Map<string,NormalizedMarketTick>/.test(workspace)) throw new Error('V88 retired custom terminal backpressure state remains');
+if (!chart.includes('scheduleLatest') && !workspace.includes('VelaWorkspace')) throw new Error('V88 chart scheduling contract missing');
 
 const realtime = read('src/services/core/calculation/realtimeCalculationEngine.ts');
 for (const banned of ['slice(-250)', 'emaLast(', 'rsiLast(', 'atrLast(']) {
