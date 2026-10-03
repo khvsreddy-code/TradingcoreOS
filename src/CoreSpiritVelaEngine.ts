@@ -12,7 +12,8 @@ import type {
 } from './services/core/chart/velaChartFacade';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
-import type { CoreSpiritMarketBar, CoreSpiritObject } from './services/coreSpirit/types';
+import type { CoreSpiritObject } from './services/coreSpirit/types';
+import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData';
 
 type PreparedToken = {
   sourceId: string;
@@ -193,7 +194,7 @@ export class CoreSpiritVelaEngine {
             color: output.style?.color,
             lineStyle: lineStyle(output.style?.lineStyle),
             width: output.style?.lineWidth,
-            title: output.style?.title,
+            
           };
           if (existing) Object.assign(existing, line);
           else priceLines.push(line);
