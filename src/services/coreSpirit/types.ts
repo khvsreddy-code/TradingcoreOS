@@ -1,6 +1,6 @@
 import type { CoreSpiritAst } from './ast';
 import type { CoreSpiritMarketBar } from './marketData';
-import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
+import type { CoreSpiritSurfaceMetadata, CoreSpiritEventDestination } from './languageConcepts';
 import type { CoreSpiritVisualGeometry, CoreSpiritVisualPlacement, CoreSpiritVisualRelativePosition } from './visualCoordinates';
 
 /** Neutral market-bar alias; CoreSpirit stays independent of broker adapters. */
@@ -55,7 +55,7 @@ export type CoreSpiritObject =
   | { kind: 'footprint'; id: string; time: number; rows: CoreSpiritFootprintSceneRow[]; tickSize: number; style?: CoreSpiritVisualStyle; metadata?: Record<string, unknown>; visual?: CoreSpiritVisualPlacement }
   | { kind: 'customVisual'; id: string; time?: number; metadata?: Record<string, unknown>; visual?: CoreSpiritVisualPlacement; geometry: CoreSpiritVisualGeometry | Record<string, unknown> }
   | { kind: 'signal'; time: number; type: string; metadata?: Record<string, unknown> }
-  | { kind: 'event'; id: string; name: string; time: number; destinations?: string[]; metadata?: Record<string, unknown> }
+  | { kind: 'event'; id: string; name: string; time: number; destinations?: CoreSpiritEventDestination[]; metadata?: Record<string, unknown> }
   | { kind: 'scanCandidate'; id: string; time?: number; score?: number; label?: string; metadata?: Record<string, unknown> }
   | { kind: 'orderIntent'; id: string; time: number; side: 'long'|'short'|'flat'; confidence: number; stop?: number|null; target?: number|null; tag?: string; sizing?: { kind:'quantity'; value:number } | { kind:'riskPercent'; value:number } | { kind:'all' }; metadata?: Record<string, unknown> };
 
