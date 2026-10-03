@@ -11,7 +11,10 @@ import { coreSpiritAboveBar, coreSpiritAtBar, coreSpiritBelowBar, coreSpiritChar
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { CoreSpiritCompiler } from './compiler';
 import { createCoreSpiritExecutionContext, createCoreSpiritExecutionFrame } from './executionContext';
-import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './types';
+import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritDataResolutionContext } from './types';
+import type { CoreSpiritWorkspaceSlot } from './visualApp';
+import type { CoreSpiritChartAreaKind } from './visualCoordinates';
+import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
 import { sma as kernelSma, highest as kernelHighest, lowest as kernelLowest, emaStep, trueRange, rsiFromAverages } from './indicatorKernel';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 
