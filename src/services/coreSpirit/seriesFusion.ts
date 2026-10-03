@@ -58,7 +58,7 @@ export function planCoreSpiritSeriesFusion(program:CoreSpiritIrProgram):CoreSpir
       used.add(cur);
       const next:number[]=[];
       for(let j=cur+1;j<ins.length;j++){const x=ins[j];if(x.op==='call'&&canon(x.args[0])===canon(i.dest))next.push(j);}
-      cur=next.length===1&&ins[next[0]].op==='call'&&fusable(ins[next[0]].name)?next[0]:-1;
+      if(next.length===1){const nextInstr=ins[next[0]!];cur=nextInstr.op==='call'&&fusable(nextInstr.name)?next[0]!: -1;}else{cur=-1;}
     }
     if(stages.length<2){for(const s of stages)used.delete(s.instruction);continue;}
     const operations=Object.freeze(stages.map(s=>({name:s.name,length:s.length})));
