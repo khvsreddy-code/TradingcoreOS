@@ -1,6 +1,5 @@
 import { tradingApi, readTradingApiJson } from '../http/tradingApi';
 import { MarketFeedEvent } from '../../types/market';
-import { upstoxMarketDataClient } from './UpstoxMarketDataClient';
 
 type Listener = (event: MarketFeedEvent) => void;
 
@@ -149,7 +148,6 @@ export class BrokerMarketDataClient {
 
   subscribe(brokerId: string, instrumentKeys: string[], listener: Listener, depthInstrumentKey?: string): () => void {
     const id = brokerId.toLowerCase();
-    if (id === 'upstox') return upstoxMarketDataClient.subscribe(instrumentKeys, listener, 'full');
     if (id !== 'fyers') {
       listener({ type: 'error', error: `Live market data is not implemented for ${brokerId}` });
       return () => {};
@@ -209,10 +207,6 @@ export class BrokerMarketDataClient {
 
   disconnect(brokerId: string): void {
     const id = brokerId.toLowerCase();
-    if (id === 'upstox') {
-      upstoxMarketDataClient.disconnect();
-      return;
-    }
     for (const [key, stream] of this.streams) {
       if (!key.startsWith(`${id}:`)) continue;
       stream.stopped = true;
