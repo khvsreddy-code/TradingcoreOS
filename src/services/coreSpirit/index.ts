@@ -3,7 +3,9 @@ export * from './types';
 export * from './ast';
 export * from './lexer';
 export * from './parser';
-export * from './semanticAnalyzer';
+export { analyzeCoreSpirit } from './semanticAnalyzer';
+export type { CoreSpiritDiagnostic, CoreSpiritUdt, CoreSpiritSemanticOptions, CoreSpiritSemanticResult } from './semanticAnalyzer';
+
 export * from './ir';
 export * from './compiler';
 export * from './standardLibrary';
@@ -41,7 +43,8 @@ export * from './session';
 export * from './irContract';
 export * from './replay';
 export * from './coreSpiritRoadmap';
-export * from './sandboxPolicy';
+export { CORE_SPIRIT_DEFAULT_SANDBOX, validateCoreSpiritSandboxPolicy } from './sandboxPolicy';
+export type { CoreSpiritSandboxPolicy, CoreSpiritCapability as CoreSpiritPolicyCapability } from './sandboxPolicy';
 export * from './executionProtocol';
 export * from './sourceMetadata';
 export * from './strategyContract';
@@ -91,7 +94,8 @@ export * from './semanticGraph';
 export * from './reactiveEngine';
 
 export * from './executionPlanner';
-export * from './capabilitySandbox';
+export { CORE_SPIRIT_SANDBOX_LIMITS, CoreSpiritCapabilityDeniedError, CoreSpiritSandboxQuotaError, CoreSpiritCapabilitySandbox, createCoreSpiritSandbox, validateCoreSpiritSandboxArchitecture, computeCapabilityForBackend } from './capabilitySandbox';
+export type { CoreSpiritSandboxCapability, CoreSpiritForbiddenCapability as CoreSpiritSandboxForbiddenCapability, CoreSpiritSandboxLimits, CoreSpiritCapabilitySandboxOptions } from './capabilitySandbox';
 export * from './coreSpiritV1Runtime';
 
 export * from './visualProjection';
@@ -120,7 +124,8 @@ export * from './deploymentLifecycle';
 export * from './reconciliation';
 
 
-export * from './coreSpiritExecutionModel';
+export { CORE_SPIRIT_AUTHORING_LEVELS, CORE_SPIRIT_EXECUTION_CONTEXTS, CORE_SPIRIT_VALUE_KINDS, CORE_SPIRIT_NODE_CLASSES, CORE_SPIRIT_COMPONENT_BACKENDS, classifyCoreSpiritValueKind, executionLaneForNode, executionClassForNode, deriveCoreSpiritNodeExecutionDescriptor } from './coreSpiritExecutionModel';
+export type { CoreSpiritAuthoringLevel, CoreSpiritValueKind, CoreSpiritNodeClass, CoreSpiritValueType, CoreSpiritComponentBackend, CoreSpiritComponentExecutionProfile, CoreSpiritComponentStateProfile, CoreSpiritComponentDocumentation, CoreSpiritComponentPort, CoreSpiritComponentContract, CoreSpiritExecutionLane, CoreSpiritNodeExecutionDescriptor } from './coreSpiritExecutionModel';
 
 export * from './coreSpiritPerformance';
 
