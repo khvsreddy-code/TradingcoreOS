@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { VelaWorkspace } from './vendor/vela/src/workspace';
+import { VelaWorkspace } from './services/core/chart/velaChartFacade';
 import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine';
 
