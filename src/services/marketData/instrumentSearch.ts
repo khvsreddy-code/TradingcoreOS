@@ -24,10 +24,6 @@ export async function searchFyersInstruments(q: string, segment: InstrumentSearc
   return searchBrokerInstruments('fyers', q, segment, limit);
 }
 
-export async function searchUpstoxInstruments(q: string, segment: InstrumentSearchSegment = 'all', limit = 30): Promise<SearchInstrument[]> {
-  return searchBrokerInstruments('upstox', q, segment, Math.min(limit, 30));
-}
-
 export async function searchBrokerInstruments(brokerId: string, q: string, segment: InstrumentSearchSegment = 'all', limit = 60): Promise<SearchInstrument[]> {
   const normalizedQuery = q.trim();
   if (normalizedQuery.length < 2) return [];
