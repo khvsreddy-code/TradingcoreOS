@@ -5,6 +5,9 @@ import type { MarketFeedEvent, NormalizedMarketTick } from './types/market';
 const SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
   { ticker: 'NIFTYBANK-INDEX', prefix: 'NSE', description: 'NIFTY BANK', type: 'index' },
+  { ticker: 'FINNIFTY-INDEX', prefix: 'NSE', description: 'NIFTY Financial Services', type: 'index' },
+  { ticker: 'MIDCPNIFTY-INDEX', prefix: 'NSE', description: 'NIFTY Midcap Select', type: 'index' },
+  { ticker: 'SENSEX-INDEX', prefix: 'BSE', description: 'S&P BSE SENSEX', type: 'index' },
 ];
 
 function runtimeSymbol(ticker: string): string {
@@ -96,12 +99,52 @@ export class TcoVelaDataProvider implements DataProvider {
 
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
     const symbol = runtimeSymbol(ticker);
-    const limit = Math.max(100, Math.min(10000, Math.floor(Number(range.limit) || 1000)));
-    const rows = await tradingCoreRuntime.getHistoricalData(symbol, timeframe, undefined, limit);
+    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
+
+    // Fast path: one broker-routed request for the visible history. A retry is
+    // deliberate here because a cold FYERS session can become ready a moment
+    // after the Vela workspace asks for its first bars.
+    let rows: Awaited<ReturnType<typeof tradingCoreRuntime.getHistoricalData>> = [];
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        rows = await tradingCoreRuntime.getHistoricalData(symbol, timeframe, undefined, requested);
+        if (rows.length) break;
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+      }
+    }
+
     let bars = dedupe((rows || []).map(row => asBar(row)));
     if (range.from != null) bars = bars.filter(bar => Number(bar.time) >= Number(range.from));
     if (range.to != null) bars = bars.filter(bar => Number(bar.time) <= Number(range.to));
-    return bars.slice(-limit);
+
+    // Do not allow a transient history failure to leave Vela permanently blank.
+    // The FYERS quote route is a live seed only; the websocket immediately takes
+    // ownership and forms the current candle.
+    if (!bars.length) {
+      try {
+        const quote = await tradingCoreRuntime.getMarketQuotes([symbol]);
+        const row = quote[symbol];
+        if (row && Number.isFinite(Number(row.ltp)) && Number(row.ltp) > 0) {
+          const now = Date.now();
+          bars = [{
+            time: Math.floor(now / timeframeMs(timeframe)) * timeframeMs(timeframe),
+            open: Number(row.ltp),
+            high: Number(row.ltp),
+            low: Number(row.ltp),
+            close: Number(row.ltp),
+            volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined,
+          }];
+        }
+      } catch {
+        // The caller gets the original history failure through the normal Vela
+        // fault boundary; this fallback is intentionally best-effort.
+      }
+    }
+    if (!bars.length && lastError) throw lastError;
+    return bars.slice(-requested);
   }
 
   async getBarsProgressive(ticker: string, timeframe: string, range: BarRange, onBatch: (bars: OHLCV[]) => void, opts?: { signal?: AbortSignal }): Promise<OHLCV[]> {
