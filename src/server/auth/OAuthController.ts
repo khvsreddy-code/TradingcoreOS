@@ -14,10 +14,10 @@ function getBrokerRedirectUri(brokerId: string): string {
 
 export class OAuthController {
   /**
-   * GET /api/auth/broker/login?broker=upstox
+   * GET /api/auth/broker/login?broker=fyers
    */
   public static async handleLogin(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const brokerId = (req.query.broker as string) || (req.query.brokerId as string) || 'upstox';
+    const brokerId = (req.query.broker as string) || (req.query.brokerId as string) || 'fyers';
     const userId = req.tradingCoreUserId!;
 
     try {
@@ -36,7 +36,7 @@ export class OAuthController {
     try {
       const { broker, brokerId, code, auth_code, state } = req.body;
       // FYERS v3 returns the actual credential as `auth_code`; `code=200` is
-      // only the success status. Upstox uses `code` for its authorization code.
+      // only the success status. Accept the generic `code` field as a compatibility fallback.
       const authorizationCode = auth_code || code;
 
       if (!authorizationCode) {
