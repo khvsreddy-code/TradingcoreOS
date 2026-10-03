@@ -1,364 +1,8 @@
 import crypto from 'node:crypto';
 import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
 import { withBrokerRequestGate } from '../BrokerRequestGate.js';
+import { FyersApiClient } from '../../fyers/core/FyersApiClient.js';
 import type { BrokerHistory, BrokerMarketQuotes, BrokerOptionChain, BrokerOrderPayload, BrokerProfile, CancelResult, OrderMutationResult } from '../contracts.js';
-
-export class UpstoxAdapter extends BaseBroker {
-  readonly brokerId = 'upstox';
-  readonly name = 'Upstox Pro';
-
-  getAuthUrl(redirectUri: string, state: string, clientId?: string): string {
-    const key = process.env.UPSTOX_CLIENT_ID;
-    if (!key) throw new Error('UPSTOX_CLIENT_ID is not configured');
-    return `https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id=${encodeURIComponent(key)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
-  }
-
-  async exchangeCodeForToken(code: string, redirectUri: string, clientId?: string): Promise<TokenExchangeResult> {
-    const key = process.env.UPSTOX_CLIENT_ID;
-    const secret = process.env.UPSTOX_CLIENT_SECRET;
-    if (!key || !secret) return { success: false, error: 'Upstox OAuth is not configured' };
-
-    try {
-      const response = await fetch('https://api.upstox.com/v2/login/authorization/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        },
-        body: new URLSearchParams({
-          code,
-          client_id: key,
-          client_secret: secret,
-          redirect_uri: redirectUri,
-          grant_type: 'authorization_code',
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: data?.errors?.[0]?.message || data?.message || 'Token exchange failed',
-        };
-      }
-
-      return {
-        success: true,
-        rawAccessToken: data.access_token,
-        rawRefreshToken: data.refresh_token,
-        expiresInSeconds: data.expires_in || 86400,
-        clientCode: data.user_id, // Often provided in token or profile response, Upstox might not return it here, but let's assume if it does or just use a default format.
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err?.message || 'Failed to connect to Upstox API',
-      };
-    }
-  }
-
-  async refreshToken(refreshToken: string): Promise<TokenExchangeResult> {
-    const key = process.env.UPSTOX_CLIENT_ID;
-    const secret = process.env.UPSTOX_CLIENT_SECRET;
-    if (!key || !secret) return { success: false, error: 'Upstox OAuth is not configured' };
-
-    try {
-      const response = await fetch('https://api.upstox.com/v2/login/authorization/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        },
-        body: new URLSearchParams({
-          client_id: key,
-          client_secret: secret,
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: data?.errors?.[0]?.message || data?.message || 'Token refresh failed',
-        };
-      }
-
-      return {
-        success: true,
-        rawAccessToken: data.access_token,
-        rawRefreshToken: data.refresh_token, // Upstox might not issue a new one, handle safely
-        expiresInSeconds: data.expires_in || 86400,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err?.message || 'Failed to refresh token from Upstox API',
-      };
-    }
-  }
-
-  private async upstoxFetch(endpoint: string, accessToken: string, options: RequestInit = {}) {
-    const url = `https://api.upstox.com/v2${endpoint}`;
-    const headers: Record<string, string> = {
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-    };
-    
-    if (options.method === 'POST' || options.method === 'PUT') {
-      headers['Content-Type'] = 'application/json';
-    }
-
-    const response = await fetch(url, { ...options, headers: { ...headers, ...options.headers } });
-    const data = await response.json();
-    
-    if (!response.ok || data.status === 'error') {
-      throw new Error(data?.errors?.[0]?.message || data?.message || 'Upstox API Error');
-    }
-    
-    return data.data;
-  }
-
-  async getProfile(accessToken: string): Promise<BrokerProfile> {
-    const data = await this.upstoxFetch('/user/profile', accessToken);
-    return {
-      userId: data.user_id,
-      name: data.user_name,
-      email: data.email,
-      broker: data.broker || 'Upstox',
-    };
-  }
-
-  async getFunds(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').AccountFunds> {
-    // Upstox Fund & Margin V3 is now the preferred endpoint.
-    const response = await fetch('https://api.upstox.com/v3/user/get-funds-and-margin', {
-      headers: { Accept: 'application/json', 'Api-Version': '3.0', Authorization: `Bearer ${accessToken}` },
-    });
-    const payload = await response.json();
-    if (!response.ok || payload?.status === 'error') {
-      throw new Error(payload?.errors?.[0]?.message || payload?.message || 'Upstox funds API error');
-    }
-    const data = payload?.data || {};
-    const available = Number(data?.available_to_trade?.total || 0);
-    const cash = data?.available_to_trade?.cash_available_to_trade || {};
-    const marginUsed = Number(cash?.margin_used?.total || data?.available_to_trade?.pledge_available_to_trade?.margin_used?.total || 0);
-    return {
-      totalCapital: available + marginUsed,
-      availableMargin: available,
-      usedMargin: marginUsed,
-      collateralMargin: Number(data?.available_to_trade?.pledge_available_to_trade?.total || 0),
-    };
-  }
-
-  async getHoldings(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Holding[]> {
-    const data = await this.upstoxFetch('/portfolio/long-term-holdings', accessToken);
-    return (data || []).map((h: any) => ({
-      id: h.instrument_token || h.trading_symbol || `h_${Math.random()}`,
-      symbol: h.trading_symbol || h.company_name,
-      quantity: h.quantity,
-      avgPrice: h.average_price,
-      ltp: h.last_price,
-      pnl: h.pnl,
-      dayChange: h.day_change_percentage,
-    }));
-  }
-
-  async getPositions(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').Position[]> {
-    const data = await this.upstoxFetch('/portfolio/short-term-positions', accessToken);
-    return (data || []).map((p: any) => ({
-      id: p.instrument_token || p.trading_symbol || `p_${Math.random()}`,
-      symbol: p.trading_symbol,
-      quantity: p.quantity || p.net_quantity,
-      avgPrice: p.average_price || p.buy_price,
-      ltp: p.last_price,
-      pnl: p.pnl,
-      product: p.product,
-    }));
-  }
-
-  async getOrders(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').OrderResult[]> {
-    const data = await this.upstoxFetch('/order/retrieve-all', accessToken);
-    return (data || []).map((o: any) => ({
-      orderId: o.order_id,
-      status: o.status,
-      message: o.status_message || o.status,
-      timestamp: o.order_timestamp,
-    }));
-  }
-
-  async getTrades(accessToken: string): Promise<import('../../../services/brokers/BrokerAdapter.js').TradeRecord[]> {
-    const data = await this.upstoxFetch('/order/trades/get-trades-for-day', accessToken);
-    return (data || []).map((trade: any) => ({ tradeId: trade.trade_id, orderId: trade.order_id, symbol: trade.trading_symbol, side: trade.transaction_type, quantity: trade.quantity, price: trade.average_price, timestamp: trade.trade_timestamp, product: trade.product }));
-  }
-
-  async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> {
-    if (!instrumentKeys.length) return {};
-    const data = await this.upstoxFetch(`/market-quote/quotes?instrument_key=${encodeURIComponent(instrumentKeys.join(','))}`, accessToken);
-    const out: BrokerMarketQuotes = {};
-    for (const [key, value] of Object.entries(data || {})) {
-      const row = value as any;
-      const symbol = row?.instrument_token || row?.symbol || key;
-      const ltp = Number(row?.last_price ?? row?.ltp ?? 0);
-      const ohlc = row?.ohlc || {};
-      const prevClose = Number(ohlc?.close ?? row?.previous_close ?? ltp);
-      const change = Number.isFinite(ltp) && Number.isFinite(prevClose) ? ltp - prevClose : 0;
-      out[symbol] = {
-        ltp: Number.isFinite(ltp) ? ltp : 0,
-        chg: String(change),
-        change,
-        changePercent: prevClose ? (change / prevClose) * 100 : 0,
-        volume: Number(row?.volume ?? row?.volume_traded ?? 0),
-        bid: Number(row?.depth?.buy?.[0]?.price ?? row?.bid_price ?? 0),
-        ask: Number(row?.depth?.sell?.[0]?.price ?? row?.ask_price ?? 0),
-        timestamp: new Date().toISOString(),
-      };
-    }
-    return out;
-  }
-
-  async getHistoricalData(accessToken: string, instrumentKey: string, interval: string, limit = 10000): Promise<BrokerHistory> {
-    const map: Record<string,{unit:string;interval:string}> = {
-      '1minute':{unit:'minutes',interval:'1'}, '2minute':{unit:'minutes',interval:'2'}, '3minute':{unit:'minutes',interval:'3'},
-      '5minute':{unit:'minutes',interval:'5'}, '10minute':{unit:'minutes',interval:'10'}, '15minute':{unit:'minutes',interval:'15'},
-      '20minute':{unit:'minutes',interval:'20'}, '30minute':{unit:'minutes',interval:'30'}, '60minute':{unit:'hours',interval:'1'},
-      '120minute':{unit:'hours',interval:'2'}, '240minute':{unit:'hours',interval:'4'}, 'day':{unit:'days',interval:'1'},
-      '1day':{unit:'days',interval:'1'}, 'week':{unit:'weeks',interval:'1'}, 'month':{unit:'months',interval:'1'},
-    };
-    const spec = map[interval] || (/^(\d+)minute$/.test(interval) ? {unit:'minutes',interval:RegExp.$1} : {unit:'days',interval:'1'});
-    const to = new Date(); const days = spec.unit==='minutes' ? (Number(spec.interval)<=15 ? 31 : 92) : spec.unit==='hours' ? 92 : spec.unit==='days' ? 365 : spec.unit==='weeks' ? 3650 : 3650;
-    const from = new Date(to.getTime() - days*86400000);
-    return this.fetchUpstoxHistoryV3(accessToken,instrumentKey,spec.unit,spec.interval,to,from,limit);
-  }
-
-  async getHistoricalDataBefore(accessToken: string, instrumentKey: string, interval: string, beforeTimestamp: string, limit = 5_000): Promise<BrokerHistory> {
-    const map: Record<string,{unit:string;interval:string}> = {
-      '1minute':{unit:'minutes',interval:'1'}, '2minute':{unit:'minutes',interval:'2'}, '3minute':{unit:'minutes',interval:'3'},
-      '5minute':{unit:'minutes',interval:'5'}, '10minute':{unit:'minutes',interval:'10'}, '15minute':{unit:'minutes',interval:'15'},
-      '20minute':{unit:'minutes',interval:'20'}, '30minute':{unit:'minutes',interval:'30'}, '60minute':{unit:'hours',interval:'1'},
-      '120minute':{unit:'hours',interval:'2'}, '240minute':{unit:'hours',interval:'4'}, 'day':{unit:'days',interval:'1'},
-      '1day':{unit:'days',interval:'1'}, 'week':{unit:'weeks',interval:'1'}, 'month':{unit:'months',interval:'1'},
-    };
-    const spec = map[interval] || {unit:'days',interval:'1'};
-    const to = new Date(beforeTimestamp); const days = spec.unit==='minutes' ? (Number(spec.interval)<=15 ? 31 : 92) : spec.unit==='hours' ? 92 : spec.unit==='days' ? 365 : spec.unit==='weeks' ? 3650 : 3650;
-    const from = new Date(to.getTime() - days*86400000);
-    return this.fetchUpstoxHistoryV3(accessToken,instrumentKey,spec.unit,spec.interval,to,from,limit);
-  }
-
-  private async fetchUpstoxHistoryV3(accessToken:string,instrumentKey:string,unit:string,interval:string,to:Date,from:Date,limit:number):Promise<BrokerHistory>{
-    const fmt=(d:Date)=>d.toISOString().slice(0,10);
-    const data=await this.upstoxFetch(`/historical-candle/${encodeURIComponent(instrumentKey)}/${unit}/${interval}/${fmt(to)}/${fmt(from)}`,accessToken);
-    return (data?.candles||[]).map((row:any[])=>({timestamp:new Date(String(row[0])).toISOString(),open:Number(row[1]),high:Number(row[2]),low:Number(row[3]),close:Number(row[4]),volume:Number(row[5]||0)})).filter((x:any)=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).sort((a:any,b:any)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).slice(-Math.max(100,Math.min(10000,Number(limit)||5000)));
-  }
-  async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> {
-    const data = await this.upstoxFetch(`/option/chain?instrument_key=${encodeURIComponent(instrumentKey)}&expiry_date=${encodeURIComponent(expiryDate)}`, accessToken);
-    const rows = (data || []).map((row: any) => ({ strike: Number(row.strike_price), expiry: row.expiry, underlyingKey: row.underlying_key, call: normalizeOptionQuote(row.call_options), put: normalizeOptionQuote(row.put_options) })).filter((row: any) => Number.isFinite(row.strike));
-    const spot = Number(data?.[0]?.underlying_spot_price || 0);
-    // Keep the wire payload tight: seven strikes on either side of ATM is enough
-    // for the chart's compact OI support/resistance selection.
-    const strikes: number[] = [...new Set<number>(rows.map((r: any) => Number(r.strike)).filter(Number.isFinite))].sort((a, b) => a - b);
-    const atm = strikes.reduce((best: number, strike: number, i: number) => Math.abs(strike - spot) < Math.abs(strikes[best] - spot) ? i : best, 0);
-    const keep = new Set(strikes.slice(Math.max(0, atm - 7), atm + 8));
-    return { underlyingKey: instrumentKey, expiry: data?.[0]?.expiry || expiryDate, spot, contracts: rows.filter((row: any) => keep.has(row.strike)) };
-  }
-
-  async placeOrder(accessToken: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
-    validateUpstoxOrder(orderData);
-    const payload = {
-      quantity: orderData.quantity || 1,
-      product: normalizeUpstoxProduct(orderData.product),
-      validity: orderData.validity || 'DAY',
-      price: orderData.price || 0,
-      tag: orderData.tag || 'tradingcore',
-      instrument_token: orderData.instrument_token,
-      order_type: normalizeUpstoxOrderType(String(orderData.order_type ?? orderData.orderType ?? '')),
-      transaction_type: orderData.side ? orderData.side.toUpperCase() : 'BUY',
-      disclosed_quantity: 0,
-      trigger_price: orderData.trigger_price || 0,
-      is_amo: Boolean(orderData.is_amo),
-      slice: Boolean(orderData.slice),
-      market_protection: orderData.market_protection ?? -1,
-    };
-
-    const data = await this.upstoxHftFetch('/v3/order/place', accessToken, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    return {
-      orderId: data.order_id,
-      status: 'PENDING',
-      message: 'Order placed successfully',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  async modifyOrder(accessToken: string, orderId: string, orderData: BrokerOrderPayload): Promise<OrderMutationResult> {
-    const payload = {
-      order_id: orderId,
-      quantity: orderData.quantity,
-      validity: orderData.validity || 'DAY',
-      price: orderData.price,
-      order_type: orderData.order_type || (orderData.price ? 'LIMIT' : 'MARKET'),
-      trigger_price: orderData.trigger_price || 0,
-    };
-
-    const data = await this.upstoxHftFetch('/v3/order/modify', accessToken, {
-      method: 'PUT',
-      body: JSON.stringify(payload)
-    });
-    return {
-      orderId: data.order_id,
-      status: 'PENDING',
-      message: 'Order modified successfully',
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  async cancelOrder(accessToken: string, orderId: string): Promise<CancelResult> {
-    const data = await this.upstoxHftFetch(`/v3/order/cancel?order_id=${encodeURIComponent(orderId)}`, accessToken, {
-      method: 'DELETE'
-    });
-    return {
-      success: true,
-      message: `Order ${orderId} cancelled`,
-    };
-  }
-
-  private async upstoxHftFetch(path: string, accessToken: string, options: RequestInit = {}) {
-    const response = await fetch(`https://api-hft.upstox.com${path}`, { ...options, headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...options.headers } });
-    const data = await response.json();
-    if (!response.ok || data.status === 'error') throw new Error(data?.errors?.[0]?.message || data?.message || 'Upstox API error');
-    return data.data;
-  }
-}
-
-function validateUpstoxOrder(order: BrokerOrderPayload): void {
-  if (!Number.isInteger(order.quantity) || order.quantity <= 0) throw new Error('Quantity must be a positive whole number');
-  if (!/^[A-Z_]+\|.+$/.test(order.instrument_token || '')) throw new Error('A valid Upstox instrument token is required');
-  if (!['BUY', 'SELL', 'Buy', 'Sell'].includes(order.side)) throw new Error('Order side must be BUY or SELL');
-  if (!['D', 'I', 'MTF', 'CNC', 'MIS', 'NRML'].includes(order.product)) throw new Error('Unsupported product');
-  const orderType = String(order.order_type ?? order.orderType ?? '');
-  if (!['MARKET', 'LIMIT', 'SL', 'SL-M', 'Market', 'Limit'].includes(orderType)) throw new Error('Unsupported order type');
-  const type = orderType.toUpperCase();
-  if ((type === 'LIMIT' || type === 'SL') && !(Number(order.price) > 0)) throw new Error('A positive price is required for limit and SL orders');
-  if ((type === 'SL' || type === 'SL-M') && !(Number(order.trigger_price ?? order.triggerPrice) > 0)) throw new Error('A positive trigger price is required for stop-loss orders');
-}
-
-function normalizeUpstoxProduct(product: string): string {
-  return ({ CNC: 'D', MIS: 'I', NRML: 'D' } as Record<string, string>)[product] || product;
-}
-
-function normalizeUpstoxOrderType(orderType: string): string {
-  return ({ Market: 'MARKET', Limit: 'LIMIT' } as Record<string, string>)[orderType] || orderType;
-}
-
-function normalizeOptionQuote(option: any) {
-  if (!option) return undefined;
-  const market = option.market_data || {};
-  return { instrumentKey: option.instrument_key, ltp: market.ltp, volume: market.volume, oi: market.oi, previousOi: market.prev_oi, bidPrice: market.bid_price, bidQuantity: market.bid_qty, askPrice: market.ask_price, askQuantity: market.ask_qty };
-}
 
 export class FyersAdapter extends BaseBroker {
   readonly brokerId = 'fyers';
@@ -539,52 +183,22 @@ export class FyersAdapter extends BaseBroker {
 
   async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> {
     if (!instrumentKeys.length) return {};
-    // Dedicated chart-heartbeat lane. Quote snapshots are sampled every few
-    // seconds and must never wait behind history/options/portfolio traffic.
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2_500);
-    try {
-      const query = encodeURIComponent(instrumentKeys.join(','));
-      const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${query}`, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
-      });
-      const text = await response.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        const error: any = new Error(`Fyers quotes returned a non-JSON response (${response.status})`);
-        error.status = response.status;
-        throw error;
-      }
-      if (!response.ok || data?.s === 'error') {
-        const error: any = new Error(data?.message || `Fyers quotes failed (${response.status})`);
-        error.status = response.status;
-        error.brokerRateLimited = response.status === 429 || Number(data?.code) === 429;
-        throw error;
-      }
-      return Object.fromEntries((data?.d || []).map((q: any) => [
-        q.n || q.v?.symbol,
-        {
-          ltp: Number(q.v?.lp || 0),
-          chg: String(q.v?.chp ?? q.v?.ch ?? 0),
-          change: Number(q.v?.ch ?? 0),
-          changePercent: Number(q.v?.chp ?? 0),
-          volume: Number(q.v?.volume ?? 0),
-          bid: Number(q.v?.bid ?? 0),
-          ask: Number(q.v?.ask ?? 0),
-          timestamp: new Date().toISOString(),
-        },
-      ]));
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
-        const timeoutError: any = new Error('Fyers quotes request timed out');
-        timeoutError.status = 504;
-        throw timeoutError;
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
+    const payload: any = await new FyersApiClient(accessToken).dataGet('/quotes', {
+      symbols: instrumentKeys.join(','),
+    });
+    return Object.fromEntries((payload?.d || []).map((q: any) => [
+      q.n || q.v?.symbol,
+      {
+        ltp: Number(q.v?.lp ?? q.v?.ltp ?? 0),
+        chg: String(q.v?.chp ?? q.v?.ch ?? 0),
+        change: Number(q.v?.ch ?? 0),
+        changePercent: Number(q.v?.chp ?? 0),
+        volume: Number(q.v?.volume ?? 0),
+        bid: Number(q.v?.bid ?? 0),
+        ask: Number(q.v?.ask ?? 0),
+        timestamp: new Date().toISOString(),
+      },
+    ]));
   }
 
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string, limit = 10000): Promise<BrokerHistory> {
@@ -598,46 +212,37 @@ export class FyersAdapter extends BaseBroker {
     const requestedLimit = Math.max(100, Math.min(5_000, Math.floor(Number(limit) || 5_000)));
     const to = Math.floor(Date.now() / 1000);
     const minutesPerCandle = /^\d+$/.test(resolution) ? Math.max(1, Number(resolution)) : 1440;
-    const lookbackDays = resolution === 'D' ? Math.min(366, requestedLimit) : Math.min(180, Math.max(7, Math.ceil((requestedLimit * minutesPerCandle) / 375 * 1.15)));
+    const lookbackDays = resolution === 'D'
+      ? Math.min(366, requestedLimit)
+      : Math.min(180, Math.max(7, Math.ceil((requestedLimit * minutesPerCandle) / 375 * 1.15)));
     const from = to - lookbackDays * 86400;
-    const params = new URLSearchParams({ symbol: instrumentKey, resolution, date_format: '0', range_from: String(from), range_to: String(to) });
-    const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) } });
-    const text = await response.text();
-    let data: any;
-    try { data = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
-    if (!response.ok || data?.s === 'error') {
-      const error: any = new Error(data?.message || `Fyers history failed (${response.status})`);
-      error.status = response.status || (Number(data?.code) === 429 ? 429 : 0);
-      error.brokerCode = Number(data?.code) || undefined;
-      throw error;
-    }
-    return (data?.candles || []).map((c: any[]) => ({ timestamp: new Date(Number(c[0]) * 1000).toISOString(), open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5] || 0) })).slice(-requestedLimit);
+    const payload: any = await new FyersApiClient(accessToken).dataGet('/history', {
+      symbol: instrumentKey,
+      resolution,
+      date_format: '0',
+      range_from: from,
+      range_to: to,
+    });
+    return (payload?.candles || [])
+      .map((c: any[]) => ({
+        timestamp: new Date(Number(c[0]) * 1000).toISOString(),
+        open: Number(c[1]),
+        high: Number(c[2]),
+        low: Number(c[3]),
+        close: Number(c[4]),
+        volume: Number(c[5] || 0),
+      }))
+      .filter((x: any) => [x.open, x.high, x.low, x.close, x.volume].every(Number.isFinite))
+      .slice(-requestedLimit);
   }
 
   async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> {
-    // FYERS v3 options-chain endpoint returns CE/PE legs, OI, change-OI and
-    // previous-session OI in one snapshot. Keep the request centred on ATM
-    // with seven strikes on either side so the chart can select meaningful
-    // 3–7 strike OI support/resistance without downloading the full chain.
-    const params = new URLSearchParams({ symbol: instrumentKey, strikecount: '7' });
-    if (expiryDate && expiryDate !== 'current_week' && /^\d+$/.test(expiryDate)) params.set('timestamp', expiryDate);
-    const response = await withBrokerRequestGate('fyers', accessToken, () => fetch(`https://api-t1.fyers.in/data/options-chain-v3?${params.toString()}`, {
-      headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) },
-    }));
-    const text = await response.text();
-    let payload: any;
-    try { payload = JSON.parse(text); } catch {
-      const error: any = new Error(`Fyers option-chain returned a non-JSON response (${response.status})`);
-      error.status = response.status;
-      throw error;
-    }
-    if (!response.ok || payload?.s === 'error') {
-      const error: any = new Error(payload?.message || `Fyers option-chain failed (${response.status})`);
-      error.status = response.status;
-      error.brokerRateLimited = response.status === 429 || Number(payload?.code) === 429;
-      throw error;
-    }
-
+    const params: Record<string, string | number | undefined> = {
+      symbol: instrumentKey,
+      strikecount: 7,
+      timestamp: expiryDate && expiryDate !== 'current_week' && /^\d+$/.test(expiryDate) ? expiryDate : undefined,
+    };
+    const payload: any = await new FyersApiClient(accessToken).dataGet('/options-chain-v3', params);
     const data = payload?.data || {};
     const rows = Array.isArray(data?.optionsChain) ? data.optionsChain : [];
     const spotRow = rows.find((row: any) => !row?.option_type || row?.strike_price === -1);
