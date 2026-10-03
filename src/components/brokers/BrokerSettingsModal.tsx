@@ -15,9 +15,8 @@ import {
   AlertCircle,
   PlusCircle,
 } from 'lucide-react';
-import {
-  tradingCoreRuntime,
-} from '../../services/runtime/TradingCoreRuntime';
+import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
+import { BrokerOAuthService } from '../../services/oauth/BrokerOAuthService';
 import { BrokerConnectionInfo } from '../../services/brokers/BrokerManager';
 import { BrokerCapabilities } from '../../services/brokers/BrokerAdapter';
 
@@ -39,6 +38,8 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
   const [pings, setPings] = useState<Record<string, number>>({});
   const [isTesting, setIsTesting] = useState<Record<string, boolean>>({});
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isConnectingFyers, setIsConnectingFyers] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   const reloadConnections = () => {
     const all = tradingCoreRuntime.getAllConnections();
@@ -49,9 +50,27 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen) {
-      reloadConnections();
-    }
+    if (!isOpen) return;
+    reloadConnections();
+
+    const handleOAuthMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== 'TRADINGCORE_BROKER_CONNECTED' && event.data?.type !== 'TRADINGCORE_BROKER_OAUTH_SUCCESS') return;
+      if (String(event.data?.broker || event.data?.brokerId || '').toLowerCase() !== 'fyers') return;
+      setIsConnectingFyers(true);
+      setConnectError(null);
+      try {
+        await tradingCoreRuntime.restoreBrokerConnections();
+        reloadConnections();
+      } catch (error: unknown) {
+        setConnectError(error instanceof Error ? error.message : 'Fyers authorization completed but the session could not be restored.');
+      } finally {
+        setIsConnectingFyers(false);
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -87,7 +106,17 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
     await tradingCoreRuntime.syncPortfolio();
     setIsSyncing(false);
     reloadConnections();
+  };\n\n  const handleConnectFyers = async () => {
+    setIsConnectingFyers(true);
+    setConnectError(null);
+    const result = await BrokerOAuthService.initiateOAuth('fyers');
+    if (!result.success) {
+      setConnectError(result.error || 'Unable to start Fyers authorization.');
+      setIsConnectingFyers(false);
+    }
   };
+
+
 
   const handleDisconnect = async (brokerId: string) => {
     try {
@@ -142,7 +171,7 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans">
       <div className="w-full max-w-4xl rounded-2xl border border-[var(--tco-border)] bg-[var(--tco-surface)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[var(--tco-border)] flex items-center justify-between bg-[var(--tco-surface-3)]">
@@ -162,6 +191,15 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => void handleConnectFyers()}
+              disabled={isConnectingFyers}
+              className="flex items-center gap-1.5 rounded-lg border border-[#3b82f6]/30 bg-[#3b82f6]/10 px-3 py-1.5 text-xs font-mono font-bold text-[#3b82f6] hover:bg-[#3b82f6]/15 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {isConnectingFyers ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <PlusCircle className="h-3.5 w-3.5" />}
+              <span>{isConnectingFyers ? 'Opening Fyers…' : 'Connect Fyers'}</span>
+            </button>
+
+            <button
               onClick={handleSyncPortfolio}
               disabled={isSyncing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--tco-border)] bg-[var(--tco-hover)] text-xs font-mono text-[var(--tco-text)] hover:bg-[var(--tco-border)] transition-colors cursor-pointer disabled:opacity-50"
@@ -180,6 +218,11 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
         </div>
 
         {/* Content Body */}
+        {connectError && (
+          <div className="mx-5 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-mono text-red-300">
+            {connectError}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-[#222636] flex-1 overflow-y-auto">
           {/* Left Column: Connected Brokers */}
           <div className="md:col-span-5 p-5 space-y-4 bg-[var(--tco-surface-2)]">
@@ -212,13 +255,11 @@ export const BrokerSettingsModal: React.FC<BrokerSettingsModalProps> = ({
                 </div>
                 {onNavigateToConnect && (
                   <button
-                    onClick={() => {
-                      onClose();
-                      onNavigateToConnect();
-                    }}
-                    className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[var(--tco-surface-2)] hover:bg-[#2563eb] transition-colors cursor-pointer"
+                    onClick={() => void handleConnectFyers()}
+                    disabled={isConnectingFyers}
+                    className="w-full py-2 rounded-lg bg-[#3b82f6] text-xs font-bold text-[var(--tco-surface-2)] hover:bg-[#2563eb] transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    Connect Broker Now
+                    {isConnectingFyers ? 'Opening Fyers…' : 'Connect Fyers'}
                   </button>
                 )}
               </div>
