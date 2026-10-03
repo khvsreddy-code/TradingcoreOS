@@ -150,7 +150,7 @@ export class CoreSpiritVisualDebuggerSession {
     const selectedBar = this.options.bars[bounded];
     const timestamp = new Date(selectedBar.timestamp).getTime();
     const rawTrace = runtime.getDebugTrace();
-    const irTrace: DebuggerIrStep[] = rawTrace.flatMap(step => { const pc = Number(step.pc); if (!Number.isFinite(pc)) return []; const source = step.source && typeof step.source === 'object' ? step.source as DebuggerSourceLocation : sourceForPc(this.options.artifact, pc); return [{ ...step, pc, opcode: String(step.opcode ?? ''), args: Array.isArray(step.args) ? step.args : [], source } as DebuggerIrStep]; });
+    const irTrace: DebuggerIrStep[] = rawTrace.flatMap(step => { const pc = Number(step.pc); if (!Number.isFinite(pc)) return []; const source = step.source && typeof step.source === 'object' ? step.source as DebuggerSourceLocation : sourceForPc(this.options.artifact, pc); return [{ pc, opcode: String(step.opcode ?? ''), args: Array.isArray(step.args) ? step.args : [], source }]; });
     const lastEmit = [...irTrace].reverse().find(step => step.opcode === 'emit');
     const lastCall = [...irTrace].reverse().find(step => step.opcode === 'call');
     const source = lastEmit?.source
