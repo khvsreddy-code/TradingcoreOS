@@ -99,7 +99,7 @@ export async function resolveCoreSpiritDataPlanCached(
 
   if (!resolver.request) return { values, missing: misses };
   const resolved = await Promise.all(misses.map(async request => {
-    const snapshot = await cache.resolve(request, () => resolver.request!(request), ttlMs);
+    const snapshot = await cache.resolve(request, async () => await resolver.request!(request), ttlMs);
     return { request, snapshot };
   }));
   for (const { request, snapshot } of resolved) {
