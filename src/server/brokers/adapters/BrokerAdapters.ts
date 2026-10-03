@@ -1,3 +1,16 @@
+import crypto from 'node:crypto';
+import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
+import { withBrokerRequestGate } from '../BrokerRequestGate.js';
+import type {
+  BrokerHistory,
+  BrokerMarketQuotes,
+  BrokerOptionChain,
+  BrokerOrderPayload,
+  BrokerProfile,
+  CancelResult,
+  OrderMutationResult,
+} from '../contracts.js';
+
 export class FyersAdapter extends BaseBroker {
   readonly brokerId = 'fyers';
   readonly name = 'Fyers Direct';
