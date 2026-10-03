@@ -4,7 +4,7 @@ import { CoreSpiritObject, CoreSpiritProgram, CoreSpiritValue } from './types';
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { CoreSpiritCompiler } from './compiler';
 import { createCoreSpiritExecutionContext } from './executionContext';
-import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './types';
+import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritBarState } from './types';
 import { sma as kernelSma, highest as kernelHighest, lowest as kernelLowest, emaStep, trueRange, rsiFromAverages } from './indicatorKernel';
 
 export type CoreSpiritRuntimeOptions = {
@@ -12,7 +12,7 @@ export type CoreSpiritRuntimeOptions = {
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
 };
 export type CoreSpiritRuntimeState = {
-  barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean };
+  barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: CoreSpiritBarState;
 };
 export type CoreSpiritExecutionResult = { outputs: CoreSpiritObject[]; state: CoreSpiritRuntimeState; diagnostics: string[] };
 
