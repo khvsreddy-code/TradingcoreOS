@@ -49,7 +49,11 @@ jobs:
 
           payload = "".join(parts)
           expected_sha256 = "b1b6f83cedbdca09eb893e6f1d9804b6fd1454a78cebcdc139f3618997829607"
+          print("corrected part hashes:")
+          for i, part in enumerate(parts, 1):
+              print(i, len(part), hashlib.sha256(part.encode()).hexdigest())
           actual_sha256 = hashlib.sha256(payload.encode()).hexdigest()
+          print("payload sha256:", actual_sha256)
           if actual_sha256 != expected_sha256:
               raise SystemExit(f"patch payload hash mismatch: {actual_sha256}")
 
