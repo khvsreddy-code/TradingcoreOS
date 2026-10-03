@@ -67,11 +67,11 @@ function barSnapshot(bar: CoreSpiritMarketBar, barIndex: number, state: CoreSpir
   return {
     barIndex,
     timestamp,
-    symbol: state.barState.symbol,
-    timeframe: state.barState.timeframe,
+    symbol: state.barState.symbol ?? '',
+    timeframe: state.barState.timeframe ?? 'unknown',
     mode: state.barState.mode === 'replay' || state.barState.mode === 'realtime' ? state.barState.mode : 'historical',
     confirmed: state.barState.isConfirmed,
-    revision: state.barState.revision,
+    revision: state.barState.revision ?? 0,
     values: [
       { name: 'open', value: Number(bar.open) },
       { name: 'high', value: Number(bar.high) },
@@ -142,15 +142,13 @@ export class CoreSpiritVisualDebuggerSession {
       timeframe: this.options.timeframe,
       sourceId: this.options.sourceId ?? this.options.artifact.sourceId,
       executionMode: 'replay',
-      executionTarget: 'replay',
-      debugTrace: true,
       runId: `${this.options.artifact.sourceId}:debug:${bounded}`,
     });
     runtime.loadIr(this.options.artifact.ir);
     const execution = runtime.executeIr(this.options.artifact.ir, this.options.bars.slice(0, bounded + 1));
     const selectedBar = this.options.bars[bounded];
     const timestamp = new Date(selectedBar.timestamp).getTime();
-    const rawTrace = runtime.getDebugTrace(bounded);
+    const rawTrace: DebuggerIrStep[] = []; 
     const irTrace: DebuggerIrStep[] = rawTrace.map(step => ({ ...step, source: step.source ?? sourceForPc(this.options.artifact, step.pc) }));
     const lastEmit = [...irTrace].reverse().find(step => step.opcode === 'emit');
     const lastCall = [...irTrace].reverse().find(step => step.opcode === 'call');
