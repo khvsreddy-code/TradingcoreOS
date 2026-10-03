@@ -231,6 +231,18 @@ export class VelaSeriesFacade<T = string> {
     this.chart.renderer.configurePaneAppearance?.(targetPane, { scale: options.scale === 'log' ? 'price' : options.scale, log: options.scale === 'log', scaleMode: options.scaleMode, auto: options.auto && options.scaleMode === 'auto', min: options.min, max: options.max, inverted: options.inverted });
   }
 
+  priceScale(): { applyOptions: (options: { scaleMargins?: { top?: number; bottom?: number } }) => void } {
+    return { applyOptions: () => { /* Vela owns pane geometry; no data recomputation is performed. */ } };
+  }
+
+  createPriceLine(options: { price: number; color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
+    return this.chart.createPriceLine(options);
+  }
+
+  removePriceLine(handle: PriceLineHandle): void {
+    handle.remove();
+  }
+
   remove(): void {
     if (this.removed) return;
     this.removed = true;
@@ -328,12 +340,13 @@ export class VelaChartFacade {
     this.renderer.updateIndicator(existing.handle, { kind: 'value', indicatorId: modelId, dirty: { from: markerPoints[0]?.time ?? 0, to: markerPoints.at(-1)?.time ?? 0 }, series: [{ seriesId: existing.seriesId, kind: 'markers', markers: markerPoints }] } as ScenePatch);
   }
 
-  createPriceLine(price: number, options: { color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
+  createPriceLine(optionsOrPrice: number | { price: number; color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }, legacyOptions?: { color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
+    const options = typeof optionsOrPrice === 'number' ? { ...(legacyOptions ?? {}), price: optionsOrPrice } : optionsOrPrice;
     const id = `tco-price-line:${++seriesSerial}`;
-    this.priceLines.push({ id, paneId: this.pricePaneId, price, color: String(options.color || '#60a5fa'), width: Math.max(1, Number(options.lineWidth) || 1), lineStyle: lineStyle(options.lineStyle), title: options.title });
+    this.priceLines.push({ id, paneId: this.pricePaneId, price:Number(options.price), color:String(options.color || '#60a5fa'), width:Math.max(1,Number(options.lineWidth)||1), lineStyle:lineStyle(options.lineStyle), title:options.title });
     this.ensurePriceLineModel();
     this.updatePriceLineModel();
-    return { id, remove: () => { this.priceLines = this.priceLines.filter(x => x.id !== id); this.updatePriceLineModel(); } };
+    return { id, remove:()=>{ this.priceLines=this.priceLines.filter(x=>x.id!==id); this.updatePriceLineModel(); } };
   }
 
   barSpacing(): number { return Number((this.renderer as any).barSpacing?.() ?? 6); }
@@ -403,13 +416,7 @@ export class VelaChartFacade {
   syncBandFillsForSeries(seriesId: string): void { for (const [id, state] of this.bandFills) if (state.from.id === seriesId || state.to.id === seriesId) this.syncBandFill(id); }
   private removeBandFill(id: string): void { const state = this.bandFills.get(id); if (!state) return; this.renderer.removeIndicator(state.handle); this.bandFills.delete(id); }
 
-  createPriceLine(options: { price: number; color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
-    const id = `tco-price-line:${++seriesSerial}`;
-    this.priceLines.push({ id, paneId: this.pricePaneId, price:Number(options.price), color:String(options.color || '#60a5fa'), width:Math.max(1,Number(options.lineWidth)||1), lineStyle:lineStyle(options.lineStyle), title:options.title });
-    this.ensurePriceLineModel();
-    this.updatePriceLineModel();
-    return { id, remove:()=>{ this.priceLines=this.priceLines.filter(x=>x.id!==id); this.updatePriceLineModel(); } };
-  }
+
   removeBandFillsForSeries(seriesId:string): void { for(const [id,state] of this.bandFills) if(state.from.id===seriesId||state.to.id===seriesId) this.removeBandFill(id); }
 
   unregisterSeries(series: VelaSeriesFacade): void { this.series.delete(series); this.candleSeries.delete(series); this.setSeriesGlow(series.id, 0); }
