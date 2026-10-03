@@ -174,7 +174,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
  const openCoreSpirit=()=>{ setCoreSpiritOpen(true); setCoreSpiritStatus(''); setCoreSpiritDiagnostics([]); coreSpiritChartRegistry.activate(chartId.current); };
  const compileCoreSpirit=()=>{ try { const model=new CoreSpiritEditorModel(coreSpiritSource); const result=model.compile(); const errors=(result.diagnostics||[]).filter((d:any)=>d.severity==='error'); setCoreSpiritDiagnostics((result.diagnostics||[]).map((d:any)=>`${d.line?`Line ${d.line}: `:''}${d.message}`)); setCoreSpiritStatus(errors.length?'Compile failed':'Compiled'); return !errors.length; } catch(e:any){ setCoreSpiritDiagnostics([String(e?.message||e)]); setCoreSpiritStatus('Compile failed'); return false; } };
  const deployCoreSpirit=async()=>{ if(!compileCoreSpirit())return; try { localStorage.setItem('tradingcore:corespirit:chart-source',coreSpiritSource); coreSpiritChartRegistry.activate(chartId.current); setCoreSpiritStatus('Deploying…'); const target=coreSpiritChartRegistry.getActive(); if(!target)throw new Error('No active chart'); const run=await target.run(coreSpiritSource,'chart-indicator'); setCoreSpiritStatus(`${run.barsProcessed.toLocaleString()} bars · ${run.plotsEmitted} plots · ${run.signalsEmitted} signals`); setCoreSpiritDiagnostics(run.diagnostics); setCoreSpiritOpen(false); } catch(e:any){ setCoreSpiritStatus('Deploy failed'); setCoreSpiritDiagnostics([String(e?.message||e)]); } };
- const publishDrawing=(event:'drawing.created'|'drawing.updated',drawing:CoreDrawing)=>{coreEventBus.emit(event,{drawing:drawing as unknown as Record<string,unknown>});};
+ const publishDrawing=(event:'drawing.created'|'drawing.updated',drawing:CoreDrawing)=>{coreEventBus.emit(event,{id:drawing.id,owner:drawing.owner,drawing:drawing as unknown as Record<string,unknown>,timestamp:Date.now()});};
  const publishChartLifecycle=(state:'ready'|'loading'|'updating'|'error'|'recovering'|'disposed')=>{coreEventBus.emit('chart.lifecycle',{chartId:chartId.current,state,timestamp:Date.now()});};
  const requestIndicatorWorker=(data:HistoricalCandle[], range=visibleLogicalRangeRef.current, mode:'snapshot'|'incremental'='snapshot', operation:'replace'|'append'='replace')=>{
    const requestSeq=++indicatorRequestSeq.current;
@@ -645,8 +645,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
      void renderPredictionOverlay(data);
      if(oiAnalytics.current&&Number.isFinite(Number(latestTick.current?.ltp))){
        const p=Number(latestTick.current!.ltp);const current=oiAnalytics.current;const tolerance=Math.max(analytics.current?.atr||0,1)*.18;
-       const walls=current.walls.map(w=>({...w,state:w.side==='PUT'?(p<w.strike-tolerance?'MITIGATED':Math.abs(p-w.strike)<=tolerance?'TESTING':'ACTIVE'):(p>w.strike+tolerance?'MITIGATED':Math.abs(p-w.strike)<=tolerance?'TESTING':'ACTIVE')}));
-       const levels=current.levels.map(l=>({...l,state:l.side==='support'?(p<l.strike-tolerance?'MITIGATED':Math.abs(p-l.strike)<=tolerance?'TESTING':'ACTIVE'):(p>l.strike+tolerance?'MITIGATED':Math.abs(p-l.strike)<=tolerance?'TESTING':'ACTIVE')}));
+       const walls=current.walls.map(w=>({...w,state:(w.side==='PUT'?(p<w.strike-tolerance?'MITIGATED':Math.abs(p-w.strike)<=tolerance?'TESTING':'ACTIVE'):(p>w.strike+tolerance?'MITIGATED':Math.abs(p-w.strike)<=tolerance?'TESTING':'ACTIVE')) as OIWallState}));
+       const levels=current.levels.map(l=>({...l,state:(l.side==='support'?(p<l.strike-tolerance?'MITIGATED':Math.abs(p-l.strike)<=tolerance?'TESTING':'ACTIVE'):(p>l.strike+tolerance?'MITIGATED':Math.abs(p-l.strike)<=tolerance?'TESTING':'ACTIVE')) as OIWallState}));
        const changed=walls.some((w,i)=>w.state!==current.walls[i]?.state)||levels.some((l,i)=>l.state!==current.levels[i]?.state);
        oiAnalytics.current={...current,spot:p,walls,levels};
        if(changed)renderOI(oiAnalytics.current);
