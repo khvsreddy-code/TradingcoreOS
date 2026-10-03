@@ -146,42 +146,6 @@ workspaceFixRoutes.get('/:brokerId/instruments/search', async (req: Authenticate
     }
   }
 
-  if (brokerId === 'upstox') {
-    const token = await session(req, res, 'upstox');
-    if (!token) return;
-    try {
-      const tokens = q.split(/\s+/).filter(Boolean);
-      const params = new URLSearchParams({ query: q, page_number: '1', records: '30' });
-      if (segment === 'options') {
-        params.set('segments', 'FO');
-        params.set('instrument_types', 'CE,PE');
-        params.set('expiry', 'current_week');
-      } else if (segment === 'futures') {
-        params.set('segments', 'FO');
-        params.set('instrument_types', 'FUT');
-        params.set('expiry', 'current_month');
-      } else if (segment === 'stocks') params.set('segments', 'EQ');
-      else params.set('segments', 'ALL');
-      const response = await fetch(`https://api.upstox.com/v2/instruments/search?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } });
-      const payload = await response.json();
-      if (!response.ok || payload?.status !== 'success') throw new Error(payload?.errors?.[0]?.message || payload?.message || `Upstox instrument search failed (${response.status})`);
-      const data = (Array.isArray(payload.data) ? payload.data : []).map((row: any) => ({
-        key: row.instrument_key,
-        label: row.trading_symbol || row.short_name || row.name || row.instrument_key,
-        symbol: row.trading_symbol || row.instrument_key,
-        description: row.name,
-        exchange: row.exchange,
-        type: row.instrument_type,
-        expiry: row.expiry,
-        strike: Number.isFinite(Number(row.strike_price)) ? Number(row.strike_price) : undefined,
-        optionType: ['CE', 'PE'].includes(String(row.instrument_type)) ? String(row.instrument_type) : undefined,
-        lotSize: Number.isFinite(Number(row.lot_size)) ? Number(row.lot_size) : undefined,
-      })).filter((row: any) => tokens.every((t) => [row.symbol, row.description, row.expiry, row.strike, row.optionType].filter(Boolean).join(' ').toLowerCase().includes(t))).slice(0, limit);
-      return res.json({ success: true, data, total: data.length, source: 'upstox-instrument-search-suggestions' });
-    } catch (err: any) {
-      return res.status(502).json({ success: false, error: err?.message || 'Unable to search Upstox instruments' });
-    }
-  }
   return next();
 });
 
@@ -200,20 +164,6 @@ function normalizeFyersUnderlying(key: string): string {
   if (/^NSE:[A-Z0-9&.-]+$/.test(upper) && !upper.endsWith('-EQ') && !upper.endsWith('-INDEX')) return `${upper}-EQ`;
   if (/^BSE:[A-Z0-9&.-]+$/.test(upper) && !upper.endsWith('-EQ') && !upper.endsWith('-INDEX')) return `${upper}-EQ`;
   return value;
-}
-
-async function resolveUpstoxExpiry(accessToken: string, instrumentKey: string, requested: string): Promise<string> {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(requested)) return requested;
-  const response = await fetch(`https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(instrumentKey)}&expiry_date=${encodeURIComponent(requested)}`, {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
-  });
-  const payload = await response.json();
-  if (!response.ok || payload?.status !== 'success') {
-    throw new Error(payload?.errors?.[0]?.message || payload?.message || `Unable to resolve Upstox expiry ${requested}`);
-  }
-  const expiries = [...new Set<string>((Array.isArray(payload.data) ? payload.data : []).map((row: any) => String(row.expiry || '')).filter((x: string) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
-  if (!expiries.length) throw new Error(`No active Upstox option expiry found for ${requested}.`);
-  return expiries[0];
 }
 
 function optionAnalytics(chain: any) {
@@ -256,16 +206,15 @@ function optionAnalytics(chain: any) {
 
 workspaceFixRoutes.get('/:brokerId/option-chain', async (req: AuthenticatedRequest, res: Response, next) => {
   const brokerId = String(req.params.brokerId).toLowerCase();
-  if (brokerId !== 'fyers' && brokerId !== 'upstox') return next();
+  if (brokerId !== 'fyers') return next();
   const token = await session(req, res, brokerId);
   if (!token) return;
   const rawKey = String(req.query.instrument_key || '');
   if (!rawKey) return res.status(400).json({ success: false, error: 'instrument_key is required' });
   try {
     const broker = BrokerRegistry.getAdapter(brokerId);
-    const underlying = brokerId === 'fyers' ? normalizeFyersUnderlying(rawKey) : rawKey;
+    const underlying = normalizeFyersUnderlying(rawKey);
     let expiry = String(req.query.expiry_date || 'current_week');
-    if (brokerId === 'upstox') expiry = await resolveUpstoxExpiry(token, underlying, expiry);
     const rawData = await broker.getOptionChain(token, underlying, expiry);
     if (!rawData || !Array.isArray(rawData.contracts) || !rawData.contracts.length) {
       throw new Error('Broker returned an empty option chain. Check that the selected symbol is F&O-enabled and the expiry is active.');
