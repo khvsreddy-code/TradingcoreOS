@@ -146,7 +146,7 @@ export class CoreSpiritVelaEngine {
 
   execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
     const token = req.prepared.token as PreparedToken;
-    const bars = req.bars as CoreSpiritMarketBar[];
+    const bars = req.bars as unknown as CoreSpiritMarketBar[];
     const runtime = new CoreSpiritRuntime({
       symbol: req.market.symbol,
       timeframe: req.market.timeframe,
