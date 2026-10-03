@@ -43,9 +43,10 @@ jobs:
           parts = [(root / n).read_text() for n in names]
 
           # Repair the three character-losses introduced during transport.
-          parts[0] = parts[0][:9162] + "/T" + parts[0][9162:]\n          parts[0] = parts[0].replace("S5XYLJR", "S5XYJLR").replace("GfWgnn", "GfGwnn")
+          parts[0] = parts[0][:9162] + "/T" + parts[0][9162:]
+          parts[0] = parts[0].replace("S5XYLJR", "S5XYJLR").replace("GfWgnn", "GfGwnn")
           parts[2] = parts[2][:9169] + "9" + parts[2][9169:]
-          parts[2] = parts[2][:11460] + "w" + parts[2][11460:]
+          parts[2] = parts[2][:11417] + "k" + parts[2][11417:]
           parts[3] = parts[3][:3653] + "S" + parts[3][3653:]
 
           payload = "".join(parts)
