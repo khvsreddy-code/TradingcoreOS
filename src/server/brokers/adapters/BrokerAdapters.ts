@@ -273,7 +273,7 @@ export class UpstoxAdapter extends BaseBroker {
       price: orderData.price || 0,
       tag: orderData.tag || 'tradingcore',
       instrument_token: orderData.instrument_token,
-      order_type: normalizeUpstoxOrderType(orderData.order_type || orderData.orderType),
+      order_type: normalizeUpstoxOrderType(String(orderData.order_type ?? orderData.orderType ?? '')),
       transaction_type: orderData.side ? orderData.side.toUpperCase() : 'BUY',
       disclosed_quantity: 0,
       trigger_price: orderData.trigger_price || 0,
@@ -339,8 +339,9 @@ function validateUpstoxOrder(order: BrokerOrderPayload): void {
   if (!/^[A-Z_]+\|.+$/.test(order.instrument_token || '')) throw new Error('A valid Upstox instrument token is required');
   if (!['BUY', 'SELL', 'Buy', 'Sell'].includes(order.side)) throw new Error('Order side must be BUY or SELL');
   if (!['D', 'I', 'MTF', 'CNC', 'MIS', 'NRML'].includes(order.product)) throw new Error('Unsupported product');
-  if (!['MARKET', 'LIMIT', 'SL', 'SL-M', 'Market', 'Limit'].includes(order.order_type || order.orderType)) throw new Error('Unsupported order type');
-  const type = (order.order_type || order.orderType).toUpperCase();
+  const orderType = String(order.order_type ?? order.orderType ?? '');
+  if (!['MARKET', 'LIMIT', 'SL', 'SL-M', 'Market', 'Limit'].includes(orderType)) throw new Error('Unsupported order type');
+  const type = orderType.toUpperCase();
   if ((type === 'LIMIT' || type === 'SL') && !(Number(order.price) > 0)) throw new Error('A positive price is required for limit and SL orders');
   if ((type === 'SL' || type === 'SL-M') && !(Number(order.trigger_price ?? order.triggerPrice) > 0)) throw new Error('A positive trigger price is required for stop-loss orders');
 }
