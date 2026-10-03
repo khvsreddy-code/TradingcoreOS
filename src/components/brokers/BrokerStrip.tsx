@@ -7,16 +7,15 @@ interface BrokerStripProps {
 }
 
 const BROKER_DATA = [
-  { name: 'Upstox', api: 'OAuth 2.0 + V3 trading/data', tags: 'OAuth · REST · WebSocket', latency: 'Supported route', color: '#a855f7', initial: 'U' },
-  { name: 'Fyers', api: 'Fyers API v3', tags: 'OAuth · Broker account', latency: 'Supported', color: '#06b6d4', initial: 'F' },
+  { name: 'Fyers', api: 'Fyers API v3 + OAuth 2.0', tags: 'OAuth · REST · WebSocket', latency: 'Primary route', color: '#3b82f6', initial: 'F' },
 ];
 
 export const BrokerStrip: React.FC<BrokerStripProps> = ({ onSelectBroker }) => (
   <section id="brokers" className="py-24 bg-[var(--tco-surface-2)] border-t border-[#1e2230]">
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center">
       <p className="font-mono text-xs tracking-widest uppercase text-[var(--tco-muted)] font-semibold mb-3">SUPPORTED BROKERS</p>
-      <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--tco-text)] tracking-tight mb-3">Two focused broker connections. Nothing extra.</h2>
-      <p className="text-sm text-[var(--tco-muted)] max-w-2xl mx-auto mb-12">TradingCore keeps the broker surface intentionally small: Upstox for the live market-data/execution path and Fyers as the second supported account connection.</p>
+      <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--tco-text)] tracking-tight mb-3">One broker connection. One market-data path.</h2>
+      <p className="text-sm text-[var(--tco-muted)] max-w-2xl mx-auto mb-12">TradingCore uses Fyers as the single broker route for market data, portfolio and execution.</p>
       <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }} className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
         {BROKER_DATA.map((broker) => (
           <button key={broker.name} onClick={() => onSelectBroker?.(broker.name)} className="group rounded-2xl border border-[#1e2230] bg-[var(--tco-surface)] p-6 text-left transition-all hover:border-[#3b4257] hover:bg-[#11141d]">
