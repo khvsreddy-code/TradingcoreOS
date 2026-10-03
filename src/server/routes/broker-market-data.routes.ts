@@ -19,18 +19,6 @@ async function getFyersSession(req: AuthenticatedRequest, res: Response) {
 }
 
 
-async function getBrokerSession(req: AuthenticatedRequest, res: Response, brokerId: string) {
-  const userId = req.tradingCoreUserId!;
-  const session = await BrokerRepository.getSession(brokerId, userId);
-  if (!session || session.status !== 'Connected') { res.status(401).json({ success: false, error: `${brokerId} is not connected for this account.` }); return null; }
-  try { return { userId, token: EncryptionService.decrypt(session.accessTokenEncrypted) }; }
-  catch { res.status(500).json({ success: false, error: `Unable to decrypt the ${brokerId} session.` }); return null; }
-}
-
-async function getUpstoxSession(req: AuthenticatedRequest, res: Response) {
-  return getBrokerSession(req, res, 'upstox');
-}
-
 function toFyersSymbol(symbol: string): string {
   const value = decodeURIComponent(String(symbol || '')).trim();
   const normalized = value.toLowerCase().replace(/\s+/g, '');
@@ -219,45 +207,6 @@ function mastersForSegment(segment: string): string[] {
   }
 }
 
-
-/** Upstox's authenticated Instrument Search API keeps the workspace search current without downloading the entire BOD file. */
-brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: AuthenticatedRequest, res: Response, next) => {
-  if (String(req.params.brokerId).toLowerCase() !== 'upstox') return next();
-  const session = await getUpstoxSession(req, res); if (!session) return;
-  const query = String(req.query.q || '').trim();
-  const segment = String(req.query.segment || 'all').toLowerCase();
-  const limit = Math.max(1, Math.min(30, Number(req.query.limit || 30)));
-  if (!query) return res.json({ success: true, data: [], total: 0, source: 'upstox-instrument-search' });
-  try {
-    const params = new URLSearchParams({ query, page_number: '1', records: String(limit) });
-    if (segment === 'stocks') params.set('segments', 'EQ');
-    else if (segment === 'futures') params.set('segments', 'FUT');
-    else if (segment === 'options') params.set('segments', 'OPT');
-    else if (segment === 'commodities') params.set('segments', 'COMM');
-    else if (segment === 'currency') params.set('segments', 'CURR');
-    const response = await fetch(`https://api.upstox.com/v2/instruments/search?${params.toString()}`, {
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-    });
-    const payload = await response.json();
-    if (!response.ok || payload?.status !== 'success') throw new Error(payload?.errors?.[0]?.message || `Upstox instrument search failed (${response.status})`);
-    const data = (Array.isArray(payload.data) ? payload.data : []).map((row: any) => ({
-      key: row.instrument_key,
-      label: row.short_name || row.name || row.trading_symbol || row.instrument_key,
-      symbol: row.trading_symbol || row.instrument_key,
-      description: row.name,
-      exchange: row.exchange,
-      type: row.instrument_type,
-      isin: row.isin,
-      expiry: row.expiry,
-      strike: Number.isFinite(Number(row.strike_price)) && Number(row.strike_price) > 0 ? Number(row.strike_price) : undefined,
-      optionType: ['CE', 'PE'].includes(String(row.instrument_type)) ? String(row.instrument_type) : undefined,
-      lotSize: Number.isFinite(Number(row.lot_size)) ? Number(row.lot_size) : undefined,
-    })).filter((row: any) => row.key);
-    return res.json({ success: true, data, total: data.length, source: 'upstox-instrument-search', meta: payload.meta_data?.page });
-  } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Unable to search Upstox instruments' });
-  }
-});
 
 brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: AuthenticatedRequest, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
