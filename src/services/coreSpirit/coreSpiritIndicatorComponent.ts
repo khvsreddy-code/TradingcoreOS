@@ -192,7 +192,7 @@ function indicatorOutputs(artifact: CoreSpiritExecutableArtifact, requestedNames
     const name = outputId;
     if (seen.has(name)) continue;
     seen.add(name);
-    outputs.push(Object.freeze({ id: outputId, name, type: { kind: (role === 'event' ? 'event' : 'visual') as const }, role, sourceInstruction: instruction }));
+    outputs.push(Object.freeze({ id: outputId, name, type: { kind: role === 'event' ? 'event' : 'visual' }, role, sourceInstruction: instruction }));
   }
   return Object.freeze(outputs);
 }
@@ -419,7 +419,6 @@ export function createCoreSpiritIndicatorRealtimeHost(
 ): CoreSpiritRealtimeExecutionHost {
   return new CoreSpiritRealtimeExecutionHost(indicator.artifact, {
     runId: identity.runId,
-    artifactChecksum: indicator.artifact.checksum,
     datasetId: identity.datasetId,
     symbol: identity.symbol,
     timeframe: identity.timeframe,
