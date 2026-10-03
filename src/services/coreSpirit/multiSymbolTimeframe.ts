@@ -97,7 +97,7 @@ export function alignHigherTimeframeSnapshot(
 ): CoreSpiritDataSnapshot | null {
   return validateSynchronizedSnapshot(snapshot, {
     asOfTimestamp,
-    alignment: policy.allowDeveloping ? policy.alignment === 'last-confirmed' ? 'latest' : policy.alignment : policy.alignment,
+    alignment: policy.allowDeveloping ? policy.alignment === 'last-confirmed' ? 'developing' : policy.alignment : policy.alignment,
     maxStalenessMs: policy.maxStalenessMs,
   });
 }
