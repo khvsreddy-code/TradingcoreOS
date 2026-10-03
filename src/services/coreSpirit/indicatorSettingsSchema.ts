@@ -226,6 +226,11 @@ const COMMON_TIMEFRAME_OPTIONS: readonly IndicatorSettingOption[] = Object.freez
   { value: '1W', label: '1 week' }, { value: '1M', label: '1 month' },
 ]);
 
+function buildIndicatorSettingsFieldIndex(schema: IndicatorSettingsSchema): ReadonlyMap<string, IndicatorSettingField> {
+  const fields = schema.sections.flatMap(section => section.fields);
+  return new Map(fields.map(field => [field.path, field]));
+}
+
 function conditionLeaf(condition: IndicatorSettingCondition): condition is Exclude<IndicatorSettingCondition, { all: readonly IndicatorSettingCondition[] } | { any: readonly IndicatorSettingCondition[] } | { not: IndicatorSettingCondition }> {
   return typeof condition === 'object' && condition !== null && 'path' in condition;
 }
@@ -321,7 +326,7 @@ function detectConditionCycles(fields: readonly IndicatorSettingField[]): string
   return [...new Set(errors)];
 }
 
-function validateCondition(condition: IndicatorSettingCondition, knownPaths: Set<string>, ownerPath: string, depth = 0, fieldByPath = new Map<string, IndicatorSettingField>()): string[] {
+function validateCondition(condition: IndicatorSettingCondition, knownPaths: ReadonlySet<string>, ownerPath: string, depth: number, fieldByPath: ReadonlyMap<string, IndicatorSettingField>): string[] {
   if (!condition || typeof condition !== 'object') return [`invalid parameter dependency for '${ownerPath}'`];
   if (depth > 8) return [`parameter dependency for '${ownerPath}' is deeper than the maximum nesting depth`];
   if (conditionLeaf(condition)) {
@@ -730,12 +735,11 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
       if (field.validation?.maxLength != null && field.validation.maxLength < (field.validation.minLength ?? 0)) errors.push(`invalid maxLength for '${field.path}'`);
     }
   }
-  // Build one canonical schema-field index for every dependency validation pass.
-  // The same index is reused for target/type validation and cycle detection.
+  // One canonical field index is constructed before any dependency is evaluated.
+  // Passing it as a required argument makes an undefined dependency index impossible
+  // at compile time and keeps condition validation deterministic.
   const allSchemaFields = schema.sections.flatMap(section => section.fields);
-  const fieldByPath = new Map<string, IndicatorSettingField>(
-    allSchemaFields.map(field => [field.path, field]),
-  );
+  const fieldByPath = buildIndicatorSettingsFieldIndex(schema);
 
   for (const section of schema.sections) for (const field of section.fields) {
     if (field.visibleWhen && !paths.has(field.visibleWhen.path)) errors.push(`visibility dependency '${field.visibleWhen.path}' for '${field.path}' is not declared`);
@@ -743,7 +747,7 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
     if (field.visibilityCondition) errors.push(...validateCondition(field.visibilityCondition, paths, field.path, 0, fieldByPath));
     if (field.enabledWhen) errors.push(...validateCondition(field.enabledWhen, paths, field.path, 0, fieldByPath));
   }
-  errors.push(...detectConditionCycles(allSchemaFields));
+    errors.push(...detectConditionCycles(allSchemaFields));
   for (const section of schema.sections) for (const field of section.fields) {
     const defaultError = validateIndicatorSettingValue(field, field.defaultValue);
     if (defaultError) errors.push(`default validation for '${field.path}': ${defaultError}`);
