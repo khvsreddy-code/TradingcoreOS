@@ -3,7 +3,6 @@ import { BrokerRegistry } from '../brokers/BrokerRegistry.js';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { UpstoxMarketDataTransport } from '../marketData/UpstoxMarketDataTransport.js';
 import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
 import { OAuthService } from '../auth/OAuthService.js';
 import { OrderIdempotencyRepository } from '../storage/OrderIdempotencyRepository.js';
@@ -126,11 +125,17 @@ tradingRoutes.get('/:brokerId/market-stream', injectBrokerSession, (req: BrokerS
   if (!instrumentKeys.length) { res.status(400).json({ success: false, error: 'instrument_keys is required' }); return; }
   if (instrumentKeys.length > 100 || instrumentKeys.some((key) => key.length > 160)) { res.status(400).json({ success: false, error: 'Too many or invalid instrument keys' }); return; }
   const brokerId = req.params.brokerId.toLowerCase();
-  if (brokerId !== 'upstox' && brokerId !== 'fyers') { res.status(400).json({ success: false, error: 'Live streaming is not implemented for this broker' }); return; }
-  res.status(200); res.setHeader('Content-Type', 'application/x-ndjson'); res.setHeader('Cache-Control', 'no-cache, no-transform'); res.setHeader('Connection', 'keep-alive'); res.flushHeaders();
-  const unsubscribe = brokerId === 'upstox'
-    ? UpstoxMarketDataTransport.subscribe(req.tradingCoreUserId!, req.accessToken, instrumentKeys, (event) => res.write(`${JSON.stringify(event)}\n`), depthMode as 'full' | 'full_d30')
-    : FyersMarketDataTransport.subscribe(req.tradingCoreUserId!, req.accessToken, instrumentKeys, (event) => res.write(`${JSON.stringify(event)}\n`));
+  if (brokerId !== 'fyers') { res.status(400).json({ success: false, error: 'Live streaming is only available through Fyers' }); return; }
+  res.status(200);
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  const write = (event: unknown) => {
+    try { res.write(`${JSON.stringify(event)}\n`); } catch {}
+  };
+  const unsubscribe = FyersMarketDataTransport.subscribe(req.tradingCoreUserId!, req.accessToken, instrumentKeys, write);
   req.on('close', unsubscribe);
 });
 
