@@ -184,7 +184,7 @@ export function IndicatorSettingsPanel({ item, compact = false, onChange, onOpen
   return <div className={compact ? 'space-y-2' : 'space-y-3'}>
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
-        <div className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--tco-dim)]"><Settings2 className="h-3 w-3 text-[#60a5fa]"/>{title} settings</div>
+        <div className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--tco-dim)]"><Settings2 className="h-3 w-3 text-[#60a5fa]"/>{String(title)} settings</div>
         <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-mono text-[var(--tco-dim)]">
           <span>{String(schema.identity.source).toUpperCase()}</span><span>DEF v{String(schema.identity.definitionVersion)}</span><span>{schema.outputs.length} output{schema.outputs.length === 1 ? '' : 's'}</span><span>{schema.capabilities.incrementalExecution ? 'INCREMENTAL' : 'BATCH'}</span>
         </div>
