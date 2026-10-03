@@ -10,7 +10,9 @@
       "DOM.Iterable"
     ],
     "skipLibCheck": true,
-    "types": ["vite/client"],
+    "types": [
+      "vite/client"
+    ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -23,5 +25,19 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.mjs",
+    "vendor/vela/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.mjs",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
 }
