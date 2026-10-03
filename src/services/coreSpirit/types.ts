@@ -193,16 +193,6 @@ export type CoreSpiritDataResolutionContext = {
   maxStalenessMs?: number;
 };
 
-export type CoreSpiritDataResolutionContext = {
-  asOfTimestamp: number;
-  baseSymbol: string;
-  baseTimeframe: string;
-  executionMode: CoreSpiritExecutionMode;
-  revision: number;
-  alignment: CoreSpiritDataAlignment;
-  maxStalenessMs?: number;
-};
-
 export type CoreSpiritDataResolver = {
   request?: (request: CoreSpiritDataRequest) => CoreSpiritDataSnapshot | Promise<CoreSpiritDataSnapshot>;
   /** Optional batched resolver. Hosts should prefer this for scripts requesting several symbols/TFs. */
