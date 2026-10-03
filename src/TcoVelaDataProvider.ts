@@ -1,6 +1,4 @@
-import type { DataProvider, ProviderInfo, SymbolDescriptor } from '../vendor/vela/src/core/ports/DataProvider';
-import type { BarRange } from '../vendor/vela/src/core/ports/MarketDataFeed';
-import type { OHLCV } from '../vendor/vela/src/core/model/ohlcv';
+import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV } from './services/core/chart/velaChartFacade';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import type { MarketFeedEvent, NormalizedMarketTick } from './types/market';
 
