@@ -231,7 +231,7 @@ function anchorsFromObject(output: CoreSpiritObject): readonly CoreSpiritSceneAn
     case 'polygon':
       return output.points.map(point => ({ time: point.time, price: point.price }));
     case 'customVisual':
-      return output.geometry?.kind === 'polygon' ? output.geometry.points.map(point => ({ time: point.x, price: point.y })) : undefined;
+      { const geometry = output.geometry; if (!geometry || typeof geometry !== 'object') return undefined; const candidate = geometry as { kind?: unknown; points?: unknown }; if (candidate.kind !== 'polygon' || !Array.isArray(candidate.points)) return undefined; return (candidate.points as Array<{ x: number; y: number }>).map(point => ({ time: Number(point.x), price: Number(point.y) })); }
     default:
       return undefined;
   }
@@ -253,7 +253,7 @@ function timeRangeFromObject(output: CoreSpiritObject): { start: number; end: nu
       if (!output.points.length) return undefined;
       return { start: Math.min(...output.points.map(point => point.time)), end: Math.max(...output.points.map(point => point.time)) };
     case 'customVisual':
-      if (output.geometry?.kind === 'polygon' && output.geometry.points.length) return { start: Math.min(...output.geometry.points.map(point => point.x)), end: Math.max(...output.geometry.points.map(point => point.x)) };
+      { const geometry = output.geometry; if (!geometry || typeof geometry !== 'object') return undefined; const candidate = geometry as { kind?: unknown; points?: unknown }; if (candidate.kind !== 'polygon' || !Array.isArray(candidate.points) || !candidate.points.length) return undefined; const points = candidate.points as Array<{ x: number; y: number }>; return { start: Math.min(...points.map(point => Number(point.x))), end: Math.max(...points.map(point => Number(point.x))) }; }
       return undefined;
     default:
       return undefined;
