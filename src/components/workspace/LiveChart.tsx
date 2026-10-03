@@ -30,7 +30,7 @@ import { isIncrementalIndicatorSupported } from '../../services/marketData/incre
 import { selectIndicatorComputeWindow } from '../../services/marketData/chartComputeWindow';
 import { historyDemandPageCandles } from '../../services/marketData/chartHistoryPolicy';
 import { getIndicators, saveIndicators, getAutomations, AutomationConfig } from '../../services/workspace/workspaceState';
-import { buildOIChartAnalytics, OIChartAnalytics } from '../../services/marketData/oiEngine';
+import { buildOIChartAnalytics, OIChartAnalytics, type OIWallState } from '../../services/marketData/oiEngine';
 import { Plus, Settings2, Code2, Play, Zap, Eye, EyeOff, Trash2, RotateCcw, Pencil, Search, Check, X, Crosshair, Minus, ArrowUpRight, MoveHorizontal, MoveVertical, Square, Circle, Ruler, Type, MousePointer2, Eraser, Paintbrush, Highlighter, Waves, GitBranch, Triangle, BoxSelect, Target, Undo2 } from 'lucide-react';
 import { PREDICTION_MODELS, getSavedPredictionModelIds, savePredictionModelIds } from '../../services/predictionEngine';
 import { chartPredictionCoordinator } from '../../services/marketData/chartPredictionCoordinator';
