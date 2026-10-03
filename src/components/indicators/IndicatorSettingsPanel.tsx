@@ -186,7 +186,7 @@ export function IndicatorSettingsPanel({ item, compact = false, onChange, onOpen
       <div className="min-w-0">
         <div className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-widest text-[var(--tco-dim)]"><Settings2 className="h-3 w-3 text-[#60a5fa]"/>{title} settings</div>
         <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-mono text-[var(--tco-dim)]">
-          <span>{schema.identity.source.toUpperCase()}</span><span>DEF v{schema.identity.definitionVersion}</span><span>{schema.outputs.length} output{schema.outputs.length === 1 ? '' : 's'}</span><span>{schema.capabilities.incrementalExecution ? 'INCREMENTAL' : 'BATCH'}</span>
+          <span>{String(schema.identity.source).toUpperCase()}</span><span>DEF v{schema.identity.definitionVersion}</span><span>{schema.outputs.length} output{schema.outputs.length === 1 ? '' : 's'}</span><span>{schema.capabilities.incrementalExecution ? 'INCREMENTAL' : 'BATCH'}</span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">

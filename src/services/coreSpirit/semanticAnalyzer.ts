@@ -3,6 +3,9 @@ import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import { CoreSpiritType, compatible, isBooleanType, isNumericType, joinTypes } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
+import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
+import { canUseCapability } from './layeredPlatformContract';
+import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
 export type CoreSpiritDiagnostic = { severity:'error'|'warning'; message:string; line?:number; column?:number; start?:number; end?:number; code?:string };
 export type CoreSpiritUdt = { name:string; fields:Array<{name:string;type:CoreSpiritType}> };
@@ -18,7 +21,7 @@ export type CoreSpiritSemanticResult = {
 };
 
 const seriesNames=new Set(['open','high','low','close','volume','time']);
-const specialIdentifiers=new Set(['na']);
+const specialIdentifiers=new Set(['na','bar_index']);
 const comparisonOps=new Set(['==','!=','<','<=','>','>=']);
 
 export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticOptions = {}):CoreSpiritSemanticResult {
@@ -54,10 +57,36 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'identifier':
         if(seriesNames.has(n.name)) return 'series<number>';
         if(n.name==='na') return 'null';
+        if(n.name==='bar_index') return 'number';
         return scope.get(n.name) || 'unknown';
 
       case 'member': {
+        if(n.target.type==='identifier' && n.target.name==='chart' && ['price','volume','indicator','custom'].includes(n.member)) return `visual:area`;
+        if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
+        if(n.target.type==='identifier' && scope.get(n.target.name)==='timeframe:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
+        if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe')) {
+          if(!['open','high','low','close','volume','time'].includes(n.member)) {
+            report(n,`Market/timeframe references do not expose member '${n.member}'`,'UNKNOWN_DATA_FIELD');
+            return 'unknown';
+          }
+          return 'number';
+        }
+        if(n.target.type==='call' && n.target.name==='model') {
+          const modelName=n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : undefined;
+          const modelDecl=(options.surface as CoreSpiritSurfaceMetadata | undefined)?.declarations?.find((d)=>d.kind==='model' && (!modelName || d.name===modelName));
+          if(modelDecl && modelDecl.kind==='model' && modelDecl.outputs.includes(n.member)) {
+            const outputType=modelDecl.outputTypes?.[n.member] ?? 'number';
+            if(outputType==='string') return 'string';
+            if(outputType==='boolean') return 'boolean';
+            return 'number';
+          }
+          if(modelDecl && modelDecl.kind==='model') report(n,`MODEL '${modelDecl.name}' has no output '${n.member}'`,'UNKNOWN_MODEL_OUTPUT');
+          return 'unknown';
+        }
         const target=infer(n.target,scope);
+        if(target==='model:ref') {
+          return 'number';
+        }
         if(target.startsWith('udt:component:')){
           const componentId=target.slice('udt:component:'.length);
           const component=resolveCoreSpiritComponent(componentSource,componentId);
@@ -115,6 +144,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         }
 
         const builtin=CORE_SPIRIT_BUILTINS.get(n.name);
+        if(['buy','sell','order'].includes(n.name) && !canUseCapability(options.layer || 'script','order-intents')) {
+          report(n,`CoreSpirit layer '${options.layer || 'script'}' cannot use capability 'order-intents'`,'CAPABILITY_ORDER_INTENTS');
+        }
         if(!builtin){
           report(n,`Unknown function '${n.name}'`,'UNKNOWN_FUNCTION');
           return 'unknown';
@@ -138,14 +170,32 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(['crossover','crossunder'].includes(n.name) && (!isNumericType(argTypes[0])||!isNumericType(argTypes[1]))) report(n,`${n.name} expects two numeric series`,'TYPE_CROSS');
         if(['plot','marker','line','zone','box','band','gradient','arrow','shape','heatmap','polyline','hline'].includes(n.name) && n.args.length>0 && !isNumericType(argTypes[0])) report(n,`${n.name} requires a numeric value`,'TYPE_OUTPUT');
         if(['bg','barcolor'].includes(n.name) && n.args.length>0 && !compatible('string',argTypes[0])) report(n,`${n.name} color must be a string`,'TYPE_COLOR');
-        if(n.name==='label' && n.args.length>0 && !compatible('string',argTypes[0])) report(n,'label text must be a string','TYPE_LABEL_TEXT');
-        if(n.name==='signal' && n.args.length>0 && !compatible('string',argTypes[0])) report(n,'signal expects a string type','TYPE_SIGNAL');
+        if(n.name==='label' && n.args.length>2 && !compatible('string',argTypes[2])) report(n,'label text must be a string','TYPE_LABEL_TEXT');
+        if(n.name==='labelAt' && n.args.length>1 && !compatible('string',argTypes[1])) report(n,'labelAt text must be a string','TYPE_LABELAT_TEXT');
+        if(n.name==='signal') {
+          const valid = (n.args.length>=2 && isBooleanType(argTypes[0]) && compatible('string',argTypes[1])) || (n.args.length>=1 && compatible('string',argTypes[0]));
+          if(!valid) report(n,'signal expects a string or a boolean condition followed by a string type','TYPE_SIGNAL');
+        }
         return builtin.returnType as CoreSpiritType;
       }
 
-      case 'memberCall':
+      case 'memberCall': {
+        let contract;
+        if(n.target.type==='identifier') {
+          contract=getCoreSpiritMemberContract(n.target.name==='panel' ? 'panel' : n.target.name,n.member);
+        } else if(n.target.type==='member') {
+          contract=getCoreSpiritMemberContract(n.target.member==='panel' ? 'ui' : 'panel',n.member);
+        }
+        if(contract) {
+          n.args.forEach((x,index)=>{
+            if(contract?.actionArgIndices?.includes(index) && x.type==='identifier' && !scope.has(x.name)) return;
+            infer(x,scope);
+          });
+          return contract.returnType as CoreSpiritType;
+        }
         n.args.forEach(x=>infer(x,scope));
         return 'unknown';
+      }
 
       default:
         return 'unknown';
@@ -213,6 +263,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
       case 'call': {
         const args=n.args.map(x=>inferSemantic(x,scope));
+        if(n.name==='market') {
+          return semanticSeries('number',{symbol:n.args[0]?.type==='string' ? String(n.args[0].value) : 'current', timeframe:'chart'});
+        }
+        if(n.name==='timeframe') {
+          return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
+        }
+        if(n.name==='bar_index') return semanticScalar('number');
         const component=resolveCoreSpiritComponent(componentSource,n.name);
         if(component){
           const result=componentResultLanguageType(component);
@@ -287,8 +344,17 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         break;
       case 'member':
         infer(n,scope); break;
-      case 'memberCall':
-        n.args.forEach(x=>visit(x,scope)); infer(n,scope); break;
+      case 'memberCall': {
+        let contract;
+        if(n.target.type==='identifier') contract=getCoreSpiritMemberContract(n.target.name==='panel' ? 'panel' : n.target.name,n.member);
+        else if(n.target.type==='member') contract=getCoreSpiritMemberContract(n.target.member==='panel' ? 'ui' : 'panel',n.member);
+        n.args.forEach((x,index)=>{
+          if(contract?.actionArgIndices?.includes(index) && x.type==='identifier' && !scope.has(x.name)) return;
+          visit(x,scope);
+        });
+        infer(n,scope);
+        break;
+      }
       case 'index':
         visit(n.target,scope); visit(n.index,scope); break;
       case 'call':

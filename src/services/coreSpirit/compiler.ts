@@ -94,6 +94,24 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
+          if (n.target.type === 'identifier' && CORE_SPIRIT_ROOT_NAMESPACES.includes(n.target.name as typeof CORE_SPIRIT_ROOT_NAMESPACES[number])) {
+            const contract = getCoreSpiritMemberContract(n.target.name, n.member);
+            if (contract) {
+              const actionPositions = new Set(contract.actionArgIndices || []);
+              const args = n.args.map((arg, index) => {
+                if (actionPositions.has(index) && arg.type === 'identifier' && !locals.includes(arg.name)) {
+                  const actionDest = `t${temp++}`;
+                  emitInstruction(n, { op:'const', dest:actionDest, value:arg.name });
+                  return actionDest;
+                }
+                return expr(arg);
+              });
+              const dest=`t${temp++}`;
+              emitInstruction(n, {op:'call', dest, name:contract.callName, args, callId:`${contract.callName}:${n.span?.start ?? temp}`});
+              if (contract.emitKind) emitInstruction(n, {op:'emit',kind:contract.emitKind,args:[dest,...args],outputId:`${contract.emitKind}:${n.span?.start ?? temp}`});
+              return dest;
+            }
+          }
           if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
             const resolved = resolveCoreSpiritLibraryCall(n.target.name, n.member, componentSource);
             if (!resolved) throw new Error(`Unknown standard-library member '${n.target.name}.${n.member}'.`);

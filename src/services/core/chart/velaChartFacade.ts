@@ -48,7 +48,7 @@ type SeriesOptions = {
 };
 
 type ChartPointInput = { time: Time; value?: number | null; open?: number; high?: number; low?: number; close?: number; color?: string };
-type ChartMarkerInput = { time: Time; position: 'aboveBar' | 'belowBar' | 'inBar'; color: string; shape: string; text?: string; size?: 'tiny' | 'small' | 'normal' | 'large' | 'huge' };
+type ChartMarkerInput = { time: Time; position: 'aboveBar' | 'belowBar' | 'inBar'; color: string; shape: string; text?: string; size?: 'tiny' | 'small' | 'normal' | 'large' | 'huge'; textSize?: number; offset?: number };
 
 type PriceLineHandle = { id: string; remove: () => void };
 export type FillHandle = { id: string; setOptions: (options: { enabled?: boolean; upperColor?: string; lowerColor?: string; opacity?: number; gradient?: boolean; conditional?: boolean; bullishColor?: string; bearishColor?: string }) => void; remove: () => void };
@@ -231,61 +231,6 @@ export class VelaSeriesFacade<T = string> {
     this.chart.renderer.configurePaneAppearance?.(targetPane, { scale: options.scale === 'log' ? 'price' : options.scale, log: options.scale === 'log', scaleMode: options.scaleMode, auto: options.auto && options.scaleMode === 'auto', min: options.min, max: options.max, inverted: options.inverted });
   }
 
-  addFillBetweenSeries(from: VelaSeriesFacade, to: VelaSeriesFacade, options: { id?: string; enabled?: boolean; upperColor?: string; lowerColor?: string; opacity?: number; gradient?: boolean; conditional?: boolean; bullishColor?: string; bearishColor?: string } = {}): FillHandle {
-    const id = options.id || `tco-fill:${++seriesSerial}`;
-    const existing = this.bandFills.get(id);
-    if (existing) { this.applyFillOptions(existing, options); return { id, setOptions: next => this.applyFillOptions(existing, next), remove: () => this.removeBandFill(id) }; }
-    const modelId = `${id}:model`, fromId = `${id}:from`, toId = `${id}:to`;
-    const fromSpec: SeriesSpec = { id: fromId, title: `${id}:from`, paneId: this.pricePaneId, kind: 'line', visible: false, overlay: true, display: { pane: false, legend: false, priceScale: false, dataWindow: false }, points: from.snapshotPoints(), style: { color: '#60a5fa', width: 1, lineStyle: 'solid' } };
-    const toSpec: SeriesSpec = { id: toId, title: `${id}:to`, paneId: this.pricePaneId, kind: 'line', visible: false, overlay: true, display: { pane: false, legend: false, priceScale: false, dataWindow: false }, points: to.snapshotPoints(), style: { color: '#60a5fa', width: 1, lineStyle: 'solid' } };
-    const fill: Fill = { id: `${id}:fill`, paneId: this.pricePaneId, fromSeriesId: fromId, toSeriesId: toId };
-    const model = indicatorBase(modelId, 'Indicator fill', this.pricePaneId, [fromSpec, toSpec]); model.fills = [fill];
-    const handle = this.renderer.mountIndicator(model);
-    const state = { handle, modelId, from, to, fill, options: {} as any };
-    this.bandFills.set(id, state); this.applyFillOptions(state, options); this.syncBandFill(id);
-    return { id, setOptions: next => this.applyFillOptions(state, next), remove: () => this.removeBandFill(id) };
-  }
-
-  private applyFillOptions(state: { handle: IndicatorRenderHandle; modelId: string; from: VelaSeriesFacade; to: VelaSeriesFacade; fill: Fill; options: any }, options: any): void {
-    state.options = { ...state.options, ...options };
-    const fromPoints = state.from.snapshotPoints(), toPoints = state.to.snapshotPoints();
-    const opacity = Math.max(0.02, Math.min(1, Number(state.options.opacity ?? 0.18)));
-    const upper = withAlpha(String(state.options.upperColor || '#60a5fa'), opacity), lower = withAlpha(String(state.options.lowerColor || '#60a5fa'), opacity);
-    const fill = state.fill;
-    if (state.options.enabled === false) { fill.colors = undefined; fill.gradient = undefined; fill.color = 'rgba(0,0,0,0)'; }
-    else if (state.options.gradient) {
-      fill.color = undefined; fill.colors = undefined; fill.gradient = fromPoints.map((p: any, i: number) => { const q=toPoints[i]; if(!q||p.value==null||q.value==null)return null; return { topValue: Math.max(p.value,q.value), bottomValue: Math.min(p.value,q.value), topColor: upper, bottomColor: lower }; });
-    } else if (state.options.conditional) {
-      fill.gradient = undefined; fill.color = undefined; fill.colors = fromPoints.map((p:any,i:number)=>{const q=toPoints[i]; if(!q||p.value==null||q.value==null)return null; return p.value>=q.value?withAlpha(String(state.options.bullishColor||'#22c55e'),opacity):withAlpha(String(state.options.bearishColor||'#ef4444'),opacity);});
-    } else { fill.gradient = undefined; fill.colors = undefined; fill.color = upper; }
-    fill.paneId = state.from.getPaneId();
-    const native = this.renderer as any;
-    if (typeof native.setIndicatorFills === 'function') native.setIndicatorFills(state.modelId, [fill]);
-  }
-
-  private syncBandFill(id: string): void {
-    const state = this.bandFills.get(id); if (!state) return;
-    const native = this.renderer as any;
-    if (typeof native.setIndicatorSeriesPoints === 'function') native.setIndicatorSeriesPoints(state.modelId, [
-      { seriesId: `${id}:from`, points: state.from.snapshotPoints() },
-      { seriesId: `${id}:to`, points: state.to.snapshotPoints() },
-    ]);
-    state.fill.paneId = state.from.getPaneId();
-    if (typeof native.setIndicatorFills === 'function') native.setIndicatorFills(state.modelId, [state.fill]);
-  }
-
-  syncBandFillsForSeries(seriesId: string): void { for (const [id, state] of this.bandFills) if (state.from.id === seriesId || state.to.id === seriesId) this.syncBandFill(id); }
-  private removeBandFill(id: string): void { const state = this.bandFills.get(id); if (!state) return; this.renderer.removeIndicator(state.handle); this.bandFills.delete(id); }
-
-  createPriceLine(options: { price: number; color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string }): PriceLineHandle {
-    return this.chart.createPriceLine(Number(options.price), options);
-  }
-
-  removePriceLine(handle: PriceLineHandle): void { handle?.remove?.(); }
-  priceToCoordinate(price: number): number | null { return this.chart.priceToCoordinate(price); }
-  coordinateToPrice(y: number): number | null { return this.chart.coordinateToPrice(y); }
-  priceScale() { return { applyOptions: (_options: unknown) => {} }; }
-
   remove(): void {
     if (this.removed) return;
     this.removed = true;
@@ -383,7 +328,7 @@ export class VelaChartFacade {
     this.renderer.updateIndicator(existing.handle, { kind: 'value', indicatorId: modelId, dirty: { from: markerPoints[0]?.time ?? 0, to: markerPoints.at(-1)?.time ?? 0 }, series: [{ seriesId: existing.seriesId, kind: 'markers', markers: markerPoints }] } as ScenePatch);
   }
 
-  createPriceLine(price: number, options: { color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string }): PriceLineHandle {
+  createPriceLine(price: number, options: { color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
     const id = `tco-price-line:${++seriesSerial}`;
     this.priceLines.push({ id, paneId: this.pricePaneId, price, color: String(options.color || '#60a5fa'), width: Math.max(1, Number(options.lineWidth) || 1), lineStyle: lineStyle(options.lineStyle), title: options.title });
     this.ensurePriceLineModel();
@@ -412,6 +357,59 @@ export class VelaChartFacade {
 
   subscribeCrosshair(cb: (e: CrosshairEvent) => void): Unsubscribe { return this.renderer.onCrosshairMove(cb); }
   currentBars(): OHLCV[] { return ((this.renderer as any).bars || []) as OHLCV[]; }
+  addFillBetweenSeries(from: VelaSeriesFacade, to: VelaSeriesFacade, options: { id?: string; enabled?: boolean; upperColor?: string; lowerColor?: string; opacity?: number; gradient?: boolean; conditional?: boolean; bullishColor?: string; bearishColor?: string } = {}): FillHandle {
+    const id = options.id || `tco-fill:${++seriesSerial}`;
+    const existing = this.bandFills.get(id);
+    if (existing) { this.applyFillOptions(existing, options); return { id, setOptions: next => this.applyFillOptions(existing, next), remove: () => this.removeBandFill(id) }; }
+    const modelId = `${id}:model`, fromId = `${id}:from`, toId = `${id}:to`;
+    const fromSpec: SeriesSpec = { id: fromId, title: `${id}:from`, paneId: this.pricePaneId, kind: 'line', visible: false, overlay: true, display: { pane: false, legend: false, priceScale: false, dataWindow: false }, points: from.snapshotPoints(), style: { color: '#60a5fa', width: 1, lineStyle: 'solid' } };
+    const toSpec: SeriesSpec = { id: toId, title: `${id}:to`, paneId: this.pricePaneId, kind: 'line', visible: false, overlay: true, display: { pane: false, legend: false, priceScale: false, dataWindow: false }, points: to.snapshotPoints(), style: { color: '#60a5fa', width: 1, lineStyle: 'solid' } };
+    const fill: Fill = { id: `${id}:fill`, paneId: this.pricePaneId, fromSeriesId: fromId, toSeriesId: toId };
+    const model = indicatorBase(modelId, 'Indicator fill', this.pricePaneId, [fromSpec, toSpec]); model.fills = [fill];
+    const handle = this.renderer.mountIndicator(model);
+    const state = { handle, modelId, from, to, fill, options: {} as any };
+    this.bandFills.set(id, state); this.applyFillOptions(state, options); this.syncBandFill(id);
+    return { id, setOptions: next => this.applyFillOptions(state, next), remove: () => this.removeBandFill(id) };
+  }
+
+  private applyFillOptions(state: { handle: IndicatorRenderHandle; modelId: string; from: VelaSeriesFacade; to: VelaSeriesFacade; fill: Fill; options: any }, options: any): void {
+    state.options = { ...state.options, ...options };
+    const fromPoints = state.from.snapshotPoints(), toPoints = state.to.snapshotPoints();
+    const opacity = Math.max(0.02, Math.min(1, Number(state.options.opacity ?? 0.18)));
+    const upper = withAlpha(String(state.options.upperColor || '#60a5fa'), opacity), lower = withAlpha(String(state.options.lowerColor || '#60a5fa'), opacity);
+    const fill = state.fill;
+    if (state.options.enabled === false) { fill.colors = undefined; fill.gradient = undefined; fill.color = 'rgba(0,0,0,0)'; }
+    else if (state.options.gradient) {
+      fill.color = undefined; fill.colors = undefined; fill.gradient = fromPoints.map((p: any, i: number) => { const q=toPoints[i]; if(!q||p.value==null||q.value==null)return null; return { topValue: Math.max(p.value,q.value), bottomValue: Math.min(p.value,q.value), topColor: upper, bottomColor: lower }; });
+    } else if (state.options.conditional) {
+      fill.gradient = undefined; fill.color = undefined; fill.colors = fromPoints.map((p:any,i:number)=>{const q=toPoints[i]; if(!q||p.value==null||q.value==null)return null; return p.value>=q.value?withAlpha(String(state.options.bullishColor||'#22c55e'),opacity):withAlpha(String(state.options.bearishColor||'#ef4444'),opacity);});
+    } else { fill.gradient = undefined; fill.colors = undefined; fill.color = upper; }
+    fill.paneId = state.from.getPaneId();
+    const native = this.renderer as any;
+    if (typeof native.setIndicatorFills === 'function') native.setIndicatorFills(state.modelId, [fill]);
+  }
+
+  private syncBandFill(id: string): void {
+    const state = this.bandFills.get(id); if (!state) return;
+    const native = this.renderer as any;
+    if (typeof native.setIndicatorSeriesPoints === 'function') native.setIndicatorSeriesPoints(state.modelId, [
+      { seriesId: `${id}:from`, points: state.from.snapshotPoints() },
+      { seriesId: `${id}:to`, points: state.to.snapshotPoints() },
+    ]);
+    state.fill.paneId = state.from.getPaneId();
+    if (typeof native.setIndicatorFills === 'function') native.setIndicatorFills(state.modelId, [state.fill]);
+  }
+
+  syncBandFillsForSeries(seriesId: string): void { for (const [id, state] of this.bandFills) if (state.from.id === seriesId || state.to.id === seriesId) this.syncBandFill(id); }
+  private removeBandFill(id: string): void { const state = this.bandFills.get(id); if (!state) return; this.renderer.removeIndicator(state.handle); this.bandFills.delete(id); }
+
+  createPriceLine(options: { price: number; color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
+    const id = `tco-price-line:${++seriesSerial}`;
+    this.priceLines.push({ id, paneId: this.pricePaneId, price:Number(options.price), color:String(options.color || '#60a5fa'), width:Math.max(1,Number(options.lineWidth)||1), lineStyle:lineStyle(options.lineStyle), title:options.title });
+    this.ensurePriceLineModel();
+    this.updatePriceLineModel();
+    return { id, remove:()=>{ this.priceLines=this.priceLines.filter(x=>x.id!==id); this.updatePriceLineModel(); } };
+  }
   removeBandFillsForSeries(seriesId:string): void { for(const [id,state] of this.bandFills) if(state.from.id===seriesId||state.to.id===seriesId) this.removeBandFill(id); }
 
   unregisterSeries(series: VelaSeriesFacade): void { this.series.delete(series); this.candleSeries.delete(series); this.setSeriesGlow(series.id, 0); }

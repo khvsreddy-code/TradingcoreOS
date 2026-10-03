@@ -95,7 +95,7 @@ export class CoreSpiritWorkerPool {
       if (index >= 0) this.slots.splice(index, 1);
       cleanup();
     };
-    slot.worker.postMessage({ type:'run', requestId, source, sourceId, bars:job.bars });
+    slot.worker.postMessage({ type:'run', requestId, source:job.source, sourceId:job.sourceId, bars:job.bars });
   }
 
   private async runFallback(source: string, bars: CoreSpiritMarketBar[], sourceId: string): Promise<CoreSpiritWorkerRunResult> {

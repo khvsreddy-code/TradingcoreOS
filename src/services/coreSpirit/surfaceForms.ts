@@ -7,6 +7,7 @@ import { normalizeCoreSpiritEventSource, normalizeCoreSpiritWhenCondition } from
 import { buildCoreSpiritCompositionGraph } from './composability';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
+import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { normalizeReadableOperatorsWithTokens, withProtectedCoreSpiritSurfaceText } from './surfaceCst';
 
 export type CoreSpiritSurfaceSyntaxContext = {
@@ -320,11 +321,11 @@ export function normalizeCoreSpiritSource(source: string): string {
   return out.join('\n');
 }
 
-export function describeCoreSpiritSurface(source: string): CoreSpiritSurfaceMetadata {
+export function describeCoreSpiritSurface(source: string, options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritSurfaceMetadata {
   const surface = extractCoreSpiritSurfaceMetadata(source);
   const normalized = normalizeCoreSpiritSource(source);
   const parsed = new CoreSpiritParser(normalized).parseDetailed();
-  const semantic = parsed.diagnostics.length ? null : analyzeCoreSpirit(parsed.ast,{ surface });
+  const semantic = parsed.diagnostics.length ? null : analyzeCoreSpirit(parsed.ast,{ surface, components: options.components });
   if (!semantic) return surface;
   const graph = buildCoreSpiritCompositionGraph(parsed.ast,semantic,surface);
   return {

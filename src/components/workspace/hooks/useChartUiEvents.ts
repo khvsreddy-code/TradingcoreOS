@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { IChartApi } from '../../services/core/chart/velaChartFacade';
+import type { IChartApi } from '../../../services/core/chart/velaChartFacade';
 
 export type ChartUiEventHandlers = {
   setTimeframe: (timeframe: string) => void;

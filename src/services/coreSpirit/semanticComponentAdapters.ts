@@ -2,7 +2,7 @@ import type { CoreSpiritModelManifest } from './modelAbi';
 import type { CoreSpiritComponentContract, CoreSpiritComponentPort } from './coreSpiritExecutionModel';
 
 function modelPort(name:string):CoreSpiritComponentPort{
-  return Object.freeze({name,type:{kind:'feature'},required:true,description:`Model ABI tensor '${name}'.`});
+  return Object.freeze({name,type:{kind:'feature' as const},required:true,description:`Model ABI tensor '${name}'.`});
 }
 function backendForModel(manifest:CoreSpiritModelManifest):'wasm'|'host'|'remote'{
   return manifest.backend==='wasm'?'wasm':manifest.backend==='native-rpc'?'remote':'host';

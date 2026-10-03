@@ -149,7 +149,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
   const [latencyMs, setLatencyMs] = useState<number>();
   const [orderLatencyMs, setOrderLatencyMs] = useState<number>();
   const ticksRef = useRef<Record<string, NormalizedMarketTick>>({});
-  const tickFrameRef = useRef<number>();
+  const tickFrameRef = useRef<number | null>(null);
   const selectedTick = ticks[selectedKey];
   const selectedInstrument = watchlist.find((x: any) => x.key === selectedKey) || instrumentResults.find((x: any) => x.key === selectedKey) || { key: selectedKey, label: selectedKey, short: selectedKey, type: 'Custom' };
 
@@ -296,7 +296,7 @@ export function FullWorkspaceView({ onBackToLanding, onNavigateToBroker, onNavig
     {renderOverlay()}
 
     <section className="border-t border-[var(--tco-border)] bg-[var(--tco-surface)] p-2"><div className="flex gap-1 overflow-x-auto">{(['INFO','POSITIONS','ORDERS','TRADES','HOLDINGS','FUNDS'] as const).map(tab => <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1.5 rounded-md font-mono text-[10px] ${activeTab === tab ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'text-[var(--tco-muted)] hover:text-white'}`}>{tab}</button>)}</div><div className="mt-2 max-h-28 overflow-y-auto font-mono text-[10px] text-[#d1d5db]">{activeTab === 'INFO' && <div className="grid grid-cols-2 md:grid-cols-6 gap-2"><MetricRow label="Bias" value={analytics?.bias || '—'} /><MetricRow label="VWAP" value={fmt(analytics?.vwap, 1)} /><MetricRow label="ATR" value={fmt(analytics?.atr, 1)} /><MetricRow label="Prev H" value={fmt(analytics?.previousHigh, 0)} /><MetricRow label="Prev L" value={fmt(analytics?.previousLow, 0)} /><MetricRow label="Margin" value={funds ? `₹${fmt(funds.availableMargin, 0)}` : '—'} /></div>}{activeTab === 'POSITIONS' && (positions.length ? positions.map(p => <p key={p.id}>{p.symbol} · {p.quantity} · P&L ₹{fmt(p.pnl)}</p>) : <p className="text-[var(--tco-dim)]">No positions returned by broker.</p>)}{activeTab === 'ORDERS' && (orders.length ? orders.map(o => <p key={o.orderId}>{o.orderId} · {o.status} · {o.timestamp}</p>) : <p className="text-[var(--tco-dim)]">No orders returned by broker.</p>)}{activeTab === 'TRADES' && (trades.length ? trades.map(t => <p key={t.tradeId}>{t.symbol} · {t.side} · {t.quantity} @ ₹{fmt(t.price)}</p>) : <p className="text-[var(--tco-dim)]">No trades returned by broker.</p>)}{activeTab === 'HOLDINGS' && (holdings.length ? holdings.map(h => <p key={h.id}>{h.symbol} · {h.quantity} · ₹{fmt(h.ltp)}</p>) : <p className="text-[var(--tco-dim)]">No holdings returned by broker.</p>)}{activeTab === 'FUNDS' && <p>{funds ? `Available ₹${fmt(funds.availableMargin, 0)} · Used ₹${fmt(funds.usedMargin, 0)} · Collateral ₹${fmt(funds.collateralMargin, 0)}` : 'Funds unavailable'}</p>}</div></section>
-    {settingsOpen && <BrokerSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onConnected={() => { setSettingsOpen(false); void tradingCoreRuntime.restoreBrokerConnections(); }} />}
+    {settingsOpen && <BrokerSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onNavigateToConnect={() => setSettingsOpen(false)} />}
   </div>;
 }
 

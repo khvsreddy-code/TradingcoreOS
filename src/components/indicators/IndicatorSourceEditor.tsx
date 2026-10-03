@@ -16,15 +16,15 @@ export type IndicatorSourceEditorProps = {
 
 export function IndicatorSourceEditor({ item, user, onClose, onSaved }: IndicatorSourceEditorProps) {
   const template = useMemo(() => getIndicatorSourceTemplate(item.kind, item), [item.kind, item]);
-  const [source, setSource] = useState(item.sourceCode || template.source);
-  const [title, setTitle] = useState(item.customName || item.kind);
-  const [description, setDescription] = useState(template.note);
+  const [source, setSource] = useState<string>(typeof item.sourceCode === 'string' ? item.sourceCode : template.source);
+  const [title, setTitle] = useState<string>(typeof item.customName === 'string' ? item.customName : item.kind);
+  const [description, setDescription] = useState<string>(template.note);
   const [category, setCategory] = useState('Custom');
   const [tags, setTags] = useState(item.kind.toLowerCase().replace(/[^a-z0-9]+/g, ' '));
   const [license, setLicense] = useState('MIT');
   const [cover, setCover] = useState<File | null>(null);
   const [tab, setTab] = useState<'code' | 'publish'>('code');
-  const [scriptId, setScriptId] = useState<string | null>(item.scriptId || null);
+  const [scriptId, setScriptId] = useState<string | null>(typeof item.scriptId === 'string' ? item.scriptId : null);
   const [status, setStatus] = useState<'idle'|'saving'|'saved'|'publishing'|'published'|'error'>('idle');
   const [message, setMessage] = useState('');
   const [publication, setPublication] = useState<IndicatorPublication | null>(null);

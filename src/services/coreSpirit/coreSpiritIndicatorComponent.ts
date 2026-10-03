@@ -159,13 +159,13 @@ function sourceInputsFromArtifact(artifact: CoreSpiritExecutableArtifact): reado
   }
   return Object.freeze([...names].map(name => Object.freeze({
     name,
-    type: { kind: 'series', element: 'scalar' },
+    type: { kind: 'series' as const, element: 'scalar' as const },
     required: true,
     source: 'canonical-data' as const,
   })));
 }
 
-function emittedInstructions(artifact: CoreSpiritExecutableArtifact): ReadonlyArray<{ instruction: number; ins: CoreSpiritIrInstruction }> {
+function emittedInstructions(artifact: CoreSpiritExecutableArtifact): ReadonlyArray<{ instruction: number; ins: Extract<CoreSpiritIrInstruction,{op:'emit'}> }> {
   return artifact.ir.entry.instructions.flatMap((ins, instruction) => ins.op === 'emit' ? [{ instruction, ins }] : []);
 }
 
@@ -181,7 +181,7 @@ function indicatorOutputs(artifact: CoreSpiritExecutableArtifact, requestedNames
     outputs.push(Object.freeze({
       id: `value:${ins.name}`,
       name: ins.name,
-      type: ins.series ? { kind: 'series', element: 'scalar' } : { kind: 'scalar' },
+      type: ins.series ? { kind: 'series' as const, element: 'scalar' as const } : { kind: 'scalar' as const },
       role: 'value',
       sourceInstruction: instruction,
     }));
@@ -192,7 +192,7 @@ function indicatorOutputs(artifact: CoreSpiritExecutableArtifact, requestedNames
     const name = outputId;
     if (seen.has(name)) continue;
     seen.add(name);
-    outputs.push(Object.freeze({ id: outputId, name, type: { kind: role === 'event' ? 'event' : 'visual' }, role, sourceInstruction: instruction }));
+    outputs.push(Object.freeze({ id: outputId, name, type: { kind: (role === 'event' ? 'event' : 'visual') as const }, role, sourceInstruction: instruction }));
   }
   return Object.freeze(outputs);
 }

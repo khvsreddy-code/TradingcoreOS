@@ -23,7 +23,9 @@ function keyOf(r: CoreSpiritDataRequest): string {
 export function planCoreSpiritDataRequests(requests: CoreSpiritDataRequest[]): CoreSpiritDataPlan {
   const unique = new Map<string, CoreSpiritPlannedRequest>();
   for (const request of requests) {
-    const normalized = { ...request, symbol: normalizeText(request.symbol), timeframe: normalizeText(request.timeframe), field: normalizeText(request.field), offset: Math.max(0, Math.floor(request.offset ?? 0)) };
+    const field = normalizeText(request.field).toLowerCase();
+    if (!['open','high','low','close','volume','time'].includes(field)) continue;
+    const normalized: CoreSpiritDataRequest = { ...request, symbol: normalizeText(request.symbol), timeframe: normalizeText(request.timeframe), field: field as CoreSpiritDataRequest['field'], offset: Math.max(0, Math.floor(request.offset ?? 0)) };
     const key = keyOf(normalized);
     if (!unique.has(key)) unique.set(key, { ...normalized, key });
   }

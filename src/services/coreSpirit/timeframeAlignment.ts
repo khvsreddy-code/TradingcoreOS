@@ -26,3 +26,9 @@ export function groupIntrabars(parentBars: Array<{ timestamp: number; endTimesta
     return { parentTimestamp: parent.timestamp, timeframe: `${parentDurationMs}ms`, points, complete: points.length > 0 && points.at(-1)!.timestamp < end, source: 'aligned-ltf' };
   });
 }
+
+
+export function alignTimeframeSnapshots(targetTimes: number[], snapshots: CoreSpiritDataSnapshot[], options: { confirmedOnly?: boolean } = {}): CoreSpiritAlignedPoint[] {
+  const filtered = options.confirmedOnly ? snapshots.filter(snapshot => snapshot.state === 'confirmed' || snapshot.state === 'historical') : snapshots;
+  return alignSnapshots(targetTimes, filtered);
+}

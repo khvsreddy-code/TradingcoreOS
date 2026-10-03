@@ -2,6 +2,8 @@ import type { OptionChain, NormalizedMarketTick } from '../../types/market';
 
 export interface OrderRequest {
   symbol: string;
+  /** Optional broker-native instrument identifier (for example Upstox instrument_key). */
+  instrument_token?: string;
   quantity: number;
   price?: number;
   triggerPrice?: number;

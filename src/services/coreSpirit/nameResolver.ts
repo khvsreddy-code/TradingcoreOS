@@ -51,6 +51,14 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
             });
             break;
           }
+          if(namespace==='panel'){
+            n.args.forEach((a,index)=>{
+              const isAction=(n.member==='button'&&index===1)||(n.member==='toggle'&&index===2)||(n.member==='number'&&index===2)||(n.member==='slider'&&index===4);
+              if(isAction&&a.type==='identifier'&&!scope.has(a.name))return;
+              expression(a,scope);
+            });
+            break;
+          }
           if(CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES.includes(namespace as typeof CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES[number])){
             if(!resolveCoreSpiritLibraryCall(namespace,n.member,componentSource))
               report(n,`Unknown standard-library member '${namespace}.${n.member}'`,'UNKNOWN_MEMBER');

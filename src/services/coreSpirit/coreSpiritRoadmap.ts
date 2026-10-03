@@ -3,7 +3,7 @@
  * This file is intentionally data-first so tooling can render the roadmap,
  * check dependencies, and keep the language/runtime roadmap in sync.
  */
-export type CoreSpiritStageKind = 'foundation' | 'runtime' | 'compiler' | 'tooling' | 'platform' | 'governance';
+export type CoreSpiritStageKind = 'foundation' | 'runtime' | 'compiler' | 'tooling' | 'platform' | 'governance' | 'language' | 'security' | 'ui';
 export type CoreSpiritGate = {
   id: string;
   statement: string;

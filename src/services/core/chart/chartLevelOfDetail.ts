@@ -1,5 +1,5 @@
 import type { ChartDataPoint, MarketDataStore } from './chartDataModel';
-import { normalizeChartViewport, type ChartViewport } from './chartViewport';
+import { normalizeChartViewport, type ChartViewport, type ChartViewportInput } from './chartViewport';
 
 export type ChartLodBar = ChartDataPoint & { sourceFrom: number; sourceTo: number };
 
@@ -36,7 +36,7 @@ export function createLodIndex(): ChartLodIndex {
   };
 }
 
-export function updateLodIndex(store: MarketDataStore, index: ChartLodIndex, viewportInput: ChartViewport): ChartLodIndex {
+export function updateLodIndex(store: MarketDataStore, index: ChartLodIndex, viewportInput: ChartViewportInput): ChartLodIndex {
   const viewport = normalizeChartViewport(store.length, viewportInput);
   const rows = viewport.to - viewport.from;
   const bucketSize = rows <= viewport.pixelWidth * 1.5

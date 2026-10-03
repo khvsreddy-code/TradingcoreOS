@@ -24,6 +24,15 @@ export interface CoreSpiritMarketTick {
   side?: 'buy' | 'sell' | 'unknown';
 }
 
+export interface CoreSpiritMarketDataProvenance {
+  provider?: string;
+  source?: string;
+  fetchedAt?: string;
+  requestId?: string;
+  checksum?: string;
+  metadata?: Readonly<Record<string, string | number | boolean | null>>;
+}
+
 export interface CoreSpiritMarketDataset {
   version: typeof CORE_SPIRIT_MARKET_DATA_VERSION;
   id: string;
@@ -32,6 +41,7 @@ export interface CoreSpiritMarketDataset {
   bars: readonly CoreSpiritMarketBar[];
   source: 'broker' | 'file' | 'database' | 'research' | 'synthetic' | 'replay';
   checksum?: string;
+  provenance?: CoreSpiritMarketDataProvenance;
 }
 
 export function validateCoreSpiritMarketBar(bar: CoreSpiritMarketBar): void {
@@ -60,5 +70,6 @@ export function normalizeCoreSpiritMarketDataset(
     bars,
     source: dataset.source,
     checksum: dataset.checksum,
+    provenance: dataset.provenance,
   };
 }

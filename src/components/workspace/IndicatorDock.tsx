@@ -13,7 +13,7 @@ const fmtConfig = (x: IndicatorConfig) => {
   if (x.fast || x.slow || x.signal) parts.push(`${x.fast ?? '—'}/${x.slow ?? '—'}/${x.signal ?? '—'}`);
   if (x.multiplier) parts.push(`${x.multiplier}×`);
   if (x.smooth) parts.push(`S${x.smooth}`);
-  return parts.join(' · ');
+  return String(parts.join(' · '));
 };
 
 const defaultIds = new Set(defaultIndicators.map(x => x.id));
