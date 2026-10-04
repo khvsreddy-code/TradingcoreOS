@@ -125,3 +125,19 @@ This remains independent from indicator calculation: history transport, CoreSpir
 ## Motion boundary
 
 Motion remains intentionally restrained. UI/DOM motion uses the existing Motion/CSS layer; Vela owns chart navigation animation. Three.js is not used for routine DOM transitions because it would introduce an unnecessary rendering subsystem.
+
+## v128 — columnar deep backfill
+
+The `ColumnarHistoryTape` is now used for both initial data and deep backward paging. `loadRangeColumns` carries a bounded older-history page from the TCO provider into `prependColumns`, avoiding a retained-series OHLCV object rebuild on every 5,000-bar prepend.
+
+The identity-chart path updates the renderer from the retained columnar snapshot and materializes only the new compatibility head page when legacy consumers need objects. Transformed price styles retain their compatibility projection because they genuinely require derived candle values.
+
+## v128 — dirty-range/render closure
+
+History backfill supplies a causal dirty interval based on the new head plus indicator `maxLookback`. CoreSpirit computes that bounded span and Vela converts the resulting model into a binary-bounded `replace-range` value patch. Unchanged series tails remain intact.
+
+## v128 — frame budget telemetry
+
+Per-cell Vela performance now includes `p95FrameMs`, `fps`, `frameBudgetMs`, `frameBudgetMisses` and `frameBudgetMissRate` in addition to average/worst/long-frame counters. The frame sample buffer is fixed at 240 entries, keeping telemetry overhead bounded.
+
+The browser verification harness can exercise one, four and eight-cell deployments by supplying matching URL/cell-count pairs. It also fails when observed p95 frame time exceeds the configured threshold.
