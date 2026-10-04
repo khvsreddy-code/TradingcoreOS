@@ -7,7 +7,7 @@ There are four canonical documentation batches:
 3. **03_VELA_AND_CHARTING.md** — Vela boundary, columnar candles, incremental patches, LOD and viewport behavior.
 4. **04_INDICATORS_AND_PLATFORM.md** — indicator artifacts, settings, dependency graphs and community indicators.
 
-Older standalone documents are preserved under `docs/archive/source/`.
+Older standalone documents are preserved under `docs/archive/` and `docs/archive/source/`. Versioned planning documents are archived; active architecture references remain temporarily available until their material is fully absorbed into these four batches.
 
 ## Beginner CoreSpirit path
 
