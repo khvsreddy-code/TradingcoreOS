@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const root=process.cwd(); const read=f=>fs.readFileSync(path.join(root,f),'utf8');
 const legacy=read('src/services/coreSpirit/indicatorKernel.ts');
-const standard=read('src/services/coreSpirit/indicatorEngine.ts');
+const standard=read('src/services/marketData/indicatorEngine.ts');
 const marketKernel=read('src/services/marketData/coreIndicatorKernel.ts');
 const stateful=read('src/services/coreSpirit/statefulIndicatorKernel.ts');
 const runtime=read('src/services/coreSpirit/runtime.ts');
