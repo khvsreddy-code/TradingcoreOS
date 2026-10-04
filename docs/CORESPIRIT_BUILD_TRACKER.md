@@ -71,7 +71,45 @@ These are intentionally **not falsely marked as finished**:
 1. **True columnar history ABI completion** — migrate the remaining Vela compatibility consumers and remove the final OHLCV mirror.
 2. **Exact dirty-span completion** — propagate one proven causal range through CoreSpirit → renderer/model packet collections → Vela invalidation end-to-end.
 3. **GPU/frame runtime verification** — collect real browser measurements for 1/4/8 charts, 5k initial load, 5k prepend and live ticks; then add GPU counters where meaningful.
-3. **GPU/frame runtime verification** — collect real browser measurements for 1/4/8 charts, 5k initial load, 5k prepend and live ticks; add GPU counters where meaningful.
+
+
+## v132 — hot VM, copy-on-write realtime state and terminal product pass
+
+### 5. Runtime architecture — smaller hot VM
+
+- [x] Extracted CoreSpiritExecutionVM as the dedicated instruction-dispatch hot loop.
+- [x] Runtime-specific operations are supplied through a narrow VM host instead of embedding orchestration into the dispatch loop.
+- [x] Added CoreSpiritOutputCollector, CoreSpiritEventRouter, CoreSpiritCapabilityHost and CoreSpiritDebugHost.
+- [x] CoreSpiritRuntime remains the orchestration facade; the VM is broker/network/DOM free.
+- [x] Added a CI contract preventing regression to the old monolithic hot loop.
+
+### 6. Realtime state — checkpoint + mutation journal
+
+- [x] Removed full seriesState / localSeries / crossState clones from forming-bar rollback.
+- [x] Added per-key mutation journals for bounded numeric/value series and cross-state.
+- [x] Forming-bar replacements rollback only touched state and then start a fresh journal for the replacement evaluation.
+- [x] Historical checkpoint export/import remains clone-safe because it is a cold recovery path.
+- [x] Realtime execution results use the non-cloning state view; explicit snapshot callers retain the cloned API.
+- [x] Added CI coverage for the hot VM and copy-on-write invariants.
+
+### 7. Vela workspace and data-path hardening
+
+- [x] Default workspace layout changed from 4 charts to 1 chart; persisted state key bumped to avoid legacy-grid contamination.
+- [x] Added TCO-owned Watchlist, Journal and Panels topbar actions plus a TradingCoreOS × Vela brand action.
+- [x] Quant UI is not included.
+- [x] Alt drawing wheel selection highlight is royal purple.
+- [x] Non-live application accent moved to #d3ebf4; live terminal keeps its trading palette.
+- [x] Live trading animations are disabled so feed updates are never visually delayed by decorative easing.
+- [x] Empty FYERS column history now falls through to the ordinary history path instead of producing a successful blank dataset.
+- [x] Vela topbar exposes stable action ids so TCO can style contributed chrome without reaching into widget internals.
+- [x] Added CI contracts for workspace composition, candle fallback and FYERS order latency.
+
+### 8. FYERS order hot path
+
+- [x] Fixed-IP FYERS execution gateway remains the preferred execution route when configured.
+- [x] Order responses no longer wait on non-critical audit-log writes after the safety ledger is finalized.
+- [x] Order transport explicitly uses cache: no-store.
+- [~] Broker-session lookup/decryption still occurs per order; a multi-instance-safe short-lived session fast path is a future optimization and must not weaken credential revocation semantics.
 
 ## Retained product baseline
 
@@ -81,7 +119,7 @@ These are intentionally **not falsely marked as finished**:
 - [x] Compact FYERS history ingress.
 - [x] Vela-owned Alt drawing wheel with Panels action.
 - [x] Supabase workspace persistence + 15-minute autosave.
-- [x] Black/graphite + royal-purple visual system.
+- [x] Black/graphite live-terminal visual system; non-live application chrome uses #d3ebf4, while the Alt drawing wheel keeps royal-purple selection highlight.
 - [x] Public CoreSpirit indicator/strategy scripts, Models and Automations surfaces.
 - [x] CI contract suite is configured to enforce the architecture.
 
