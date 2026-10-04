@@ -2,7 +2,7 @@
 
 > Living implementation truth for CoreSpirit.
 >
-> `docs/CORESPIRIT.md` is the stable architecture brain. This file records what is actually built, what has been verified, what remains incomplete, and the next concrete work.
+> `docs/01_CORESPIRIT.md` is the stable CoreSpirit architecture brain. This file records what is actually built, what has been verified, what remains incomplete, and the next concrete work.
 
 ## Current release
 
