@@ -23,6 +23,13 @@
   --tco-control: #303747;
   --tco-axis: #252b3a;
   --tco-surface-blue: #141022;
+  --tco-accent: #7c5cff;
+  --tco-accent-soft: #9b8aff;
+  --tco-accent-bright: #c4b5fd;
+  --tco-motion-fast: 180ms;
+  --tco-motion-standard: 280ms;
+  --tco-motion-slow: 380ms;
+  --tco-motion-ease: cubic-bezier(.22,1,.36,1);
   --tco-code-bg-deep: #08070d;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color-scheme: dark;
@@ -54,7 +61,7 @@ html[data-tco-theme="white"] {
   --tco-slate: #667085;
   --tco-control: #c7ced8;
   --tco-axis: #c5ccd5;
-  --tco-surface-blue: #eef3f8;
+  --tco-surface-blue: #15131f;
   --tco-code-bg-deep: #e7ebf0;
 }
 
@@ -114,7 +121,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   color: #f7f8fb;
 }
 .hero-gradient-text {
-  background: linear-gradient(110deg, #f3f4f6 5%, #b7adff 38%, #9b8aff 62%, #60a5fa 95%);
+  background: linear-gradient(110deg, #f3f4f6 5%, #b7adff 38%, #9b8aff 62%, #9b8aff 95%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -143,15 +150,15 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   border-radius: 12px;
   font-size: .82rem;
   font-weight: 700;
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+  transition: transform var(--tco-motion-standard) var(--tco-motion-ease), box-shadow var(--tco-motion-standard) var(--tco-motion-ease), border-color var(--tco-motion-standard) var(--tco-motion-ease), background var(--tco-motion-standard) var(--tco-motion-ease);
 }
 .premium-button:hover { transform: translateY(-1px); }
 .premium-button-primary {
   color: #090a0f;
-  background: linear-gradient(135deg, #60a5fa, #7c5cff 60%, #6648d8);
-  box-shadow: 0 10px 35px rgba(59,130,246,.18), inset 0 1px rgba(255,255,255,.28);
+  background: linear-gradient(135deg, #9b8aff, #7c5cff 60%, #6648d8);
+  box-shadow: 0 10px 35px rgba(124,92,255,.18), inset 0 1px rgba(255,255,255,.28);
 }
-.premium-button-primary:hover { box-shadow: 0 15px 42px rgba(59,130,246,.28), inset 0 1px rgba(255,255,255,.28); }
+.premium-button-primary:hover { box-shadow: 0 15px 42px rgba(124,92,255,.28), inset 0 1px rgba(255,255,255,.28); }
 .premium-button-secondary {
   color: #e5e7eb;
   border: 1px solid rgba(255,255,255,.09);
@@ -194,11 +201,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  border: 1px solid rgba(59,130,246,.28);
-  background: rgba(59,130,246,.08);
+  border: 1px solid rgba(124,92,255,.28);
+  background: rgba(124,92,255,.08);
   font-size: 9px;
   font-weight: 900;
-  color: #60a5fa;
+  color: #9b8aff;
 }
 
 .chart-grid {
@@ -222,14 +229,14 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   transition: .2s ease;
 }
 .toolbar-pill:hover { color: var(--tco-text); border-color: rgba(255,255,255,.12); }
-.toolbar-pill-active { color: #60a5fa; border-color: rgba(59,130,246,.28); background: rgba(59,130,246,.06); }
-.toolbar-pill-active-blue { color: #93c5fd; border-color: rgba(96,165,250,.25); background: rgba(96,165,250,.05); }
+.toolbar-pill-active { color: #9b8aff; border-color: rgba(124,92,255,.28); background: rgba(124,92,255,.06); }
+.toolbar-pill-active-blue { color: #c4b5fd; border-color: rgba(155,138,255,.25); background: rgba(155,138,255,.05); }
 .live-dot {
   height: 6px;
   width: 6px;
   border-radius: 50%;
-  background: #60a5fa;
-  box-shadow: 0 0 0 4px rgba(96,165,250,.08), 0 0 14px rgba(96,165,250,.45);
+  background: #9b8aff;
+  box-shadow: 0 0 0 4px rgba(155,138,255,.08), 0 0 14px rgba(155,138,255,.45);
 }
 
 /* Compact desktop watchlist rail provided by the workspace runtime bridge. */
@@ -250,7 +257,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   letter-spacing: .14em;
   color: #64748b;
 }
-.tco-watchlist-live { color: #3b82f6; font-size: 8px; letter-spacing: .04em; }
+.tco-watchlist-live { color: #7c5cff; font-size: 8px; letter-spacing: .04em; }
 .tco-watchlist-item,
 .tco-watchlist-add {
   position: relative;
@@ -267,11 +274,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   cursor: pointer;
   transition: border-color .15s ease, background .15s ease;
 }
-.tco-watchlist-item:hover { border-color: rgba(59,130,246,.35); background: rgba(59,130,246,.05); }
+.tco-watchlist-item:hover { border-color: rgba(124,92,255,.35); background: rgba(124,92,255,.05); }
 .tco-watchlist-remove { position: absolute; right: 7px; top: 5px; color: #64748b; font-size: 13px; }
 .tco-watchlist-remove:hover { color: #ef4444; }
 .tco-watchlist-add { border-style: dashed; color: #64748b; text-align: center; }
-.tco-watchlist-add:hover { border-color: rgba(59,130,246,.35); color: #3b82f6; }
+.tco-watchlist-add:hover { border-color: rgba(124,92,255,.35); color: #7c5cff; }
 @media (max-width: 1535px) {
   .tco-watchlist-rail { display: none !important; }
   .tco-watchlist-source-hidden { display: flex !important; }
