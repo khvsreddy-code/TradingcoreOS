@@ -18,7 +18,7 @@ const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const storage = read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 
 assert.match(semantic, /function builtinDeterminism/);
-assert.match(semantic, /Stateful does not mean effectful/);
+assert.match(semantic, /const deterministic = ins\.op === 'call' \? builtinDeterminism/);
 assert.match(vector, /copyFrom\(source: MonotonicDeque/);
 assert.match(vector, /clone\(\): CoreSpiritFusedSeriesCursor/);
 assert.match(runtime, /fusedCursorSnapshots/);
