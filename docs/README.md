@@ -37,3 +37,21 @@ show series(strength, "RSI")
 ```
 
 Use named series. The compiler builds a semantic dependency graph and can fuse compatible numeric chains.
+
+## v127 deep-performance pass — 2026-10-04
+
+The active documentation now records the following implementation layers:
+
+```
+TCO data columns
+  → Vela ColumnarHistoryTape
+  → Vela columnar renderer
+  → CoreSpirit stateful kernels
+  → exact dirty spans
+  → Vela replace-range patches
+  → renderer frame/backend telemetry
+```
+
+The four canonical batches are the only active architecture docs. Historical/redundant source notes are preserved under `docs/archive/`; `docs/history/` remains an immutable release history.
+
+For contributors, the rule is simple: change the canonical document first. Do not create another one-off architecture note for an already-covered subsystem.
