@@ -70,520 +70,85 @@ function signOfDelta(value: number, previous: number): number {
  * Fixed-capacity monotonic deque. It stores only window-local extrema, not a
  * history-sized output array. Each append/eviction is amortized O(1).
  */
-class MonotonicDeque {
-  private readonly indices: Int32Array;
-  private readonly values: Float64Array;
-  private head = 0;
-  private size = 0;
-
-  constructor(private readonly capacity: number, private readonly minimum: boolean) {
-    this.indices = new Int32Array(capacity);
-    this.values = new Float64Array(capacity);
-  }
-
-  clear(): void {
-    this.head = 0;
-    this.size = 0;
-  }
-
-  private slot(offset: number): number {
-    return (this.head + offset) % this.capacity;
-  }
-
-  push(index: number, value: number): void {
-    if (!Number.isFinite(value)) return;
-    while (this.size > 0) {
-      const lastSlot = this.slot(this.size - 1);
-      const last = this.values[lastSlot]!;
-      const dominated = this.minimum ? last >= value : last <= value;
-      if (!dominated) break;
-      this.size -= 1;
-    }
-    const write = this.slot(this.size);
-    this.indices[write] = index;
-    this.values[write] = value;
-    this.size += 1;
-  }
-
-  evictBefore(index: number): void {
-    while (this.size > 0 && this.indices[this.head]! < index) {
-      this.head = (this.head + 1) % this.capacity;
-      this.size -= 1;
-    }
-  }
-
-  front(): number {
-    return this.size > 0 ? this.values[this.head]! : Number.NaN;
-  }
-  
-  clone(): MonotonicDeque {
-    const next = new MonotonicDeque(this.capacity, this.minimum);
-    next.indices.set(this.indices);
-    next.values.set(this.values);
-    next.head = this.head;
-    next.size = this.size;
-    return next;
-  }
-
-  copyFrom(source: MonotonicDeque): void {
-    if (source.capacity !== this.capacity || source.minimum !== this.minimum) throw new Error('incompatible deque state');
-    this.indices.set(source.indices);
-    this.values.set(source.values);
-    this.head = source.head;
-    this.size = source.size;
-  }
-
-}
-
-/** Rolling numeric state. All memory is bounded by the largest operation period. */
-class RollingState {
-  readonly values: Float64Array;
-  readonly minQueue: MonotonicDeque;
-  readonly maxQueue: MonotonicDeque;
-  readonly period: number;
-  cursor = 0;
-  count = 0;
-  validCount = 0;
-  sum = 0;
-  sumSquares = 0;
-  weightedSum = 0;
-
-  constructor(period: number) {
-    this.period = Math.max(1, period);
-    this.values = new Float64Array(this.period);
-    this.values.fill(Number.NaN);
-    this.minQueue = new MonotonicDeque(this.period, true);
-    this.maxQueue = new MonotonicDeque(this.period, false);
-  }
-
-  push(value: number, absoluteIndex: number): void {
-    const finite = Number.isFinite(value);
-    const numeric = finite ? value : 0;
-    const full = this.count === this.period;
-
-    if (full) {
-      const old = this.values[this.cursor]!;
-      const oldNumeric = Number.isFinite(old) ? old : 0;
-      this.sum -= oldNumeric;
-      this.sumSquares -= oldNumeric * oldNumeric;
-      this.validCount -= Number.isFinite(old) ? 1 : 0;
-      this.weightedSum = this.weightedSum - (this.sum + oldNumeric) + numeric * this.period;
-      this.values[this.cursor] = value;
-      this.sum += numeric;
-      this.sumSquares += numeric * numeric;
-      this.validCount += finite ? 1 : 0;
-      this.cursor = (this.cursor + 1) % this.period;
-    } else {
-      const weight = this.count + 1;
-      this.values[this.count] = value;
-      this.sum += numeric;
-      this.sumSquares += numeric * numeric;
-      this.weightedSum += numeric * weight;
-      this.validCount += finite ? 1 : 0;
-      this.count += 1;
-      if (this.count === this.period) this.cursor = 0;
-    }
-
-    const oldestVisible = absoluteIndex - Math.min(this.count, this.period) + 1;
-    this.minQueue.evictBefore(oldestVisible);
-    this.maxQueue.evictBefore(oldestVisible);
-    if (finite) {
-      this.minQueue.push(absoluteIndex, value);
-      this.maxQueue.push(absoluteIndex, value);
-    }
-  }
-
-  ready(): boolean {
-    return this.count === this.period && this.validCount === this.period;
-  }
-
-  mean(): number {
-    return this.sum / this.period;
-  }
-
-  variance(): number {
-    return Math.max(0, this.sumSquares / this.period - this.mean() * this.mean());
-  }
-
-  weighted(): number {
-    return this.weightedSum / (this.period * (this.period + 1) / 2);
-  }
-
-  min(): number {
-    return this.minQueue.front();
-  }
-
-  max(): number {
-    return this.maxQueue.front();
-  }
-  
-  clone(): RollingState {
-    const next = new RollingState(this.period);
-    next.values.set(this.values);
-    next.cursor = this.cursor;
-    next.count = this.count;
-    next.validCount = this.validCount;
-    next.sum = this.sum;
-    next.sumSquares = this.sumSquares;
-    next.weightedSum = this.weightedSum;
-    next.minQueue.copyFrom(this.minQueue);
-    next.maxQueue.copyFrom(this.maxQueue);
-    return next;
-  }
-
-  copyFrom(source: RollingState): void {
-    if (source.period !== this.period) throw new Error('incompatible rolling state');
-    this.values.set(source.values);
-    this.cursor = source.cursor;
-    this.count = source.count;
-    this.validCount = source.validCount;
-    this.sum = source.sum;
-    this.sumSquares = source.sumSquares;
-    this.weightedSum = source.weightedSum;
-    this.minQueue.copyFrom(source.minQueue);
-    this.maxQueue.copyFrom(source.maxQueue);
-  }
-
-}
-
-class CoreSpiritHeap {
-  private readonly data:number[]=[];
-  constructor(private readonly higher:(a:number,b:number)=>boolean){}
-  get size(){return this.data.length;}
-  peek(){return this.data[0];}
-  push(v:number){let i=this.data.length;this.data.push(v);while(i>0){const p=(i-1)>>>1;if(this.higher(this.data[p]!,v))break;this.data[i]=this.data[p]!;i=p;}this.data[i]=v;}
-  pop(){if(!this.data.length)return undefined;const root=this.data[0]!;const last=this.data.pop()!;if(this.data.length){let i=0;while(true){const l=i*2+1;if(l>=this.data.length)break;const r=l+1;let child=l;if(r<this.data.length&&this.higher(this.data[r]!,this.data[l]!))child=r;if(this.higher(last,this.data[child]!))break;this.data[i]=this.data[child]!;i=child;}this.data[i]=last;}return root;}
-  values(){return this.data.slice();}
-  replace(values:number[]){this.data.length=0;for(const v of values)this.push(v);}
-}
-
-class CoreSpiritDualHeapMedian {
-  private readonly lower=new CoreSpiritHeap((a,b)=>a>b);
-  private readonly upper=new CoreSpiritHeap((a,b)=>a<b);
-  private readonly delayed=new Map<number,number>();
-  private lowerSize=0;
-  private upperSize=0;
-
-  private prune(heap:CoreSpiritHeap){while(heap.size){const v=heap.peek()!;const n=this.delayed.get(v)||0;if(n<=0)return;heap.pop();if(n===1)this.delayed.delete(v);else this.delayed.set(v,n-1);}}
-  private rebalance(){this.prune(this.lower);this.prune(this.upper);if(this.lowerSize>this.upperSize+1){const v=this.lower.pop()!;this.lowerSize--;this.upper.push(v);this.upperSize++;this.prune(this.lower);}else if(this.lowerSize<this.upperSize){const v=this.upper.pop()!;this.upperSize--;this.lower.push(v);this.lowerSize++;this.prune(this.upper);}}
-  add(v:number){if(!Number.isFinite(v))return;this.prune(this.lower);if(!this.lower.size||v<=this.lower.peek()!){this.lower.push(v);this.lowerSize++;}else{this.upper.push(v);this.upperSize++;}this.rebalance();}
-  remove(v:number){if(!Number.isFinite(v))return;this.prune(this.lower);this.prune(this.upper);if(this.lower.size&&v<=this.lower.peek()!)this.lowerSize--;else this.upperSize--;this.delayed.set(v,(this.delayed.get(v)||0)+1);this.prune(this.lower);this.prune(this.upper);this.rebalance();}
-  median(){this.prune(this.lower);this.prune(this.upper);if(!this.lowerSize&&!this.upperSize)return Number.NaN;return this.lowerSize>this.upperSize?this.lower.peek()!:(this.lower.peek()!+this.upper.peek()!)/2;}
-  clear(){this.lower.replace([]);this.upper.replace([]);this.delayed.clear();this.lowerSize=0;this.upperSize=0;}
-  clone(){const next=new CoreSpiritDualHeapMedian();next.lower.replace(this.lower.values());next.upper.replace(this.upper.values());for(const [v,n] of this.delayed)next.delayed.set(v,n);next.lowerSize=this.lowerSize;next.upperSize=this.upperSize;return next;}
-  copyFrom(source:CoreSpiritDualHeapMedian){this.lower.replace(source.lower.values());this.upper.replace(source.upper.values());this.delayed.clear();for(const [v,n] of source.delayed)this.delayed.set(v,n);this.lowerSize=source.lowerSize;this.upperSize=source.upperSize;}
-}
-
-/** Exact rolling median: O(log period) expected per append/replace, with bounded dual heaps. */
-class MedianState {
-  private readonly values: Float64Array;
-  private readonly period: number;
-  private readonly median = new CoreSpiritDualHeapMedian();
-  private cursor = 0;
-  private count = 0;
-  private validCount = 0;
-
-  constructor(period:number){
-    this.period=Math.max(1,Math.floor(period));
-    this.values=new Float64Array(this.period);
-    this.values.fill(Number.NaN);
-  }
-
-  update(value:number):number{
-    if(this.count===this.period){
-      const old=this.values[this.cursor]!;
-      if(Number.isFinite(old)){this.median.remove(old);this.validCount--;}
-      this.values[this.cursor]=value;
-      if(Number.isFinite(value)){this.median.add(value);this.validCount++;}
-      this.cursor=(this.cursor+1)%this.period;
-    }else{
-      this.values[this.count]=value;
-      if(Number.isFinite(value)){this.median.add(value);this.validCount++;}
-      this.count++;
-      if(this.count===this.period)this.cursor=0;
-    }
-    return this.count===this.period&&this.validCount===this.period?this.median.median():Number.NaN;
-  }
-
-  clone():MedianState{const next=new MedianState(this.period);next.copyFrom(this);return next;}
-  copyFrom(source:MedianState){
-    if(source.period!==this.period)throw new Error('incompatible median state');
-    this.values.set(source.values);
-    this.cursor=source.cursor;this.count=source.count;this.validCount=source.validCount;
-    this.median.copyFrom(source.median);
-  }
-}
-
-class PersistenceState {
-  private readonly values: Float64Array;
-  private readonly deltaSigns: Int8Array;
-  private readonly comparisonValid: Uint8Array;
-  private readonly comparisonSame: Uint8Array;
-  private readonly period: number;
-  private cursor = 0;
-  private count = 0;
-  private validCount = 0;
-  private comparisons = 0;
-  private same = 0;
-  private seen = 0;
-
-  constructor(period: number) {
-    this.period = Math.max(1, period);
-    this.values = new Float64Array(this.period);
-    this.values.fill(Number.NaN);
-    this.deltaSigns = new Int8Array(this.period);
-    this.comparisonValid = new Uint8Array(this.period);
-    this.comparisonSame = new Uint8Array(this.period);
-  }
-
-  update(value: number): number {
-    const absoluteIndex = this.seen;
-    const slot = absoluteIndex % this.period;
-    const previousSlot = (absoluteIndex - 1 + this.period) % this.period;
-    const previousValue = absoluteIndex > 0 ? this.values[previousSlot]! : Number.NaN;
-    const previousSign = absoluteIndex > 0 ? this.deltaSigns[previousSlot]! : 0;
-
-    if (this.count === this.period) {
-      const oldStart = absoluteIndex - this.period;
-      const comparisonIndex = oldStart + 2;
-      if (comparisonIndex >= 0) {
-        const removeSlot = comparisonIndex % this.period;
-        if (this.comparisonValid[removeSlot]) {
-          this.comparisons -= 1;
-          this.same -= this.comparisonSame[removeSlot] ? 1 : 0;
-          this.comparisonValid[removeSlot] = 0;
-          this.comparisonSame[removeSlot] = 0;
-        }
-      }
-      const old = this.values[this.cursor]!;
-      this.validCount -= Number.isFinite(old) ? 1 : 0;
-      this.cursor = (this.cursor + 1) % this.period;
-    } else {
-      this.count += 1;
-    }
-
-    this.values[slot] = value;
-    this.validCount += Number.isFinite(value) ? 1 : 0;
-
-    const currentSign = signOfDelta(value, previousValue);
-    this.deltaSigns[slot] = currentSign;
-    if (absoluteIndex >= 2 && currentSign !== 0 && previousSign !== 0) {
-      this.comparisonValid[slot] = 1;
-      this.comparisonSame[slot] = currentSign === previousSign ? 1 : 0;
-      this.comparisons += 1;
-      this.same += currentSign === previousSign ? 1 : 0;
-    } else {
-      this.comparisonValid[slot] = 0;
-      this.comparisonSame[slot] = 0;
-    }
-
-    this.seen += 1;
-    if (this.count !== this.period || this.validCount !== this.period) return Number.NaN;
-    return this.comparisons > 0 ? this.same / this.comparisons : 0;
-  }
-  
-  clone(): PersistenceState {
-    const next = new PersistenceState(this.period);
-    next.values.set(this.values);
-    next.deltaSigns.set(this.deltaSigns);
-    next.comparisonValid.set(this.comparisonValid);
-    next.comparisonSame.set(this.comparisonSame);
-    next.cursor = this.cursor;
-    next.count = this.count;
-    next.validCount = this.validCount;
-    next.comparisons = this.comparisons;
-    next.same = this.same;
-    next.seen = this.seen;
-    return next;
-  }
-
-  copyFrom(source: PersistenceState): void {
-    if (source.period !== this.period) throw new Error('incompatible persistence state');
-    this.values.set(source.values);
-    this.deltaSigns.set(source.deltaSigns);
-    this.comparisonValid.set(source.comparisonValid);
-    this.comparisonSame.set(source.comparisonSame);
-    this.cursor = source.cursor;
-    this.count = source.count;
-    this.validCount = source.validCount;
-    this.comparisons = source.comparisons;
-    this.same = source.same;
-    this.seen = source.seen;
-  }
-
-}
-
-class EMAState {
-  private readonly period: number;
-  private readonly alpha: number;
-  private seedSum = 0;
-  private seedCount = 0;
-  private state = Number.NaN;
-
-  constructor(period: number, wilder = false) {
-    this.period = Math.max(1, period);
-    this.alpha = wilder ? 1 / this.period : 2 / (this.period + 1);
-  }
-
-  update(value: number): number {
-    if (!Number.isFinite(value)) return Number.NaN;
-    if (this.seedCount < this.period) {
-      this.seedSum += value;
-      this.seedCount += 1;
-      if (this.seedCount < this.period) return Number.NaN;
-      this.state = this.seedSum / this.period;
-      return this.state;
-    }
-    this.state = this.alpha * value + (1 - this.alpha) * this.state;
-    return this.state;
-  }
-  
-  clone(): EMAState {
-    const next = new EMAState(this.period, this.alpha === 1 / this.period);
-    next.seedSum = this.seedSum;
-    next.seedCount = this.seedCount;
-    next.state = this.state;
-    return next;
-  }
-
-  copyFrom(source: EMAState): void {
-    if (source.period !== this.period || source.alpha !== this.alpha) throw new Error('incompatible EMA state');
-    this.seedSum = source.seedSum;
-    this.seedCount = source.seedCount;
-    this.state = source.state;
-  }
-
-}
-
-class ChangeState {
-  private previous = Number.NaN;
-  constructor(private readonly percentage: boolean) {}
-
-  update(value: number): number {
-    const previous = this.previous;
-    this.previous = value;
-    if (!Number.isFinite(value) || !Number.isFinite(previous)) return Number.NaN;
-    if (this.percentage) return previous === 0 ? Number.NaN : value / previous - 1;
-    return value - previous;
-  }
-  
-  clone(): ChangeState {
-    const next = new ChangeState(this.percentage);
-    next.previous = this.previous;
-    return next;
-  }
-
-  copyFrom(source: ChangeState): void {
-    if (source.percentage !== this.percentage) throw new Error('incompatible change state');
-    this.previous = source.previous;
-  }
-
-}
-
 class FusedSeriesStage {
   private readonly op: CoreSpiritSeriesOperation;
-  private readonly rolling?: RollingState;
-  private readonly median?: MedianState;
-  private readonly persistence?: PersistenceState;
+  private readonly rollingMean?: RollingMean;
+  private readonly rollingVariance?: RollingVariance;
+  private readonly rollingMinMax?: RollingMinMax;
+  private readonly rollingSum?: RollingSum;
+  private readonly rollingMedian?: RollingMedian;
+  private readonly wma?: WMAState;
   private readonly ema?: EMAState;
+  private readonly wilder?: WilderState;
   private readonly change?: ChangeState;
+  private readonly persistence?: PersistenceState;
 
   constructor(op: CoreSpiritSeriesOperation) {
     this.op = op;
     const period = len(op);
     switch (op.name) {
-      case 'sma':
-      case 'mean':
-      case 'sum':
-      case 'highest':
-      case 'lowest':
-      case 'stdev':
-      case 'variance':
-      case 'wma':
-      case 'zscore':
-      case 'normalize':
-        this.rolling = new RollingState(period);
-        break;
-      case 'median':
-        this.median = new MedianState(period);
-        break;
-      case 'persistence':
-        this.persistence = new PersistenceState(period);
-        break;
-      case 'ema':
-        this.ema = new EMAState(period, false);
-        break;
-      case 'rma':
-        this.ema = new EMAState(period, true);
-        break;
-      case 'change':
-        this.change = new ChangeState(false);
-        break;
-      case 'pctchange':
-        this.change = new ChangeState(true);
-        break;
+      case 'sma': case 'mean': this.rollingMean = new RollingMean(period); break;
+      case 'sum': this.rollingSum = new RollingSum(period); break;
+      case 'highest': case 'lowest': case 'normalize': this.rollingMinMax = new RollingMinMax(period); break;
+      case 'stdev': case 'variance': case 'zscore': this.rollingVariance = new RollingVariance(period); if (op.name === 'zscore') this.rollingMean = new RollingMean(period); break;
+      case 'wma': this.wma = new WMAState(period); break;
+      case 'median': this.rollingMedian = new RollingMedian(period); break;
+      case 'persistence': this.persistence = new PersistenceState(period); break;
+      case 'ema': this.ema = new EMAState(period); break;
+      case 'rma': this.wilder = new WilderState(period); break;
+      case 'change': this.change = new ChangeState(false); break;
+      case 'pctchange': this.change = new ChangeState(true); break;
     }
   }
 
-  update(value: number, absoluteIndex: number): number {
-    if (this.change) return this.change.update(value);
-    if (this.ema) return this.ema.update(value);
-    if (this.median) return this.median.update(value);
-    if (this.persistence) return this.persistence.update(value);
-
-    const rolling = this.rolling!;
-    rolling.push(value, absoluteIndex);
-    if (!rolling.ready()) return Number.NaN;
-
-    switch (this.op.name) {
-      case 'sum':
-        return rolling.sum;
-      case 'mean':
-      case 'sma':
-        return rolling.mean();
-      case 'highest':
-        return rolling.max();
-      case 'lowest':
-        return rolling.min();
-      case 'variance':
-        return rolling.variance();
-      case 'stdev':
-        return Math.sqrt(rolling.variance());
-      case 'wma':
-        return rolling.weighted();
-      case 'zscore': {
-        const deviation = Math.sqrt(rolling.variance());
-        return deviation === 0 ? 0 : (value - rolling.mean()) / deviation;
+  update(value:number, absoluteIndex:number):number {
+    void absoluteIndex;
+    if (this.change) return this.change.update(value) ?? Number.NaN;
+    if (this.ema) return this.ema.update(value) ?? Number.NaN;
+    if (this.wilder) return this.wilder.updateWilder(value) ?? Number.NaN;
+    if (this.rollingMedian) return this.rollingMedian.update(value).value ?? Number.NaN;
+    if (this.persistence) return this.persistence.update(value).value ?? Number.NaN;
+    if (this.rollingMean) {
+      const snapshot=this.rollingMean.update(value);
+      if (this.op.name==='sma'||this.op.name==='mean') return snapshot.value ?? Number.NaN;
+      if (this.op.name==='zscore') {
+        const variance=this.rollingVariance!.update(value).value;
+        const mean=snapshot.value;
+        return mean==null||variance==null||variance===0?0:(value-mean)/variance;
       }
-      case 'normalize': {
-        const minimum = rolling.min();
-        const maximum = rolling.max();
-        return maximum === minimum ? 0 : (value - minimum) / (maximum - minimum);
-      }
-      default:
-        return Number.NaN;
     }
-  }
-  
-  getOperation(): CoreSpiritSeriesOperation {
-    return this.op;
-  }
-
-  copyFrom(source: FusedSeriesStage): void {
-    if (source.op.name !== this.op.name || len(source.op) !== len(this.op)) throw new Error('incompatible fused stage state');
-    if (this.rolling && source.rolling) this.rolling.copyFrom(source.rolling);
-    if (this.median && source.median) this.median.copyFrom(source.median);
-    if (this.persistence && source.persistence) this.persistence.copyFrom(source.persistence);
-    if (this.ema && source.ema) this.ema.copyFrom(source.ema);
-    if (this.change && source.change) this.change.copyFrom(source.change);
-  }
-
-  clone(): FusedSeriesStage {
-    const next = new FusedSeriesStage(this.op);
-    next.copyFrom(this);
-    return next;
+    if (this.rollingSum) return this.rollingSum.update(value).value ?? Number.NaN;
+    if (this.rollingVariance) {
+      const variance=this.rollingVariance.update(value).value;
+      if (variance==null) return Number.NaN;
+      return this.op.name==='variance'?variance:Math.sqrt(variance);
+    }
+    if (this.rollingMinMax) {
+      const state=this.rollingMinMax.update(value);
+      if (state.min==null||state.max==null) return Number.NaN;
+      if (this.op.name==='highest') return state.max;
+      if (this.op.name==='lowest') return state.min;
+      return state.max===state.min?0:(value-state.min)/(state.max-state.min);
+    }
+    if (this.wma) return this.wma.update(value) ?? Number.NaN;
+    return Number.NaN;
   }
 
+  getOperation():CoreSpiritSeriesOperation{return this.op;}
+  copyFrom(source:FusedSeriesStage):void {
+    if(source.op.name!==this.op.name||len(source.op)!==len(this.op))throw new Error('incompatible fused stage state');
+    if(this.rollingMean&&source.rollingMean)this.rollingMean.copyFrom(source.rollingMean);
+    if(this.rollingVariance&&source.rollingVariance)this.rollingVariance.copyFrom(source.rollingVariance);
+    if(this.rollingMinMax&&source.rollingMinMax)this.rollingMinMax.copyFrom(source.rollingMinMax);
+    if(this.rollingSum&&source.rollingSum)this.rollingSum.copyFrom(source.rollingSum);
+    if(this.rollingMedian&&source.rollingMedian)this.rollingMedian.copyFrom(source.rollingMedian);
+    if(this.wma&&source.wma)this.wma.copyFrom(source.wma);
+    if(this.ema&&source.ema)this.ema.copyFrom(source.ema);
+    if(this.wilder&&source.wilder)this.wilder.copyFrom(source.wilder);
+    if(this.change&&source.change)this.change.copyFrom(source.change);
+    if(this.persistence&&source.persistence)this.persistence.copyFrom(source.persistence);
+  }
+  clone():FusedSeriesStage{const next=new FusedSeriesStage(this.op);next.copyFrom(this);return next;}
 }
 
 export class CoreSpiritFusedSeriesCursor {
