@@ -85,3 +85,12 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 - [x] Browser verification harness supports configurable one/four/eight-chart runs.
 - [ ] Capture authenticated 1/4/8-chart measurements for 5k initial load, 5k prepend and live ticks.
 - [ ] Capture GPU vendor-specific counters; WebGL2 availability is not GPU utilization evidence.
+
+
+### v130 inherited regression closures
+- [x] TC-PERF-33 — bounded 32-dataset HistoryStore residency/LRU.
+- [x] TC-PERF-36 — prepend accounting uses actual normalized retained growth.
+- [x] TC-PERF-38 — dependency graph exposes deterministic topological order and rejects cycles.
+- [x] TC-PERF-39 — rolling WMA/Bollinger/Donchian paths use shared incremental kernels.
+- [x] TC-PERF-40 — appearance-only settings remain outside mathematical cache identity.
+- [x] TC-PERF-41 — history/dependency/style boundaries have contract coverage.
