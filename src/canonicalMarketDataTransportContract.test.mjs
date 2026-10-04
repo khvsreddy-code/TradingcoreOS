@@ -34,6 +34,8 @@ assert.doesNotMatch(workspace, /indicatorWheelOpen/);
 assert.match(altWheel, /event\.key !== 'Alt'/);
 assert.match(altWheel, /onSelect/);
 assert.match(altWheel, /onPanels/);
-assert.match(workspace, /AltDrawingWheel|alt-wheel/);
+const velaWorkspace = fs.readFileSync(path.join(root, 'vendor/vela/src/workspace/VelaWorkspace.ts'), 'utf8');
+assert.match(velaWorkspace, /AltDrawingWheel/);
+assert.match(velaWorkspace, /new AltDrawingWheel/);
 
 console.log('TRADINGCORE_V115_CANONICAL_MARKET_TRANSPORT_CONTRACT_OK');
