@@ -3670,7 +3670,6 @@ export class NativeRenderer implements IChartRenderer {
             frameBudgetMissRate: this.perfFrames ? this.perfFrameBudgetMisses / this.perfFrames : 0,
             backend,
         };
-        }
     }
 
     /** Build the data→pixel projector user drawings resolve their anchors through. */
