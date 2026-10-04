@@ -305,7 +305,7 @@ export class ChartDataPlane {
     const requestKey = `${this.key}:initial-columns:${requestedLimit}`;
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requestedLimit), 'initial')
       .then(columns => {
-        if (!columns) {
+        if (!columns || columns.time.length === 0) {
           this.state.historyPromise = undefined;
           return this.ensureHistory(requestedLimit);
         }
