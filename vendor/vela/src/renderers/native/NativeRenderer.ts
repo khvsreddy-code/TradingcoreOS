@@ -3616,6 +3616,22 @@ export class NativeRenderer implements IChartRenderer {
 
         if (easeLive && liveActual) this.bars[li] = liveActual; // restore the true forming bar
         this.paintedData = true; // scales are real from here on — the chrome-only tier may run
+        this.recordFramePerformance(perfStart);
+    }
+
+    private recordFramePerformance(perfStart: number): void {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        this.perfFrames += 1;
+        this.perfLastFrameMs = Math.max(0, now - perfStart);
+        this.perfTotalFrameMs += this.perfLastFrameMs;
+        this.perfWorstFrameMs = Math.max(this.perfWorstFrameMs, this.perfLastFrameMs);
+        if (this.perfFirstFrameAt === 0) this.perfFirstFrameAt = Date.now();
+        if (this.perfLastFrameMs > 50) this.perfLongFrames += 1;
+        if (this.perfLastFrameMs > NativeRenderer.PERF_FRAME_BUDGET_MS) this.perfFrameBudgetMisses += 1;
+        this.perfRecentFrameMs[this.perfRecentFrameCursor] = this.perfLastFrameMs;
+        this.perfRecentFrameCursor = (this.perfRecentFrameCursor + 1) % this.perfRecentFrameMs.length;
+        this.perfRecentFrameCount = Math.min(this.perfRecentFrameCount + 1, this.perfRecentFrameMs.length);
+        this.perfLastFrameAt = Date.now();
     }
 
     /** Renderer-local performance counters exposed through the host-safe Vela workspace API. */
@@ -3655,18 +3671,6 @@ export class NativeRenderer implements IChartRenderer {
             backend,
         };
         }
-        this.perfFrames += 1;
-        const perfDuration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - perfStart;
-        this.perfLastFrameMs = Math.max(0, perfDuration);
-        this.perfTotalFrameMs += this.perfLastFrameMs;
-        this.perfWorstFrameMs = Math.max(this.perfWorstFrameMs, this.perfLastFrameMs);
-        if (this.perfFirstFrameAt === 0) this.perfFirstFrameAt = this.perfLastFrameAt || Date.now();
-        if (this.perfLastFrameMs > 50) this.perfLongFrames += 1;
-        if (this.perfLastFrameMs > NativeRenderer.PERF_FRAME_BUDGET_MS) this.perfFrameBudgetMisses += 1;
-        this.perfRecentFrameMs[this.perfRecentFrameCursor] = this.perfLastFrameMs;
-        this.perfRecentFrameCursor = (this.perfRecentFrameCursor + 1) % this.perfRecentFrameMs.length;
-        this.perfRecentFrameCount = Math.min(this.perfRecentFrameCount + 1, this.perfRecentFrameMs.length);
-        this.perfLastFrameAt = Date.now();
     }
 
     /** Build the data→pixel projector user drawings resolve their anchors through. */
