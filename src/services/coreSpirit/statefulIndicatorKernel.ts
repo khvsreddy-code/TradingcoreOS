@@ -437,13 +437,14 @@ export class RollingMinMax extends RollingBase {
 
 export class RollingSum extends RollingBase {
   private sum = 0;
-  update(value: number, mode: 'append' | 'replace' = 'append') {
+  update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
     const v = Number(value);
-    if (!Number.isFinite(v)) return this.sumValue();
+    if (!Number.isFinite(v)) return { count: this.count, value: this.value() };
     if (mode === 'replace' && this.count) { const old = this.buffer[this.slotForCurrent()]; this.sum += v - old; this.replaceCurrentSlot(v); }
     else { if (this.count === this.capacity) this.sum -= this.buffer[this.cursor]; this.appendSlot(v); this.sum += v; }
-    return this.sumValue();
+    return { count: this.count, value: this.value() };
   }
+  value(): number | null { return this.count === this.capacity ? this.sum : null; }
   sumValue() { return this.sum; }
   reset() { super.reset(); this.sum = 0; }
 }
