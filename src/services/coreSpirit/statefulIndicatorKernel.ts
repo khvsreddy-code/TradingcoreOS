@@ -397,13 +397,23 @@ export function centeredRollingExtrema(
 }
 
 /** Exact rolling mean absolute deviation in expected O(log period) per append/replace. */
+/** Exact rolling mean absolute deviation in expected O(log period) per append/replace. */
 export class RollingAbsoluteDeviation extends RollingBase {
   private readonly ordered=new OrderedMultiset();
   private sum=0;
-  update(value:number,mode:'append'|'replace'='append'){const v=Number(value);if(!Number.isFinite(v))return this.value(null);if(mode==='replace'&&this.count){const old=this.buffer[this.slotForCurrent()];this.ordered.erase(old);this.sum-=old;this.replaceCurrentSlot(v);}else{if(this.count===this.capacity){const old=this.buffer[this.cursor];this.ordered.erase(old);this.sum-=old;}this.appendSlot(v);}this.ordered.insert(v);this.sum+=v;return this.value(null);}
-  value(mean:number|null){if(mean==null||this.count!==this.capacity)return null;const leftCount=this.ordered.countLE(mean),leftSum=this.ordered.sumLE(mean),rightCount=this.capacity-leftCount,rightSum=this.sum-leftSum;return (mean*leftCount-leftSum+rightSum-mean*rightCount)/this.capacity;}
+  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot {
+    const v=Number(value);
+    if(!Number.isFinite(v)){const mean=this.count===this.capacity?this.sum/this.capacity:null;return {count:this.count,value:this.value(mean)};}
+    if(mode==='replace'&&this.count){const old=this.buffer[this.slotForCurrent()];this.ordered.erase(old);this.sum-=old;this.replaceCurrentSlot(v);}
+    else {if(this.count===this.capacity){const old=this.buffer[this.cursor];this.ordered.erase(old);this.sum-=old;}this.appendSlot(v);}
+    this.ordered.insert(v);this.sum+=v;
+    const mean=this.count===this.capacity?this.sum/this.capacity:null;
+    return {count:this.count,value:this.value(mean)};
+  }
+  value(mean:number|null){if(mean==null||this.count!==this.capacity)return null;const leftCount=this.ordered.countLE(mean),leftSum=this.ordered.sumLE(mean),rightCount=this.capacity-leftCount,rightSum=this.sum-leftSum;return(mean*leftCount-leftSum+rightSum-mean*rightCount)/this.capacity;}
   reset(){super.reset();this.ordered.clear();this.sum=0;}
 }
+
 
 class RollingExtremaTree {
   private readonly size: number;
