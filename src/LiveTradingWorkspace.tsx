@@ -48,6 +48,7 @@ export function LiveTradingWorkspace() {
     if (!host.current) return;
 
     let workspace: VelaWorkspace | null = null;
+    let cleanupWorkspaceListeners: (() => void) | undefined;
     let cancelled = false;
 
     const mount = async () => {
@@ -111,6 +112,7 @@ export function LiveTradingWorkspace() {
     return () => {
       cancelled = true;
       workspaceRef.current = null;
+      cleanupWorkspaceListeners?.();
       workspace?.destroy();
     };
   }, []);

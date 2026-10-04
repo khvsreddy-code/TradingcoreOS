@@ -2747,6 +2747,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             return true;
         }
 
+        const previousModel = record.model;
         let paneId = record.model?.paneId ?? 'price';
         const prevOwnScale = record.model?.ownScale === true;
         if (record.loading && !record.paneLocked) {
@@ -2777,7 +2778,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues);
             record.pendingStructural = false;
         } else {
-            this.renderer.updateIndicator(record.renderHandle, modelToValuePatch(model));
+            this.renderer.updateIndicator(record.renderHandle, modelToValuePatch(model, previousModel, record.pendingCause ?? 'history'));
         }
         if (record.loading) this.setLoading(record, false);
         this.announce(record, handle);
@@ -2995,39 +2996,154 @@ function blankedModel(model: IndicatorModel): IndicatorModel {
     };
 }
 
-function modelToValuePatch(model: IndicatorModel): ValuePatch {
+function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | undefined, cause: ScriptRunCause): ValuePatch {
+    const incremental = cause === 'tick' || cause === 'bar';
     const series: SeriesValueDelta[] = [];
+    const seriesStyles: NonNullable<ValuePatch['seriesStyles']> = [];
     let from = Number.POSITIVE_INFINITY;
     let to = 0;
-    for (const s of model.series) {
-        if (s.kind === 'candle' || s.kind === 'bar') {
-            series.push({ seriesId: s.id, kind: 'bars', bars: s.bars });
-            for (const b of s.bars) {
-                if (b.time < from) from = b.time;
-                if (b.time > to) to = b.time;
-            }
-        } else if (isLineLikeSeries(s)) {
-            series.push({ seriesId: s.id, kind: 'points', points: s.points });
-            for (const p of s.points) {
-                if (p.time < from) from = p.time;
-                if (p.time > to) to = p.time;
+
+    for (const current of model.series) {
+        const prev = previous?.series.find((candidate) => candidate.id === current.id);
+        const delta = incremental && prev ? incrementalSeriesDelta(prev, current, cause) : null;
+        const emitted = delta ?? fullSeriesDelta(current);
+        series.push(emitted);
+        const values = emitted.kind === 'points' ? emitted.points : emitted.kind === 'bars' ? emitted.bars : emitted.markers;
+        for (const value of values) { from = Math.min(from, value.time); to = Math.max(to, value.time); }
+
+        if (prev && isLineLikeSeries(current) && isLineLikeSeries(prev)) {
+            const styleChanged = JSON.stringify(current.style) !== JSON.stringify(prev.style);
+            const displayChanged = JSON.stringify(current.display ?? null) !== JSON.stringify(prev.display ?? null);
+            const titleChanged = current.title !== prev.title;
+            const visibleChanged = current.visible !== prev.visible;
+            if (styleChanged || displayChanged || titleChanged || visibleChanged) {
+                seriesStyles.push({
+                    seriesId: current.id,
+                    ...(styleChanged ? { style: current.style } : {}),
+                    ...(displayChanged ? { display: current.display } : {}),
+                    ...(titleChanged ? { title: current.title } : {}),
+                    ...(visibleChanged ? { visible: current.visible } : {}),
+                });
             }
         }
     }
-    return {
-        kind: 'value',
-        indicatorId: model.id,
+
+    const patch: ValuePatch = {
+        kind: 'value', indicatorId: model.id,
         dirty: { from: Number.isFinite(from) ? from : 0, to },
-        // ALWAYS stated, `null` included: an omitted key leaves the renderer on the previous
-        // run's offset, so a re-run that widened to the whole chart could not clear it.
         anchorTime: model.anchorTime ?? null,
         series,
-        lines: model.lines ?? [],
-        boxes: model.boxes ?? [],
-        labels: model.labels ?? [],
-        polylines: model.polylines ?? [],
-        linefills: model.linefills ?? [],
-        tables: model.tables ?? [],
-        trades: model.trades ?? [],
     };
+    if (seriesStyles.length) patch.seriesStyles = seriesStyles;
+
+    const previousFills = previous?.fills ?? [];
+    let structuralFillChange = previousFills.length !== model.fills.length;
+    const fillDeltas: NonNullable<ValuePatch['fillDeltas']> = [];
+    const fillStyles: NonNullable<ValuePatch['fillStyles']> = [];
+    for (const fill of model.fills) {
+        const prev = previousFills.find((candidate) => candidate.id === fill.id);
+        if (!prev) { structuralFillChange = true; continue; }
+        if (fill.paneId !== prev.paneId || fill.fromSeriesId !== prev.fromSeriesId || fill.toSeriesId !== prev.toSeriesId || fill.overlay !== prev.overlay) {
+            structuralFillChange = true; continue;
+        }
+        if (fill.color !== prev.color) fillStyles.push({ fillId: fill.id, paneId: fill.paneId, color: fill.color });
+        if (incremental) {
+            if (fill.colors && prev.colors) {
+                const d = tailDelta(prev.colors, fill.colors);
+                if (d) fillDeltas.push({ fillId: fill.id, op: d.op, colors: d.values });
+            }
+            if (fill.gradient && prev.gradient) {
+                const d = tailDelta(prev.gradient, fill.gradient);
+                if (d) fillDeltas.push({ fillId: fill.id, op: d.op, gradient: d.values });
+            }
+        }
+    }
+    if (!incremental || structuralFillChange) patch.fills = model.fills;
+    else {
+        if (fillDeltas.length) patch.fillDeltas = fillDeltas;
+        if (fillStyles.length) patch.fillStyles = fillStyles;
+    }
+
+    const collections = [
+        ['backgrounds', model.backgrounds, previous?.backgrounds ?? []],
+        ['priceLines', model.priceLines, previous?.priceLines ?? []],
+        ['lines', model.lines ?? [], previous?.lines ?? []],
+        ['boxes', model.boxes ?? [], previous?.boxes ?? []],
+        ['labels', model.labels ?? [], previous?.labels ?? []],
+        ['polylines', model.polylines ?? [], previous?.polylines ?? []],
+        ['linefills', model.linefills ?? [], previous?.linefills ?? []],
+        ['tables', model.tables ?? [], previous?.tables ?? []],
+        ['trades', model.trades ?? [], previous?.trades ?? []],
+    ] as const;
+    for (const [key, current, prev] of collections) {
+        if (!incremental || JSON.stringify(current) !== JSON.stringify(prev)) (patch as unknown as Record<string, unknown>)[key] = current;
+    }
+    return patch;
+}
+
+function fullSeriesDelta(series: IndicatorModel['series'][number]): SeriesValueDelta {
+    if (series.kind === 'candle' || series.kind === 'bar') return { seriesId: series.id, kind: 'bars', bars: series.bars, op: 'replace' };
+    if (series.kind === 'markers') return { seriesId: series.id, kind: 'markers', markers: series.markers, op: 'replace' };
+    if (isLineLikeSeries(series)) return { seriesId: series.id, kind: 'points', points: series.points, op: 'replace' };
+    throw new Error(`Unsupported series kind: ${String(series.kind)}`);
+}
+
+function incrementalSeriesDelta(previous: IndicatorModel['series'][number], current: IndicatorModel['series'][number], cause: ScriptRunCause): SeriesValueDelta | null {
+    if (previous.kind !== current.kind) return null;
+    if (current.kind === 'markers' && previous.kind === 'markers') return incrementalMarkerDelta(previous.markers, current.markers, current.id);
+    if (current.kind === 'candle' || current.kind === 'bar') {
+        if (previous.kind !== 'candle' && previous.kind !== 'bar') return null;
+        return incrementalValuesDelta(previous.bars, current.bars, current, cause);
+    }
+    if (isLineLikeSeries(current) && isLineLikeSeries(previous)) return incrementalValuesDelta(previous.points, current.points, current, cause);
+    return null;
+}
+
+function incrementalValuesDelta<T extends { time: number }>(previousValues: readonly T[], currentValues: readonly T[], series: IndicatorModel['series'][number], cause: ScriptRunCause): SeriesValueDelta | null {
+    if (currentValues.length === previousValues.length && currentValues.length > 0) {
+        const last = currentValues[currentValues.length - 1]!;
+        const prevLast = previousValues[previousValues.length - 1]!;
+        if (last.time === prevLast.time) return tailSeriesDelta(series, 'replace-last', [last]);
+    }
+    if (cause === 'bar' && currentValues.length === previousValues.length + 1 && previousValues.length > 0) {
+        const previousLast = previousValues[previousValues.length - 1]!;
+        const currentBeforeLast = currentValues[currentValues.length - 2]!;
+        const last = currentValues[currentValues.length - 1]!;
+        if (currentBeforeLast.time === previousLast.time) return tailSeriesDelta(series, 'append', [last]);
+    }
+    return null;
+}
+
+function incrementalMarkerDelta(previous: Extract<IndicatorModel['series'][number], { kind: 'markers' }>['markers'], current: Extract<IndicatorModel['series'][number], { kind: 'markers' }>['markers'], seriesId: string): SeriesValueDelta | null {
+    let start = 0;
+    while (start < previous.length && start < current.length && markerEqual(previous[start]!, current[start]!)) start += 1;
+    if (start === previous.length && start === current.length) return null;
+    let oldEnd = previous.length - 1;
+    let newEnd = current.length - 1;
+    while (oldEnd >= start && newEnd >= start && markerEqual(previous[oldEnd]!, current[newEnd]!)) { oldEnd -= 1; newEnd -= 1; }
+    const payload = current.slice(start, newEnd + 1);
+    const remove = Math.max(0, oldEnd - start + 1);
+    if (start >= previous.length) return { seriesId, kind: 'markers', markers: payload, op: 'append' };
+    if (start === 0 && oldEnd === previous.length - 1 && newEnd === current.length - 1) return { seriesId, kind: 'markers', markers: payload, op: 'replace' };
+    return { seriesId, kind: 'markers', markers: payload, op: 'replace-range', start, remove };
+}
+
+function markerEqual(a: { time: number; position: string; shape: string; color: string; text?: string; size?: string; textSize?: number; offset?: number }, b: { time: number; position: string; shape: string; color: string; text?: string; size?: string; textSize?: number; offset?: number }): boolean {
+    return a.time === b.time && a.position === b.position && a.shape === b.shape && a.color === b.color && a.text === b.text && a.size === b.size && a.textSize === b.textSize && a.offset === b.offset;
+}
+
+function tailSeriesDelta(series: IndicatorModel['series'][number], op: 'append' | 'replace-last', values: any[]): SeriesValueDelta {
+    if (series.kind === 'candle' || series.kind === 'bar') return { seriesId: series.id, kind: 'bars', bars: values, op };
+    if (series.kind === 'markers') return { seriesId: series.id, kind: 'markers', markers: values, op };
+    return { seriesId: series.id, kind: 'points', points: values, op };
+}
+
+function tailDelta<T>(previous: readonly T[], current: readonly T[]): { op: 'append' | 'replace-last'; values: T[] } | null {
+    if (current.length === previous.length) {
+        if (current.length === 0) return null;
+        if (JSON.stringify(previous[current.length - 1]) === JSON.stringify(current[current.length - 1])) return null;
+        return { op: 'replace-last', values: [current[current.length - 1]!] };
+    }
+    if (current.length === previous.length + 1) return { op: 'append', values: [current[current.length - 1]!] };
+    return null;
 }

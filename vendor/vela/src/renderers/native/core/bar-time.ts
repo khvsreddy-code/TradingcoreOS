@@ -5,10 +5,10 @@
  */
 
 /** Median spacing between consecutive bar times — robust to gaps/missing bars. */
-export function medianInterval(times: readonly number[]): number {
-    if (times.length < 2) return 0;
+export function medianInterval(times: ArrayLike<number>, length = times.length): number {
+    if (length < 2) return 0;
     const diffs: number[] = [];
-    for (let i = 1; i < times.length; i += 1) {
+    for (let i = 1; i < length; i += 1) {
         const d = times[i]! - times[i - 1]!;
         if (d > 0) diffs.push(d);
     }
@@ -22,8 +22,8 @@ export function medianInterval(times: readonly number[]): number {
  * between known bars and extrapolates before/after the dataset using `interval`
  * so extended/future drawing anchors still resolve.
  */
-export function barTimeToLogical(ms: number, times: readonly number[], interval: number): number {
-    const n = times.length;
+export function barTimeToLogical(ms: number, times: ArrayLike<number>, interval: number, length = times.length): number {
+    const n = length;
     if (n === 0) return 0;
     const first = times[0]!;
     const last = times[n - 1]!;
@@ -42,8 +42,8 @@ export function barTimeToLogical(ms: number, times: readonly number[], interval:
 }
 
 /** Inverse of {@link barTimeToLogical}: fractional logical index → epoch ms. */
-export function logicalToBarTime(logical: number, times: readonly number[], interval: number): number {
-    const n = times.length;
+export function logicalToBarTime(logical: number, times: ArrayLike<number>, interval: number, length = times.length): number {
+    const n = length;
     if (n === 0) return 0;
     if (logical <= 0) return times[0]! + (interval > 0 ? logical * interval : 0);
     if (logical >= n - 1) return times[n - 1]! + (interval > 0 ? (logical - (n - 1)) * interval : 0);

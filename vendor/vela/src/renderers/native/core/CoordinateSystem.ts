@@ -35,7 +35,9 @@ export class CoordinateSystem {
     private devicePixelRatio = 1;
     private viewport: ViewportState = defaultViewport();
     private pitchScale = 1;
-    private times: number[] = [];
+    private times = new Float64Array(0);
+    private timeLength = 0;
+    private timeCapacity = 0;
     private intervalMs = 0;
 
     // ── geometry inputs (owned by the renderer) ──
@@ -46,11 +48,27 @@ export class CoordinateSystem {
     }
 
     setBars(times: readonly number[]): void {
-        // Copy so the instance OWNS its buffer — `appendBar` mutates it in place, so
-        // it must not alias an array the caller retains. Cost is one O(n) copy on a
-        // (rare) full setData, dwarfed by the median sort below.
-        this.times = times.slice();
-        this.intervalMs = medianInterval(this.times);
+        const n = Math.max(0, times.length);
+        const next = new Float64Array(n);
+        for (let i = 0; i < n; i += 1) next[i] = Number(times[i]);
+        this.times = next;
+        this.timeLength = n;
+        this.timeCapacity = n;
+        this.intervalMs = medianInterval(this.times, this.timeLength);
+    }
+
+    setBarsColumns(times: Float64Array, length: number, unit: 'seconds' | 'milliseconds' = 'milliseconds'): void {
+        const n = Math.max(0, Math.min(Math.floor(length), times.length));
+        const next = new Float64Array(n);
+        if (unit === 'seconds') {
+            for (let i = 0; i < n; i += 1) next[i] = times[i]! * 1000;
+        } else {
+            next.set(times.subarray(0, n));
+        }
+        this.times = next;
+        this.timeLength = n;
+        this.timeCapacity = n;
+        this.intervalMs = medianInterval(this.times, this.timeLength);
     }
 
     /**
@@ -61,8 +79,16 @@ export class CoordinateSystem {
      * push. `barCount` reads `times.length`, so the new bar is visible immediately.
      */
     appendBar(time: number): void {
-        this.times.push(time);
-        if (this.intervalMs <= 0 && this.times.length >= 2) this.intervalMs = medianInterval(this.times);
+        if (this.timeLength >= this.timeCapacity) {
+            const nextCapacity = Math.max(256, this.timeCapacity * 2 || 256);
+            const next = new Float64Array(nextCapacity);
+            if (this.timeLength > 0) next.set(this.times.subarray(0, this.timeLength));
+            this.times = next;
+            this.timeCapacity = nextCapacity;
+        }
+        this.times[this.timeLength] = time;
+        this.timeLength += 1;
+        if (this.intervalMs <= 0 && this.timeLength >= 2) this.intervalMs = medianInterval(this.times, this.timeLength);
     }
 
     setViewport(viewport: ViewportState): void {
@@ -116,7 +142,7 @@ export class CoordinateSystem {
     }
 
     get barCount(): number {
-        return this.times.length;
+        return this.timeLength;
     }
 
     get barInterval(): number {
@@ -139,11 +165,11 @@ export class CoordinateSystem {
 
     // ── bar time ↔ logical ↔ pixel ──
     timeToLogical(ms: number): number {
-        return barTimeToLogical(ms, this.times, this.intervalMs);
+        return barTimeToLogical(ms, this.times, this.intervalMs, this.timeLength);
     }
 
     logicalToTime(logical: number): number {
-        return logicalToBarTime(logical, this.times, this.intervalMs);
+        return logicalToBarTime(logical, this.times, this.intervalMs, this.timeLength);
     }
 
     timeToX(ms: number): number {

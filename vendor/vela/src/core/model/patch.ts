@@ -1,57 +1,72 @@
 import type { Millis } from './time';
 import type { OHLCV } from './ohlcv';
-import type { SeriesPoint, SeriesSpec, MarkerPoint } from './series';
+import type { SeriesPoint, SeriesSpec, MarkerPoint, LineLikeStyle } from './series';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
+import type { Fill, FillGradientStop } from './scene';
 
 export interface DirtyRange {
     from: Millis;
     to: Millis;
 }
 
-/** Per-series changed tail in a value patch. */
-export type SeriesValueDelta =
-    | { seriesId: string; kind: 'points'; points: SeriesPoint[] }
-    | { seriesId: string; kind: 'bars'; bars: OHLCV[] }
-    | { seriesId: string; kind: 'markers'; markers: MarkerPoint[] };
+/** Exact retained-series mutation. Full replacement is explicit and remains the compatibility path. */
+export type SeriesPatchOperation = 'replace' | 'append' | 'prepend' | 'replace-last' | 'replace-range';
 
-/**
- * Value-only update to existing series — legal as an in-place renderer update
- * (the renderer chooses `update()` vs `setData(tail)` by time comparison).
- */
+/** A value delta carries only the values affected by the operation. */
+export type SeriesValueDelta =
+    | { seriesId: string; kind: 'points'; points: SeriesPoint[]; op?: SeriesPatchOperation; start?: number; remove?: number }
+    | { seriesId: string; kind: 'bars'; bars: OHLCV[]; op?: SeriesPatchOperation; start?: number; remove?: number }
+    | { seriesId: string; kind: 'markers'; markers: MarkerPoint[]; op?: SeriesPatchOperation; start?: number; remove?: number };
+
+/** Style/display mutation with no data payload. */
+export interface SeriesStyleDelta {
+    seriesId: string;
+    style?: Partial<LineLikeStyle>;
+    display?: import('./series').SeriesDisplay;
+    title?: string;
+    visible?: boolean;
+}
+
+/** Tail/range mutation for dynamic fill values. */
+export interface FillValueDelta {
+    fillId: string;
+    op?: SeriesPatchOperation;
+    colors?: Array<string | null>;
+    gradient?: Array<FillGradientStop | null>;
+    start?: number;
+    remove?: number;
+}
+
+/** Fill-only mutation. */
+export interface FillStyleDelta {
+    fillId: string;
+    paneId?: string;
+    color?: string;
+    overlay?: boolean;
+}
+
 export interface ValuePatch {
     kind: 'value';
     indicatorId: string;
     dirty: DirtyRange;
-    /**
-     * The emitting run's anchor (see `IndicatorModel.anchorTime`): a re-run over a
-     * DIFFERENT bar window arrives as a value patch, so the anchor must travel with
-     * it for index-aligned rendering to re-derive its offset. `null` states the run
-     * spanned the WHOLE chart and clears any previous anchor — an omitted key cannot,
-     * so a model that once had an anchor would otherwise keep that stale offset.
-     */
     anchorTime?: Millis | null;
     series: SeriesValueDelta[];
-    /**
-     * Full drawing snapshots for this tick. Pine drawing containers are emitted
-     * as a small, capped, already-final set each run, so live updates replace
-     * the whole set rather than diffing. Absent ≡ unchanged/none.
-     */
+    seriesStyles?: SeriesStyleDelta[];
+    fillDeltas?: FillValueDelta[];
+    fillStyles?: FillStyleDelta[];
+    fills?: Fill[];
+    backgrounds?: import('./scene').Background[];
+    priceLines?: import('./scene').PriceLine[];
     lines?: DrawingLine[];
     boxes?: DrawingBox[];
     labels?: DrawingLabel[];
     polylines?: DrawingPolyline[];
     linefills?: DrawingLinefill[];
     tables?: DrawingTable[];
-    /** Trade executions follow the same full-snapshot-per-tick pattern as the drawings. */
     trades?: TradeExecution[];
 }
 
-/**
- * Structural change — series added/removed/kind-changed, or panes changed.
- * Forces a remount of the affected series (a series' kind is fixed at creation
- * in most backends).
- */
 export interface SchemaPatch {
     kind: 'schema';
     indicatorId: string;

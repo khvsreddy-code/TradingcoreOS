@@ -4,6 +4,7 @@ import type { ChartLodBar, ChartLodIndex } from './chartLevelOfDetail';
 import type { ChartScene } from './chartScene';
 import { NativeRenderer } from '../../../../vendor/vela/src/renderers/native/NativeRenderer';
 import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
+import type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 import { getCurrentTheme, getThemePalette } from '../../../theme/theme';
 
 function theme(): VelaTheme {

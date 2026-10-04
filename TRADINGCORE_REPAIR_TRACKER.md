@@ -796,3 +796,16 @@ The Watchlist and Journal are registered through Vela's contribution API and the
 ### What remains
 
 The columnar boundary is now real for identity OHLCV history, native candle rendering, typed LOD and forming-bar updates. The next conversion is deliberately downstream: migrate CoreSpirit and native indicator kernels from the Vela compatibility `OHLCV[]` mirror to typed `CanonicalMarketView`/series inputs, then migrate deep/backfill/transformed chart paths to columnar range operations. Only after those steps should the remaining Vela compatibility mirror be retired and SAB be reconsidered.
+
+
+## v117 — Vela retained/incremental rendering
+
+**Completed:** explicit series patch operations; previous-model/cause-aware engine diffing; style-only patches; incremental markers; incremental fill anchors/state; typed coordinate time; mutable columnar renderer ownership; v116 null-column dereference fix; workspace cleanup declaration; OHLCV import fix; regression contract.
+
+**Next:** direct CoreSpirit typed-series kernel input and multi-chart/multi-pane benchmark coverage.
+
+### v117 deep patch ABI + verification
+
+The retained-scene contract is now explicit: `append`, `replace-last`, `prepend`, and `replace-range` mutate only affected data; `seriesStyles` handles appearance without touching values; marker updates diff their changed interval; fill updates use a separate value/style channel. The engine only selects a tail delta when the previous/current series identity and timestamp continuity prove the live operation; otherwise it falls back to a full replacement.
+
+The full Vela source audit also confirmed that candle rendering is the correct place to keep the columnar representation: the renderer may keep an internal `OHLCV[]` compatibility mirror for legacy scripting/data-window paths, but that mirror is not the render transport. Supabase broker/session/workspace persistence remains outside this hot path; the database advisor currently reports RLS-policy evaluation and duplicate-policy/index cleanup opportunities, which are separate persistence optimizations.

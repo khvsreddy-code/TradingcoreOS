@@ -6,7 +6,7 @@ import type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 import type { IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
 import type { SeriesPoint, SeriesSpec, LineLikeSeries, LineStyle as VelaLineStyle, MarkerPoint } from '../../../../vendor/vela/src/core/model/series';
 import type { PriceLine, Pane, Fill } from '../../../../vendor/vela/src/core/model/scene';
-import type { ScenePatch } from '../../../../vendor/vela/src/core/model/patch';
+import type { ScenePatch, SeriesPatchOperation } from '../../../../vendor/vela/src/core/model/patch';
 
 export type Time = number;
 export type LineStyleValue = 0 | 1 | 2;
@@ -185,12 +185,9 @@ export class VelaSeriesFacade<T = string> {
   setData(rows: readonly ChartPointInput[]): void {
     if (this.removed) return;
     if (this.kind === 'candle') { this.chart.setBars(rows.map(toBar)); return; }
-    const points = rows.map((p) => ({ time: msFromTime(p.time), value: p.value == null ? null : Number(p.value), ...(p.color ? { color: String(p.color) } : {}) })).filter(p => Number.isFinite(p.time)) as SeriesPoint[];
-    const series = this.valueSeries();
-    if (!series) return;
-    series.points = points;
-    this.patchSeries(points);
-    this.chart.syncBandFillsForSeries(this.id);
+    const points = rows.map((p) => ({ time: msFromTime(p.time), value: p.value == null ? null : Number(p.value), ...(p.color ? { color: String(p.color) } : {}) })).filter((p) => Number.isFinite(p.time)) as SeriesPoint[];
+    this.patchSeries('replace', points);
+    this.chart.syncBandFillsForSeries(this.id, 'replace', points);
   }
 
   update(row: ChartPointInput): void {
@@ -198,42 +195,38 @@ export class VelaSeriesFacade<T = string> {
     if (this.kind === 'candle') { this.chart.updateBar(toBar(row)); return; }
     const point: SeriesPoint = { time: msFromTime(row.time), value: row.value == null ? null : Number(row.value), ...(row.color ? { color: String(row.color) } : {}) };
     if (!Number.isFinite(point.time)) return;
-    const series = this.valueSeries();
-    if (!series) return;
+    const series = this.valueSeries(); if (!series) return;
     const last = series.points[series.points.length - 1];
-    if (!last || point.time > last.time) series.points.push(point); else if (point.time === last.time) series.points[series.points.length - 1] = point; else return;
-    this.patchSeries([point]);
-    this.chart.syncBandFillsForSeries(this.id);
+    if (!last || point.time > last.time) {
+      this.patchSeries('append', [point]);
+      this.chart.syncBandFillsForSeries(this.id, 'append', [point]);
+    } else if (point.time === last.time) {
+      this.patchSeries('replace-last', [point]);
+      this.chart.syncBandFillsForSeries(this.id, 'replace-last', [point]);
+    }
   }
 
   applyOptions(next: SeriesOptions): void {
     this.options = { ...this.options, ...next };
     if (this.kind === 'candle') { this.chart.setCandleOptions(next); return; }
-    const series = this.valueSeries(); if (!series) return;
-    const appearanceKey = JSON.stringify({ color:this.options.color, opacity:this.options.opacity, width:this.options.lineWidth, style:this.options.lineStyle, visible:this.options.visible, legend:this.options.lastValueVisible, gradient:this.options.gradient, gradientColor:this.options.gradientColor, glow:this.options.glow, glowStrength:this.options.glowStrength });
+    const series = this.valueSeries();
+    if (!series || !this.handle || !this.model) return;
+    const appearanceKey = JSON.stringify({ color:this.options.color, opacity:this.options.opacity, width:this.options.lineWidth, style:this.options.lineStyle, visible:this.options.visible, legend:this.options.lastValueVisible, glow:this.options.glow, glowStrength:this.options.glowStrength });
     if (appearanceKey === this.appearanceKey) return;
     this.appearanceKey = appearanceKey;
-    series.title = String(this.options.title || series.title);
-    series.visible = this.options.visible !== false;
-    series.display = { pane: series.visible !== false, legend: !!this.options.lastValueVisible, priceScale: false, dataWindow: false };
     const baseColor = String(this.options.color || series.style.color || '#38bdf8');
     const opacity = Math.max(0.05, Math.min(1, Number(this.options.opacity ?? 1)));
-    const gradient = Boolean(this.options.gradient);
-    const gradientColor = String(this.options.gradientColor || '#60a5fa');
-    const nextPoints = series.points.map((point, index, all) => ({
-      ...point,
-      color: gradient ? mixColor(baseColor, gradientColor, all.length <= 1 ? 0 : index / (all.length - 1)) : withAlpha(baseColor, opacity),
-    }));
-    series.points = nextPoints;
-    series.style = {
-      ...series.style,
+    const style = {
       color: withAlpha(baseColor, opacity),
       width: Math.max(1, Number(this.options.lineWidth) || series.style.width || 1),
       lineStyle: lineStyle(this.options.lineStyle),
       glow: Boolean(this.options.glow) ? Math.max(0.05, Math.min(1, Number(this.options.glowStrength) || 0.35)) : 0,
-    } as any;
-    this.chart.setSeriesGlow(series.id, Number((series.style as any).glow) || 0);
-    this.chart.renderer.updateIndicator(this.handle!, { kind: 'value', indicatorId: this.model!.id, dirty: { from: Number.MIN_SAFE_INTEGER, to: Number.MAX_SAFE_INTEGER }, series: [{ seriesId: series.id, kind: 'points', points: series.points }] } as ScenePatch);
+    };
+    this.chart.setSeriesGlow(series.id, Number(style.glow) || 0);
+    this.chart.renderer.updateIndicator(this.handle, {
+      kind: 'value', indicatorId: this.model.id, dirty: { from: 0, to: 0 }, series: [],
+      seriesStyles: [{ seriesId: series.id, style, display: { pane: this.options.visible !== false, legend: !!this.options.lastValueVisible, priceScale: false, dataWindow: false }, title: String(this.options.title || series.title), visible: this.options.visible !== false }],
+    } as ScenePatch);
   }
 
   setPaneAppearance(options: { mode:'auto'|'overlay'|'separate'; scale:'price'|'percent'|'indexed'|'log'; scaleMode:'auto'|'manual'; min:number|null; max:number|null; auto:boolean; inverted:boolean }, paneId?: string): void {
@@ -280,11 +273,31 @@ export class VelaSeriesFacade<T = string> {
     return s && (s.kind === 'line' || s.kind === 'histogram') ? s : undefined;
   }
 
-  private patchSeries(points: SeriesPoint[]): void {
+  private patchSeries(op: SeriesPatchOperation, points: SeriesPoint[]): void {
     const series = this.valueSeries();
     if (!series || !this.handle || !this.model) return;
-    this.chart.renderer.updateIndicator(this.handle, { kind: 'value', indicatorId: this.model.id, dirty: { from: points[0]?.time ?? 0, to: points.at(-1)?.time ?? 0 }, series: [{ seriesId: series.id, kind: 'points', points: series.points }] } as ScenePatch);
+    this.chart.renderer.updateIndicator(this.handle, {
+      kind: 'value', indicatorId: this.model.id,
+      dirty: { from: points[0]?.time ?? 0, to: points.at(-1)?.time ?? 0 },
+      series: [{ seriesId: series.id, kind: 'points', points, op }],
+    } as ScenePatch);
   }
+}
+
+function markerEqual(a: MarkerPoint, b: MarkerPoint): boolean {
+  return a.time === b.time && a.position === b.position && a.color === b.color && a.shape === b.shape && a.text === b.text && a.size === b.size && a.textSize === b.textSize && a.offset === b.offset;
+}
+function markerPatch(previous: readonly MarkerPoint[], next: readonly MarkerPoint[]): { op: SeriesPatchOperation; markers: MarkerPoint[]; start?: number; remove?: number } | null {
+  let start = 0;
+  while (start < previous.length && start < next.length && markerEqual(previous[start]!, next[start]!)) start += 1;
+  if (start === previous.length && start === next.length) return null;
+  let oldEnd = previous.length - 1, newEnd = next.length - 1;
+  while (oldEnd >= start && newEnd >= start && markerEqual(previous[oldEnd]!, next[newEnd]!)) { oldEnd -= 1; newEnd -= 1; }
+  const payload = next.slice(start, newEnd + 1);
+  const remove = Math.max(0, oldEnd - start + 1);
+  if (start >= previous.length) return { op: 'append', markers: payload };
+  if (start === 0 && oldEnd === previous.length - 1 && newEnd === next.length - 1) return { op: 'replace', markers: payload };
+  return { op: 'replace-range', markers: payload, start, remove };
 }
 
 function toBar(row: ChartPointInput): OHLCV {
@@ -307,7 +320,7 @@ export class VelaChartFacade {
   private readonly timeScaleFacade = new VelaTimeScaleFacade(this);
   private readonly series = new Set<VelaSeriesFacade>();
   private readonly candleSeries = new Set<VelaSeriesFacade>();
-  private readonly markerModels = new Map<string, { handle: IndicatorRenderHandle; seriesId: string }>();
+  private readonly markerModels = new Map<string, { handle: IndicatorRenderHandle; seriesId: string; markers: MarkerPoint[] }>();
   private readonly bandFills = new Map<string, { handle: IndicatorRenderHandle; modelId: string; from: VelaSeriesFacade; to: VelaSeriesFacade; fill: Fill; options: any }>();
   private readonly priceLineModelId = `tco-price-lines:${++chartSerial}`;
   private priceLineHandle?: IndicatorRenderHandle;
@@ -349,16 +362,19 @@ export class VelaChartFacade {
   setMarkers(markers: readonly ChartMarkerInput[]): void {
     const modelId = `${this.priceLineModelId}:markers`;
     const existing = this.markerModels.get(modelId);
-    const markerPoints: MarkerPoint[] = markers.map((m): MarkerPoint => ({ time: msFromTime(m.time), position: m.position, color: String(m.color || '#f59e0b'), shape: String(m.shape || 'circle'), ...(m.text ? { text: String(m.text) } : {}), ...(m.size ? { size: m.size } : {}), ...(m.textSize != null ? { textSize: Number(m.textSize) } : {}), ...(m.offset != null ? { offset: Number(m.offset) } : {}) }));
+    const next: MarkerPoint[] = markers.map((m): MarkerPoint => ({ time: msFromTime(m.time), position: m.position, color: String(m.color || '#f59e0b'), shape: String(m.shape || 'circle'), ...(m.text ? { text: String(m.text) } : {}), ...(m.size ? { size: m.size } : {}), ...(m.textSize != null ? { textSize: Number(m.textSize) } : {}), ...(m.offset != null ? { offset: Number(m.offset) } : {}) }));
     if (!existing) {
       const seriesId = `${modelId}:series`;
-      const markerSeries: SeriesSpec = { id: seriesId, title: 'Signals', paneId: this.pricePaneId, kind: 'markers', visible: true, overlay: true, markers: markerPoints };
+      const markerSeries: SeriesSpec = { id: seriesId, title: 'Signals', paneId: this.pricePaneId, kind: 'markers', visible: true, overlay: true, markers: next };
       const model = indicatorBase(modelId, 'Signals', this.pricePaneId, [markerSeries]);
       const handle = this.renderer.mountIndicator(model);
-      this.markerModels.set(modelId, { handle, seriesId });
+      this.markerModels.set(modelId, { handle, seriesId, markers: next });
       return;
     }
-    this.renderer.updateIndicator(existing.handle, { kind: 'value', indicatorId: modelId, dirty: { from: markerPoints[0]?.time ?? 0, to: markerPoints.at(-1)?.time ?? 0 }, series: [{ seriesId: existing.seriesId, kind: 'markers', markers: markerPoints }] } as ScenePatch);
+    const delta = markerPatch(existing.markers, next);
+    if (!delta) return;
+    existing.markers = next;
+    this.renderer.updateIndicator(existing.handle, { kind: 'value', indicatorId: modelId, dirty: { from: delta.markers[0]?.time ?? 0, to: delta.markers.at(-1)?.time ?? 0 }, series: [{ seriesId: existing.seriesId, kind: 'markers', markers: delta.markers, op: delta.op, start: delta.start, remove: delta.remove }] } as ScenePatch);
   }
 
   createPriceLine(optionsOrPrice: number | { price: number; color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }, legacyOptions?: { color?: string; lineWidth?: number; lineStyle?: number; axisLabelVisible?: boolean; title?: string; lastValueVisible?: boolean }): PriceLineHandle {
@@ -410,35 +426,51 @@ export class VelaChartFacade {
     state.options = { ...state.options, ...options };
     const fromPoints = state.from.snapshotPoints(), toPoints = state.to.snapshotPoints();
     const opacity = Math.max(0.02, Math.min(1, Number(state.options.opacity ?? 0.18)));
-    const upper = withAlpha(String(state.options.upperColor || '#60a5fa'), opacity), lower = withAlpha(String(state.options.lowerColor || '#60a5fa'), opacity);
+    const upper = withAlpha(String(state.options.upperColor || '#60a5fa'), opacity);
+    const lower = withAlpha(String(state.options.lowerColor || '#60a5fa'), opacity);
     const fill = state.fill;
     if (state.options.enabled === false) { fill.colors = undefined; fill.gradient = undefined; fill.color = 'rgba(0,0,0,0)'; }
     else if (state.options.gradient) {
-      fill.color = undefined; fill.colors = undefined; fill.gradient = fromPoints.map((p: any, i: number) => { const q=toPoints[i]; if(!q||p.value==null||q.value==null)return null; return { topValue: Math.max(p.value,q.value), bottomValue: Math.min(p.value,q.value), topColor: upper, bottomColor: lower }; });
+      fill.color = undefined; fill.colors = undefined;
+      fill.gradient = fromPoints.map((p, i) => { const q = toPoints[i]; if (!q || p.value == null || q.value == null) return null; return { topValue: Math.max(p.value, q.value), bottomValue: Math.min(p.value, q.value), topColor: upper, bottomColor: lower }; });
     } else if (state.options.conditional) {
-      fill.gradient = undefined; fill.color = undefined; fill.colors = fromPoints.map((p:any,i:number)=>{const q=toPoints[i]; if(!q||p.value==null||q.value==null)return null; return p.value>=q.value?withAlpha(String(state.options.bullishColor||'#22c55e'),opacity):withAlpha(String(state.options.bearishColor||'#ef4444'),opacity);});
+      fill.gradient = undefined; fill.color = undefined;
+      fill.colors = fromPoints.map((p, i) => { const q = toPoints[i]; if (!q || p.value == null || q.value == null) return null; return p.value >= q.value ? withAlpha(String(state.options.bullishColor || '#22c55e'), opacity) : withAlpha(String(state.options.bearishColor || '#ef4444'), opacity); });
     } else { fill.gradient = undefined; fill.colors = undefined; fill.color = upper; }
     fill.paneId = state.from.getPaneId();
-    const native = this.renderer as any;
-    if (typeof native.setIndicatorFills === 'function') native.setIndicatorFills(state.modelId, [fill]);
+    this.renderer.updateIndicator(state.handle, { kind: 'value', indicatorId: state.modelId, dirty: { from: fromPoints[0]?.time ?? 0, to: fromPoints.at(-1)?.time ?? 0 }, series: [], fillStyles: [{ fillId: fill.id, paneId: fill.paneId, color: fill.color }], fillDeltas: [{ fillId: fill.id, op: 'replace', ...(fill.colors !== undefined ? { colors: fill.colors } : {}), ...(fill.gradient !== undefined ? { gradient: fill.gradient } : {}) }] } as ScenePatch);
   }
 
   private syncBandFill(id: string): void {
     const state = this.bandFills.get(id); if (!state) return;
-    const native = this.renderer as any;
-    if (typeof native.setIndicatorSeriesPoints === 'function') native.setIndicatorSeriesPoints(state.modelId, [
-      { seriesId: `${id}:from`, points: state.from.snapshotPoints() },
-      { seriesId: `${id}:to`, points: state.to.snapshotPoints() },
-    ]);
-    state.fill.paneId = state.from.getPaneId();
-    if (typeof native.setIndicatorFills === 'function') native.setIndicatorFills(state.modelId, [state.fill]);
+    const fromPoints = state.from.snapshotPoints(), toPoints = state.to.snapshotPoints();
+    this.renderer.updateIndicator(state.handle, { kind: 'value', indicatorId: state.modelId, dirty: { from: fromPoints[0]?.time ?? 0, to: fromPoints.at(-1)?.time ?? 0 }, series: [{ seriesId: `${id}:from`, kind: 'points', points: fromPoints, op: 'replace' }, { seriesId: `${id}:to`, kind: 'points', points: toPoints, op: 'replace' }] } as ScenePatch);
   }
 
-  syncBandFillsForSeries(seriesId: string): void { for (const [id, state] of this.bandFills) if (state.from.id === seriesId || state.to.id === seriesId) this.syncBandFill(id); }
-  private removeBandFill(id: string): void { const state = this.bandFills.get(id); if (!state) return; this.renderer.removeIndicator(state.handle); this.bandFills.delete(id); }
+  syncBandFillsForSeries(seriesId: string, op: SeriesPatchOperation = 'replace', points?: SeriesPoint[]): void {
+    for (const [id, state] of this.bandFills) {
+      const target = state.from.id === seriesId ? `${id}:from` : state.to.id === seriesId ? `${id}:to` : null;
+      if (!target) continue;
+      const payload = points ?? (target.endsWith(':from') ? state.from.snapshotPoints() : state.to.snapshotPoints());
+      if (payload.length === 0 && op !== 'replace') continue;
+      this.renderer.updateIndicator(state.handle, { kind: 'value', indicatorId: state.modelId, dirty: { from: payload[0]?.time ?? 0, to: payload.at(-1)?.time ?? 0 }, series: [{ seriesId: target, kind: 'points', points: payload, op }] } as ScenePatch);
+    }
+  }
 
 
-  removeBandFillsForSeries(seriesId:string): void { for(const [id,state] of this.bandFills) if(state.from.id===seriesId||state.to.id===seriesId) this.removeBandFill(id); }
+  private removeBandFill(id: string): void {
+    const state = this.bandFills.get(id);
+    if (!state) return;
+    this.renderer.removeIndicator(state.handle);
+    this.bandFills.delete(id);
+  }
+
+  removeBandFillsForSeries(seriesId: string): void {
+    for (const [id, state] of this.bandFills) {
+      if (state.from.id === seriesId || state.to.id === seriesId) this.removeBandFill(id);
+    }
+  }
+
 
   unregisterSeries(series: VelaSeriesFacade): void { this.series.delete(series); this.candleSeries.delete(series); this.setSeriesGlow(series.id, 0); }
   private readonly seriesGlow = new Map<string, number>();
@@ -448,6 +480,18 @@ export class VelaChartFacade {
     this.renderer.applyFeature('glow', max);
   }
 
+
+  /** Renderer-only compatibility bridge for appearance modules; live data uses incremental updateIndicator patches. */
+  setIndicatorFills(indicatorId: string, fills: Fill[]): void {
+    const fn = (this.renderer as any).setIndicatorFills;
+    if (typeof fn === 'function') fn.call(this.renderer, indicatorId, fills);
+  }
+
+  /** Renderer-only compatibility bridge; callers with live data should prefer incremental patch ops. */
+  setIndicatorSeriesPoints(indicatorId: string, updates: Array<{ seriesId: string; points: SeriesPoint[] }>): void {
+    const fn = (this.renderer as any).setIndicatorSeriesPoints;
+    if (typeof fn === 'function') fn.call(this.renderer, indicatorId, updates);
+  }
 
   private ensurePriceLineModel(): void {
     if (this.priceLineHandle) return;

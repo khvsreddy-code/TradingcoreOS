@@ -20,7 +20,7 @@ import type {
 import type { VelaTheme } from '../../core/options';
 import type { OHLCV } from '../../core/model/ohlcv';
 import { createMutableColumnarBars, appendColumnarBar } from '../../core/model/columnar-bars';
-import type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../core/model/columnar-bars';
+import type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex, MutableColumnarBars } from '../../core/model/columnar-bars';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
 import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
@@ -285,7 +285,7 @@ export class NativeRenderer implements IChartRenderer {
     private bars: OHLCV[] = [];
     /** Canonical numeric source for the native base-price renderer. Object bars remain only
      * as a compatibility mirror for legacy scripting/data-window/drawing code. */
-    private columnarBars: ColumnarBars | null = null;
+    private columnarBars: MutableColumnarBars | null = null;
     private columnarLod: ColumnarLodIndex | null = null;
     private didInitialFit = false;
     /** A data-tier paint has happened (scales + drawing resolvers are real) — gates the
@@ -1910,6 +1910,7 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.bars = this.bars;
         this.scene.candleColumns = this.columnarBars;
         this.scene.candleLodIndex = undefined;
+        this.coords.setBarsColumns(this.columnarBars.time, this.columnarBars.length, this.columnarBars.timeUnit ?? 'milliseconds');
         this.coords.setBars(this.bars.map((b) => b.time));
         for (const model of this.scene.indicators.values()) this.refreshAnchorOffset(model);
         if (opts?.preserveView === true && prevHeadTime != null && this.bars.length > 0) {
@@ -4471,29 +4472,70 @@ function leadingPointsBefore(model: IndicatorModel, headTime: number): number | 
     return null;
 }
 
-/** Apply a scene patch to a stored indicator model so the next frame reflects it. */
+/** Apply a scene patch to retained indicator state. */
 function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
     if (patch.kind === 'value') {
         for (const delta of patch.series) {
-            const s = model.series.find((x) => x.id === delta.seriesId);
-            if (!s) continue;
-            if (delta.kind === 'points' && isLineLikeSeries(s)) s.points = delta.points;
-            else if (delta.kind === 'bars' && (s.kind === 'candle' || s.kind === 'bar')) s.bars = delta.bars;
+            const series = model.series.find((x) => x.id === delta.seriesId);
+            if (!series) continue;
+            const op = delta.op ?? 'replace';
+            if (delta.kind === 'points' && isLineLikeSeries(series)) series.points = applyArrayDelta(series.points, delta.points, op, delta.start, delta.remove);
+            else if (delta.kind === 'bars' && (series.kind === 'candle' || series.kind === 'bar')) series.bars = applyArrayDelta(series.bars, delta.bars, op, delta.start, delta.remove);
+            else if (delta.kind === 'markers' && series.kind === 'markers') series.markers = applyArrayDelta(series.markers, delta.markers, op, delta.start, delta.remove);
         }
-        if (patch.lines) model.lines = patch.lines;
-        if (patch.boxes) model.boxes = patch.boxes;
-        if (patch.labels) model.labels = patch.labels;
-        if (patch.polylines) model.polylines = patch.polylines;
-        if (patch.linefills) model.linefills = patch.linefills;
-        if (patch.tables) model.tables = patch.tables;
-        if (patch.trades) model.trades = patch.trades;
+        for (const delta of patch.seriesStyles ?? []) {
+            const series = model.series.find((x) => x.id === delta.seriesId);
+            if (!series) continue;
+            if (delta.style && isLineLikeSeries(series)) series.style = { ...series.style, ...delta.style };
+            if (delta.display) series.display = { ...series.display, ...delta.display };
+            if (delta.title !== undefined) series.title = delta.title;
+            if (delta.visible !== undefined) series.visible = delta.visible;
+        }
+        for (const delta of patch.fillStyles ?? []) {
+            const fill = model.fills.find((x) => x.id === delta.fillId);
+            if (!fill) continue;
+            if (delta.paneId !== undefined) fill.paneId = delta.paneId;
+            if (delta.color !== undefined) fill.color = delta.color;
+            if (delta.overlay !== undefined) fill.overlay = delta.overlay;
+        }
+        for (const delta of patch.fillDeltas ?? []) {
+            const fill = model.fills.find((x) => x.id === delta.fillId);
+            if (!fill) continue;
+            const op = delta.op ?? 'replace';
+            if (delta.colors !== undefined) fill.colors = applyArrayDelta(fill.colors ?? [], delta.colors, op, delta.start, delta.remove);
+            if (delta.gradient !== undefined) fill.gradient = applyArrayDelta(fill.gradient ?? [], delta.gradient, op, delta.start, delta.remove);
+        }
+        if (patch.fills !== undefined) model.fills = patch.fills;
+        if (patch.backgrounds !== undefined) model.backgrounds = patch.backgrounds;
+        if (patch.priceLines !== undefined) model.priceLines = patch.priceLines;
+        if (patch.lines !== undefined) model.lines = patch.lines;
+        if (patch.boxes !== undefined) model.boxes = patch.boxes;
+        if (patch.labels !== undefined) model.labels = patch.labels;
+        if (patch.polylines !== undefined) model.polylines = patch.polylines;
+        if (patch.linefills !== undefined) model.linefills = patch.linefills;
+        if (patch.tables !== undefined) model.tables = patch.tables;
+        if (patch.trades !== undefined) model.trades = patch.trades;
         return;
     }
     for (const id of patch.removed) {
-        const i = model.series.findIndex((x) => x.id === id);
-        if (i >= 0) model.series.splice(i, 1);
+        const index = model.series.findIndex((x) => x.id === id);
+        if (index >= 0) model.series.splice(index, 1);
     }
     for (const spec of patch.added) model.series.push(spec);
+}
+
+function applyArrayDelta<T>(current: T[], incoming: T[], op: import('../../core/model/patch').SeriesPatchOperation, start?: number, remove?: number): T[] {
+    switch (op) {
+        case 'append': current.push(...incoming); return current;
+        case 'prepend': current.splice(0, 0, ...incoming); return current;
+        case 'replace-last':
+            if (incoming.length === 0) return current;
+            if (current.length === 0) current.push(...incoming);
+            else current[current.length - 1] = incoming[incoming.length - 1]!;
+            return current;
+        case 'replace-range': current.splice(Math.max(0, start ?? 0), Math.max(0, remove ?? incoming.length), ...incoming); return current;
+        default: return incoming;
+    }
 }
 
 /** Compact stamp for the data-window header in the configured zone (e.g. `2024-03-08 14:30`). */
