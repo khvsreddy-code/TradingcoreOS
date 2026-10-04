@@ -7,7 +7,7 @@ There are four canonical documentation batches:
 3. **03_VELA_AND_CHARTING.md** — Vela boundary, columnar candles, incremental patches, LOD and viewport behavior.
 4. **04_INDICATORS_AND_PLATFORM.md** — indicator artifacts, settings, dependency graphs and community indicators.
 
-Older standalone documents are preserved under `docs/archive/` and `docs/archive/source/`. Versioned planning documents are archived; active architecture references remain temporarily available until their material is fully absorbed into these four batches.
+Older standalone documents are preserved under `docs/archive/`. Versioned implementation notes live under `docs/archive/history/`; legacy and broker notes live under their named archive subdirectories. Only the four canonical batches plus the living tracker should be edited for active architecture.
 
 ## Beginner CoreSpirit path
 
@@ -52,7 +52,7 @@ TCO data columns
   → renderer frame/backend telemetry
 ```
 
-The four canonical batches are the only active architecture docs. Historical/redundant source notes are preserved under `docs/archive/`; `docs/history/` remains an immutable release history.
+The four canonical batches are the only active architecture docs. Historical/redundant source notes are preserved under `docs/archive/history/` and `docs/archive/legacy/`.
 
 For contributors, the rule is simple: change the canonical document first. Do not create another one-off architecture note for an already-covered subsystem.
 
