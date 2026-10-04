@@ -14,7 +14,6 @@ const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const facade = read('src/services/core/chart/velaChartFacade.ts');
 const renderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
 const markerModel = read('vendor/vela/src/core/model/series.ts');
-const tracker = read('TRADINGCORE_REPAIR_TRACKER.md');
 const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
 const schemaDoc = read('docs/INDICATOR_SETTINGS_SCHEMA.md');
 
