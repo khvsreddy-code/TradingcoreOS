@@ -121,7 +121,7 @@ class FusedSeriesStage {
     if (this.rollingVariance) {
       const variance=this.rollingVariance.update(value).value;
       if (variance==null) return Number.NaN;
-      return this.op.name==='variance'?variance:Math.sqrt(variance);
+      return this.op.name==='variance'?(this.rollingVariance.variance() ?? Number.NaN):variance;
     }
     if (this.rollingMinMax) {
       const state=this.rollingMinMax.update(value);
