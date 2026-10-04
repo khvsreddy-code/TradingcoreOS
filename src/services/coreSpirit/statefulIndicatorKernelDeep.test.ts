@@ -100,7 +100,9 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   k.update(10, 9, 9.5);
   k.update(11, 10, 10.5);
   nearly(k.update(12, 10, 11)!, 1.5);
-  nearly(k.update(14, 12, 13)!, 2.0);
+  const atrFourth = k.update(14, 12, 13)!;
+  console.log('ATR_DIAG', { trueRange: k.trueRange, value: atrFourth });
+  nearly(atrFourth, 2.0);
   nearly(k.update(14, 12, 13, 'replace')!, 2.0);
 }
 
