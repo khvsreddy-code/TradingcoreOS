@@ -93,6 +93,26 @@ function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
   return [...bySecond.values()].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)).slice(-MAX_HISTORY_CANDLES);
 }
 
+function columnarHistoryToCandles(columns: {
+  time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds';
+}, limit = 5000): HistoricalCandle[] {
+  const count = Math.min(columns.time.length, columns.open.length, columns.high.length, columns.low.length, columns.close.length, columns.volume.length);
+  const start = Math.max(0, count - Math.max(1, limit));
+  const out: HistoricalCandle[] = new Array(Math.max(0, count - start));
+  const multiplier = columns.timeUnit === 'seconds' ? 1000 : 1;
+  let previous = Number.NaN;
+  let written = 0;
+  for (let i = start; i < count; i += 1) {
+    const time = Number(columns.time[i]) * multiplier;
+    const open = Number(columns.open[i]), high = Number(columns.high[i]), low = Number(columns.low[i]), close = Number(columns.close[i]), volume = Number(columns.volume[i]);
+    if (!Number.isFinite(time) || time <= 0 || ![open, high, low, close].every(Number.isFinite)) continue;
+    if (time === previous) continue;
+    previous = time;
+    out[written++] = { timestamp: new Date(time).toISOString(), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
+  }
+  out.length = written;
+  return out;
+}
 export class ChartDataPlane {
   readonly key: ChartDataPlaneKey;
   private readonly canonicalPlane: CanonicalDataPlane;
@@ -251,6 +271,58 @@ export class ChartDataPlane {
     return merged;
   }
 
+  private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds' }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
+    const candles = columnarHistoryToCandles(columns, Math.min(5000, requestedLimit));
+    if (!candles.length) return [];
+    const retained = candles.slice(-MAX_HISTORY_CANDLES);
+    this.state.candles = retained;
+    this.state.revision += 1;
+    this.canonicalPlane.replaceColumns(columns, Math.max(0, columns.time.length - retained.length));
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    historyStore.set(this.brokerId, this.instrumentKey, interval, retained, Math.min(MAX_HISTORY_CANDLES, Math.max(requestedLimit, retained.length)));
+    this.state.lastHistoryLoadAt = Date.now();
+    this.state.olderHistoryExhausted = false;
+    this.state.historyReady = true;
+    this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
+    return retained;
+  }
+
+  /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
+  async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
+    if (this.state.historyPromise) return this.state.historyPromise;
+    if (this.state.historyReady && this.state.candles.length) return this.activeWindow(this.state.candles, limitOverride);
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    const baseLimit = initialHistoryCandles(this.timeframe);
+    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
+    if (fresh?.length) {
+      const active = this.activeWindow(fresh, requestedLimit);
+      this.state.historyReady = true; this.state.olderHistoryExhausted = false; this.setCandles(active, 'cache');
+      return active;
+    }
+    this.state.historyLoading = true;
+    this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
+    const requestKey = `${this.key}:initial-columns:${requestedLimit}`;
+    const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requestedLimit), 'initial')
+      .then(columns => {
+        if (!columns) {
+          this.state.historyPromise = undefined;
+          return this.ensureHistory(requestedLimit);
+        }
+        const active = this.setColumnarHistory(columns, requestedLimit, 'history');
+        if (!active.length) throw new Error('No historical candles available');
+        this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        return active;
+      })
+      .catch(error => {
+        const message = String((error as any)?.message || error || 'Historical candles unavailable');
+        this.emit({ type: 'status', status: 'error', error: message, snapshot: this.snapshot() });
+        throw error;
+      })
+      .finally(() => { this.state.historyLoading = false; this.state.historyPromise = undefined; });
+    this.state.historyPromise = promise;
+    return promise;
+  }
   private async ensureHistory(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
