@@ -29,6 +29,6 @@ assert(facade.includes('markerPatch(existing.markers'), 'marker incremental patc
 assert(facade.includes('syncBandFillsForSeries(seriesId: string, op:'), 'fill anchor incremental path missing');
 assert(!facade.includes("points: series.points }] } as ScenePatch"), 'facade still sends full series.points');
 assert(coord.includes('Float64Array') && coord.includes('timeCapacity'), 'coordinate time storage not typed');
-assert(workspace.includes('let cleanupWorkspaceListeners'), 'workspace cleanup declaration missing');
-assert(nativeFacade.includes("import type { OHLCV }"), 'OHLCV type import missing');
+assert(workspace.includes('workspaceListenerDisposers'), 'workspace cleanup ownership missing');
+assert(nativeFacade.includes('VelaLegacyBar'), 'Vela legacy compatibility bar type seam missing');
 console.log('TRADINGCORE_V117_INCREMENTAL_PATCH_CONTRACT_OK');

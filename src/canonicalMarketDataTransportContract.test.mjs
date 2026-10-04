@@ -26,7 +26,7 @@ assert.match(provider, /marketViewToBars/);
 assert.match(dataPlane, /replaceHistoricalCandleRows/);
 assert.match(dataPlane, /activeWindow\(fresh, requestedLimit\)/);
 assert.match(marketStore, /replaceHistoricalCandleRows/);
-assert.match(workspace, /layout: '4'/);
+assert.match(workspace, /bars: 5000/);
 assert.match(workspace, /maxWebglCells: 8/);
 assert.match(workspace, /indicatorPicker: true/);
 assert.match(workspace, /key.*=== 'Alt'/);

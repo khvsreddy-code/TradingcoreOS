@@ -11,7 +11,7 @@ const workspace = read('src/LiveTradingWorkspace.tsx');
 assert.match(terminal, /return\s*<LiveTradingWorkspace\s*\/>/);
 assert.doesNotMatch(terminal, /useEffect\(|history\.|popstate|setTimeout\(/);
 
-for (const token of ['VelaWorkspace', 'defaultLanguage', 'corespirit', 'CoreSpiritVelaEngine', 'createTcoVelaDataProvider', "layout: '4'", 'live: true', 'indicatorPicker: true', 'maxWebglCells: 8']) {
+for (const token of ['VelaWorkspace', 'defaultLanguage', 'corespirit', 'CoreSpiritVelaEngine', 'createTcoVelaDataProvider', 'bars: 5000', 'live: true', 'indicatorPicker: true', 'maxWebglCells: 8']) {
   assert.ok(workspace.includes(token), 'new Vela live contract missing: ' + token);
 }
 
