@@ -110,3 +110,8 @@ Bollinger, Donchian, Stochastic, CCI and MFI standard paths already use canonica
 ## v107 incremental indicator execution
 
 CoreSpirit and the market-data indicator engine use bounded incremental kernels for repeated indicator updates, with tail-only forming-bar updates where the data-plane contract permits. IndicatorCodeViewer remains available for source inspection without introducing a second scripting language.
+
+
+The canonical bounded kernel family includes `RollingAbsoluteDeviation` for ordered-MAD calculations and robust dispersion metrics.
+
+Forming-bar indicator updates use `series.update`/tail-update semantics where the renderer/data-plane contract permits.
