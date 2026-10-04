@@ -185,7 +185,7 @@ export class VelaSeriesFacade<T = string> {
 
   setData(rows: readonly ChartPointInput[]): void {
     if (this.removed) return;
-    if (this.kind === 'candle') { this.chart.setBars(rows.map(toBar)); return; }
+    if (this.kind === 'candle') { this.chart.setBarsColumns(toColumnarBars(rows)); return; }
     const points = rows.map((p) => ({ time: msFromTime(p.time), value: p.value == null ? null : Number(p.value), ...(p.color ? { color: String(p.color) } : {}) })).filter((p) => Number.isFinite(p.time)) as SeriesPoint[];
     const current = this.valueSeries()?.points ?? [];
     let op: SeriesPatchOperation = 'replace';
@@ -311,6 +311,18 @@ function markerPatch(previous: readonly MarkerPoint[], next: readonly MarkerPoin
   return { op: 'replace-range', markers: payload, start, remove };
 }
 
+function toColumnarBars(rows: readonly ChartPointInput[]): ColumnarBars {
+  const n = rows.length;
+  const time = new Float64Array(n), open = new Float64Array(n), high = new Float64Array(n), low = new Float64Array(n), close = new Float64Array(n), volume = new Float64Array(n);
+  volume.fill(Number.NaN);
+  for (let i = 0; i < n; i += 1) {
+    const row = rows[i]!, t = msFromTime(row.time), c = Number(row.close ?? row.value ?? 0);
+    time[i] = t; open[i] = Number(row.open ?? c); high[i] = Number(row.high ?? c); low[i] = Number(row.low ?? c); close[i] = c;
+    const v = Number((row as any).volume); if (Number.isFinite(v)) volume[i] = v;
+  }
+  return { time, open, high, low, close, volume, length:n, timeUnit:'milliseconds' };
+}
+
 function toBar(row: ChartPointInput): OHLCV {
   const time = msFromTime(row.time);
   const close = Number(row.close ?? row.value ?? 0);
@@ -367,8 +379,10 @@ export class VelaChartFacade {
   unsubscribeClick(cb: (param: any) => void): void { this.onClickHandlers.delete(cb); }
   subscribeSizeChange(_cb: () => void): () => void { return () => {}; }
 
-  setBars(bars: readonly ChartPointInput[]): void { this.renderer.setBars(bars.map(toBar), { preserveView: this.renderer.getVisibleRange() !== null }); }
-  updateBar(bar: OHLCV): void { this.renderer.updateBar(bar); }
+  setBars(bars: readonly ChartPointInput[]): void { this.setBarsColumns(toColumnarBars(bars)); }
+  setBarsColumns(columns: ColumnarBars): void { this.renderer.setBarsColumns(columns, { preserveView: this.renderer.getVisibleRange() !== null }); }
+  updateBar(bar: OHLCV): void { this.updateBarColumns({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume, timeUnit: 'milliseconds' }); }
+  updateBarColumns(update: ColumnarBarUpdate): void { this.renderer.updateBarColumns(update); }
   setCandleOptions(options: SeriesOptions): void { this.lastCandleOptions = { ...this.lastCandleOptions, ...options }; const apply = (this.renderer as any).setCandleAppearance; if (typeof apply === 'function') apply.call(this.renderer, { upColor: options.upColor || options.color || '#22c55e', downColor: options.downColor || options.color || '#ef4444', borderUpColor: options.borderUpColor, borderDownColor: options.borderDownColor, wickUpColor: options.wickUpColor, wickDownColor: options.wickDownColor, borderVisible: options.borderVisible, wickVisible: options.wickVisible }); }
   setMarkers(markers: readonly ChartMarkerInput[]): void {
     const modelId = `${this.priceLineModelId}:markers`;
