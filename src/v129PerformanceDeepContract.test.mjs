@@ -43,7 +43,7 @@ assert.match(vela,/rawTape\.countTimeRange/); assert.match(vela,/rawTape\.lastIn
 
 assert.match(engine,/notifyBars\(reason\s*,\s*dirtyRange\)/);
 assert.match(engine,/collectRange\(rangeResult\.outputs\s*,\s*dirtyRange\)/);
-assert.match(engine,/executionStart = Math\.max\(0,start - maxLookback\)/);
+assert.match(engine,/executionStart\s*=\s*Math\.max\(0,\s*start\s*-\s*maxLookback\)/);
 assert.doesNotMatch(engine,/reason === 'backfill'[\s\S]{0,700}points\.clear\(\)/);
 
 for(const stage of ['transport','compute','patch','renderer','frame']) assert.match(telemetry,new RegExp(stage));
