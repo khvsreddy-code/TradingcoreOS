@@ -1024,10 +1024,16 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                         return;
                     }
                 }
-                this.rawTape.prependRows(head);
+                const previousOldest = this.rawTape.firstTime();
+                const prepended = this.rawTape.prependRows(head);
                 this.invalidateRawBarsCompat();
                 this.renderRetainedRawSeries({ preserveView: true });
-                this.notifySessionsBars('backfill');
+                const dirtyFrom = this.rawTape.firstTime();
+                const lookbackBars = Math.max(0, ...this.registry.all().map((record) => Number(record.prepared?.maxLookback ?? 0)));
+                const dirtyToIndex = Math.min(this.rawTape.length - 1, Math.max(prepended, prepended + lookbackBars));
+                const dirtyTo = dirtyToIndex >= 0 ? this.rawTape.time[dirtyToIndex]! : previousOldest;
+                if (Number.isFinite(dirtyFrom) && Number.isFinite(dirtyTo) && dirtyTo >= dirtyFrom) this.notifySessionsBars('backfill', { from: dirtyFrom, to: dirtyTo });
+                else this.notifySessionsBars('backfill');
                 this.events.emit('history:progress', { loaded: this.rawBars.length, target: requested });
             }
             if (this.generation === gen) this.completeHistory('depth');
