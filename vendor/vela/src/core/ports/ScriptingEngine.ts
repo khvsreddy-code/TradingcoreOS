@@ -60,6 +60,8 @@ export interface PreparedScript {
      * may refine it in place after the first run.
      */
     reactsToViewport: boolean;
+    /** Maximum causal lookback in bars; used to bound prepend recomputation and dirty spans. */
+    maxLookback?: number;
     readonly token: unknown;
 }
 
@@ -133,9 +135,7 @@ export interface ExecutionHandlers {
     onAlert?(alert: EngineAlert): void;
     onWarning?(warning: EngineWarning): void;
     onError?(error: Error): void;
-    /** Optional maximum causal lookback in bars. Hosts use it to bound history-backfill recomputation. */
-    maxLookback?: number;
-    /** A `static` run finished; not fired for an open live stream. */
+        /** A `static` run finished; not fired for an open live stream. */
     onDone?(): void;
 }
 
