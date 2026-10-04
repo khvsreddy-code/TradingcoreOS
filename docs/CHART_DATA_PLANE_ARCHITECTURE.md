@@ -544,3 +544,13 @@ The full Vela source audit also confirmed that candle rendering is the correct p
 TradingCoreOS now requests a 5,000-candle initial chart window and 5,000-candle older-history pages. The Vela ranged cache and deep-history chunk size are aligned to the same 5k unit. The TCO Vela provider now honors a ranged `to` boundary by hydrating the older page before slicing, preventing left-edge scrolls from returning the newest 5k candles again.
 
 The Fyers history route caps chart requests at 5,000 candles, adds the 10-minute interval mapping, and uses timeframe-aware lookback windows to give the broker a realistic opportunity to return the requested page.
+
+## v120 — Vela/Fyers demand paging and fused-runtime boundary
+
+The Vela base chart now treats 5,000 candles as the initial hot window and grows history in 5,000-candle pages when the viewport approaches the left edge. This uses the existing Vela depth/backfill mechanism rather than a second TCO history implementation. TCO's canonical chart plane remains the market-data authority.
+
+The Fyers runtime also deduplicates identical older-history requests and consults the existing history store before opening another broker round trip. Initial/older requests are capped at 5,000 at the Vela adapter boundary.
+
+The native Vela render path continues to consume the canonical typed market plane; the remaining OHLCV representation is explicitly compatibility-only.
+
+Realtime CoreSpirit fusion now keeps deterministic stateful kernel cursors active in realtime and snapshots/restores their bounded state around forming-bar revisions, instead of disabling fusion for every realtime execution.

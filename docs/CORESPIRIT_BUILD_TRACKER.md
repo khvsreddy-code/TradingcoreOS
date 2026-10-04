@@ -3616,3 +3616,21 @@ Historical/replay CoreSpirit VM execution now installs the semantic fusion plan.
 - visual/event/authority operations stay outside numeric fusion;
 - intermediate series allocation count is zero;
 - planner explanation and CI contracts expose the selected fused groups.
+
+## v120 — CoreSpirit realtime fusion and whole-web performance
+
+Completed:
+- Semantic graph now separates pure, deterministic, stateful, and effectful semantics. Deterministic local stateful kernels are not automatically fusion barriers.
+- EMA/RMA remain explicitly fusible stateful kernels.
+- Fused cursor state can be snapshotted/restored, enabling realtime forming-bar revision rollback without rebuilding full intermediate arrays.
+- Fusion-group lookup is indexed by stable group id rather than scanning the plan for each instruction.
+- Existing single-pass cursor execution remains one chronological traversal with one final history-sized output and zero full intermediate series allocations.
+- Fyers older-page requests are bounded to 5,000, cached briefly, deduplicated in flight, and hydrated from the shared history store when possible.
+- The Vela engine requests another 5,000 bars when the visible left edge approaches the loaded history boundary.
+- TradingCoreOS uses the existing Motion dependency for DOM transitions and a graphite/indigo design system instead of adding a heavyweight 3D/UI dependency.
+
+Next performance boundary:
+- Direct CanonicalMarketView -> CoreSpirit typed-series ingress for the remaining indicator inputs.
+- Dirty-span RenderPacket propagation so compute invalidation and Vela redraw ranges share one exact span.
+- Explicit retained overlay revisions for prediction/drawing rasters.
+- Columnar variants of Vela's remaining alternate price styles and legacy data-window paths.

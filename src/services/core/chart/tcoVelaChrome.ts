@@ -38,7 +38,7 @@ const watchlistPanel: SidePanelDescriptor = {
       const button = document.createElement('button');
       button.type = 'button';
       button.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid transparent;border-radius:7px;padding:9px 10px;background:transparent;color:#e2e8f0;text-align:left;cursor:pointer;';
-      button.addEventListener('mouseenter', () => { button.style.background = 'rgba(59,130,246,.10)'; });
+      button.addEventListener('mouseenter', () => { button.style.background = 'rgba(124,92,255,.10)'; });
       button.addEventListener('mouseleave', () => { if (!button.dataset.active) button.style.background = 'transparent'; });
       const left = document.createElement('span');
       left.innerHTML = `<span style="display:block;font-size:11px;font-weight:700">${item.label}</span><span style="display:block;margin-top:2px;font-size:9px;color:#64748b">${item.short}</span>`;
@@ -59,8 +59,8 @@ const watchlistPanel: SidePanelDescriptor = {
         const button = active.get(item.symbol)!;
         const selected = item.symbol === current;
         button.dataset.active = selected ? '1' : '';
-        button.style.background = selected ? 'rgba(59,130,246,.12)' : 'transparent';
-        button.style.borderColor = selected ? 'rgba(96,165,250,.24)' : 'transparent';
+        button.style.background = selected ? 'rgba(124,92,255,.12)' : 'transparent';
+        button.style.borderColor = selected ? 'rgba(155,138,255,.24)' : 'transparent';
       }
     };
 
@@ -100,7 +100,7 @@ const journalPanel: SidePanelDescriptor = {
     root.appendChild(actions);
     const save = document.createElement('button');
     save.type = 'button'; save.textContent = 'Save note';
-    save.style.cssText = 'flex:1;border:1px solid rgba(96,165,250,.28);border-radius:7px;padding:8px;background:rgba(59,130,246,.12);color:#bfdbfe;font:11px ui-monospace;cursor:pointer;';
+    save.style.cssText = 'flex:1;border:1px solid rgba(155,138,255,.28);border-radius:7px;padding:8px;background:rgba(124,92,255,.12);color:#ddd6fe;font:11px ui-monospace;cursor:pointer;';
     save.addEventListener('click', () => { localStorage.setItem(JOURNAL_KEY, textarea.value); void saveTcoVelaJournal(textarea.value); });
     const stamp = document.createElement('button');
     stamp.type = 'button'; stamp.textContent = 'Stamp context';

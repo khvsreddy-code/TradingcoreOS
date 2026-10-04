@@ -393,6 +393,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     record.session.setVisibleRange(window);
                 } else if (record.native?.descriptor.reactsToViewport) record.native.instance.onViewport({ from: window.left, to: window.right });
             }
+            // Base-history demand is owned by Vela here: the first 5k bars are hot, and as the
+            // user approaches the loaded tape's left edge we grow depth by exactly one 5k page.
+            // The existing backfill loop preserves the viewport and merges live ticks safely.
+            if (window.left <= LEFT_HISTORY_TRIGGER_BARS && this.historyState !== 'backfill' && this.rawBars.length > 0) {
+                const currentDepth = Math.max(SINGLE_LOAD_BARS, this.rawBars.length);
+                if (currentDepth < MAX_HISTORY_BARS) this.extendDepth(this.generation, Math.min(MAX_HISTORY_BARS, currentDepth + SINGLE_LOAD_BARS));
+            }
             // An active chart-type data engine streams in newly-visible data as the user scrolls.
             if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onViewport?.({ from: window.left, to: window.right });
         }, VIEWPORT_DEBOUNCE_MS);

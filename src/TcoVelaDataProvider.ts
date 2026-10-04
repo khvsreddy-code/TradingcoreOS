@@ -115,9 +115,15 @@ export class TcoVelaDataProvider implements DataProvider {
   async getBarsColumns(ticker: string, timeframe: string, range: BarRange): Promise<ColumnarBars> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
+    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
     const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
     await plane.ensureReady(requested);
+    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+    const current = plane.readCanonical();
+    const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+    if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
+      await plane.loadOlderHistory('visible', { visibleBars: requested });
+    }
     return marketViewToColumns(plane.readCanonical(), range, requested);
   }
 

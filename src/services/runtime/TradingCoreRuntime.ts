@@ -25,6 +25,8 @@ export class TradingCoreRuntime {
   private optionChainCache = new Map<string, { expiresAt: number; data: any }>();
   private optionChainPromises = new Map<string, Promise<any>>();
   private historyCache = new Map<string, { expiresAt: number; data: HistoricalCandle[] }>();
+  private olderHistoryCache = new Map<string, { expiresAt: number; data: HistoricalCandle[] }>();
+  private olderHistoryInflight = new Map<string, Promise<HistoricalCandle[]>>();
   private routeGeneration = 0;
   private lastTickTime = new Map<string, number>();
 
@@ -48,7 +50,7 @@ export class TradingCoreRuntime {
 
   public async connectBrokerOAuth(brokerId: string, authCode?: string): Promise<{ success: boolean; error?: string }> {
     const res = await this.brokerMgr.connectOAuth(brokerId, authCode);
-    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); historyStore.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
+    if (res.success) { this.routeGeneration += 1; this.historyCache.clear(); this.olderHistoryCache.clear(); this.olderHistoryInflight.clear(); historyStore.clear(); this.optionChainCache.clear(); this.optionChainPromises.clear(); this.lastTickTime.clear(); this.switchActiveBroker(brokerId); this.emit('BROKER_CONNECTED', { brokerId, method: 'OAuth' }); void this.syncPortfolio(brokerId); }
     return res;
   }
   public async connectBrokerApiKeys(brokerId: string, credentials: any): Promise<{ success: boolean; error?: string }> {
@@ -224,25 +226,47 @@ export class TradingCoreRuntime {
     await Promise.all(unique.map(async symbol => { if (historyStore.get(brokerId, symbol, timeframe)?.length) return; try { await this.getHistoricalData(symbol, timeframe); } catch {} }));
   }
 
-  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 10000): Promise<HistoricalCandle[]> {
+  public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
     const brokerInfo = this.getPrimaryBrokerInfo();
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
-    const generationAtStart = this.routeGeneration;
-    if (!broker.getHistoricalDataBefore) return [];
-    const rows = await broker.getHistoricalDataBefore(symbol, timeframe, beforeTimestamp, limit);
-    if (generationAtStart !== this.routeGeneration || this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() !== brokerId) return [];
-    const byTime = new Map<number, HistoricalCandle>();
-    for (const row of rows || []) {
-      const raw = (row as any)?.timestamp;
-      const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
-      const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
-      if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
-      byTime.set(time, row);
+    const requestedLimit = Math.max(2, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const key = brokerId + ':' + symbol + ':' + timeframe + ':' + beforeTimestamp + ':' + requestedLimit;
+    const cached = this.olderHistoryCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+    const existing = this.olderHistoryInflight.get(key);
+    if (existing) return existing;
+    const storeBefore = historyStore.getBefore(brokerId, symbol, timeframe, beforeTimestamp, requestedLimit);
+    if (storeBefore.length >= Math.min(50, requestedLimit)) {
+      this.olderHistoryCache.set(key, { data: storeBefore, expiresAt: Date.now() + 30_000 });
+      return storeBefore;
     }
-    return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
+    if (!broker.getHistoricalDataBefore) return [];
+    const generationAtStart = this.routeGeneration;
+    const task = broker.getHistoricalDataBefore(symbol, timeframe, beforeTimestamp, requestedLimit)
+      .then(rows => {
+        if (generationAtStart !== this.routeGeneration || this.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() !== brokerId) return [];
+        const byTime = new Map<number, HistoricalCandle>();
+        for (const row of rows || []) {
+          const raw = (row as any)?.timestamp;
+          const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
+          const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
+          if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
+          byTime.set(time, row);
+        }
+        const normalized = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
+        if (normalized.length) {
+          historyStore.mergeInto(brokerId, symbol, timeframe, normalized, 50_000);
+          this.olderHistoryCache.set(key, { data: normalized, expiresAt: Date.now() + 30_000 });
+        }
+        return normalized;
+      })
+      .finally(() => this.olderHistoryInflight.delete(key));
+    this.olderHistoryInflight.set(key, task);
+    return task;
   }
+
   public subscribeTicks(symbols: string[], callback: (tick: any) => void): () => void { return this.subscribeMarketData(symbols, (event) => { if (event.type === 'tick' && event.tick) callback(event.tick); }); }
   public subscribeMarketData(instrumentKeys: string[], listener: (event: MarketFeedEvent) => void, depthInstrumentKey?: string): () => void {
     let initial = this.getPrimaryBrokerInfo();

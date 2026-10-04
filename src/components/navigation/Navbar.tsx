@@ -42,11 +42,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-3">
           <a
             href="/" onClick={(e) => { e.preventDefault(); onNavigate?.('landing'); }}
-            className="group flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] rounded-md p-1"
+            className="group flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tco-accent)] rounded-md p-1"
             aria-label="TradingCore Home"
           >
             {/* Monogram Geometric Logo */}
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--tco-surface-3)] border border-[var(--tco-border)] text-[#3b82f6] transition-colors group-hover:border-[#33384f]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--tco-surface-3)] border border-[var(--tco-border)] text-[var(--tco-accent)] transition-colors group-hover:border-[#33384f]">
               <svg
                 width="16"
                 height="16"
@@ -64,13 +64,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               </svg>
             </div>
             <span className="text-sm font-bold tracking-tight text-[var(--tco-text)]">
-              Trading<span className="text-[#3b82f6]">Core</span>
+              Trading<span className="text-[var(--tco-accent)]">Core</span>
             </span>
           </a>
 
           {/* Version Badge */}
           <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-[#1e2230] bg-[var(--tco-surface-3)] px-2.5 py-0.5 font-mono text-[10px] font-medium text-[var(--tco-muted)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#3b82f6]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--tco-accent)]" />
             OS PREVIEW
           </div>
         </div>
@@ -84,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <a
               key={item.href}
               href={item.href}
-              className="rounded-md px-2 py-1 text-[12px] font-medium text-[#7f899e] transition-all duration-200 hover:bg-white/[0.035] hover:text-[var(--tco-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3b82f6]" 
+              className="rounded-md px-2 py-1 text-[12px] font-medium text-[#7f899e] transition-all duration-200 hover:bg-white/[0.035] hover:text-[var(--tco-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--tco-accent)]" 
             >
               {item.label}
             </a>
@@ -99,13 +99,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <>
               <button
                 onClick={() => onNavigate?.('login')}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.025] px-4 py-2 text-sm font-medium text-[var(--tco-text-2)] transition-all hover:border-white/[0.15] hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]" 
+                className="rounded-lg border border-white/[0.08] bg-white/[0.025] px-4 py-2 text-sm font-medium text-[var(--tco-text-2)] transition-all hover:border-white/[0.15] hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tco-accent)]" 
               >
                 Sign In
               </button>
               <button
                 onClick={onLaunchPlatform}
-                className="group flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#60a5fa] via-[#3b82f6] to-[#2563eb] px-4 py-2 text-sm font-semibold text-[var(--tco-surface-2)] shadow-[0_8px_24px_rgba(59,130,246,.14)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(59,130,246,.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]" 
+                className="group flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[var(--tco-accent-soft)] via-[var(--tco-accent)] to-[var(--tco-accent)] px-4 py-2 text-sm font-semibold text-[var(--tco-surface-2)] shadow-[0_8px_24px_rgba(59,130,246,.14)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(59,130,246,.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tco-accent)]" 
               >
                 Launch Platform
                 <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -121,14 +121,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={onLaunchPlatform}
-              className="flex items-center gap-1 rounded-lg bg-[#3b82f6] px-3 py-1.5 text-xs font-semibold text-[var(--tco-surface-2)] transition-all hover:bg-[#2563eb]"
+              className="flex items-center gap-1 rounded-lg bg-[var(--tco-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--tco-surface-2)] transition-all hover:bg-[var(--tco-accent)]"
             >
               Launch
             </button>
           )}
           <button
             onClick={toggleMobileMenu}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-3)] text-[var(--tco-muted)] transition-colors hover:text-[var(--tco-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--tco-border)] bg-[var(--tco-surface-3)] text-[var(--tco-muted)] transition-colors hover:text-[var(--tco-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tco-accent)]"
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-menu"
             aria-label="Toggle navigation menu"
@@ -155,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <div className="flex flex-col gap-1 px-6 pt-4 pb-6">
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[var(--tco-border)]/60">
-                <span className="h-2 w-2 rounded-full bg-[#3b82f6]" />
+                <span className="h-2 w-2 rounded-full bg-[var(--tco-accent)]" />
                 <span className="font-mono text-xs text-[var(--tco-muted)]">
                   INDIA FIRST · TRADING OS
                 </span>
@@ -193,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         closeMobileMenu();
                         onLaunchPlatform();
                       }}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#3b82f6] py-2.5 text-sm font-semibold text-[var(--tco-surface-2)] transition-colors hover:bg-[#2563eb]"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--tco-accent)] py-2.5 text-sm font-semibold text-[var(--tco-surface-2)] transition-colors hover:bg-[var(--tco-accent)]"
                     >
                       Launch Platform
                       <ArrowUpRight className="h-4 w-4" />

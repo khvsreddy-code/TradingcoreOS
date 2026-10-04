@@ -53,14 +53,12 @@ export function LiveTradingWorkspace() {
     let cancelled = false;
 
     const mount = async () => {
-      // The chart must never race broker restoration. This is intentionally
-      // awaited before Vela builds its provider registry and requests candles.
-      try {
-        await tradingCoreRuntime.restoreBrokerConnections();
-      } catch {
-        // Vela/runtime surface the actual market-data error below.
-      }
-      const defaults = await loadTcoVelaDefaults();
+      const brokerReady = tradingCoreRuntime.hasConnectedBroker()
+        ? Promise.resolve()
+        : tradingCoreRuntime.restoreBrokerConnections().catch(() => undefined);
+      const defaultsPromise = loadTcoVelaDefaults();
+      await Promise.all([brokerReady, defaultsPromise]);
+      const defaults = await defaultsPromise;
       if (cancelled || !host.current) return;
 
       workspace = new VelaWorkspace(host.current, {
@@ -70,7 +68,23 @@ export function LiveTradingWorkspace() {
         bars: 5000,
         timeframes: ['1', '3', '5', '10', '15'],
         live: true,
-        theme: 'dark',
+        theme: {
+          background: '#090a0e',
+          textColor: '#a7abb6',
+          gridColor: '#191c24',
+          borderColor: '#282c35',
+          upColor: '#46d89a',
+          downColor: '#ef6b7a',
+          fontFamily: 'DM Sans, system-ui, sans-serif',
+        },
+        animations: {
+          zoom: 280,
+          pan: 340,
+          scroll: 400,
+          autoscale: 300,
+          liveBar: 180,
+          intro: { style: 'grow', duration: 1200 },
+        },
         defaultLanguage: 'corespirit',
         providers: {
           tco: () => createTcoVelaDataProvider(),
@@ -200,7 +214,7 @@ export function LiveTradingWorkspace() {
     >
       {indicatorWheelOpen && indicatorWheelItems.length > 0 && (
         <div className="pointer-events-none fixed inset-0 z-[500] flex items-center justify-center" aria-label="Quick indicator wheel">
-          <div className="relative h-[300px] w-[300px] rounded-full border border-blue-400/30 bg-[#070a10]/92 shadow-[0_0_90px_rgba(59,130,246,0.16)] backdrop-blur-xl">
+          <div className="relative h-[300px] w-[300px] rounded-full border border-violet-400/30 bg-[#070a10]/92 shadow-[0_0_90px_rgba(124,92,255,0.16)] backdrop-blur-xl">
             {indicatorWheelItems.map((item, index) => {
               const angle = index * (360 / indicatorWheelItems.length);
               const rad = (angle - 90) * Math.PI / 180;
@@ -210,7 +224,7 @@ export function LiveTradingWorkspace() {
               return (
                 <div
                   key={item.type}
-                  className={`absolute w-24 -translate-x-1/2 -translate-y-1/2 rounded-lg border px-2 py-2 text-center font-mono text-[9px] font-bold uppercase tracking-wide ${selected ? 'border-blue-300/80 bg-blue-500/20 text-blue-100 shadow-[0_0_24px_rgba(59,130,246,0.25)]' : 'border-white/10 bg-black/65 text-slate-400'}`}
+                  className={`absolute w-24 -translate-x-1/2 -translate-y-1/2 rounded-lg border px-2 py-2 text-center font-mono text-[9px] font-bold uppercase tracking-wide ${selected ? 'border-violet-300/80 bg-violet-500/20 text-violet-100 shadow-[0_0_24px_rgba(124,92,255,0.25)]' : 'border-white/10 bg-black/65 text-slate-400'}`}
                   style={{ left: `${x}%`, top: `${y}%` }}
                 >
                   {item.title}
@@ -218,7 +232,7 @@ export function LiveTradingWorkspace() {
               );
             })}
             <div className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/10 bg-black/80 text-center">
-              <Activity className="mb-1 h-4 w-4 text-blue-400" />
+              <Activity className="mb-1 h-4 w-4 text-violet-400" />
               <span className="text-[8px] font-mono font-bold tracking-[0.2em] text-slate-200">ALT</span>
               <span className="mt-0.5 text-[7px] font-mono uppercase tracking-wider text-slate-500">Indicator wheel</span>
             </div>

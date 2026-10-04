@@ -831,3 +831,17 @@ Remaining:
 - Direct CoreSpirit runtime ingestion from `CanonicalMarketView` without candle-object materialization.
 - Fused-cursor checkpoint/rollback for realtime revision evaluation.
 - Dirty-span propagation from CoreSpirit kernels into Vela RenderPacket so compute and render invalidation share exact ranges.
+
+## v120 — UI/Fyers/CoreSpirit consolidation
+
+Verified/fixed in this pass:
+- CoreSpirit EMA chain fusion failure in CI: semantic graph previously classified `pure:false` EMA as nondeterministic/effectful even though the kernel is deterministic and local; this is now separated correctly.
+- Realtime fusion cursor rollback state is snapshotable.
+- Fyers older-history calls are bounded/deduplicated.
+- Vela viewport left-edge history demand now grows depth in 5,000-bar pages.
+- Workspace broker restoration is skipped when a broker is already connected, and defaults load concurrently with broker restoration.
+- Vela workspace uses Supabase-backed storage with local fallback.
+- Terminal/nav/dashboard hardcoded blue accents are aligned to the indigo-violet brand token.
+- Vela chart motion is intentionally slower than the original snappy defaults while fast-mode remains a separate explicit performance mode.
+
+Known Supabase advisor items (RLS initplan warnings, duplicate permissive policies, unused indexes/unindexed FKs) are left unchanged in this renderer-focused pass so security behavior is not altered casually.

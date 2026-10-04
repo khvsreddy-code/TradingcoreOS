@@ -325,3 +325,11 @@ The full Vela source audit also confirmed that candle rendering is the correct p
 ## v118 — terminal visual/motion polish
 
 The production terminal uses a near-black graphite base with a restrained indigo-violet accent. Native Vela motion constants were slowed from the previous ultra-snappy defaults so zoom, pan, autoscale, live-bar glide and first-paint reveal settle more naturally. UI DOM transitions use the existing Motion stack; the chart renderer itself remains on Vela's native scheduler.
+
+## v120 — production Vela shell integration
+
+Vela remains isolated behind the TCO chart facade while TCO injects the provider, CoreSpirit engine, and VelaStorage implementation. The workspace uses existing Supabase persistence surfaces for workspace state, preferences, and Journal rather than coupling the Vela vendor tree directly to Supabase.
+
+The workspace now uses a custom near-black graphite Vela theme with restrained indigo-violet branding and deliberately slower chart motion. DOM chrome continues to use the existing Motion dependency for polished layout/menu transitions.
+
+Viewport-driven history depth is handled by Vela's own engine with a 5,000-bar page size and a small left-edge lead. This keeps the chart interactive while older history arrives behind the current viewport.
