@@ -2,6 +2,10 @@
 
 Vela is TradingCoreOS's sole charting/rendering engine. Application code crosses into it through TCO-owned facades/adapters.
 
+## Vendor boundary
+
+TCO feature code crosses into the vendored Vela fork only through the TCO chart facade/provider boundary. Vela renderer internals stay behind that seam.
+
 ## Boundary
 
 ```
@@ -19,6 +23,10 @@ TCO feature code should not depend directly on Vela renderer implementation clas
 The **canonical columnar data plane** is the numeric OHLCV boundary from TCO into Vela. The production identity-chart path feeds the **Vela NativeRenderer** from typed columns rather than using object rows as the render transport.
 
 **Object materialization** remains an explicit compatibility operation for consumers that have not migrated to the columnar ABI. The native LOD path targets **zero-object LOD**: reduced geometry is represented as typed bucket/index data instead of repeatedly constructing reduced candle objects.
+
+## Columnar candle API
+
+The columnar candle API is the renderer-facing typed time/open/high/low/close/volume contract. It is the preferred ingestion path for identity OHLCV charts and avoids per-candle object allocation in the native renderer.
 
 ## Columnar retained history
 
