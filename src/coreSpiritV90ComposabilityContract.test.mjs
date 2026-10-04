@@ -9,7 +9,7 @@ for (const token of ['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE']) {
   if (!language.includes(`'${token}'`)) throw new Error(`CoreSpirit six-concept surface regression: ${token}`);
 }
 for (const banned of ['component\' keyword', 'function keyword', 'pipeline keyword']) {
-  if (read('docs/CORESPIRIT_COMPOSABILITY.md').toLowerCase().includes(banned)) {
+  if (read('docs/archive/legacy/CORESPIRIT_LEGACY_ARCHITECTURE.md').toLowerCase().includes(banned)) {
     throw new Error(`CoreSpirit composability docs unexpectedly advertise a new surface construct: ${banned}`);
   }
 }
@@ -44,7 +44,7 @@ for (const [name, source, tokens] of [
   for (const token of tokens) if (!source.includes(token)) throw new Error(`${name} missing composability integration: ${token}`);
 }
 
-const docs = read('docs/CORESPIRIT_COMPOSABILITY.md');
+const docs = read('docs/archive/legacy/CORESPIRIT_LEGACY_ARCHITECTURE.md');
 for (const token of ['simple to learn', 'multi-output', 'CoreSpirit IR', 'execution plan', 'host']) {
   if (!docs.toLowerCase().includes(token.toLowerCase())) throw new Error(`Composability documentation missing '${token}'`);
 }
