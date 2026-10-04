@@ -66,3 +66,9 @@ Avoid repeated full-array slice/reduce/sort work when bounded state produces the
 ## Authority boundary
 
 Indicator/model computation cannot directly control the broker. Execution remains a separate authority layer.
+
+## Public CoreSpirit scripts
+
+The community publication model now treats `indicator` and `strategy` as explicit CoreSpirit script kinds. Public discovery is available through `/explore/indicators` and the unified `/explore/scripts` hub, with the same source-inspection, author metadata, install/view accounting and Supabase publication model.
+
+A publication carries `script_kind` so the catalog does not infer strategy-vs-indicator semantics from naming or source text. CoreSpirit remains the only user-facing scripting language; there is no PineScript/PineTS compatibility layer.
