@@ -3010,8 +3010,9 @@ function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | und
     let from = Number.POSITIVE_INFINITY;
     let to = 0;
 
+    const previousSeries = new Map((previous?.series ?? []).map((candidate) => [candidate.id, candidate]));
     for (const current of model.series) {
-        const prev = previous?.series.find((candidate) => candidate.id === current.id);
+        const prev = previousSeries.get(current.id);
         const delta = incremental && prev ? incrementalSeriesDelta(prev, current, cause) : null;
         const emitted = delta ?? fullSeriesDelta(current);
         series.push(emitted);
@@ -3019,8 +3020,8 @@ function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | und
         for (const value of values) { from = Math.min(from, value.time); to = Math.max(to, value.time); }
 
         if (prev && isLineLikeSeries(current) && isLineLikeSeries(prev)) {
-            const styleChanged = JSON.stringify(current.style) !== JSON.stringify(prev.style);
-            const displayChanged = JSON.stringify(current.display ?? null) !== JSON.stringify(prev.display ?? null);
+            const styleChanged = !lineStyleEqual(current.style, prev.style);
+            const displayChanged = !displayEqual(current.display, prev.display);
             const titleChanged = current.title !== prev.title;
             const visibleChanged = current.visible !== prev.visible;
             if (styleChanged || displayChanged || titleChanged || visibleChanged) {
@@ -3082,10 +3083,59 @@ function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | und
         ['tables', model.tables ?? [], previous?.tables ?? []],
         ['trades', model.trades ?? [], previous?.trades ?? []],
     ] as const;
+    const collectionDeltas: NonNullable<ValuePatch['collections']> = [];
     for (const [key, current, prev] of collections) {
-        if (!incremental || JSON.stringify(current) !== JSON.stringify(prev)) (patch as unknown as Record<string, unknown>)[key] = current;
+        if (!incremental) {
+            (patch as unknown as Record<string, unknown>)[key] = current;
+            continue;
+        }
+        const delta = incrementalCollectionDelta(prev, current);
+        if (delta) {
+            collectionDeltas.push({ collection: key, op: delta.op, values: delta.values as unknown[] });
+        } else if (current.length !== prev.length) {
+            (patch as unknown as Record<string, unknown>)[key] = current;
+        }
     }
+    if (collectionDeltas.length) patch.collections = collectionDeltas;
     return patch;
+}
+
+function lineStyleEqual(a: import('../model/series').LineLikeStyle, b: import('../model/series').LineLikeStyle): boolean {
+    return a.color === b.color && a.width === b.width && a.lineStyle === b.lineStyle && a.glow === b.glow && a.base === b.base;
+}
+
+function displayEqual(a: import('../model/series').SeriesDisplay | undefined, b: import('../model/series').SeriesDisplay | undefined): boolean {
+    return (a?.pane ?? true) === (b?.pane ?? true)
+        && (a?.priceScale ?? true) === (b?.priceScale ?? true)
+        && (a?.legend ?? true) === (b?.legend ?? true)
+        && (a?.dataWindow ?? true) === (b?.dataWindow ?? true);
+}
+
+function shallowCollectionEqual(a: unknown, b: unknown): boolean {
+    if (Object.is(a, b)) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    const ak = Object.keys(a as object);
+    const bk = Object.keys(b as object);
+    if (ak.length !== bk.length) return false;
+    for (const key of ak) {
+        if (!Object.is((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) return false;
+    }
+    return true;
+}
+
+function incrementalCollectionDelta<T>(previous: readonly T[], current: readonly T[]): { op: 'append' | 'replace-last'; values: T[] } | null {
+    if (current.length === previous.length) {
+        if (current.length === 0) return null;
+        const next = current[current.length - 1]!;
+        const prev = previous[previous.length - 1]!;
+        return shallowCollectionEqual(prev, next) ? null : { op: 'replace-last', values: [next] };
+    }
+    if (current.length === previous.length + 1) {
+        if (previous.length === 0 || shallowCollectionEqual(previous[previous.length - 1], current[current.length - 2])) {
+            return { op: 'append', values: [current[current.length - 1]!] };
+        }
+    }
+    return null;
 }
 
 function fullSeriesDelta(series: IndicatorModel['series'][number]): SeriesValueDelta {

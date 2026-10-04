@@ -1,6 +1,7 @@
 import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
 import type { OHLCV } from '../../../core/model/ohlcv';
+import { columnarHighAt, columnarLowAt, columnarOpenAt, columnarCloseAt, columnarTimeAt, type ColumnarBars } from '../../../core/model/columnar-bars';
 import type { LineStyle } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
@@ -42,7 +43,7 @@ export class ChromeRenderer {
     private readonly markIcons = new MarkIconRaster(() => this.onMarkIconReady?.());
     private onMarkIconReady: (() => void) | null = null;
     /** Bar open times of the current series, rebuilt only when the array or its length changes (a live tick keeps both). */
-    private barTimesSrc: readonly OHLCV[] | null = null;
+    private barTimesSrc: readonly OHLCV[] | ColumnarBars | null = null;
     private barTimesCache: number[] = [];
 
     mount(canvas: HTMLCanvasElement): void {
@@ -81,7 +82,10 @@ export class ChromeRenderer {
         this.drawScene.setDeps({
             timeToLogical: (ms) => coords.timeToLogical(ms),
             barAt: (logical) => {
-                const b = scene.bars[Math.round(logical)];
+                const index = Math.round(logical);
+                const columns = scene.candleColumns;
+                if (columns && index >= 0 && index < columns.length) return { high: columnarHighAt(columns, index), low: columnarLowAt(columns, index) };
+                const b = scene.bars[index];
                 return b ? { high: b.high, low: b.low } : null;
             },
             theme,
@@ -198,6 +202,17 @@ export class ChromeRenderer {
     }
 
     private barTimes(scene: SceneGraph): readonly number[] {
+        const columns = scene.candleColumns;
+        if (columns) {
+            if (this.barTimesSrc !== columns) {
+                this.barTimesSrc = columns;
+                this.barTimesCache = new Array<number>(columns.length);
+                for (let i = 0; i < columns.length; i += 1) this.barTimesCache[i] = columnarTimeAt(columns, i);
+            } else if (this.barTimesCache.length < columns.length) {
+                for (let i = this.barTimesCache.length; i < columns.length; i += 1) this.barTimesCache.push(columnarTimeAt(columns, i));
+            }
+            return this.barTimesCache;
+        }
         if (this.barTimesSrc !== scene.bars || this.barTimesCache.length !== scene.bars.length) {
             this.barTimesSrc = scene.bars;
             this.barTimesCache = scene.bars.map((b) => b.time);
@@ -341,14 +356,18 @@ export class ChromeRenderer {
      * and disappears once the bar has closed, until the next bar arrives.
      */
     private drawPriceLineAndCountdown(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, pricePane: PaneNode | null): void {
-        const n = scene.bars.length;
+        const n = scene.barCount();
         // A hidden price series takes its current-price line/label/countdown down with it —
         // as does a hidden price PANE (collapsed, or zero-height while a study pane is maximized).
         if (!pricePane || n === 0 || scene.candlesHidden || pricePane.collapsed || pricePane.bounds.height <= 0) return;
-        const last = scene.bars[n - 1]!;
-        const y = coords.priceToY(last.close, pricePane.scale, pricePane.bounds);
+        const lastOpen = scene.openAt(n - 1);
+        const lastHigh = scene.highAt(n - 1);
+        const lastLow = scene.lowAt(n - 1);
+        const lastClose = scene.closeAt(n - 1);
+        const lastTime = scene.timeAt(n - 1);
+        const y = coords.priceToY(lastClose, pricePane.scale, pricePane.bounds);
         if (y < pricePane.bounds.top || y > pricePane.bounds.top + pricePane.bounds.height) return;
-        const color = this.priceElementColor(scene, coords, theme, last);
+        const color = this.priceElementColor(scene, coords, theme, lastOpen, lastClose);
 
         // ── dashed line (independent of the label) ──
         if (scene.showPriceLine) {
@@ -364,12 +383,12 @@ export class ChromeRenderer {
         }
 
         // ── axis chips: last-price label and/or countdown ──
-        const cdText = scene.showCountdown ? countdownText(last.time, coords.barInterval, Date.now()) : null;
+        const cdText = scene.showCountdown ? countdownText(lastTime, coords.barInterval, Date.now()) : null;
         const showCountdown = cdText !== null;
         const showLabel = scene.showPriceLabel;
         if (!showLabel && !showCountdown) return;
 
-        const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, last.close, percentScaleFor(scene, pricePane), scene.priceMintick);
+        const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, lastClose, percentScaleFor(scene, pricePane), scene.priceMintick);
         const PAD = 8;
         const x = dataW + 1;
         // Text color chosen for contrast against the chip's own color (so a white candle
@@ -409,11 +428,11 @@ export class ChromeRenderer {
      * series itself is drawn: candle/bar body up-down, the line/area line color, or the
      * baseline side (above/below the baseline price).
      */
-    private priceElementColor(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, last: OHLCV): string {
+    private priceElementColor(scene: SceneGraph, _coords: CoordinateSystem, theme: VelaTheme, open: number, close: number): string {
         const st = scene.style;
         switch (scene.priceStyle) {
             case 'bars':
-                return last.close >= last.open ? (st.bars.upColor ?? theme.upColor) : (st.bars.downColor ?? theme.downColor);
+                return close >= open ? (st.bars.upColor ?? theme.upColor) : (st.bars.downColor ?? theme.downColor);
             case 'line':
                 return st.line.color ?? theme.upColor;
             case 'area':
@@ -421,7 +440,7 @@ export class ChromeRenderer {
             case 'baseline': {
                 const i0 = Math.max(0, Math.floor(coords.visibleLogicalRange().from));
                 const baseline = scene.baselineValue ?? scene.bars[i0]?.close ?? 0;
-                return last.close >= baseline ? (st.baseline.topLineColor ?? theme.upColor) : (st.baseline.bottomLineColor ?? theme.downColor);
+                return close >= baseline ? (st.baseline.topLineColor ?? theme.upColor) : (st.baseline.bottomLineColor ?? theme.downColor);
             }
             default: // 'candles'
                 return last.close >= last.open ? theme.upColor : theme.downColor;

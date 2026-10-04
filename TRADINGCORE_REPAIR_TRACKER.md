@@ -845,3 +845,17 @@ Verified/fixed in this pass:
 - Vela chart motion is intentionally slower than the original snappy defaults while fast-mode remains a separate explicit performance mode.
 
 Known Supabase advisor items (RLS initplan warnings, duplicate permissive policies, unused indexes/unindexed FKs) are left unchanged in this renderer-focused pass so security behavior is not altered casually.
+
+## v121 — true retained incremental rendering
+
+The Vela update contract is now enforced all the way from the public TCO facade to the retained native scene. A live setData call that differs only by one new tail point is converted to append; a forming-bar update becomes replace-last. The renderer applies those mutations in-place.
+
+Indicator renderer collections now have an explicit delta channel. Backgrounds, price lines, drawings, tables and trade collections can use a tail append/replace-last delta when the new state is provably tail-local; structural/reorder changes still use the explicit full-replacement path.
+
+The native indicator-drawing raster cache is keyed by drawing-content revision plus viewport, pane geometry and scale signature. A market tick therefore does not force unchanged labels, boxes or tables to be repainted.
+
+This is the intended rule:
+
+history -> setData once -> live tail patches -> style state patches -> affected overlay patches -> repaint only invalidated surfaces.
+
+No live tick should reconstruct a 20k-point series merely because the chart has 20k loaded bars.

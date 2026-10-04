@@ -1,5 +1,5 @@
 import type { OHLCV } from '../../../core/model/ohlcv';
-import type { ColumnarBars, ColumnarLodIndex } from '../../../core/model/columnar-bars';
+import { columnarTimeAt, columnarOpenAt, columnarHighAt, columnarLowAt, columnarCloseAt, columnarVolumeAt, type ColumnarBars, type ColumnarLodIndex } from '../../../core/model/columnar-bars';
 
 import type { VolumeLayerData, VpvrLayerData } from '../../../core/model/volume-layers';
 import type { PaneKind } from '../../../core/model/scene';
@@ -233,6 +233,15 @@ export class SceneGraph {
      *  prepainted canvas the backend composites just before the series carrying `beforeZ`.
      *  Rebuilt by the renderer per data frame. */
     drawingSlices: ReadonlyMap<string, ReadonlyArray<DrawingSlice>> = new Map();
+    /** Native columnar scalar accessors. Legacy object bars are fallback-only compatibility data. */
+    barCount(): number { return this.candleColumns?.length ?? this.bars.length; }
+    timeAt(index: number): number { return this.candleColumns && index >= 0 && index < this.candleColumns.length ? columnarTimeAt(this.candleColumns, index) : (this.bars[index]?.time ?? Number.NaN); }
+    openAt(index: number): number { return this.candleColumns && index >= 0 && index < this.candleColumns.length ? columnarOpenAt(this.candleColumns, index) : (this.bars[index]?.open ?? Number.NaN); }
+    highAt(index: number): number { return this.candleColumns && index >= 0 && index < this.candleColumns.length ? columnarHighAt(this.candleColumns, index) : (this.bars[index]?.high ?? Number.NaN); }
+    lowAt(index: number): number { return this.candleColumns && index >= 0 && index < this.candleColumns.length ? columnarLowAt(this.candleColumns, index) : (this.bars[index]?.low ?? Number.NaN); }
+    closeAt(index: number): number { return this.candleColumns && index >= 0 && index < this.candleColumns.length ? columnarCloseAt(this.candleColumns, index) : (this.bars[index]?.close ?? Number.NaN); }
+    volumeAt(index: number): number { return this.candleColumns && index >= 0 && index < this.candleColumns.length ? columnarVolumeAt(this.candleColumns, index) : (this.bars[index]?.volume ?? Number.NaN); }
+
     /** Per-model index offset: the chart bar index of the model's `anchorTime` — its
      *  index-aligned payloads (dense series arrays, `bar_index` drawings) count from that
      *  bar. Only nonzero for models computed over a SUFFIX of the bars (whole-chart models,

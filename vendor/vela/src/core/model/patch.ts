@@ -46,6 +46,19 @@ export interface FillStyleDelta {
     overlay?: boolean;
 }
 
+/** Retained-scene mutation for renderer-owned collections. */
+export type CollectionPatchName =
+    | 'backgrounds' | 'priceLines'
+    | 'lines' | 'boxes' | 'labels' | 'polylines' | 'linefills' | 'tables' | 'trades';
+
+export interface CollectionValueDelta {
+    collection: CollectionPatchName;
+    values: unknown[];
+    op?: SeriesPatchOperation;
+    start?: number;
+    remove?: number;
+}
+
 export interface ValuePatch {
     kind: 'value';
     indicatorId: string;
@@ -65,6 +78,7 @@ export interface ValuePatch {
     linefills?: DrawingLinefill[];
     tables?: DrawingTable[];
     trades?: TradeExecution[];
+    collections?: CollectionValueDelta[];
 }
 
 export interface SchemaPatch {

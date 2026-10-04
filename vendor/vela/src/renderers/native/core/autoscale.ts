@@ -1,4 +1,5 @@
 import type { OHLCV } from '../../../core/model/ohlcv';
+import type { ColumnarBars } from '../../../core/model/columnar-bars';
 import type { IndicatorModel } from '../../../core/model/indicator';
 import type { SeriesSpec } from '../../../core/model/series';
 import { isLineLikeSeries, seriesInScale } from '../../../core/model/series';
@@ -22,6 +23,7 @@ export function computePaneScale(
     offsetOf: (id: string) => number = () => 0,
     /** Top/bottom whitespace as percent of pane height (see `ChartMargins`). */
     margins: { top: number; bottom: number } = DEFAULT_MARGINS,
+    columns?: ColumnarBars,
 ): PriceScale {
     let min = Infinity;
     let max = -Infinity;
@@ -33,11 +35,19 @@ export function computePaneScale(
     };
 
     if (includeCandles) {
-        for (let i = i0; i <= i1; i += 1) {
-            const b = bars[i];
-            if (b) {
-                consider(b.high);
-                consider(b.low);
+        if (columns) {
+            const last = Math.min(i1, columns.length - 1);
+            for (let i = Math.max(0, i0); i <= last; i += 1) {
+                consider(columns.high[i]);
+                consider(columns.low[i]);
+            }
+        } else {
+            for (let i = i0; i <= i1; i += 1) {
+                const b = bars[i];
+                if (b) {
+                    consider(b.high);
+                    consider(b.low);
+                }
             }
         }
     }

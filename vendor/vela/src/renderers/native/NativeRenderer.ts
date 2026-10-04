@@ -25,7 +25,7 @@ import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
 import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
-import type { ScenePatch } from '../../core/model/patch';
+import type { ScenePatch, CollectionValueDelta } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
 import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeName, IntroAnimation, IntroStyle } from '../../core/options';
 import {
@@ -195,6 +195,8 @@ export class NativeRenderer implements IChartRenderer {
     private extLayers: ExtLayer[] = [];
     /** Last applied layer-canvas order (ids below + above the data canvas) — re-slotted only on change. */
     private layerOrderSig = '';
+    /** Monotonic indicator-drawing content revision; data ticks do not advance it. */
+    private drawingRevision = 0;
     // The attribution mark (see chrome/AttributionMark + the NOTICE file): default-on;
     // disabling requires an equivalent visible attribution elsewhere in the host UI.
     private attributionEl: HTMLElement | null = null;
@@ -2376,6 +2378,16 @@ export class NativeRenderer implements IChartRenderer {
             }
         }
         applyPatch(model, patch);
+        if (patch.kind === 'value' && (
+            patch.lines !== undefined || patch.boxes !== undefined || patch.labels !== undefined ||
+            patch.polylines !== undefined || patch.linefills !== undefined || patch.tables !== undefined ||
+            patch.collections?.some((delta) =>
+                delta.collection === 'lines' || delta.collection === 'boxes' || delta.collection === 'labels' ||
+                delta.collection === 'polylines' || delta.collection === 'linefills' || delta.collection === 'tables'
+            )
+        )) {
+            this.drawingRevision += 1;
+        }
         this.scheduler.invalidate(InvalidateLevel.Light);
     }
 
@@ -3579,7 +3591,7 @@ export class NativeRenderer implements IChartRenderer {
         // the user drawings whose z sits inside a pane's series stack — prepainted so the
         // backend can composite them mid-stack (under the candles, between indicators).
         this.scene.drawingSlices = mergeSlices(
-            this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas),
+            this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas, this.drawingRevision),
             this.userDrawings?.prepareSlices(this.scene.orderedPanes().map((p) => p.id)) ?? new Map(),
         );
         this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas
@@ -4473,6 +4485,11 @@ function leadingPointsBefore(model: IndicatorModel, headTime: number): number | 
 }
 
 /** Apply a scene patch to retained indicator state. */
+function applyCollectionDelta(target: Record<string, unknown[] | undefined>, delta: CollectionValueDelta): void {
+    const current = target[delta.collection] ?? [];
+    target[delta.collection] = applyArrayDelta(current, delta.values, delta.op ?? 'replace', delta.start, delta.remove);
+}
+
 function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
     if (patch.kind === 'value') {
         for (const delta of patch.series) {
@@ -4515,6 +4532,10 @@ function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
         if (patch.linefills !== undefined) model.linefills = patch.linefills;
         if (patch.tables !== undefined) model.tables = patch.tables;
         if (patch.trades !== undefined) model.trades = patch.trades;
+        if (patch.collections) {
+            const target = model as unknown as Record<string, unknown[] | undefined>;
+            for (const delta of patch.collections) applyCollectionDelta(target, delta);
+        }
         return;
     }
     for (const id of patch.removed) {

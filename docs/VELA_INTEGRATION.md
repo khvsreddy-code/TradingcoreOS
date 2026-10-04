@@ -333,3 +333,17 @@ Vela remains isolated behind the TCO chart facade while TCO injects the provider
 The workspace now uses a custom near-black graphite Vela theme with restrained indigo-violet branding and deliberately slower chart motion. DOM chrome continues to use the existing Motion dependency for polished layout/menu transitions.
 
 Viewport-driven history depth is handled by Vela's own engine with a 5,000-bar page size and a small left-edge lead. This keeps the chart interactive while older history arrives behind the current viewport.
+
+## v121 — true retained incremental rendering
+
+The Vela update contract is now enforced all the way from the public TCO facade to the retained native scene. A live setData call that differs only by one new tail point is converted to append; a forming-bar update becomes replace-last. The renderer applies those mutations in-place.
+
+Indicator renderer collections now have an explicit delta channel. Backgrounds, price lines, drawings, tables and trade collections can use a tail append/replace-last delta when the new state is provably tail-local; structural/reorder changes still use the explicit full-replacement path.
+
+The native indicator-drawing raster cache is keyed by drawing-content revision plus viewport, pane geometry and scale signature. A market tick therefore does not force unchanged labels, boxes or tables to be repainted.
+
+This is the intended rule:
+
+history -> setData once -> live tail patches -> style state patches -> affected overlay patches -> repaint only invalidated surfaces.
+
+No live tick should reconstruct a 20k-point series merely because the chart has 20k loaded bars.

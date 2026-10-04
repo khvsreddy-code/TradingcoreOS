@@ -1,6 +1,7 @@
 import type { VelaTheme } from '../../../core/options';
 import type { DrawingTable } from '../../../core/model/drawings';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
+import { columnarHighAt, columnarLowAt } from '../../../core/model/columnar-bars';
 import type { SceneGraph, PaneNode, DrawingSlice } from '../core/SceneGraph';
 import {
     DrawingSceneRenderer,
@@ -49,23 +50,33 @@ export class IndicatorDrawingSlices {
     private readonly sliceCache = new Map<string, HTMLCanvasElement>();
     /** Tooltip hit-rects of every label drawn this frame, in plot coords (rebuilt per prepare). */
     private tips: LabelTipRegion[] = [];
+    private lastPrepareKey = '';
+    private lastSlices: Map<string, DrawingSlice[]> = new Map();
 
     /**
      * Rebuild the per-indicator drawing slices for this data frame. `ref` is the data
      * canvas the slices must match pixel-for-pixel (the backend composites them 1:1).
      * Runs from the renderer's data paint, just before the backend composites the scene.
      */
-    prepare(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, ref: HTMLCanvasElement): Map<string, DrawingSlice[]> {
+    prepare(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, ref: HTMLCanvasElement, drawingRevision = 0): Map<string, DrawingSlice[]> {
+        const vr = coords.visibleLogicalRange();
+        const paneKey = scene.orderedPanes().map((pane) => [pane.id, pane.bounds.top, pane.bounds.height, pane.scale.min, pane.scale.max, pane.scale.log, pane.scale.invert].join(',')).join(';');
+        const key = [drawingRevision, ref.width, ref.height, coords.dpr, vr.from, vr.to, coords.getViewport().barSpacing, coords.getViewport().rightOffset, paneKey].join('|');
+        if (key === this.lastPrepareKey) return this.lastSlices;
+        this.lastPrepareKey = key;
         this.tips = [];
         const out = new Map<string, DrawingSlice[]>();
         if (ref.width === 0 || ref.height === 0) {
             this.sliceCache.clear();
+            this.lastSlices = out;
             return out;
         }
         this.drawScene.setDeps({
             timeToLogical: (ms) => coords.timeToLogical(ms),
             barAt: (logical) => {
-                const b = scene.bars[Math.round(logical)];
+                const index = Math.round(logical);
+                if (scene.candleColumns && index >= 0 && index < scene.candleColumns.length) return { high: columnarHighAt(scene.candleColumns, index), low: columnarLowAt(scene.candleColumns, index) };
+                const b = scene.bars[index];
                 return b ? { high: b.high, low: b.low } : null;
             },
             theme,
@@ -127,6 +138,7 @@ export class IndicatorDrawingSlices {
         }
         for (const key of [...this.sliceCache.keys()]) if (!buckets.has(key)) this.sliceCache.delete(key); // drop stale layers
         for (const slices of out.values()) slices.sort((a, b) => a.beforeZ - b.beforeZ);
+        this.lastSlices = out;
         return out;
     }
 

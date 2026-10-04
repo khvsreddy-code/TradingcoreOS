@@ -187,8 +187,18 @@ export class VelaSeriesFacade<T = string> {
     if (this.removed) return;
     if (this.kind === 'candle') { this.chart.setBars(rows.map(toBar)); return; }
     const points = rows.map((p) => ({ time: msFromTime(p.time), value: p.value == null ? null : Number(p.value), ...(p.color ? { color: String(p.color) } : {}) })).filter((p) => Number.isFinite(p.time)) as SeriesPoint[];
-    this.patchSeries('replace', points);
-    this.chart.syncBandFillsForSeries(this.id, 'replace', points);
+    const current = this.valueSeries()?.points ?? [];
+    let op: SeriesPatchOperation = 'replace';
+    let payload = points;
+    if (current.length > 0 && points.length === current.length + 1 && current[current.length - 1]!.time === points[points.length - 2]!.time) {
+      op = 'append';
+      payload = [points[points.length - 1]!];
+    } else if (current.length > 0 && points.length === current.length && current[current.length - 1]!.time === points[points.length - 1]!.time) {
+      op = 'replace-last';
+      payload = [points[points.length - 1]!];
+    }
+    this.patchSeries(op, payload);
+    this.chart.syncBandFillsForSeries(this.id, op, payload);
   }
 
   update(row: ChartPointInput): void {

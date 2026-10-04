@@ -5,6 +5,11 @@ const read = (file) => fs.readFileSync(file, 'utf8');
 
 const runtime = read('src/services/coreSpirit/runtime.ts');
 const vector = read('src/services/coreSpirit/seriesVector.ts');
+const patch = read('vendor/vela/src/core/model/patch.ts');
+const diffEngine = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
+const native = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
+const drawingSlices = read('vendor/vela/src/renderers/native/drawings/IndicatorDrawingSlices.ts');
+const facade = read('src/services/core/chart/velaChartFacade.ts');
 const semantic = read('src/services/coreSpirit/semanticGraph.ts');
 const engine = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
 const provider = read('src/TcoVelaDataProvider.ts');
@@ -50,5 +55,15 @@ assert.match(chrome, /rgba\(124,92,255/);
 assert.match(storage, /workspace_layouts/);
 assert.match(storage, /user_preferences/);
 assert.match(storage, /user_settings/);
+assert.match(patch, /CollectionPatchName/);
+assert.match(diffEngine, /previousSeries = new Map/);
+assert.match(diffEngine, /incrementalCollectionDelta/);
+assert(!diffEngine.includes('JSON.stringify(current.style)'));
+assert.match(native, /drawingRevision/);
+assert.match(native, /patch\.collections/);
+assert.match(drawingSlices, /lastPrepareKey/);
+assert.match(facade, /op = 'append'/);
+assert.match(facade, /op = 'replace-last'/);
+
 
 console.log('TRADINGCORE_V120_FYERS_PAGING_REALTIME_FUSION_AND_UI_CONTRACT_OK');

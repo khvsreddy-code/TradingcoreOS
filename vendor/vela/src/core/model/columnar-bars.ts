@@ -48,6 +48,16 @@ export function columnarTimeToMillis(value: number, unit: ColumnarTimeUnit = 'mi
     return unit === 'seconds' ? value * 1000 : value;
 }
 
+export function columnarTimeAt(columns: ColumnarBars, index: number): number {
+    const raw = columns.time[index];
+    return raw == null ? Number.NaN : columnarTimeToMillis(raw, columns.timeUnit);
+}
+export function columnarOpenAt(columns: ColumnarBars, index: number): number { return columns.open[index] ?? Number.NaN; }
+export function columnarHighAt(columns: ColumnarBars, index: number): number { return columns.high[index] ?? Number.NaN; }
+export function columnarLowAt(columns: ColumnarBars, index: number): number { return columns.low[index] ?? Number.NaN; }
+export function columnarCloseAt(columns: ColumnarBars, index: number): number { return columns.close[index] ?? Number.NaN; }
+export function columnarVolumeAt(columns: ColumnarBars, index: number): number { return columns.volume[index] ?? Number.NaN; }
+
 
 export interface MutableColumnarBars extends ColumnarBars {
     time: Float64Array;
