@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity } from 'lucide-react';
 import { VelaWorkspace } from './services/core/chart/velaChartFacade';
 import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine';
@@ -10,15 +9,6 @@ import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/co
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v3-multichart';
-
-type IndicatorWheelItem = {
-  type: string;
-  title: string;
-  supported: boolean;
-  present: boolean;
-  multiInstance?: boolean;
-};
-
 
 function readCoreSpiritManifest() {
   try {
@@ -40,11 +30,6 @@ export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspace | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
-  const [indicatorWheelOpen, setIndicatorWheelOpen] = useState(false);
-  const [indicatorWheelItems, setIndicatorWheelItems] = useState<IndicatorWheelItem[]>([]);
-  const [indicatorWheelIndex, setIndicatorWheelIndex] = useState(0);
-  const indicatorWheelCancelled = useRef(false);
-
   useEffect(() => {
     if (!host.current) return;
 
@@ -158,72 +143,6 @@ export function LiveTradingWorkspace() {
     }, 15 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    const isEditable = (target: EventTarget | null): boolean => {
-      const element = target instanceof HTMLElement ? target : null;
-      return !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName));
-    };
-    const openWheel = () => {
-      const chart = workspaceRef.current?.chart;
-      if (!chart) return;
-      indicatorWheelCancelled.current = false;
-      setIndicatorWheelOpen(true);
-      void chart.availableNativeIndicators().then((entries) => {
-        const supported = entries
-          .filter((entry) => entry.supported)
-          .sort((a, b) => Number(a.present) - Number(b.present) || a.title.localeCompare(b.title))
-          .slice(0, 8)
-          .map((entry) => ({ type: entry.type, title: entry.title, supported: entry.supported, present: entry.present, multiInstance: entry.multiInstance }));
-        setIndicatorWheelItems(supported);
-        setIndicatorWheelIndex((index) => Math.min(index, Math.max(0, supported.length - 1)));
-      });
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Alt' && !event.repeat && !isEditable(event.target)) {
-        event.preventDefault();
-        openWheel();
-        return;
-      }
-      if (event.key === 'Escape' && indicatorWheelOpen) {
-        event.preventDefault();
-        indicatorWheelCancelled.current = true;
-        setIndicatorWheelOpen(false);
-      }
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.key !== 'Alt' || !indicatorWheelOpen) return;
-      event.preventDefault();
-      const item = indicatorWheelItems[indicatorWheelIndex];
-      const cancelled = indicatorWheelCancelled.current;
-      indicatorWheelCancelled.current = false;
-      setIndicatorWheelOpen(false);
-      if (!cancelled && item) {
-        try {
-          workspaceRef.current?.chart.addNativeIndicator(item.type);
-        } catch (error) {
-          workspaceRef.current?.toast(error instanceof Error ? error.message : 'Unable to add indicator', 'error', 3500);
-        }
-      }
-    };
-    const onPointerMove = (event: PointerEvent) => {
-      if (!indicatorWheelOpen || indicatorWheelItems.length === 0) return;
-      const dx = event.clientX - window.innerWidth / 2;
-      const dy = event.clientY - window.innerHeight / 2;
-      if ((dx * dx + dy * dy) < 52 * 52) return;
-      const angle = (Math.atan2(dy, dx) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2);
-      setIndicatorWheelIndex(Math.min(indicatorWheelItems.length - 1, Math.floor(angle / (Math.PI * 2 / indicatorWheelItems.length))));
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('keyup', onKeyUp, true);
-    window.addEventListener('pointermove', onPointerMove, true);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup', onKeyUp, true);
-      window.removeEventListener('pointermove', onPointerMove, true);
-    };
-  }, [indicatorWheelOpen, indicatorWheelItems, indicatorWheelIndex]);
-
 
   return (
     <div
