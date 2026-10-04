@@ -24,6 +24,6 @@ for(const fn of ['bollinger','donchian','stochastic','cci','mfi']){
   const start=engine.indexOf('export function '+fn);
   const next=engine.indexOf('\\nexport function ',start+10);
   const body=engine.slice(start,next<0?engine.length:next);
-  if(/\.slice\(/.test(body)||/\.reduce\(/.test(body)||/Math\\.(?:max|min)\\(\\.\\.\\./.test(body)) throw new Error('window rescan remains in '+fn);
+  if(/\.slice\(/.test(body)||/\.reduce\(/.test(body)||/Math\.(?:max|min)\(\.\.\./.test(body)) throw new Error('window rescan remains in '+fn);
 }
 console.log('TRADINGCORE_V131_CANONICAL_INCREMENTAL_KERNEL_CONTRACT_OK');
