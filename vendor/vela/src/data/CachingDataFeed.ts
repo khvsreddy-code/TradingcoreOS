@@ -46,6 +46,10 @@ export class CachingDataFeed implements MarketDataFeed {
         return this.inner.loadColumns ? this.inner.loadColumns(cfg) : null;
     }
 
+    async loadRangeColumns(cfg: MarketConfig, range: BarRange): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+        return this.inner.loadRangeColumns ? this.inner.loadRangeColumns(cfg, range) : null;
+    }
+
     async load(cfg: MarketConfig): Promise<OHLCV[]> {
         // Offline data is already in memory — nothing to cache.
         if (cfg.data && cfg.data.length > 0) return this.inner.load(cfg);
