@@ -1422,3 +1422,239 @@ TradingCore Chart
 Native WebGL2 remains experimental. No production switch is made in v95.
 
 ---
+
+# SOURCE: CORESPIRIT_V96_RELEASE_NOTES.md
+
+# CoreSpirit v96 — viewport and scale engine deepening
+
+## Scope
+
+v96 deepens chart platform stages #15 and #16 without expanding the CoreSpirit language surface. The release establishes a renderer-neutral viewport and dedicated time/price scale engines above the canonical data plane.
+
+## Implemented
+
+### Viewport
+
+- Explicit visible-bar state: first/last visible bar, pixels-per-bar, price domain, zoom, fractional scroll, pixel width and device-pixel ratio.
+- Cached affine bar-index ↔ pixel transform.
+- Deterministic pan, zoom anchoring and resize behavior.
+
+### Time scale
+
+- Continuous, compressed and session-compressed modes.
+- Explicit IANA timezone.
+- Injectable trading-day, holiday and session-window calendar callbacks.
+- Deterministic special-session support through the calendar contract.
+- Timeframe parsing for safe interpolation across multiple bar intervals.
+- Ordered timeline search with no candle-object materialization.
+
+### Price scale
+
+- Linear, logarithmic, percent and indexed modes.
+- Auto, manual and locked domain policies.
+- Visible-range autoscale with deterministic padding.
+- Cached forward and inverse transform coefficients.
+
+### Engine integration
+
+`TradingCoreChartEngine` now binds canonical timeline data to the time scale and updates the price domain from the active visible range when auto-scale is enabled.
+
+## Production decision
+
+Lightweight Charts remains the production backend. Native WebGL2/Canvas2D remain experimental. No production migration is claimed by v96.
+
+## Validation
+
+```text
+STAGE96_VIEWPORT_ENGINE_OK
+STAGE96_FAST_BAR_PIXEL_TRANSFORMS_OK
+STAGE96_SESSION_AWARE_TIME_SCALE_OK
+STAGE96_PRICE_SCALE_MODES_OK
+STAGE96_AUTOSCALE_MANUAL_LOCK_CONTRACT_OK
+```
+
+## Environment note
+
+The supplied archive does not contain the full installed dependency tree, so a repository-wide Vite production build is not claimed from this package. Focused v96 TypeScript compilation and runtime contracts are the validation basis for this release.
+
+---
+
+# SOURCE: CORESPIRIT_V97_RELEASE_NOTES.md
+
+# CoreSpirit v97 — renderer-neutral drawings and chart interaction
+
+## Scope
+
+v97 adds the method-level interaction model needed for a full chart platform without copying vendor source code. It deepens drawing tools and pan/zoom before the native renderer migration.
+
+## Drawing system
+
+The canonical API supports:
+
+```text
+createPointDrawing
+createDataDrawing
+createAnchoredDrawing
+getDrawingById
+getAllDrawings
+setProperties
+setPoints
+setVisible
+setSelectionEnabled
+setLocked
+bringToFront / sendToBack
+removeEntity / removeAllDrawings
+createGroupFromSelection
+onDrawingEvent
+```
+
+Drawings are renderer-neutral objects with explicit lifecycle, visibility, selection, lock, z-order, group, owner and source metadata. Data-coordinate and normalized viewport-coordinate spaces are distinct.
+
+## Tool system
+
+The tool catalog is declarative. Each tool declares its family, interaction model, coordinate space and point requirements. This allows the catalog to grow without embedding renderer-specific behavior in the API.
+
+`CoreDrawingToolSession` owns interactive draft collection and validation. Geometry rendering remains a separate concern.
+
+## Navigation
+
+The chart exposes a renderer-neutral navigation contract covering:
+
+```text
+time spacing
+horizontal offset
+visible bar range
+time ↔ X
+price ↔ Y
+pan enable/disable
+zoom enable/disable
+auto/manual/locked price scale
+```
+
+`ChartGestureController` translates pointer drag, wheel and pinch gestures into this contract.
+
+## Production renderer
+
+Lightweight Charts remains the production renderer. `ChartController` exposes a TradingCore navigation facade over it. Native WebGL/Canvas code can consume the same chart contracts directly.
+
+## Vendor boundary
+
+The uploaded TradingView chart project was used only to inspect the **behavioral/method categories** that a mature charting system exposes. No vendor implementation code is copied into TradingCoreOS. The CoreDrawing model, tool registry, interaction state machine, navigation contract and renderer adapter are TradingCoreOS implementations.
+
+## Roadmap
+
+Stages 101–112 cover renderer-neutral drawing creation/control, tool semantics, drawing interaction/hit testing, navigation, gesture translation, production bridging, scene projection and parity gates.
+
+## Validation
+
+```text
+STAGE97_DRAWING_API_METHODS_OK
+STAGE97_DRAWING_TOOL_CATALOG_OK
+STAGE97_NAVIGATION_METHODS_OK
+STAGE97_PAN_ZOOM_GATING_OK
+STAGE97_ANCHORED_DRAWING_OK
+STAGE97_PRODUCTION_DRAWING_API_INTEGRATION_OK
+```
+
+---
+
+# SOURCE: CORESPIRIT_V98_RELEASE_NOTES.md
+
+# CoreSpirit v98 Release Notes
+
+Date: 2026-09-27
+
+## Theme
+
+**User-authored indicators + public community publishing**
+
+## Included
+
+- Renderer-neutral indicator Inputs / Style / Display settings contract.
+- Editable starter CoreSpirit source templates for common native indicators.
+- Indicator Studio for editing and compiling source.
+- Immutable Supabase source-version persistence.
+- Public indicator publication projection with source snapshot metadata.
+- Dedicated public cover-image storage with owner-scoped writes.
+- Anonymous public Explore catalog.
+- Search, category, open-source and sorting controls.
+- Public indicator detail/source inspection.
+- Stable `/explore/indicators/<slug>` routes.
+- Usage counters through RLS-gated event recording and database-triggered counters.
+- Public indicator settings snapshots stored alongside the source snapshot, with only renderer-neutral authoring fields exposed.
+- Workspace and live indicator-dock entry points into the source workflow.
+- CoreSpirit roadmap extended to 130 stages.
+
+## Non-goals
+
+- PineScript compatibility.
+- TradingView implementation/code copying.
+- Anonymous script mutation.
+- Automatic broker execution from public code.
+- Publishing source that does not compile to a CoreSpirit IR artifact.
+
+## Current production chart policy
+
+Lightweight Charts remains the production rendering backend. The community indicator system depends on TradingCore chart and CoreSpirit contracts, not vendor renderer internals.
+
+## Supabase migration
+
+Applied migration:
+
+`20260927140500_tradingcoreos_v98_user_indicator_publications.sql`
+
+This creates the public publication table, indexes, RLS policies, cover-image bucket/policies, and RLS-gated view/install event recording and database-triggered counters.
+
+
+RLS/index hardening migration:
+
+`20260927141327_harden_indicator_publication_counters.sql`
+`20260927141354_optimize_indicator_publication_rls_indexes.sql`
+`20260927142500_add_indicator_settings_snapshot.sql`
+
+---
+
+# SOURCE: CORESPIRIT_V99_RELEASE_NOTES.md
+
+# TradingCoreOS v99 — Terminal Shell Consolidation
+
+Date: 2026-09-28
+
+## Scope
+
+v99 is a TradingCoreOS host/workspace UI release. It does **not** advance CoreSpirit beyond v98 and does not change the CoreSpirit language, compiler, stable IR, VM, 130-stage roadmap, or v98 user-indicator authoring/publication execution boundary.
+
+## Live terminal
+
+- `/live` now has one canonical terminal owner: `LiveTradingTerminal` → `LiveTradingWorkspace`.
+- The center is chart-first; the chart work area is the primary product surface.
+- The right dock consolidates Watchlist, Order Book, and Alerts, and supports resize/collapse.
+- The bottom dock consolidates Positions, Orders, Trades, Activity, Strategy Log, and the inline Order Ticket.
+- Compare, Replay, Settings, Indicators, Draw, Alerts, and chart controls remain available through the terminal command surface.
+- Older workspace snapshots continue to restore through backward-compatible mapping of the former `panel` state.
+- The unused duplicate `TradingCoreProWorkspace` file was removed.
+
+## Non-interference
+
+No market-data subscription architecture, history pagination, quote fallback, chart data plane, or CoreSpirit execution path was changed as part of v99.
+
+## Verification
+
+- `TRADINGCORE_V99_TERMINAL_SHELL_CONTRACT_OK`
+- Existing architecture/route/hardening/CoreSpirit/indicator community contracts: PASS
+- TSX parser validation: PASS for modified source files
+- Full dependency-backed typecheck/build: pending in the supplied archive because npm dependencies were not available and registry installation timed out
+
+
+## v100 terminal visual-density pass — 2026-09-29
+
+The `/live` shell now uses a flatter terminal visual language. This is a presentation-only refinement layered on top of the v99 composition boundary. The landing page and premium marketing surfaces retain their existing visual treatment.
+
+- Chart infrastructure uses squared or nearly squared geometry (0–2px radius).
+- Terminal controls use 0–4px radius; popovers use up to 6px.
+- Decorative shadows are removed from chart, dock, toolbar and bottom-terminal infrastructure.
+- Separators are thin and information density is increased through spacing and typography rather than cards.
+- The terminal uses blue as the structural accent; market semantics such as positive/negative values remain distinguishable.
+- Existing chart/feed/CoreSpirit/runtime contracts are unchanged.
+
+---
