@@ -13,6 +13,7 @@ function run(args) {
   return String(result.stdout || '').trim();
 }
 
+try {
 for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const url = urls[caseIndex];
   const expectedCells = expectedCellsList[Math.min(caseIndex, expectedCellsList.length - 1)] || 1;
