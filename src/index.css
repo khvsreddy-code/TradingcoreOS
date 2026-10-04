@@ -23,9 +23,9 @@
   --tco-control: #303747;
   --tco-axis: #252b3a;
   --tco-surface-blue: #141022;
-  --tco-accent: #7c5cff;
-  --tco-accent-soft: #9b8aff;
-  --tco-accent-bright: #c4b5fd;
+  --tco-accent: #d3ebf4;
+  --tco-accent-soft: #e5f5fa;
+  --tco-accent-bright: #f0f9fc;
   --tco-motion-fast: 180ms;
   --tco-motion-standard: 280ms;
   --tco-motion-slow: 380ms;
@@ -68,7 +68,7 @@ html[data-tco-theme="white"] {
 html { scroll-behavior: smooth; background: var(--tco-bg); }
 body { margin: 0; min-width: 320px; background: var(--tco-bg); color: var(--tco-text); }
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
-::selection { background: rgba(124,92,255,.22); color: #eff6ff; }
+::selection { background: rgba(211,235,244,.22); color: #eff6ff; }
 
 .font-mono { font-family: 'JetBrains Mono', monospace; }
 
@@ -87,15 +87,15 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 }
 
 .hero-orb-a {
-  background: radial-gradient(circle, rgba(124,92,255,.16), transparent 68%);
+  background: radial-gradient(circle, rgba(211,235,244,.16), transparent 68%);
   filter: blur(12px);
 }
 .hero-orb-b {
-  background: radial-gradient(circle, rgba(155,138,255,.13), transparent 68%);
+  background: radial-gradient(circle, rgba(229,245,250,.13), transparent 68%);
   filter: blur(20px);
 }
 .product-glow {
-  background: radial-gradient(circle at 50% 50%, rgba(124,92,255,.11), transparent 62%);
+  background: radial-gradient(circle at 50% 50%, rgba(211,235,244,.11), transparent 62%);
   filter: blur(35px);
 }
 
@@ -121,7 +121,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   color: #f7f8fb;
 }
 .hero-gradient-text {
-  background: linear-gradient(110deg, #f3f4f6 5%, #b7adff 38%, #9b8aff 62%, #9b8aff 95%);
+  background: linear-gradient(110deg, #f3f4f6 5%, #b7adff 38%, #e5f5fa 62%, #e5f5fa 95%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -155,16 +155,16 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .premium-button:hover { transform: translateY(-1px); }
 .premium-button-primary {
   color: #090a0f;
-  background: linear-gradient(135deg, #9b8aff, #7c5cff 60%, #6648d8);
-  box-shadow: 0 10px 35px rgba(124,92,255,.18), inset 0 1px rgba(255,255,255,.28);
+  background: linear-gradient(135deg, #e5f5fa, #d3ebf4 60%, #b7dbe6);
+  box-shadow: 0 10px 35px rgba(211,235,244,.18), inset 0 1px rgba(255,255,255,.28);
 }
-.premium-button-primary:hover { box-shadow: 0 15px 42px rgba(124,92,255,.28), inset 0 1px rgba(255,255,255,.28); }
+.premium-button-primary:hover { box-shadow: 0 15px 42px rgba(211,235,244,.28), inset 0 1px rgba(255,255,255,.28); }
 .premium-button-secondary {
   color: #e5e7eb;
   border: 1px solid rgba(255,255,255,.09);
   background: rgba(255,255,255,.025);
 }
-.premium-button-secondary:hover { border-color: rgba(155,138,255,.35); background: rgba(255,255,255,.045); }
+.premium-button-secondary:hover { border-color: rgba(229,245,250,.35); background: rgba(255,255,255,.045); }
 
 .terminal-shell {
   overflow: hidden;
@@ -201,11 +201,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  border: 1px solid rgba(124,92,255,.28);
-  background: rgba(124,92,255,.08);
+  border: 1px solid rgba(211,235,244,.28);
+  background: rgba(211,235,244,.08);
   font-size: 9px;
   font-weight: 900;
-  color: #9b8aff;
+  color: #e5f5fa;
 }
 
 .chart-grid {
@@ -229,14 +229,14 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   transition: .2s ease;
 }
 .toolbar-pill:hover { color: var(--tco-text); border-color: rgba(255,255,255,.12); }
-.toolbar-pill-active { color: #9b8aff; border-color: rgba(124,92,255,.28); background: rgba(124,92,255,.06); }
-.toolbar-pill-active-blue { color: #c4b5fd; border-color: rgba(155,138,255,.25); background: rgba(155,138,255,.05); }
+.toolbar-pill-active { color: #e5f5fa; border-color: rgba(211,235,244,.28); background: rgba(211,235,244,.06); }
+.toolbar-pill-active-blue { color: #f0f9fc; border-color: rgba(229,245,250,.25); background: rgba(229,245,250,.05); }
 .live-dot {
   height: 6px;
   width: 6px;
   border-radius: 50%;
-  background: #9b8aff;
-  box-shadow: 0 0 0 4px rgba(155,138,255,.08), 0 0 14px rgba(155,138,255,.45);
+  background: #e5f5fa;
+  box-shadow: 0 0 0 4px rgba(229,245,250,.08), 0 0 14px rgba(229,245,250,.45);
 }
 
 /* Compact desktop watchlist rail provided by the workspace runtime bridge. */
@@ -257,7 +257,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   letter-spacing: .14em;
   color: #64748b;
 }
-.tco-watchlist-live { color: #7c5cff; font-size: 8px; letter-spacing: .04em; }
+.tco-watchlist-live { color: #d3ebf4; font-size: 8px; letter-spacing: .04em; }
 .tco-watchlist-item,
 .tco-watchlist-add {
   position: relative;
@@ -274,11 +274,11 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   cursor: pointer;
   transition: border-color .15s ease, background .15s ease;
 }
-.tco-watchlist-item:hover { border-color: rgba(124,92,255,.35); background: rgba(124,92,255,.05); }
+.tco-watchlist-item:hover { border-color: rgba(211,235,244,.35); background: rgba(211,235,244,.05); }
 .tco-watchlist-remove { position: absolute; right: 7px; top: 5px; color: #64748b; font-size: 13px; }
 .tco-watchlist-remove:hover { color: #ef4444; }
 .tco-watchlist-add { border-style: dashed; color: #64748b; text-align: center; }
-.tco-watchlist-add:hover { border-color: rgba(124,92,255,.35); color: #7c5cff; }
+.tco-watchlist-add:hover { border-color: rgba(211,235,244,.35); color: #d3ebf4; }
 @media (max-width: 1535px) {
   .tco-watchlist-rail { display: none !important; }
   .tco-watchlist-source-hidden { display: flex !important; }
@@ -448,8 +448,8 @@ html[data-tco-theme="white"] .bg-\[\#161108\] { background: var(--tco-surface-3)
    restrained indigo-violet accent, and deliberate DOM motion. Vela chart animation is
    configured in its own native options; these rules only govern UI chrome. */
 :root {
-  --tco-accent: #7c5cff;
-  --tco-accent-soft: #9b8aff;
+  --tco-accent: #d3ebf4;
+  --tco-accent-soft: #e5f5fa;
   --tco-accent-rgb: 124 92 255;
   --tco-graphite: #0f1116;
   --tco-graphite-2: #17191f;
@@ -479,7 +479,7 @@ button, a, input, select, textarea, [role="button"] {
 }
 html[data-tco-theme="black"] body {
   background:
-    radial-gradient(circle at 80% -10%, rgba(124,92,255,.045), transparent 34rem),
+    radial-gradient(circle at 80% -10%, rgba(211,235,244,.045), transparent 34rem),
     var(--tco-bg);
 }
 html[data-tco-theme="black"] .tco-premium-surface {
@@ -492,15 +492,15 @@ html[data-tco-theme="black"] .tco-premium-surface {
 /* TradingCoreOS interaction/motion baseline — deliberate, restrained motion.
    Motion is for continuity, not decoration. Heavy transforms stay opt-in. */
 :root {
-  --tco-accent: #7c5cff;
-  --tco-accent-soft: #9b8aff;
+  --tco-accent: #d3ebf4;
+  --tco-accent-soft: #e5f5fa;
   --tco-motion-fast: 160ms;
   --tco-motion-standard: 240ms;
   --tco-motion-slow: 320ms;
   --tco-motion-ease: cubic-bezier(.22,1,.36,1);
 }
 html[data-tco-theme="white"] {
-  --tco-accent: #6648d8;
+  --tco-accent: #b7dbe6;
   --tco-accent-soft: #8066e8;
 }
 .tco-interactive {
@@ -523,3 +523,14 @@ html[data-tco-theme="white"] {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
   .tco-interactive:hover { transform: none; }
 }
+
+
+/* TradingCoreOS chrome: icy blue product accent; the live Vela terminal owns its own palette. */
+.vela-widget-action-left[data-action-id="tco.brand"] {
+  font-family: "Minecraft", "Courier New", monospace;
+  font-weight: 900;
+  letter-spacing: .045em;
+  color: #d3ebf4;
+  text-shadow: 0 0 14px rgba(211,235,244,.10);
+}
+.vela-widget-action-left[data-action-id="tco.brand"] .vela-icon { opacity: .9; }
