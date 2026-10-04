@@ -14,11 +14,15 @@ const engine=read('src/CoreSpiritVelaEngine.ts');
 const telemetry=read('src/services/marketData/chartPerformanceTelemetry.ts');
 
 for(const pattern of [/\.slice\([^)]*period[^)]*\)/,/\.slice\([^)]*length[^)]*\)/,/Math\.(?:max|min)\(\.\.\./,/\.reduce\(/,/\.sort\(/]) assert.doesNotMatch(legacy,pattern);
-for(const name of ['RollingSum','RollingMean','RollingVariance','RollingMinMax','RollingMedian','RollingPercentile','RollingAbsoluteDeviation','EMAState','WilderState','ATRState','WMAState','VWAPSessionState']) assert.match(stateful,new RegExp('export class '+name));
+for(const name of ['RollingSum','RollingMean','RollingVariance','RollingMinMax','RollingMedian','RollingPercentile','RollingAbsoluteDeviation','EMAState','WilderState','ATRState','WMAState','VWAPSessionState','ChangeState','RollingPersistenceState']) assert.match(stateful,new RegExp('export class '+name));
 for(const name of ['bollinger','donchian','stochastic','cci','mfi']) assert.match(standard.toLowerCase(),new RegExp(name));
 assert.doesNotMatch(runtime,/trHistory\.slice\(-length\)\.reduce/);
 assert.doesNotMatch(marketKernel,/gains\.slice\(0,p\)\.reduce/);
 assert.doesNotMatch(marketKernel,/for\(let j=i-p\+1;j<=i;j\+=1\)/);
+const structure=read('src/services/marketData/structureEngine.ts');
+assert.doesNotMatch(structure,/atrValue\(c\.slice\(0, i \+ 1\)/);
+assert.doesNotMatch(structure,/\.slice\(Math\.max\(0, index - period \+ 1\)/);
+assert.match(read('src/services/marketData/indicatorEngine.ts'),/const halfState=new WMAState/);
 
 for(const method of ['timeAt','lastIndexAtOrBefore','firstIndexAtOrAfter','countTimeRange']) assert.match(tape,new RegExp(method+'\\('));
 assert.match(vela,/rawTape\.countTimeRange/); assert.match(vela,/rawTape\.lastIndexAtOrBefore/); assert.match(vela,/rawTape\.timeAt/);
@@ -32,7 +36,7 @@ for(const stage of ['transport','compute','patch','renderer','frame']) assert.ma
 assert.match(telemetry,/recordStage/);
 assert.ok(fs.existsSync(path.join(root,'tools/verify-chart-performance.mjs')));
 assert.ok(fs.existsSync(path.join(root,'docs/CORESPIRIT_BUILD_TRACKER.md')));
-assert.ok(fs.existsSync(path.join(root,'docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md')));
+assert.ok(fs.existsSync(path.join(root,'docs/archive/history/README.md')));
 assert.ok(!fs.existsSync(path.join(root,'docs/CHART_RENDERER_MIGRATION.md')));
 assert.ok(!fs.existsSync(path.join(root,'docs/archive/compatibility/CORESPIRIT_BUILD_TRACKER.md')));
 assert.ok(!fs.existsSync(path.join(root,'docs/archive/compatibility/CHART_RENDERER_MIGRATION.md')));
@@ -41,3 +45,4 @@ console.log('TRADINGCORE_V129_STATEFUL_ROLLING_KERNELS_OK');
 console.log('TRADINGCORE_V129_COLUMNAR_TAPE_CONSUMER_MIGRATION_OK');
 console.log('TRADINGCORE_V129_DIRTY_SPAN_CORRECTNESS_OK');
 console.log('TRADINGCORE_V129_STAGE_TELEMETRY_AND_DOC_HONESTY_OK');
+console.log('TRADINGCORE_V130_KERNEL_CLOSURE_ARCHITECTURE_OK');
