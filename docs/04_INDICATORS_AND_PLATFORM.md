@@ -72,3 +72,42 @@ Indicator/model computation cannot directly control the broker. Execution remain
 The community publication model now treats `indicator` and `strategy` as explicit CoreSpirit script kinds. Public discovery is available through `/explore/indicators` and the unified `/explore/scripts` hub, with the same source-inspection, author metadata, install/view accounting and Supabase publication model.
 
 A publication carries `script_kind` so the catalog does not infer strategy-vs-indicator semantics from naming or source text. CoreSpirit remains the only user-facing scripting language; there is no PineScript/PineTS compatibility layer.
+
+## v127 — indicator computation contract
+
+Indicator implementations are split into two paths.
+
+**Stateful incremental path** for bounded rolling math:
+```
+RollingSum · RollingMean · RollingVariance
+RollingMin/Max · RollingMedian · RollingPercentile
+EMA · Wilder · ATR · VWAP
+```
+
+**Structural/semantic path** for pattern logic where the window is not a simple rolling statistic. Even there, centered extrema and other bounded lookbacks use monotonic state instead of repeated array slicing.
+
+The standard indicator set — including Bollinger, Donchian, Stochastic, CCI and MFI — stays on the stateful lane for live updates and historical execution.
+
+## Dirty-range indicator execution
+
+A CoreSpirit artifact publishes `maxLookback`. During history backfill, only the newly introduced region plus the causal warmup is recomputed. The generated `IndicatorModel` carries `dirty` so Vela can issue a `replace-range` patch rather than treating the model as a full replacement.
+
+Appearance-only settings remain isolated from mathematical recomputation.
+
+## Public scripts
+
+The public publication model treats `indicator` and `strategy` as explicit CoreSpirit script kinds. Public discovery is available through `/explore/indicators` and `/explore/scripts`. No PineScript/PineTS compatibility layer is involved.
+
+## Performance rule for authors
+
+Do not write per-bar window construction such as:
+
+```
+slice(...)
+Math.max(...)
+Math.min(...)
+reduce(...)
+sort(...)
+```
+
+inside historical loops when a canonical stateful kernel exists. The compiler/runtime should absorb this complexity so CoreSpirit scripts remain simple while execution stays bounded.
