@@ -9,7 +9,7 @@ import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/co
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
-const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v3-multichart';
+const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v4-single-default';
 
 function readCoreSpiritManifest() {
   try {
@@ -46,9 +46,10 @@ export function LiveTradingWorkspace() {
       await Promise.all([brokerReady, defaultsPromise]);
       const defaults = await defaultsPromise;
       if (cancelled || !host.current) return;
+      const initialLayout = defaults.layout && defaults.layout !== '4' ? defaults.layout : '1';
 
       workspace = new VelaWorkspace(host.current, {
-        layout: defaults.layout || '4',
+        layout: initialLayout,
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
         bars: 5000,
@@ -63,14 +64,8 @@ export function LiveTradingWorkspace() {
           downColor: '#ef6b7a',
           fontFamily: 'DM Sans, system-ui, sans-serif',
         },
-        animations: {
-          zoom: 280,
-          pan: 340,
-          scroll: 400,
-          autoscale: 300,
-          liveBar: 180,
-          intro: { style: 'grow', duration: 1200 },
-        },
+        // Live trading stays motion-light: the market feed is the animation.
+        animations: false,
         defaultLanguage: 'corespirit',
         providers: {
           tco: () => createTcoVelaDataProvider(),
@@ -82,6 +77,10 @@ export function LiveTradingWorkspace() {
         drawings: true,
         drawingToolbar: true,
         indicatorPicker: true,
+        topbar: {
+          left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
+          right: ['tco.watchlist', 'tco.journal', 'tco.panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
+        },
         sync: { symbol: false, timeframe: false, crosshair: true, style: false, drawings: false },
         volume: true,
         watermark: true,
