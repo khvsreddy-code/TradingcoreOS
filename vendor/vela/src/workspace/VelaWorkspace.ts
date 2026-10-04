@@ -842,6 +842,31 @@ export class VelaWorkspace {
         return this.compositeLayoutShot(cells);
     }
 
+    /** Aggregate renderer performance counters across the currently mounted cells. */
+    getPerformanceStats(): ReadonlyArray<{
+        cellId: string;
+        frames: number;
+        totalFrameMs: number;
+        averageFrameMs: number;
+        worstFrameMs: number;
+        longFrames: number;
+        lastFrameMs: number;
+        lastFrameAt: number;
+        backend: 'webgl2' | 'canvas2d' | 'unknown';
+    }> {
+        return this.cells().flatMap((cell) => {
+            const renderer = cell.chart.renderer as typeof cell.chart.renderer & {
+                getPerformanceStats?: () => {
+                    frames: number; totalFrameMs: number; averageFrameMs: number; worstFrameMs: number;
+                    longFrames: number; lastFrameMs: number; lastFrameAt: number;
+                    backend: 'webgl2' | 'canvas2d' | 'unknown';
+                };
+            };
+            const stats = renderer.getPerformanceStats?.();
+            return stats ? [{ cellId: cell.id, ...stats }] : [];
+        });
+    }
+
     /** Download {@link screenshot} as a PNG. A multi-cell layout is named
      *  `vela-layout.png`; one visible cell keeps `${symbol}-${timeframe}.png`. */
     downloadScreenshot(): void {
