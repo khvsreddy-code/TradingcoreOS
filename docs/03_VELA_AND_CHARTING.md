@@ -77,3 +77,15 @@ Motion is spatial continuity, not decoration. Motion remains the DOM/UI animatio
 ## Viewport rule
 
 History prepend must preserve the user's logical/time anchor. Data growth must not automatically refit the chart to the newest candle.
+
+## v126 — Vela interaction and history ingress
+
+Vela now owns the complete Alt quick-tool interaction. Holding **Alt** on the chart opens a radial wheel sourced from the Vela drawing registry. The wheel exposes common line, Fibonacci, shape, text and anchored-VWAP tools, while the center action opens the active Vela panel dock. Editable fields are excluded so Alt remains safe during text entry.
+
+The live workspace no longer mounts a competing React Alt indicator wheel. This keeps input ownership inside the chart engine and avoids duplicate overlays.
+
+The first native Vela history paint uses compact broker columns when available. Vela still exposes `setBarsColumns()`/`updateBarColumns()` to the native renderer, while older compatibility consumers may still receive `OHLCV[]`.
+
+### TCO chrome model
+
+The production chart chrome uses a graphite-black base with royal purple/indigo accents. The duplicate watchlist control is replaced by the **Bookmarks** side panel, and the topbar provides explicit **Panels** and profile/account actions. Workspace state continues through the Vela persistence adapter, with TCO exposing `saveNow()` for scheduled autosave.
