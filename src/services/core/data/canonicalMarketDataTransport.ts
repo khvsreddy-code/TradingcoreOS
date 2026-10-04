@@ -85,3 +85,9 @@ export function assertCanonicalMarketDataPacket(packet: CanonicalMarketDataPacke
   const fields = [packet.time, packet.open, packet.high, packet.low, packet.close, packet.volume];
   if (fields.some(field => field.length !== packet.length)) throw new Error('Canonical market packet columns have different lengths.');
 }
+
+
+/** Transfer a canonical packet without structured-cloning its numeric buffers. Ownership moves to the worker. */
+export function transferCanonicalMarketDataPacket(worker: Worker, packet: CanonicalMarketDataPacket, message: Record<string, unknown> = {}): void {
+  worker.postMessage({ ...message, market: packet }, packetTransferables(packet));
+}
