@@ -36,7 +36,7 @@ for (const token of ['canonical columnar data plane', 'Vela NativeRenderer', 'ob
   if (!chartDocs.includes(token) && !migration.includes(token)) throw new Error(`chart documentation contract missing ${token}`);
 }
 if (!tracker.includes('v94 implementation record') || !tracker.includes('zero-copy canonical chart data plane')) throw new Error('tracker missing v94 zero-copy record');
-if (!v95Docs.includes('v95 — full chart engine decomposition')) throw new Error('v95 chart engine decomposition documentation missing');
+if (!v95Docs.includes('## Vendor boundary') || !v95Docs.includes('## Columnar candle API')) throw new Error('active Vela chart architecture documentation missing');
 
 console.log('STAGE94_ZERO_COPY_SOURCE_CONTRACT_OK');
 console.log('STAGE94_CHART_DOCUMENTATION_CONTRACT_OK');
