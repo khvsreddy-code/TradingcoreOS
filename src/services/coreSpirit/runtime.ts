@@ -115,7 +115,16 @@ export class CoreSpiritRuntime {
     this.bus = bus;
     this.outputCollector = new CoreSpiritOutputCollector(this.maxOutputsPerBar);
     this.eventRouter = new CoreSpiritEventRouter(this.bus);
-    this.capabilityHost = new CoreSpiritCapabilityHost(this.executionTarget, this.dataResolver, this.modelOutputResolver, this.eventResolver);
+    this.capabilityHost = new CoreSpiritCapabilityHost(
+      this.executionTarget,
+      this.dataResolver,
+      (input) => this.modelOutputResolver?.({
+        modelName: input.modelName,
+        field: input.field,
+        binding: input.binding as { kind:string; locator:string } | undefined,
+      }) ?? null,
+      this.eventResolver,
+    );
   }
 
   reset(): void {
