@@ -1,4 +1,4 @@
-import type { CoreSpiritDataResolver, CoreSpiritDataRequest, CoreSpiritDataResolutionContext, CoreSpiritExecutionContext } from './types';
+import type { CoreSpiritDataResolver, CoreSpiritDataRequest, CoreSpiritDataResolutionContext } from './types';
 
 export class CoreSpiritCapabilityHost {
   constructor(
