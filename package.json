@@ -16,7 +16,8 @@
     "coreSpirit:normalize": "node tools/corespirit-cli.mjs normalize",
     "coreSpirit:inspect": "node tools/corespirit-cli.mjs inspect",
     "coreSpirit:graph": "node tools/corespirit-cli.mjs graph",
-    "ci": "npm run test:contracts && npm run typecheck && npm run build"
+    "ci": "npm run test:contracts && npm run typecheck && npm run build",
+    "verify:browser": "node tools/verify-chart-performance.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
