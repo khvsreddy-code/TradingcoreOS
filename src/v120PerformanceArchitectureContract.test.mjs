@@ -24,7 +24,8 @@ const storage = read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 
 assert.match(semantic, /function builtinDeterminism/);
 assert.match(semantic, /const deterministic = ins\.op === 'call' \? builtinDeterminism/);
-assert.match(vector, /copyFrom\(source: MonotonicDeque/);
+assert.match(vector, /from '\.\/statefulIndicatorKernel'/);
+assert.match(vector, /copyFrom\(source: FusedSeriesStage/);
 assert.match(vector, /clone\(\): CoreSpiritFusedSeriesCursor/);
 assert.match(runtime, /fusedCursorSnapshots/);
 assert.match(runtime, /cursor\.clone\(\)/);
