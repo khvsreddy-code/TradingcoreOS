@@ -144,6 +144,12 @@ export function LiveTradingWorkspace() {
       for (const sample of stats) {
         chartPerformanceTelemetry.ingestRendererSnapshot(`vela:${sample.cellId}`, sample);
       }
+      if (typeof window !== 'undefined') {
+        (window as Window & { __TCO_PERF__?: unknown }).__TCO_PERF__ = {
+          capturedAt: Date.now(),
+          cells: stats,
+        };
+      }
     }, 1000);
     const timer = window.setInterval(() => {
       workspaceRef.current?.saveNow();
