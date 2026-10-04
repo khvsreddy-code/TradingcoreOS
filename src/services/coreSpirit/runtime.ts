@@ -230,7 +230,7 @@ export class CoreSpiritRuntime {
     this.executionContext.session = this.executionContext.frame.session;
     this.lastBarWasRealtime = true;
     try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, outputs, diagnostics); }
-    catch (error) { diagnostics.push(`bar ${barIndex}: ${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
 
@@ -349,7 +349,7 @@ export class CoreSpiritRuntime {
       this.history.push(bar);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
       try { this.executeBlock(ir.entry.instructions, bar, this.history, i, outputs, diagnostics); }
-      catch (error) { diagnostics.push(`bar ${i}: ${error instanceof Error ? error.message : String(error)}`); }
+      catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
     }
     return { outputs, state: this.getState(), diagnostics };
   }
