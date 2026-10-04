@@ -11,7 +11,7 @@ const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const live = read('src/components/workspace/LiveChart.tsx');
 const settings = read('src/components/indicators/IndicatorSettingsPanel.tsx');
 const viewer = read('src/components/indicators/IndicatorCodeViewer.tsx');
-const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
+const buildTracker = read('docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md');
 const history = read('docs/archive/history/v107-incremental-indicator-execution.md');
 
 for (const token of [
