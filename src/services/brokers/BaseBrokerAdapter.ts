@@ -109,9 +109,9 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
     return requireArray(requireSuccessData(payload, 'Historical data request failed'), isHistoricalCandle, 'historical candles');
   }
 
-  async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000): Promise<HistoricalCandleColumns | null> {
+  async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null> {
     const safeLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
-    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}&format=columns`, { signal });
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}&format=columns${beforeTimestamp != null ? `&before=${encodeURIComponent(new Date(beforeTimestamp).toISOString())}` : ''}`, { signal });
     const payload = readJson(await res.text());
     if (!res.ok) throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : `Historical data request failed (${res.status})`);
     const value = requireSuccessData(payload, 'Historical data request failed');
