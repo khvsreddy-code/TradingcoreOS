@@ -124,7 +124,7 @@ All bounded-period math must use incremental state rather than creating a new wi
 
 - `RollingSum` and `RollingMean` with ring-buffer state
 - `RollingVariance` using running sum and sum-of-squares
-- `RollingMinMax` with monotonic deques
+- `RollingMinMax` with replace-safe bounded segment-tree state; centered extrema use monotonic deques
 - `RollingMedian` with dual heaps and delayed deletion
 - `RollingPercentile` using the ordered multiset's order-statistic selection
 - EMA/Wilder/ATR/VWAP state machines
