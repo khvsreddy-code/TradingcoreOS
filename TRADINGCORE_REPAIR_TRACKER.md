@@ -816,3 +816,18 @@ The full Vela source audit also confirmed that candle rendering is the correct p
 Resolved the remaining reported blockers in the current Vela head: workspace listener disposer now has lexical ownership, and the TCO Vela native adapter uses Vela's inferred legacy-bar type rather than an unresolved OHLCV import. The MutableColumnarBars typing fix is already present in the retained-scene head.
 
 History is now standardized on 5,000-bar initial and older pages, and the Vela animation defaults are intentionally slower for a more professional terminal feel.
+
+
+## v119 — CoreSpirit true series fusion
+
+Completed:
+- Replaced the `seriesVector` fake-fusion executor that allocated one full series per operation.
+- Added a single-pass `CoreSpiritFusedSeriesCursor` with bounded ring/deque/ordered-window state.
+- Enabled deterministic local EMA/RMA fusion.
+- Integrated fusion into historical/replay VM execution; realtime remains on its rollback-safe incremental state path.
+- Added numerical equivalence and zero-intermediate allocation contracts.
+
+Remaining:
+- Direct CoreSpirit runtime ingestion from `CanonicalMarketView` without candle-object materialization.
+- Fused-cursor checkpoint/rollback for realtime revision evaluation.
+- Dirty-span propagation from CoreSpirit kernels into Vela RenderPacket so compute and render invalidation share exact ranges.

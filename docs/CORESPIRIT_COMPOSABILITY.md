@@ -603,3 +603,30 @@ time - time                   → duration
 ```
 
 These systems do not grant host authority and remain outside appearance-driven invalidation.
+
+
+## v119 — compositional kernel fusion
+
+Series composition now has a concrete execution contract rather than only a planning contract. A linear component graph of compatible series nodes can be lowered into a `CoreSpiritFusedSeriesCursor` that carries each node's bounded algorithm state and passes the current scalar output directly to the next node.
+
+For a chain such as:
+
+```text
+close → EMA → difference → normalize → zscore
+```
+
+the optimized path is:
+
+```text
+bar i
+  → close[i]
+  → EMA state update
+  → difference scalar
+  → normalization window update
+  → zscore window update
+  → final output[i]
+```
+
+There is no requirement to retain `EMA[]`, `difference[]`, and `normalize[]` as separate history arrays merely to feed the next component. The fusion cursor owns bounded state; the final output remains the public materialized series when a host actually needs one.
+
+Stateful fusion is deliberately restricted to deterministic local recurrences such as EMA/RMA. Broker/network, model I/O, visual emission, order authority, nondeterministic calls and multi-consumer branches remain barriers.

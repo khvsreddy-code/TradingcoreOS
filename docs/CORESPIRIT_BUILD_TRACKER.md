@@ -3581,3 +3581,38 @@ The full Vela source audit also confirmed that candle rendering is the correct p
 Completed: 5k-first history policy; 5k older-page policy; Fyers 10m coverage; range-aware TCO Vela hydration; Vela 5k cache/deep-history alignment; slower chart motion; graphite/indigo visual identity; Supabase-backed Vela workspace persistence.
 
 The next CoreSpirit performance boundary is series-kernel fusion: compile compatible pure series nodes into one chronological traversal with no full intermediate Float64Array per operation.
+
+
+## v119 — true CoreSpirit series-kernel fusion
+
+The v93 series-fusion implementation is no longer a metadata-only optimization. The fused executor now performs one chronological traversal over the input and updates each compatible stage's bounded state in-place before writing only the final output series.
+
+```text
+source Float64Array
+    ↓
+bar i
+    ├── stage 1 state update
+    ├── stage 2 consumes stage 1 scalar
+    ├── stage 3 consumes stage 2 scalar
+    └── final output[i]
+```
+
+### Allocation contract
+
+A fused run may borrow an existing `Float64Array` input and allocates one final `Float64Array` output. Rolling stages use bounded period-sized rings/deques; median uses a bounded sorted window; EMA/RMA use scalar recursive state. No full historical intermediate `Float64Array` is created between stages.
+
+### Stateful fusion
+
+EMA and RMA are now explicitly fusible despite being stateful. They are permitted only because their state is private, deterministic and local to the fusion cursor. Effectful, nondeterministic and externally-capable nodes remain fusion barriers.
+
+### VM integration
+
+Historical/replay CoreSpirit VM execution now installs the semantic fusion plan. At a fused group start, the VM advances one reusable fusion cursor and writes all stage registers for that bar; later stage call instructions are skipped because their values already exist. Realtime execution keeps the existing rollback-safe stateful path until fused cursor snapshot semantics are separately formalized.
+
+### Invariants
+
+- semantic graph, not regex or source text, determines fusion eligibility;
+- one IR / one VM remains the execution model;
+- visual/event/authority operations stay outside numeric fusion;
+- intermediate series allocation count is zero;
+- planner explanation and CI contracts expose the selected fused groups.

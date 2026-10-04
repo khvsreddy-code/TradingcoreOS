@@ -17,6 +17,8 @@ import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
 import { sma as kernelSma, highest as kernelHighest, lowest as kernelLowest, emaStep, trueRange, rsiFromAverages } from './indicatorKernel';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
+import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
+import { CoreSpiritFusedSeriesCursor } from './seriesVector';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
 export type CoreSpiritRuntimeOptions = {
@@ -74,6 +76,9 @@ export class CoreSpiritRuntime {
   private debugTrace: Array<Record<string, unknown>> = [];
   private realtimeRevision = 0;
   private loadedSurface?: CoreSpiritProgram['surface'];
+  private seriesFusionPlan?: CoreSpiritSeriesFusionPlan;
+  private readonly fusedStageByInstruction = new Map<number, { groupId: string; stageIndex: number }>();
+  private readonly fusedCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
@@ -101,6 +106,7 @@ export class CoreSpiritRuntime {
     this.state = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
     this.history = []; this.crossState = {}; this.committedSeriesState = {}; this.committedLocalSeries = {}; this.committedCrossState = {};
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
+    this.resetFusedSeriesCursors();
   }
   getState(): CoreSpiritRuntimeState { this.state.workspaceState=this.workspaceSnapshot(); return { ...this.state, workspaceState:this.workspaceSnapshot(), locals: { ...this.state.locals }, seriesState: Object.fromEntries(Object.entries(this.state.seriesState).map(([k,v]) => [k,[...v]])), localSeries: Object.fromEntries(Object.entries(this.state.localSeries).map(([k,v]) => [k,[...v]])) }; }
 
@@ -109,6 +115,7 @@ export class CoreSpiritRuntime {
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
+    this.installSeriesFusion(compiled.ir);
     // State retention must always cover the program's declared lookback plus a safety margin.
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
     this.reset();
@@ -258,7 +265,7 @@ export class CoreSpiritRuntime {
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
     const outputs: CoreSpiritObject[] = [], diagnostics: string[] = [];
-    this.compiledIr = ir; this.reset();
+    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset();
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.plotOrdinal = 0;
@@ -283,6 +290,7 @@ export class CoreSpiritRuntime {
   loadIr(ir: CoreSpiritIrProgram): void {
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
+    this.installSeriesFusion(ir);
     this.stateHistoryLimit = Math.min(this.maxHistoryBars, Math.max(this.stateHistoryLimit, ir.maxLookback + 32));
   }
 
@@ -309,6 +317,58 @@ export class CoreSpiritRuntime {
     } catch { return false; }
   }
 
+  private installSeriesFusion(ir: CoreSpiritIrProgram): void {
+    const plan = planCoreSpiritSeriesFusion(ir);
+    this.seriesFusionPlan = plan;
+    this.fusedStageByInstruction.clear();
+    for (const group of plan.groups) {
+      for (let stageIndex = 0; stageIndex < group.instructions.length; stageIndex += 1) {
+        this.fusedStageByInstruction.set(group.instructions[stageIndex]!, { groupId: group.id, stageIndex });
+      }
+    }
+    this.resetFusedSeriesCursors();
+  }
+
+  private resetFusedSeriesCursors(): void {
+    this.fusedCursors.clear();
+    if (this.executionContext.mode === 'realtime' || !this.seriesFusionPlan) return;
+    for (const group of this.seriesFusionPlan.groups) {
+      this.fusedCursors.set(group.id, new CoreSpiritFusedSeriesCursor(group.operations));
+    }
+  }
+
+  private fusedStageValues(instructionIndex: number, values: Map<string, unknown>, barIndex: number, instructions: CoreSpiritIrInstruction[]): boolean {
+    if (this.executionContext.mode === 'realtime') return false;
+    const binding = this.fusedStageByInstruction.get(instructionIndex);
+    if (!binding || !this.seriesFusionPlan) return false;
+    const group = this.seriesFusionPlan.groups.find((candidate) => candidate.id === binding.groupId);
+    if (!group) return false;
+    if (binding.stageIndex !== 0) return true;
+    const first = instructions[instructionIndex];
+    if (!first || first.op !== 'call') return false;
+    const sourceRaw = values.get(first.args[0]!);
+    if (sourceRaw == null) return false;
+    const source = Number(sourceRaw);
+    if (!Number.isFinite(source)) {
+      const cursor = this.fusedCursors.get(group.id);
+      if (!cursor) return false;
+      const outputValues = cursor.update(Number.NaN, barIndex);
+      for (let i = 0; i < group.instructions.length; i += 1) {
+        const stageInstruction = instructions[group.instructions[i]!];
+        if (stageInstruction?.op === 'call') values.set(stageInstruction.dest, outputValues[i]!);
+      }
+      return true;
+    }
+    const cursor = this.fusedCursors.get(group.id);
+    if (!cursor) return false;
+    const outputValues = cursor.update(source, barIndex);
+    for (let i = 0; i < group.instructions.length; i += 1) {
+      const stageInstruction = instructions[group.instructions[i]!];
+      if (stageInstruction?.op === 'call') values.set(stageInstruction.dest, outputValues[i]!);
+    }
+    return true;
+  }
+
   private executeBlock(instructions: CoreSpiritIrInstruction[], bar: HistoricalCandle, bars: HistoricalCandle[], barIndex: number, outputs: CoreSpiritObject[], diagnostics: string[]): void {
     const values = new Map<string, unknown>(); let pc = 0; let steps = 0;
     while (pc < instructions.length) {
@@ -322,7 +382,17 @@ export class CoreSpiritRuntime {
         case 'setLocal': { const value = values.get(ins.source); this.state.locals[ins.name] = value; if (ins.series !== false) this.pushLocalState(ins.name, value as any); pc++; break; }
         case 'unary': values.set(ins.dest, this.unary(ins.operator, values.get(ins.operand))); pc++; break;
         case 'binary': values.set(ins.dest, this.binary(ins.operator, values.get(ins.left), values.get(ins.right))); pc++; break;
-        case 'call': { const args = ins.args.map(a => values.get(a)); values.set(ins.dest, this.call(ins.callId || ins.dest, ins.name,args,bar,bars,barIndex,ins.seriesArgs||[])); pc++; break; }
+        case 'call': {
+          const fusion = this.fusedStageByInstruction.get(pc);
+          if (fusion && (fusion.stageIndex > 0 || this.fusedStageValues(pc, values, barIndex, instructions))) {
+            pc++;
+            break;
+          }
+          const args = ins.args.map(a => values.get(a));
+          values.set(ins.dest, this.call(ins.callId || ins.dest, ins.name,args,bar,bars,barIndex,ins.seriesArgs||[]));
+          pc++;
+          break;
+        }
         case 'index': {
           const index = Number(values.get(ins.index));
           if (!Number.isInteger(index) || index < 0) throw new Error(`invalid historical index ${String(index)}`);

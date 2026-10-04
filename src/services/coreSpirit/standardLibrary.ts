@@ -42,7 +42,7 @@ export type CoreSpiritLibraryGroup = {
 export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   // Series
   { name:'sma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
-  { name:'ema', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
+  { name:'ema', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'stateful'} },
   { name:'hma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series' },
   { name:'highest', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'lowest', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
@@ -50,7 +50,7 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'mean', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'stdev', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'wma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
-  { name:'rma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
+  { name:'rma', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'stateful'} },
   { name:'median', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'series', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'zscore', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'normalize', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },

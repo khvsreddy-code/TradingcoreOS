@@ -30,7 +30,7 @@ const input = new Float64Array([100, 102, 101, 105, 106, 104, 108, 110]);
 const fused = executeCoreSpiritSeriesFusionGroup(fusion.groups[0], { register:fusion.groups[0].inputRegister, values:input });
 if (fused.output.length !== input.length) throw new Error('fused output length mismatch');
 if (fused.stats.fusedPasses !== 1) throw new Error('fused executor did not use one chronological pass');
-if (fused.stats.intermediateAllocations !== 3) throw new Error('unexpected stage workspace allocation accounting');
+if (fused.stats.intermediateAllocations !== 0) throw new Error('fused executor allocated a full intermediate series');
 
 const empty = executeCoreSpiritFusedSeriesPipeline(input, []);
 if (empty.output !== input && empty.output.length !== input.length) throw new Error('empty series pipeline did not preserve shape');
@@ -39,7 +39,7 @@ const executionPlan = planCoreSpiritExecution(compiled.ir, { barCount: input.len
 if (executionPlan.seriesFusion.groups.length !== 1) throw new Error('execution planner did not absorb series fusion plan');
 if (!executionPlan.explanation.some(value => value.includes('series fusion'))) throw new Error('execution plan explanation omitted fusion');
 
-const nonFusableSource = `let a = sma(close, 3); let b = ema(a, 3); plot(b)`;
+const nonFusableSource = `let a = sma(close, 3); let b = rsi(a, 3); plot(b)`;
 const nonParsed = new CoreSpiritParser(nonFusableSource).parseDetailed();
 if (nonParsed.diagnostics.length) throw new Error(nonParsed.diagnostics.map(item => item.message).join('; '));
 const nonCompiled = compiler.compile(nonParsed.ast, 'stage93-nonfusable', { surface: describeCoreSpiritSurface(nonFusableSource) });
@@ -48,8 +48,27 @@ const nonFusion = planCoreSpiritSeriesFusion(nonCompiled.ir);
 if (nonFusion.groups.length !== 0) throw new Error('stateful EMA chain was incorrectly fused');
 
 if (CORE_SPIRIT_BUILTINS.get('pctchange')?.seriesExecution?.fusible !== true) throw new Error('pctchange lacks vector/fusion contract');
-if (CORE_SPIRIT_BUILTINS.get('ema')?.seriesExecution?.fusible !== false) throw new Error('EMA fusion contract is not stateful-safe');
+if (CORE_SPIRIT_BUILTINS.get('rma')?.seriesExecution?.fusible !== true) throw new Error('RMA fusion contract is not enabled');
+if (CORE_SPIRIT_BUILTINS.get('ema')?.seriesExecution?.fusible !== true) throw new Error('EMA fusion contract is not enabled');
 
 console.log('STAGE93_FIRST_CLASS_SERIES_OK');
 console.log('STAGE93_OPERATION_FUSION_OK');
 console.log('STAGE93_SERIES_BACKEND_METADATA_OK');
+
+const fusedEmaSource = `
+let a = ema(close, 3)
+let b = change(a, 1)
+let c = normalize(b, 3)
+show(c)
+`;
+const fusedEmaParsed = new CoreSpiritParser(fusedEmaSource).parseDetailed();
+if (fusedEmaParsed.diagnostics.length) throw new Error(fusedEmaParsed.diagnostics.map(item => item.message).join('; '));
+const fusedEmaCompiled = compiler.compile(fusedEmaParsed.ast, 'stage93-ema', { surface: describeCoreSpiritSurface(fusedEmaSource) });
+if (!fusedEmaCompiled.ir) throw new Error(fusedEmaCompiled.diagnostics.map(item => item.message).join('; '));
+const fusedEmaPlan = planCoreSpiritSeriesFusion(fusedEmaCompiled.ir);
+if (fusedEmaPlan.groups.length !== 1) throw new Error('EMA chain was not fused');
+if (fusedEmaPlan.groups[0].operations.map(operation => operation.name).join('>') !== 'ema>change>normalize') throw new Error('EMA chain was not maximally fused');
+
+const fusionInput = new Float64Array([100, 102, 101, 105, 106, 104, 108, 110, 112, 111]);
+const fusionRun = executeCoreSpiritSeriesFusionGroup(fusedEmaPlan.groups[0], { register: fusedEmaPlan.groups[0].inputRegister, values: fusionInput });
+if (fusionRun.stats.fusedPasses !== 1 || fusionRun.stats.intermediateAllocations !== 0) throw new Error('EMA fusion is not single-pass zero-intermediate');

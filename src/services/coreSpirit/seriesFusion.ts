@@ -8,6 +8,7 @@ import {
   coreSpiritSeriesMaxLookback,
   executeCoreSpiritFusedSeriesPipeline,
   asCoreSpiritNumericSeries,
+  isCoreSpiritSeriesOperationFusible,
 } from './seriesVector';
 
 export type CoreSpiritSeriesFusionStage=Readonly<{
@@ -23,7 +24,7 @@ export type CoreSpiritSeriesFusionPlan=Readonly<{
   rejectedPureSeriesInstructions:readonly number[];explanation:readonly string[];
 }>;
 
-const fusable=(name:string)=>{const b=getCoreSpiritBuiltin(name);return !!(b?.pure&&b.seriesExecution?.vectorizable&&b.seriesExecution?.fusible);};
+const fusable=(name:string)=>{const b=getCoreSpiritBuiltin(name);return !!(b?.seriesExecution?.vectorizable&&b.seriesExecution?.fusible&&isCoreSpiritSeriesOperationFusible(name));};
 const constant=(ins:readonly CoreSpiritIrInstruction[],reg:string)=>{const x=ins.find(i=>i.op==='const'&&i.dest===reg);if(!x||x.op!=='const')return undefined;const n=Number(x.value);return Number.isFinite(n)?n:undefined;};
 const nodeMap=(p:CoreSpiritIrProgram)=>new Map((p.graphs?.semantic.nodes??[]).map(n=>[n.instruction,n] as const));
 
