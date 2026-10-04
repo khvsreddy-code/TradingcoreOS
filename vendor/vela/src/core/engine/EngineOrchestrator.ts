@@ -6,6 +6,7 @@ import type { OHLCV } from '../model/ohlcv';
 import type { ColumnarBars, ColumnarBarUpdate, ColumnarTimeUnit } from '../model/columnar-bars';
 import type { IndicatorModel } from '../model/indicator';
 import type { ValuePatch, SeriesValueDelta } from '../model/patch';
+import { ColumnarHistoryTape } from '../model/ColumnarHistoryTape';
 import { isLineLikeSeries } from '../model/series';
 import type { InputSchema, InputValue } from '../model/inputs';
 import type { VelaTheme, MarketConfig, MarketSwitch, MarketSnapshot, AddIndicatorOptions, PriceStyle, MoveTarget, PaneInfo } from '../options';
@@ -142,7 +143,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** The RAW market data, exactly as the feed served it — the source of truth. The `'bar'`
      *  event, gap-heal reconciliation, and `chart.data` stay on this plane; nothing synthetic
      *  is ever stored or emitted as data. */
-    private rawBars: OHLCV[] = [];
+    /** Retained RAW history source-of-truth. Columnar storage is canonical; OHLCV is a compatibility view. */
+    private readonly rawTape = new ColumnarHistoryTape(MAX_HISTORY_BARS);
+    private rawBarsCompat: OHLCV[] | null = null;
+    private get rawBars(): OHLCV[] { return this.rawBarsCompat ??= this.rawTape.toOHLCV(); }
+    private set rawBars(rows: OHLCV[]) { this.rawTape.replaceRows(rows); this.rawBarsCompat = rows; }
+    private invalidateRawBarsCompat(): void { this.rawBarsCompat = null; }
     /** The active price style's 1:1 bar transform (null ≡ raw view). */
     private barTransform: BarTransform | null = null;
     // ── chart-type data engines (SDK): one lazily-created engine per style id ──
@@ -966,7 +972,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private extendDepth(gen: number, requested: number): void {
         if (this.rawBars.length > requested) {
-            this.setBarSeries(this.rawBars.slice(this.rawBars.length - requested), { preserveView: true });
+            this.rawTape.trimTo(requested);
+            this.invalidateRawBarsCompat();
+            this.renderRetainedRawSeries({ preserveView: true });
             this.completeHistory('depth');
             return;
         }
@@ -1016,7 +1024,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                         return;
                     }
                 }
-                this.setBarSeries([...head, ...this.rawBars], { preserveView: true });
+                this.rawTape.prependRows(head);
+                this.invalidateRawBarsCompat();
+                this.renderRetainedRawSeries({ preserveView: true });
                 this.notifySessionsBars('backfill');
                 this.events.emit('history:progress', { loaded: this.rawBars.length, target: requested });
             }
@@ -1646,14 +1656,19 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const time = unit === 'seconds' ? update.time * 1000 : update.time;
         const volume = update.volume != null && Number.isFinite(update.volume) ? update.volume : undefined;
         const bar: OHLCV = { time, open: update.open, high: update.high, low: update.low, close: update.close, volume };
-        const last = this.rawBars[this.rawBars.length - 1];
-        if (last && time === last.time) {
-            this.rawBars[this.rawBars.length - 1] = bar;
+        const lastTime = this.rawTape.lastTime();
+        if (Number.isFinite(lastTime) && time === lastTime) {
+            this.rawTape.replaceLastValues(time, update.open, update.high, update.low, update.close, volume);
             this.barCause = 'tick';
-        } else if (!last || time > last.time) {
-            this.rawBars.push(bar);
+            if (this.barTransform) this.bars[this.bars.length - 1] = this.barTransform.next(bar, this.bars[this.bars.length - 2]);
+            else { this.bars[this.bars.length - 1] = bar; this.rawBarsCompat = this.bars; }
+        } else if (!Number.isFinite(lastTime) || time > lastTime) {
+            this.rawTape.appendValues(time, update.open, update.high, update.low, update.close, volume);
             this.barCause = 'bar';
+            if (this.barTransform) this.bars.push(this.barTransform.next(bar, this.bars[this.bars.length - 1]));
+            else { this.bars.push(bar); this.rawBarsCompat = this.bars; }
         } else return;
+        if (this.barTransform) this.invalidateRawBarsCompat();
         this.renderer.updateBarColumns(update);
         this.events.emit('bar', bar);
         if (notify) this.notifySessionsBars(this.historyState === 'backfill' ? 'backfill' : undefined);
@@ -1683,10 +1698,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // feed's ranged fetch instead of pushing a discontinuous bar. Provider-agnostic: every
         // provider serves `getBars({ from })`. Within the cooldown a discontinuity is accepted
         // as a real market gap (an empty interval on an illiquid symbol) — no refetch loop.
-        const last = this.rawBars[this.rawBars.length - 1];
-        if (last && this.canHeal() && bar.time > last.time + this.barIntervalMs() * GAP_FACTOR && Date.now() - this.lastHealAt > HEAL_COOLDOWN_MS) {
+        const lastTime = this.rawTape.lastTime();
+        if (Number.isFinite(lastTime) && this.canHeal() && bar.time > lastTime + this.barIntervalMs() * GAP_FACTOR && Date.now() - this.lastHealAt > HEAL_COOLDOWN_MS) {
             this.healBuffer.push(bar);
-            void this.healGap(last.time);
+            void this.healGap(lastTime);
             return;
         }
         this.applyBar(bar);
@@ -1697,36 +1712,29 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * (identity when no transform), and hand the view to the renderer. Everything downstream
      * (engines via `getBars`, natives, visible-range presets) reads `this.bars` — the view.
      */
-    private setBarSeriesColumns(columns: ColumnarBars, opts?: { preserveView?: boolean; clearing?: boolean }): void {
-        const n = Math.max(0, Math.min(columns.length, columns.time.length, columns.open.length, columns.high.length, columns.low.length, columns.close.length, columns.volume.length));
-        const unit = columns.timeUnit ?? 'milliseconds';
-        this.columnarTimeUnit = unit;
-        const raw = new Array<OHLCV>(n);
-        for (let i = 0; i < n; i += 1) {
-            raw[i] = {
-                time: unit === 'seconds' ? columns.time[i]! * 1000 : columns.time[i]!,
-                open: columns.open[i]!, high: columns.high[i]!, low: columns.low[i]!, close: columns.close[i]!,
-                volume: Number.isFinite(columns.volume[i]!) ? columns.volume[i]! : undefined,
-            };
+    /** Render retained RAW tape. Identity-transform charts use numeric columns directly. */
+    private renderRetainedRawSeries(opts?: { preserveView?: boolean; clearing?: boolean }): void {
+        const raw = this.rawBars;
+        if (this.barTransform) {
+            this.bars = this.barTransform.full(raw);
+            this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
+        } else {
+            this.bars = raw;
+            this.renderer.setBarsColumns(this.rawTape.snapshotColumns('milliseconds'), { preserveView: opts?.preserveView });
         }
-        this.rawBars = raw;
-        this.bars = raw;
-        if (typeof this.renderer.setBarsColumns === 'function') this.renderer.setBarsColumns(columns, { preserveView: opts?.preserveView });
-        else this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
         if (!opts?.clearing && this.bars.length > 0) this.endLoad();
     }
 
+    private setBarSeriesColumns(columns: ColumnarBars, opts?: { preserveView?: boolean; clearing?: boolean }): void {
+        this.rawTape.replaceColumns(columns);
+        this.invalidateRawBarsCompat();
+        this.renderRetainedRawSeries(opts);
+    }
+
     private setBarSeries(raw: OHLCV[], opts?: { preserveView?: boolean; clearing?: boolean }): void {
-        this.columnarTimeUnit = 'milliseconds';
-        this.rawBars = raw;
-        this.bars = this.barTransform ? this.barTransform.full(raw) : raw;
-        this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
-        // The first PAINTED batch ends the loading state — on a deep history that is the quick
-        // preview, well before the load pipeline completes. Only a non-empty series counts: the
-        // switch-time CLEARING call says so explicitly, and an empty COMPLETED load is closed
-        // by loadMarket's finally instead (a style re-derivation over empty bars mid-load must
-        // not end a load still in flight).
-        if (!opts?.clearing && this.bars.length > 0) this.endLoad();
+        this.rawTape.replaceRows(raw);
+        this.rawBarsCompat = raw;
+        this.renderRetainedRawSeries(opts);
     }
 
     /**
@@ -1739,10 +1747,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * notifications during a backfill are pure waste).
      */
     private applyBar(bar: OHLCV, notify = true): void {
-        const last = this.rawBars[this.rawBars.length - 1];
+        const lastTime = this.rawTape.lastTime();
         let viewBar = bar;
-        if (last && bar.time === last.time) {
-            this.rawBars[this.rawBars.length - 1] = bar;
+        if (Number.isFinite(lastTime) && bar.time === lastTime) {
+            this.rawTape.replaceLastValues(bar.time, bar.open, bar.high, bar.low, bar.close, bar.volume);
             // The forming candle refined — its values are still provisional.
             this.barCause = 'tick';
             if (this.barTransform) {
@@ -1750,17 +1758,28 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 viewBar = this.barTransform.next(bar, this.bars[this.bars.length - 2]);
                 this.bars[this.bars.length - 1] = viewBar;
             }
-        } else if (!last || bar.time > last.time) {
-            this.rawBars.push(bar);
+        } else if (!Number.isFinite(lastTime) || bar.time > lastTime) {
+            this.rawTape.appendRow(bar);
             // A new bar opened, so the one before it is now FINAL — the distinction
             // `script:run` carries as `cause: 'bar'`.
             this.barCause = 'bar';
             if (this.barTransform) {
                 viewBar = this.barTransform.next(bar, this.bars[this.bars.length - 1]);
                 this.bars.push(viewBar);
+            } else {
+                this.bars.push(bar);
+                this.rawBarsCompat = this.bars;
             }
-        } else return;
-
+        } else {
+            if (this.barTransform) {
+                viewBar = this.barTransform.next(bar, this.bars[this.bars.length - 2]);
+                this.bars[this.bars.length - 1] = viewBar;
+            } else {
+                this.bars[this.bars.length - 1] = bar;
+                this.rawBarsCompat = this.bars;
+            }
+        }
+        if (this.barTransform) this.invalidateRawBarsCompat();
         this.renderer.updateBar(viewBar);
         this.events.emit('bar', bar);
         // During a backfill a tick is tagged 'backfill' too — policy-A sessions hold their
