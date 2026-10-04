@@ -115,7 +115,7 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
     const payload = readJson(await res.text());
     if (!res.ok) throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : `Historical data request failed (${res.status})`);
     const value = requireSuccessData(payload, 'Historical data request failed');
-    if (isHistoricalColumns(value)) return value;
+    if (isHistoricalColumns(value)) return value.time.length > 0 ? value : null;
     // Compatibility fallback for a broker route that has not implemented the compact
     // format yet. This path is deliberately cold-only; FYERS uses the zero-object response.
     if (Array.isArray(value)) {
