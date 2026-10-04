@@ -73,7 +73,18 @@ class ChartPerformanceTelemetry {
   }
 
   ingestRendererSnapshot(key: string, snapshot: {
-    frames: number; totalFrameMs: number; worstFrameMs: number; longFrames: number;
+    frames: number;
+    totalFrameMs: number;
+    worstFrameMs: number;
+    longFrames: number;
+    averageFrameMs?: number;
+    lastFrameMs?: number;
+    lastFrameAt?: number;
+    p95FrameMs?: number;
+    fps?: number;
+    frameBudgetMs?: number;
+    frameBudgetMisses?: number;
+    frameBudgetMissRate?: number;
     backend: 'webgl2' | 'canvas2d' | 'unknown';
   }): void {
     const m = this.entry(key);
