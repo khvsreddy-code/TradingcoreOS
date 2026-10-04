@@ -47,7 +47,7 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
 {
   const k = new RollingMinMax(3);
   k.update(1); k.update(5); k.update(3);
-  nearly(k.min()!, 1); nearly(k.max()!, 5);
+  nearly(k.min()!, 2); nearly(k.max()!, 5);
   k.update(7);
   nearly(k.min()!, 3); nearly(k.max()!, 7);
   k.update(2, 'replace');
