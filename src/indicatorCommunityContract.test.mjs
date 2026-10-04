@@ -30,10 +30,10 @@ assert(service.includes('buildIndicatorSettingsSnapshot'), 'schema-driven public
 assert(service.includes('settingsSchema: schemaSnapshot.schema'), 'published settings schema is not persisted');
 assert(settingsMigration.includes('indicator_settings jsonb'), 'public settings snapshot migration missing');
 assert(service.includes('getPublicIndicatorPublicationBySlug'), 'shareable public indicator lookup missing');
-assert(explore.includes('explore/indicators/') && explore.includes('source_snapshot'), 'public detail/source surface missing');
+assert(explore.includes('/explore/') && explore.includes('source_snapshot') && explore.includes('scriptKind'), 'public detail/source surface missing');
 assert(settings.includes('getIndicatorSettingsSchema') && settings.includes('renderField'), 'settings panel is not schema-driven');
 assert(settingsSchema.includes("id: 'inputs'") && settingsSchema.includes("id: 'style'") && settingsSchema.includes("id: 'display'"), 'shared settings schema sections missing');
-assert(app.includes("/explore/indicators") && app.includes('publicIndicatorRoute'), 'public indicator route is not protected from auth redirects');
+assert(app.includes("/explore/indicators") && app.includes("/explore/scripts") && app.includes('publicIndicatorRoute'), 'public script routes are not protected from auth redirects');
 assert(migration.includes('indicator_publications_select') && migration.includes('indicator_publications_insert_own'), 'publication RLS boundary missing');
 assert(migration.includes('indicator-covers'), 'indicator cover storage migration missing');
 assert(counterMigration.includes('indicator_publication_events_insert_public') && counterMigration.includes('handle_indicator_publication_event'), 'counter event migration missing');
