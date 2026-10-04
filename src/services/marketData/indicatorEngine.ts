@@ -1,7 +1,7 @@
 import type { IndicatorAppearanceConfig } from '../coreSpirit/indicatorAppearance';
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { buildTradingCoreVStructure } from './structureEngine';
-import { sma, ema, rma as wilder, trueRanges, atr, wma as weightedMovingAverage } from './coreIndicatorKernel';
+import { sma, ema, rma as wilder, trueRanges, atr } from './coreIndicatorKernel';
 import { RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingAbsoluteDeviation, RollingPercentile, EMAState, WMAState, centeredRollingExtrema } from './incrementalIndicatorKernel';
 import { CORE_PRICE_SOURCE_OPTIONS } from '../coreSpirit/indicatorSettingsSchema';
 import type { IndicatorSettingsSchema } from '../coreSpirit/indicatorSettingsSchema';
