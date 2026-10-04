@@ -15,10 +15,10 @@ import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDat
 import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './visualApp';
 import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
-import { sma as kernelSma, highest as kernelHighest, lowest as kernelLowest, emaStep, trueRange, rsiFromAverages } from './indicatorKernel';
+import { trueRange, rsiFromAverages } from './indicatorKernel';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
-import { CoreSpiritFusedSeriesCursor } from './seriesVector';
+import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
 export type CoreSpiritRuntimeOptions = {
@@ -83,6 +83,9 @@ export class CoreSpiritRuntime {
   private readonly fusedGroupById = new Map<string, CoreSpiritSeriesFusionPlan['groups'][number]>();
   /** One bounded snapshot per active forming-bar group; never history-sized. */
   private readonly fusedCursorSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
+  /** Direct stateful built-ins that are not absorbed into a fusion group. */
+  private readonly directKernelCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
+  private readonly directKernelSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
@@ -153,6 +156,10 @@ export class CoreSpiritRuntime {
         const cursor = this.fusedCursors.get(groupId);
         if (cursor) cursor.copyFrom(snapshot);
       }
+      for (const [key, snapshot] of this.directKernelSnapshots) {
+        const cursor = this.directKernelCursors.get(key);
+        if (cursor) cursor.copyFrom(snapshot);
+      }
       this.history[this.history.length - 1] = normalized;
     } else {
       this.realtimeRevision = 0;
@@ -167,6 +174,11 @@ export class CoreSpiritRuntime {
         const snapshot = this.fusedCursorSnapshots.get(groupId);
         if (snapshot) snapshot.copyFrom(cursor);
         else this.fusedCursorSnapshots.set(groupId, cursor.clone());
+      }
+      for (const [key, cursor] of this.directKernelCursors) {
+        const snapshot = this.directKernelSnapshots.get(key);
+        if (snapshot) snapshot.copyFrom(cursor);
+        else this.directKernelSnapshots.set(key, cursor.clone());
       }
       this.history.push(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
@@ -351,6 +363,8 @@ export class CoreSpiritRuntime {
     this.fusedCursors.clear();
     this.fusedGroupById.clear();
     this.fusedCursorSnapshots.clear();
+    this.directKernelCursors.clear();
+    this.directKernelSnapshots.clear();
     if (!this.seriesFusionPlan) return;
     for (const group of this.seriesFusionPlan.groups) {
       this.fusedGroupById.set(group.id, group);
@@ -497,14 +511,20 @@ export class CoreSpiritRuntime {
       if(!Number.isFinite(a)||!Number.isFinite(b)||!previous) return finish(false);
       return finish(name==='crossover' ? previous.a <= previous.b && a > b : previous.a >= previous.b && a < b);
     }
-    if (name==='sma'||name==='highest'||name==='lowest'||name==='change') {
-      const values=this.window(series,length,bars,index);
-      if(name==='sma') return finish(kernelSma(values, length));
-      if(name==='highest') return finish(kernelHighest(values, length));
-      if(name==='lowest') return finish(kernelLowest(values, length));
-      const current=values[0], previous=this.loadSeries(series,length,bar,bars,index); return finish(current==null||previous==null?null:current-previous);
+    const statefulSeriesNames = new Set(['sma','mean','sum','highest','lowest','stdev','variance','wma','median','zscore','normalize','persistence','ema','rma','change','pctchange']);
+    if (statefulSeriesNames.has(name)) {
+      const current = Number(args[0]);
+      if (!Number.isFinite(current)) return finish(null);
+      const operation = { name: name as CoreSpiritSeriesOperationName, length };
+      const key = 'direct:' + name + ':' + series + ':' + length;
+      let cursor = this.directKernelCursors.get(key);
+      if (!cursor) {
+        cursor = new CoreSpiritFusedSeriesCursor([operation]);
+        this.directKernelCursors.set(key, cursor);
+      }
+      const result = cursor.update(current, index)[0];
+      return finish(Number.isFinite(result) ? result : null);
     }
-    if(name==='ema') { const key=`ema:${series}:${length}`, current=Number(args[0]); if(args[0] == null || !Number.isFinite(current))return finish(null); const historyValues=this.window(series,length,bars,index); if(historyValues.length<length)return null; const prevRaw=this.state.seriesState[key]?.at(-1); const prev=prevRaw == null ? null : Number(prevRaw); const value=emaStep(current, Number.isFinite(prev as number) ? prev : null, historyValues, length); if(value == null) return finish(null); this.pushState(key,value); return finish(value); }
     if(name==='rsi') { const key=`rsi:${series}:${length}`, current=Number(args[0]), previous=index>0?Number(this.loadSeries(series,1,bar,bars,index)):NaN; if(args[0] == null || !Number.isFinite(current)||!Number.isFinite(previous)||index<length)return finish(null); const gain=Math.max(0,current-previous),loss=Math.max(0,previous-current),g=`${key}:gain`,l=`${key}:loss`,pg=Number(this.state.seriesState[g]?.at(-1)),pl=Number(this.state.seriesState[l]?.at(-1)); const ag=Number.isFinite(pg)?(pg*(length-1)+gain)/length:this.averageGain(series,length,bars,index),al=Number.isFinite(pl)?(pl*(length-1)+loss)/length:this.averageLoss(series,length,bars,index); this.pushState(g,ag);this.pushState(l,al);return finish(rsiFromAverages(ag,al)); }
     if(name==='atr') { const key=`atr:${length}`, trKey=`atr:tr:${length}`, prevClose=index>0?Number(this.loadSeries('close',1,bar,bars,index)):Number(bar.open), h=Number(bar.high),l=Number(bar.low),tr=Math.max(h-l,Math.abs(h-prevClose),Math.abs(l-prevClose)); this.pushState(trKey,tr); const trHistory=this.state.seriesState[trKey]||[]; if(trHistory.length<length)return null; const prev=Number(this.state.seriesState[key]?.at(-1)); const value=Number.isFinite(prev)?(prev*(length-1)+tr)/length:trHistory.slice(-length).reduce((a,b)=>a+b,0)/length; this.pushState(key,value); return finish(value); }
     if(name==='vwap') { const day=this.sessionDay(bar.timestamp),dayKey='vwap:day',pvKey='vwap:pv',volKey='vwap:vol'; const dayNumber=Number(day.replace(/-/g,'')); const previousDay=this.state.seriesState[dayKey]?.at(-1); if(previousDay!==dayNumber){this.state.seriesState[pvKey]=[];this.state.seriesState[volKey]=[];this.state.seriesState[dayKey]=[];} this.pushState(dayKey,Number(day.replace(/-/g,''))); const pv=Number(this.state.seriesState[pvKey]?.at(-1)||0)+((Number(bar.high)+Number(bar.low)+Number(bar.close))/3)*Math.max(0,Number(bar.volume)||0),vol=Number(this.state.seriesState[volKey]?.at(-1)||0)+Math.max(0,Number(bar.volume)||0);this.pushState(pvKey,pv);this.pushState(volKey,vol);return finish(vol?pv/vol:null); }
@@ -566,8 +586,6 @@ export class CoreSpiritRuntime {
     if(name==='footprintRows') return finish(footprint?.rows?.length ?? 0);
     return finish(args[0] ?? null);
   }
-
-  private window(name:string,length:number,bars:HistoricalCandle[],index:number):number[] { const out:number[]=[];for(let i=index;i>=Math.max(0,index-length+1);i--){const v=Number(name==='time'?this.toEpoch(bars[i].timestamp):(bars[i] as any)[name]);if(Number.isFinite(v))out.push(v);}return out; }
 
   private loadIndexedValue(name:string,index:number,bar:HistoricalCandle,bars:HistoricalCandle[],barIndex:number):number|null|CoreSpiritValue {
     if (!Number.isInteger(index) || index < 0) throw new Error(`future indexing is not allowed for ${name}[${index}]`);
