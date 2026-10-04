@@ -223,6 +223,8 @@ The mathematical hot path is now consolidated around one canonical CoreSpirit ke
 - `structureEngine.ts` no longer computes `atrValue(c.slice(0, i + 1))` for every candidate zone. ATR and rolling volume averages are materialized once and reused, removing the previous quadratic prefix-scan path.
 - HMA now uses three bounded WMA states in one chronological traversal instead of creating two full WMA histories plus a raw intermediate series.
 
+- Fractal pivot detection is now linear in history size: high/low windows are evaluated by the centered monotonic-extrema kernel instead of scanning `1..period` for every candidate bar.
+
 ### Complexity contract
 
 | Primitive | Append | Forming-bar replace |
