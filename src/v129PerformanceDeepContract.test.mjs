@@ -20,7 +20,7 @@ for(const name of ['bollinger','donchian','stochastic','cci','mfi']) assert.matc
 assert.doesNotMatch(runtime,/trHistory\.slice\(-length\)\.reduce/);
 assert.match(runtime,/if\(name==='atr'\)/);
 assert.match(runtime,/new ATRState\(length\)/);
-assert.match(runtime,/kernel\.update\(Number\(bar\.high\),Number\(bar\.low\),Number\(bar\.close\),mode\)/);
+assert.match(runtime,/kernel\.update\(Number\(bar\.high\),\s*Number\(bar\.low\),\s*Number\(bar\.close\),\s*mode\)/);
 assert.doesNotMatch(marketKernel,/gains\.slice\(0,p\)\.reduce/);
 assert.doesNotMatch(marketKernel,/for\(let j=i-p\+1;j<=i;j\+=1\)/);
 assert.match(structure,/centeredRollingExtrema\(highs, period/);
