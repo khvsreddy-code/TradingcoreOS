@@ -29,7 +29,6 @@ type KernelEntry = {
 };
 
 type RsiKernel = { gain:WilderState; loss:WilderState; previous:number|null; value:number|null };
-type HmaKernel = { half:WMAState; full:WMAState; root:WMAState };
 type PersistenceKernelState = {
   values:Float64Array; deltaSigns:Int8Array; comparisonValid:Uint8Array; comparisonSame:Uint8Array;
   period:number; cursor:number; count:number; validCount:number; comparisons:number; same:number; seen:number;
