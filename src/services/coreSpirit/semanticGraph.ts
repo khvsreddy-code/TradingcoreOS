@@ -110,6 +110,14 @@ function builtinPurity(name: string, component?: import('./coreSpiritExecutionMo
   return getCoreSpiritBuiltin(name)?.pure ?? false;
 }
 
+function builtinDeterminism(name: string, component?: import('./coreSpiritExecutionModel').CoreSpiritComponentContract): boolean {
+  if (component) return component.deterministic;
+  if (name.startsWith('ui.') || name.startsWith('visual.') || name.startsWith('app.') || name.startsWith('scan.')) return false;
+  const builtin = getCoreSpiritBuiltin(name);
+  if (!builtin) return false;
+  return builtin.capability !== 'market' && builtin.capability !== 'webhook' && builtin.capability !== 'ai';
+}
+
 function instructionDest(ins: CoreSpiritIrInstruction): string | undefined {
   return 'dest' in ins ? ins.dest : undefined;
 }
@@ -178,12 +186,12 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options
       : undefined;
     const pure = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'index' ||
       (ins.op === 'call' && builtinPurity(ins.name, component));
-    const effectful = ins.op === 'emit' || ins.op === 'setLocal' || ins.op === 'jump' || (ins.op === 'call' && !pure);
     const kind = classify(ins);
     const name = instructionName(ins);
-    const external = ins.op === 'emit' || (ins.op === 'call' && !pure);
-    const stateful = ins.op === 'setLocal' || Boolean(component?.stateful) || (ins.op === 'call' && /^(ema|rsi|atr|vwap|highest|lowest|sma|valuewhen|bar_index)$/.test(ins.name));
-    const deterministic = component ? component.deterministic : !external;
+    const stateful = ins.op === 'setLocal' || Boolean(component?.stateful) || (ins.op === 'call' && /^(ema|rma|rsi|atr|vwap|highest|lowest|sma|valuewhen|bar_index)$/.test(ins.name));
+    const deterministic = ins.op === 'call' ? builtinDeterminism(ins.name, component) : ins.op !== 'emit';
+    const effectful = ins.op === 'emit' || ins.op === 'setLocal' || ins.op === 'jump' || (ins.op === 'call' && !deterministic);
+    const external = ins.op === 'emit' || (ins.op === 'call' && !deterministic);
     const estimatedCost: CoreSpiritGraphNode['estimatedCost'] = external ? 'external' : ins.op === 'const' || ins.op === 'move' ? 'constant' : ins.op === 'call' ? (/^(model\\.|model$|predict|inference)/.test(ins.name) ? 'high' : 'medium') : 'low';
     const latencyClass: CoreSpiritGraphNode['latencyClass'] = estimatedCost === 'external' ? 'external' : estimatedCost === 'high' ? 'slow' : estimatedCost === 'medium' ? 'normal' : estimatedCost === 'constant' ? 'instant' : 'fast';
     const parallelizable = deterministic && !stateful && !effectful;
