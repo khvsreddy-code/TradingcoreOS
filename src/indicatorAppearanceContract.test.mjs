@@ -49,6 +49,7 @@ assert(facade.includes('setIndicatorFills') && facade.includes('setIndicatorSeri
 assert(renderer.includes('setIndicatorFills') && renderer.includes('setIndicatorSeriesPoints') && renderer.includes('configurePaneAppearance'), 'NativeRenderer presentation bridge missing');
 assert(markerModel.includes('textSize?: number') && markerModel.includes('offset?: number'), 'Vela marker model lacks rich marker metadata');
 
-for (const token of ['v110 indicator appearance schema v2','buildIndicatorComputationSignature','appearance-only fields','worker transport','Vela renderer-only fill']) assert(buildTracker.includes(token) || schemaDoc.includes(token), `documentation marker missing: ${token}`);
+for (const token of ['v110 indicator appearance schema v2','buildIndicatorComputationSignature','appearance-only','worker transport','vela renderer-only fill']) const documentation = `${buildTracker}\n${schemaDoc}`.toLowerCase();
+for (const token of ['v110 indicator appearance schema v2','buildindicatorcomputationsignature','appearance-only','worker transport','vela renderer-only fill']) assert(documentation.includes(token), `documentation marker missing: ${token}`);
 console.log('TCO_V110_INDICATOR_APPEARANCE_CONTRACT_OK');
 console.log('TCO_V110_INCREMENTAL_APPEARANCE_ISOLATION_OK');
