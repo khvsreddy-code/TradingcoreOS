@@ -135,3 +135,10 @@ The standard rolling family covered by this architecture includes Bollinger, Don
 | VWAP | session accumulator | O(1) |
 
 Grouping, pivot and structural indicators may use different state machines when their semantics require them. The hard rule is that a historical loop must not rebuild and rescan the same period-sized window for every bar.
+
+
+## v130 — one kernel owner
+
+CoreSpirit now has one mathematical kernel owner: `src/services/coreSpirit/statefulIndicatorKernel.ts`. The fused-series executor imports those kernels instead of maintaining parallel rolling implementations. This closes the last known kernel-duplication gap without changing the CoreSpirit language surface.
+
+Production indicator code must not introduce a period-sized window inside a historical loop when a canonical bounded kernel exists. This applies to scalar helpers, standard indicators, advanced indicators and structural analytics. Fixed-size pattern windows remain acceptable when their cost is independent of user-selected period and their semantics are clearer as a bounded pattern check.
