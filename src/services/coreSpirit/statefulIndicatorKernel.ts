@@ -671,6 +671,7 @@ export class VWAPSessionState {
 export class RSIState {
   private readonly period:number;
   private previous:number|null=null;
+  private stablePrevious:number|null=null;
   private avgGain:number|null=null;
   private avgLoss:number|null=null;
   private stableGain:number|null=null;
@@ -684,23 +685,25 @@ export class RSIState {
   update(value:number, mode:'append'|'replace'='append'):number|null {
     const v=Number(value); if(!Number.isFinite(v)) return null;
     if(this.previous==null){this.previous=v;return null;}
-    const d=v-this.previous,g=Math.max(d,0),l=Math.max(-d,0);
+    const prior = mode==='replace' && this.stablePrevious!=null ? this.stablePrevious : this.previous;
+    const d=v-prior,g=Math.max(d,0),l=Math.max(-d,0);
     if(mode==='replace' && this.avgGain!=null && this.avgLoss!=null && this.stableGain!=null && this.stableLoss!=null){
       this.currentValue=this.valueFrom((this.period-1)*this.stableGain/this.period+g/this.period,(this.period-1)*this.stableLoss/this.period+l/this.period);
       this.avgGain=(this.period-1)*this.stableGain/this.period+g/this.period;
       this.avgLoss=(this.period-1)*this.stableLoss/this.period+l/this.period;
       this.previous=v; return this.currentValue;
     }
+    this.stablePrevious=this.previous;
     this.previous=v;
     if(this.seedCount<this.period){this.seedGain+=g;this.seedLoss+=l;this.seedCount+=1;if(this.seedCount<this.period)return null;this.avgGain=this.seedGain/this.period;this.avgLoss=this.seedLoss/this.period;this.stableGain=null;this.stableLoss=null;}
     else {this.stableGain=this.avgGain;this.stableLoss=this.avgLoss;this.avgGain=((this.period-1)*(this.avgGain??0)+g)/this.period;this.avgLoss=((this.period-1)*(this.avgLoss??0)+l)/this.period;}
     this.currentValue=this.valueFrom(this.avgGain??0,this.avgLoss??0); return this.currentValue;
   }
-  reset(){this.previous=null;this.avgGain=null;this.avgLoss=null;this.stableGain=null;this.stableLoss=null;this.seedGain=0;this.seedLoss=0;this.seedCount=0;this.currentValue=null;}
+  reset(){this.previous=null;this.stablePrevious=null;this.avgGain=null;this.avgLoss=null;this.stableGain=null;this.stableLoss=null;this.seedGain=0;this.seedLoss=0;this.seedCount=0;this.currentValue=null;}
   clone(): RSIState { const next = new RSIState(this.period); next.copyFrom(this); return next; }
   copyFrom(source: RSIState): void {
     if (source.period !== this.period) throw new Error('incompatible RSI state');
-    this.previous = source.previous; this.avgGain = source.avgGain; this.avgLoss = source.avgLoss;
+    this.previous = source.previous; this.stablePrevious = source.stablePrevious; this.avgGain = source.avgGain; this.avgLoss = source.avgLoss;
     this.stableGain = source.stableGain; this.stableLoss = source.stableLoss;
     this.seedGain = source.seedGain; this.seedLoss = source.seedLoss; this.seedCount = source.seedCount;
     this.currentValue = source.currentValue;
