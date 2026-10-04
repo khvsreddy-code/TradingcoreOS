@@ -130,6 +130,57 @@ export class ColumnarHistoryTape {
         return keepOlder;
     }
 
+    /**
+     * Prepend an ordered columnar history page without materializing OHLCV objects.
+     * Only values strictly older than the retained head are accepted, preserving the
+     * exact backfill boundary and allowing the caller to hand the same columns to a
+     * native renderer.
+     */
+    prependColumns(columns: ColumnarBars): number {
+        const available = Math.max(0, Math.min(
+            columns.length,
+            columns.time.length,
+            columns.open.length,
+            columns.high.length,
+            columns.low.length,
+            columns.close.length,
+            columns.volume.length,
+        ));
+        if (!available) return 0;
+        const factor = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? 1000 : 1;
+        const first = this.firstTime();
+        let olderCount = available;
+        if (Number.isFinite(first)) {
+            olderCount = 0;
+            while (olderCount < available && Number(columns.time[olderCount]) * factor < first) olderCount += 1;
+        }
+        if (!olderCount) return 0;
+        const keepOlder = Math.min(olderCount, this.maxCapacity - this._length);
+        if (keepOlder <= 0) return 0;
+        const sourceStart = olderCount - keepOlder;
+        this.ensureCapacity(Math.max(256, keepOlder + this._length));
+        if (this._length > 0) {
+            this._time.copyWithin(keepOlder, 0, this._length);
+            this._open.copyWithin(keepOlder, 0, this._length);
+            this._high.copyWithin(keepOlder, 0, this._length);
+            this._low.copyWithin(keepOlder, 0, this._length);
+            this._close.copyWithin(keepOlder, 0, this._length);
+            this._volume.copyWithin(keepOlder, 0, this._length);
+        }
+        for (let i = 0; i < keepOlder; i += 1) {
+            const source = sourceStart + i;
+            this._time[i] = Number(columns.time[source]) * factor;
+            this._open[i] = Number(columns.open[source]);
+            this._high[i] = Number(columns.high[source]);
+            this._low[i] = Number(columns.low[source]);
+            this._close[i] = Number(columns.close[source]);
+            const volume = Number(columns.volume[source]);
+            this._volume[i] = Number.isFinite(volume) ? volume : Number.NaN;
+        }
+        this._length += keepOlder;
+        return keepOlder;
+    }
+
     appendValues(time: number, open: number, high: number, low: number, close: number, volume?: number): void {
         if (this._length >= this.maxCapacity) this.dropOldest(1);
         else this.ensureCapacity(this._length + 1);
