@@ -27,7 +27,7 @@ import { ThemeProvider } from './theme/ThemeContext';
 const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminal').then(m => ({ default: m.LiveTradingTerminal })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const PredictionCenterPage = lazy(() => import('./pages/PredictionCenterPage').then(m => ({ default: m.PredictionCenterPage })));
-const ModelsPage = PredictionCenterPage;
+const ModelsPage = lazy(() => import('./pages/ModelsPage').then(m => ({ default: m.ModelsPage })));
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
 const IndicatorsPage = lazy(() => import('./pages/IndicatorsPage').then(m => ({ default: m.IndicatorsPage })));
 const IndicatorExplorePage = lazy(() => import('./pages/IndicatorExplorePage').then(m => ({ default: m.IndicatorExplorePage })));
@@ -53,6 +53,9 @@ class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, { error: Err
 function pathnameIsPublicIndicator(path: string) {
   return path === '/explore/indicators' || path.startsWith('/explore/indicators/');
 }
+function pathnameIsPublicScript(path: string) {
+  return path === '/explore/scripts' || path.startsWith('/explore/scripts/');
+}
 
 function AppContent() {
   if (window.location.pathname.startsWith('/auth/broker-callback')) return <BrokerCallbackPage />;
@@ -60,7 +63,7 @@ function AppContent() {
   if (window.location.pathname === '/terms') return <LegalPage kind="terms" />;
   const { user, loading: authLoading, isAuthenticated, authStep } = useAuth(); const { profile, loading: profileLoading } = useProfile(); void profile;
   const [pathname, setPathname] = useState(() => window.location.pathname); const [routeErrorReset, setRouteErrorReset] = useState(0);
-  const publicIndicatorRoute = pathnameIsPublicIndicator(pathname); const [hasConnectedBroker, setHasConnectedBroker] = useState<boolean>(() => tradingCoreRuntime.hasConnectedBroker()); const [brokerRestoreReady, setBrokerRestoreReady] = useState(!isAuthenticated); const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); const initialProtectedEntry = useRef(workspacePaths.includes(window.location.pathname as WorkspaceRoute)); const currentView = viewFromPath(pathname); const protectedEntry = currentView === 'app' || currentView === 'broker-connection'; const isSystemInitializing = authLoading || (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
+  const publicIndicatorRoute = pathnameIsPublicIndicator(pathname) || pathnameIsPublicScript(pathname); const [hasConnectedBroker, setHasConnectedBroker] = useState<boolean>(() => tradingCoreRuntime.hasConnectedBroker()); const [brokerRestoreReady, setBrokerRestoreReady] = useState(!isAuthenticated); const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); const initialProtectedEntry = useRef(workspacePaths.includes(window.location.pathname as WorkspaceRoute)); const currentView = viewFromPath(pathname); const protectedEntry = currentView === 'app' || currentView === 'broker-connection'; const isSystemInitializing = authLoading || (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
   useEffect(() => { const pop=()=>setPathname(window.location.pathname); window.addEventListener('popstate',pop); return()=>window.removeEventListener('popstate',pop); },[]);
   useEffect(() => { let cancelled=false; if (publicIndicatorRoute) { setBrokerRestoreReady(true); return () => { cancelled=true; }; } if(authLoading||!isAuthenticated||!user){if(!authLoading&&!isAuthenticated&&!cancelled)setBrokerRestoreReady(true);return;} setBrokerRestoreReady(false); void tradingCoreRuntime.restoreBrokerConnections().finally(()=>{if(!cancelled){setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker());setBrokerRestoreReady(true);}}); return()=>{cancelled=true;}; },[authLoading,isAuthenticated,user?.id,publicIndicatorRoute]);
   useEffect(() => { const check=()=>setHasConnectedBroker(tradingCoreRuntime.hasConnectedBroker()); check(); const a=tradingCoreRuntime.on('BROKER_CONNECTED',check),b=tradingCoreRuntime.on('BROKER_DISCONNECTED',check); return()=>{a();b();}; },[]);
