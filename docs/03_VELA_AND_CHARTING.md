@@ -89,3 +89,39 @@ The first native Vela history paint uses compact broker columns when available. 
 ### TCO chrome model
 
 The production chart chrome uses a graphite-black base with royal purple/indigo accents. The duplicate watchlist control is replaced by the **Bookmarks** side panel, and the topbar provides explicit **Panels** and profile/account actions. Workspace state continues through the Vela persistence adapter, with TCO exposing `saveNow()` for scheduled autosave.
+
+## v127 — columnar retained history
+
+The retained RAW Vela history is now backed by `ColumnarHistoryTape`. It stores OHLCV in typed numeric columns with a 50,000-bar capacity and performs prepend/append/replace-last mutations directly against the tape.
+
+`OHLCV[]` remains available as a compatibility projection for session/replay/script consumers that have not yet moved to the columnar ABI. This distinction is explicit; the tape is the source of truth.
+
+## v127 — range patching
+
+Vela's `ValuePatch` ABI already supports `replace-range`. CoreSpirit now supplies `IndicatorModel.dirty`, and the orchestrator converts dirty models into range deltas using binary time bounds. Untouched historical values are not rewritten.
+
+This is the intended bridge from reactive CoreSpirit execution to renderer work: semantic dirty span → model dirty span → RenderPacket/ValuePatch dirty span → retained Vela scene update.
+
+## v127 — rendering telemetry
+
+The native renderer exposes frame-paint counters through `getPerformanceStats()`. Workspace aggregation reports per-cell backend, frame count, average/worst frame time and long-frame count. TCO polls these samples and publishes them to the performance telemetry store plus `window.__TCO_PERF__` for browser instrumentation.
+
+The backend field identifies the active rendering backend; it is not presented as a direct GPU timer measurement.
+
+## Deep-history interaction invariant
+
+```
+5,000 initial candles
+→ visible immediately
+→ left-edge trigger
+→ one older 5,000 page
+→ preserve logical viewport
+→ repeat
+→ hard 50,000 retention cap
+```
+
+This remains independent from indicator calculation: history transport, CoreSpirit dirty execution and Vela rendering are separate layers.
+
+## Motion boundary
+
+Motion remains intentionally restrained. UI/DOM motion uses the existing Motion/CSS layer; Vela owns chart navigation animation. Three.js is not used for routine DOM transitions because it would introduce an unnecessary rendering subsystem.
