@@ -8,6 +8,7 @@ import type { IndicatorModel } from '../model/indicator';
 import type { ValuePatch, SeriesValueDelta, DirtyRange } from '../model/patch';
 import { ColumnarHistoryTape } from '../model/ColumnarHistoryTape';
 import { isLineLikeSeries } from '../model/series';
+import type { SeriesPoint, MarkerPoint } from '../model/series';
 import type { InputSchema, InputValue } from '../model/inputs';
 import type { VelaTheme, MarketConfig, MarketSwitch, MarketSnapshot, AddIndicatorOptions, PriceStyle, MoveTarget, PaneInfo } from '../options';
 import type { PaneController } from '../PanesControl';
