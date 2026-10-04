@@ -33,6 +33,17 @@ function barTimeMillis(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
+function lowerBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: number): number {
+  let lo = 0, hi = bars.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (barTimeMillis(bars[mid]?.timestamp) < targetMs) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function upperBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: number): number {
+  let lo = 0, hi = bars.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (barTimeMillis(bars[mid]?.timestamp) <= targetMs) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
 function titleFromSource(source: string): string {
   const match = source.match(/\b(?:indicator|study|component)\s+["']([^"']+)["']/i);
   if (match?.[1]) return match[1].trim();
@@ -149,6 +160,7 @@ export class CoreSpiritVelaEngine {
       props: [],
       meta,
       reactsToViewport: false,
+      maxLookback: compiled.ir.maxLookback,
       token,
     };
   }
@@ -209,6 +221,37 @@ export class CoreSpiritVelaEngine {
           else priceLines.push(line);
         }
       }
+    };
+
+    const collectRange = (objects: CoreSpiritObject[], dirty: DirtyRange) => {
+      const rangedSeries = new Map<string, SeriesPoint[]>();
+      const other: CoreSpiritObject[] = [];
+      for (const output of objects) {
+        if (output.kind !== 'series') { other.push(output); continue; }
+        const id = String(output.seriesId || output.name || `${token.sourceId}:series`);
+        const list = rangedSeries.get(id) || [];
+        const time = Number(output.time);
+        const value = output.value == null ? null : Number(output.value);
+        if (Number.isFinite(time) && time >= dirty.from && time <= dirty.to) list.push({
+          time: time as SeriesPoint['time'],
+          value: Number.isFinite(value) ? value : null,
+        });
+        rangedSeries.set(id, list);
+      }
+      for (const [id, fresh] of rangedSeries) {
+        const existing = points.get(id) || [];
+        let from = 0, to = existing.length;
+        if (existing.length) {
+          let lo=0,hi=existing.length;
+          while(lo<hi){const mid=(lo+hi)>>>1;if(Number(existing[mid]!.time)<dirty.from)lo=mid+1;else hi=mid;}
+          from=lo; lo=0;hi=existing.length;
+          while(lo<hi){const mid=(lo+hi)>>>1;if(Number(existing[mid]!.time)<=dirty.to)lo=mid+1;else hi=mid;}
+          to=lo;
+        }
+        existing.splice(from, Math.max(0,to-from), ...fresh);
+        points.set(id, existing);
+      }
+      if (other.length) collect(other);
     };
 
     const emitModel = (dirty?: DirtyRange) => {
@@ -291,6 +334,20 @@ export class CoreSpiritVelaEngine {
           markers.clear();
           priceLines.splice(0, priceLines.length);
           runtime.loadIr(token.ir);
+          if (reason === 'complete') return;
+          if (dirty && Number.isFinite(dirty.from) && Number.isFinite(dirty.to)) {
+            const start = lowerBoundBarTime(currentBars, dirty.from);
+            const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirty.to));
+            const rangeBars = currentBars.slice(start, end);
+            if (rangeBars.length) {
+              const rangeRuntime = new CoreSpiritRuntime({ symbol: req.market.symbol, timeframe: req.market.timeframe, sourceId: token.sourceId, executionMode: req.mode === 'live' ? 'realtime' : 'historical', executionTarget: 'chart' });
+              rangeRuntime.loadIr(token.ir);
+              const rangeResult = rangeRuntime.executeIr(token.ir, rangeBars);
+              collectRange(rangeResult.outputs, dirty);
+              emitModel(dirty);
+              return;
+            }
+          }
           const result = runtime.executeIr(token.ir, currentBars);
           collect(result.outputs);
           liveStarted = req.mode === 'live';
@@ -302,7 +359,7 @@ export class CoreSpiritVelaEngine {
         if (!liveStarted) rehydrateForLive();
         const latest = currentBars.at(-1);
         if (!latest) return;
-        const latestTime = Number(latest.timestamp);
+        const latestTime = barTimeMillis(latest.timestamp);
         const result = runtime.executeBar(latest);
         collect(result.outputs);
         lastTime = latestTime;
