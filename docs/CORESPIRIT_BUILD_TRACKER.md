@@ -6,11 +6,11 @@
 
 ## Current release
 
-**Release:** CoreSpirit v115 — typed canonical data ingress + Vela workspace integration
+**Release:** CoreSpirit v127 — stateful indicator kernels + columnar Vela history + dirty-span rendering telemetry
 
-**Tracker state:** current implementation truth for the CoreSpirit indicator/component ABI plus the v115 canonical typed-data and Vela workspace boundary.
+**Tracker state:** current implementation truth for the CoreSpirit indicator/component ABI, stateful math kernels, columnar Vela history boundary, dirty-span execution/patching and renderer telemetry.
 
-**Architecture document:** `docs/CORESPIRIT.md`
+**Architecture document:** `docs/01_CORESPIRIT.md`
 
 **Machine release record:** `CORESPIRIT_V111_MANIFEST.json`
 
@@ -52,10 +52,10 @@
 - [x] Extended Supabase workspace persistence through the existing Vela snapshot path; chart layout, ticker/timeframe, drawings and panel state remain inside the persisted workspace document.
 - [x] Removed redundant workspace RLS policies and optimized remaining preference RLS evaluation.
 - [x] Public CoreSpirit indicator exploration, Models, Automations and CoreSpirit routes remain first-class product surfaces.
-- [~] Canonical typed data reaches the native Vela renderer; Vela's orchestration tape still retains an OHLCV compatibility representation.
-- [ ] Replace Vela orchestration `OHLCV[]` history storage with a columnar tape without breaking scripting/session/drawing APIs.
-- [ ] Dirty-span CoreSpirit execution and RenderPacket range revisions.
-- [ ] GPU/frame-budget telemetry and browser verification across 1/4/8 chart layouts.
+- [x] Canonical typed data reaches the native Vela renderer and the orchestration source of truth is now the Vela columnar tape; compatibility OHLCV projection is explicit.
+- [x] Replaced Vela orchestration `OHLCV[]` history storage with a bounded columnar tape while retaining an explicit compatibility projection for scripting/session/drawing consumers.
+- [x] Dirty-span CoreSpirit execution and Vela `replace-range` model revisions are implemented.
+- [~] Renderer frame/backend telemetry and browser instrumentation are implemented; actual browser-session evidence across 1/4/8 layouts remains environment-dependent.
 
 ### v126 data/UX depth pass — 2026-10-04
 
@@ -71,8 +71,8 @@
 - [x] Elevated the shared workspace shell with graphite/indigo chrome, slower transitions and a direct Community Scripts entry point.
 - [~] Public script detail/reuse is unified with the existing CoreSpirit editor flow; a dedicated strategy-authoring workspace is still future work.
 - [ ] Replace Vela's internal OHLCV orchestration tape with a true columnar history tape while preserving session/replay/drawing compatibility.
-- [ ] Propagate exact dirty ranges through CoreSpirit execution and RenderPacket/Vela scene revisions.
-- [ ] Add GPU/frame telemetry and browser verification for first paint, 5k prepend, live ticks and 1/4/8-chart layouts.
+- [x] Propagated exact dirty ranges through CoreSpirit execution and RenderPacket/Vela `replace-range` revisions.
+- [~] Added renderer frame/backend telemetry and browser-testable instrumentation; actual browser execution evidence remains a separate environment gate.
 
 ### v109 architecture lock — 2026-09-29
 
