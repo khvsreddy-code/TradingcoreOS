@@ -526,7 +526,24 @@ export class CoreSpiritRuntime {
       return finish(Number.isFinite(result) ? result : null);
     }
     if(name==='rsi') { const key=`rsi:${series}:${length}`, current=Number(args[0]), previous=index>0?Number(this.loadSeries(series,1,bar,bars,index)):NaN; if(args[0] == null || !Number.isFinite(current)||!Number.isFinite(previous)||index<length)return finish(null); const gain=Math.max(0,current-previous),loss=Math.max(0,previous-current),g=`${key}:gain`,l=`${key}:loss`,pg=Number(this.state.seriesState[g]?.at(-1)),pl=Number(this.state.seriesState[l]?.at(-1)); const ag=Number.isFinite(pg)?(pg*(length-1)+gain)/length:this.averageGain(series,length,bars,index),al=Number.isFinite(pl)?(pl*(length-1)+loss)/length:this.averageLoss(series,length,bars,index); this.pushState(g,ag);this.pushState(l,al);return finish(rsiFromAverages(ag,al)); }
-    if(name==='atr') { const key=`atr:${length}`, trKey=`atr:tr:${length}`, prevClose=index>0?Number(this.loadSeries('close',1,bar,bars,index)):Number(bar.open), h=Number(bar.high),l=Number(bar.low),tr=Math.max(h-l,Math.abs(h-prevClose),Math.abs(l-prevClose)); this.pushState(trKey,tr); const trHistory=this.state.seriesState[trKey]||[]; if(trHistory.length<length)return null; const prev=Number(this.state.seriesState[key]?.at(-1)); const value=Number.isFinite(prev)?(prev*(length-1)+tr)/length:trHistory.slice(-length).reduce((a,b)=>a+b,0)/length; this.pushState(key,value); return finish(value); }
+    if(name==='atr') {
+      const key=`atr:${length}`, trKey=`atr:tr:${length}`, sumKey=`atr:trsum:${length}`;
+      const previousClose=index>0?Number(this.loadSeries('close',1,bar,bars,index)):Number(bar.open);
+      const h=Number(bar.high),l=Number(bar.low);
+      const tr=Math.max(h-l,Math.abs(h-previousClose),Math.abs(l-previousClose));
+      this.pushState(trKey,tr);
+      const trHistory=this.state.seriesState[trKey]||[];
+      const previousSum=Number(this.state.seriesState[sumKey]?.at(-1));
+      const rollingSum=Number.isFinite(previousSum)
+        ? previousSum + tr - (trHistory.length>length ? Number(trHistory[trHistory.length-length-1]) : 0)
+        : tr;
+      this.pushState(sumKey,rollingSum);
+      if(trHistory.length<length)return null;
+      const prev=Number(this.state.seriesState[key]?.at(-1));
+      const value=Number.isFinite(prev)?(prev*(length-1)+tr)/length:rollingSum/length;
+      this.pushState(key,value);
+      return finish(value);
+    }
     if(name==='vwap') { const day=this.sessionDay(bar.timestamp),dayKey='vwap:day',pvKey='vwap:pv',volKey='vwap:vol'; const dayNumber=Number(day.replace(/-/g,'')); const previousDay=this.state.seriesState[dayKey]?.at(-1); if(previousDay!==dayNumber){this.state.seriesState[pvKey]=[];this.state.seriesState[volKey]=[];this.state.seriesState[dayKey]=[];} this.pushState(dayKey,Number(day.replace(/-/g,''))); const pv=Number(this.state.seriesState[pvKey]?.at(-1)||0)+((Number(bar.high)+Number(bar.low)+Number(bar.close))/3)*Math.max(0,Number(bar.volume)||0),vol=Number(this.state.seriesState[volKey]?.at(-1)||0)+Math.max(0,Number(bar.volume)||0);this.pushState(pvKey,pv);this.pushState(volKey,vol);return finish(vol?pv/vol:null); }
     if(name==='__member_get') {
       const ref=args[0]; const member=String(args[1]??'');
