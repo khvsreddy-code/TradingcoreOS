@@ -22,6 +22,8 @@ assert.doesNotMatch(marketKernel,/for\(let j=i-p\+1;j<=i;j\+=1\)/);
 const structure=read('src/services/marketData/structureEngine.ts');
 assert.doesNotMatch(structure,/atrValue\(c\.slice\(0, i \+ 1\)/);
 assert.doesNotMatch(structure,/\.slice\(Math\.max\(0, index - period \+ 1\)/);
+assert.doesNotMatch(structure,/for \(let j = 1; j <= period; j \+= 1\)/);
+assert.match(structure,/centeredRollingExtrema\(highs, period/);
 assert.match(read('src/services/marketData/indicatorEngine.ts'),/const halfState=new WMAState/);
 
 for(const method of ['timeAt','lastIndexAtOrBefore','firstIndexAtOrAfter','countTimeRange']) assert.match(tape,new RegExp(method+'\\('));
