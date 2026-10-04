@@ -434,16 +434,31 @@ class RollingExtremaTree {
   clear():void { this.minTree.fill(Number.POSITIVE_INFINITY); this.maxTree.fill(Number.NEGATIVE_INFINITY); }
 }
 
-/** Exact bounded rolling extrema. A segment tree is used because forming-bar replacement is a point update: unlike a plain monotonic deque, it never loses dominated values that may become extrema after replacement. */
+/** Exact bounded rolling extrema. A segment tree gives deterministic O(log P)
+ * append and point-replacement updates. It is used here because forming-bar
+ * replacement is a true point update; a monotonic deque can discard a value
+ * that becomes the extrema again after replacement. */
+
 export class RollingMinMax extends RollingBase {
   private readonly tree: RollingExtremaTree;
   constructor(period:number){super(period);this.tree=new RollingExtremaTree(this.capacity);}
   update(value:number,mode:'append'|'replace'='append'){
     const v=Number(value);
     if(!Number.isFinite(v)) return {count:this.count,min:this.min(),max:this.max()};
-    const slot=mode==='replace'&&this.count ? this.slotForCurrent() : this.cursor;
-    this.appendSlot(v);
-    this.tree.set(slot,v);
+
+    if(mode==='replace'&&this.count){
+      // A forming-bar revision changes the current slot; it is not a new bar.
+      // Keep the cursor/absolute index unchanged so downstream rolling state
+      // remains aligned with the historical timeline.
+      const slot=this.slotForCurrent();
+      this.replaceCurrentSlot(v);
+      this.tree.set(slot,v);
+    }else{
+      const slot=this.cursor;
+      this.appendSlot(v);
+      this.tree.set(slot,v);
+    }
+
     return {count:this.count,min:this.min(),max:this.max()};
   }
   min(){ return this.count===this.capacity ? this.tree.min() : null; }

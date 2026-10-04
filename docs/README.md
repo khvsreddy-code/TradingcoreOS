@@ -1,21 +1,36 @@
 # TradingCoreOS Documentation
 
-## Active documents
-1. `01_CORESPIRIT.md` — CoreSpirit language, compiler and runtime.
-2. `02_DATA_AND_PERFORMANCE.md` — market data, incremental compute, history and performance.
-3. `03_VELA_AND_CHARTING.md` — Vela boundary, columnar tape, rendering and history paging.
-4. `04_INDICATORS_AND_PLATFORM.md` — indicators, settings, dependency graph and public scripts.
-5. `CORESPIRIT_BUILD_TRACKER.md` — living implementation tracker and open architectural debt.
+## Active source of truth
 
-Do not create another architecture markdown file for a subsystem already covered here. Superseded notes belong under `docs/archive/history/`.
+1. `01_CORESPIRIT.md` — CoreSpirit language, compiler, runtime and mathematical execution.
+2. `02_DATA_AND_PERFORMANCE.md` — canonical data transport, history, kernels and performance budgets.
+3. `03_VELA_AND_CHARTING.md` — Vela boundary, retained history, patching, rendering and chart interaction.
+4. `04_INDICATORS_AND_PLATFORM.md` — indicator artifacts, settings, public scripts and computation policy.
+5. `CORESPIRIT_BUILD_TRACKER.md` — living implementation tracker and explicit open architectural debt.
 
-## Runtime path
-FYERS compact columns → TCO canonical data plane → Vela ColumnarHistoryTape → CoreSpirit stateful kernels → causal dirty range → retained Vela patch → frame/backend telemetry.
+Historical stage-by-stage notes belong under `docs/archive/`. Do not create a new architecture markdown file when the subject already belongs in one of the five active documents.
+
+## Locked runtime path
+
+```
+FYERS compact columns
+  → TCO canonical typed data plane
+  → Vela ColumnarHistoryTape
+  → CoreSpirit stateful kernels
+  → causal dirty range
+  → renderer/model range patch
+  → Vela retained scene
+  → frame/backend telemetry
+```
+
+Compatibility representations are allowed only at explicit boundaries. Source-level contracts must never describe a compatibility seam as zero-object or zero-copy without runtime evidence.
 
 ## History policy
-- First load: **5,000 candles**.
-- Left-edge demand: **5,000 older candles** per page.
-- Retention cap: **50,000 candles**.
 
-## Documentation truth
-Source contracts and CI are structural evidence. They are not substitutes for authenticated browser, network or GPU measurements.
+- First chart load: **5,000 candles**.
+- Left-edge demand page: **5,000 older candles**.
+- Retained history ceiling: **50,000 candles**.
+
+## Performance truth
+
+CI proves source and contract invariants. It does not prove authenticated broker latency, browser FPS, GPU utilization or visual quality. Those measurements remain explicit validation gates.

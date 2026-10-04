@@ -4,209 +4,123 @@
 
 ```
 Broker / TCO feed
- → CanonicalMarketDataStore
- → typed-array views
-    ├─ CoreSpirit
-    ├─ indicator kernels
-    ├─ analytics
-    └─ Vela adapter
- → RenderPacket
- → incremental Vela patch
+ → canonical typed columns
+ → CoreSpirit / analytics
+ → renderer-neutral model
+ → retained Vela range patch
+ → renderer/frame
 ```
 
-The canonical columns are typed arrays for time/open/high/low/close/volume.
+Canonical market data is time/open/high/low/close/volume typed storage. `HistoricalCandle[]` is an edge compatibility representation, not the preferred hot-path transport.
 
-## Worker transport
+## History policy
 
-Canonical worker packets are copied once at the ownership boundary and expose their six ArrayBuffers as transferables. SharedArrayBuffer is deliberately deferred.
+- Initial chart load: **5,000 candles**.
+- Older left-edge page: **5,000 candles**.
+- Fyers history request cap: **5,000 candles**.
+- Maximum retained history: **50,000 candles**.
+- Identical history requests are cached and single-flight deduplicated.
+- Older history is fetched on demand instead of preloading 50k bars.
 
-The transport boundary is now explicit, but some legacy worker kernels still convert packets into `HistoricalCandle[]`. That conversion is the next removal target; those kernels must not be described as zero-object compute until migrated.
+## Stateful indicator mathematics
 
-## History
-
-- initial chart load: 5,000 candles
-- older demand page: 5,000
-- Fyers request cap: 5,000
-- retained shared history: 50,000
-- identical requests: cached/single-flight
-- older history: demand-driven near the visible left edge
-
-## CoreSpirit fusion
-
-The fused executor has a caller-owned-output form:
-
-```executeCoreSpiritFusedSeriesPipelineInto(..., output)```
-
-This reuses the destination and performs one chronological traversal. Bounded state is held per operation. No full historical intermediate array is created between compatible stages.
-
-## Dirty spans — next performance boundary
-
-Every mutation should carry:
+The canonical CoreSpirit kernel layer provides bounded state for rolling and recursive calculations:
 
 ```
-timelineKey
-revision
-from
-to
-reason
+RollingSum / RollingMean
+RollingVariance
+RollingMinMax
+RollingMedian / RollingPercentile
+RollingAbsoluteDeviation
+EMA / Wilder / ATR / WMA / VWAP
 ```
 
-Only the affected dependency closure should be recomputed. Then the same exact range should be sent to the RenderPacket and Vela.
+The standard indicator engine uses these primitives for Bollinger, Donchian, Stochastic, CCI and MFI. This makes their bounded rolling portion linear over N for fixed-period sum/mean/variance operations, with logarithmic expected/update work for ordered-statistic operations.
 
-## Frame budget
+The market-data `incrementalIndicatorKernel.ts` is only a compatibility re-export of the same canonical kernel layer. It must never become a second mathematical implementation.
 
-Track:
+### Complexity contract
 
-- data→compute latency
-- compute→render latency
+| Family | Per-bar hot-path state |
+|---|---:|
+| SMA / sum | O(1) |
+| Bollinger | O(1) |
+| Donchian | O(log P) |
+| Stochastic | O(log P) |
+| CCI / MAD | O(log P) expected |
+| MFI | O(1) |
+| Median / percentile | O(log P) expected |
+| EMA / Wilder / ATR / WMA / VWAP | O(1) |
+
+## Avoiding false performance claims
+
+Some advanced/structural indicators intentionally use semantic grouping, fixed-size pattern checks, session aggregation or centered scans. They are not automatically equivalent to a simple rolling statistic.
+
+The hard prohibition is narrower and enforceable:
+
+```
+For each bar:
+  construct the same period-sized window
+  scan/sort that window
+```
+
+when bounded state can provide identical semantics.
+
+Reference implementations in tests may still use a simple windowed algorithm because their purpose is numerical equivalence testing.
+
+## Columnar transport
+
+The first 5,000-bar Vela load uses compact numeric history when the broker supports it. Deep backfill can prepend typed columns directly into `ColumnarHistoryTape`.
+
+The retained tape supports binary time lookup, append, replace-last, prepend and bounded trimming.
+
+**Current status: partial completion.** The native tape is columnar, but selected replay/session/drawing/transformed-chart consumers still request `OHLCV[]` compatibility projections. The final removal of that mirror is an ABI migration, not a documentation-only change.
+
+## Dirty-span compute
+
+The primary history-backfill path carries a causal dirty interval plus lookback warmup and performs ranged indicator/model recomputation.
+
+**Current status: partial completion.** The exact range exists through the primary CoreSpirit/Vela path, but every RenderPacket/ScenePatch collection and every renderer-owned overlay is not yet guaranteed to consume the same bounded span. A full replacement remains an explicit fallback for unproven cases.
+
+## Telemetry
+
+Source instrumentation exists for transport, compute, patch, renderer and frame stages. Native Vela reports frame count, worst/average frame time, p95 frame time, FPS estimate, frame-budget misses and backend.
+
+**Current status: instrumentation complete; runtime verification open.**
+
+Track at minimum:
+
+- transport latency
+- compute latency
 - patch latency
-- allocations/update
-- long tasks
-- dropped frames
+- renderer time
+- p95 frame time
+- frame-budget miss rate
 - dirty-span width
 - full replacement count
+- live forming-bar update cost
 
-The goal is bounded work per market update, not merely good average throughput.
+## Browser/GPU validation gate
 
-## Do not
+The repository contains `tools/verify-chart-performance.mjs` for browser checks. The following measurements are deliberately **not marked complete** until captured against a running/authenticated environment:
 
-- introduce SAB before ownership/reclamation rules are explicit;
-- rebuild 20k points for one live tick;
-- add another normalization layer;
-- create another chart-vendor abstraction;
-- hide full replacements behind methods named “update”.
+- 1-chart layout
+- 4-chart layout
+- 8-chart layout
+- 5,000-candle first load
+- 5,000-candle backward prepend
+- live forming-bar replacement
+- actual browser/network latency
+- GPU vendor/utilization counters
 
+## v130
 
-## v125 — fast chart history contract
-
-The production chart history path is explicitly locked to:
-
-```
-Vela first load
-  → 5,000 candles
-  → interactive immediately
-  → visible left-edge trigger
-  → exactly one older 5,000-candle page
-  → prepend while preserving logical viewport
-  → repeat until the 50,000 retention ceiling or source genesis
-```
-
-FYERS is queried through the authenticated server route, capped at 5,000 candles per request, with server-side cache and single-flight deduplication. Epoch range boundaries anchor backward pages to exact candle boundaries. FYERS documents that history timestamps identify the start of each candle interval.
-
-The Vela fork uses a 5,000-bar history chunk and a 200-bar left-edge trigger. The TCO provider's `loadRange` routes those requests through the shared ChartDataPlane instead of creating a second history path.
-
-The remaining zero-object work is explicit: the native renderer consumes columnar data, but Vela's orchestration tape still keeps an OHLCV compatibility representation for history/session engines. Removing that last representation is a separate ABI-level migration and must not be hidden behind a misleading function name.
-
-## v126 — compact FYERS → Vela history fast path
-
-The first chart load now has an explicit compact numeric transport for FYERS-capable broker adapters:
-
-```text
-FYERS History API
-  → compact numeric OHLCV columns
-  → TradingCore runtime
-  → shared ChartDataPlane
-  → CanonicalDataPlane / typed arrays
-  → Vela setBarsColumns()
-```
-
-The ordinary `HistoricalCandle[]` route remains as a compatibility boundary for secondary/ranged history and APIs that still require objects. The user-visible policy is unchanged: first load is 5,000 candles; left-edge demand fetches another 5,000; retention is capped at 50,000.
-
-`MarketDataStore.replaceColumns()` writes directly into the canonical typed buffers, removing the previous browser-side conversion loop before the first native Vela paint.
-
-### Remaining hot-path debt
-
-The remaining materialization is concentrated in Vela orchestration/history compatibility and ranged/secondary-series consumers. That should be removed only after a true columnar history-tape ABI exists for replay, session windows, drawings and transformed chart types.
-
-## v127 — stateful indicator kernels
-
-All bounded-period math must use incremental state rather than creating a new window per output bar. The implementation now includes:
-
-- `RollingSum` and `RollingMean` with ring-buffer state
-- `RollingVariance` using running sum and sum-of-squares
-- `RollingMinMax` with monotonic deques
-- `RollingMedian` with dual heaps and delayed deletion
-- `RollingPercentile` using the ordered multiset's order-statistic selection
-- EMA/Wilder/ATR/VWAP state machines
-- centered extrema scans implemented as one-pass monotonic-deque traversals
-
-Bollinger, Donchian, Stochastic, CCI, MFI and the standard indicator engine now consume these stateful primitives. Advanced structure/volatility paths were also removed from repeated per-bar rolling scans where bounded state provides the same semantics.
-
-The remaining slices in the indicator engine are either fixed-size pattern checks or whole-group/day calculations; they are not `O(N × period)` rolling windows.
-
-## v127 — Vela columnar history tape
-
-Vela's retained raw history now has a dedicated `ColumnarHistoryTape` source of truth for time/open/high/low/close/volume. The tape is bounded at 50,000 bars and supports replace, prepend, append, replace-last and trim operations without rebuilding the retained object array.
-
-The renderer already owns its own numeric column store, so the Vela orchestration layer now passes numeric history through the columnar seam and materializes `OHLCV[]` only when compatibility consumers explicitly need it.
-
-## v127 — exact dirty-span execution
-
-The data path now carries exact dirty spans from history mutation into script execution. Each CoreSpirit artifact exposes its maximum causal lookback; a prepend re-run includes that warmup before replacing only the affected model range.
-
-This changes the expensive path from:
-
-```
-prepend 5k
-→ execute all retained history
-→ rebuild all plots
-→ full renderer replacement
-```
-
-to:
-
-```
-prepend 5k
-→ bounded causal warmup
-→ execute affected span
-→ replace-range patch
-→ preserve untouched series
-```
-
-## v127 — frame/backend telemetry
-
-Vela's native renderer records frame-paint duration, worst frame, long-frame count and backend type (`webgl2` / `canvas2d`). VelaWorkspace aggregates those metrics across mounted cells, and TCO ingests them into `chartPerformanceTelemetry`.
-
-Browser verification can inspect `window.__TCO_PERF__`. Actual browser/deployed verification remains a separate environment-dependent gate; source contracts do not claim that a browser session was executed when it was not.
+The canonical scalar compatibility layer was cleaned up to eliminate old per-window `slice/reduce/spread` patterns. `RollingMinMax` forming-bar replacement is corrected, and the existing stateful parity contract continues to validate replacement semantics.
 
 ## Performance invariants
 
-1. O(N × period) rolling implementations are forbidden when bounded state can express the same calculation.
-2. A live tick updates only the forming-bar state.
-3. A 5,000-bar historical prepend does not imply a full retained-series renderer replacement.
-4. Columnar data remains the canonical market-data representation through the hot path.
-5. Compatibility object materialization is explicit and measurable.
-
-## v128 — deep performance closure
-
-### Stateful mathematical kernels
-
-The canonical CoreSpirit kernel layer now owns bounded-period primitives used by the runtime and market-data indicator engine. The market-data compatibility module is a re-export, so new code does not create a second kernel implementation.
-
-Rolling sum/mean/variance are O(1) append/replace operations; min/max use monotonic deques; median uses bounded dual-heap state; percentile and mean-absolute-deviation use an ordered statistic structure; EMA/Wilder/ATR/WMA/VWAP use persistent state machines. Forming-bar updates use replacement state rather than rebuilding a window.
-
-Standard indicators such as Bollinger, Donchian, Stochastic, CCI and MFI therefore execute as approximately O(N) over history for their bounded rolling portions, with O(log P) expected work only for ordered-statistic operations.
-
-### Columnar deep backfill
-
-Vela's retained history is now columnar through the backward paging path as well as the renderer path. The engine asks the provider for `loadRangeColumns`, prepends the returned typed columns directly into `ColumnarHistoryTape`, and sends the same retained columns to the renderer.
-
-On identity price charts, only the newly introduced compatibility head page is materialized into `OHLCV[]`; the already-retained tail is reused by reference. Full compatibility rebuilding remains isolated to transformed price styles or an explicit fallback.
-
-### Dirty-span closure
-
-Backfill calculates a causal dirty span using the newly prepended region plus the maximum registered lookback. CoreSpirit evaluates that bounded range, `IndicatorModel.dirty` carries the exact time span, `rangeSeriesDelta` finds binary time bounds, and Vela applies `replace-range` only to the changed section.
-
-### Telemetry
-
-Native Vela telemetry now reports p95 frame duration, FPS estimate, 16.67ms frame-budget misses, budget-miss rate, long-frame count and rendering backend. A bounded 240-sample frame history is maintained without per-frame allocation.
-
-Browser verification accepts multiple URLs/cell-count expectations through `TCO_BROWSER_URLS` and `TCO_EXPECTED_CELLS`, with an optional `TCO_MAX_P95_FRAME_MS` gate.
-
-## v129 — latency budget model
-
-The performance model now separates transport, compute, patch and renderer/frame costs. Columnar market data is the preferred transport shape, CoreSpirit indicator state is bounded by lookback/period, and dirty backfills execute only the causal span required to repair an invalidated range.
-
-The 5,000-first / 5,000-backward / 50,000-retention history policy remains fixed.
-
-Browser runtime measurements are intentionally separate from source contracts.
+1. A live tick updates the forming-bar state instead of rebuilding retained history.
+2. A 5,000-bar prepend does not imply a 50,000-bar renderer replacement.
+3. Columnar storage remains the canonical market-data representation.
+4. Compatibility object creation is explicit and measurable.
+5. Source contracts do not substitute for browser/GPU evidence.

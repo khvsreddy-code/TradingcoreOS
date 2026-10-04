@@ -1,153 +1,111 @@
 # Vela and charting
 
-The **canonical columnar data plane** is the authoritative OHLCV transport between TradingCoreOS market data and Vela. Compatibility object projections are downstream only.
+Vela is TradingCoreOS's sole charting/rendering engine. Application code crosses into it through TCO-owned facades/adapters.
 
-## Vendor boundary
+## Boundary
 
 ```
 TradingCoreOS
- ↓
-velaChartFacade
- ↓
-TCO Vela adapter
- ↓
-modified Vela
- ↓
-native renderer
+ → velaChartFacade
+ → TCO Vela adapter/provider
+ → modified Vela
+ → native renderer
 ```
 
-Application code should not import Vela renderer internals directly.
+TCO feature code should not depend directly on Vela renderer implementation classes.
 
-## Columnar candle API
+## Columnar retained history
 
-The native path exposes:
+`ColumnarHistoryTape` is the retained raw-history source of truth for identity OHLCV charts.
 
-```
-setBarsColumns(columns)
-updateBarColumns(update)
-setLodIndex(index)
-setVisibleRange(range)
-```
+It supports:
 
-The renderer owns its mutable numeric capacity after the boundary. Forming-bar updates and finalized-bar appends are O(1) mutations.
+- typed time/open/high/low/close/volume columns
+- binary time lookup
+- append
+- replace-last
+- prepend
+- bounded trim
+- 50,000-bar retention
 
-A legacy OHLCV mirror remains for Vela compatibility consumers, but it is not the preferred candle painting transport. **object materialization** is an explicit compatibility boundary and is never the canonical render transport.
-
-## Incremental contract
-
-```
-history       → setData once
-new bar       → append
-forming bar   → replace-last
-style change  → style patch
-marker change → marker range patch
-fill change   → fill patch
-```
-
-A full replacement is allowed only when identity/order/continuity cannot prove a smaller patch.
-
-## Deep history
+The native renderer consumes typed columns. The user-visible history flow is:
 
 ```
-Vela range request
- → TCO provider
- → ChartDataPlane
- → local cache
- → Fyers only if missing
- → prepend 5,000
- → preserve viewport
+5,000 initial
+ → left-edge trigger
+ → 5,000 older
+ → preserve logical viewport
+ → repeat
+ → 50,000 maximum
 ```
 
-Retention remains bounded at 50,000 bars.
+### Important status
 
-## LOD
+This is **not yet a zero-object end-to-end Vela tape**.
 
-LOD uses typed bucket arrays and source ranges. The target is **zero-object LOD** on the native path; legacy reduced-candle object input is compatibility-only.
+Selected Vela consumers still use explicit `OHLCV[]` projections for compatibility, especially where existing replay/session/drawing/transformed-price APIs have not migrated to a columnar ABI. The native candle renderer is not dependent on those objects, but the compatibility mirror cannot be removed until those consumers are converted.
+
+## Rendering patch model
+
+The preferred mutation classes are:
+
+```
+initial history → set data
+new bar        → append
+forming bar    → replace-last
+older page     → prepend
+style change   → style patch
+localized data → replace-range
+```
+
+A full replacement is only valid when identity/order/continuity or a dependency contract prevents a smaller patch.
+
+## Dirty-range bridge
+
+The primary CoreSpirit/Vela history path can produce a causal dirty range and convert it into a binary-bounded range delta.
+
+**Current status: partial completion.** The bridge is real, but not all renderer-owned collections and overlay categories are guaranteed to preserve one exact dirty span end-to-end. This is one of the three remaining deep architecture phases.
 
 ## Motion
 
-Current Vela defaults are intentionally restrained:
+Chart motion belongs to Vela. Current restrained defaults are:
 
-- zoom 260ms
-- pan inertia 360ms
-- scroll 320ms
-- autoscale 260ms
-- live-bar easing 180ms
+- zoom: 260ms
+- pan inertia: 360ms
+- scroll: 320ms
+- autoscale: 260ms
+- forming-bar easing: 180ms
 
-Motion is spatial continuity, not decoration. Motion remains the DOM/UI animation layer; Vela owns chart motion.
+DOM/UI motion remains with Motion/CSS. Three.js is not used for ordinary DOM animation because it would create an unnecessary rendering subsystem for the terminal.
 
-## Viewport rule
+## Alt drawing wheel
 
-History prepend must preserve the user's logical/time anchor. Data growth must not automatically refit the chart to the newest candle.
+Holding Alt on the chart opens the Vela-owned drawing wheel. It is populated from the Vela drawing registry and includes common line, Fibonacci, shape, text and anchored-VWAP tools. The center action opens the active panel dock.
 
-## v126 — Vela interaction and history ingress
+The React workspace does not mount a competing Alt wheel.
 
-Vela now owns the complete Alt quick-tool interaction. Holding **Alt** on the chart opens a radial wheel sourced from the Vela drawing registry. The wheel exposes common line, Fibonacci, shape, text and anchored-VWAP tools, while the center action opens the active Vela panel dock. Editable fields are excluded so Alt remains safe during text entry.
+## Workspace persistence
 
-The live workspace no longer mounts a competing React Alt indicator wheel. This keeps input ownership inside the chart engine and avoids duplicate overlays.
+Vela workspace state is persisted through the TCO Supabase adapter with a local fallback. The live workspace schedules a 15-minute autosave.
 
-The first native Vela history paint uses compact broker columns when available. Vela still exposes `setBarsColumns()`/`updateBarColumns()` to the native renderer, while older compatibility consumers may still receive `OHLCV[]`.
+Persisted state includes the chart/layout state used for the user experience: symbol/timeframe, drawings, indicators, panels, layout and related Vela workspace state.
 
-### TCO chrome model
+## Performance telemetry
 
-The production chart chrome uses a graphite-black base with royal purple/indigo accents. The duplicate watchlist control is replaced by the **Bookmarks** side panel, and the topbar provides explicit **Panels** and profile/account actions. Workspace state continues through the Vela persistence adapter, with TCO exposing `saveNow()` for scheduled autosave.
+Vela exposes frame/backend statistics and TCO aggregates stage-level telemetry. The browser verifier reads `window.__TCO_PERF__`.
 
-## v127 — columnar retained history
+**Runtime browser verification is still open.** Source contracts do not claim that authenticated browser or GPU measurements have been captured.
 
-The retained RAW Vela history is now backed by `ColumnarHistoryTape`. It stores OHLCV in typed numeric columns with a 50,000-bar capacity and performs prepend/append/replace-last mutations directly against the tape.
+## v130 boundary cleanup
 
-`OHLCV[]` remains available as a compatibility projection for session/replay/script consumers that have not yet moved to the columnar ABI. This distinction is explicit; the tape is the source of truth.
+The canonical stateful mathematical path is now separated from the legacy scalar compatibility helpers. Vela's retained history remains columnar by default, while compatibility object materialization stays explicit and tracked.
 
-## v127 — range patching
+## Three remaining deep phases
 
-Vela's `ValuePatch` ABI already supports `replace-range`. CoreSpirit now supplies `IndicatorModel.dirty`, and the orchestrator converts dirty models into range deltas using binary time bounds. Untouched historical values are not rewritten.
+1. **True columnar history ABI completion** — migrate the remaining Vela session/replay/drawing/transform consumers and remove the compatibility mirror.
+2. **Exact dirty-span completion** — carry one proven causal range through CoreSpirit → renderer/model packets → Vela invalidation for every supported overlay collection.
+3. **GPU/frame runtime verification** — capture actual browser measurements for 1/4/8 charts, 5k load, 5k prepend and live ticks; add GPU telemetry only where the browser/backend can provide meaningful counters.
 
-This is the intended bridge from reactive CoreSpirit execution to renderer work: semantic dirty span → model dirty span → RenderPacket/ValuePatch dirty span → retained Vela scene update.
+## Historical renderer migration notes
 
-## v127 — rendering telemetry
-
-The native renderer exposes frame-paint counters through `getPerformanceStats()`. Workspace aggregation reports per-cell backend, frame count, average/worst frame time and long-frame count. TCO polls these samples and publishes them to the performance telemetry store plus `window.__TCO_PERF__` for browser instrumentation.
-
-The backend field identifies the active rendering backend; it is not presented as a direct GPU timer measurement.
-
-## Deep-history interaction invariant
-
-```
-5,000 initial candles
-→ visible immediately
-→ left-edge trigger
-→ one older 5,000 page
-→ preserve logical viewport
-→ repeat
-→ hard 50,000 retention cap
-```
-
-This remains independent from indicator calculation: history transport, CoreSpirit dirty execution and Vela rendering are separate layers.
-
-## Motion boundary
-
-Motion remains intentionally restrained. UI/DOM motion uses the existing Motion/CSS layer; Vela owns chart navigation animation. Three.js is not used for routine DOM transitions because it would introduce an unnecessary rendering subsystem.
-
-## v128 — columnar deep backfill
-
-The `ColumnarHistoryTape` is now used for both initial data and deep backward paging. `loadRangeColumns` carries a bounded older-history page from the TCO provider into `prependColumns`, avoiding a retained-series OHLCV object rebuild on every 5,000-bar prepend.
-
-The identity-chart path updates the renderer from the retained columnar snapshot and materializes only the new compatibility head page when legacy consumers need objects. Transformed price styles retain their compatibility projection because they genuinely require derived candle values.
-
-## v128 — dirty-range/render closure
-
-History backfill supplies a causal dirty interval based on the new head plus indicator `maxLookback`. CoreSpirit computes that bounded span and Vela converts the resulting model into a binary-bounded `replace-range` value patch. Unchanged series tails remain intact.
-
-## v128 — frame budget telemetry
-
-Per-cell Vela performance now includes `p95FrameMs`, `fps`, `frameBudgetMs`, `frameBudgetMisses` and `frameBudgetMissRate` in addition to average/worst/long-frame counters. The frame sample buffer is fixed at 240 entries, keeping telemetry overhead bounded.
-
-The browser verification harness can exercise one, four and eight-cell deployments by supplying matching URL/cell-count pairs. It also fails when observed p95 frame time exceeds the configured threshold.
-
-## Archived renderer migration reference
-
-The historical renderer migration material has been consolidated here. The important durable rule is that Vela is the sole chart/rendering engine and TradingCoreOS talks to it through TCO-owned facades/adapters. Renderer-specific compatibility belongs behind that boundary; new chart capabilities should extend Vela's headless interfaces, columnar data path and retained patch model rather than reintroducing a second chart stack.
-
-## Stage 94 retained zero-copy contract
-
-The canonical columnar data plane feeds the `Vela NativeRenderer` without object materialization in the hot LOD/GPU path. The active chart boundary retains the historical `canonical columnar data plane`, `Vela NativeRenderer`, `object materialization`, and `zero-object LOD` terminology so the retired standalone renderer-migration document is no longer needed.
+The old standalone renderer migration document has been retired. Durable renderer-boundary information lives here; superseded implementation notes remain in `docs/archive/history/`.

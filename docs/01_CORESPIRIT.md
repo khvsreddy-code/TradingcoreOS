@@ -1,140 +1,129 @@
-# CoreSpirit — language and scripting
+# CoreSpirit — language, compiler and execution
 
-CoreSpirit is TradingCoreOS's native language for indicators, models, visuals and automation.
+CoreSpirit is TradingCoreOS's only user-facing scripting language for indicators, models, visuals and automation.
 
 ## Compiler model
 
 ```
-source → CST/tokens → normalized AST → semantic model → IR → one VM/reactive runtime
+source
+ → CST/tokens
+ → normalized AST
+ → semantic model
+ → IR
+ → one reactive VM/runtime
 ```
 
-Users write CoreSpirit; they do not need to write IR or renderer code.
+Users write CoreSpirit declarations; they do not need to understand IR, renderer internals or broker authority.
 
-## Foundations
+## Language foundations
 
-### DATA
+CoreSpirit's small semantic surface is built around:
+
+`DATA / LET / WHEN / SHOW / MODEL / AUTOMATE`
+
+Typed series, dependency graphs, deterministic replay, source maps, capability sandboxing and renderer-neutral visual intent are compiler/runtime concerns.
+
+## Stateful mathematics
+
+The canonical bounded-state layer is:
+
+```
+RollingSum
+RollingMean
+RollingVariance
+RollingMin / RollingMax
+RollingMedian
+RollingPercentile
+RollingAbsoluteDeviation
+EMA
+Wilder
+ATR
+WMA
+VWAP
+```
+
+The execution rule is:
+
+> A fixed-period historical calculation must not recreate and rescan the same period-sized window for every bar when an equivalent bounded state machine exists.
+
+Implementation strategy:
+
+| Operation | State | Typical hot-path cost |
+|---|---|---:|
+| Sum / mean | ring buffer + running sum | O(1) |
+| Variance / stdev | running moments | O(1) |
+| Min / max | bounded extrema tree for append + forming-bar replacement | O(log P) |
+| Median / percentile | ordered statistics | O(log P) expected |
+| WMA | running weighted state | O(1) |
+| EMA / Wilder | recursive state | O(1) |
+| ATR | true-range + Wilder state | O(1) |
+| VWAP | session accumulator | O(1) |
+
+A monotonic deque remains the preferred structure for scans that have monotone append semantics, including centered extrema. Forming-bar replacement is different: arbitrary point replacement can invalidate a dominated deque entry, so `RollingMinMax` uses a bounded segment tree.
+
+## Fused execution
+
+Compatible deterministic series chains are executed through one chronological traversal with bounded state and one final output buffer. The semantic dependency graph decides fusion eligibility; regex/source-text discovery is not an execution mechanism.
+
+```
+source series
+  → stateful stage
+  → scalar handoff
+  → stateful stage
+  → final output
+```
+
+The current `seriesVector.ts` still contains a second private fused-state implementation. It is bounded and tested, but deduplication into the canonical kernel layer remains open and is tracked explicitly.
+
+## Indicator authoring
+
+Authors should normally express the mathematical calculation directly:
+
 ```corespirit
-data market = market("NSE:NIFTY50-INDEX", "5m")
-```
-
-### LET
-```corespirit
-let fast = ema(close, 20)
-let slow = ema(close, 50)
-let spread = fast - slow
-```
-
-### WHEN / IF
-```corespirit
-when close > fast
-  show marker(high, "above", "breakout")
-
-if close > slow
-  show line(fast)
-```
-
-### SHOW
-SHOW publishes renderer-neutral visual intent: series, line, marker, label, box, zone, fill, level, background and related visual primitives.
-
-### MODEL / AUTOMATE
-MODEL consumes a model artifact. AUTOMATE declares automation intent. Broker authority remains outside the numeric VM.
-
-## Common built-ins
-
-```
-ema(source, length)
-sma(source, length)
-rsi(source, length)
-atr(length)
-highest(source, length)
-lowest(source, length)
-change(source)
-pctchange(source)
-zscore(source, length)
-normalize(source, length)
-median(source, length)
-```
-
-Context helpers include `market()` and `timeframe()`.
-
-## Indicator example
-
-```corespirit
-data market = market("NSE:NIFTY50-INDEX", "5m")
-
 let basis = ema(close, 20)
-let deviation = atr(14)
-let upper = basis + deviation * 2
-let lower = basis - deviation * 2
-
-when close > upper
-  show marker(high, "above", "breakout")
-
-show line(basis, "Basis", "#7c5cff", 2)
-show line(upper, "Upper", "#94a3b8", 1)
-show line(lower, "Lower", "#94a3b8", 1)
+let upper = basis + atr(14) * 2
+show line(basis)
+show line(upper)
 ```
 
-## Settings
+The compiler/runtime absorbs rolling buffers, incremental state and execution planning.
 
-Indicator parameters can be number, integer, decimal, boolean, enum, color, source, timeframe, symbol, session, price, duration or string.
+Manual `slice()`, `reduce()`, repeated `Math.max/min` window scans and `sort()` inside a historical loop are prohibited when a canonical kernel can express the same operation.
 
-Parameters can publish default, min/max/step, group, tooltip, dependency, visibility and validation.
+## Revisions and forming bars
 
-Appearance-only changes must not trigger mathematical recomputation.
+A forming candle is a replacement, not a new historical bar. Stateful kernels therefore support `append` and semantically valid `replace` operations.
 
-## Authoring rules
+A replacement must update the current state slot without advancing the cursor, then repair any dependent state that observes the changed value.
 
-1. Name calculations with LET.
-2. Prefer built-ins over manual rolling loops.
-3. Keep visual declarations separate from numeric calculations.
-4. Keep scripts deterministic for replay.
-5. Declare multi-symbol/timeframe dependencies explicitly.
-6. Do not make indicators or models broker authorities.
+## Dirty spans
 
-## Performance
+CoreSpirit has a causal lookback model and the chart engine can evaluate a bounded affected range plus warmup. This is implemented on the primary backfill path, but it is **not yet universal across every renderer/model collection and overlay type**.
 
-A compatible chain such as:
+The target is:
 
 ```
-close → EMA → difference → normalization → signal
+history mutation
+ → dirty [from,to]
+ → causal warmup
+ → CoreSpirit range execution
+ → renderer-neutral range delta
+ → Vela replace-range patch
 ```
 
-is executed as one chronological traversal with bounded state. Eligibility comes from the semantic dependency graph, not regex/source-text discovery.
+The fallback full recomputation path remains legal when a dependency cannot prove a smaller safe range.
 
-## Stateful math is part of CoreSpirit's execution contract
+## Performance boundary
 
-CoreSpirit built-ins lower to stateful kernels whenever the operation has bounded rolling state. The canonical kernel family is:
+The runtime should optimize the user's source without expanding CoreSpirit into a large collection of manual optimization keywords. Stateful kernels, semantic scheduling, dirty ranges and fused execution are compiler/runtime machinery.
 
-```
-RollingSum · RollingMean · RollingVariance
-RollingMin · RollingMax · RollingMedian
-EMA · Wilder · ATR · VWAP
-```
+## v130 deep kernel pass
 
-Ring buffers retain the bounded input state. Monotonic deques handle rolling extrema. Running sums and sums-of-squares handle mean/variance. Exact rolling median uses dual heaps with delayed deletion; percentile/rank operations use the ordered multiset. These primitives let a historical pass remain approximately O(N) for fixed-period indicators instead of repeatedly creating and scanning windows.
+- Scalar indicator compatibility helpers now route period work through the canonical stateful kernels rather than reconstructing windows with `slice/reduce/spread`.
+- The forming-bar replacement path for `RollingMinMax` is corrected so replacement does not advance the rolling cursor.
+- The existing numerical kernel tests continue to serve as parity guards.
+- Kernel deduplication between `statefulIndicatorKernel.ts` and `seriesVector.ts` remains explicitly open.
 
-Authoring rule: prefer the built-in/stateful primitive over hand-written `slice()/Math.max()/Math.min()/reduce()/sort()` loops.
+## Authority boundary
 
-## Causal dirty spans
-
-Every CoreSpirit prepared artifact can expose its maximum causal lookback. When older chart history is prepended, Vela supplies an exact dirty timeline and CoreSpirit executes only the affected range plus the required causal warmup. The resulting model carries the same dirty span into Vela's range patch layer.
-
-```
-history prepend
-  → dirty.from / dirty.to
-  → maxLookback warmup
-  → CoreSpirit range execution
-  → renderer-neutral model
-  → replace-range patch
-```
-
-A full historical re-run remains the compatibility path for operations without a valid bounded causal range.
-
-## v129 — bounded indicator state
-
-CoreSpirit rolling mathematics now uses bounded state machines rather than period-window reconstruction. Sums/means use running aggregates, variance maintains running moments, extrema use monotonic deques, median/percentile use ordered state, and EMA/Wilder/ATR/WMA/VWAP retain incremental state.
-
-The legacy indicator compatibility surface was rewritten to remove repeated `slice`, `reduce`, sort and spread max/min patterns. Full-history callers should use the vector/fused path or the new `*Series` helpers.
-
-`seriesVector.ts` remains a deduplication target because it still carries private fused-state implementations even though those implementations are bounded and linear.
+Indicator and model computation cannot directly authorize broker execution. Risk and execution authority remain outside the numeric VM.
