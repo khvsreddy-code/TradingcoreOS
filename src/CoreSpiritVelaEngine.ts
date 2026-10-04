@@ -348,7 +348,9 @@ export class CoreSpiritVelaEngine {
           if (dirty && Number.isFinite(dirty.from) && Number.isFinite(dirty.to)) {
             const start = lowerBoundBarTime(currentBars, dirty.from);
             const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirty.to));
-            const rangeBars = currentBars.slice(start, end);
+            const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
+            const executionStart = Math.max(0, start - maxLookback);
+            const rangeBars = currentBars.slice(executionStart, end);
             if (rangeBars.length) {
               const rangeRuntime = new CoreSpiritRuntime({ symbol: req.market.symbol, timeframe: req.market.timeframe, sourceId: token.sourceId, executionMode: req.mode === 'live' ? 'realtime' : 'historical', executionTarget: 'chart' });
               rangeRuntime.loadIr(token.ir);
