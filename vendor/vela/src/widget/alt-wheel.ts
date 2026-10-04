@@ -162,20 +162,18 @@ export class AltDrawingWheel {
     private readonly orbit: HTMLDivElement;
     private readonly buttons: HTMLButtonElement[] = [];
     private openState = false;
-    private active = false;
     private readonly onResize = () => this.position();
     private readonly onKeyDown = (event: KeyboardEvent) => {
         if (event.key !== 'Alt' || event.repeat) return;
-        this.active = true;
+        if (this.isEditable(event.target)) return;
+        event.preventDefault();
         this.open();
     };
     private readonly onKeyUp = (event: KeyboardEvent) => {
         if (event.key !== 'Alt') return;
-        this.active = false;
         this.close();
     };
     private readonly onBlur = () => {
-        this.active = false;
         this.close();
     };
 
@@ -229,8 +227,8 @@ export class AltDrawingWheel {
         this.orbit.appendChild(hint);
         host.appendChild(this.root);
 
-        host.addEventListener('keydown', this.onKeyDown);
-        host.ownerDocument.addEventListener('keyup', this.onKeyUp);
+        host.ownerDocument.addEventListener('keydown', this.onKeyDown, true);
+        host.ownerDocument.addEventListener('keyup', this.onKeyUp, true);
         window.addEventListener('resize', this.onResize, { passive: true });
         window.addEventListener('blur', this.onBlur);
     }
@@ -244,6 +242,11 @@ export class AltDrawingWheel {
         this.root.dataset.open = '1';
         this.root.setAttribute('aria-hidden', 'false');
         this.position();
+    }
+
+    private isEditable(target: EventTarget | null): boolean {
+        const element = target instanceof HTMLElement ? target : null;
+        return !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName));
     }
 
     close(): void {
@@ -265,8 +268,8 @@ export class AltDrawingWheel {
 
     destroy(): void {
         this.active = false;
-        this.host.removeEventListener('keydown', this.onKeyDown);
-        this.host.ownerDocument.removeEventListener('keyup', this.onKeyUp);
+        this.host.ownerDocument.removeEventListener('keydown', this.onKeyDown, true);
+        this.host.ownerDocument.removeEventListener('keyup', this.onKeyUp, true);
         window.removeEventListener('resize', this.onResize);
         window.removeEventListener('blur', this.onBlur);
         this.root.remove();
