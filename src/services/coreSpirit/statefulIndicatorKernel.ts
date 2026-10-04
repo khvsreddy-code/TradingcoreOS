@@ -573,7 +573,7 @@ export class RollingPersistenceState extends RollingBase {
     const previousSign = absoluteIndex > 0 ? this.signs[previousSlot]! : 0;
 
     if (this.count === this.capacity) {
-      const comparisonSlot = (slot + 2) % this.capacity;
+      const comparisonSlot = (slot + 1) % this.capacity;
       if (this.comparisonValid[comparisonSlot]) {
         this.comparisons -= 1; this.same -= this.comparisonSame[comparisonSlot] ? 1 : 0;
         this.comparisonValid[comparisonSlot] = 0; this.comparisonSame[comparisonSlot] = 0;
