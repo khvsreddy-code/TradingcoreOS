@@ -75,3 +75,24 @@ The goal is bounded work per market update, not merely good average throughput.
 - add another normalization layer;
 - create another chart-vendor abstraction;
 - hide full replacements behind methods named “update”.
+
+
+## v125 — fast chart history contract
+
+The production chart history path is explicitly locked to:
+
+```
+Vela first load
+  → 5,000 candles
+  → interactive immediately
+  → visible left-edge trigger
+  → exactly one older 5,000-candle page
+  → prepend while preserving logical viewport
+  → repeat until the 50,000 retention ceiling or source genesis
+```
+
+FYERS is queried through the authenticated server route, capped at 5,000 candles per request, with server-side cache and single-flight deduplication. Epoch range boundaries anchor backward pages to exact candle boundaries. FYERS documents that history timestamps identify the start of each candle interval.
+
+The Vela fork uses a 5,000-bar history chunk and a 200-bar left-edge trigger. The TCO provider's `loadRange` routes those requests through the shared ChartDataPlane instead of creating a second history path.
+
+The remaining zero-object work is explicit: the native renderer consumes columnar data, but Vela's orchestration tape still keeps an OHLCV compatibility representation for history/session engines. Removing that last representation is a separate ABI-level migration and must not be hidden behind a misleading function name.
