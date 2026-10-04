@@ -123,7 +123,258 @@ class OrderedMultiset {
   erase(key:number){this.root=this.eraseNode(this.root,key);}
   countLE(key:number){let n=this.root,total=0;while(n){if(key<n.key)n=n.left;else{total+=this.size(n.left)+n.count;n=n.right;}}return total;}
   sumLE(key:number){let n=this.root,total=0;while(n){if(key<n.key)n=n.left;else{total+=this.sum(n.left)+n.key*n.count;n=n.right;}}return total;}
+  select(rank:number):number|null { if(rank<0||rank>=this.size(this.root))return null; let n=this.root,k=Math.floor(rank);while(n){const left=this.size(n.left);if(k<left){n=n.left;continue;}if(k<left+n.count)return n.key;k-=left+n.count;n=n.right;}return null; }
   clear(){this.root=null;this.seed=0x9e3779b9;}
+}
+
+class BinaryHeap {
+  private readonly data: number[] = [];
+  constructor(private readonly higher: (a: number, b: number) => boolean) {}
+  get size() { return this.data.length; }
+  peek(): number | undefined { return this.data[0]; }
+  push(value: number): void {
+    let i = this.data.length;
+    this.data.push(value);
+    while (i > 0) {
+      const parent = (i - 1) >>> 1;
+      if (this.higher(this.data[parent]!, value)) break;
+      this.data[i] = this.data[parent]!;
+      i = parent;
+    }
+    this.data[i] = value;
+  }
+  pop(): number | undefined {
+    if (!this.data.length) return undefined;
+    const root = this.data[0]!;
+    const last = this.data.pop()!;
+    if (this.data.length) {
+      let i = 0;
+      while (true) {
+        const left = i * 2 + 1;
+        if (left >= this.data.length) break;
+        const right = left + 1;
+        let child = left;
+        if (right < this.data.length && this.higher(this.data[right]!, this.data[left]!)) child = right;
+        if (this.higher(last, this.data[child]!)) break;
+        this.data[i] = this.data[child]!;
+        i = child;
+      }
+      this.data[i] = last;
+    }
+    return root;
+  }
+  values(): number[] { return this.data.slice(); }
+  replace(values: number[]): void { this.data.length = 0; for (const value of values) this.push(value); }
+}
+
+class DualHeapMedian {
+  private readonly lower = new BinaryHeap((a, b) => a > b);
+  private readonly upper = new BinaryHeap((a, b) => a < b);
+  private readonly delayed = new Map<number, number>();
+  private lowerSize = 0;
+  private upperSize = 0;
+
+  private prune(heap: BinaryHeap): void {
+    while (heap.size) {
+      const value = heap.peek()!;
+      const count = this.delayed.get(value) ?? 0;
+      if (count <= 0) return;
+      heap.pop();
+      if (count === 1) this.delayed.delete(value); else this.delayed.set(value, count - 1);
+    }
+  }
+
+  private rebalance(): void {
+    this.prune(this.lower);
+    this.prune(this.upper);
+    if (this.lowerSize > this.upperSize + 1) {
+      const value = this.lower.pop()!;
+      this.lowerSize -= 1;
+      this.upper.push(value);
+      this.upperSize += 1;
+      this.prune(this.lower);
+    } else if (this.lowerSize < this.upperSize) {
+      const value = this.upper.pop()!;
+      this.upperSize -= 1;
+      this.lower.push(value);
+      this.lowerSize += 1;
+      this.prune(this.upper);
+    }
+  }
+
+  add(value: number): void {
+    if (!Number.isFinite(value)) return;
+    this.prune(this.lower);
+    if (!this.lower.size || value <= this.lower.peek()!) {
+      this.lower.push(value);
+      this.lowerSize += 1;
+    } else {
+      this.upper.push(value);
+      this.upperSize += 1;
+    }
+    this.rebalance();
+  }
+
+  remove(value: number): void {
+    if (!Number.isFinite(value)) return;
+    this.prune(this.lower);
+    this.prune(this.upper);
+    if (this.lower.size && value <= this.lower.peek()!) this.lowerSize -= 1;
+    else this.upperSize -= 1;
+    this.delayed.set(value, (this.delayed.get(value) ?? 0) + 1);
+    this.prune(this.lower);
+    this.prune(this.upper);
+    this.rebalance();
+  }
+
+  median(): number | null {
+    this.prune(this.lower);
+    this.prune(this.upper);
+    const total = this.lowerSize + this.upperSize;
+    if (!total) return null;
+    if (this.lowerSize > this.upperSize) return this.lower.peek()!;
+    return ((this.lower.peek() ?? 0) + (this.upper.peek() ?? 0)) / 2;
+  }
+
+  clear(): void {
+    this.lower.replace([]);
+    this.upper.replace([]);
+    this.delayed.clear();
+    this.lowerSize = 0;
+    this.upperSize = 0;
+  }
+
+  clone(): DualHeapMedian {
+    const next = new DualHeapMedian();
+    next.lower.replace(this.lower.values());
+    next.upper.replace(this.upper.values());
+    for (const [value, count] of this.delayed) next.delayed.set(value, count);
+    next.lowerSize = this.lowerSize;
+    next.upperSize = this.upperSize;
+    return next;
+  }
+
+  copyFrom(source: DualHeapMedian): void {
+    this.lower.replace(source.lower.values());
+    this.upper.replace(source.upper.values());
+    this.delayed.clear();
+    for (const [value, count] of source.delayed) this.delayed.set(value, count);
+    this.lowerSize = source.lowerSize;
+    this.upperSize = source.upperSize;
+  }
+}
+
+/** Exact rolling median in expected O(log period) per append/replace. */
+export class RollingMedian extends RollingBase {
+  private readonly heaps = new DualHeapMedian();
+  private validCount = 0;
+
+  update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
+    const v = Number(value);
+    if (mode === 'replace' && this.count) {
+      const old = this.buffer[this.slotForCurrent()];
+      if (Number.isFinite(old)) { this.heaps.remove(old); this.validCount -= 1; }
+      this.replaceCurrentSlot(v);
+    } else {
+      if (this.count === this.capacity) {
+        const old = this.buffer[this.cursor];
+        if (Number.isFinite(old)) { this.heaps.remove(old); this.validCount -= 1; }
+      }
+      this.appendSlot(v);
+    }
+    if (Number.isFinite(v)) { this.heaps.add(v); this.validCount += 1; }
+    return { count: this.count, value: this.value() };
+  }
+
+  value(): number | null {
+    return this.count === this.capacity && this.validCount === this.capacity ? this.heaps.median() : null;
+  }
+
+  reset(): void { super.reset(); this.heaps.clear(); this.validCount = 0; }
+  clone(): RollingMedian {
+    const next = new RollingMedian(this.capacity);
+    next.copyFrom(this);
+    return next;
+  }
+  copyFrom(source: RollingMedian): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible rolling median state');
+    this.buffer.set(source.buffer);
+    this.versions.set(source.versions);
+    this.cursor = source.cursor;
+    this.count = source.count;
+    this.absoluteIndex = source.absoluteIndex;
+    this.latestValue = source.latestValue;
+    this.validCount = source.validCount;
+    this.heaps.copyFrom(source.heaps);
+  }
+}
+
+/** Exact rolling percentile/rank in expected O(log period) per append/replace. */
+export class RollingPercentile extends RollingBase {
+  private readonly ordered = new OrderedMultiset();
+  private validCount = 0;
+
+  update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
+    const v = Number(value);
+    if (mode === 'replace' && this.count) {
+      const old = this.buffer[this.slotForCurrent()];
+      if (Number.isFinite(old)) { this.ordered.erase(old); this.validCount -= 1; }
+      this.replaceCurrentSlot(v);
+    } else {
+      if (this.count === this.capacity) {
+        const old = this.buffer[this.cursor];
+        if (Number.isFinite(old)) { this.ordered.erase(old); this.validCount -= 1; }
+      }
+      this.appendSlot(v);
+    }
+    if (Number.isFinite(v)) { this.ordered.insert(v); this.validCount += 1; }
+    return { count: this.count, value: this.value() };
+  }
+
+  rank(value: number): number | null {
+    const v = Number(value);
+    if (!Number.isFinite(v) || this.count !== this.capacity || this.validCount === 0) return null;
+    return this.ordered.countLE(v) / this.validCount;
+  }
+
+  percentile(q: number): number | null {
+    if (this.count !== this.capacity || this.validCount === 0) return null;
+    const target = Math.max(0, Math.min(1, Number(q) || 0)) * (this.validCount - 1);
+    const loRank = Math.floor(target), hiRank = Math.ceil(target);
+    const lo = this.ordered.select(loRank);
+    const hi = this.ordered.select(hiRank);
+    if (lo == null || hi == null) return null;
+    return lo + (hi - lo) * (target - loRank);
+  }
+
+  value(): number | null { return this.percentile(0.5); }
+  reset(): void { super.reset(); this.ordered.clear(); this.validCount = 0; }
+}
+
+/** Centered sliding extrema in O(N) using monotonic deques. */
+export function centeredRollingExtrema(
+  values: ArrayLike<number>,
+  halfWindow: number,
+  visit: (centerIndex: number, minimum: number, maximum: number) => void,
+): void {
+  const h = Math.max(1, Math.floor(halfWindow));
+  const maxDeque: number[] = [], minDeque: number[] = [];
+  let maxHead = 0, minHead = 0;
+  for (let right = 0; right < values.length; right += 1) {
+    const value = Number(values[right]);
+    while (maxDeque.length > maxHead && Number(values[maxDeque[maxDeque.length - 1]!] ?? Number.NaN) <= value) maxDeque.pop();
+    while (minDeque.length > minHead && Number(values[minDeque[minDeque.length - 1]!] ?? Number.NaN) >= value) minDeque.pop();
+    maxDeque.push(right);
+    minDeque.push(right);
+    const left = right - 2 * h;
+    while (maxHead < maxDeque.length && maxDeque[maxHead]! < left) maxHead += 1;
+    while (minHead < minDeque.length && minDeque[minHead]! < left) minHead += 1;
+    const center = right - h;
+    if (center < h || center >= values.length - h || maxHead >= maxDeque.length || minHead >= minDeque.length) continue;
+    visit(center, Number(values[minDeque[minHead]!]!), Number(values[maxDeque[maxHead]!]!));
+    if (maxHead > 32 && maxHead * 2 > maxDeque.length) { maxDeque.splice(0, maxHead); maxHead = 0; }
+    if (minHead > 32 && minHead * 2 > minDeque.length) { minDeque.splice(0, minHead); minHead = 0; }
+  }
 }
 
 /** Exact rolling mean absolute deviation in expected O(log period) per append/replace. */
