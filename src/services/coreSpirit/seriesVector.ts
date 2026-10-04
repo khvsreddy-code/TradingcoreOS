@@ -662,39 +662,26 @@ export class CoreSpiritFusedSeriesCursor {
  *
  * There is no operation-sized history array and no operation-to-operation full-series copy.
  */
+export function executeCoreSpiritFusedSeriesPipelineInto(
+  input: ArrayLike<number>,
+  operations: readonly CoreSpiritSeriesOperation[],
+  output: Float64Array,
+): CoreSpiritSeriesExecutionResult {
+  const source = asCoreSpiritNumericSeries(input);
+  if (operations.length === 0) return Object.freeze({ output: source, stats: Object.freeze({ bars: source.length, operations: 0, fusedPasses: 0, intermediateAllocations: 0 }) });
+  if (output.length !== source.length) throw new Error(`fused output length mismatch: expected ${source.length}, got ${output.length}`);
+  const cursor = new CoreSpiritFusedSeriesCursor(operations);
+  output.fill(Number.NaN);
+  for (let i = 0; i < source.length; i += 1) cursor.updateInto(source[i]!, i, output, i);
+  return Object.freeze({ output, stats: Object.freeze({ bars: source.length, operations: operations.length, fusedPasses: 1, intermediateAllocations: 0 }) });
+}
+
+/** Convenience historical materialization: allocates the final output once. */
 export function executeCoreSpiritFusedSeriesPipeline(
   input: ArrayLike<number>,
   operations: readonly CoreSpiritSeriesOperation[],
 ): CoreSpiritSeriesExecutionResult {
   const source = asCoreSpiritNumericSeries(input);
-  if (operations.length === 0) {
-    return Object.freeze({
-      output: source,
-      stats: Object.freeze({
-        bars: source.length,
-        operations: 0,
-        fusedPasses: 0,
-        intermediateAllocations: 0,
-      }),
-    });
-  }
-
-  const cursor = new CoreSpiritFusedSeriesCursor(operations);
   const output = new Float64Array(source.length);
-  output.fill(Number.NaN);
-
-  for (let i = 0; i < source.length; i += 1) {
-    const values = cursor.update(source[i]!, i);
-    output[i] = values[values.length - 1]!;
-  }
-
-  return Object.freeze({
-    output,
-    stats: Object.freeze({
-      bars: source.length,
-      operations: operations.length,
-      fusedPasses: 1,
-      intermediateAllocations: 0,
-    }),
-  });
+  return executeCoreSpiritFusedSeriesPipelineInto(source, operations, output);
 }
