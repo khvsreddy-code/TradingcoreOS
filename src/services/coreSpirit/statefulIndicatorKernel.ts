@@ -39,16 +39,16 @@ class MonotonicDeque {
 
 abstract class RollingBase {
   protected readonly capacity: number;
-  protected readonly buffer: number[];
-  protected readonly versions: number[];
+  protected readonly buffer: Float64Array;
+  protected readonly versions: Uint32Array;
   protected cursor = 0;
   protected count = 0;
   protected absoluteIndex = 0;
   protected latestValue: number | null = null;
   constructor(period: number) {
     this.capacity = Math.max(1, Math.floor(period));
-    this.buffer = new Array(this.capacity).fill(0);
-    this.versions = new Array(this.capacity).fill(0);
+    this.buffer = new Float64Array(this.capacity);
+    this.versions = new Uint32Array(this.capacity);
   }
   protected slotForCurrent() { return (this.cursor - 1 + this.capacity) % this.capacity; }
   protected appendSlot(value: number) {
@@ -81,7 +81,7 @@ abstract class RollingBase {
 export class RollingMin extends RollingBase {
   private readonly state: RollingMinMax;
   constructor(period:number){super(period);this.state=new RollingMinMax(period);}
-  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.value?.min??null};}
+  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.min??null};}
   value():number|null{return this.state.min();}
   reset(){super.reset();this.state.reset();}
   private appendMirror(_value:number,_mode:'append'|'replace'):void{}
@@ -90,7 +90,7 @@ export class RollingMin extends RollingBase {
 export class RollingMax extends RollingBase {
   private readonly state: RollingMinMax;
   constructor(period:number){super(period);this.state=new RollingMinMax(period);}
-  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.value?.max??null};}
+  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.max??null};}
   value():number|null{return this.state.max();}
   reset(){super.reset();this.state.reset();}
   private appendMirror(_value:number,_mode:'append'|'replace'):void{}
@@ -552,6 +552,7 @@ export class WilderState {
     this.valueState = ((this.period - 1) * this.valueState + v) / this.period;
     return this.valueState;
   }
+  update(value: number, mode: 'append' | 'replace' = 'append') { return this.updateWilder(value, mode); }
   reset() { this.seed.reset(); this.valueState = null; this.stableBeforeCurrent = null; this.currentInput = null; }
   get value() { return this.valueState; }
 }
