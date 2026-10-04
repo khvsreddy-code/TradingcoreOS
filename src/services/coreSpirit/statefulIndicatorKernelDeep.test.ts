@@ -38,10 +38,10 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
 {
   const k = new RollingVariance(3);
   k.update(1); k.update(2);
-  nearly(k.update(3).value!, Math.sqrt(14 / 9));
+  nearly(k.update(3).value!, Math.sqrt(2 / 3));
   nearly(k.mean()!, 2);
   nearly(k.variance()!, 2 / 3);
-  nearly(k.update(4, 'replace').value!, Math.sqrt(2 / 3));
+  nearly(k.update(4, 'replace').value!, Math.sqrt(14 / 9));
 }
 
 {
