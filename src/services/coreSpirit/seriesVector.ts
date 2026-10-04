@@ -148,7 +148,8 @@ class FusedSeriesStage {
       }
       case 'normalize': {
         const snapshot = this.minmax!.update(value);
-        if (snapshot.min == null || snapshot.max == null || snapshot.max === snapshot.min) return 0;
+        if (snapshot.min == null || snapshot.max == null) return Number.NaN;
+        if (snapshot.max === snapshot.min) return 0;
         return (value - snapshot.min) / (snapshot.max - snapshot.min);
       }
       case 'variance':
