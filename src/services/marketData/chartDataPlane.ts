@@ -93,17 +93,6 @@ function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
   return [...bySecond.values()].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)).slice(-MAX_HISTORY_CANDLES);
 }
 
-function toCanonicalRows(rows: HistoricalCandle[]) {
-  return rows.map(row => ({
-    time: Math.floor(Date.parse(row.timestamp) / 1000),
-    open: Number(row.open),
-    high: Number(row.high),
-    low: Number(row.low),
-    close: Number(row.close),
-    volume: Number(row.volume) || 0,
-  }));
-}
-
 export class ChartDataPlane {
   readonly key: ChartDataPlaneKey;
   private readonly canonicalPlane: CanonicalDataPlane;
@@ -145,7 +134,8 @@ export class ChartDataPlane {
   }
 
   private syncCanonical(): void {
-    this.canonicalPlane.replace(toCanonicalRows(this.state.candles).slice(-CANONICAL_MAX));
+    const from = Math.max(0, this.state.candles.length - CANONICAL_MAX);
+    this.canonicalPlane.replaceHistoricalCandleRows(this.state.candles, from);
   }
 
   private setCandles(rows: HistoricalCandle[], reason: 'cache' | 'history' | 'older-history'): void {
@@ -179,11 +169,12 @@ export class ChartDataPlane {
     const latest = result.candles[result.candles.length - 1];
     const latestPoint = latest ? { time: Math.floor(Date.parse(latest.timestamp) / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 } : null;
     if (latestPoint) {
-      const canonicalLast = this.canonicalPlane.market.length ? this.canonicalPlane.market.get(this.canonicalPlane.market.length - 1) : undefined;
-      const canonicalNeedsReplace = this.canonicalPlane.market.length !== previousLength && this.canonicalPlane.market.length !== previousLength - 1;
-      if (canonicalNeedsReplace || (!canonicalLast && previousLength > 0)) this.syncCanonical();
-      else if (!canonicalLast || latestPoint.time > canonicalLast.time) this.canonicalPlane.append(latestPoint);
-      else if (latestPoint.time === canonicalLast.time) this.canonicalPlane.updateLast(latestPoint);
+      const canonicalLength = this.canonicalPlane.market.length;
+      const canonicalLastTime = canonicalLength ? this.canonicalPlane.market.time[canonicalLength - 1] : NaN;
+      const canonicalNeedsReplace = canonicalLength !== previousLength && canonicalLength !== previousLength - 1;
+      if (canonicalNeedsReplace || (!Number.isFinite(canonicalLastTime) && previousLength > 0)) this.syncCanonical();
+      else if (!Number.isFinite(canonicalLastTime) || latestPoint.time > canonicalLastTime) this.canonicalPlane.append(latestPoint);
+      else if (latestPoint.time === canonicalLastTime) this.canonicalPlane.updateLast(latestPoint);
       else this.syncCanonical();
     }
     if (result.bucketChanged || result.candles.length !== previousLength) {
@@ -243,8 +234,8 @@ export class ChartDataPlane {
     };
   }
 
-  private activeWindow(rows: HistoricalCandle[]): HistoricalCandle[] {
-    const limit = initialHistoryCandles(this.timeframe);
+  private activeWindow(rows: HistoricalCandle[], limitOverride?: number): HistoricalCandle[] {
+    const limit = Math.max(initialHistoryCandles(this.timeframe), Math.min(5000, Math.floor(Number(limitOverride) || initialHistoryCandles(this.timeframe))));
     return rows.length > limit ? rows.slice(-limit) : rows;
   }
 
@@ -260,14 +251,16 @@ export class ChartDataPlane {
     return merged;
   }
 
-  private async ensureHistory(): Promise<HistoricalCandle[]> {
+  private async ensureHistory(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
-    const initialLimit = initialHistoryCandles(this.timeframe);
+    const baseLimit = initialHistoryCandles(this.timeframe);
+    const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride)))) : baseLimit;
+    const initialLimit = requestedLimit;
     const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
     const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
     if (fresh?.length) {
-      const active = this.activeWindow(fresh);
+      const active = this.activeWindow(fresh, requestedLimit);
       if (!this.state.historyReady || this.state.candles.length < active.length) {
         this.state.historyReady = true;
         this.state.olderHistoryExhausted = false;
@@ -279,7 +272,7 @@ export class ChartDataPlane {
     if (stale?.length && !this.state.candles.length) {
       this.state.historyReady = true;
       this.state.olderHistoryExhausted = false;
-      this.setCandles(this.activeWindow(stale), 'cache');
+      this.setCandles(this.activeWindow(stale, requestedLimit), 'cache');
     }
 
     this.state.historyLoading = true;
@@ -315,6 +308,21 @@ export class ChartDataPlane {
       });
     this.state.historyPromise = promise;
     return promise;
+  }
+
+  /** Wait for canonical history to become ready. Vela and other adapters use this instead of reopening broker history. */
+  ensureReady(limit?: number): Promise<HistoricalCandle[]> {
+    return this.ensureHistory(limit);
+  }
+
+  /** Borrow the shared typed-array market view. No candle objects are created. */
+  readCanonical() {
+    return this.canonicalPlane.read();
+  }
+
+  /** The shared canonical data plane for advanced TCO consumers. */
+  canonicalDataPlane(): CanonicalDataPlane {
+    return this.canonicalPlane;
   }
 
   async loadOlderHistory(priority: 'visible' | 'warm' = 'visible', demand?: { visibleBars?: number }): Promise<HistoricalCandle[]> {

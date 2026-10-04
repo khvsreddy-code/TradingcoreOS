@@ -1,6 +1,7 @@
 import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV } from './services/core/chart/velaChartFacade';
+import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
+import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
-import type { MarketFeedEvent, NormalizedMarketTick } from './types/market';
 
 const SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
@@ -16,6 +17,14 @@ function runtimeSymbol(ticker: string): string {
   return value.includes(':') ? value : `NSE:${value}`;
 }
 
+function runtimeTimeframe(timeframe: string): string {
+  const value = String(timeframe || '5').trim();
+  if (/^\d+$/.test(value)) return `${value}m`;
+  if (CHART_TIMEFRAME_INTERVALS[value]) return value;
+  if (/^\d+[mhd]$/i.test(value)) return value.toLowerCase();
+  return '5m';
+}
+
 function epoch(value: unknown): number {
   const numeric = typeof value === 'number' ? value : Number(value);
   if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
@@ -23,24 +32,37 @@ function epoch(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
-function asBar(row: { timestamp?: string | number; open: number; high: number; low: number; close: number; volume?: number }): OHLCV {
-  return {
-    time: epoch(row.timestamp),
-    open: Number(row.open),
-    high: Number(row.high),
-    low: Number(row.low),
-    close: Number(row.close),
-    volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined,
-  };
+function marketViewToBars(view: CanonicalMarketView, range: BarRange, limit: number): OHLCV[] {
+  const from = range.from == null ? Number.NEGATIVE_INFINITY : Number(range.from);
+  const to = range.to == null ? Number.POSITIVE_INFINITY : Number(range.to);
+  const start = Math.max(0, Number.isFinite(from) ? lowerBound(view.time, from > 2e12 ? from / 1000 : from) : 0);
+  const end = Number.isFinite(to) ? Math.min(view.length, upperBound(view.time, to > 2e12 ? to / 1000 : to)) : view.length;
+  const first = Math.max(start, end - limit);
+  const bars = new Array<OHLCV>(Math.max(0, end - first));
+  let out = 0;
+  for (let i = first; i < end; i += 1) {
+    bars[out++] = {
+      time: view.time[i]! * 1000,
+      open: view.open[i]!,
+      high: view.high[i]!,
+      low: view.low[i]!,
+      close: view.close[i]!,
+      volume: Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined,
+    };
+  }
+  return bars;
 }
 
-function dedupe(rows: OHLCV[]): OHLCV[] {
-  const byTime = new Map<number, OHLCV>();
-  for (const row of rows) {
-    if (![row.time, row.open, row.high, row.low, row.close].every(Number.isFinite)) continue;
-    byTime.set(Number(row.time), row);
-  }
-  return [...byTime.values()].sort((a, b) => Number(a.time) - Number(b.time));
+function lowerBound(values: Float64Array, target: number): number {
+  let lo = 0, hi = values.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (values[mid]! < target) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
+function upperBound(values: Float64Array, target: number): number {
+  let lo = 0, hi = values.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (values[mid]! <= target) lo = mid + 1; else hi = mid; }
+  return lo;
 }
 
 function timeframeMs(timeframe: string): number {
@@ -54,33 +76,6 @@ function timeframeMs(timeframe: string): number {
     case 'w': return n * 7 * 24 * 60 * 60_000;
     default: return n * 60_000;
   }
-}
-
-function tickToBar(tick: NormalizedMarketTick, previous: OHLCV | undefined, timeframe: string): OHLCV | undefined {
-  const price = Number(tick.ltp ?? tick.close ?? tick.ohlc?.at(-1)?.close);
-  if (!Number.isFinite(price)) return undefined;
-  const stamp = epoch(tick.lastTradeTimestamp ?? tick.receivedAt);
-  const interval = timeframeMs(timeframe);
-  const bucket = Math.floor(stamp / interval) * interval;
-  if (!previous || Number(previous.time) < bucket) {
-    return {
-      time: bucket,
-      open: Number.isFinite(Number(tick.open)) ? Number(tick.open) : price,
-      high: Math.max(Number.isFinite(Number(tick.high)) ? Number(tick.high) : price, price),
-      low: Math.min(Number.isFinite(Number(tick.low)) ? Number(tick.low) : price, price),
-      close: price,
-      volume: Number.isFinite(Number(tick.volume)) ? Number(tick.volume) : undefined,
-    };
-  }
-  const time = Number(previous.time);
-  return {
-    time,
-    open: Number.isFinite(Number(previous.open)) ? Number(previous.open) : price,
-    high: Math.max(Number(previous.high), price),
-    low: Math.min(Number(previous.low), price),
-    close: price,
-    volume: Number.isFinite(Number(tick.volume)) ? Number(tick.volume) : previous.volume,
-  };
 }
 
 export class TcoVelaDataProvider implements DataProvider {
@@ -99,52 +94,33 @@ export class TcoVelaDataProvider implements DataProvider {
 
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
     const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
-
-    // Fast path: one broker-routed request for the visible history. A retry is
-    // deliberate here because a cold FYERS session can become ready a moment
-    // after the Vela workspace asks for its first bars.
-    let rows: Awaited<ReturnType<typeof tradingCoreRuntime.getHistoricalData>> = [];
+    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
     let lastError: unknown = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        rows = await tradingCoreRuntime.getHistoricalData(symbol, timeframe, undefined, requested);
-        if (rows.length) break;
-      } catch (error) {
-        lastError = error;
-        if (attempt === 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
-      }
+    try {
+      await plane.ensureReady(requested);
+      return marketViewToBars(plane.readCanonical(), range, requested);
+    } catch (error) {
+      lastError = error;
     }
 
-    let bars = dedupe((rows || []).map(row => asBar(row)));
-    if (range.from != null) bars = bars.filter(bar => Number(bar.time) >= Number(range.from));
-    if (range.to != null) bars = bars.filter(bar => Number(bar.time) <= Number(range.to));
-
-    // Do not allow a transient history failure to leave Vela permanently blank.
-    // The FYERS quote route is a live seed only; the websocket immediately takes
-    // ownership and forms the current candle.
-    if (!bars.length) {
-      try {
-        const quote = await tradingCoreRuntime.getMarketQuotes([symbol]);
-        const row = quote[symbol];
-        if (row && Number.isFinite(Number(row.ltp)) && Number(row.ltp) > 0) {
-          const now = Date.now();
-          bars = [{
-            time: Math.floor(now / timeframeMs(timeframe)) * timeframeMs(timeframe),
-            open: Number(row.ltp),
-            high: Number(row.ltp),
-            low: Number(row.ltp),
-            close: Number(row.ltp),
-            volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined,
-          }];
-        }
-      } catch {
-        // The caller gets the original history failure through the normal Vela
-        // fault boundary; this fallback is intentionally best-effort.
+    // Compatibility fallback is deliberately outside the canonical path. It is only
+    // used when the shared plane could not initialize, and the next websocket update
+    // still enters through the canonical TCO data plane.
+    try {
+      const quote = await tradingCoreRuntime.getMarketQuotes([symbol]);
+      const row = quote[symbol];
+      if (row && Number.isFinite(Number(row.ltp)) && Number(row.ltp) > 0) {
+        const now = Date.now();
+        const interval = timeframeMs(tcoTimeframe);
+        return [{ time: Math.floor(now / interval) * interval, open: Number(row.ltp), high: Number(row.ltp), low: Number(row.ltp), close: Number(row.ltp), volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined }];
       }
+    } catch {
+      // Preserve the original canonical-history error at the Vela fault boundary.
     }
-    if (!bars.length && lastError) throw lastError;
-    return bars.slice(-requested);
+    if (lastError) throw lastError;
+    return [];
   }
 
   async getBarsProgressive(ticker: string, timeframe: string, range: BarRange, onBatch: (bars: OHLCV[]) => void, opts?: { signal?: AbortSignal }): Promise<OHLCV[]> {
@@ -155,20 +131,28 @@ export class TcoVelaDataProvider implements DataProvider {
   }
 
   getSymbolInfo(ticker: string) {
-    return Promise.resolve({ ticker: runtimeSymbol(ticker), exchange: 'NSE', type: 'index' });
+    const symbol = runtimeSymbol(ticker);
+    return Promise.resolve({ ticker: symbol, exchange: symbol.startsWith('BSE:') ? 'BSE' : 'NSE', type: 'index' });
   }
 
   subscribe(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void): () => void {
     const symbol = runtimeSymbol(ticker);
-    let previous: OHLCV | undefined;
-    const onEvent = (event: MarketFeedEvent) => {
-      if (event.type !== 'tick' || !event.tick || String(event.tick.instrumentKey) !== symbol) return;
-      const next = tickToBar(event.tick, previous, timeframe);
-      if (!next) return;
-      previous = next;
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    let fingerprint = '';
+    const stop = plane.subscribe((event) => {
+      if (event.type !== 'snapshot' && event.type !== 'tick') return;
+      const view = plane.readCanonical();
+      if (!view.length) return;
+      const i = view.length - 1;
+      const next: OHLCV = { time: view.time[i]! * 1000, open: view.open[i]!, high: view.high[i]!, low: view.low[i]!, close: view.close[i]!, volume: Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined };
+      const nextKey = `${next.time}|${next.open}|${next.high}|${next.low}|${next.close}|${next.volume ?? ''}`;
+      if (nextKey === fingerprint) return;
+      fingerprint = nextKey;
       onBar(next);
-    };
-    return tradingCoreRuntime.subscribeMarketData([symbol], onEvent);
+    });
+
+    return stop;
   }
 }
 

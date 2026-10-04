@@ -211,19 +211,21 @@ indicator workers        ≤ 2
 
 This is the central v103 scaling invariant.
 
-## Future transport optimization
+## v115 worker transport hardening
 
-The v103 data plane is structurally ready for a later zero-copy worker transport:
+The worker transport is no longer a future-only design. v115 adds a versioned `CanonicalMarketDataPacket` made of bounded typed-array channels and transfers its six `ArrayBuffer`s through the worker boundary.
 
 ```text
 CanonicalDataPlane
       ↓
-SharedArrayBuffer / typed-array views
+bounded typed packet
       ↓
-worker compute pools
+Transferable ArrayBuffers
+      ↓
+worker compute pool
 ```
 
-That transport should be introduced only after the ownership model and revision/dirty-range semantics remain stable. v103 therefore fixes **multiplicity and lifecycle duplication first** without forcing SAB into every current execution path.
+This is an explicit ownership transfer, not a SharedArrayBuffer alias. `SharedArrayBuffer` remains deferred until mutation, revision, worker lifetime and reclamation semantics are strong enough to make shared memory safer than transfer-based packets. The multi-chart scaling rule therefore remains the same: chart count may increase renderer instances, but it must not multiply canonical dataset ownership or full-history object cloning.
 
 ## Non-interference invariant
 
@@ -291,3 +293,57 @@ The multi-chart budget now covers retained history as well as workers and transp
 ```
 
 Shared dataset affinity remains the primary deduplication boundary. History cache eviction is deliberately independent from realtime feed lifetime: evicting an inactive bucket must never terminate a live `broker:symbol` subscription used by another consumer.
+
+## v115 — Vela workspace activation + canonical worker transport — 2026-10-04
+
+The multi-chart architecture is now wired to the production Vela workspace rather than remaining a dormant capability in the vendored engine.
+
+### Live workspace configuration
+
+`src/LiveTradingWorkspace.tsx` now boots Vela with:
+
+- initial `4`-cell layout;
+- four seeded chart identities for NIFTY 50, NIFTY BANK, SENSEX and FINNIFTY;
+- Vela layout switching retained for the standard registered layouts;
+- indicator picker enabled;
+- object-tree/panel/bottom-bar/screenshot/action surfaces retained through Vela's shared shell;
+- drawing toolbar and drawing persistence enabled;
+- crosshair synchronization enabled as the initial multi-chart sync policy, with Vela's runtime sync controls still available;
+- `maxWebglCells: 8`, so the 4/8-cell modes can stay inside a predictable WebGL budget;
+- a new persistence key so a pre-v115 single-chart document cannot pin the production workspace back to `layout: false`.
+
+The dataset layer remains shared: cells referring to the same `broker:symbol:timeframe` key resolve to the same `ChartDataPlane`/canonical dataset rather than creating independent broker history lifecycles.
+
+### Active-cell rule
+
+The Vela workspace has one active cell at a time. Shared chrome acts on that cell, while the other cells remain rendering consumers. TradingCoreOS therefore keeps symbol selection/watchlist actions targeted to the active cell instead of introducing another parallel terminal/chart state model.
+
+### Indicator interaction
+
+Vela already provides its standard indicator picker and object tree. TCO v115 adds an application-level **Alt-held indicator wheel** for rapid native-indicator insertion:
+
+```text
+Hold Alt
+   ↓
+query active cell's supported native indicators
+   ↓
+show up to 8 supported quick choices around the pointer-space center
+   ↓
+release Alt
+   ↓
+active Vela chart.addNativeIndicator(type)
+```
+
+The wheel is deliberately a host feature. It does not modify Vela's indicator registry or scripting engine and it acts only on the currently active chart cell.
+
+### Sync semantics
+
+Multi-chart sync must remain explicit rather than forcing every chart to mirror every state. Vela exposes independent symbol/timeframe/crosshair/style/drawing groups; TCO starts with crosshair synchronization while leaving symbol, timeframe, style and drawings available as deliberate user-controlled sync modes.
+
+### Performance consequence
+
+A four-chart grid is not four copies of the worker market-data message. Each cell may render independently, but the compute/data layers are keyed by dataset identity and worker packets carry bounded typed windows. Identical dataset requests also share the existing history/data-plane ownership.
+
+### Known limit
+
+The current broker ABI still returns `HistoricalCandle[]`. Until broker adapters can expose a native columnar history response, one object array exists at the external broker boundary. v115 removes the additional object-array churn between canonical storage, workers and Vela; it does not claim to have eliminated the broker API's compatibility representation.

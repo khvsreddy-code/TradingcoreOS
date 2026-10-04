@@ -130,6 +130,33 @@ export class MarketDataStore {
     this.markDirty(0, this._length);
   }
 
+  /**
+   * Replace OHLCV history directly from an existing broker/history object array.
+   * No intermediate MarketDataPoint objects are created; the caller's rows are
+   * projected straight into the canonical typed columns. This is a compatibility
+   * ingress until broker adapters expose a native columnar history contract.
+   */
+  replaceHistoricalCandleRows(rows: readonly { timestamp: string; open: number; high: number; low: number; close: number; volume: number }[], from = 0, to = rows.length): void {
+    const start = Math.max(0, Math.min(rows.length, Math.floor(from)));
+    const end = Math.max(start, Math.min(rows.length, Math.ceil(to)));
+    const length = end - start;
+    this.ensure(length);
+    for (let i = 0; i < length; i += 1) {
+      const row = rows[start + i]!;
+      const parsed = Date.parse(String(row.timestamp));
+      this._time[i] = Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
+      this._open[i] = Number(row.open);
+      this._high[i] = Number(row.high);
+      this._low[i] = Number(row.low);
+      this._close[i] = Number(row.close);
+      this._volume[i] = Number.isFinite(Number(row.volume)) ? Number(row.volume) : 0;
+      this._oi[i] = NaN; this._bid[i] = NaN; this._ask[i] = NaN;
+      this._bidVolume[i] = NaN; this._askVolume[i] = NaN; this._trades[i] = NaN; this._session[i] = NaN;
+    }
+    this._length = length;
+    this.markDirty(0, this._length);
+  }
+
   append(row: MarketDataPoint): void {
     this.ensure(this._length + 1);
     const index = this._length;

@@ -54,6 +54,8 @@ export class CanonicalDataPlane {
   get length(): number { return this.market.length; }
 
   replace(rows: readonly MarketDataPoint[]): void { this.market.replace(rows); }
+  /** Direct OHLCV compatibility ingress; avoids a second row-object allocation pass. */
+  replaceHistoricalCandleRows(rows: readonly { timestamp: string; open: number; high: number; low: number; close: number; volume: number }[], from = 0, to = rows.length): void { this.market.replaceHistoricalCandleRows(rows, from, to); }
   append(row: MarketDataPoint): void { this.market.append(row); }
   updateLast(row: MarketDataPoint): void { this.market.updateLast(row); }
   clear(): void { this.market.clear(); }

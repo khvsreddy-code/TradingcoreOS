@@ -36,8 +36,8 @@ for (const fn of ['bollinger','donchian','stochastic','cci','mfi','hma','ichimok
 if (/const rollingStd = .*\.slice\(/.test(indicatorEngine) || /const normalized = .*\.slice\(/.test(indicatorEngine)) throw new Error('Advanced rolling helper still uses slice windows');
 if (!/mode\?:'snapshot'\|'incremental'/.test(worker) || !/operation\?:'replace'\|'append'/.test(worker)) throw new Error('Incremental worker protocol missing');
 if (!/incrementalMode:'update'/.test(worker) || !/incrementalMode:'reset'/.test(worker)) throw new Error('Incremental worker result modes missing');
-if (!/tailKey/.test(coordinator) || !/JSON\.stringify\(\[tail\.open,\s*tail\.high,\s*tail\.low,\s*tail\.close,\s*tail\.volume\]\)/.test(coordinator)) throw new Error('Same-bar indicator cache identity is not tail-aware');
-if (!/indicatorQueue\.run\(payload, incrementalConfigs\.length > 0 \? incrementalKey : datasetKey\)/.test(coordinator)) throw new Error('Incremental snapshot/tick worker affinity is not pinned');
+if (!/tailKey/.test(coordinator) || !/JSON\.stringify\(\[market\.open\[i\], market\.high\[i\], market\.low\[i\], market\.close\[i\], market\.volume\[i\]\]\)/.test(coordinator)) throw new Error('Same-bar indicator cache identity is not tail-aware');
+if (!/indicatorQueue\.run\(payload, incrementalKey, transfer\)/.test(coordinator)) throw new Error('Incremental snapshot/tick worker affinity is not pinned');
 if (!/if \(result\.resetRequired\)/.test(coordinator) || !/seedOnMiss: true/.test(coordinator)) throw new Error('Incremental reset/resync path missing');
 if (!/requestIndicatorWorker\(data,undefined,'incremental'/.test(live)) throw new Error('Live chart does not request incremental forming-bar updates');
 if (!/seriesApi\.update/.test(live) && !/\.update\(points\[points\.length-1\]/.test(live)) throw new Error('Live chart lacks tail-only series updates');

@@ -1,7 +1,9 @@
 import type { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CanonicalMarketDataPacket } from '../core/data/canonicalMarketDataTransport';
+import { assertCanonicalMarketDataPacket } from '../core/data/canonicalMarketDataTransport';
 import { IndicatorConfig, series, vwap, bollinger, keltner, donchian, rsi, macd, supertrend, stochastic, ichimoku, advancedIndicatorModel } from './indicatorEngine';
 import { createIndicatorDependencyCache, dependencyNodeKeysFor, evaluateIndicatorDependencyGraph, isDependencyGraphSupported } from './indicatorDependencyGraph';
-import { IncrementalIndicatorRuntime, isIncrementalIndicatorSupported } from './incrementalIndicatorEngine';
+import { IncrementalIndicatorRuntime } from './incrementalIndicatorEngine';
 
 const workerKinds = new Set([
   'EMA','SMA','HMA','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Supertrend','Ichimoku Cloud'
@@ -16,19 +18,26 @@ function touch<T>(map:Map<string,T>,key:string,value:T){map.delete(key);map.set(
 function getDatasetCache(datasetKey:string,revision:number){const key=`${datasetKey}|${revision}`,existing=datasetCaches.get(key);if(existing){datasetCaches.delete(key);datasetCaches.set(key,existing);return existing;}const cache=createIndicatorDependencyCache();datasetCaches.set(key,cache);while(datasetCaches.size>DATASET_CACHE_LIMIT)datasetCaches.delete(datasetCaches.keys().next().value as string);return cache;}
 function getIncrementalRuntime(key:string){const existing=incrementalRuntimes.get(key);if(existing)return touch(incrementalRuntimes,key,existing);return touch(incrementalRuntimes,key,new IncrementalIndicatorRuntime());}
 
-function advancedToWorkerData(kind:string,candles:HistoricalCandle[],result:any){
-  const nameMap:Record<string,string>={
-    'Adaptive Ehlers':'Adaptive','Fractional EMA Kalman Filter':'Filter','Trend Pressure':'Pressure','Trinity':'Trinity','Neural Weight Oscillator':'NWO',
-  };
-  const names=kind==='Trend Target Ribbon'?['Fast','Mid','Slow','Target+','Target-']:[nameMap[kind]].filter(Boolean);
-  if(kind==='Trend Target Ribbon')return candles.map((c,i)=>({time:Math.floor(new Date(c.timestamp).getTime()/1000),...Object.fromEntries(names.map(name=>[name,result?.lines?.[name]?.[i]?.value??null]))})).filter((x:any)=>names.some(name=>x[name]!=null));
-  const points=result?.lines?.[names[0]]||[];return points;
+function packetToCandles(packet: CanonicalMarketDataPacket): HistoricalCandle[] {
+  assertCanonicalMarketDataPacket(packet);
+  const rows = new Array<HistoricalCandle>(packet.length);
+  for (let i = 0; i < packet.length; i += 1) {
+    rows[i] = {
+      timestamp: new Date(packet.time[i]! * 1000).toISOString(),
+      open: packet.open[i]!,
+      high: packet.high[i]!,
+      low: packet.low[i]!,
+      close: packet.close[i]!,
+      volume: packet.volume[i] || 0,
+    };
+  }
+  return rows;
 }
 
 self.onmessage = (event: MessageEvent<{
   requestId:number;
-  candles?:HistoricalCandle[];
-  bar?:HistoricalCandle;
+  market?:CanonicalMarketDataPacket;
+  bar?:CanonicalMarketDataPacket;
   configs:IndicatorConfig[];
   datasetKey?:string;
   revision?:number;
@@ -38,15 +47,19 @@ self.onmessage = (event: MessageEvent<{
   seedOnMiss?:boolean;
   primeIncremental?:boolean;
 }>) => {
-  const {requestId,candles=[],bar,configs,datasetKey='anonymous',revision=0,mode='snapshot',operation='replace',incrementalKey=datasetKey,seedOnMiss=false,primeIncremental=false}=event.data;
+  const {requestId,market,bar,configs,datasetKey='anonymous',revision=0,mode='snapshot',operation='replace',incrementalKey=datasetKey,seedOnMiss=false,primeIncremental=false}=event.data;
   try {
+    const candles = market ? packetToCandles(market) : [];
+    const latestBar = bar ? packetToCandles(bar)[0] : undefined;
+
     if(mode==='incremental'){
-      if(!bar)throw new Error('Incremental indicator update missing forming bar.');
+      const effectiveBar = latestBar || candles[candles.length - 1];
+      if(!effectiveBar)throw new Error('Incremental indicator update missing forming bar.');
       const existed=incrementalRuntimes.has(incrementalKey);
       const runtime=existed ? incrementalRuntimes.get(incrementalKey)! : getIncrementalRuntime(incrementalKey);
       const evaluation=(!existed || seedOnMiss) && candles.length
         ? runtime.seed(candles,configs)
-        : runtime.update(bar,operation,configs);
+        : runtime.update(effectiveBar,operation,configs);
       if(evaluation.resetRequired){
         if(!candles.length){self.postMessage({requestId,results:[],incremental:true,resetRequired:true,updateCost:evaluation.updateCost});return;}
         const seeded=runtime.seed(candles,configs);
@@ -55,6 +68,7 @@ self.onmessage = (event: MessageEvent<{
       self.postMessage({requestId,results:evaluation.results,incremental:true,incrementalMode:'update',processedBars:evaluation.processedBars,updateCost:evaluation.updateCost});return;
     }
 
+    if(!market) throw new Error('Indicator snapshot missing canonical market packet.');
     const graphConfigs=configs.filter(c=>c.enabled&&isDependencyGraphSupported(c.kind));
     const graphCache=getDatasetCache(datasetKey,revision);
     const graph=evaluateIndicatorDependencyGraph(candles,graphConfigs,graphCache);
@@ -79,7 +93,6 @@ self.onmessage = (event: MessageEvent<{
       if(cfg.kind==='Ichimoku Cloud')return{id:cfg.id,kind:cfg.kind,data:ichimoku(candles,cfg.period||9,cfg.slow||26,cfg.displacement||26)};
       return{id:cfg.id,kind:cfg.kind,data:series(candles,cfg.kind,cfg)};
     });
-    // Prime only covers the stateful hot path. Other enabled legacy studies remain on their existing renderer path.
     const primed = primeIncremental ? incrementalResults : [];
     self.postMessage({requestId,results:[...primed,...graphResults,...legacyResults],dependencyGraph:{nodeKeys:dependencyNodeKeysFor(graphConfigs),...graph.stats},incrementalSeeded:primeIncremental});
   } catch(error:any){self.postMessage({requestId,error:error?.message||'Indicator worker failed'});}

@@ -1,7 +1,7 @@
 # TradingCore Repair Tracker
 
-Updated: 2026-09-29
-Source build: `TradingcoreOS-fast-reactive-live-price-v4-10k-LIVE-CANDLE-HARD-FIXED.zip`
+Updated: 2026-10-04
+Source build: `TradingcoreOS-main new updates(2).zip`
 
 ## Purpose
 
@@ -40,7 +40,7 @@ This repair pass now includes the chart backend cutover as a protected boundary.
 - [x] `/live` and oscillator chart switched to the Vela-backed facade.
 - [x] CoreSpirit community catalog now uses versioned TCO publications.
 - [ ] Full browser smoke verification against the live deployment.
-- [ ] D1 typed-array Vela ingestion.
+- [~] D1 typed-array Vela ingestion — canonical worker transport is patched; direct Vela typed ingestion remains next.
 - [ ] D2 viewport-aware Vela LOD binding.
 
 ## TC-R01 — Detailed repair
@@ -685,3 +685,35 @@ The indicator parameter validator had a two-step regression: an earlier repair i
 | TC-BUILD-10 | Indicator dependency validator | Critical | The validator now constructs allSchemaFields and fieldByPath exactly once before validating dependency/visibility/enabled conditions. | **FIXED — SOURCE** | src/services/coreSpirit/indicatorSettingsSchema.ts |
 | TC-BUILD-11 | Regression prevention | Critical | Conditional-settings contract asserts exactly one canonical allSchemaFields declaration, one fieldByPath map declaration, and cycle detection reuse. | **FIXED — CONTRACT** | src/indicatorConditionalSettingsContract.test.mjs |
 | TC-BUILD-12 | CI gate | Critical | v115 must pass contracts before build/typecheck; no next architecture stage proceeds while this validator gate is red. | **IN PROGRESS — CI RUN 84** | GitHub Actions run 84 |
+## v115 — canonical market transport + Vela multi-chart activation — 2026-10-04
+
+| ID | Area | Severity | Defect / hardening | Status | Evidence |
+|---|---|---:|---|---|---|
+| TC-PERF-57 | Worker transport | Critical | Indicator/analytics workers received object-based candle arrays across the `postMessage()` boundary, forcing structured cloning and repeated object-graph traversal. | **FIXED — STATIC CONTRACT** | `src/services/core/data/canonicalMarketDataTransport.ts`, `src/services/marketData/chartComputeCoordinator.ts` |
+| TC-PERF-58 | Worker ownership | Critical | Worker ownership of market windows was implicit, leaving the eventual shared-memory design without a clean transfer boundary. | **FIXED — TRANSFER ABI** | versioned packet + transferable `ArrayBuffer`s; SAB intentionally deferred |
+| TC-PERF-59 | Canonical ingress | High | `ChartDataPlane` built a second `MarketDataPoint[]` representation before populating the canonical typed store. | **FIXED — DIRECT TYPED WRITE** | `MarketDataStore.replaceHistoricalCandleRows()`, `CanonicalDataPlane.replaceHistoricalCandleRows()` |
+| TC-PERF-60 | Realtime tail | High | Realtime canonical-tail checks called `MarketDataStore.get()`, allocating a temporary market row on every tick. | **FIXED** | typed `market.time[last]` access in `ChartDataPlane.onTick()` |
+| TC-PERF-61 | Vela provider | Critical | Vela could reopen broker history outside the shared chart data lifecycle. | **FIXED — SHARED PLANE** | `TcoVelaDataProvider` resolves `getChartDataPlane()` and reads `readCanonical()` |
+| TC-PERF-62 | Vela multi-chart | Critical | Production live workspace was explicitly pinned to `layout: false`, leaving Vela's multi-chart architecture dormant. | **FIXED** | `src/LiveTradingWorkspace.tsx` uses layout `4`, four seeds, runtime layout/sync shell |
+| TC-UI-63 | Indicator UX | High | Fast indicator insertion was available through the standard picker but had no TCO radial quick action. | **FIXED — HOST UX** | Alt-held indicator wheel in `LiveTradingWorkspace.tsx` |
+| TC-PERF-64 | Contract protection | High | The v115 transport/workspace invariants could regress without an aggregate node-only guard. | **FIXED** | `src/canonicalMarketDataTransportContract.test.mjs`, package `test:contracts` entry |
+| TC-PERF-65 | End-to-end typed CoreSpirit ingress | Critical | Existing indicator kernels still require compatibility candle objects inside the worker. | **NEXT** | migrate CoreSpirit/indicator kernel input ABI to `CanonicalMarketView`/typed series |
+| TC-PERF-66 | Broker columnar ABI | High | Broker adapters still expose `HistoricalCandle[]` as their external history contract. | **NEXT** | add native columnar history transport without breaking compatibility callers |
+| TC-PERF-67 | Vela typed ingestion | High | Provider-side `OHLCV[]` allocation remains a Vela compatibility boundary. | **NEXT** | direct typed/retained-buffer Vela data adapter |
+| TC-PERF-68 | SAB | Medium | SharedArrayBuffer is not yet justified because ownership/revision/reclamation semantics need to be explicit first. | **DEFERRED BY DESIGN** | revisit after typed CoreSpirit ingress and worker lifecycle hardening |
+
+### v115 verification
+
+- [x] `TRADINGCORE_V115_CANONICAL_MARKET_TRANSPORT_CONTRACT_OK`
+- [x] `TRADINGCORE_V99_TERMINAL_SHELL_CONTRACT_OK` updated for multi-chart workspace expectations.
+- [x] `TRADINGCORE_V100_TERMINAL_VISUAL_DENSITY_CONTRACT_OK` updated for multi-chart workspace expectations.
+- [x] Existing node-only contract suite reaches the dependency-backed TypeScript boundary without a v115 static-contract failure.
+- [x] Global TypeScript parser/compiler invocation reaches the missing dependency declaration boundary only: `Cannot find type definition file for 'vite/client'` in this extracted environment.
+- [ ] Full `npm run typecheck` after `npm install` / dependency restoration.
+- [ ] Full Vite production build after dependency restoration.
+- [ ] Browser validation of the four-cell workspace, active-cell switching and Alt indicator wheel.
+- [ ] Connected FYERS four-cell stress test measuring duplicate history fetches, worker update cost, dropped updates and frame time.
+
+### v115 architectural rule
+
+`HistoricalCandle[]` is now an **edge representation**, not a cross-thread or cross-stage transport representation. New compute/data APIs must prefer typed canonical views, typed packet transport or renderer-neutral packets. Any new object-array API must be justified as an explicit compatibility boundary and must not silently become the canonical store again.

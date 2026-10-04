@@ -13,7 +13,7 @@ for(const token of ['true-range','atr:','ema:','wma:','hma:','donchian:']) if(!g
 if(!/Keltner Channels/.test(graph)||!/Supertrend/.test(graph)||!/MACD/.test(graph)) throw new Error('Composite indicator dependencies missing');
 if(!/createIndicatorDependencyCache/.test(worker)||!/evaluateIndicatorDependencyGraph/.test(worker)) throw new Error('Indicator worker does not execute the dependency graph');
 if(!/export function wma/.test(kernel)) throw new Error('Shared WMA primitive missing for HMA');
-if(!/windowKey/.test(coordinator)||!/datasetKey: `\$\{datasetKey\}\|window:/.test(coordinator)) throw new Error('Indicator compute cache is not window-aware');
+if(!/windowKey/.test(coordinator)||!(/datasetKey: windowKey/.test(coordinator)||/datasetKey: `\$\{datasetKey\}\|window:/.test(coordinator))) throw new Error('Indicator compute cache is not window-aware');
 for (const token of ['appearance.line.color','appearance.fill.upperColor','appearance.fill.lowerColor','appearance.line.width','appearance.line.style','appearance.line.opacity']) if(!settingsSchema.includes(token)) throw new Error('Schema-driven indicator appearance controls are incomplete');
 if(!/IndicatorSettingsPanel/.test(live)||!/editingIndicator===x\.id/.test(live)) throw new Error('Live terminal does not expose first-class indicator settings');
 console.log('TRADINGCORE_V105_INDICATOR_DEPENDENCY_GRAPH_CONTRACT_OK');

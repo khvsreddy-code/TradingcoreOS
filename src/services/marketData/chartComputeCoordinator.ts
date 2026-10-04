@@ -1,4 +1,11 @@
 import type { HistoricalCandle } from '../brokers/BrokerAdapter';
+import type { CanonicalMarketView } from '../core/data/canonicalDataPlane';
+import {
+  createCanonicalMarketDataPacket,
+  packetTransferables,
+  sliceCanonicalMarketView,
+  type CanonicalMarketDataPacket,
+} from '../core/data/canonicalMarketDataTransport';
 import { buildChartAnalytics, type ChartAnalytics } from './levelEngine';
 import {
   IndicatorConfig,
@@ -15,16 +22,30 @@ import {
 } from './indicatorEngine';
 import { isIncrementalIndicatorSupported } from './incrementalIndicatorEngine';
 import { buildIndicatorComputationSignature } from '../coreSpirit/indicatorSettingsSchema';
+import { selectIndicatorComputeBounds } from './chartComputeWindow';
 
-type IndicatorWorkerResult = { id: string; kind: string; data: any[]; incremental?: boolean; incrementalMode?: 'update'|'reset'; updateCost?: string };
-type AnalyticsRequest = { requestId: number; candles: HistoricalCandle[]; spot: number };
-type IndicatorRequest = { requestId: number; candles?: HistoricalCandle[]; bar?: HistoricalCandle; configs: IndicatorConfig[]; datasetKey: string; revision: number; mode?: 'snapshot'|'incremental'; operation?: 'replace'|'append'; incrementalKey?: string; seedOnMiss?: boolean; primeIncremental?: boolean };
+export type IndicatorWorkerResult = { id: string; kind: string; data: any[]; incremental?: boolean; incrementalMode?: 'update'|'reset'; updateCost?: string };
+type AnalyticsRequest = { requestId: number; market: CanonicalMarketDataPacket; spot: number };
+type IndicatorRequest = {
+  requestId: number;
+  market?: CanonicalMarketDataPacket;
+  bar?: CanonicalMarketDataPacket;
+  configs: IndicatorConfig[];
+  datasetKey: string;
+  revision: number;
+  mode?: 'snapshot'|'incremental';
+  operation?: 'replace'|'append';
+  incrementalKey?: string;
+  seedOnMiss?: boolean;
+  primeIncremental?: boolean;
+};
 
 type Pending<T> = {
   requestId: number;
   payload: Omit<T, 'requestId'>;
   resolve: (value: any) => void;
   reject: (reason: unknown) => void;
+  transferables?: Transferable[];
 };
 
 const MAX_ANALYTICS_WORKERS = 2;
@@ -147,8 +168,6 @@ class SharedWorkerQueue<Payload extends object, Result> {
         || (this.workers.length < this.maxWorkers ? this.ensureWorker() : undefined);
       if (!idle) return;
       this.queue.shift();
-      // Preserve dataset affinity when its preferred worker is busy. A temporary
-      // spill to another worker must not overwrite the canonical affinity owner.
       if (pending.affinityKey && !affinityWorker) this.affinity.set(pending.affinityKey, idle);
       this.busy.set(idle, pending.requestId);
       this.pending.set(pending.requestId, pending);
@@ -159,7 +178,7 @@ class SharedWorkerQueue<Payload extends object, Result> {
       Promise.resolve().then(() => {
         if (!this.pending.has(pending.requestId)) { clearTimeout(timeout); return; }
         try {
-          (idle as any).postMessage({ requestId: pending.requestId, ...(pending.payload as any) });
+          (idle as any).postMessage({ requestId: pending.requestId, ...(pending.payload as any) }, pending.transferables || []);
         } catch (error) {
           clearTimeout(timeout);
           this.onWorkerFailure(idle, error instanceof Error ? error : new Error(String(error)));
@@ -172,10 +191,10 @@ class SharedWorkerQueue<Payload extends object, Result> {
     }
   }
 
-  run(payload: Omit<Payload, 'requestId'>, affinityKey?: string): Promise<Result> {
+  run(payload: Omit<Payload, 'requestId'>, affinityKey?: string, transferables?: Transferable[]): Promise<Result> {
     return new Promise((resolve, reject) => {
       const requestId = ++this.sequence;
-      this.queue.push({ requestId, payload, resolve, reject, affinityKey });
+      this.queue.push({ requestId, payload, resolve, reject, affinityKey, transferables });
       this.dispatch();
     });
   }
@@ -190,6 +209,12 @@ class SharedWorkerQueue<Payload extends object, Result> {
     this.busy.clear();
     this.affinity.clear();
   }
+}
+
+function tailKey(market: CanonicalMarketView): string {
+  if (!market.length) return '';
+  const i = market.length - 1;
+  return JSON.stringify([market.open[i], market.high[i], market.low[i], market.close[i], market.volume[i]]);
 }
 
 export class ChartComputeCoordinator {
@@ -212,21 +237,33 @@ export class ChartComputeCoordinator {
     return value;
   }
 
-  runAnalytics(datasetKey: string, revision: number, candles: HistoricalCandle[], spot: number): Promise<ChartAnalytics> {
-    const key = `${datasetKey}|${revision}|${Number(spot).toPrecision(12)}`;
+  runAnalytics(datasetKey: string, revision: number, market: CanonicalMarketView, spot: number, compatibilityCandles: HistoricalCandle[] = []): Promise<ChartAnalytics> {
+    const key = `${datasetKey}|${revision}|${market.length}|${tailKey(market)}|${Number(spot).toPrecision(12)}`;
     const cached = this.analyticsCache.get(key);
     if (cached) return Promise.resolve(cached);
     const inflight = this.analyticsInflight.get(key);
     if (inflight) return inflight;
-    const promise = this.analyticsQueue.run({ candles, spot })
+    const packet = createCanonicalMarketDataPacket(market);
+    const promise = this.analyticsQueue.run(
+      { market: packet, spot },
+      undefined,
+      packetTransferables(packet),
+    )
       .then(result => this.remember(this.analyticsCache, key, result.analytics))
-      .catch(() => this.remember(this.analyticsCache, key, buildChartAnalytics(candles, spot)))
+      .catch(() => this.remember(this.analyticsCache, key, buildChartAnalytics(compatibilityCandles, spot)))
       .finally(() => this.analyticsInflight.delete(key));
     this.analyticsInflight.set(key, promise);
     return promise;
   }
 
-  runIndicators(datasetKey: string, revision: number, candles: HistoricalCandle[], configs: IndicatorConfig[], options: { mode?: 'snapshot'|'incremental'; operation?: 'replace'|'append'; incrementalKey?: string } = {}): Promise<IndicatorWorkerResult[]> {
+  runIndicators(
+    datasetKey: string,
+    revision: number,
+    market: CanonicalMarketView,
+    configs: IndicatorConfig[],
+    options: { mode?: 'snapshot'|'incremental'; operation?: 'replace'|'append'; incrementalKey?: string; range?: { from: number; to: number } | null } = {},
+    compatibilityCandles: HistoricalCandle[] = [],
+  ): Promise<IndicatorWorkerResult[]> {
     const active = configs.filter(config => config.enabled);
     if (!active.length) return Promise.resolve([]);
     const normalized = normalizeIndicatorConfigs(active);
@@ -234,70 +271,81 @@ export class ChartComputeCoordinator {
     const incrementalKey = options.incrementalKey || datasetKey;
 
     if (options.mode === 'incremental') {
-      if (!incrementalConfigs.length) return Promise.resolve([]);
+      if (!incrementalConfigs.length || !market.length) return Promise.resolve([]);
       const primeKey = `${incrementalKey}|${normalized.signature}`;
       const primed = this.incrementalPrimed.has(primeKey);
-      const bar = candles[candles.length - 1];
-      if (!bar) return Promise.resolve([]);
-      const payload: Omit<IndicatorRequest, 'requestId'> = {
-        candles: primed ? undefined : candles,
-        bar,
+      const payloadBase = {
         configs: normalized.configs,
         datasetKey,
         revision,
-        mode: 'incremental',
+        mode: 'incremental' as const,
         operation: options.operation || 'replace',
         incrementalKey,
         seedOnMiss: !primed,
       };
-      return this.indicatorQueue.run(payload, incrementalKey)
+      const packet = primed
+        ? createCanonicalMarketDataPacket(market, market.length - 1, market.length)
+        : createCanonicalMarketDataPacket(market);
+      const payload: Omit<IndicatorRequest, 'requestId'> = {
+        ...payloadBase,
+        ...(primed ? { bar: packet } : { market: packet }),
+      };
+      const transfer = packetTransferables(packet);
+      return this.indicatorQueue.run(payload, incrementalKey, transfer)
         .then(result => {
           if (result.resetRequired) {
             this.incrementalPrimed.delete(primeKey);
-            return this.indicatorQueue.run({ ...payload, candles, seedOnMiss: true }, incrementalKey)
-              .then(seedResult => {
-                this.incrementalPrimed.add(primeKey);
-                return remapIndicatorResults(seedResult.results, normalized.ids, active);
-              });
+            const reseed = createCanonicalMarketDataPacket(market);
+            return this.indicatorQueue.run(
+              { ...payloadBase, market: reseed, seedOnMiss: true },
+              incrementalKey,
+              packetTransferables(reseed),
+            ).then(seedResult => {
+              this.incrementalPrimed.add(primeKey);
+              return remapIndicatorResults(seedResult.results, normalized.ids, active);
+            });
           }
           this.incrementalPrimed.add(primeKey);
           return remapIndicatorResults(result.results, normalized.ids, active);
         })
         .catch(() => {
-          // A worker can be recycled while a chart remains alive. Fall back to a current full pass
-          // once; the next tick deliberately re-seeds the stateful runtime.
           this.incrementalPrimed.delete(primeKey);
-          return runIndicatorFallback(candles, normalized.configs);
+          return runIndicatorFallback(compatibilityCandles, normalized.configs);
         });
     }
 
-    const first = candles[0]?.timestamp || '';
-    const last = candles[candles.length - 1]?.timestamp || '';
-    const tail = candles[candles.length - 1];
-    const tailKey = tail ? JSON.stringify([tail.open, tail.high, tail.low, tail.close, tail.volume]) : '';
-    const windowKey = `${candles.length}:${first}:${last}`;
-    const key = `${datasetKey}|${revision}|${windowKey}|${tailKey}|${normalized.signature}`;
+    const bounds = selectIndicatorComputeBounds(market.length, options.range);
+    const window = sliceCanonicalMarketView(market, bounds.startIndex, bounds.endIndex);
+    const first = window.time.length ? window.time[0] : 0;
+    const last = window.time.length ? window.time[window.time.length - 1] : 0;
+    const windowKey = `${datasetKey}|window:${bounds.startIndex}:${bounds.endIndex}`;
+    const key = `${windowKey}|${revision}|${bounds.key}:${first}:${last}|${tailKey(window)}|${normalized.signature}`;
     const cached = this.indicatorCache.get(key);
     if (cached) return Promise.resolve(remapIndicatorResults(cached, normalized.ids, active));
     const inflight = this.indicatorInflight.get(key);
     if (inflight) return inflight.then(result => remapIndicatorResults(result, normalized.ids, active));
+
+    const packet = createCanonicalMarketDataPacket(market, bounds.startIndex, bounds.endIndex);
     const payload: Omit<IndicatorRequest, 'requestId'> = {
-      candles,
+      market: packet,
       configs: normalized.configs,
-      datasetKey: `${datasetKey}|window:${windowKey}`,
+      datasetKey: windowKey,
       revision,
       mode: 'snapshot',
       incrementalKey,
       primeIncremental: incrementalConfigs.length > 0,
     };
-    const promise = this.indicatorQueue.run(payload, incrementalConfigs.length > 0 ? incrementalKey : datasetKey)
+    const promise = this.indicatorQueue.run(
+      payload,
+      incrementalConfigs.length > 0 ? incrementalKey : datasetKey,
+      packetTransferables(packet),
+    )
       .then(result => {
         if (incrementalConfigs.length > 0) this.incrementalPrimed.add(`${incrementalKey}|${normalized.signature}`);
         return this.remember(this.indicatorCache, key, result.results);
       })
       .catch(() => {
-        const fallback = runIndicatorFallback(candles, normalized.configs);
-        // Do not claim the worker state is primed when the snapshot fell back locally.
+        const fallback = runIndicatorFallback(compatibilityCandles, normalized.configs);
         this.incrementalPrimed.delete(`${incrementalKey}|${normalized.signature}`);
         return this.remember(this.indicatorCache, key, fallback);
       })

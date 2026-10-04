@@ -27,7 +27,6 @@ import { shouldLoadOlderHistory } from '../../services/marketData/chartHistoryCo
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
 import { chartComputeCoordinator } from '../../services/marketData/chartComputeCoordinator';
 import { isIncrementalIndicatorSupported } from '../../services/marketData/incrementalIndicatorEngine';
-import { selectIndicatorComputeWindow } from '../../services/marketData/chartComputeWindow';
 import { historyDemandPageCandles } from '../../services/marketData/chartHistoryPolicy';
 import { getIndicators, saveIndicators, getAutomations, AutomationConfig } from '../../services/workspace/workspaceState';
 import { buildOIChartAnalytics, OIChartAnalytics, type OIWallState } from '../../services/marketData/oiEngine';
@@ -179,9 +178,9 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
  const requestIndicatorWorker=(data:HistoricalCandle[], range=visibleLogicalRangeRef.current, mode:'snapshot'|'incremental'='snapshot', operation:'replace'|'append'='replace')=>{
    const requestSeq=++indicatorRequestSeq.current;
    const revision=dataRevisionRef.current;
-   const computeWindow=mode==='incremental'?data:selectIndicatorComputeWindow(data,range).data;
+   const market=chartDataPlane.readCanonical();
    const incrementalKey=`${chartDatasetKey}|${chartId.current}`;
-   void chartComputeCoordinator.runIndicators(chartDatasetKey,revision,computeWindow,indicators,{mode,operation,incrementalKey}).then(results=>{
+   void chartComputeCoordinator.runIndicators(chartDatasetKey,revision,market,indicators,{mode,operation,incrementalKey,range},data).then(results=>{
      if(requestSeq!==indicatorRequestSeq.current||!lifecycle.current.isAlive()||revision!==dataRevisionRef.current||data!==candles.current||!chart.current)return;
      chartUpdateScheduler.current.scheduleLatest('shared-worker-indicators',()=>{try{renderWorkerIndicators(results);}catch(indicatorError){console.warn('[TradingCore] Shared indicator render skipped invalid data:',indicatorError);}});
    });
@@ -517,7 +516,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
    const revision=dataRevisionRef.current;
    const run=()=>{
      analyticsTimer.current=null;
-     void chartComputeCoordinator.runAnalytics(chartDatasetKey,revision,data,spot).then(a=>{
+     void chartComputeCoordinator.runAnalytics(chartDatasetKey,revision,chartDataPlane.readCanonical(),spot,data).then(a=>{
        if(!lifecycle.current.isAlive()||revision!==dataRevisionRef.current||data!==candles.current)return;
        analytics.current=a;
        onAnalytics?.(a);
@@ -627,7 +626,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
      const live=data[data.length-1];
      if(live)chartUpdateScheduler.current.scheduleLatest('realtime-bar',()=>{
        const renderStarted=performance.now();
-       rendererController.applyRealtimeBar(live,candleAppearanceRef.current,false);
+       rendererController.applyRealtimeCanonical(chartDataPlane.readCanonical(),candleAppearanceRef.current);
        chartPerformanceTelemetry.recordRendererUpdate(chartMarketKey(brokerId,resolvedInstrumentKey),performance.now()-renderStarted);
      });
      if(live)calculationEngine.current.updateTick(live,data.length-1,Boolean(event.bucketChanged));
@@ -655,7 +654,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
    }
    const paintStarted=performance.now();
    calculationEngine.current.reset(data,resolvedInstrumentKey,timeframe);
-   rendererController.setHistory(data,candleAppearanceRef.current,false);
+   rendererController.setHistoryFromCanonical(chartDataPlane.readCanonical(),candleAppearanceRef.current);
    try{renderStudies(data);requestIndicatorWorker(data);}catch(indicatorError){console.warn('[TradingCore] Shared indicator render skipped invalid data:',indicatorError);}
    renderDrawings();
    publish(data,Number(latestTick.current?.ltp)||Number(data[data.length-1]?.close)||0,true);

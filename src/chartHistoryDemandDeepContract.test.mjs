@@ -4,6 +4,7 @@ const root=process.cwd();
 const policy=fs.readFileSync(path.join(root,'src/services/marketData/chartHistoryPolicy.ts'),'utf8');
 const plane=fs.readFileSync(path.join(root,'src/services/marketData/chartDataPlane.ts'),'utf8');
 const live=fs.readFileSync(path.join(root,'src/components/workspace/LiveChart.tsx'),'utf8');
+const coordinator=fs.readFileSync(path.join(root,'src/services/marketData/chartComputeCoordinator.ts'),'utf8');
 const computeWindow=fs.readFileSync(path.join(root,'src/services/marketData/chartComputeWindow.ts'),'utf8');
 if(!/historyDemandPageCandles/.test(policy)) throw new Error('Viewport-sized history demand policy missing');
 if(!/historyDemandLeadBars/.test(policy)) throw new Error('Viewport lead-bar policy missing');
@@ -12,6 +13,7 @@ if(!plane.includes('const requestKey = `${this.key}:older:${oldest.timestamp}:${
 if(!/olderRequestCooldownUntil/.test(plane)) throw new Error('Older-page duplicate cooldown missing');
 if(!/setVisibleLogicalRange\(shifted\)/.test(live)) throw new Error('Logical viewport is not shifted after prepend');
 if(!/Number\(event\.olderAdded\)/.test(live)) throw new Error('Older prepend count is not consumed by chart');
-if(!/selectIndicatorComputeWindow/.test(live)) throw new Error('Indicator viewport compute window not wired');
+if(!/readCanonical\(\)/.test(live)) throw new Error('Live chart canonical data view not wired');
+if(!/selectIndicatorComputeBounds/.test(coordinator)) throw new Error('Indicator viewport compute bounds not wired');
 if(!/MAX_INDICATOR_COMPUTE_CANDLES = 10_000/.test(computeWindow)) throw new Error('Indicator compute safety ceiling missing');
 console.log('TRADINGCORE_V105_HISTORY_DEMAND_DEPTH_CONTRACT_OK');

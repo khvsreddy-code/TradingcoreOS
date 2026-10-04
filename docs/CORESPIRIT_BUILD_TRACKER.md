@@ -6,9 +6,9 @@
 
 ## Current release
 
-**Release:** CoreSpirit v111 — first-class programmable indicators + Vela runtime-export build repair
+**Release:** CoreSpirit v115 — typed canonical data ingress + Vela workspace integration
 
-**Tracker state:** current implementation truth for the v111 first-class indicator component model and Vela build boundary.
+**Tracker state:** current implementation truth for the CoreSpirit indicator/component ABI plus the v115 canonical typed-data and Vela workspace boundary.
 
 **Architecture document:** `docs/CORESPIRIT.md`
 
@@ -30,11 +30,11 @@ TradingCoreOS is locked to a **CoreSpirit-first + Vela chart engine + TCO-owned 
 - [x] Kept React/CoreSpirit feature code out of direct Vela imports; vendor access is concentrated in the adapter boundary.
 - [x] Preserved canonical columnar market data, indicator execution, risk/policy and broker authorization outside the renderer.
 - [x] Documented Vela's visible attribution requirement and retained the upstream notice/attribution path.
-- [ ] D1: typed-array ingress from the canonical data plane without full-history OHLCV object materialization.
+- [~] D1: typed-array ingress — canonical worker transport and direct canonical ingress are patched; legacy Vela/broker object boundaries remain.
 - [ ] D2: viewport-driven Vela LOD binding.
 - [ ] D3: stable CoreSpirit render packets with forming-bar tail updates.
 - [ ] D4: retained native drawing projection.
-- [ ] D5: renderer-neutral multi-chart range/crosshair synchronization.
+- [~] D5: multi-chart synchronization — VelaWorkspace sync controls are active; renderer-neutral TCO range synchronization remains.
 - [ ] D6: frame-time/GPU allocation regression budgets.
 
 **Renderer boundary validation target:** `TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK`.
@@ -3443,3 +3443,44 @@ These systems do not grant host authority and remain outside appearance-driven i
 Stages 177–184 close the next depth layer: typed parameter value-domain validation, compiled dependency/reverse-dependent graphs, default-hydrated conditional state, deterministic profile-selected preset resolution, portable preset bundles/fingerprints, semantic dimensional algebra, explicit pure conversions, and the release gate at stage 184.
 
 **Validation:** 30 Node-only repository contracts pass; semantic TypeScript runtime contract passes via Node type stripping; full dependency-backed TypeScript/Vite build remains unclaimed because this extracted environment lacks the complete npm dependency tree.
+
+## v115 — CoreSpirit data-ingress boundary — 2026-10-04
+
+CoreSpirit remains the only user-facing trading language and still owns compilation, semantic typing, IR/VM execution and renderer-neutral visual output. v115 changes the data ingress around those stages so new compute work can stop depending on main-thread candle-object transport.
+
+### Locked boundary
+
+```text
+Broker/history
+    ↓
+ChartDataPlane
+    ↓
+CanonicalDataPlane / MarketDataStore
+    ↓
+CanonicalMarketView
+    ↓
+CoreSpirit / indicator typed-series input     ← next conversion seam
+    ↓
+RenderPacket / derived stores
+    ↓
+Vela adapter
+```
+
+The current worker implementation still performs a compatibility conversion from the transferred six-channel packet to the legacy `HistoricalCandle[]` shape required by existing indicator kernels. That conversion is intentionally temporary and isolated inside the worker; it is not a reason to restore object-array transport on the main thread.
+
+### v115 status
+
+- [x] Versioned canonical market packet ABI.
+- [x] Transferable typed-array worker transport.
+- [x] Direct normalized-history → canonical typed-column write.
+- [x] Vela provider reads the shared canonical plane.
+- [x] Vela workspace is live in multi-chart mode.
+- [x] TCO Alt-held native-indicator wheel.
+- [ ] CoreSpirit execution input accepts `CanonicalMarketView`/typed series without compatibility candle materialization.
+- [ ] Stable CoreSpirit RenderPacket is the only chart-facing output transport.
+- [ ] Incremental dependency graph and typed-series kernels consume only dirty ranges, not full historical slices.
+- [ ] SAB evaluation after ownership/revision/reclamation semantics are locked.
+
+### CoreSpirit performance principle
+
+Complexity must be absorbed by compiler planning, semantic dependency graphs, incremental runtime state and typed data access rather than by allocating larger object graphs. A simple CoreSpirit source language should therefore be capable of expressing complex indicators/models/automations without forcing the runtime to represent every intermediate candle as a JavaScript object.

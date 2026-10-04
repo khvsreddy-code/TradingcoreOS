@@ -2,7 +2,7 @@ import type { IChartApi, ISeriesApi, Time } from '../../services/core/chart/vela
 import type { HistoricalCandle } from '../../services/brokers/BrokerAdapter';
 import { candleSeriesOptions, type CandleAppearance, volumeColor } from '../../services/core/chart/candleAppearance';
 import { type ChartDataPoint } from '../../services/core/chart/chartDataModel';
-import { getCanonicalDataPlane, type CanonicalDataPlane } from '../../services/core/data/canonicalDataPlane';
+import { getCanonicalDataPlane, type CanonicalDataPlane, type CanonicalMarketView } from '../../services/core/data/canonicalDataPlane';
 import { PRODUCTION_CHART_BACKEND } from '../../services/core/chart/chartBackendPolicy';
 
 export type ChartRendererControllerBindings = {
@@ -58,6 +58,55 @@ export class ChartController {
     if (Number.isFinite(Number(bar.volume)) && Number(bar.volume) > 0) {
       b.volume.update({ time, value: Number(bar.volume), color: volumeColor(appearance, Number(bar.open), Number(bar.close)) } as any);
     }
+  }
+
+  /**
+   * Canonical-first history projection. The TCO data plane stays columnar; only the
+   * explicit Vela renderer boundary materializes its OHLCV records.
+   */
+  setHistoryFromCanonical(market: CanonicalMarketView, appearance: CandleAppearance): void {
+    const b = this.bindings;
+    if (!b || !market.length) return;
+    const firstIndex = 0;
+    const lastIndex = market.length - 1;
+    const fingerprint = `${market.revision}|${market.length}|${market.time[firstIndex] ?? ''}|${market.time[lastIndex] ?? ''}|${market.open[lastIndex] ?? ''}|${market.high[lastIndex] ?? ''}|${market.low[lastIndex] ?? ''}|${market.close[lastIndex] ?? ''}|${market.volume[lastIndex] ?? ''}`;
+    if (this.lastHistoryFingerprint === fingerprint) return;
+    this.lastHistory = null;
+    this.lastHistoryFingerprint = fingerprint;
+    const candleRows = new Array<{ time: Time; open: number; high: number; low: number; close: number }>(market.length);
+    const closeRows = new Array<{ time: Time; value: number }>(market.length);
+    const volumeRows = new Array<{ time: Time; value: number; color: string }>(market.length);
+    for (let i = 0; i < market.length; i += 1) {
+      const time = (market.time[i]! * 1000) as Time;
+      const open = market.open[i]!;
+      const high = market.high[i]!;
+      const low = market.low[i]!;
+      const close = market.close[i]!;
+      const volume = market.volume[i] || 0;
+      candleRows[i] = { time, open, high, low, close };
+      closeRows[i] = { time, value: close };
+      volumeRows[i] = { time, value: volume, color: volumeColor(appearance, open, close) };
+    }
+    b.candle.setData(candleRows);
+    b.closeLine.setData(closeRows as any);
+    b.volume.setData(volumeRows as any);
+  }
+
+  /** Canonical forming-bar projection; only the final Vela update object is allocated. */
+  applyRealtimeCanonical(market: CanonicalMarketView, appearance: CandleAppearance): void {
+    const b = this.bindings;
+    if (!b || !market.length) return;
+    const i = market.length - 1;
+    const time = (market.time[i]! * 1000) as Time;
+    const open = market.open[i]!;
+    const high = market.high[i]!;
+    const low = market.low[i]!;
+    const close = market.close[i]!;
+    const volume = market.volume[i] || 0;
+    this.lastHistory = null;
+    this.lastHistoryFingerprint = '';
+    b.candle.update({ time, open, high, low, close });
+    if (Number.isFinite(volume) && volume > 0) b.volume.update({ time, value: volume, color: volumeColor(appearance, open, close) } as any);
   }
 
   setHistory(data: HistoricalCandle[], appearance: CandleAppearance, syncCanonical = true): void {

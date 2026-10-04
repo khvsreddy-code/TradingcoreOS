@@ -343,3 +343,109 @@ bar-only replace/append updates
 The market-data plane still owns history and realtime candle materialization. The indicator worker does not become a second source of market truth; it consumes the latest canonical bar and its resident mathematical state.
 
 Worker affinity is chart-specific for the incremental state. Multiple charts may share the same canonical dataset plane while each chart keeps its own renderer-visible indicator runtime key where independent configuration/timing requires it.
+
+## v115 — canonical worker transport + direct typed-array ingress — 2026-10-04
+
+The v115 pass makes the existing columnar architecture an execution boundary rather than a documentation-only target.
+
+### Actual hot path after v115
+
+```text
+Broker/history API
+      │
+      ▼
+HistoricalCandle[]                 ← compatibility input from current broker ABI
+      │
+      ├── normalizeHistory()        ← one required validation/canonicalization pass
+      │
+      ▼
+ChartDataPlane.state.candles       ← legacy/UI compatibility cache
+      │
+      └── direct typed write
+            ▼
+CanonicalDataPlane
+      │
+      ├── Float64Array time/open/high/low/close/volume
+      ├── Float64Array OI/bid/ask/... optional columns
+      │
+      ├───────────────┬────────────────┬────────────────┐
+      ▼               ▼                ▼                ▼
+Core/indicator     analytics       chart adapter      other consumers
+compute worker       worker             │
+      │               │                 ▼
+      │               │             Vela OHLCV
+      │               │                 │
+      └──── transferred typed packets  ▼
+                              NativeRenderer
+```
+
+The important change is what **does not** happen between the main-thread canonical store and compute workers: there is no `HistoricalCandle[]` structured-cloned through `postMessage()`.
+
+### Worker packet ABI
+
+`src/services/core/data/canonicalMarketDataTransport.ts` defines a versioned `CanonicalMarketDataPacket` containing bounded `Float64Array` channels for time, OHLC and volume. `createCanonicalMarketDataPacket()` is the explicit ownership boundary: it copies the requested canonical window once, then `packetTransferables()` transfers the six `ArrayBuffer`s to the worker.
+
+The packet is therefore **transfer-based, not zero-copy in the mathematical sense**. The canonical store remains owned by the main thread; the worker receives ownership of the bounded packet buffers. This is intentional. It gives us deterministic ownership and avoids aliasing before a later `SharedArrayBuffer` design is justified.
+
+### Why this matters
+
+The old worker path could look like:
+
+```text
+HistoricalCandle[]
+  → structured clone
+  → worker object graph
+  → indicator arrays
+```
+
+A busy chart grid multiplies that cost by the number of compute requests. v115 changes the transport to:
+
+```text
+canonical typed arrays
+  → bounded packet
+  → transferable buffers
+  → worker compatibility materialization
+  → existing kernels
+```
+
+The remaining `HistoricalCandle[]` materialization happens **inside the worker** because the current legacy indicator and analytics kernels still accept candle objects. That is now an isolated compatibility seam rather than the transport ABI.
+
+### Realtime path
+
+For a forming bar, the indicator coordinator transfers only a one-row typed packet once the incremental runtime is primed. A full history packet is used only for snapshot computation, first-time incremental seeding, or an explicit reset/resynchronization. This avoids re-cloning the complete dataset on every tick.
+
+`ChartDataPlane` also stopped calling `MarketDataStore.get()` merely to inspect the canonical tail on each tick; it reads the typed `time` view directly.
+
+### Vela boundary
+
+The Vela provider now resolves `broker:symbol:timeframe` through the shared `ChartDataPlane` and reads its canonical view. It binary-searches the typed timestamp column for the requested range and creates ordinary `OHLCV` objects only for Vela's provider interface.
+
+That allocation is a renderer/provider compatibility boundary, not a compute transport.
+
+### Ownership rules
+
+1. `CanonicalDataPlane` owns canonical numeric storage.
+2. `ChartDataPlane` owns broker/history lifecycle and realtime candle reconciliation.
+3. Workers own transferred compute-window buffers after `postMessage()`.
+4. Indicator/analytics kernels own their derived result arrays/state, not market-data copies.
+5. Vela owns its rendering-side `OHLCV` compatibility objects.
+6. No consumer may mutate canonical backing arrays in place.
+7. `SharedArrayBuffer` is deferred until the worker lifecycle, mutation discipline, revision protocol and reclamation model are explicit.
+
+### Remaining representation-churn work
+
+v115 intentionally does **not** pretend the whole system is finished. The next high-value seam is the CoreSpirit/indicator-kernel input ABI itself. The desired end state is:
+
+```text
+CanonicalMarketView
+      ↓
+CoreSpirit typed series / execution input
+      ↓
+incremental kernels / VM
+      ↓
+renderer-neutral RenderPacket
+      ↓
+Vela adapter
+```
+
+The existing worker compatibility materializer can then be retired for kernels that have been converted to typed-series inputs. That is the point at which a true zero-object hot path becomes achievable end to end.

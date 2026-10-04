@@ -1,6 +1,6 @@
 # Vela Chart Integration
 
-Date: 2026-09-29
+Date: 2026-10-04
 
 ## Architecture lock
 
@@ -75,8 +75,8 @@ Vela's bundled `NOTICE` requires visible attribution wherever a chart is display
 
 ## Deepening roadmap
 
-### D1 — Typed-array ingestion
-Add a Vela-native ingestion method that can consume `MarketDataViews` or an equivalent typed-array view contract directly. The current adapter materializes OHLCV objects once per full history replacement; realtime updates remain incremental.
+### D1 — Typed-array ingestion — partial v115
+The canonical-to-worker side of typed ingress is now implemented through versioned transferable packets. Direct Vela-native ingestion remains the next seam: the current `DataProvider` API still requires `OHLCV[]`, so `TcoVelaDataProvider` materializes ordinary bars only at that explicit renderer/provider boundary.
 
 ### D2 — Renderer-owned LOD
 Connect the existing TCO `ChartLodIndex` to Vela viewport changes so the renderer can select the smallest safe representation for the current pixel density without copying the entire dataset.
@@ -87,8 +87,8 @@ Convert CoreSpirit output into stable render packets keyed by series/visual IDs,
 ### D4 — Drawings in the native scene
 Move TCO drawing primitives into the Vela/TCO retained scene boundary rather than maintaining separate browser overlays for production chart visuals where Vela has an equivalent primitive.
 
-### D5 — Multi-chart synchronization
-Use TCO's renderer-neutral visible-range and crosshair contracts to synchronize multiple Vela surfaces without exposing Vela internals to React.
+### D5 — Multi-chart synchronization — partial v115
+VelaWorkspace now exposes the production multi-chart shell, active-cell projection and independent sync controls. TCO still needs to connect its renderer-neutral visible-range contract so synchronization logic remains portable beyond Vela.
 
 ### D6 — GPU budget enforcement
 Introduce a chart frame budget and allocation counters: visible bars, active series, draw calls, typed-buffer bytes, overlay nodes and long-task duration. Regression gates should be attached to the contracts rather than manual observation alone.
@@ -196,3 +196,37 @@ Vela NativeRenderer
 
 This is important for portability: an indicator can run in historical, replay or realtime hosts without knowing which renderer is currently presenting it. Vela is a production rendering backend, not the source of indicator semantics.
 
+
+## v115 production workspace + canonical transport — 2026-10-04
+
+The Vela integration has moved from “renderer cutover” to “production workspace mode.”
+
+### Workspace capabilities now exposed in TradingCoreOS
+
+The live chart now boots the vendored `VelaWorkspace` in a four-cell layout instead of `layout: false`. Vela's shared workspace shell therefore becomes the primary multi-chart surface: layout switching, active-cell projection, indicator picker, object tree/panels, drawings, bottom bar, screenshot/action surfaces and the workspace keymap remain in one host rather than being rebuilt in React.
+
+The workspace is seeded with four index cells and uses a new persistence key so previous one-chart saved state cannot force the new workspace back into single-chart mode.
+
+### TCO indicator wheel
+
+TradingCoreOS adds an application-level radial quick picker triggered by holding `Alt`. It asks the active Vela chart for its supported native-indicator catalog, selects up to eight quick entries, highlights the sector under the pointer and adds the selected native indicator on `Alt` release.
+
+This is intentionally separate from CoreSpirit scripting. Native Vela indicators remain Vela-native; CoreSpirit scripts continue through `CoreSpiritVelaEngine`. No Pine/PineTS compatibility path is introduced.
+
+The current public Vela platform documentation describes the standard `Alt` radial wheel as a **drawing-tool** wheel, while the indicator picker is the separate indicator UI. TradingCoreOS's Alt indicator wheel is therefore a TCO host extension, not a claim that the upstream Vela indicator picker itself is radial. citeturn954793search3turn954793search1
+
+### Data provider boundary
+
+`TcoVelaDataProvider` no longer reopens broker history independently. It obtains the shared `ChartDataPlane`, waits for the canonical dataset, binary-searches its typed `time` column, and materializes only the bars requested by Vela. Live subscriptions read the current canonical tail and allocate one Vela bar at the provider boundary.
+
+### Compute boundary
+
+The TCO compute coordinator now transfers versioned typed-array market packets to workers. Existing legacy kernels still receive a compatibility `HistoricalCandle[]` only after the message reaches the worker. That makes worker compatibility materialization an explicit migration seam rather than the cross-thread data format.
+
+### Upstream Vela feature alignment
+
+The vendored workspace already supports standard multi-chart layouts (including 1, 2-horizontal, 2-vertical, 4 and 8-cell modes), active-cell behavior and independent synchronization controls. TCO now exposes that capability instead of suppressing it with single-chart mode. citeturn954793search0turn954793search2
+
+### Next Vela performance seam
+
+The next step is direct typed-array/retained-buffer ingestion into the Vela-facing data adapter, followed by viewport-driven LOD selection and stable CoreSpirit RenderPackets. The current provider compatibility objects should be treated as an adapter boundary to be reduced, not as the canonical chart representation.
