@@ -3042,11 +3042,12 @@ function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | und
     const previousSeries = new Map((previous?.series ?? []).map((candidate) => [candidate.id, candidate]));
     for (const current of model.series) {
         const prev = previousSeries.get(current.id);
-        const delta = incremental && prev ? incrementalSeriesDelta(prev, current, cause) : null;
+        const ranged = model.dirty && prev ? rangeSeriesDelta(prev, current, model.dirty) : null;
+        const delta = incremental && prev ? incrementalSeriesDelta(prev, current, cause) : ranged;
         const emitted = delta ?? fullSeriesDelta(current);
         series.push(emitted);
         const values = emitted.kind === 'points' ? emitted.points : emitted.kind === 'bars' ? emitted.bars : emitted.markers;
-        for (const value of values) { from = Math.min(from, value.time); to = Math.max(to, value.time); }
+        if (!model.dirty) for (const value of values) { from = Math.min(from, value.time); to = Math.max(to, value.time); }
 
         if (prev && isLineLikeSeries(current) && isLineLikeSeries(prev)) {
             const styleChanged = !lineStyleEqual(current.style, prev.style);
@@ -3067,7 +3068,7 @@ function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | und
 
     const patch: ValuePatch = {
         kind: 'value', indicatorId: model.id,
-        dirty: { from: Number.isFinite(from) ? from : 0, to },
+        dirty: model.dirty ?? { from: Number.isFinite(from) ? from : 0, to },
         anchorTime: model.anchorTime ?? null,
         series,
     };
@@ -3165,6 +3166,41 @@ function incrementalCollectionDelta(previous: readonly unknown[], current: reado
         }
     }
     return null;
+}
+
+function rangeSeriesDelta(
+    previous: IndicatorModel['series'][number],
+    current: IndicatorModel['series'][number],
+    dirty: DirtyRange,
+): SeriesValueDelta | null {
+    if (previous.kind !== current.kind) return null;
+    const values = (series: IndicatorModel['series'][number]): { kind: 'points'|'bars'|'markers'; items: Array<{ time: number }> } | null => {
+        if (isLineLikeSeries(series)) return { kind: 'points', items: series.points as Array<{ time: number }> };
+        if (series.kind === 'candle' || series.kind === 'bar') return { kind: 'bars', items: series.bars as Array<{ time: number }> };
+        if (series.kind === 'markers') return { kind: 'markers', items: series.markers as Array<{ time: number }> };
+        return null;
+    };
+    const prev = values(previous);
+    const next = values(current);
+    if (!prev || !next || prev.kind !== next.kind) return null;
+    const lower = (items: Array<{ time: number }>, target: number): number => {
+        let lo = 0, hi = items.length;
+        while (lo < hi) { const mid = (lo + hi) >>> 1; if (Number(items[mid]!.time) < target) lo = mid + 1; else hi = mid; }
+        return lo;
+    };
+    const upper = (items: Array<{ time: number }>, target: number): number => {
+        let lo = 0, hi = items.length;
+        while (lo < hi) { const mid = (lo + hi) >>> 1; if (Number(items[mid]!.time) <= target) lo = mid + 1; else hi = mid; }
+        return lo;
+    };
+    const start = lower(prev.items, dirty.from);
+    const remove = upper(prev.items, dirty.to) - start;
+    const incomingStart = lower(next.items, dirty.from);
+    const incomingEnd = upper(next.items, dirty.to);
+    const incoming = next.items.slice(incomingStart, incomingEnd);
+    if (next.kind === 'points') return { seriesId: current.id, kind: 'points', points: incoming as SeriesPoint[], op: 'replace-range', start, remove };
+    if (next.kind === 'bars') return { seriesId: current.id, kind: 'bars', bars: incoming as OHLCV[], op: 'replace-range', start, remove };
+    return { seriesId: current.id, kind: 'markers', markers: incoming as MarkerPoint[], op: 'replace-range', start, remove };
 }
 
 function fullSeriesDelta(series: IndicatorModel['series'][number]): SeriesValueDelta {
