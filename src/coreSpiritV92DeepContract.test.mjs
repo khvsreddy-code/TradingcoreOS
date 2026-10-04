@@ -15,7 +15,7 @@ const legacy=read('docs/archive/legacy/CORESPIRIT_LEGACY_ARCHITECTURE.md');
 const core=legacy;
 const composition=legacy;
 const scripting=legacy;
-const tracker=read('docs/CORESPIRIT_BUILD_TRACKER.md');
+const tracker=read('docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md');
 for(const token of ['DATA','LET','WHEN','SHOW','MODEL','AUTOMATE']) if(!core.includes(token)) throw new Error(`six-concept surface missing ${token}`);
 for(const token of ['CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES','resolveCoreSpiritLibraryCall','canonicalBuiltin','componentId']) if(!namespaces.includes(token)) throw new Error(`namespace architecture missing ${token}`);
 for(const token of ['CORE_SPIRIT_SURFACE_CONCEPTS','buildCoreSpiritComplexityProfile','validateCoreSpiritComplexityProfile','model-abi','host-capability']) if(!absorber.includes(token)) throw new Error(`complexity absorber missing ${token}`);
