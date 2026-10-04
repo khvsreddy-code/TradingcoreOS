@@ -257,7 +257,8 @@ export function advancedIndicatorModel(c: HistoricalCandle[], kind: IndicatorKin
   } else if(kind==='Neural Weight Oscillator'){
     const z1=normalized(close.map((x,i)=>i?x-close[i-1]:0),p), z2=normalized(vol,p); add('NWO',z1.map((x,i)=>x==null||z2[i]==null?null:Math.tanh(.65*x+.35*z2[i])));
   } else if(kind==='OrderBlock AI'){
-    for(let i=p;i<c.length;i++){const a=atrP[i]||0, body=Math.abs(close[i]-c[i].open), vr=(vol[i]||0)/(rollingMean(vol,p)[i]||1);if(a&&body>mult*a&&vr>1.2){const base=c[i-1],bull=close[i]>c[i].open;zones.push({startTime:t[i-1],endTime:t[c.length-1],upper:bull?Math.max(base.open,base.close):base.high,lower:bull?base.low:Math.min(base.open,base.close),label:'OB AI',score:Math.min(1,(body/a)/4*.6+Math.min(vr/3,1)*.4),side:bull?'bull':'bear'})}}
+    const volumeMean=rollingMean(vol,p);
+    for(let i=p;i<c.length;i++){const a=atrP[i]||0,body=Math.abs(close[i]-c[i].open),vr=(vol[i]||0)/(volumeMean[i]||1);if(a&&body>mult*a&&vr>1.2){const base=c[i-1],bull=close[i]>c[i].open;zones.push({startTime:t[i-1],endTime:t[c.length-1],upper:bull?Math.max(base.open,base.close):base.high,lower:bull?base.low:Math.min(base.open,base.close),label:'OB AI',score:Math.min(1,(body/a)/4*.6+Math.min(vr/3,1)*.4),side:bull?'bull':'bear'})}}
   } else if(kind==='Pivot Consolidation Zone'){
     const highState=new RollingMinMax(p), lowState=new RollingMinMax(p);
     for(let i=0;i<c.length;i++){const h=highState.max(),l=lowState.min();if(i>=p&&h!=null&&l!=null){const range=h-l;if(range<=((atrP[i]||range)*1.5))zones.push({startTime:t[i-p]!,endTime:t[i],upper:h,lower:l,label:'Pivot Consolidation',score:.7});}highState.update(high[i]);lowState.update(low[i]);}
