@@ -150,7 +150,7 @@ export interface BrokerAdapter {
   getMarketData(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>>;
   getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit?: number): Promise<HistoricalCandle[]>;
   /** Optional compact history path; avoids per-candle objects until a compatibility boundary actually needs them. */
-  getHistoricalDataColumns?(symbol: string, timeframe: string, signal?: AbortSignal, limit?: number): Promise<HistoricalCandleColumns | null>;
+  getHistoricalDataColumns?(symbol: string, timeframe: string, signal?: AbortSignal, limit?: number, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null>;
   /** Load an older history page ending before the supplied timestamp. */
   getHistoricalDataBefore?(symbol: string, timeframe: string, beforeTimestamp: string, limit?: number, signal?: AbortSignal): Promise<HistoricalCandle[]>;
   placeOrder(order: OrderRequest): Promise<OrderResult>;
