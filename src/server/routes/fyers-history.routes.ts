@@ -82,6 +82,13 @@ function normalizeColumns(rows: any[], limit: number) {
   return { time, open, high, low, close, volume, timeUnit: 'milliseconds' as const };
 }
 
+type FyersColumnarData = ReturnType<typeof normalizeColumns>;
+type FyersHistoryData = any[] | FyersColumnarData;
+
+function isColumnarData(value: FyersHistoryData): value is FyersColumnarData {
+  return !Array.isArray(value);
+}
+
 function columnsFromCandleRows(rows: any[]) {
   const time: number[] = [], open: number[] = [], high: number[] = [], low: number[] = [], close: number[] = [], volume: number[] = [];
   for (const row of rows || []) {
@@ -227,13 +234,13 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
         throw new Error(payload?.message || `Fyers history failed (${response.status})`);
       }
-      let data = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
-      const dataLength = columnar ? data.time.length : data.length;
+      let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
+      const dataLength = isColumnarData(data) ? data.time.length : data.length;
       if (!beforeDate && dataLength < 2) {
         const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
         if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
       }
-      const finalLength = columnar ? data.time.length : data.length;
+      const finalLength = isColumnarData(data) ? data.time.length : data.length;
       if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
@@ -241,9 +248,9 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    const returned = columnar ? data.time.length : data.length;
-    const oldestTimestamp = columnar ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
-    const newestTimestamp = columnar ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
+    const returned = isColumnarData(data) ? data.time.length : data.length;
+    const oldestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
+    const newestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
     res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !columnar && data.length === 1 && data[0]?.liveSeed === true });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
