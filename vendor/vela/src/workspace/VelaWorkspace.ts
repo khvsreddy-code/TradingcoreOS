@@ -43,6 +43,7 @@ import { MoreDrawer } from '../widget/more-drawer';
 import { TimezoneDrawer } from '../widget/timezone-drawer';
 import { PriceScaleDrawer } from '../widget/price-scale-drawer';
 import { DrawingPill } from '../widget/drawing-pill';
+import { AltDrawingWheel } from '../widget/alt-wheel';
 import { priceStyleIds } from '../renderers/native/core/chartConfig';
 import { resolveIndicators, type IndicatorManifest, type ResolvedIndicator } from '../widget/indicators';
 import { DrawingToolbar } from '../renderers/native/drawings/DrawingToolbar';
@@ -372,6 +373,8 @@ export class VelaWorkspace {
     private layoutCtl!: LayoutModeController;
     private readonly mobileBar: MobileBar | null;
     private readonly drawingPill: DrawingPill | null;
+    /** Vela-native Alt-held radial quick tool launcher. */
+    private altWheel: AltDrawingWheel | null = null;
     private tfDrawer: TimeframeDrawer | null = null;
     private drawingsDrawer: DrawingsDrawer | null = null;
     private moreDrawer: MoreDrawer | null = null;
@@ -756,6 +759,26 @@ export class VelaWorkspace {
         // Shortcuts only fire while focus is INSIDE the workspace (the keymap listens
         // on the root) — autofocus makes them work before the first click.
         if (opts.autofocus) this.refocusActive();
+
+        // Vela-native Alt wheel: hold Alt to expose the most-used drawing tools around
+        // the ACTIVE chart. The center opens the same Vela panel dock used by the topbar;
+        // TCO can still style/compose that dock through contributed panel entries.
+        this.altWheel = new AltDrawingWheel(this.root, {
+            getAnchor: () => this.activeId ? (this.cellsById.get(this.activeId)?.host ?? this.root) : this.root,
+            onSelect: (type) => {
+                this.active.chart.drawings.setTool(type);
+                this.refocusActive();
+            },
+            onPanels: () => {
+                const open = this.dock.openId;
+                if (open) this.dock.toggle(open, false);
+                else {
+                    const first = this.dock.list()[0];
+                    if (first) this.dock.toggle(first.id, true);
+                }
+                this.refocusActive();
+            },
+        });
 
         // The shared manifest resolves once; every FRESH cell seeds its enabled entries.
         if (opts.indicators !== undefined) {
@@ -1317,6 +1340,7 @@ export class VelaWorkspace {
         this.attachmentDisposers.clear();
         this.root.removeEventListener('keydown', this.onRootKeydown);
         this.keymap.destroy();
+        this.altWheel?.destroy();
         this.drawToolbar?.destroy();
         this.topbar.destroy();
         this.bottombar?.destroy();
