@@ -4,7 +4,7 @@ export class CoreSpiritCapabilityHost {
   constructor(
     private readonly executionTarget: string,
     private readonly dataResolver?: CoreSpiritDataResolver,
-    private readonly modelOutputResolver?: (input: { modelName: string; field: string; binding?: { kind: string; locator: string } }) => unknown,
+    private readonly modelOutputResolver?: (input: { modelName: string; field: string; binding?: unknown }) => unknown,
     private readonly eventResolver?: (eventName: string) => boolean | unknown,
   ) {}
 
@@ -20,7 +20,7 @@ export class CoreSpiritCapabilityHost {
     return this.eventResolver?.(name) ?? false;
   }
 
-  resolveModel(input: { modelName: string; field: string; binding?: { kind: string; locator: string } }): unknown {
+  resolveModel(input: { modelName: string; field: string; binding?: unknown }): unknown {
     return this.modelOutputResolver?.(input) ?? null;
   }
 
