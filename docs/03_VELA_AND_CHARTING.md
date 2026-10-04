@@ -31,7 +31,7 @@ setVisibleRange(range)
 
 The renderer owns its mutable numeric capacity after the boundary. Forming-bar updates and finalized-bar appends are O(1) mutations.
 
-A legacy OHLCV mirror remains for Vela compatibility consumers, but it is not the preferred candle painting transport. **Object materialization** is an explicit compatibility boundary and is never the canonical render transport.
+A legacy OHLCV mirror remains for Vela compatibility consumers, but it is not the preferred candle painting transport. **object materialization** is an explicit compatibility boundary and is never the canonical render transport.
 
 ## Incremental contract
 
