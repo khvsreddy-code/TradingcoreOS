@@ -91,6 +91,12 @@ export function executeCoreSpiritSeriesFusionGroup(group:CoreSpiritSeriesFusionG
   if(input.register!==group.inputRegister)throw new Error(`fusion input register mismatch: expected '${group.inputRegister}', got '${input.register}'`);
   return executeCoreSpiritFusedSeriesPipeline(asCoreSpiritNumericSeries(input.values),group.operations);
 }
+
+/** Reuses a caller-owned final output buffer; no new history-sized output is allocated. */
+export function executeCoreSpiritSeriesFusionGroupInto(group:CoreSpiritSeriesFusionGroup,input:CoreSpiritFusedSeriesInput,output:Float64Array){
+  if(input.register!==group.inputRegister)throw new Error(`fusion input register mismatch: expected '${group.inputRegister}', got '${input.register}'`);
+  return executeCoreSpiritFusedSeriesPipelineInto(asCoreSpiritNumericSeries(input.values),group.operations,output);
+}
 export function validateCoreSpiritSeriesFusionPlan(plan:CoreSpiritSeriesFusionPlan):string[]{
   const e:string[]=[];
   for(const g of plan.groups){
