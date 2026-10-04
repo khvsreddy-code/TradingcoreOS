@@ -230,7 +230,7 @@ export class TradingCoreRuntime {
    * Compact history path for native Vela loads. No candle objects are created in the
    * browser before the chart receives its OHLCV columns.
    */
-  public async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000): Promise<HistoricalCandleColumns | null> {
+  public async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000, beforeTimestamp?: number | string): Promise<HistoricalCandleColumns | null> {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
     let brokerInfo = this.getPrimaryBrokerInfo();
     if ((!brokerInfo || !this.getPrimaryBroker()) && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
@@ -240,7 +240,7 @@ export class TradingCoreRuntime {
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER' || !broker.getHistoricalDataColumns) return null;
-    return broker.getHistoricalDataColumns(symbol, timeframe, signal, Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000))));
+    return broker.getHistoricalDataColumns(symbol, timeframe, signal, Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000))), beforeTimestamp);
   }
 
   public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
