@@ -2,7 +2,7 @@ import type { IndicatorAppearanceConfig } from '../coreSpirit/indicatorAppearanc
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { buildTradingCoreVStructure } from './structureEngine';
 import { sma, ema, rma as wilder, trueRanges, atr, wma as weightedMovingAverage } from './coreIndicatorKernel';
-import { RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingAbsoluteDeviation, EMAState } from './incrementalIndicatorKernel';
+import { RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingAbsoluteDeviation, RollingPercentile, EMAState, centeredRollingExtrema } from './incrementalIndicatorKernel';
 import { CORE_PRICE_SOURCE_OPTIONS } from '../coreSpirit/indicatorSettingsSchema';
 import type { IndicatorSettingsSchema } from '../coreSpirit/indicatorSettingsSchema';
 
@@ -219,8 +219,16 @@ export function advancedIndicatorModel(c: HistoricalCandle[], kind: IndicatorKin
     const alpha=2/(p+1), out:(number|null)[]=[]; let prev=close[0]||0;
     close.forEach((x,i)=>{const volr=i?Math.abs(x-close[i-1])/(atrP[i]||Math.max(1,x*0.001)):0; const a=Math.max(0.05,Math.min(0.7,alpha*(1+volr))); prev=prev+a*(x-prev);out.push(i>=p-1?prev:null)}); add('Adaptive',out);
   } else if(kind==='ATR Percentile Bands'){
-    const atrVals=atrP.map(x=>x||0), upper:(number|null)[]=[], lower:(number|null)[]=[];
-    atrVals.forEach((a,i)=>{const w=atrVals.slice(Math.max(0,i-p+1),i+1).filter(Boolean);const pct=w.length?w.filter(x=>x<=a).length/w.length:0.5;const k=0.5+pct*mult;upper.push(i>=p-1?close[i]+a*k:null);lower.push(i>=p-1?close[i]-a*k:null)});add('Upper',upper);add('Lower',lower);
+    const rank=new RollingPercentile(p);
+    const upper:(number|null)[]=[],lower:(number|null)[], atrVals=atrP.map(x=>x||0);
+    atrVals.forEach((a,i)=>{
+      rank.update(a>0?a:Number.NaN);
+      const pct=a>0?(rank.rank(a)??0.5):0.5;
+      const k=0.5+pct*mult;
+      upper.push(i>=p-1?close[i]+a*k:null);
+      lower.push(i>=p-1?close[i]-a*k:null);
+    });
+    add('Upper',upper);add('Lower',lower);
   } else if(kind==='CVD Profiles' || kind==='Volume Delta Footprint'){
     let cvd=0; const raw:(number|null)[]=[]; c.forEach((x,i)=>{const d=x.close>x.open?x.volume:x.close<x.open?-x.volume:0;cvd+=d;raw.push(cvd)});add('CVD',raw);
     const z=normalized(c.map(x=>x.close>x.open?x.volume:x.close<x.open?-x.volume:0),p); z.forEach((v,i)=>{if(v!=null&&Math.abs(v)>2)markers.push({time:t[i],price:v>0?low[i]:high[i],label:v>0?'Δ+':'Δ-',side:v>0?'bull':'bear'})});
@@ -253,7 +261,15 @@ export function advancedIndicatorModel(c: HistoricalCandle[], kind: IndicatorKin
   } else if(kind==='Pivot Consolidation Zone'){
     const s=p; for(let i=s;i<c.length;i++){const h=Math.max(...high.slice(i-s,i)),l=Math.min(...low.slice(i-s,i)),range=h-l;if(range<=((atrP[i]||range)*1.5)){zones.push({startTime:t[i-s],endTime:t[i],upper:h,lower:l,label:'Pivot Consolidation',score:.7})}}
   } else if(kind==='Stoploss Cascades'){
-    for(let i=p;i<c.length;i++){const rh=Math.max(...high.slice(i-p,i)),rl=Math.min(...low.slice(i-p,i)),a=atrP[i]||0;if(a&&high[i]>rh+mult*a&&close[i]<rh)markers.push({time:t[i],price:high[i],label:'Stop Cascade ↓',side:'bear'});if(a&&low[i]<rl-mult*a&&close[i]>rl)markers.push({time:t[i],price:low[i],label:'Stop Cascade ↑',side:'bull'})}
+    const highState=new RollingMinMax(p), lowState=new RollingMinMax(p);
+    for(let i=0;i<c.length;i++){
+      const rh=highState.max(), rl=lowState.min(), a=atrP[i]||0;
+      if(i>=p&&a&&rh!=null&&rl!=null){
+        if(high[i]>rh+mult*a&&close[i]<rh)markers.push({time:t[i],price:high[i],label:'Stop Cascade ↓',side:'bear'});
+        if(low[i]<rl-mult*a&&close[i]>rl)markers.push({time:t[i],price:low[i],label:'Stop Cascade ↑',side:'bull'});
+      }
+      highState.update(high[i]); lowState.update(low[i]);
+    }
   } else if(kind==='Trend Pressure'){
     const mom=close.map((x,i)=>i?x-close[i-1]:0), z=normalized(mom,p), vr=normalized(vol,p);add('Pressure',z.map((x,i)=>x==null||vr[i]==null?null:Math.tanh(.7*x+.3*vr[i])));
   } else if(kind==='Trend Target Ribbon'){
@@ -269,19 +285,21 @@ export function advancedIndicatorModel(c: HistoricalCandle[], kind: IndicatorKin
   return {lines,zones,markers};
 }
 
-export function marketStructure(c: HistoricalCandle[], swing=3): Array<{time:number;price:number;type:'HH'|'HL'|'LH'|'LL'}> {const out:Array<{time:number;price:number;type:'HH'|'HL'|'LH'|'LL'}>=[];let lastHigh:number|undefined,lastLow:number|undefined;for(let i=swing;i<c.length-swing;i++){const w=c.slice(i-swing,i+swing+1);const hi=Math.max(...w.map(x=>x.high)),lo=Math.min(...w.map(x=>x.low));if(c[i].high===hi){const type=lastHigh==null?'HH':c[i].high>lastHigh?'HH':'LH';lastHigh=c[i].high;out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,type});}if(c[i].low===lo){const type=lastLow==null?'HL':c[i].low>lastLow?'HL':'LL';lastLow=c[i].low;out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,type});}}return out; }
-export type ZonePoint = { time:number; upper:number; lower:number; kind:'bullish'|'bearish' };
-export function fairValueGaps(c: HistoricalCandle[], _lookback=1): ZonePoint[] { const out:ZonePoint[]=[]; for(let i=2;i<c.length;i++){ if(c[i].low>c[i-2].high) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),upper:c[i].low,lower:c[i-2].high,kind:'bullish'}); if(c[i].high<c[i-2].low) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),upper:c[i-2].low,lower:c[i].high,kind:'bearish'}); } return out.slice(-100); }
-export type SRPoint={time:number;price:number;side:'support'|'resistance'};
-export function classicPivots(c: HistoricalCandle[]): Array<{value:number;label:string}> {
-  if(c.length<2) return [];
-  const key = (ts:string|number) => indiaDate(ts);
-  const sessions = new Map<string, HistoricalCandle[]>();
-  for(const x of c){const k=key(x.timestamp); const a=sessions.get(k)||[]; a.push(x); sessions.set(k,a);}
-  const days=[...sessions.values()]; if(days.length<2) return [];
-  const d=days[days.length-2]; const h=Math.max(...d.map(x=>x.high)); const l=Math.min(...d.map(x=>x.low)); const cl=d[d.length-1].close;
-  const p=(h+l+cl)/3, r=h-l;
-  return [{value:p,label:'P'},{value:p+r,label:'R1'},{value:p+2*r,label:'R2'},{value:p+3*r,label:'R3'},{value:p-r,label:'S1'},{value:p-2*r,label:'S2'},{value:p-3*r,label:'S3'}];
+export function marketStructure(c: HistoricalCandle[], swing=3): Array<{time:number;price:number;type:'HH'|'HL'|'LH'|'LL'}> {
+  const out:Array<{time:number;price:number;type:'HH'|'HL'|'LH'|'LL'}>=[], highs=c.map(x=>x.high), lows=c.map(x=>x.low);
+  let lastHigh:number|undefined,lastLow:number|undefined;
+  centeredRollingExtrema(highs,swing,(i,_minH,maxH)=>{
+    if(highs[i]!==maxH)return;
+    const type=lastHigh==null?'HH':highs[i]>lastHigh?'HH':'LH';
+    lastHigh=highs[i];out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:highs[i],type});
+  });
+  centeredRollingExtrema(lows,swing,(i,minL,_maxL)=>{
+    if(lows[i]!==minL)return;
+    const type=lastLow==null?'HL':lows[i]>lastLow?'HL':'LL';
+    lastLow=lows[i];out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:lows[i],type});
+  });
+  out.sort((a,b)=>a.time-b.time);
+  return out;
 }
 
 export function dynamicSupportResistance(c: HistoricalCandle[], swing=5): SRPoint[] {
@@ -300,20 +318,17 @@ export function dynamicSupportResistance(c: HistoricalCandle[], swing=5): SRPoin
     .slice(-20);
 }
 export type SweepPoint={time:number;price:number;side:'buy-side'|'sell-side'};
-export function liquiditySweeps(c: HistoricalCandle[], swing=5): SweepPoint[] { const out:SweepPoint[]=[]; for(let i=swing;i<c.length;i++){const prev=c.slice(Math.max(0,i-swing),i),hi=Math.max(...prev.map(x=>x.high)),lo=Math.min(...prev.map(x=>x.low)); if(c[i].high>hi&&c[i].close<hi) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,side:'buy-side'}); if(c[i].low<lo&&c[i].close>lo) out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,side:'sell-side'});} return out.slice(-30); }
-export function orderBlocks(c: HistoricalCandle[], _swing=5): ZonePoint[] { const out:ZonePoint[]=[]; for(let i=2;i<c.length;i++){const body=Math.abs(c[i].close-c[i].open),prevBody=Math.abs(c[i-1].close-c[i-1].open); if(body>prevBody*1.8){ const base=c[i-1]; out.push({time:Math.floor(new Date(base.timestamp).getTime()/1000),upper:Math.max(base.open,base.close),lower:Math.min(base.open,base.close),kind:c[i].close>c[i].open?'bullish':'bearish'}); }} return out.slice(-30); }
-const indiaDate = (ts:string|number) => new Date(ts).toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'});
-const indiaParts = (ts:string|number) => { const d=new Date(ts); const f=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'}).formatToParts(d); const get=(t:string)=>f.find(x=>x.type===t)?.value||''; return {date:`${get('year')}-${get('month')}-${get('day')}`,weekday:get('weekday')}; };
-export function indianKeyLevels(c: HistoricalCandle[]): KeyLevel[] {
-  if(!c.length) return [];
-  const sessions=new Map<string,HistoricalCandle[]>(); for(const x of c){const k=indiaDate(x.timestamp); const a=sessions.get(k)||[];a.push(x);sessions.set(k,a);} const days=[...sessions.values()]; const cur=days[days.length-1]||[]; const prev=days[days.length-2]||[];
-  const out:KeyLevel[]=[]; const t=Math.floor(new Date(cur[cur.length-1]?.timestamp||c[c.length-1].timestamp).getTime()/1000);
-  if(prev.length){out.push({time:t,price:Math.max(...prev.map(x=>x.high)),label:'PDH',side:'resistance'},{time:t,price:Math.min(...prev.map(x=>x.low)),label:'PDL',side:'support'},{time:t,price:prev[prev.length-1].close,label:'PDC',side:'neutral'});}
-  if(cur.length) out.push({time:t,price:cur[0].open,label:'DAY OPEN',side:'neutral'},{time:t,price:Math.max(...cur.map(x=>x.high)),label:'DAY HIGH',side:'resistance'},{time:t,price:Math.min(...cur.map(x=>x.low)),label:'DAY LOW',side:'support'});
-  const currentWeek=days.filter(d=>{const a=indiaParts(d[0].timestamp).date; const first=indiaParts(cur[0].timestamp).date; const da=new Date(a),df=new Date(first); da.setDate(da.getDate()-((da.getDay()+6)%7)); df.setDate(df.getDate()-((df.getDay()+6)%7)); return da.toISOString().slice(0,10)===df.toISOString().slice(0,10);}); const priorWeek=days.filter(d=>{if(!d.length||!prev.length)return false;const a=indiaParts(d[0].timestamp).date,b=indiaParts(prev[0].timestamp).date; const da=new Date(a),db=new Date(b); da.setDate(da.getDate()-((da.getDay()+6)%7));db.setDate(db.getDate()-((db.getDay()+6)%7));return da.toISOString().slice(0,10)===db.toISOString().slice(0,10);});
-  void currentWeek;
-  if(cur.length) out.push({time:t,price:cur[0].open,label:'WEEK OPEN',side:'neutral'}); if(priorWeek.length){out.push({time:t,price:Math.max(...priorWeek.flat().map(x=>x.high)),label:'PWH',side:'resistance'},{time:t,price:Math.min(...priorWeek.flat().map(x=>x.low)),label:'PWL',side:'support'});}
-  return out.filter((x,i,a)=>a.findIndex(y=>Math.abs(y.price-x.price)<0.01&&y.label===x.label)===i);
+export function liquiditySweeps(c: HistoricalCandle[], swing=5): SweepPoint[] {
+  const out:SweepPoint[]=[], highState=new RollingMinMax(swing), lowState=new RollingMinMax(swing);
+  for(let i=0;i<c.length;i++){
+    const hi=highState.max(),lo=lowState.min();
+    if(i>=swing&&hi!=null&&lo!=null){
+      if(c[i].high>hi&&c[i].close<hi)out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].high,side:'buy-side'});
+      if(c[i].low<lo&&c[i].close>lo)out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),price:c[i].low,side:'sell-side'});
+    }
+    highState.update(c[i].high); lowState.update(c[i].low);
+  }
+  return out.slice(-30);
 }
 export function cpr(c: HistoricalCandle[]): KeyLevel[] {
   if(!c.length)return []; const sessions=new Map<string,HistoricalCandle[]>();for(const x of c){const k=indiaDate(x.timestamp),a=sessions.get(k)||[];a.push(x);sessions.set(k,a);}const days=[...sessions.values()];if(days.length<2)return [];const d=days[days.length-2],h=Math.max(...d.map(x=>x.high)),l=Math.min(...d.map(x=>x.low)),cl=d[d.length-1].close,p=(h+l+cl)/3,bc=(h+l)/2,tc=2*p-bc,r1=2*p-l,s1=2*p-h,t=Math.floor(new Date(c[c.length-1].timestamp).getTime()/1000);return [{time:t,price:tc,label:'CPR TC',side:'resistance'},{time:t,price:p,label:'CPR P',side:'neutral'},{time:t,price:bc,label:'CPR BC',side:'support'},{time:t,price:r1,label:'R1',side:'resistance'},{time:t,price:s1,label:'S1',side:'support'}];
