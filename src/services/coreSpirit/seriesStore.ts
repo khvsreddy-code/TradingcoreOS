@@ -3,6 +3,7 @@ export type CoreSpiritStoredValue = number | boolean | string | null;
 type NumberEntry = {
   existed: boolean;
   original: number[] | undefined;
+  originalLength: number;
   replaced: boolean;
   removed: number[];
 };
@@ -10,6 +11,7 @@ type NumberEntry = {
 type ValueEntry = {
   existed: boolean;
   original: CoreSpiritStoredValue[] | undefined;
+  originalLength: number;
   replaced: boolean;
   removed: CoreSpiritStoredValue[];
 };
@@ -65,13 +67,13 @@ export class CoreSpiritSeriesStore {
         continue;
       }
       const current = this.numberState[key];
-      if (!current || current === entry.original) {
+      if (!current) {
         if (entry.original) this.numberState[key] = entry.original;
         continue;
       }
       if (entry.removed.length) current.unshift(...entry.removed);
-      current.length = entry.original!.length;
-      this.numberState[key] = entry.original!;
+      current.length = entry.originalLength;
+      this.numberState[key] = current;
     }
 
     for (const [key, entry] of this.valueJournal) {
@@ -84,13 +86,13 @@ export class CoreSpiritSeriesStore {
         continue;
       }
       const current = this.valueState[key];
-      if (!current || current === entry.original) {
+      if (!current) {
         if (entry.original) this.valueState[key] = entry.original;
         continue;
       }
       if (entry.removed.length) current.unshift(...entry.removed);
-      current.length = entry.original!.length;
-      this.valueState[key] = entry.original!;
+      current.length = entry.originalLength;
+      this.valueState[key] = current;
     }
 
     for (const [key, entry] of this.crossJournal) {
@@ -165,7 +167,8 @@ export class CoreSpiritSeriesStore {
     this.numberJournal.set(key, {
       existed: existing !== undefined,
       original: existing,
-      replaced: false,
+      originalLength: existing?.length ?? 0,
+      replaced: false;
       removed: [],
     });
   }
@@ -175,7 +178,8 @@ export class CoreSpiritSeriesStore {
     this.valueJournal.set(key, {
       existed: existing !== undefined,
       original: existing,
-      replaced: false,
+      originalLength: existing?.length ?? 0,
+      replaced: false;
       removed: [],
     });
   }
