@@ -46,8 +46,7 @@ export function planCoreSpiritSeriesFusion(program:CoreSpiritIrProgram):CoreSpir
     if(used.has(start))continue;
     const first=ins[start];
     if(first.op!=='call'||first.args.length<1||!fusable(first.name))continue;
-    const src=canon(first.args[0]);const producer=producedBy.get(src);
-    if(producer!=null&&ins[producer].op!=='loadSeries')continue;
+    const src=canon(first.args[0]); void src;
     const stages:CoreSpiritSeriesFusionStage[]=[];let cur=start;
     while(cur>=0){
       const i=ins[cur]; if(i.op!=='call'||i.args.length<1||!fusable(i.name))break;
