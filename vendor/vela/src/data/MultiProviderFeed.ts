@@ -226,6 +226,15 @@ export class MultiProviderFeed implements MarketDataFeed {
         void this.fetchSymbolInfo(resolved).catch(() => {});
     }
 
+    async loadRangeColumns(cfg: MarketConfig, range: BarRange): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+        if (cfg.data && cfg.data.length > 0) return null;
+        const resolved = this.registry.resolve(rawSymbol(cfg), { default: this.primaryProvider });
+        if (!resolved) return null;
+        this.primaryProvider = resolved.provider;
+        this.prefetchSymbolInfo(resolved);
+        return this.cache.loadRangeColumns ? this.cache.loadRangeColumns(canonical(cfg, resolved), range) : null;
+    }
+
     async loadRange(cfg: MarketConfig, range: BarRange): Promise<OHLCV[]> {
         if (cfg.data && cfg.data.length > 0) return this.cache.loadRange(cfg, range);
         // Secondary series (request.security): resolve its OWN prefix, with the chart
@@ -361,6 +370,18 @@ class RegistryFetchFeed implements MarketDataFeed {
             // never rejects the load — batches already painted stay painted.
             console.warn(`[vela] progressive fetch failed for ${ticker} ${cfg.timeframe ?? '60'} — ${e instanceof Error ? e.message : String(e)}`);
             return [];
+        }
+    }
+
+    loadRangeColumns(cfg: MarketConfig, range: BarRange): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+        const { provider: name, ticker } = parseSymbol(cfg.symbol ?? '');
+        const provider = this.registry.get(name ?? '');
+        if (!provider?.getBarsColumns) return null;
+        try {
+            return await provider.getBarsColumns(ticker, cfg.timeframe ?? '60', { ...range, session: cfg.session });
+        } catch (e) {
+            console.warn(`[vela] columnar range fetch failed for ${ticker} ${cfg.timeframe ?? '60'} — ${e instanceof Error ? e.message : String(e)}`);
+            return null;
         }
     }
 
