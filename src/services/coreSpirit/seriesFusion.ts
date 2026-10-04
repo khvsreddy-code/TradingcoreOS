@@ -83,7 +83,7 @@ export function planCoreSpiritSeriesFusion(program:CoreSpiritIrProgram):CoreSpir
     version:1,groups:Object.freeze(groups),
     fusedInstructionCount:groups.reduce((n,g)=>n+g.instructions.length,0),
     rejectedPureSeriesInstructions:Object.freeze(rejected),
-    explanation:Object.freeze(groups.map(g=>`series fusion: fused ${g.operations.length} pure series operations into ${g.strategy}; lookback=${g.maxLookback}`)),
+    explanation:Object.freeze(groups.map(g=>`series fusion: fused ${g.operations.length} compatible deterministic series operations into ${g.strategy}; lookback=${g.maxLookback}`)),
   });
 }
 
