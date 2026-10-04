@@ -22,7 +22,7 @@ for(const forbidden of ['class MonotonicDeque','class RollingState','class CoreS
 }
 for(const fn of ['bollinger','donchian','stochastic','cci','mfi']){
   const start=engine.indexOf('export function '+fn);
-  const next=engine.indexOf('\\nexport function ',start+10);
+  const next=engine.indexOf('\nexport function ',start+10);
   const body=engine.slice(start,next<0?engine.length:next);
   if(/\.slice\(/.test(body)||/\.reduce\(/.test(body)||/Math\.(?:max|min)\(\.\.\./.test(body)) throw new Error('window rescan remains in '+fn);
 }
