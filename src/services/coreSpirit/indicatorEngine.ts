@@ -24,6 +24,7 @@ type KernelEntry = {
   kernel:NativeKernel;
   lastHistoryLength:number;
   lastSignature:string;
+  lastSecond:number;
   lastValue:unknown;
 };
 
@@ -88,17 +89,19 @@ function statefulValue(
   if (!entry) {
     const kernel=factory();
     seedKernel(kernel,history,seedCount);
-    entry={kernel,lastHistoryLength:history.length,lastSignature:sig,lastValue:kernelCurrent(kernel,selector)};
+    entry={kernel,lastHistoryLength:history.length,lastSignature:sig,lastSecond:Number(history[1]),lastValue:kernelCurrent(kernel,selector)};
     store.set(key,entry);
     return entry.lastValue;
   }
   if (entry.lastHistoryLength===history.length && entry.lastSignature===sig) return entry.lastValue;
+  const secondChanged=Number(history[1])!==entry.lastSecond;
   const mode:'append'|'replace' =
-    history.length > entry.lastHistoryLength || (history.length===entry.lastHistoryLength && entry.lastSignature!==sig)
+    history.length > entry.lastHistoryLength || (history.length===entry.lastHistoryLength && secondChanged)
       ? 'append' : 'replace';
   entry.kernel.update(current,mode);
   entry.lastHistoryLength=history.length;
   entry.lastSignature=sig;
+  entry.lastSecond=Number(history[1]);
   entry.lastValue=kernelCurrent(entry.kernel,selector);
   return entry.lastValue;
 }
@@ -114,14 +117,14 @@ class HmaKernel implements NativeKernel {
     this.full=new WMAState(period);
     this.root=new WMAState(root);
   }
+  private lastValue:number|null=null;
   update(value:number,mode:'append'|'replace'='append'):number|null {
-    const a=this.half.update(value,mode);
-    const b=this.full.update(value,mode);
-    if (a==null || b==null) return this.root.update(Number.NaN,mode);
-    return this.root.update(2*a-b,mode);
+    const a=this.half.update(value,mode), b=this.full.update(value,mode);
+    this.lastValue = a==null || b==null ? null : this.root.update(2*a-b,mode);
+    return this.lastValue;
   }
-  get value():number|null { return this.root.update(Number.NaN,'replace'); }
-  reset():void { this.half.reset(); this.full.reset(); this.root.reset(); }
+  get value():number|null { return this.lastValue; }
+  reset():void { this.half.reset(); this.full.reset(); this.root.reset(); this.lastValue=null; }
 }
 
 class PersistenceKernel implements NativeKernel {
@@ -206,6 +209,8 @@ class PersistenceKernel implements NativeKernel {
   reset():void { this.s.values.fill(Number.NaN);this.s.deltaSigns.fill(0);this.s.comparisonValid.fill(0);this.s.comparisonSame.fill(0);this.s.cursor=0;this.s.count=0;this.s.validCount=0;this.s.comparisons=0;this.s.same=0;this.s.seen=0; }
 }
 
+function numericOrNull(value:unknown):number|null { if (value==null) return null; const n=Number(value); return Number.isFinite(n) ? n : null; }
+
 function output(ctx:NativeIndicatorContext,key:string,value:number|null):number|null {
   if (value==null || !Number.isFinite(value)) return null;
   ctx.push(key,value);
@@ -222,27 +227,27 @@ export function calculateNativeIndicator(name:string,args:unknown[],history:numb
   switch(name) {
     case 'sma':
     case 'mean':
-      return output(ctx,resultKey,Number(statefulValue(ctx,name + ':' + sourceName + ':' + period,values,current,()=>new RollingMean(period),period,name)));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,name + ':' + sourceName + ':' + period,values,current,()=>new RollingMean(period),period,name)));
     case 'sum':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'sum:' + sourceName + ':' + period,values,current,()=>new RollingSum(period),period,'sum')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'sum:' + sourceName + ':' + period,values,current,()=>new RollingSum(period),period,'sum')));
     case 'highest':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'highest:' + sourceName + ':' + period,values,current,()=>new RollingMinMax(period),period,'highest')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'highest:' + sourceName + ':' + period,values,current,()=>new RollingMinMax(period),period,'highest')));
     case 'lowest':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'lowest:' + sourceName + ':' + period,values,current,()=>new RollingMinMax(period),period,'lowest')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'lowest:' + sourceName + ':' + period,values,current,()=>new RollingMinMax(period),period,'lowest')));
     case 'stdev':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'stdev:' + sourceName + ':' + period,values,current,()=>new RollingVariance(period),period,'stdev')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'stdev:' + sourceName + ':' + period,values,current,()=>new RollingVariance(period),period,'stdev')));
     case 'variance':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'variance:' + sourceName + ':' + period,values,current,()=>new RollingVariance(period),period,'variance')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'variance:' + sourceName + ':' + period,values,current,()=>new RollingVariance(period),period,'variance')));
     case 'wma':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'wma:' + sourceName + ':' + period,values,current,()=>new WMAState(period),period,'wma')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'wma:' + sourceName + ':' + period,values,current,()=>new WMAState(period),period,'wma')));
     case 'median':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'median:' + sourceName + ':' + period,values,current,()=>new RollingMedian(period),period,'median')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'median:' + sourceName + ':' + period,values,current,()=>new RollingMedian(period),period,'median')));
     case 'rma':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'rma:' + sourceName + ':' + period,values,current,()=>new WilderState(period),period,'rma')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'rma:' + sourceName + ':' + period,values,current,()=>new WilderState(period),period,'rma')));
     case 'ema':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'ema:' + sourceName + ':' + period,values,current,()=>new EMAState(period),period,'ema')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'ema:' + sourceName + ':' + period,values,current,()=>new EMAState(period),period,'ema')));
     case 'hma':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'hma:' + sourceName + ':' + period,values,current,()=>new HmaKernel(period),period + Math.floor(Math.sqrt(period)) + 2,'hma')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'hma:' + sourceName + ':' + period,values,current,()=>new HmaKernel(period),period + Math.floor(Math.sqrt(period)) + 2,'hma')));
     case 'zscore': {
       const key='zscore:' + sourceName + ':' + period;
       const store=storeFor(ctx);
@@ -264,7 +269,7 @@ export function calculateNativeIndicator(name:string,args:unknown[],history:numb
       return lo==null||hi==null ? null : output(ctx,resultKey,hi===lo ? 0 : (current-lo)/(hi-lo));
     }
     case 'persistence':
-      return output(ctx,resultKey,Number(statefulValue(ctx,'persistence:' + sourceName + ':' + period,values,current,()=>new PersistenceKernel(period),period,'persistence')));
+      return output(ctx,resultKey,numericOrNull(statefulValue(ctx,'persistence:' + sourceName + ':' + period,values,current,()=>new PersistenceKernel(period),period,'persistence')));
     case 'change': {
       if (values.length<=period) return null;
       const previous=Number(values[period]);
@@ -280,8 +285,8 @@ export function calculateNativeIndicator(name:string,args:unknown[],history:numb
   }
 }
 
-type NativeAtrContext = NativeIndicatorContext & { __atrKernel?: Map<string, { state:ATRState; previousClose:number|null; lastBarSignature:string }> };
-const atrContexts = new WeakMap<NativeIndicatorContext, Map<string,{state:ATRState; previousClose:number|null; lastBarSignature:string}>>();
+type NativeAtrEntry = { state:WilderState; previousClose:number|null; lastBarSignature:string; };
+const atrContexts = new WeakMap<NativeIndicatorContext, Map<string,NativeAtrEntry>>();
 
 export function calculateNativeAtr(
   bar:Pick<CoreSpiritMarketBar,'high'|'low'> & {close?:number},
@@ -293,22 +298,27 @@ export function calculateNativeAtr(
   const key='atr:' + p;
   let store=atrContexts.get(ctx);
   if(!store){store=new Map();atrContexts.set(ctx,store);}
-  const close=Number((bar as {close?:number}).close);
-  const signature=String(bar.high)+'|' + String(bar.low)+'|' + String(close);
+  const high=Number(bar.high), low=Number(bar.low), close=Number((bar as {close?:number}).close);
+  if(![high,low].every(Number.isFinite)) return null;
+  const signature=String(high)+'|' + String(low)+'|' + String(close);
   let entry=store.get(key);
+  const trWithPrevious=(pc:number|null)=>Number.isFinite(pc as number)
+    ? Math.max(high-low,Math.abs(high-(pc as number)),Math.abs(low-(pc as number)))
+    : high-low;
   if(!entry){
-    const state=new ATRState(p);
-    const pc=Number.isFinite(previousClose) ? previousClose : null;
-    if(pc!=null) state.update(Number(bar.high),Number(bar.low),Number(bar.high), 'append');
-    else state.update(Number(bar.high),Number(bar.low),Number.isFinite(close)?close:Number(bar.high),'append');
-    entry={state,previousClose:pc,lastBarSignature:signature};
+    const state=new WilderState(p);
+    const tr=trWithPrevious(Number.isFinite(previousClose as number) ? previousClose : null);
+    const value=state.updateWilder(tr,'append');
+    entry={state,previousClose:Number.isFinite(close)?close:null,lastBarSignature:signature};
     store.set(key,entry);
-    return output(ctx,'result:atr:' + p,Number.isFinite(Number(state.value)) ? Number(state.value) : null);
+    return output(ctx,'result:atr:' + p,value==null?null:Number(value));
   }
-  const mode: 'append'|'replace' = entry.lastBarSignature === signature ? 'replace' : 'append';
-  const value=entry.state.update(Number(bar.high),Number(bar.low),Number.isFinite(close)?close:Number(bar.high),mode);
+  const mode:'append'|'replace'=entry.lastBarSignature===signature?'replace':'append';
+  const tr=trWithPrevious(entry.previousClose);
+  const value=entry.state.updateWilder(tr,mode);
+  if(mode==='append' && Number.isFinite(close)) entry.previousClose=close;
   entry.lastBarSignature=signature;
-  return output(ctx,'result:atr:' + p,Number.isFinite(Number(value)) ? Number(value) : null);
+  return output(ctx,'result:atr:' + p,value==null?null:Number(value));
 }
 
 /** Stage 95 shared-data entry point: indicator kernels borrow canonical series inputs. */
