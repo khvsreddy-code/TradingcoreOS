@@ -133,3 +133,38 @@ Clearly redundant legacy repair/one-off performance notes are removed from the a
 ## Verification truth rule
 
 CI contracts prove source-level invariants. They do not prove browser FPS, network latency, GPU utilization, authenticated broker behavior or visual quality. Those remain open until runtime evidence exists.
+
+
+| 70 | Progressive authoring depth without language forks | ✅ |
+
+
+## v130 — hot VM, realtime journal and terminal product pass
+
+### CoreSpirit runtime
+- [x] ExecutionVM remains the instruction-dispatch boundary; Runtime is the orchestration facade.
+- [x] Forming-bar rollback uses StateStore/SeriesStore mutation journals rather than retained-history clones.
+- [x] Realtime event effects are transaction-buffered with the forming-bar lifecycle.
+- [x] Runtime RSI/ATR/session VWAP use canonical incremental kernels with bounded copy/restore state.
+- [x] Output collection has explicit per-bar clear semantics.
+
+### Live terminal and Vela
+- [x] Default workspace is one chart with a fresh v4 persistence key.
+- [x] TCO is the explicit Vela primary provider and initial history target is 5,000 candles.
+- [x] Panels opens the TCO watchlist; Journal has its own topbar action.
+- [x] TradingCoreOS × Vela is the host wordmark; Quant UI is not included.
+- [x] Alt drawing-wheel selection highlight is royal purple.
+- [x] Empty direct columnar history now falls through to the normal history path instead of returning a blank successful result.
+
+### Product UI
+- [x] Non-live application accent is #d3ebf4.
+- [x] Non-live surfaces use slower, smoother motion; live trading remains chart-native/motion-light.
+- [x] Historical legacy tracker assertions were removed from CI rather than resurrecting obsolete Markdown.
+
+### FYERS
+- [x] Client transport defaults to cache: no-store for broker/API actions.
+- [x] Fixed-IP FYERS execution gateway remains preferred when configured.
+- [~] Broker session lookup/decryption remains per order pending measured, revocation-safe server-side caching.
+
+### Verification truth
+- [ ] Authenticated browser candle-render evidence.
+- [ ] Measured FYERS order round-trip latency.
