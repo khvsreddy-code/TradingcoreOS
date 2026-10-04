@@ -25,7 +25,8 @@ for (const name of ['RollingSum','RollingMean','RollingVariance','RollingMinMax'
 assert.match(kernels, /class MonotonicDeque/);
 assert.match(kernels, /class BinaryHeap/);
 assert.match(kernels, /centeredRollingExtrema/);
-assert.match(vector, /CoreSpiritDualHeapMedian/);
+assert.match(vector, /RollingMedian/);
+assert.doesNotMatch(vector, /CoreSpiritDualHeapMedian/);
 assert.doesNotMatch(vector, /for \(let i = this\.sortedCount/);
 
 assert.match(indicators, /RollingPercentile/);
