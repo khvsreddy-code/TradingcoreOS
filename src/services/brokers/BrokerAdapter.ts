@@ -82,6 +82,17 @@ export interface HistoricalCandle {
   volume: number;
 }
 
+/** Compact OHLCV transport used by Vela's native columnar history fast path. */
+export interface HistoricalCandleColumns {
+  time: number[];
+  open: number[];
+  high: number[];
+  low: number[];
+  close: number[];
+  volume: number[];
+  timeUnit: 'milliseconds' | 'seconds';
+}
+
 
 export interface PortfolioSnapshot {
   funds: AccountFunds | null;
@@ -138,6 +149,8 @@ export interface BrokerAdapter {
   fetchTradeHistory(): Promise<TradeRecord[]>;
   getMarketData(symbols: string[]): Promise<Record<string, { ltp: number; chg: string; volume: number }>>;
   getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit?: number): Promise<HistoricalCandle[]>;
+  /** Optional compact history path; avoids per-candle objects until a compatibility boundary actually needs them. */
+  getHistoricalDataColumns?(symbol: string, timeframe: string, signal?: AbortSignal, limit?: number): Promise<HistoricalCandleColumns | null>;
   /** Load an older history page ending before the supplied timestamp. */
   getHistoricalDataBefore?(symbol: string, timeframe: string, beforeTimestamp: string, limit?: number, signal?: AbortSignal): Promise<HistoricalCandle[]>;
   placeOrder(order: OrderRequest): Promise<OrderResult>;
