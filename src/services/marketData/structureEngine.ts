@@ -136,30 +136,39 @@ type WeightedPoint = { price: number; weight: number; source: 'KDE' | 'FRACTAL';
 
 function fractalPoints(c: HistoricalCandle[], period: number, start: number, end: number): WeightedPoint[] {
   const out: WeightedPoint[] = [];
-  const volumeMean = new RollingMean(20);
   const first = Math.max(0, Math.min(c.length, start));
   const last = Math.max(first, Math.min(c.length, end));
-  for (let i = 0; i < last; i += 1) {
-    const meanVolume = volumeMean.size > 0
-      ? volumeMean.sumValue / volumeMean.size
-      : 0;
-    if (i >= Math.max(period, first) && i < Math.min(c.length - period, last)) {
-      let highPivot = true;
-      let lowPivot = true;
-      for (let j = 1; j <= period; j += 1) {
-        if (c[i]!.high < c[i - j]!.high || c[i]!.high < c[i + j]!.high) highPivot = false;
-        if (c[i]!.low > c[i - j]!.low || c[i]!.low > c[i + j]!.low) lowPivot = false;
-        if (!highPivot && !lowPivot) break;
-      }
-      const volumeWeight = meanVolume > 0
-        ? Math.min(4, Math.max(0.5, (c[i]!.volume || 0) / meanVolume))
-        : 1;
-      if (highPivot) out.push({ price: c[i]!.high, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
-      if (lowPivot) out.push({ price: c[i]!.low, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
-    }
+  const highs = new Float64Array(c.length);
+  const lows = new Float64Array(c.length);
+  const meanVolumeBefore = new Float64Array(c.length);
+  const volumeMean = new RollingMean(20);
+
+  for (let i = 0; i < c.length; i += 1) {
+    meanVolumeBefore[i] = volumeMean.size > 0 ? volumeMean.sumValue / volumeMean.size : 0;
+    highs[i] = c[i]!.high;
+    lows[i] = c[i]!.low;
     volumeMean.update(Math.max(0, c[i]!.volume || 0));
   }
-  return out;
+
+  centeredRollingExtrema(highs, period, (index, _minimum, maximum) => {
+    if (index < first || index >= last || highs[index] !== maximum) return;
+    const meanVolume = meanVolumeBefore[index]!;
+    const volumeWeight = meanVolume > 0
+      ? Math.min(4, Math.max(0.5, (c[index]!.volume || 0) / meanVolume))
+      : 1;
+    out.push({ price: c[index]!.high, weight: 1 + volumeWeight, source: 'FRACTAL', index });
+  });
+
+  centeredRollingExtrema(lows, period, (index, minimum, _maximum) => {
+    if (index < first || index >= last || lows[index] !== minimum) return;
+    const meanVolume = meanVolumeBefore[index]!;
+    const volumeWeight = meanVolume > 0
+      ? Math.min(4, Math.max(0.5, (c[index]!.volume || 0) / meanVolume))
+      : 1;
+    out.push({ price: c[index]!.low, weight: 1 + volumeWeight, source: 'FRACTAL', index });
+  });
+
+  return out.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 }
 
 function kdePeaks(c: HistoricalCandle[], start: number, atr: number, options: TradingCoreVOptions): { points: WeightedPoint[]; bandwidth: number } {
