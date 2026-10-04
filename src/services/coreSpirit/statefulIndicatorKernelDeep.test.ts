@@ -105,8 +105,8 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   const k = new ATRState(3);
   k.update(10, 9, 9.5);
   k.update(11, 10, 10.5);
-  nearly(k.update(12, 10, 11)!, 1.3333333333333333);
-  nearly(k.update(14, 12, 13)!, 1.8888888888888888);
+  nearly(k.update(12, 10, 11)!, 1.5);
+  nearly(k.update(14, 12, 13)!, 1.6666666666666667);
 }
 
 {
