@@ -80,6 +80,7 @@ export class CoreSpiritRuntime {
   private readonly executionTarget: CoreSpiritExecutionTarget = 'chart';
   private readonly layer: CoreSpiritProgramLayer = 'script';
   private realtimeRevision = 0;
+  private realtimeEventTransactionId?: string;
   private loadedSurface?: CoreSpiritProgram['surface'];
   private seriesFusionPlan?: CoreSpiritSeriesFusionPlan;
   private readonly fusedStageByInstruction = new Map<number, { groupId: string; stageIndex: number }>();
@@ -132,7 +133,7 @@ export class CoreSpiritRuntime {
     this.appRuntime.reset();
     this.declarativeVisualState = { version:1, revision:0, specs:[] };
     this.reactiveRevision = 0; this.reactiveRecomputed = 0; this.reactiveReused = 0; this.reactiveEffects = 0;
-    this.realtimeRevision = 0; this.debugHost.reset(); this.realtimeLifecycle='idle';
+    this.realtimeRevision = 0; this.eventRouter.rollbackTransaction(); this.realtimeEventTransactionId = undefined; this.debugHost.reset(); this.realtimeLifecycle='idle';
     this.state = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
     this.history = []; this.crossState = {}; this.committedSeriesState = {}; this.committedLocalSeries = {}; this.committedCrossState = {};
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
@@ -183,7 +184,10 @@ export class CoreSpiritRuntime {
       this.realtimeRevision += 1;
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; this.reactiveReused += 1; }
       this.stateStore.rollbackRealtimeTransaction();
+      this.eventRouter.rollbackTransaction(this.realtimeEventTransactionId);
       this.stateStore.beginRealtimeTransaction();
+      this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
+      this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
       for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
         const cursor = this.fusedCursors.get(groupId);
         if (cursor) cursor.copyFrom(snapshot);
@@ -198,6 +202,8 @@ export class CoreSpiritRuntime {
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; }
       this.currentBarSnapshot = { historyLength: this.history.length };
       this.stateStore.beginRealtimeTransaction();
+      this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
+      this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
       for (const [groupId, cursor] of this.fusedCursors) {
         const snapshot = this.fusedCursorSnapshots.get(groupId);
         if (snapshot) snapshot.copyFrom(cursor);
@@ -279,6 +285,8 @@ export class CoreSpiritRuntime {
     this.committedSeriesState = cloneNumberMap(this.state.seriesState);
     this.committedLocalSeries = cloneValueMap(this.state.localSeries);
     this.committedCrossState = cloneCrossMap(this.crossState);
+    if (this.realtimeEventTransactionId) this.eventRouter.commitTransaction(this.realtimeEventTransactionId);
+    this.realtimeEventTransactionId = undefined;
     this.stateStore.commitRealtimeTransaction();
     this.currentBarSnapshot = undefined;
     this.fusedCursorSnapshots.clear();
@@ -290,6 +298,8 @@ export class CoreSpiritRuntime {
   rollbackRealtimeBar(): void {
     if (!this.currentBarSnapshot) return;
     this.stateStore.rollbackRealtimeTransaction();
+    this.eventRouter.rollbackTransaction(this.realtimeEventTransactionId);
+    this.realtimeEventTransactionId = undefined;
     for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
       this.fusedCursors.set(groupId, snapshot.clone());
     }
