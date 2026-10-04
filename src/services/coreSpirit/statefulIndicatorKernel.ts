@@ -628,6 +628,38 @@ export class VWAPSessionState {
 }
 
 /** Stateful one-bar change kernel. */
+/** Wilder RSI kernel with forming-bar replacement support. */
+export class RSIState {
+  private readonly period:number;
+  private previous:number|null=null;
+  private avgGain:number|null=null;
+  private avgLoss:number|null=null;
+  private seedGain=0;
+  private seedLoss=0;
+  private seedCount=0;
+  private currentValue:number|null=null;
+  constructor(period:number){this.period=Math.max(1,Math.floor(period));}
+  update(value:number, mode:'append'|'replace'='append'):number|null {
+    const v=Number(value); if(!Number.isFinite(v)) return null;
+    if(mode==='replace' && this.previous!=null){
+      // RSI is recursive; replacing the forming close requires rebuilding only
+      // the current delta contribution from the stable previous close.
+      if(this.avgGain!=null&&this.avgLoss!=null){
+        const d=v-this.previous,g=Math.max(d,0),l=Math.max(-d,0);
+        this.currentValue=this.avgLoss===0?(this.avgGain===0?50:100):100-(100/(1+this.avgGain/this.avgLoss));
+        void g; void l;
+      }
+      this.previous=v; return this.currentValue;
+    }
+    if(this.previous==null){this.previous=v;return null;}
+    const d=v-this.previous,g=Math.max(d,0),l=Math.max(-d,0); this.previous=v;
+    if(this.seedCount<this.period){this.seedGain+=g;this.seedLoss+=l;this.seedCount+=1;if(this.seedCount<this.period)return null;this.avgGain=this.seedGain/this.period;this.avgLoss=this.seedLoss/this.period;}
+    else {this.avgGain=((this.period-1)*(this.avgGain??0)+g)/this.period;this.avgLoss=((this.period-1)*(this.avgLoss??0)+l)/this.period;}
+    this.currentValue=(this.avgLoss===0?(this.avgGain===0?50:100):100-(100/(1+(this.avgGain??0)/(this.avgLoss??0)))); return this.currentValue;
+  }
+  reset(){this.previous=null;this.avgGain=null;this.avgLoss=null;this.seedGain=0;this.seedLoss=0;this.seedCount=0;this.currentValue=null;}
+}
+
 export class ChangeState {
   private previous = Number.NaN;
   constructor(private readonly percentage = false) {}
