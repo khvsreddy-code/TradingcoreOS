@@ -8,7 +8,7 @@
 4. `04_INDICATORS_AND_PLATFORM.md` — indicator artifacts, settings, public scripts and computation policy.
 5. `CORESPIRIT_BUILD_TRACKER.md` — living implementation tracker and explicit open architectural debt.
 
-Historical stage-by-stage notes belong under `docs/archive/`. Do not create a new architecture markdown file when the subject already belongs in one of the five active documents.
+Historical stage-by-stage notes belong under `docs/archive/history/`. Legacy contract fixtures may remain there while CI references them, but they are not active architecture sources. Do not create a new architecture markdown file when the subject already belongs in one of the five active documents.
 
 ## Locked runtime path
 
