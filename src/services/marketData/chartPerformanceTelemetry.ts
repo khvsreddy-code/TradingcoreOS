@@ -14,6 +14,11 @@ export type ChartPerformanceSnapshot = {
   totalFrameMs: number;
   averageFrameMs: number;
   worstFrameMs: number;
+  p95FrameMs: number;
+  fps: number;
+  frameBudgetMs: number;
+  frameBudgetMisses: number;
+  frameBudgetMissRate: number;
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
 };
@@ -28,6 +33,11 @@ type MutableMetrics = {
   frames: number;
   totalFrameMs: number;
   worstFrameMs: number;
+  p95FrameMs: number;
+  fps: number;
+  frameBudgetMs: number;
+  frameBudgetMisses: number;
+  frameBudgetMissRate: number;
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
 };
@@ -38,7 +48,7 @@ class ChartPerformanceTelemetry {
   private entry(key: string): MutableMetrics {
     let value = this.metrics.get(key);
     if (!value) {
-      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, longFrames: 0, backend: 'unknown' };
+      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0, frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown' };
       this.metrics.set(key, value);
     }
     return value;
@@ -64,12 +74,17 @@ class ChartPerformanceTelemetry {
     m.frames = Math.max(0, Number(snapshot.frames) || 0);
     m.totalFrameMs = Math.max(0, Number(snapshot.totalFrameMs) || 0);
     m.worstFrameMs = Math.max(0, Number(snapshot.worstFrameMs) || 0);
+    m.p95FrameMs = Math.max(0, Number(snapshot.p95FrameMs) || 0);
+    m.fps = Math.max(0, Number(snapshot.fps) || 0);
+    m.frameBudgetMs = Math.max(0, Number(snapshot.frameBudgetMs) || (1000 / 60));
+    m.frameBudgetMisses = Math.max(0, Number(snapshot.frameBudgetMisses) || 0);
+    m.frameBudgetMissRate = Math.max(0, Number(snapshot.frameBudgetMissRate) || 0);
     m.longFrames = Math.max(0, Number(snapshot.longFrames) || 0);
     m.backend = snapshot.backend;
   }
 
   snapshot(key: string): ChartPerformanceSnapshot {
-    const m = this.metrics.get(key) || { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, longFrames: 0, backend: 'unknown' as const };
+    const m = this.metrics.get(key) || { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0, frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown' as const };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     return {
       key,
@@ -87,6 +102,11 @@ class ChartPerformanceTelemetry {
       totalFrameMs: m.totalFrameMs,
       averageFrameMs: m.frames ? m.totalFrameMs / m.frames : 0,
       worstFrameMs: m.worstFrameMs,
+      p95FrameMs: m.p95FrameMs,
+      fps: m.fps,
+      frameBudgetMs: m.frameBudgetMs,
+      frameBudgetMisses: m.frameBudgetMisses,
+      frameBudgetMissRate: m.frameBudgetMissRate,
       longFrames: m.longFrames,
       backend: m.backend,
     };
