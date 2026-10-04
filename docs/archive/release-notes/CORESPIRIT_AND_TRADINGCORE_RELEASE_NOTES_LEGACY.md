@@ -768,3 +768,420 @@ Passing dependency-free contracts:
 The full Vite build is not claimed from this extracted environment because the dependency tree is unavailable; a hosted build/browser validation remains the authoritative next integration check.
 
 ---
+
+# SOURCE: CORESPIRIT_V113_RELEASE_NOTES.md
+
+# CoreSpirit v113 — Build repair + universal presets + semantic series typing
+
+Date: 2026-10-01
+
+## Scope
+
+v113 completes the deeper pass over universal parameters and conditional settings, extends them into presets/profiles, and introduces semantic domain typing for series values.
+
+The release also fixes the ten source/generated-build annotations reported by GitHub/Vercel for the Vela migration boundary.
+
+## 1. Build / annotation repairs
+
+### `LiveChart.tsx`
+The indicator-series registration helper referenced the component-local `indicatorSeries` ref while living at module scope. It is now defined inside `LiveChart`, alongside the ref it owns.
+
+### `LevelSettingsDock.tsx`
+`ReactNode` is now explicitly imported as a type. No undeclared `React` namespace is required.
+
+### `IndicatorSourceEditor.tsx`
+`getIndicatorSettingsSchema` is restored from the canonical CoreSpirit schema module.
+
+### `IndicatorSettingsPanel.tsx`
+Multi-select options use DOM option values directly from the typed `selectedOptions` collection, and the panel now consumes the resolved parameter state's `visible` and `enabled` maps rather than independently evaluating dependencies.
+
+### `App.tsx`
+`RouteErrorBoundary` now declares `RouteErrorBoundaryProps` and extends `Component<RouteErrorBoundaryProps, ...>`, making `this.props` valid under React's current TypeScript types.
+
+### Generated `dist`
+Generated build output is outside the source-of-truth boundary. `dist/` is ignored and the repository hygiene contract ensures generated worker artifacts are not tracked.
+
+### Node version alignment
+The package engine, lockfile root engine and GitHub Actions runtime are aligned to Node 24.x. This removes the previous Vercel warning where `engines.node = 22.x` overrode the Project Settings Node 24 configuration.
+
+## 2. Universal parameter depth
+
+The parameter system remains schema-driven and indicator-kind agnostic. Parameters expose trading-aware types and constraints, and conditions can control both visibility and enabled state.
+
+Condition validation is now target-field aware. Numeric comparisons cannot target strings/colors, `matches` cannot target numeric fields, and membership conditions require a compatible selectable/string-like target.
+
+Dependency cycles, self-references, unsafe paths, malformed groups and excessive nesting remain rejected before the schema reaches the editor.
+
+## 3. Presets / templates / profiles
+
+The serializable preset ABI now supports:
+
+```text
+Factory Default
+Script-embedded Defaults
+Factory Templates
+Personal
+Workspace
+Community
+```
+
+Artifacts can declare their own template definitions with explicit IDs, names, descriptions and parameter overrides. This is configuration data; it does not execute code or add indicator-specific UI branches.
+
+Effective parameter layers are resolved deterministically:
+
+```text
+Factory → Script → Workspace → Personal
+```
+
+The resolver returns both the effective values and the preset identity applied at each layer.
+
+Local writes are restricted to personal/workspace presets. Community presets remain read/catalog surfaces.
+
+Profiles are isolated by user/workspace context, serialize through the same preset ABI and are bounded to 128 presets. Active profile metadata can associate a selected preset with an indicator kind without creating a second configuration format.
+
+## 4. Semantic series types
+
+CoreSpirit now distinguishes the semantic atoms:
+
+```text
+number
+price
+volume
+time
+duration
+boolean
+string
+currency
+```
+
+including:
+
+```text
+series<number>
+series<price>
+series<volume>
+series<time>
+series<duration>
+series<boolean>
+series<string>
+```
+
+Semantic metadata may include unit, currency, symbol, timeframe, precision and scale.
+
+This sits above the structural VM type system. The VM can still consume `series<number>` while the compiler knows the value is semantically `series<price>`.
+
+## 5. Domain-aware operators
+
+The semantic layer now rejects expressions such as:
+
+```text
+price + volume
+price > volume
+```
+
+while preserving valid combinations such as:
+
+```text
+price + number
+price - price
+price / price
+price * volume
+series<time> + duration
+```
+
+Source-preserving functions keep the source semantic domain when meaningful. ATR/true-range/VWAP are classified as price-domain outputs, while RSI-like normalized oscillators are numeric/percent-domain outputs.
+
+## 6. Tooling
+
+CoreSpirit language completions and type information advertise domain-aware market series instead of collapsing all series to an anonymous numeric type.
+
+Explicit declarations such as:
+
+```text
+let basis: series<price> = close
+```
+
+are accepted by the parser and checked against semantic inference.
+
+## 7. Non-interference
+
+- No Pine/PineTS/Pine compatibility layer is introduced.
+- No second indicator VM/evaluator is introduced.
+- Preset/profile data contains no executable callbacks.
+- Semantic types do not create a second runtime graph.
+- Appearance changes remain outside mathematical computation identity.
+- Vela remains behind the TCO chart facade.
+- Broker authorization and risk authority remain TCO-owned.
+
+## Verification
+
+Passing dependency-free Node contracts include:
+
+- `TCO_V113_BUILD_ANNOTATION_REGRESSION_CONTRACT_OK`
+- `TCO_V113_INDICATOR_PRESET_SYSTEM_CONTRACT_OK`
+- `TCO_V113_CORESPIRIT_SEMANTIC_SERIES_TYPE_CONTRACT_OK`
+- `TCO_V113_GENERATED_ARTIFACT_HYGIENE_OK`
+- `TCO_V111_VELA_RUNTIME_EXPORT_CONTRACT_OK`
+- `TCO_V112_UNIVERSAL_PARAMETER_SYSTEM_CONTRACT_OK`
+- `TCO_V112_CONDITIONAL_SETTINGS_CONTRACT_OK`
+
+The complete dependency-free Node contract inventory is the currently verified suite. A full dependency-backed `tsc`/Vite build and post-push GitHub Actions/Vercel run remain unclaimed because the extracted archive environment does not have a usable dependency tree.
+
+## Universal parameter ABI v3
+
+v113 depth work treats parameters as a typed ABI rather than input widgets. Fields validate their value domain, constraints and declared options before presets can be persisted/applied. The dependency schema compiles to a graph of dependencies/dependents with cycle detection and deterministic resolution over default-hydrated state.
+
+## Preset/profile depth
+
+Factory, script-embedded, template, workspace, personal and community configuration remain one serializable preset model. Profiles now persist the deliberate active preset per indicator; when no selection exists, workspace/personal resolution falls back to deterministic latest-by-`updatedAt`/ID ordering. Canonical profile fingerprints are available for reconciliation/change detection.
+
+## Semantic series depth
+
+CoreSpirit now exposes explicit pure semantic conversions (`toNumber`, `toPrice`, `toVolume`, `toTime`, `toDuration`, `toCurrency`) as the sanctioned escape hatch from strict domain arithmetic. They add no new host capabilities.
+
+
+## v114 preparation/depth
+
+The v114 depth pass formalizes the universal configuration and semantic-type architecture around three principles: parameters are validated values, conditional settings are a dependency graph, and semantic domain changes are explicit.
+
+Preset profiles now participate in effective configuration resolution through `activePresetByIndicator`; workspace/personal layers retain deterministic latest fallback when no explicit selection exists. Profile fingerprints are canonical data fingerprints for reconciliation rather than security signatures.
+
+Universal parameter validation now checks field shape in addition to generic constraints. Session, timeframe, symbol, color and duration kinds receive domain validation before a value can enter a preset or resolved state.
+
+CoreSpirit semantic conversions are registered as pure library functions. They are the deliberate escape hatch from strict implicit domain rules and add no host authority.
+
+---
+
+# SOURCE: CORESPIRIT_V114_RELEASE_NOTES.md
+
+# CoreSpirit v114 — Universal configuration + semantic series depth
+
+Date: 2026-10-01
+
+## Production build annotation repairs
+
+v113/v114 preserves the source fixes for the reported hosted-build annotations:
+
+- `LiveChart.tsx` no longer has module-scope helpers capturing `indicatorSeries`.
+- `LevelSettingsDock.tsx` uses an explicit `ReactNode` import.
+- `IndicatorSourceEditor.tsx` imports the canonical settings schema resolver.
+- `IndicatorSettingsPanel.tsx` types DOM option values and consumes resolved parameter state.
+- `App.tsx` declares `RouteErrorBoundary` props explicitly.
+- generated `dist` output is excluded from source control and build inputs.
+- package and CI are aligned to Node 24.x.
+- the v111 `LineStyle` runtime export remains protected by a contract.
+
+## Universal parameter ABI v3 — deeper layer
+
+Parameters are validated by semantic field kind, not merely by generic JavaScript shape. Numeric fields enforce finite/integer/range/step semantics; duration rejects negative values; select/enum/source/timeframe/multi-select fields enforce their declared domain; color, symbol, session and timeframe receive format validation. Defaults pass the same validator used by persisted and preset values.
+
+The parameter schema compiles to:
+
+```text
+parameter
+ ├── dependencies
+ └── dependents
+
+plus a deterministic evaluation order
+```
+
+The universal editor can therefore identify the transitive affected setting paths after a parameter edit without indicator-specific UI branches. Conditions remain bounded, typed against target fields, cycle-checked and fail-closed.
+
+## Conditional settings
+
+`visibilityCondition` and `enabledWhen` are resolved against a fully default-hydrated parameter environment. This makes first-load behavior identical to persisted-state behavior and prevents schema defaults from producing transient hidden/locked controls.
+
+## Presets, templates and profiles
+
+The preset architecture now has explicit portability and profile-selection semantics:
+
+```text
+Factory
+  ↓
+Script
+  ↓
+Workspace (selected or latest)
+  ↓
+Personal  (selected or latest)
+```
+
+`activePresetByIndicator` is authoritative for explicit workspace/personal selection. Community presets remain read-only and cannot be activated as local personal/workspace configuration. Preset bundles and profiles are versioned JSON data and are schema validated. Canonical profile fingerprints support deterministic reconciliation/change detection.
+
+## Semantic series type system
+
+CoreSpirit distinguishes semantic domains across scalar and series values:
+
+```text
+number / series<number>
+price  / series<price>
+volume / series<volume>
+time   / series<time>
+duration / series<duration>
+currency / series<currency>
+boolean / series<boolean>
+string  / series<string>
+```
+
+Metadata may include unit, currency, symbol, timeframe, precision and scale. Cross-domain arithmetic and ordered comparison remain invalid unless a defined semantic operation exists.
+
+Examples:
+
+```text
+price + volume       → error
+price > volume       → error
+price * volume       → currency/notional
+time - time          → duration
+toNumber(price)      → number
+toPrice(number)      → price
+```
+
+The six explicit conversions are pure semantic operations and add no broker/network/filesystem capability.
+
+## Non-interference
+
+Appearance state remains outside mathematical computation identity. Parameter edits only invalidate calculation when the changed parameter belongs to the declared computation ABI. Presets, profiles and semantic metadata do not bypass risk, broker, data or renderer authority.
+
+## Verification
+
+- Full Node-only architecture/contract inventory: **PASS (30 commands)**.
+- Semantic-series runtime contract: **PASS** under Node's experimental TypeScript type stripping.
+- Roadmap validation: **PASS — 184 stages**.
+- Full dependency-backed TypeScript/Vite build: **NOT CLAIMED** because the extracted environment has no complete dependency tree.
+- GitHub Actions/Vercel post-push confirmation: **PENDING UNTIL HOSTED BUILD RUNS**.
+- Browser smoke: **NOT RUN**.
+
+---
+
+# SOURCE: CORESPIRIT_V88_RELEASE_NOTES.md
+
+# TradingCoreOS CoreSpirit v88
+
+## Purpose
+
+v88 turns the existing CoreSpirit foundation into a small authoring surface with a substantially more composable and performance-aware execution system.
+
+The source language remains six concepts:
+
+`DATA` · `LET` · `WHEN` · `SHOW` · `MODEL` · `AUTOMATE`
+
+Complexity is absorbed below that surface by semantic graphs, reusable components, execution planning, incremental compilation, bounded caches, workers, lineage and host execution contexts.
+
+## Implemented
+
+- Simple / Advanced / Professional authoring profiles without a language fork.
+- Live / paper / backtest / replay / scan / research / optimization execution contexts.
+- Universal CoreSpirit value kinds and pure/stateful/io/event/visual/authority execution classes.
+- Reusable typed semantic components and pipeline contracts.
+- Incremental AST reuse, changed semantic-node detection and bounded compiler caching.
+- Canonical object serialization and SHA-256 artifact caching.
+- Source-input reverse indexes for targeted reactive invalidation.
+- Bounded pure-node runtime cache and queue traversal without `shift()` in the reactive hot path.
+- Hot / warm / cold execution-lane planning and explicit effect barriers.
+- Runtime performance budgets and public performance statistics.
+- Reusable CoreSpirit worker pool instead of one worker per run.
+- Chart realtime frame coalescing and persisted chart-state memoization.
+- Workspace market-tick backpressure with one React state write per animation frame.
+- Incremental EMA / RSI / ATR / SMA / VWAP developing-bar previews.
+- Canonical timestamp normalization for realtime candle identity.
+- Rare committed-candle correction rebuild for historical corrections.
+- Bounded history request cache with in-flight request deduplication and stale-while-revalidate behavior retained.
+- Generic semantic value lineage tracing.
+- Version-aware CoreSpirit package registry.
+- Existing capability sandbox / execution authority preserved.
+- Existing numerical CPU/WASM/GPU planner preserved and extended with lanes/cache metadata.
+
+## Verification
+
+The repository contract suite passes:
+
+```text
+STAGE88_TERMINAL_ARCHITECTURE_GUARD_OK
+STAGE89_SPA_ROUTE_CONTRACT_OK
+STAGE_V85_HARDENING_CONTRACT_OK
+V85_LEGACY_BRIDGE_CLEANUP_OK
+CORESPIRIT_V88_COMPLEXITY_ABSORPTION_PERFORMANCE_CONTRACT_OK
+```
+
+Changed TypeScript/TSX source was syntax-parsed successfully with the available TypeScript compiler API.
+
+A direct runtime behavioral check also passed for same-candle realtime updates, reversible developing-bar previews, stable bar-close commits, and committed-candle correction rebuilds.
+
+## Environment limitation
+
+The archive does not contain a complete installed dependency environment. In this execution environment the local `vite` binary and `vite/client` type declarations were unavailable, and dependency installation timed out. Therefore a production Vite build was not claimed as verified.
+
+The repository remains intended to be installed normally with its declared package dependencies before `npm run build` / `npm run typecheck` are executed.
+
+---
+
+# SOURCE: CORESPIRIT_V90_RELEASE_NOTES.md
+
+# CoreSpirit v90 — Small Surface, Deep Composition
+
+## Goal
+
+Make CoreSpirit substantially more expressive without making the language substantially larger.
+
+## Frozen authoring model
+
+The public mental model remains six concepts:
+
+```text
+DATA
+LET
+WHEN
+SHOW
+MODEL
+AUTOMATE
+```
+
+CoreSpirit does **not** add separate `FUNCTION`, `PIPELINE`, `MOTION`, `REGIME`, `FEATURE`, or backend-specific keywords to make composition possible.
+
+## What changed
+
+### 1. Components are now first-class values in the compiler model
+
+Registered component contracts can be called from normal expressions:
+
+```corespirit
+motionValue = motion(data)
+vol = volatility(data)
+reg = regime(motionValue, vol)
+show reg.trendProbability
+```
+
+A single-output component returns the corresponding language value type. A multi-output component returns a typed component reference; member access resolves output ports without exposing internal implementation.
+
+### 2. Composition is carried through the entire execution pipeline
+
+```text
+CoreSpirit source
+    ↓
+AST
+    ↓
+semantic typing + component binding
+    ↓
+semantic dependency graph
+    ↓
+stable IR
+    ↓
+execution / reactive graph
+    ↓
+CPU / WASM / GPU-capable host planner
+```
+
+The author does not need to select the execution backend.
+
+### 3. Component contracts participate in incremental invalidation
+
+Component contract identity is included in compiler/cache identity. Changing a component contract therefore invalidates affected compilation artifacts instead of silently reusing stale results.
+
+### 4. Runtime remains capability-safe
+
+A registered component receives only the explicit runtime context and arguments supplied by the host. Registration does not grant broker credentials, arbitrary filesystem/network access, or direct execution authority.
+
+## Design principle
+
+> Keep the language small. Move complexity into typed semantics, graphs, contracts, planning, and runtime infrastructure.
+
+---
