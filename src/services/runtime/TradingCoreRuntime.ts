@@ -1,6 +1,6 @@
 import { brokerManager, BrokerManager, BrokerConnectionInfo } from '../brokers/BrokerManager';
 import { tradingEngine, TradingEngine } from '../engine/TradingEngine';
-import { BrokerAdapter, OrderRequest, OrderResult, Position, Holding, AccountFunds, HistoricalCandle, TradeRecord } from '../brokers/BrokerAdapter';
+import { BrokerAdapter, OrderRequest, OrderResult, Position, Holding, AccountFunds, HistoricalCandle, HistoricalCandleColumns, TradeRecord } from '../brokers/BrokerAdapter';
 import { brokerMarketDataClient } from '../marketData/BrokerMarketDataClient';
 import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market';
 import { coreEventBus } from '../core/event/eventBus';
@@ -224,6 +224,23 @@ export class TradingCoreRuntime {
     if (!brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return;
     const unique = [...new Set(symbols.map(String).filter(Boolean))].slice(0, 8);
     await Promise.all(unique.map(async symbol => { if (historyStore.get(brokerId, symbol, timeframe)?.length) return; try { await this.getHistoricalData(symbol, timeframe); } catch {} }));
+  }
+
+  /**
+   * Compact history path for native Vela loads. No candle objects are created in the
+   * browser before the chart receives its OHLCV columns.
+   */
+  public async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000): Promise<HistoricalCandleColumns | null> {
+    if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
+    let brokerInfo = this.getPrimaryBrokerInfo();
+    if ((!brokerInfo || !this.getPrimaryBroker()) && this.currentMarketDataProviderType === 'CONNECTED_BROKER') {
+      try { await this.restoreBrokerConnections(); } catch {}
+      brokerInfo = this.getPrimaryBrokerInfo();
+    }
+    const broker = this.getPrimaryBroker();
+    const brokerId = brokerInfo?.brokerId?.toLowerCase();
+    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER' || !broker.getHistoricalDataColumns) return null;
+    return broker.getHistoricalDataColumns(symbol, timeframe, signal, Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000))));
   }
 
   public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
