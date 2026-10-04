@@ -3659,3 +3659,49 @@ The execution model remains one chronological traversal: source value → fused 
 ## v121 — deeper fused realtime state
 
 CoreSpirit fused execution now reuses bounded realtime checkpoints instead of cloning a fused cursor on every forming-bar revision. The first checkpoint allocation is retained; subsequent revisions copy state in place. The fused cursor also exposes a scalar incremental output seam for append/realtime consumers. This keeps rollback cost bounded by kernel state rather than allocating a new checkpoint graph per tick.
+
+
+## v123 — performance depth pass — 2026-10-04
+
+v123 deepens the existing v119–v122 performance work instead of replacing it. The goal is to make the chart, Fyers history, CoreSpirit kernels and UI motion obey one bounded-latency model.
+
+### CoreSpirit series fusion — locked
+
+- [x] Reusable `CoreSpiritFusedSeriesCursor` executes compatible stages chronologically with scalar stage-to-stage values.
+- [x] Historical fused materialization owns one final history-sized output and reports zero full intermediate series allocations.
+- [x] Rolling extrema use bounded monotonic deques; EMA/RMA use scalar state; other rolling operations use period-bounded state.
+- [x] Fusion eligibility remains semantic-graph based and rejects effectful/non-deterministic stages.
+- [x] Runtime fusion uses indexed instruction/group lookup and reusable cursors.
+- [ ] v124: fuse dirty spans rather than replaying the complete historical tape when only a bounded dependency range changes.
+- [ ] v124: migrate every built-in numeric kernel to direct `CanonicalMarketView` typed-series ingress.
+
+### Fyers → Vela history — locked
+
+- [x] Initial history remains 5,000 candles.
+- [x] Fyers broker route hard-caps each history request at 5,000 candles.
+- [x] Identical broker history requests are cached and single-flight deduplicated.
+- [x] Browser history concurrency is globally bounded to two active requests.
+- [x] Older history is requested in 5,000-candle demand pages near the visible left edge.
+- [x] `TcoVelaDataProvider.loadRange()` explicitly routes Vela deep-history requests through the shared TCO `ChartDataPlane`.
+- [x] Shared history retention remains bounded at 50,000 candles.
+- [ ] v124: expose a shared range revision ID so prepend/backfill, CoreSpirit dirty spans and Vela render patches can be correlated without broad invalidation.
+
+### UI / animation — locked
+
+- [x] Vela chart motion slowed to premium terminal pacing: zoom 260ms, pan 360ms, scroll 320ms, autoscale 260ms.
+- [x] Live-bar easing remains restrained at 180ms.
+- [x] Global web interaction baseline is 240ms with a cubic-bezier continuity curve.
+- [x] `prefers-reduced-motion` disables non-essential animation.
+- [x] Production workspace remains graphite/black with gray chrome and royal-purple TCO accent.
+- [x] Three.js is not added merely for UI animation; Motion remains the DOM/UI animation layer and Vela remains the chart animation layer.
+- [ ] v124: apply the motion token/classes systematically to remaining high-frequency workspace controls and remove isolated fast transitions.
+- [ ] v124: finish replacing legacy blue dashboard accents with the TCO purple/indigo token layer where those colors are decorative rather than semantic.
+
+### Verification
+
+- [x] Added `v123PerformanceDepthContract.test.mjs` to lock fusion, Fyers 5k paging, motion and theme invariants.
+- [x] Registered the v123 contract in `npm run test:contracts`.
+- [ ] Run dependency-backed contract suite, typecheck and Vite build in CI after the v123 changes.
+- [ ] Browser verification of first 5k paint, left-edge 5k prepend, live forming-bar patching and workspace motion.
+
+The v123 contract is additive: no PineScript/PineTS compatibility path, no second chart vendor, no broker authority in CoreSpirit, and no renderer-specific language semantics are introduced.
