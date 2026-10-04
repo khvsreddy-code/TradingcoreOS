@@ -94,3 +94,11 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 - [x] TC-PERF-39 — rolling WMA/Bollinger/Donchian paths use shared incremental kernels.
 - [x] TC-PERF-40 — appearance-only settings remain outside mathematical cache identity.
 - [x] TC-PERF-41 — history/dependency/style boundaries have contract coverage.
+
+
+### v130 inherited presentation/computation boundary record
+- [x] v110 indicator appearance schema v2 is preserved as the historical compatibility marker.
+- [x] `buildIndicatorComputationSignature` keeps mathematical cache identity separate from appearance.
+- [x] Appearance-only fields do not invalidate computation.
+- [x] Worker transport carries computation inputs separately from presentation metadata.
+- [x] Vela renderer-only fill mutation remains the presentation path.
