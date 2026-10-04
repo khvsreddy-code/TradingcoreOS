@@ -1,5 +1,5 @@
 import type { DrawingTypeKey } from '../core/drawings';
-import { drawingTypes, getDrawingType } from '../core/drawings';
+import { getDrawingType } from '../core/drawings';
 import { registerIcon, svg16 } from '../ui';
 
 const STYLE_ID = 'vela-alt-wheel';
