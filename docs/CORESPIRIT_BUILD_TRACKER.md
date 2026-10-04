@@ -18,6 +18,28 @@
 
 
 
+
+### v127 deep performance architecture — 2026-10-04
+
+- [x] Replaced repeated bounded rolling-window scans in the indicator engine with stateful kernels: RollingSum, RollingMean, RollingVariance, RollingMinMax, RollingMedian and RollingPercentile.
+- [x] Added dual-heap rolling median with delayed deletion and order-statistic percentile selection.
+- [x] Added one-pass centered rolling extrema using monotonic deques.
+- [x] Migrated Bollinger, Donchian, Stochastic, CCI and MFI paths onto stateful incremental calculations; removed the remaining O(N × period) structure-window implementations found in Market Structure, Liquidity Sweeps, NR7, Pivot Consolidation and related advanced scans.
+- [x] Removed the hidden nested rolling-mean recomputation in OrderBlock AI.
+- [x] Added numerical parity coverage for stateful kernels, including append and forming-bar replacement behavior.
+- [x] Added Vela ColumnarHistoryTape as the retained raw-history source of truth with a bounded 50,000-bar capacity and direct prepend/append/replace-last mutation.
+- [x] Added exact dirty ranges to IndicatorModel and PreparedScript lookback metadata.
+- [x] Propagated dirty ranges through Vela execution sessions and translated them into replace-range series patches.
+- [x] Added causal warmup before dirty-range CoreSpirit execution so bounded lookback semantics remain valid.
+- [x] Added renderer frame-paint telemetry: frame count, average/worst frame time, long-frame count and backend classification.
+- [x] Aggregated Vela telemetry at workspace level and exposed browser-testable `window.__TCO_PERF__`.
+- [x] Consolidated active architecture documentation into four canonical batches and moved redundant legacy architecture/repair/FYERS material into `docs/archive/`.
+- [~] The Vela renderer still maintains a compatibility OHLCV mirror internally for some legacy scene/session consumers. The retained orchestration source itself is now columnar; eliminating the renderer mirror is a separate ABI migration.
+- [~] Browser verification is instrumented and contract-tested, but an actual browser session/deployed smoke run is environment-dependent and is not marked complete without execution evidence.
+- [ ] Add real GPU timer-query instrumentation (where supported) to distinguish CPU paint time from GPU execution time.
+- [ ] Convert the remaining renderer/session compatibility consumers from OHLCV objects to columnar/tape readers.
+
+
 ### v125 product/performance deepening — 2026-10-04
 
 - [x] Locked the Vela/FYERS history experience to 5,000 initial candles and 5,000-candle backward pages.
