@@ -34,7 +34,7 @@ assert(options.includes('ZOOM_EASE_DEFAULT_MS = 260'), 'zoom motion pacing was n
 assert(options.includes('PAN_INERTIA_DEFAULT_MS = 360'), 'pan motion pacing was not slowed');
 assert(options.includes('SCROLL_EASE_DEFAULT_MS = 320'), 'scroll motion pacing was not slowed');
 assert(options.includes('AUTOSCALE_EASE_DEFAULT_MS = 260'), 'autoscale motion pacing was not slowed');
-assert(theme.includes("accent: '#7c5cff'"), 'black theme must use royal purple accent');
-assert(css.includes('--tco-motion-standard: 240ms'), 'global UI motion baseline missing');
+assert(theme.includes("accent: '#d3ebf4'"), 'application theme must use the TCO icy-blue accent');
+assert(css.includes('--tco-motion-standard: 280ms'), 'global UI motion baseline missing');
 assert(css.includes('prefers-reduced-motion'), 'motion accessibility guard missing');
 console.log('TRADINGCORE_V123_PERFORMANCE_DEPTH_CONTRACT_OK');
