@@ -972,18 +972,18 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * a trim leaves every value they already computed valid.
      */
     private extendDepth(gen: number, requested: number): void {
-        if (this.rawBars.length > requested) {
+        if (this.rawTape.length > requested) {
             this.rawTape.trimTo(requested);
             this.invalidateRawBarsCompat();
             this.renderRetainedRawSeries({ preserveView: true });
             this.completeHistory('depth');
             return;
         }
-        if (this.rawBars.length === requested) {
+        if (this.rawTape.length === requested) {
             this.completeHistory('depth');
             return;
         }
-        // Detached, exactly like the initial load: `setMarket` resolves on what is already
+        // Detached, exactly like the initial load: setMarket resolves on what is already
         // painted while the extra depth streams in behind it.
         this.historyState = 'backfill';
         void this.backfillHistory(gen, requested);
@@ -999,47 +999,100 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private async backfillHistory(gen: number, requested: number): Promise<void> {
         try {
-            while (this.generation === gen && this.rawBars.length < requested && this.rawBars.length > 0) {
-                const remaining = requested - this.rawBars.length;
-                // A flat chunk per request: only depths past SINGLE_LOAD_BARS reach this loop,
-                // so there is no small near-window to fill quickly — every remaining round trip
-                // should carry as much as the source answers well.
+            while (this.generation === gen && this.rawTape.length < requested && this.rawTape.length > 0) {
+                const remaining = requested - this.rawTape.length;
                 const step = CHUNK_BARS;
-                const chunk = await this.feed.loadRange!(this.config.market, {
-                    to: this.rawBars[0]!.time, // overlap-by-one: the boundary bar dedupes below
-                    limit: Math.min(step, remaining) + 1,
-                });
-                if (this.generation !== gen) return; // superseded mid-fetch (switch/destroy)
-                // Merge against the CURRENT array — live ticks appended during the fetch —
-                // keeping only genuinely older bars (the existing boundary bar wins).
-                const oldest = this.rawBars[0]!.time;
-                const head = chunk.filter((b) => b.time < oldest);
-                if (head.length === 0) {
-                    this.completeHistory('genesis'); // nothing older exists at the source
-                    return;
-                }
-                for (let i = 1; i < head.length; i += 1) {
-                    if (head[i]!.time <= head[i - 1]!.time) {
-                        console.warn('[vela] non-monotonic history chunk — stopping the backfill');
-                        this.completeHistory('aborted');
-                        return;
+                const oldest = this.rawTape.firstTime();
+                let prepended = 0;
+                let servedColumnar = false;
+
+                if (this.feed.loadRangeColumns) {
+                    const columns = await this.feed.loadRangeColumns(this.config.market, {
+                        to: oldest,
+                        limit: Math.min(step, remaining) + 1,
+                    });
+                    if (this.generation !== gen) return;
+                    if (columns && columns.length > 0) {
+                        const factor = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? 1000 : 1;
+                        let previous = Number.NEGATIVE_INFINITY;
+                        for (let i = 0; i < columns.length; i += 1) {
+                            const time = Number(columns.time[i]) * factor;
+                            if (!Number.isFinite(time) || time <= previous) {
+                                console.warn('[vela] non-monotonic columnar history chunk — stopping the backfill');
+                                this.completeHistory('aborted');
+                                return;
+                            }
+                            previous = time;
+                        }
+                        prepended = this.rawTape.prependColumns(columns);
+                        servedColumnar = prepended > 0;
                     }
                 }
-                const previousOldest = this.rawTape.firstTime();
-                const prepended = this.rawTape.prependRows(head);
-                this.invalidateRawBarsCompat();
-                this.renderRetainedRawSeries({ preserveView: true });
+
+                if (!servedColumnar) {
+                    const chunk = await this.feed.loadRange!(this.config.market, {
+                        to: oldest,
+                        limit: Math.min(step, remaining) + 1,
+                    });
+                    if (this.generation !== gen) return;
+                    const head = chunk.filter((b) => b.time < oldest);
+                    if (head.length === 0) {
+                        this.completeHistory('genesis');
+                        return;
+                    }
+                    for (let i = 1; i < head.length; i += 1) {
+                        if (head[i]!.time <= head[i - 1]!.time) {
+                            console.warn('[vela] non-monotonic history chunk — stopping the backfill');
+                            this.completeHistory('aborted');
+                            return;
+                        }
+                    }
+                    prepended = this.rawTape.prependRows(head);
+                }
+
+                if (prepended <= 0) {
+                    this.completeHistory('genesis');
+                    return;
+                }
+
+                if (this.barTransform) {
+                    // Transformed price styles still require the compatibility object view.
+                    this.invalidateRawBarsCompat();
+                    this.renderRetainedRawSeries({ preserveView: true });
+                } else {
+                    // Identity-price charts keep Vela's native history columnar. Only the
+                    // newly-prepended 5k page is materialized for engines that still require
+                    // OHLCV[]; the retained tail is reused by reference.
+                    const existing = this.bars;
+                    const headBars = this.rawTape.toOHLCVRange(0, prepended);
+                    if (existing.length + prepended === this.rawTape.length) {
+                        const merged = new Array<OHLCV>(headBars.length + existing.length);
+                        for (let i = 0; i < headBars.length; i += 1) merged[i] = headBars[i]!;
+                        for (let i = 0; i < existing.length; i += 1) merged[headBars.length + i] = existing[i]!;
+                        this.bars = merged;
+                        this.rawBarsCompat = merged;
+                    } else {
+                        this.bars = this.rawTape.toOHLCV();
+                        this.rawBarsCompat = this.bars;
+                    }
+                    this.renderer.setBarsColumns(this.rawTape.snapshotColumns('milliseconds'), { preserveView: true });
+                }
+
+                const previousOldest = oldest;
                 const dirtyFrom = this.rawTape.firstTime();
                 const lookbackBars = Math.max(0, ...this.registry.all().map((record) => Number(record.prepared?.maxLookback ?? 0)));
                 const dirtyToIndex = Math.min(this.rawTape.length - 1, Math.max(prepended, prepended + lookbackBars));
                 const dirtyTo = dirtyToIndex >= 0 ? this.rawTape.time[dirtyToIndex]! : previousOldest;
-                if (Number.isFinite(dirtyFrom) && Number.isFinite(dirtyTo) && dirtyTo >= dirtyFrom) this.notifySessionsBars('backfill', { from: dirtyFrom, to: dirtyTo });
-                else this.notifySessionsBars('backfill');
-                this.events.emit('history:progress', { loaded: this.rawBars.length, target: requested });
+                if (Number.isFinite(dirtyFrom) && Number.isFinite(dirtyTo) && dirtyTo >= dirtyFrom) {
+                    this.notifySessionsBars('backfill', { from: dirtyFrom, to: dirtyTo });
+                } else {
+                    this.notifySessionsBars('backfill');
+                }
+                this.events.emit('history:progress', { loaded: this.rawTape.length, target: requested });
             }
             if (this.generation === gen) this.completeHistory('depth');
         } catch (e) {
-            console.warn(`[vela] history backfill failed — keeping ${this.rawBars.length} bars (${e instanceof Error ? e.message : String(e)})`);
+            console.warn('[vela] history backfill failed — keeping ' + this.rawTape.length + ' bars (' + (e instanceof Error ? e.message : String(e)) + ')');
             if (this.generation === gen) this.completeHistory('aborted');
         }
     }
@@ -1054,7 +1107,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.historyCompleted = true;
         this.historyState = 'complete';
         this.notifySessionsBars('complete');
-        this.events.emit('history:complete', { reason, oldestTime: this.rawBars[0]?.time ?? 0, barsLoaded: this.rawBars.length });
+        this.events.emit('history:complete', { reason, oldestTime: this.rawTape.firstTime() || 0, barsLoaded: this.rawTape.length });
         this.resolveHistoryComplete();
     }
 
