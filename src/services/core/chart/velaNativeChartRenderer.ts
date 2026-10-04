@@ -4,7 +4,6 @@ import type { ChartLodBar, ChartLodIndex } from './chartLevelOfDetail';
 import type { ChartScene } from './chartScene';
 import { NativeRenderer } from '../../../../vendor/vela/src/renderers/native/NativeRenderer';
 import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
-import type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 import { getCurrentTheme, getThemePalette } from '../../../theme/theme';
 
 function theme(): VelaTheme {
@@ -12,7 +11,9 @@ function theme(): VelaTheme {
   return { background: p.surface2, textColor: p.muted, gridColor: p.grid, borderColor: p.axis, upColor: '#22c55e', downColor: '#ef4444', fontFamily: 'JetBrains Mono, monospace' };
 }
 
-function toBars(rows: readonly ChartDataPoint[]): OHLCV[] {
+type VelaLegacyBar = Parameters<NativeRenderer['setBars']>[0][number];
+
+function toBars(rows: readonly ChartDataPoint[]): VelaLegacyBar[] {
   return rows.map((x) => ({ time: Number(x.time) * 1000, open: Number(x.open), high: Number(x.high), low: Number(x.low), close: Number(x.close), volume: Number(x.volume) || undefined }));
 }
 

@@ -2,13 +2,13 @@
 @import "tailwindcss";
 
 :root {
-  --tco-bg: #070a10;
-  --tco-surface: #0c0e15;
-  --tco-surface-2: #090a0f;
-  --tco-surface-3: #11131c;
-  --tco-hover: #141824;
-  --tco-border: #222636;
-  --tco-border-soft: #1b1f2a;
+  --tco-bg: #07080c;
+  --tco-surface: #0b0c11;
+  --tco-surface-2: #090a0e;
+  --tco-surface-3: #12141a;
+  --tco-hover: #17191f;
+  --tco-border: #262a33;
+  --tco-border-soft: #1b1e25;
   --tco-text: #f3f4f6;
   --tco-text-2: #e5e7eb;
   --tco-heading: #f5f7fa;
@@ -22,8 +22,8 @@
   --tco-slate: #475569;
   --tco-control: #303747;
   --tco-axis: #252b3a;
-  --tco-surface-blue: #0c1728;
-  --tco-code-bg-deep: #06080d;
+  --tco-surface-blue: #141022;
+  --tco-code-bg-deep: #08070d;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color-scheme: dark;
   background: var(--tco-bg);
@@ -61,7 +61,7 @@ html[data-tco-theme="white"] {
 html { scroll-behavior: smooth; background: var(--tco-bg); }
 body { margin: 0; min-width: 320px; background: var(--tco-bg); color: var(--tco-text); }
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
-::selection { background: rgba(59,130,246,.22); color: #eff6ff; }
+::selection { background: rgba(124,92,255,.22); color: #eff6ff; }
 
 .font-mono { font-family: 'JetBrains Mono', monospace; }
 
@@ -114,7 +114,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   color: #f7f8fb;
 }
 .hero-gradient-text {
-  background: linear-gradient(110deg, #f3f4f6 5%, #93c5fd 38%, #60a5fa 62%, #60a5fa 95%);
+  background: linear-gradient(110deg, #f3f4f6 5%, #b7adff 38%, #9b8aff 62%, #60a5fa 95%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -148,7 +148,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .premium-button:hover { transform: translateY(-1px); }
 .premium-button-primary {
   color: #090a0f;
-  background: linear-gradient(135deg, #60a5fa, #3b82f6 60%, #2563eb);
+  background: linear-gradient(135deg, #60a5fa, #7c5cff 60%, #6648d8);
   box-shadow: 0 10px 35px rgba(59,130,246,.18), inset 0 1px rgba(255,255,255,.28);
 }
 .premium-button-primary:hover { box-shadow: 0 15px 42px rgba(59,130,246,.28), inset 0 1px rgba(255,255,255,.28); }
@@ -157,7 +157,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
   border: 1px solid rgba(255,255,255,.09);
   background: rgba(255,255,255,.025);
 }
-.premium-button-secondary:hover { border-color: rgba(96,165,250,.35); background: rgba(255,255,255,.045); }
+.premium-button-secondary:hover { border-color: rgba(155,138,255,.35); background: rgba(255,255,255,.045); }
 
 .terminal-shell {
   overflow: hidden;
@@ -403,7 +403,7 @@ html[data-tco-theme="white"] .border-white\/\[0\.15\] { border-color: var(--tco-
 html[data-tco-theme="white"] input,
 html[data-tco-theme="white"] select,
 html[data-tco-theme="white"] textarea { color: var(--tco-text) !important; }
-html[data-tco-theme="white"] ::selection { background: rgba(37,99,235,.18); color: #0f172a; }
+html[data-tco-theme="white"] ::selection { background: rgba(102,72,216,.18); color: #0f172a; }
 
 html[data-tco-theme="white"] .text-\[\#dbe4ee\] { color: var(--tco-code-text) !important; }
 html[data-tco-theme="white"] .text-\[\#94a3b8\] { color: var(--tco-code-muted) !important; }
@@ -435,3 +435,27 @@ html[data-tco-theme="white"] .border-\[\#313949\] { border-color: var(--tco-bord
 html[data-tco-theme="white"] .bg-\[\#080b11\],
 html[data-tco-theme="white"] .bg-\[\#0b0e14\],
 html[data-tco-theme="white"] .bg-\[\#161108\] { background: var(--tco-surface-3) !important; }
+
+
+/* TradingCoreOS v118 visual system: near-black graphite surfaces, neutral separators,
+   restrained indigo-violet accent, and deliberate DOM motion. Vela chart animation is
+   configured in its own native options; these rules only govern UI chrome. */
+:root {
+  --tco-accent: #7c5cff;
+  --tco-accent-soft: #9b8aff;
+  --tco-graphite: #0f1116;
+  --tco-graphite-2: #17191f;
+  --tco-motion-fast: 150ms;
+  --tco-motion-normal: 220ms;
+  --tco-motion-slow: 360ms;
+}
+button, a, input, select, textarea, [role="button"] {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: var(--tco-motion-fast);
+  transition-timing-function: cubic-bezier(.22,1,.36,1);
+}
+.tco-premium-surface {
+  background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.008)), var(--tco-surface);
+  border-color: rgba(255,255,255,.075);
+  box-shadow: 0 16px 50px rgba(0,0,0,.26), inset 0 1px rgba(255,255,255,.025);
+}

@@ -129,6 +129,12 @@ export class TcoVelaDataProvider implements DataProvider {
     let lastError: unknown = null;
     try {
       await plane.ensureReady(requested);
+      const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+      const current = plane.readCanonical();
+      const currentNewestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+      if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(currentNewestMs) && requestedTo < currentNewestMs - 1) {
+        await plane.loadOlderHistory('visible');
+      }
       return marketViewToBars(plane.readCanonical(), range, requested);
     } catch (error) {
       lastError = error;

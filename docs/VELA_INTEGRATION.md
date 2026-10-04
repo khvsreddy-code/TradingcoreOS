@@ -320,3 +320,8 @@ Historical candle data uses setBarsColumns once. Forming bars use updateBarColum
 The retained-scene contract is now explicit: `append`, `replace-last`, `prepend`, and `replace-range` mutate only affected data; `seriesStyles` handles appearance without touching values; marker updates diff their changed interval; fill updates use a separate value/style channel. The engine only selects a tail delta when the previous/current series identity and timestamp continuity prove the live operation; otherwise it falls back to a full replacement.
 
 The full Vela source audit also confirmed that candle rendering is the correct place to keep the columnar representation: the renderer may keep an internal `OHLCV[]` compatibility mirror for legacy scripting/data-window paths, but that mirror is not the render transport. Supabase broker/session/workspace persistence remains outside this hot path; the database advisor currently reports RLS-policy evaluation and duplicate-policy/index cleanup opportunities, which are separate persistence optimizations.
+
+
+## v118 — terminal visual/motion polish
+
+The production terminal uses a near-black graphite base with a restrained indigo-violet accent. Native Vela motion constants were slowed from the previous ultra-snappy defaults so zoom, pan, autoscale, live-bar glide and first-paint reveal settle more naturally. UI DOM transitions use the existing Motion stack; the chart renderer itself remains on Vela's native scheduler.

@@ -20,6 +20,7 @@ const resolutionMap: Record<string, string> = {
   '1minute': '1',
   '3minute': '3',
   '5minute': '5',
+  '10minute': '10',
   '15minute': '15',
   '30minute': '30',
   '60minute': '60',
@@ -133,8 +134,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   const requested = Number(req.query.limit || 10_000);
   const limit = Number.isFinite(requested)
-    ? Math.max(2, Math.min(10_000, Math.floor(requested)))
-    : 10_000;
+    ? Math.max(2, Math.min(5_000, Math.floor(requested)))
+    : 5_000;
   if (!instrumentKey || !resolution) {
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
@@ -165,7 +166,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
-      const lookbackDays = resolution === 'D' ? 3650 : resolution === '30' || resolution === '60' ? 90 : 30;
+      const lookbackDays = resolution === 'D' ? 3650 : resolution === '60' ? 365 : resolution === '30' ? 210 : resolution === '15' ? 180 : resolution === '10' ? 140 : resolution === '5' ? 90 : resolution === '3' ? 50 : 30;
       const from = new Date(end.getTime() - lookbackDays * 86_400_000);
       const params = new URLSearchParams({
         symbol: instrumentKey,

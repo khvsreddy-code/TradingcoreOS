@@ -79,7 +79,7 @@ const SINGLE_LOAD_BARS = 5_000;
  * (each a bounded request the data source answers quickly, instead of one giant fetch that
  * stalls silently and lands as a single main-thread-freezing parse).
  */
-const CHUNK_BARS = 10_000;
+const CHUNK_BARS = 5_000;
 /**
  * A progressive source's FIRST paint waits for at least this many bars (or the full ask,
  * whichever is smaller): the first paint is the frame the renderer sizes the view against,

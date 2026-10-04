@@ -3574,3 +3574,10 @@ The chart side now exposes one history snapshot followed by append/replace-last 
 The retained-scene contract is now explicit: `append`, `replace-last`, `prepend`, and `replace-range` mutate only affected data; `seriesStyles` handles appearance without touching values; marker updates diff their changed interval; fill updates use a separate value/style channel. The engine only selects a tail delta when the previous/current series identity and timestamp continuity prove the live operation; otherwise it falls back to a full replacement.
 
 The full Vela source audit also confirmed that candle rendering is the correct place to keep the columnar representation: the renderer may keep an internal `OHLCV[]` compatibility mirror for legacy scripting/data-window paths, but that mirror is not the render transport. Supabase broker/session/workspace persistence remains outside this hot path; the database advisor currently reports RLS-policy evaluation and duplicate-policy/index cleanup opportunities, which are separate persistence optimizations.
+
+
+## v118 — platform performance surface
+
+Completed: 5k-first history policy; 5k older-page policy; Fyers 10m coverage; range-aware TCO Vela hydration; Vela 5k cache/deep-history alignment; slower chart motion; graphite/indigo visual identity; Supabase-backed Vela workspace persistence.
+
+The next CoreSpirit performance boundary is series-kernel fusion: compile compatible pure series nodes into one chronological traversal with no full intermediate Float64Array per operation.

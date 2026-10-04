@@ -24,8 +24,8 @@ export const BLACK_THEME = Object.freeze({
   axis: '#252b3a',
   surfaceBlue: '#0c1728',
   codeBgDeep: '#06080d',
-  accent: '#3b82f6',
-  accentSoft: '#60a5fa',
+  accent: '#7c5cff',
+  accentSoft: '#9b8aff',
 });
 
 export const WHITE_THEME = Object.freeze({
@@ -47,7 +47,7 @@ export const WHITE_THEME = Object.freeze({
   axis: '#c5ccd5',
   surfaceBlue: '#eef3f8',
   codeBgDeep: '#e7ebf0',
-  accent: '#2563eb',
+  accent: '#6648d8',
   accentSoft: '#3b82f6',
 });
 

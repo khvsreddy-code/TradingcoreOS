@@ -213,17 +213,17 @@ export interface IntroAnimation {
 
 // Built-in ease time-constants (ms) — what `true` means for each `animations` entry.
 /** Wheel-zoom glide. */
-export const ZOOM_EASE_DEFAULT_MS = 70;
+export const ZOOM_EASE_DEFAULT_MS = 150;
 /** Inertial-pan velocity decay — short/snappy (the drift is ≈ v₀·τ), not a long coast. */
-export const PAN_INERTIA_DEFAULT_MS = 110;
+export const PAN_INERTIA_DEFAULT_MS = 220;
 /** Scroll-to-latest / `panBy` glide toward its target offset. */
-export const SCROLL_EASE_DEFAULT_MS = 130;
+export const SCROLL_EASE_DEFAULT_MS = 240;
 /** Autoscale glide during a zoom/fling. */
-export const AUTOSCALE_EASE_DEFAULT_MS = 80;
+export const AUTOSCALE_EASE_DEFAULT_MS = 180;
 /** Time-constant (ms) of the live-bar glide when `animations.liveBar` is `true`. */
-export const LIVE_BAR_EASE_DEFAULT_MS = 90;
+export const LIVE_BAR_EASE_DEFAULT_MS = 140;
 /** Whole-sweep duration of the first-paint reveal. */
-export const INTRO_DURATION_DEFAULT_MS = 650;
+export const INTRO_DURATION_DEFAULT_MS = 900;
 /** Upper bound (ms) for any ease time-constant — past this the chart visibly lags its input. */
 export const ANIMATION_EASE_MAX_MS = 1000;
 /** Upper bound (ms) for `animations.liveBar` — past this the candle visibly lags the feed. */

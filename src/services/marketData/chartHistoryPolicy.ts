@@ -1,31 +1,13 @@
 export const INITIAL_HISTORY_CANDLES: Record<string, number> = {
-  '1m': 1_500,
-  '3m': 1_200,
-  '5m': 900,
-  '15m': 600,
-  '30m': 450,
-  '1H': 360,
-  '1D': 300,
+  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000, '15m': 5000, '30m': 5000, '1H': 5000, '1D': 5000,
 };
 
 export const HISTORY_PAGE_CANDLES: Record<string, number> = {
-  '1m': 1_200,
-  '3m': 1_000,
-  '5m': 900,
-  '15m': 750,
-  '30m': 600,
-  '1H': 450,
-  '1D': 300,
+  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000, '15m': 5000, '30m': 5000, '1H': 5000, '1D': 5000,
 };
 
 export const HISTORY_WARM_TARGET_CANDLES: Record<string, number> = {
-  '1m': 2_500,
-  '3m': 2_200,
-  '5m': 1_800,
-  '15m': 1_300,
-  '30m': 1_000,
-  '1H': 720,
-  '1D': 500,
+  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000, '15m': 5000, '30m': 5000, '1H': 5000, '1D': 5000,
 };
 
 export const HISTORY_MAX_CANDLES = 50_000;
@@ -45,11 +27,8 @@ export function historyPageCandles(timeframe: string): number {
  * Small viewports should not pull a full page when only a few hundred bars are
  * needed; larger viewports are capped by the normal timeframe page budget.
  */
-export function historyDemandPageCandles(timeframe: string, visibleBars: number): number {
-  const base = historyPageCandles(timeframe);
-  const bars = Math.max(1, Math.ceil(Number(visibleBars) || 1));
-  const demand = Math.max(300, Math.ceil(bars * 1.8));
-  return Math.max(300, Math.min(base, demand));
+export function historyDemandPageCandles(_timeframe: string, _visibleBars: number): number {
+  return 5000;
 }
 
 export function historyDemandLeadBars(timeframe: string, visibleBars: number): number {

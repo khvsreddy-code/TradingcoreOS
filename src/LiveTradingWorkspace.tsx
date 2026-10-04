@@ -6,6 +6,7 @@ import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import './services/core/chart/tcoVelaChrome';
+import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v3-multichart';
@@ -59,12 +60,13 @@ export function LiveTradingWorkspace() {
       } catch {
         // Vela/runtime surface the actual market-data error below.
       }
+      const defaults = await loadTcoVelaDefaults();
       if (cancelled || !host.current) return;
 
       workspace = new VelaWorkspace(host.current, {
-        layout: '4',
+        layout: defaults.layout || '4',
         symbol: 'NSE:NIFTY50-INDEX',
-        timeframe: '5',
+        timeframe: defaults.timeframe || '5',
         bars: 750,
         timeframes: ['1', '3', '5', '10', '15'],
         live: true,
@@ -87,6 +89,7 @@ export function LiveTradingWorkspace() {
         bottombar: true,
         autofocus: false,
         persist: VELA_STATE_KEY,
+        storage: createTcoVelaSupabaseStorage('fyers'),
         maxWebglCells: 8,
         cells: {
           primary: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },

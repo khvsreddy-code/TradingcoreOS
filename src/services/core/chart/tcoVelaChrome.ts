@@ -1,5 +1,6 @@
 import { registerSidePanel, registerWidgetAction, type SidePanelDescriptor, type WidgetActionDescriptor } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
+import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
 
 const WATCHLIST = [
   { symbol: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50', short: 'NIFTY' },
@@ -90,6 +91,7 @@ const journalPanel: SidePanelDescriptor = {
     root.appendChild(context);
     const textarea = document.createElement('textarea');
     textarea.value = localStorage.getItem(JOURNAL_KEY) ?? '';
+    void loadTcoVelaJournal().then((cloud) => { if (cloud != null && document.contains(textarea)) textarea.value = cloud; });
     textarea.placeholder = 'Trade notes, observations, setups, execution review...';
     textarea.style.cssText = 'flex:1;min-height:180px;resize:none;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;background:#090d15;color:#e2e8f0;outline:none;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-sizing:border-box;';
     root.appendChild(textarea);
@@ -99,7 +101,7 @@ const journalPanel: SidePanelDescriptor = {
     const save = document.createElement('button');
     save.type = 'button'; save.textContent = 'Save note';
     save.style.cssText = 'flex:1;border:1px solid rgba(96,165,250,.28);border-radius:7px;padding:8px;background:rgba(59,130,246,.12);color:#bfdbfe;font:11px ui-monospace;cursor:pointer;';
-    save.addEventListener('click', () => localStorage.setItem(JOURNAL_KEY, textarea.value));
+    save.addEventListener('click', () => { localStorage.setItem(JOURNAL_KEY, textarea.value); void saveTcoVelaJournal(textarea.value); });
     const stamp = document.createElement('button');
     stamp.type = 'button'; stamp.textContent = 'Stamp context';
     stamp.style.cssText = 'border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;background:#0c111a;color:#cbd5e1;font:11px ui-monospace;cursor:pointer;';

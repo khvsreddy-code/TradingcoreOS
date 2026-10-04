@@ -537,3 +537,10 @@ Vela native rendering now consumes the TCO columnar OHLCV plane and owns a mutab
 The retained-scene contract is now explicit: `append`, `replace-last`, `prepend`, and `replace-range` mutate only affected data; `seriesStyles` handles appearance without touching values; marker updates diff their changed interval; fill updates use a separate value/style channel. The engine only selects a tail delta when the previous/current series identity and timestamp continuity prove the live operation; otherwise it falls back to a full replacement.
 
 The full Vela source audit also confirmed that candle rendering is the correct place to keep the columnar representation: the renderer may keep an internal `OHLCV[]` compatibility mirror for legacy scripting/data-window paths, but that mirror is not the render transport. Supabase broker/session/workspace persistence remains outside this hot path; the database advisor currently reports RLS-policy evaluation and duplicate-policy/index cleanup opportunities, which are separate persistence optimizations.
+
+
+## v118 — Fyers 5k window + Vela transport tuning
+
+TradingCoreOS now requests a 5,000-candle initial chart window and 5,000-candle older-history pages. The Vela ranged cache and deep-history chunk size are aligned to the same 5k unit. The TCO Vela provider now honors a ranged `to` boundary by hydrating the older page before slicing, preventing left-edge scrolls from returning the newest 5k candles again.
+
+The Fyers history route caps chart requests at 5,000 candles, adds the 10-minute interval mapping, and uses timeframe-aware lookback windows to give the broker a realistic opportunity to return the requested page.

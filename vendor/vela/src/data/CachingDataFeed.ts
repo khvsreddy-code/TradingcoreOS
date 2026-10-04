@@ -17,7 +17,7 @@ function cacheKey(symbol: string, timeframe: string, session?: string): string {
 }
 
 /** Page size for big ranged fetches (mirrors the orchestrator's history chunks). */
-const PAGE_BARS = 10_000;
+const PAGE_BARS = 5_000;
 /**
  * At/below this a ranged fetch stays a SINGLE request. One above {@link PAGE_BARS} so the
  * orchestrator's own backfill chunks (`CHUNK_BARS + 1` for the overlap bar) never split.

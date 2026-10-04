@@ -809,3 +809,10 @@ The columnar boundary is now real for identity OHLCV history, native candle rend
 The retained-scene contract is now explicit: `append`, `replace-last`, `prepend`, and `replace-range` mutate only affected data; `seriesStyles` handles appearance without touching values; marker updates diff their changed interval; fill updates use a separate value/style channel. The engine only selects a tail delta when the previous/current series identity and timestamp continuity prove the live operation; otherwise it falls back to a full replacement.
 
 The full Vela source audit also confirmed that candle rendering is the correct place to keep the columnar representation: the renderer may keep an internal `OHLCV[]` compatibility mirror for legacy scripting/data-window paths, but that mirror is not the render transport. Supabase broker/session/workspace persistence remains outside this hot path; the database advisor currently reports RLS-policy evaluation and duplicate-policy/index cleanup opportunities, which are separate persistence optimizations.
+
+
+## v118 — history, animation and typecheck repair
+
+Resolved the remaining reported blockers in the current Vela head: workspace listener disposer now has lexical ownership, and the TCO Vela native adapter uses Vela's inferred legacy-bar type rather than an unresolved OHLCV import. The MutableColumnarBars typing fix is already present in the retained-scene head.
+
+History is now standardized on 5,000-bar initial and older pages, and the Vela animation defaults are intentionally slower for a more professional terminal feel.
