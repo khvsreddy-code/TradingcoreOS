@@ -55,3 +55,22 @@ TCO data columns
 The four canonical batches are the only active architecture docs. Historical/redundant source notes are preserved under `docs/archive/`; `docs/history/` remains an immutable release history.
 
 For contributors, the rule is simple: change the canonical document first. Do not create another one-off architecture note for an already-covered subsystem.
+
+## v128 deep-performance architecture — 2026-10-04
+
+The active documentation surface is now intentionally limited to the four architecture batches plus the compatibility tracker. Chronological stage notes moved to `docs/archive/history/`; duplicate archived copies moved to `docs/archive/compatibility/`.
+
+Current runtime path:
+
+```text
+FYERS compact columns
+  → TCO runtime / ChartDataPlane
+  → Vela ColumnarHistoryTape
+  → Vela native renderer
+  → CoreSpirit stateful kernels
+  → exact dirty-span execution
+  → replace-range scene patch
+  → per-cell frame/backend telemetry
+```
+
+v128 specifically closes the three deep performance boundaries that remained after v127: columnar ranged backfill, bounded dirty-span propagation, and p95/FPS/frame-budget telemetry. Browser verification is implemented as a repeatable `agent-browser` script; it is not treated as executed unless a browser environment actually runs it.
