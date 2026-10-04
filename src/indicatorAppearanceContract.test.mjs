@@ -14,7 +14,7 @@ const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const facade = read('src/services/core/chart/velaChartFacade.ts');
 const renderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
 const markerModel = read('vendor/vela/src/core/model/series.ts');
-const buildTracker = read('docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md');
+const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
 const schemaDoc = read('docs/04_INDICATORS_AND_PLATFORM.md');
 
 assert(exists('src/services/coreSpirit/indicatorAppearance.ts'), 'indicator appearance module missing');
