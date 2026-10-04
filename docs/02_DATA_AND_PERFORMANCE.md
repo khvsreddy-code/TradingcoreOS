@@ -96,3 +96,24 @@ FYERS is queried through the authenticated server route, capped at 5,000 candles
 The Vela fork uses a 5,000-bar history chunk and a 200-bar left-edge trigger. The TCO provider's `loadRange` routes those requests through the shared ChartDataPlane instead of creating a second history path.
 
 The remaining zero-object work is explicit: the native renderer consumes columnar data, but Vela's orchestration tape still keeps an OHLCV compatibility representation for history/session engines. Removing that last representation is a separate ABI-level migration and must not be hidden behind a misleading function name.
+
+## v126 — compact FYERS → Vela history fast path
+
+The first chart load now has an explicit compact numeric transport for FYERS-capable broker adapters:
+
+```text
+FYERS History API
+  → compact numeric OHLCV columns
+  → TradingCore runtime
+  → shared ChartDataPlane
+  → CanonicalDataPlane / typed arrays
+  → Vela setBarsColumns()
+```
+
+The ordinary `HistoricalCandle[]` route remains as a compatibility boundary for secondary/ranged history and APIs that still require objects. The user-visible policy is unchanged: first load is 5,000 candles; left-edge demand fetches another 5,000; retention is capped at 50,000.
+
+`MarketDataStore.replaceColumns()` writes directly into the canonical typed buffers, removing the previous browser-side conversion loop before the first native Vela paint.
+
+### Remaining hot-path debt
+
+The remaining materialization is concentrated in Vela orchestration/history compatibility and ranged/secondary-series consumers. That should be removed only after a true columnar history-tape ABI exists for replay, session windows, drawings and transformed chart types.
