@@ -92,7 +92,7 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   k.updateWilder(1); k.updateWilder(2);
   nearly(k.updateWilder(3)!, 2);
   nearly(k.updateWilder(5)!, 3);
-  nearly(k.updateWilder(10, 'replace')!, 5);
+  nearly(k.updateWilder(10, 'replace')!, 14 / 3);
 }
 
 {
