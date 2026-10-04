@@ -108,7 +108,7 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   k.update(1); k.update(2);
   nearly(k.update(3)!, 14 / 6);
   nearly(k.update(4)!, 20 / 6);
-  nearly(k.update(10, 'replace')!, 30 / 6);
+  nearly(k.update(10, 'replace')!, 38 / 6);
 }
 
 {
