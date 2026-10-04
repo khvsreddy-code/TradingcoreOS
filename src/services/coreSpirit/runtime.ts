@@ -79,6 +79,10 @@ export class CoreSpiritRuntime {
   private seriesFusionPlan?: CoreSpiritSeriesFusionPlan;
   private readonly fusedStageByInstruction = new Map<number, { groupId: string; stageIndex: number }>();
   private readonly fusedCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
+  /** O(1) plan lookup for fused instruction execution. */
+  private readonly fusedGroupById = new Map<string, CoreSpiritSeriesFusionPlan['groups'][number]>();
+  /** One bounded snapshot per active forming-bar group; never history-sized. */
+  private readonly fusedCursorSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
@@ -145,6 +149,9 @@ export class CoreSpiritRuntime {
       this.state.seriesState = cloneNumberMap(this.currentBarSnapshot.seriesState);
       this.state.localSeries = cloneValueMap(this.currentBarSnapshot.localSeries);
       this.crossState = cloneCrossMap(this.currentBarSnapshot.crossState);
+      for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
+        this.fusedCursors.set(groupId, snapshot.clone());
+      }
       this.history[this.history.length - 1] = normalized;
     } else {
       this.realtimeRevision = 0;
@@ -155,6 +162,10 @@ export class CoreSpiritRuntime {
         crossState: cloneCrossMap(this.crossState),
         historyLength: this.history.length,
       };
+      this.fusedCursorSnapshots.clear();
+      for (const [groupId, cursor] of this.fusedCursors) {
+        this.fusedCursorSnapshots.set(groupId, cursor.clone());
+      }
       this.history.push(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
     }
@@ -227,6 +238,7 @@ export class CoreSpiritRuntime {
     this.committedLocalSeries = cloneValueMap(this.state.localSeries);
     this.committedCrossState = cloneCrossMap(this.crossState);
     this.currentBarSnapshot = undefined;
+    this.fusedCursorSnapshots.clear();
     this.lastBarWasRealtime = false;
   }
 
@@ -237,6 +249,9 @@ export class CoreSpiritRuntime {
     this.state.seriesState=cloneNumberMap(this.currentBarSnapshot.seriesState);
     this.state.localSeries=cloneValueMap(this.currentBarSnapshot.localSeries);
     this.crossState=cloneCrossMap(this.currentBarSnapshot.crossState);
+    for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
+      this.fusedCursors.set(groupId, snapshot.clone());
+    }
     this.history=this.history.slice(0,this.currentBarSnapshot.historyLength);
     this.state.barIndex=this.history.length-1;
     this.state.time=this.history.length?this.toEpoch(this.history.at(-1)!.timestamp):0;
@@ -244,6 +259,7 @@ export class CoreSpiritRuntime {
     this.state.barState={ index:this.state.barIndex,time:this.state.time,isFirst:this.state.barIndex===0,isLast:false,isRealtime:false,isConfirmed:true,revision:0,symbol:this.options.symbol,timeframe:this.options.timeframe,mode:this.executionContext.mode };
     if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false}); this.executionContext.session=this.executionContext.frame.session; }
     this.currentBarSnapshot=undefined;
+    this.fusedCursorSnapshots.clear();
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
     this.reactiveRecomputed=0; this.reactiveReused=0; this.reactiveEffects=0;
@@ -331,17 +347,19 @@ export class CoreSpiritRuntime {
 
   private resetFusedSeriesCursors(): void {
     this.fusedCursors.clear();
-    if (this.executionContext.mode === 'realtime' || !this.seriesFusionPlan) return;
+    this.fusedGroupById.clear();
+    this.fusedCursorSnapshots.clear();
+    if (!this.seriesFusionPlan) return;
     for (const group of this.seriesFusionPlan.groups) {
+      this.fusedGroupById.set(group.id, group);
       this.fusedCursors.set(group.id, new CoreSpiritFusedSeriesCursor(group.operations));
     }
   }
 
   private fusedStageValues(instructionIndex: number, values: Map<string, unknown>, barIndex: number, instructions: CoreSpiritIrInstruction[]): boolean {
-    if (this.executionContext.mode === 'realtime') return false;
     const binding = this.fusedStageByInstruction.get(instructionIndex);
     if (!binding || !this.seriesFusionPlan) return false;
-    const group = this.seriesFusionPlan.groups.find((candidate) => candidate.id === binding.groupId);
+    const group = this.fusedGroupById.get(binding.groupId);
     if (!group) return false;
     if (binding.stageIndex !== 0) return true;
     const first = instructions[instructionIndex];

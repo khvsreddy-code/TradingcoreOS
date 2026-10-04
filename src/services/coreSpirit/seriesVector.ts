@@ -115,6 +115,24 @@ class MonotonicDeque {
   front(): number {
     return this.size > 0 ? this.values[this.head]! : Number.NaN;
   }
+  
+  clone(): MonotonicDeque {
+    const next = new MonotonicDeque(this.capacity, this.minimum);
+    next.indices.set(this.indices);
+    next.values.set(this.values);
+    next.head = this.head;
+    next.size = this.size;
+    return next;
+  }
+
+  copyFrom(source: MonotonicDeque): void {
+    if (source.capacity !== this.capacity || source.minimum !== this.minimum) throw new Error('incompatible deque state');
+    this.indices.set(source.indices);
+    this.values.set(source.values);
+    this.head = source.head;
+    this.size = source.size;
+  }
+
 }
 
 /** Rolling numeric state. All memory is bounded by the largest operation period. */
@@ -198,6 +216,34 @@ class RollingState {
   max(): number {
     return this.maxQueue.front();
   }
+  
+  clone(): RollingState {
+    const next = new RollingState(this.period);
+    next.values.set(this.values);
+    next.cursor = this.cursor;
+    next.count = this.count;
+    next.validCount = this.validCount;
+    next.sum = this.sum;
+    next.sumSquares = this.sumSquares;
+    next.weightedSum = this.weightedSum;
+    next.minQueue.copyFrom(this.minQueue);
+    next.maxQueue.copyFrom(this.maxQueue);
+    return next;
+  }
+
+  copyFrom(source: RollingState): void {
+    if (source.period !== this.period) throw new Error('incompatible rolling state');
+    this.values.set(source.values);
+    this.cursor = source.cursor;
+    this.count = source.count;
+    this.validCount = source.validCount;
+    this.sum = source.sum;
+    this.sumSquares = source.sumSquares;
+    this.weightedSum = source.weightedSum;
+    this.minQueue.copyFrom(source.minQueue);
+    this.maxQueue.copyFrom(source.maxQueue);
+  }
+
 }
 
 class MedianState {
@@ -271,6 +317,28 @@ class MedianState {
       ? this.sorted[mid]!
       : (this.sorted[mid - 1]! + this.sorted[mid]!) / 2;
   }
+  
+  clone(): MedianState {
+    const next = new MedianState(this.period);
+    next.values.set(this.values);
+    next.sorted.set(this.sorted);
+    next.cursor = this.cursor;
+    next.count = this.count;
+    next.validCount = this.validCount;
+    next.sortedCount = this.sortedCount;
+    return next;
+  }
+
+  copyFrom(source: MedianState): void {
+    if (source.period !== this.period) throw new Error('incompatible median state');
+    this.values.set(source.values);
+    this.sorted.set(source.sorted);
+    this.cursor = source.cursor;
+    this.count = source.count;
+    this.validCount = source.validCount;
+    this.sortedCount = source.sortedCount;
+  }
+
 }
 
 class PersistenceState {
@@ -340,6 +408,36 @@ class PersistenceState {
     if (this.count !== this.period || this.validCount !== this.period) return Number.NaN;
     return this.comparisons > 0 ? this.same / this.comparisons : 0;
   }
+  
+  clone(): PersistenceState {
+    const next = new PersistenceState(this.period);
+    next.values.set(this.values);
+    next.deltaSigns.set(this.deltaSigns);
+    next.comparisonValid.set(this.comparisonValid);
+    next.comparisonSame.set(this.comparisonSame);
+    next.cursor = this.cursor;
+    next.count = this.count;
+    next.validCount = this.validCount;
+    next.comparisons = this.comparisons;
+    next.same = this.same;
+    next.seen = this.seen;
+    return next;
+  }
+
+  copyFrom(source: PersistenceState): void {
+    if (source.period !== this.period) throw new Error('incompatible persistence state');
+    this.values.set(source.values);
+    this.deltaSigns.set(source.deltaSigns);
+    this.comparisonValid.set(source.comparisonValid);
+    this.comparisonSame.set(source.comparisonSame);
+    this.cursor = source.cursor;
+    this.count = source.count;
+    this.validCount = source.validCount;
+    this.comparisons = source.comparisons;
+    this.same = source.same;
+    this.seen = source.seen;
+  }
+
 }
 
 class EMAState {
@@ -366,6 +464,22 @@ class EMAState {
     this.state = this.alpha * value + (1 - this.alpha) * this.state;
     return this.state;
   }
+  
+  clone(): EMAState {
+    const next = new EMAState(this.period, this.alpha === 1 / this.period);
+    next.seedSum = this.seedSum;
+    next.seedCount = this.seedCount;
+    next.state = this.state;
+    return next;
+  }
+
+  copyFrom(source: EMAState): void {
+    if (source.period !== this.period || source.alpha !== this.alpha) throw new Error('incompatible EMA state');
+    this.seedSum = source.seedSum;
+    this.seedCount = source.seedCount;
+    this.state = source.state;
+  }
+
 }
 
 class ChangeState {
@@ -379,6 +493,18 @@ class ChangeState {
     if (this.percentage) return previous === 0 ? Number.NaN : value / previous - 1;
     return value - previous;
   }
+  
+  clone(): ChangeState {
+    const next = new ChangeState(this.percentage);
+    next.previous = this.previous;
+    return next;
+  }
+
+  copyFrom(source: ChangeState): void {
+    if (source.percentage !== this.percentage) throw new Error('incompatible change state');
+    this.previous = source.previous;
+  }
+
 }
 
 class FusedSeriesStage {
@@ -465,6 +591,21 @@ class FusedSeriesStage {
         return Number.NaN;
     }
   }
+  
+  getOperation(): CoreSpiritSeriesOperation {
+    return this.op;
+  }
+
+  clone(): FusedSeriesStage {
+    const next = new FusedSeriesStage(this.op);
+    if (this.rolling && next.rolling) next.rolling.copyFrom(this.rolling);
+    if (this.median && next.median) next.median.copyFrom(this.median);
+    if (this.persistence && next.persistence) next.persistence.copyFrom(this.persistence);
+    if (this.ema && next.ema) next.ema.copyFrom(this.ema);
+    if (this.change && next.change) next.change.copyFrom(this.change);
+    return next;
+  }
+
 }
 
 export class CoreSpiritFusedSeriesCursor {
@@ -532,4 +673,12 @@ export function executeCoreSpiritFusedSeriesPipeline(
       intermediateAllocations: 0,
     }),
   });
+  
+  clone(): CoreSpiritFusedSeriesCursor {
+    const next = new CoreSpiritFusedSeriesCursor(this.stages.map((stage) => stage.getOperation()));
+    for (let i = 0; i < this.stages.length; i += 1) next.stages[i]!.copyFrom(this.stages[i]!);
+    next.outputs.set(this.outputs);
+    return next;
+  }
+
 }
