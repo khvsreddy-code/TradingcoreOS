@@ -4,6 +4,7 @@ import type { IndicatorMeta, IndicatorModel } from '../model/indicator';
 import type { StrategyState, StrategyTrade } from '../model/strategy';
 import type { SymbolInfo, BarRange } from './MarketDataFeed';
 import type { PriceStyle } from '../options';
+import type { DirtyRange } from '../model/patch';
 
 /**
  * A cache-backed data gateway the engine uses to fetch ANY `(symbol, timeframe)`
@@ -132,6 +133,8 @@ export interface ExecutionHandlers {
     onAlert?(alert: EngineAlert): void;
     onWarning?(warning: EngineWarning): void;
     onError?(error: Error): void;
+    /** Optional maximum causal lookback in bars. Hosts use it to bound history-backfill recomputation. */
+    maxLookback?: number;
     /** A `static` run finished; not fired for an open live stream. */
     onDone?(): void;
 }
@@ -194,7 +197,7 @@ export interface ExecutionSession {
     /** Update the viewport window (re-runs viewport-dependent scripts; no-op otherwise). */
     setVisibleRange(range: VisibleBarRange): void;
     /** Signal that Vela's bars changed. No reason = live tick; see {@link BarsChangeReason}. */
-    notifyBars(reason?: BarsChangeReason): void;
+    notifyBars(reason?: BarsChangeReason, dirty?: DirtyRange): void;
 }
 
 /**
