@@ -7,6 +7,7 @@ import {
   AccountFunds,
   ApiCredentials,
   HistoricalCandle,
+  HistoricalCandleColumns,
   BrokerCapabilities,
   TradeRecord,
 } from './BrokerAdapter';
@@ -108,6 +109,28 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
     return requireArray(requireSuccessData(payload, 'Historical data request failed'), isHistoricalCandle, 'historical candles');
   }
 
+  async getHistoricalDataColumns(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000): Promise<HistoricalCandleColumns | null> {
+    const safeLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+    const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}&format=columns`, { signal });
+    const payload = readJson(await res.text());
+    if (!res.ok) throw new Error(isRecord(payload) && typeof payload.error === 'string' ? payload.error : `Historical data request failed (${res.status})`);
+    const value = requireSuccessData(payload, 'Historical data request failed');
+    if (isHistoricalColumns(value)) return value;
+    // Compatibility fallback for a broker route that has not implemented the compact
+    // format yet. This path is deliberately cold-only; FYERS uses the zero-object response.
+    if (Array.isArray(value)) {
+      const rows = value as HistoricalCandle[];
+      const time: number[] = [], open: number[] = [], high: number[] = [], low: number[] = [], close: number[] = [], volume: number[] = [];
+      for (const row of rows.slice(-safeLimit)) {
+        const parsed = Date.parse(String(row.timestamp));
+        if (!Number.isFinite(parsed)) continue;
+        time.push(parsed); open.push(Number(row.open)); high.push(Number(row.high)); low.push(Number(row.low)); close.push(Number(row.close)); volume.push(Number.isFinite(Number(row.volume)) ? Number(row.volume) : 0);
+      }
+      return { time, open, high, low, close, volume, timeUnit: 'milliseconds' };
+    }
+    return null;
+  }
+
   async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 500, signal?: AbortSignal): Promise<HistoricalCandle[]> {
     const safeLimit = Math.max(100, Math.min(30000, Math.floor(Number(limit) || 5000)));
     const res = await tradingApi(`/api/trading/${this.id.toLowerCase()}/historical?instrument_key=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(timeframe)}&limit=${safeLimit}&before=${encodeURIComponent(beforeTimestamp)}`, { signal });
@@ -153,4 +176,12 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
   }
 
   async logout(): Promise<void> { this.isAuthenticated = false; this.credentials = null; }
+}
+
+function isHistoricalColumns(value: unknown): value is HistoricalCandleColumns {
+  if (!isRecord(value)) return false;
+  const keys = ['time','open','high','low','close','volume'] as const;
+  if (!keys.every((key) => Array.isArray(value[key]) || ArrayBuffer.isView(value[key] as never))) return false;
+  if (value.timeUnit !== 'milliseconds' && value.timeUnit !== 'seconds') return false;
+  return keys.every((key) => (value[key] as unknown[]).length === (value.time as unknown[]).length);
 }
