@@ -123,3 +123,51 @@ The canonical stateful mathematical path is shared by CoreSpirit, scalar indicat
 ## Historical renderer migration notes
 
 The old standalone renderer migration document has been retired. Durable renderer-boundary information lives here; superseded implementation notes remain in `docs/archive/history/`.
+
+## Workspace chrome and product composition (v132)
+
+TradingCoreOS owns the application chrome around Vela while Vela remains the chart engine.
+
+The live workspace now composes explicit TCO actions for:
+
+- **TradingCoreOS × Vela** brand identity
+- **Watchlist**
+- **Journal**
+- **Panels**
+- Account / broker controls
+
+Vela attribution remains visible through the chart. TCO does not silently remove the Vela attribution required by the vendored project's license.
+
+The old Quant entry is intentionally absent because TradingCoreOS does not expose LuxAlgo Quant access.
+
+The default live layout is now **1 chart**. A previous persisted 4-chart default is treated as legacy and the workspace state key is versioned so the new default is not contaminated by the old persisted grid. Users can still select a multi-chart layout afterwards.
+
+### Live-terminal motion policy
+
+The live trading surface is intentionally motion-light:
+
+```text
+animations = false
+live forming bar = snap to feed
+```
+
+This keeps market state visually truthful and avoids decorative easing competing with realtime price updates.
+
+Non-live TradingCoreOS pages use the application's normal motion system for professional transitions and reduced-motion accessibility.
+
+## Candle bootstrap failure guard
+
+An empty typed FYERS column response is no longer treated as a valid successful history load.
+
+The boundary now falls back:
+
+```text
+empty column response
+ → ordinary historical path
+ → canonical ChartDataPlane
+ → Vela
+```
+
+This closes the failure mode where the quote stream could be alive while Vela received zero candles and rendered a blank chart.
+
+The canonical path still prefers typed columns and zero-object rendering whenever actual history is available.
