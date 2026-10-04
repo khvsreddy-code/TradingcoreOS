@@ -137,7 +137,7 @@ CoreSpirit rolling mathematics now uses bounded state machines rather than perio
 
 The legacy indicator compatibility surface was rewritten to remove repeated `slice`, `reduce`, sort and spread max/min patterns. Full-history callers should use the vector/fused path or the new `*Series` helpers.
 
-`seriesVector.ts` remains a deduplication target because it still carries private fused-state implementations even though those implementations are bounded and linear.
+`seriesVector.ts` is now only a fusion/execution coordinator; canonical rolling state lives in `statefulIndicatorKernel.ts`.
 
 
 ## v130 — canonical kernel ownership
