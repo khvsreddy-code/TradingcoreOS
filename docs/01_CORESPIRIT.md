@@ -101,3 +101,32 @@ close → EMA → difference → normalization → signal
 ```
 
 is executed as one chronological traversal with bounded state. Eligibility comes from the semantic dependency graph, not regex/source-text discovery.
+
+## Stateful math is part of CoreSpirit's execution contract
+
+CoreSpirit built-ins lower to stateful kernels whenever the operation has bounded rolling state. The canonical kernel family is:
+
+```
+RollingSum · RollingMean · RollingVariance
+RollingMin · RollingMax · RollingMedian
+EMA · Wilder · ATR · VWAP
+```
+
+Ring buffers retain the bounded input state. Monotonic deques handle rolling extrema. Running sums and sums-of-squares handle mean/variance. Exact rolling median uses dual heaps with delayed deletion; percentile/rank operations use the ordered multiset. These primitives let a historical pass remain approximately O(N) for fixed-period indicators instead of repeatedly creating and scanning windows.
+
+Authoring rule: prefer the built-in/stateful primitive over hand-written `slice()/Math.max()/Math.min()/reduce()/sort()` loops.
+
+## Causal dirty spans
+
+Every CoreSpirit prepared artifact can expose its maximum causal lookback. When older chart history is prepended, Vela supplies an exact dirty timeline and CoreSpirit executes only the affected range plus the required causal warmup. The resulting model carries the same dirty span into Vela's range patch layer.
+
+```
+history prepend
+  → dirty.from / dirty.to
+  → maxLookback warmup
+  → CoreSpirit range execution
+  → renderer-neutral model
+  → replace-range patch
+```
+
+A full historical re-run remains the compatibility path for operations without a valid bounded causal range.
