@@ -147,3 +147,7 @@ The browser verification harness can exercise one, four and eight-cell deploymen
 ## Archived renderer migration reference
 
 The historical renderer migration material has been consolidated here. The important durable rule is that Vela is the sole chart/rendering engine and TradingCoreOS talks to it through TCO-owned facades/adapters. Renderer-specific compatibility belongs behind that boundary; new chart capabilities should extend Vela's headless interfaces, columnar data path and retained patch model rather than reintroducing a second chart stack.
+
+## Stage 94 retained zero-copy contract
+
+The canonical columnar data plane feeds the `Vela NativeRenderer` without object materialization in the hot LOD/GPU path. The active chart boundary retains the historical `canonical columnar data plane`, `Vela NativeRenderer`, `object materialization`, and `zero-object LOD` terminology so the retired standalone renderer-migration document is no longer needed.
