@@ -543,26 +543,25 @@ export class RollingPersistenceState extends RollingBase {
       // Replace the latest value and recompute only the two comparisons that
       // can involve it. For a forming bar this is constant-time.
       const latestSlot = this.slotForCurrent();
-      const previousIndex = this.absoluteIndex - 2;
       const previousSlot = (latestSlot - 1 + this.capacity) % this.capacity;
-      const oldSign = this.signs[latestSlot]!;
+      const oldValue = this.buffer[latestSlot]!;
       const oldPreviousSign = this.signs[previousSlot]!;
+      if (Number.isFinite(oldValue)) this.validCount -= 1;
       if (this.comparisonValid[latestSlot]) {
         this.comparisons -= 1; this.same -= this.comparisonSame[latestSlot] ? 1 : 0;
         this.comparisonValid[latestSlot] = 0; this.comparisonSame[latestSlot] = 0;
       }
       this.replaceCurrentSlot(v);
+      if (Number.isFinite(v)) this.validCount += 1;
       const previousValue = this.count > 1 ? this.buffer[previousSlot]! : Number.NaN;
       const sign = Number.isFinite(v) && Number.isFinite(previousValue)
         ? (v > previousValue ? 1 : v < previousValue ? -1 : 0) : 0;
       this.signs[latestSlot] = sign;
-      void oldSign; void oldPreviousSign; void previousIndex;
       if (latestSlot !== previousSlot && sign !== 0 && oldPreviousSign !== 0) {
         this.comparisonValid[latestSlot] = 1;
         this.comparisonSame[latestSlot] = sign === oldPreviousSign ? 1 : 0;
         this.comparisons += 1; this.same += sign === oldPreviousSign ? 1 : 0;
       }
-      this.validCount = this.count;
       return this.value();
     }
 
@@ -573,7 +572,7 @@ export class RollingPersistenceState extends RollingBase {
     const previousSign = absoluteIndex > 0 ? this.signs[previousSlot]! : 0;
 
     if (this.count === this.capacity) {
-      const comparisonSlot = (slot + 1) % this.capacity;
+      const comparisonSlot = (slot + 2) % this.capacity;
       if (this.comparisonValid[comparisonSlot]) {
         this.comparisons -= 1; this.same -= this.comparisonSame[comparisonSlot] ? 1 : 0;
         this.comparisonValid[comparisonSlot] = 0; this.comparisonSame[comparisonSlot] = 0;
