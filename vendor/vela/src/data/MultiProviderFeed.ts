@@ -373,7 +373,7 @@ class RegistryFetchFeed implements MarketDataFeed {
         }
     }
 
-    loadRangeColumns(cfg: MarketConfig, range: BarRange): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+    async loadRangeColumns(cfg: MarketConfig, range: BarRange): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
         const { provider: name, ticker } = parseSymbol(cfg.symbol ?? '');
         const provider = this.registry.get(name ?? '');
         if (!provider?.getBarsColumns) return null;
