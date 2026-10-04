@@ -9,6 +9,7 @@ import type {
   IndicatorModel,
   SeriesPoint,
   SeriesSpec,
+  DirtyRange,
 } from './services/core/chart/velaChartFacade';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
@@ -25,6 +26,12 @@ const lineStyle = (value: unknown): 'solid' | 'dashed' | 'dotted' => {
   const n = Number(value);
   return n === 1 ? 'dashed' : n === 2 ? 'dotted' : 'solid';
 };
+
+function barTimeMillis(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value > 2e12 ? value : value * 1000;
+  const parsed = Date.parse(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
 
 function titleFromSource(source: string): string {
   const match = source.match(/\b(?:indicator|study|component)\s+["']([^"']+)["']/i);
@@ -62,6 +69,7 @@ function makeModel(
   }>,
   priceLines: Array<{ id: string; paneId: string; price: number; color?: string; lineStyle?: 'solid' | 'dashed' | 'dotted'; width?: number; title?: string }>,
   anchorTime?: number,
+  dirty?: DirtyRange,
 ): IndicatorModel {
   const series: SeriesSpec[] = [...points.entries()].map(([seriesId, seriesPoints], index) => ({
     id: `${id}:series:${seriesId}`,
@@ -93,6 +101,7 @@ function makeModel(
 
   return {
     id,
+    ...(dirty ? { dirty } : {}),
     title: meta.title,
     shorttitle: meta.shorttitle,
     overlay: true,
@@ -202,16 +211,18 @@ export class CoreSpiritVelaEngine {
       }
     };
 
-    const emitModel = () => {
+    const emitModel = (dirty?: DirtyRange) => {
       const first = [...points.values()].flat()[0];
-      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markers, priceLines, first?.time));
+      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markers, priceLines, first?.time, dirty));
     };
 
     try {
       const initial = runtime.executeIr(token.ir, bars);
       collect(initial.outputs);
-      lastTime = bars.length ? Number((bars[bars.length - 1] as unknown as { timestamp: string | number }).timestamp) : Number.NaN;
-      emitModel();
+      lastTime = bars.length ? barTimeMillis((bars[bars.length - 1] as unknown as { timestamp: string | number }).timestamp) : Number.NaN;
+      const firstTime = bars.length ? barTimeMillis((bars[0] as unknown as { timestamp: string | number }).timestamp) : Number.NaN;
+      const dirty = Number.isFinite(firstTime) && Number.isFinite(lastTime) ? { from: firstTime, to: lastTime } : undefined;
+      emitModel(dirty);
       if (req.mode === 'static') handlers.onDone?.();
     } catch (error) {
       handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -228,8 +239,8 @@ export class CoreSpiritVelaEngine {
       const result = runtime.executeBar(latest);
       collect(result.outputs);
       liveStarted = true;
-      lastTime = Number(latest.timestamp);
-      emitModel();
+      lastTime = barTimeMillis(latest.timestamp);
+      emitModel(Number.isFinite(lastTime) ? { from: lastTime, to: lastTime } : undefined);
     };
 
     if (req.mode === 'live') rehydrateForLive();
@@ -264,7 +275,9 @@ export class CoreSpiritVelaEngine {
         runtime.loadIr(token.ir);
         const result = runtime.executeIr(token.ir, currentBars);
         collect(result.outputs);
-        emitModel();
+        const firstTime = barTimeMillis(currentBars[0]?.timestamp);
+        const lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
+        emitModel(Number.isFinite(firstTime) && Number.isFinite(lastTime) ? { from: firstTime, to: lastTime } : undefined);
       },
       setVisibleRange() {
         // CoreSpirit currently has renderer-neutral range-insensitive execution.
@@ -281,8 +294,9 @@ export class CoreSpiritVelaEngine {
           const result = runtime.executeIr(token.ir, currentBars);
           collect(result.outputs);
           liveStarted = req.mode === 'live';
-          lastTime = Number(currentBars.at(-1)?.timestamp);
-          emitModel();
+          lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
+          const firstTime = barTimeMillis(currentBars[0]?.timestamp);
+          emitModel(Number.isFinite(firstTime) && Number.isFinite(lastTime) ? { from: firstTime, to: lastTime } : undefined);
           return;
         }
         if (!liveStarted) rehydrateForLive();
@@ -292,7 +306,7 @@ export class CoreSpiritVelaEngine {
         const result = runtime.executeBar(latest);
         collect(result.outputs);
         lastTime = latestTime;
-        emitModel();
+        emitModel(Number.isFinite(latestTime) ? { from: latestTime, to: latestTime } : undefined);
       },
     };
   }
