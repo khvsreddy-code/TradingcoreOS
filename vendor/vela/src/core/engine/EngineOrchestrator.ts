@@ -5,7 +5,7 @@ import type { Unsubscribe } from '../util/types';
 import type { OHLCV } from '../model/ohlcv';
 import type { ColumnarBars, ColumnarBarUpdate, ColumnarTimeUnit } from '../model/columnar-bars';
 import type { IndicatorModel } from '../model/indicator';
-import type { ValuePatch, SeriesValueDelta } from '../model/patch';
+import type { ValuePatch, SeriesValueDelta, DirtyRange } from '../model/patch';
 import { ColumnarHistoryTape } from '../model/ColumnarHistoryTape';
 import { isLineLikeSeries } from '../model/series';
 import type { InputSchema, InputValue } from '../model/inputs';
@@ -1793,7 +1793,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * tail. Both value-patch the result. The reason travels to the ENGINE (which owns run
      * policy): no reason = live tick, `'backfill'`/`'complete'` bracket a history backfill.
      */
-    private notifySessionsBars(reason?: BarsChangeReason): void {
+    private notifySessionsBars(reason?: BarsChangeReason, dirty?: DirtyRange): void {
         if (this.switchingMarket) return; // old sessions must not run over the incoming market's bars
         // A backfill chunk (or the run released by its completion) is still the script's
         // FIRST look at the history, whichever bar arrived last.
@@ -1802,7 +1802,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             if (!record.renderHandle || record.hidden) continue;
             if (record.session) {
                 record.pendingCause = cause;
-                record.session.notifyBars(reason);
+                record.session.notifyBars(reason, dirty);
             } else if (record.native) record.native.instance.onBars();
         }
         if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
