@@ -123,6 +123,10 @@ export type StochasticPoint = { time: number; k: number; d: number };
 export type IchimokuPoint = { time: number; tenkan: number; kijun: number; spanA: number; spanB: number };
 export type SupertrendPoint = { time: number; value: number; direction: 1 | -1 };
 
+export type ZonePoint = { time:number; upper:number; lower:number; kind:'bullish'|'bearish' };
+export type SRPoint = { time:number; price:number; side:'support'|'resistance' };
+const indiaDate = (timestamp:string|number): string => new Date(timestamp).toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'});
+
 const times = (c: HistoricalCandle[]) => c.map(x => Math.floor(new Date(x.timestamp).getTime() / 1000));
 const closeValues = (c: HistoricalCandle[]) => c.map(x => x.close);
 export const sourceValues = (c: HistoricalCandle[], source: PriceSource = 'close') => c.map(x => {
@@ -320,6 +324,69 @@ export function dynamicSupportResistance(c: HistoricalCandle[], swing=5): SRPoin
     .slice(-20);
 }
 export type SweepPoint={time:number;price:number;side:'buy-side'|'sell-side'};
+
+export function fairValueGaps(c: HistoricalCandle[], maxZones=50): ZonePoint[] {
+  const out: ZonePoint[] = [];
+  for (let i=2;i<c.length;i+=1) {
+    const left=c[i-2]!, right=c[i]!;
+    if (right.low>left.high) out.push({time:Math.floor(new Date(right.timestamp).getTime()/1000),upper:right.low,lower:left.high,kind:'bullish'});
+    else if (right.high<left.low) out.push({time:Math.floor(new Date(right.timestamp).getTime()/1000),upper:left.low,lower:right.high,kind:'bearish'});
+  }
+  return out.slice(-Math.max(1,Math.floor(maxZones)));
+}
+
+export function orderBlocks(c: HistoricalCandle[], period=5): ZonePoint[] {
+  const p=Math.max(1,Math.floor(period));
+  const bodies=c.map(x=>Math.abs(x.close-x.open));
+  const bodyState=new RollingMean(p);
+  const out: ZonePoint[]=[];
+  for(let i=0;i<c.length;i+=1){
+    const avg=bodyState.value();
+    const body=bodies[i]!;
+    if(i>0 && avg!=null && body>=avg*1.5){
+      const base=c[i-1]!;
+      out.push({
+        time:Math.floor(new Date(base.timestamp).getTime()/1000),
+        upper:Math.max(base.open,base.close),
+        lower:Math.min(base.open,base.close),
+        kind:c[i]!.close>=c[i]!.open?'bullish':'bearish',
+      });
+    }
+    bodyState.update(body);
+  }
+  return out.slice(-30);
+}
+
+export function indianKeyLevels(c: HistoricalCandle[]): KeyLevel[] {
+  if(!c.length) return [];
+  const t=Math.floor(new Date(c[c.length-1]!.timestamp).getTime()/1000);
+  const out:KeyLevel[]=[];
+  const previous=previousDayLevels(c);
+  out.push(...previous);
+  const todayKey=indiaDate(c[c.length-1]!.timestamp);
+  const today=c.filter(x=>indiaDate(x.timestamp)===todayKey);
+  if(today.length){
+    out.push(
+      {time:t,price:today[0]!.open,label:'DAY OPEN',side:'neutral'},
+      {time:t,price:Math.max(...today.map(x=>x.high)),label:'DAY HIGH',side:'resistance'},
+      {time:t,price:Math.min(...today.map(x=>x.low)),label:'DAY LOW',side:'support'},
+    );
+  }
+  return out;
+}
+
+export function classicPivots(c: HistoricalCandle[]): IndicatorPoint[] {
+  if(!c.length) return [];
+  const keys=[...new Set(c.map(x=>indiaDate(x.timestamp)))];
+  if(keys.length<2) return [];
+  const previous=c.filter(x=>indiaDate(x.timestamp)===keys[keys.length-2]);
+  if(!previous.length) return [];
+  const h=Math.max(...previous.map(x=>x.high)), l=Math.min(...previous.map(x=>x.low)), cl=previous[previous.length-1]!.close;
+  const p=(h+l+cl)/3, r=h-l;
+  const time=Math.floor(new Date(c[c.length-1]!.timestamp).getTime()/1000);
+  return [p,2*p-l,2*p-h,p+r, p-r].map(value=>({time,value}));
+}
+
 export function liquiditySweeps(c: HistoricalCandle[], swing=5): SweepPoint[] {
   const out:SweepPoint[]=[], highState=new RollingMinMax(swing), lowState=new RollingMinMax(swing);
   for(let i=0;i<c.length;i++){
