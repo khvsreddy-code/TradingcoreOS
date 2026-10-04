@@ -563,7 +563,7 @@ export class RollingPersistenceState extends RollingBase {
         this.comparisonSame[latestSlot] = sign === oldPreviousSign ? 1 : 0;
         this.comparisons += 1; this.same += sign === oldPreviousSign ? 1 : 0;
       }
-      return this.value();
+      return this.computeValue();
     }
 
     const absoluteIndex = this.seen;
@@ -597,14 +597,16 @@ export class RollingPersistenceState extends RollingBase {
     }
 
     this.seen += 1;
-    return this.value();
+    return this.computeValue();
   }
 
-  private value(): number | null {
+  private computeValue(): number | null {
     return this.count === this.capacity && this.validCount === this.capacity && this.comparisons > 0
       ? this.same / this.comparisons
       : this.count === this.capacity && this.validCount === this.capacity ? 0 : null;
   }
+
+  get value(): number | null { return this.computeValue(); }
 
   reset(): void {
     super.reset(); this.signs.fill(0); this.comparisonValid.fill(0); this.comparisonSame.fill(0);
