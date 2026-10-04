@@ -94,7 +94,6 @@ export interface VelaWorkspaceOptions extends Omit<VelaOptions, 'height'>, VelaS
      *  dormant in the pool). No `cells` entry is needed — the top-level chart
      *  options seed the single chart. */
     layout?: string | LayoutDefinition | false;
-    brand?: string;
     /** Per-cell overrides of the top-level chart defaults, keyed by a FREE-FORM cell
      *  name — the name is the cell's durable IDENTITY (persistence, `sync` groups,
      *  `ws.cell(name)`), never its position: DECLARATION ORDER fills the layout's
@@ -519,7 +518,6 @@ export class VelaWorkspace {
         // ── topbar (shared) — reflects the active cell; the layout dropdown reads the registry live ──
         this.topbar = new Topbar(this.root, {
             symbol: '',
-            brand: opts.brand,
             // RAW option, not the resolved lists — the bar distinguishes a host-declared
             // side (list is law) from a default one (an override's `order` may flow).
             composition: opts.topbar,

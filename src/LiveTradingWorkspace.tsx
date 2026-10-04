@@ -51,7 +51,6 @@ export function LiveTradingWorkspace() {
       workspace = new VelaWorkspace(host.current, {
         layout: initialLayout,
         provider: 'tco',
-        brand: 'TradingCoreOS × Vela',
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
         bars: 5000,
