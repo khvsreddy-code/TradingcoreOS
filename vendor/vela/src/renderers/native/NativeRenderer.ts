@@ -302,7 +302,9 @@ export class NativeRenderer implements IChartRenderer {
     private perfLastFrameAt = 0;
     private perfFirstFrameAt = 0;
     private perfFrameBudgetMisses = 0;
-    private readonly perfRecentFrameMs: number[] = [];
+    private readonly perfRecentFrameMs = new Float64Array(240);
+    private perfRecentFrameCount = 0;
+    private perfRecentFrameCursor = 0;
     private static readonly PERF_FRAME_BUDGET_MS = 1000 / 60;
 
     private skeletonClockMs = 0; // monotonic clock for the loading-skeleton pulse (advanced per animator frame)
@@ -3634,7 +3636,7 @@ export class NativeRenderer implements IChartRenderer {
     } {
         const name = this.backend?.constructor?.name ?? '';
         const backend = /webgl/i.test(name) ? 'webgl2' : /canvas/i.test(name) ? 'canvas2d' : 'unknown';
-        const ordered = this.perfRecentFrameMs.slice().sort((a, b) => a - b);
+        const ordered = Array.from(this.perfRecentFrameMs.subarray(0, this.perfRecentFrameCount)).sort((a, b) => a - b);
         const p95Index = ordered.length ? Math.min(ordered.length - 1, Math.max(0, Math.ceil(ordered.length * 0.95) - 1)) : 0;
         const elapsedMs = this.perfFirstFrameAt && this.perfLastFrameAt ? Math.max(1, this.perfLastFrameAt - this.perfFirstFrameAt) : 0;
         return {
@@ -3661,8 +3663,9 @@ export class NativeRenderer implements IChartRenderer {
         if (this.perfFirstFrameAt === 0) this.perfFirstFrameAt = this.perfLastFrameAt || Date.now();
         if (this.perfLastFrameMs > 50) this.perfLongFrames += 1;
         if (this.perfLastFrameMs > NativeRenderer.PERF_FRAME_BUDGET_MS) this.perfFrameBudgetMisses += 1;
-        if (this.perfRecentFrameMs.length >= 240) this.perfRecentFrameMs.shift();
-        this.perfRecentFrameMs.push(this.perfLastFrameMs);
+        this.perfRecentFrameMs[this.perfRecentFrameCursor] = this.perfLastFrameMs;
+        this.perfRecentFrameCursor = (this.perfRecentFrameCursor + 1) % this.perfRecentFrameMs.length;
+        this.perfRecentFrameCount = Math.min(this.perfRecentFrameCount + 1, this.perfRecentFrameMs.length);
         this.perfLastFrameAt = Date.now();
     }
 
