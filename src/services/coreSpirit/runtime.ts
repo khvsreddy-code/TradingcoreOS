@@ -255,7 +255,7 @@ export class CoreSpiritRuntime {
     this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false });
     this.executionContext.session = this.executionContext.frame.session;
     this.lastBarWasRealtime = true;
-    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, outputs, diagnostics); }
+    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics); }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
@@ -380,7 +380,7 @@ export class CoreSpiritRuntime {
       this.executionContext.session=this.executionContext.frame.session;
       this.history.push(bar);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
-      try { this.executeBlock(ir.entry.instructions, bar, this.history, i, outputs, diagnostics); }
+      try { this.executeBlock(ir.entry.instructions, bar, this.history, i, this.outputCollector, diagnostics); }
       catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
     }
     return { outputs, state: this.getState(), diagnostics };
