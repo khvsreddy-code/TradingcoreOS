@@ -18,6 +18,8 @@ for(const pattern of [/\.slice\([^)]*period[^)]*\)/,/\.slice\([^)]*length[^)]*\)
 for(const name of ['RollingSum','RollingMean','RollingVariance','RollingMinMax','RollingMedian','RollingPercentile','RollingAbsoluteDeviation','EMAState','WilderState','ATRState','WMAState','VWAPSessionState']) assert.match(stateful,new RegExp('export class '+name));
 for(const name of ['bollinger','donchian','stochastic','cci','mfi']) assert.match(standard.toLowerCase(),new RegExp(name));
 assert.doesNotMatch(runtime,/trHistory\.slice\(-length\)\.reduce/);
+assert.match(runtime,/if\(name==='atr'\)/);
+assert.match(runtime,/trHistory\.length<length/);
 assert.doesNotMatch(marketKernel,/gains\.slice\(0,p\)\.reduce/);
 assert.doesNotMatch(marketKernel,/for\(let j=i-p\+1;j<=i;j\+=1\)/);
 assert.match(structure,/centeredRollingExtrema\(highs, period/);
