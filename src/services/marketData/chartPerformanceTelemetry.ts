@@ -10,6 +10,12 @@ export type ChartPerformanceSnapshot = {
   worstRendererMs: number;
   packetsPerRendererUpdate: number;
   reactCoalescingRate: number;
+  frames: number;
+  totalFrameMs: number;
+  averageFrameMs: number;
+  worstFrameMs: number;
+  longFrames: number;
+  backend: 'webgl2' | 'canvas2d' | 'unknown';
 };
 
 type MutableMetrics = {
@@ -19,6 +25,11 @@ type MutableMetrics = {
   reactFrames: number;
   totalRendererMs: number;
   worstRendererMs: number;
+  frames: number;
+  totalFrameMs: number;
+  worstFrameMs: number;
+  longFrames: number;
+  backend: 'webgl2' | 'canvas2d' | 'unknown';
 };
 
 class ChartPerformanceTelemetry {
@@ -27,7 +38,7 @@ class ChartPerformanceTelemetry {
   private entry(key: string): MutableMetrics {
     let value = this.metrics.get(key);
     if (!value) {
-      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0 };
+      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, longFrames: 0, backend: 'unknown' };
       this.metrics.set(key, value);
     }
     return value;
@@ -45,8 +56,20 @@ class ChartPerformanceTelemetry {
     m.worstRendererMs = Math.max(m.worstRendererMs, duration);
   }
 
+  ingestRendererSnapshot(key: string, snapshot: {
+    frames: number; totalFrameMs: number; worstFrameMs: number; longFrames: number;
+    backend: 'webgl2' | 'canvas2d' | 'unknown';
+  }): void {
+    const m = this.entry(key);
+    m.frames = Math.max(0, Number(snapshot.frames) || 0);
+    m.totalFrameMs = Math.max(0, Number(snapshot.totalFrameMs) || 0);
+    m.worstFrameMs = Math.max(0, Number(snapshot.worstFrameMs) || 0);
+    m.longFrames = Math.max(0, Number(snapshot.longFrames) || 0);
+    m.backend = snapshot.backend;
+  }
+
   snapshot(key: string): ChartPerformanceSnapshot {
-    const m = this.metrics.get(key) || { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0 };
+    const m = this.metrics.get(key) || { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, longFrames: 0, backend: 'unknown' as const };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     return {
       key,
@@ -60,6 +83,12 @@ class ChartPerformanceTelemetry {
       worstRendererMs: m.worstRendererMs,
       packetsPerRendererUpdate: m.rendererUpdates ? m.packets / m.rendererUpdates : 0,
       reactCoalescingRate: m.reactNotificationRequests ? coalesced / m.reactNotificationRequests : 0,
+      frames: m.frames,
+      totalFrameMs: m.totalFrameMs,
+      averageFrameMs: m.frames ? m.totalFrameMs / m.frames : 0,
+      worstFrameMs: m.worstFrameMs,
+      longFrames: m.longFrames,
+      backend: m.backend,
     };
   }
 
