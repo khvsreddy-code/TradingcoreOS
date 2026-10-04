@@ -696,7 +696,7 @@ export class PersistenceState extends RollingBase {
     this.previousSign = sign;
     return { count: this.count, value: this.value() };
   }
-  value(): number | null { return this.count === this.capacity ? (this.comparisons ? this.same / this.comparisons : 0) : null; }
+  value(): number | null { return this.count === this.capacity ? (this.comparisons ? this.same / this.comparisons : 0) : null; }\n  copyFrom(source: PersistenceState): void { if (source.capacity !== this.capacity) throw new Error('incompatible persistence state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.signs.set(source.signs); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.same=source.same; this.comparisons=source.comparisons; this.previousValue=source.previousValue; this.previousSign=source.previousSign; }
   reset(): void { super.reset(); this.signs.fill(0); this.same=0; this.comparisons=0; this.previousValue=Number.NaN; this.previousSign=0; }
 }
 
