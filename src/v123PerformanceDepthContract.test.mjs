@@ -1,0 +1,40 @@
+import fs from 'node:fs';
+
+const read = (p) => fs.readFileSync(p, 'utf8');
+const assert = (ok, message) => { if (!ok) throw new Error(message); };
+
+const vector = read('src/services/coreSpirit/seriesVector.ts');
+const fusion = read('src/services/coreSpirit/seriesFusion.ts');
+const runtime = read('src/services/coreSpirit/runtime.ts');
+const provider = read('src/TcoVelaDataProvider.ts');
+const policy = read('src/services/marketData/chartHistoryPolicy.ts');
+const plane = read('src/services/marketData/chartDataPlane.ts');
+const fyers = read('src/server/routes/fyers-history.routes.ts');
+const workspace = read('src/LiveTradingWorkspace.tsx');
+const options = read('vendor/vela/src/core/options.ts');
+const theme = read('src/theme/theme.ts');
+const css = read('src/index.css');
+
+assert(vector.includes('export class CoreSpiritFusedSeriesCursor'), 'missing reusable fused cursor');
+assert(vector.includes('const output = new Float64Array(source.length);'), 'fused history path must own one final output');
+assert(vector.includes('intermediateAllocations: 0'), 'fused history path must report zero full intermediate allocations');
+assert(vector.includes('for (let i = 0; i < this.stages.length; i += 1)'), 'fused cursor must execute dependency stages per bar');
+assert(fusion.includes("strategy:'single-pass-streaming'"), 'fusion planner lost single-pass strategy');
+assert(fusion.includes('semantic.nodes'), 'fusion planner must use semantic graph metadata');
+assert(runtime.includes('fusedStageByInstruction'), 'runtime fusion dispatch index missing');
+assert(runtime.includes('this.fusedCursors.set(group.id'), 'runtime must reuse fused cursors');
+assert(provider.includes('async loadRange(ticker: string, timeframe: string, range: BarRange)'), 'TCO provider must expose explicit Vela range seam');
+assert(provider.includes("await plane.loadOlderHistory('visible', { visibleBars: requested })"), 'Vela range seam must route older pages through shared history');
+assert(policy.includes("'5m': 5000"), 'history policy must remain 5k-first');
+assert(policy.includes('return 5000;'), 'older-history demand must remain 5k pages');
+assert(plane.includes('MAX_HISTORY_CANDLES = 50_000'), 'shared history plane must keep bounded retained depth');
+assert(fyers.includes('Math.min(5_000'), 'Fyers route must cap broker history requests at 5k');
+assert(fyers.includes('inflight'), 'Fyers route must deduplicate concurrent identical requests');
+assert(options.includes('ZOOM_EASE_DEFAULT_MS = 260'), 'zoom motion pacing was not slowed');
+assert(options.includes('PAN_INERTIA_DEFAULT_MS = 360'), 'pan motion pacing was not slowed');
+assert(options.includes('SCROLL_EASE_DEFAULT_MS = 320'), 'scroll motion pacing was not slowed');
+assert(options.includes('AUTOSCALE_EASE_DEFAULT_MS = 260'), 'autoscale motion pacing was not slowed');
+assert(theme.includes("accent: '#7c5cff'"), 'black theme must use royal purple accent');
+assert(css.includes('--tco-motion-standard: 240ms'), 'global UI motion baseline missing');
+assert(css.includes('prefers-reduced-motion'), 'motion accessibility guard missing');
+console.log('TRADINGCORE_V123_PERFORMANCE_DEPTH_CONTRACT_OK');
