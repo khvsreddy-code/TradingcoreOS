@@ -49,7 +49,7 @@ const CSS = `
     content: '';
     position: absolute;
     inset: 36px;
-    border: 1px solid color-mix(in srgb, var(--vela-accent) 35%, var(--vela-border-strong));
+    border: 1px solid color-mix(in srgb, #7c5cff 35%, var(--vela-border-strong));
     border-radius: 50%;
     background: color-mix(in srgb, var(--vela-bg) 86%, transparent);
     box-shadow: 0 18px 60px rgba(0,0,0,.38), inset 0 0 0 1px rgba(255,255,255,.02);
@@ -76,10 +76,10 @@ const CSS = `
 }
 .vela-alt-wheel[data-open='1'] .vela-alt-wheel-action { transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-105px) rotate(calc(-1 * var(--angle))) scale(1); }
 .vela-alt-wheel-action:hover {
-    border-color: var(--vela-accent);
-    background: color-mix(in srgb, var(--vela-accent) 15%, var(--vela-surface-2));
-    color: var(--vela-accent-bright, var(--vela-fg-bright));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--vela-accent) 25%, transparent), 0 12px 30px rgba(0,0,0,.3);
+    border-color: #7c5cff;
+    background: color-mix(in srgb, #7c5cff 15%, var(--vela-surface-2));
+    color: #a78bfa;
+    box-shadow: 0 0 0 1px color-mix(in srgb, #7c5cff 25%, transparent), 0 12px 30px rgba(0,0,0,.3);
 }
 .vela-alt-wheel-action .vela-alt-wheel-glyph { width: 21px; height: 21px; display: block; }
 .vela-alt-wheel-action .vela-alt-wheel-label {
@@ -115,8 +115,8 @@ const CSS = `
 }
 .vela-alt-wheel[data-open='1'] .vela-alt-wheel-center { transform: translate(-50%, -50%) scale(1); }
 .vela-alt-wheel-center:hover {
-    border-color: var(--vela-accent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--vela-accent) 30%, transparent), 0 18px 42px rgba(0,0,0,.42);
+    border-color: #7c5cff;
+    box-shadow: 0 0 0 1px color-mix(in srgb, #7c5cff 30%, transparent), 0 18px 42px rgba(0,0,0,.42);
 }
 .vela-alt-wheel-center .vela-alt-wheel-icon { width: 22px; height: 22px; }
 .vela-alt-wheel-center .vela-alt-wheel-center-label { font-size: 9px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--vela-fg-muted); }
