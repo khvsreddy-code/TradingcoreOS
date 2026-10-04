@@ -87,7 +87,8 @@ export class RollingMax extends RollingBase {
 }
 
 export class RollingMean extends RollingBase {
-  copyFrom(source: RollingMean): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling mean state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.sum=source.sum; }\n
+  copyFrom(source: RollingMean): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling mean state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.sum=source.sum; }
+
   private sum = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
     const v = Number(value);
@@ -105,7 +106,8 @@ export class RollingMean extends RollingBase {
 }
 
 export class RollingVariance extends RollingBase {
-  copyFrom(source: RollingVariance): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling variance state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.sum=source.sum; this.sumSquares=source.sumSquares; }\n
+  copyFrom(source: RollingVariance): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling variance state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.sum=source.sum; this.sumSquares=source.sumSquares; }
+
   private sum = 0;
   private sumSquares = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
@@ -433,7 +435,8 @@ class RollingExtremaTree {
   }
   min():number { return this.minTree[1] ?? Number.POSITIVE_INFINITY; }
   max():number { return this.maxTree[1] ?? Number.NEGATIVE_INFINITY; }
-  clear():void { this.minTree.fill(Number.POSITIVE_INFINITY); this.maxTree.fill(Number.NEGATIVE_INFINITY); }\n  copyFrom(source:RollingExtremaTree):void { this.minTree.set(source.minTree); this.maxTree.set(source.maxTree); }
+  clear():void { this.minTree.fill(Number.POSITIVE_INFINITY); this.maxTree.fill(Number.NEGATIVE_INFINITY); }
+  copyFrom(source:RollingExtremaTree):void { this.minTree.set(source.minTree); this.maxTree.set(source.maxTree); }
 }
 
 /** Exact bounded rolling extrema. A segment tree gives deterministic O(log P)
@@ -442,7 +445,8 @@ class RollingExtremaTree {
  * that becomes the extrema again after replacement. */
 
 export class RollingMinMax extends RollingBase {
-  copyFrom(source: RollingMinMax): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling minmax state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.tree.copyFrom(source.tree); }\n
+  copyFrom(source: RollingMinMax): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling minmax state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.tree.copyFrom(source.tree); }
+
   private readonly tree: RollingExtremaTree;
   constructor(period:number){super(period);this.tree=new RollingExtremaTree(this.capacity);}
   update(value:number,mode:'append'|'replace'='append'){
@@ -469,7 +473,8 @@ export class RollingMinMax extends RollingBase {
   reset(){ super.reset(); this.tree.clear(); }
 }
 export class RollingSum extends RollingBase {
-  copyFrom(source: RollingSum): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling sum state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.sum=source.sum; }\n
+  copyFrom(source: RollingSum): void { if (source.capacity !== this.capacity) throw new Error('incompatible rolling sum state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.sum=source.sum; }
+
   private sum = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
     const v = Number(value);
@@ -484,7 +489,8 @@ export class RollingSum extends RollingBase {
 }
 
 export class EMAState {
-  copyFrom(source: EMAState): void { if (source.period !== this.period) throw new Error('incompatible EMA state'); this.seed.copyFrom(source.seed); this.valueState=source.valueState; this.stableBeforeCurrent=source.stableBeforeCurrent; this.currentInput=source.currentInput; }\n
+  copyFrom(source: EMAState): void { if (source.period !== this.period) throw new Error('incompatible EMA state'); this.seed.copyFrom(source.seed); this.valueState=source.valueState; this.stableBeforeCurrent=source.stableBeforeCurrent; this.currentInput=source.currentInput; }
+
   protected readonly period: number;
   protected readonly seed: RollingMean;
   protected valueState: number | null = null;
@@ -512,7 +518,8 @@ export class EMAState {
 }
 
 export class WilderState {
-  copyFrom(source: WilderState): void { if (source.period !== this.period) throw new Error('incompatible Wilder state'); this.seed.copyFrom(source.seed); this.valueState=source.valueState; this.stableBeforeCurrent=source.stableBeforeCurrent; this.currentInput=source.currentInput; }\n
+  copyFrom(source: WilderState): void { if (source.period !== this.period) throw new Error('incompatible Wilder state'); this.seed.copyFrom(source.seed); this.valueState=source.valueState; this.stableBeforeCurrent=source.stableBeforeCurrent; this.currentInput=source.currentInput; }
+
   readonly period: number;
   private readonly seed: RollingMean;
   private valueState: number | null = null;
@@ -575,7 +582,8 @@ export class ATRState {
 }
 
 export class WMAState extends RollingBase {
-  copyFrom(source: WMAState): void { if (source.capacity !== this.capacity) throw new Error('incompatible WMA state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.weighted=source.weighted; this.sum=source.sum; this.currentInput=source.currentInput; }\n
+  copyFrom(source: WMAState): void { if (source.capacity !== this.capacity) throw new Error('incompatible WMA state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.weighted=source.weighted; this.sum=source.sum; this.currentInput=source.currentInput; }
+
   private weighted = 0;
   private sum = 0;
   private currentInput: number | null = null;
@@ -728,7 +736,8 @@ export class PersistenceState extends RollingBase {
     this.previousSign = sign;
     return { count: this.count, value: this.value() };
   }
-  value(): number | null { return this.count === this.capacity ? (this.comparisons ? this.same / this.comparisons : 0) : null; }\n  copyFrom(source: PersistenceState): void { if (source.capacity !== this.capacity) throw new Error('incompatible persistence state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.signs.set(source.signs); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.same=source.same; this.comparisons=source.comparisons; this.previousValue=source.previousValue; this.previousSign=source.previousSign; }
+  value(): number | null { return this.count === this.capacity ? (this.comparisons ? this.same / this.comparisons : 0) : null; }
+  copyFrom(source: PersistenceState): void { if (source.capacity !== this.capacity) throw new Error('incompatible persistence state'); this.buffer.set(source.buffer); this.versions.set(source.versions); this.signs.set(source.signs); this.cursor=source.cursor; this.count=source.count; this.absoluteIndex=source.absoluteIndex; this.latestValue=source.latestValue; this.same=source.same; this.comparisons=source.comparisons; this.previousValue=source.previousValue; this.previousSign=source.previousSign; }
   reset(): void { super.reset(); this.signs.fill(0); this.same=0; this.comparisons=0; this.previousValue=Number.NaN; this.previousSign=0; }
 }
 
