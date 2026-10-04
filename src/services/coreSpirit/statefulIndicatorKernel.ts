@@ -535,20 +535,37 @@ export class WilderState {
 
 export class ATRState {
   private readonly wilder: WilderState;
-  private previousClose: number | null = null;
+  /** Close immediately before the currently forming bar. */
+  private previousBarClose: number | null = null;
+  /** Close of the currently forming/last processed bar. */
+  private currentClose: number | null = null;
   private latestTR: number | null = null;
   constructor(period: number) { this.wilder = new WilderState(period); }
   update(high: number, low: number, close: number, mode: 'append' | 'replace' = 'append') {
     const h = Number(high), l = Number(low), c = Number(close); if (![h,l,c].every(Number.isFinite)) return null;
-    const tr = this.previousClose == null ? h - l : Math.max(h - l, Math.abs(h - this.previousClose), Math.abs(l - this.previousClose));
-    const result = this.wilder.updateWilder(tr, mode); this.latestTR = tr;
-    if (mode === 'append') this.previousClose = c;
+
+    // New bars use the prior bar's close. A forming-bar replacement must keep
+    // using that same prior close rather than accidentally using the current
+    // bar's revised close as its own previous close.
+    const referenceClose = mode === 'replace' ? this.previousBarClose : this.currentClose;
+    const tr = referenceClose == null
+      ? h - l
+      : Math.max(h - l, Math.abs(h - referenceClose), Math.abs(l - referenceClose));
+
+    const result = this.wilder.updateWilder(tr, mode);
+    this.latestTR = tr;
+
+    if (mode === 'append') {
+      this.previousBarClose = this.currentClose;
+      this.currentClose = c;
+    }
+
     return result;
   }
-  replacePreviousClose(close: number) { /* previous close is intentionally unchanged on same-bar replacement */ void close; }
+  replacePreviousClose(close: number) { /* previous-bar close is intentionally unchanged on same-bar replacement */ void close; }
   get trueRange() { return this.latestTR; }
   get value() { return this.wilder.value; }
-  reset() { this.wilder.reset(); this.previousClose = null; this.latestTR = null; }
+  reset() { this.wilder.reset(); this.previousBarClose = null; this.currentClose = null; this.latestTR = null; }
 }
 
 export class WMAState extends RollingBase {

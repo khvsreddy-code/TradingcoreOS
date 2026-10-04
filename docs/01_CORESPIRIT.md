@@ -121,6 +121,7 @@ The runtime should optimize the user's source without expanding CoreSpirit into 
 
 - Scalar indicator compatibility helpers now route period work through the canonical stateful kernels rather than reconstructing windows with `slice/reduce/spread`.
 - The forming-bar replacement path for `RollingMinMax` is corrected so replacement does not advance the rolling cursor.
+- Recursive EMA/Wilder/ATR state keeps an explicit stable prior value; ATR replacements use the prior bar's close rather than the forming bar's own revised close.
 - The existing numerical kernel tests continue to serve as parity guards.
 - Kernel deduplication between `statefulIndicatorKernel.ts` and `seriesVector.ts` remains explicitly open.
 
