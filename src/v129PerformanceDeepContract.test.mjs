@@ -30,7 +30,7 @@ assert.match(structure,/heapPop\(demandHeap, 'maxUpper'\)/);
 assert.match(structure,/heapPop\(supplyHeap, 'minLower'\)/);
 assert.doesNotMatch(structure,/for\s*\(let j = 1; j <= period; j \+= 1\)/);
 assert.doesNotMatch(structure,/atrValue\(c\.slice\(0, i \+ 1\), 14\)/);
-assert.match(stateful,/mode\\s*===\\s*'replace'\\s*&&\\s*this\\.count/);
+assert.match(stateful,/mode\s*===\s*'replace'\s*&&\s*this\.count/);
 assert.match(stateful,/this\\.replaceCurrentSlot\\(v\\)/);
 assert.match(stateful,/this\\.tree\\.set\\(slot,v\\)/);
 assert.match(legacy,/RollingMean/);
