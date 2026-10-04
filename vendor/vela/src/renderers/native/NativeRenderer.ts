@@ -3523,7 +3523,6 @@ export class NativeRenderer implements IChartRenderer {
     /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
     private paintData(): void {
         const perfStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        try {
         // Layer-canvas stacking follows the indicators' z keys — recomputed lazily here so
         // every path that can move them (a z write, a restored config, a mount/remove, a
         // pane move) is covered without its own call site. No-op when unchanged.
@@ -3644,9 +3643,6 @@ export class NativeRenderer implements IChartRenderer {
         this.perfWorstFrameMs = Math.max(this.perfWorstFrameMs, this.perfLastFrameMs);
         if (this.perfLastFrameMs > 50) this.perfLongFrames += 1;
         this.perfLastFrameAt = Date.now();
-        } finally {
-        }
-
     }
 
     /** Build the data→pixel projector user drawings resolve their anchors through. */
