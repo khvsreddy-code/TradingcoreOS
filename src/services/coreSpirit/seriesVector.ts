@@ -625,7 +625,14 @@ export class CoreSpiritFusedSeriesCursor {
       this.outputs[i] = value;
     }
     return this.outputs;
+  }  
+  clone(): CoreSpiritFusedSeriesCursor {
+    const next = new CoreSpiritFusedSeriesCursor(this.stages.map((stage) => stage.getOperation()));
+    for (let i = 0; i < this.stages.length; i += 1) next.stages[i]!.copyFrom(this.stages[i]!);
+    next.outputs.set(this.outputs);
+    return next;
   }
+
 }
 
 /**
@@ -673,12 +680,4 @@ export function executeCoreSpiritFusedSeriesPipeline(
       intermediateAllocations: 0,
     }),
   });
-  
-  clone(): CoreSpiritFusedSeriesCursor {
-    const next = new CoreSpiritFusedSeriesCursor(this.stages.map((stage) => stage.getOperation()));
-    for (let i = 0; i < this.stages.length; i += 1) next.stages[i]!.copyFrom(this.stages[i]!);
-    next.outputs.set(this.outputs);
-    return next;
-  }
-
 }
