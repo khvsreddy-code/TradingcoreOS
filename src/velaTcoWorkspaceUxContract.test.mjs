@@ -1,0 +1,33 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+
+const read = (p) => fs.readFileSync(p, 'utf8');
+const live = read('src/LiveTradingWorkspace.tsx');
+const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
+const topbar = read('vendor/vela/src/widget/topbar.ts');
+const wheel = read('vendor/vela/src/widget/alt-wheel.ts');
+const provider = read('src/TcoVelaDataProvider.ts');
+const plane = read('src/services/marketData/chartDataPlane.ts');
+const theme = read('src/theme/theme.ts');
+
+assert(live.includes("const initialLayout = defaults.layout && defaults.layout !== '4' ? defaults.layout : '1';"));
+assert(live.includes("layout: initialLayout"));
+assert(live.includes("animations: false"));
+assert(live.includes("'tco.watchlist'"));
+assert(live.includes("'tco.journal'"));
+assert(live.includes("'tco.panels'"));
+assert(live.includes("'tco.brand'"));
+assert(!live.includes("'quant'"));
+assert(chrome.includes("id: 'tco.brand'"));
+assert(chrome.includes("label: 'TradingCoreOS × Vela'"));
+assert(chrome.includes("id: 'tco.watchlist'"));
+assert(chrome.includes("id: 'tco.journal'"));
+assert(chrome.includes("id: 'tco.panels'"));
+assert(chrome.includes("title: 'Watchlist'"));
+assert(topbar.includes("b.dataset.actionId = action.id"));
+assert(wheel.includes("#7c5cff"));
+assert(theme.includes("accent: '#d3ebf4'"));
+assert(provider.includes("direct && direct.time.length > 0"));
+assert(plane.includes("columns.time.length === 0"));
+
+console.log('TRADINGCORE_V132_VELA_WORKSPACE_UX_AND_CANDLE_FALLBACK_CONTRACT_OK');
