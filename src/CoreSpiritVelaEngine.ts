@@ -9,12 +9,13 @@ import type {
   IndicatorModel,
   SeriesPoint,
   SeriesSpec,
-  DirtyRange,
 } from './services/core/chart/velaChartFacade';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
 import type { CoreSpiritObject } from './services/coreSpirit/types';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData';
+
+type DirtyRange = { from:number; to:number };
 
 type PreparedToken = {
   sourceId: string;
