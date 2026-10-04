@@ -150,34 +150,6 @@ export function LiveTradingWorkspace() {
       className="fixed inset-0 z-[100] bg-[#050609]"
       aria-label="TradingCoreOS Vela live trading chart"
     >
-      {indicatorWheelOpen && indicatorWheelItems.length > 0 && (
-        <div className="pointer-events-none fixed inset-0 z-[500] flex items-center justify-center" aria-label="Quick indicator wheel">
-          <div className="relative h-[300px] w-[300px] rounded-full border border-violet-400/30 bg-[#070a10]/92 shadow-[0_0_90px_rgba(124,92,255,0.16)] backdrop-blur-xl">
-            {indicatorWheelItems.map((item, index) => {
-              const angle = index * (360 / indicatorWheelItems.length);
-              const rad = (angle - 90) * Math.PI / 180;
-              const x = 50 + Math.cos(rad) * 37;
-              const y = 50 + Math.sin(rad) * 37;
-              const selected = indicatorWheelIndex === index;
-              return (
-                <div
-                  key={item.type}
-                  className={`absolute w-24 -translate-x-1/2 -translate-y-1/2 rounded-lg border px-2 py-2 text-center font-mono text-[9px] font-bold uppercase tracking-wide ${selected ? 'border-violet-300/80 bg-violet-500/20 text-violet-100 shadow-[0_0_24px_rgba(124,92,255,0.25)]' : 'border-white/10 bg-black/65 text-slate-400'}`}
-                  style={{ left: `${x}%`, top: `${y}%` }}
-                >
-                  {item.title}
-                </div>
-              );
-            })}
-            <div className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/10 bg-black/80 text-center">
-              <Activity className="mb-1 h-4 w-4 text-violet-400" />
-              <span className="text-[8px] font-mono font-bold tracking-[0.2em] text-slate-200">ALT</span>
-              <span className="mt-0.5 text-[7px] font-mono uppercase tracking-wider text-slate-500">Indicator wheel</span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {brokerStatusOpen && (
         <BrokerSettingsModal
           isOpen={brokerStatusOpen}
