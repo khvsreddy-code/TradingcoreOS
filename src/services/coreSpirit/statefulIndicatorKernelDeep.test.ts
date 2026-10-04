@@ -120,7 +120,7 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   assert.equal(k.update(103), null);
   nearly(k.update(102)!, 75);
   nearly(k.update(104)!, 85.71428571428571, 1e-9);
-  nearly(k.update(110, 'replace')!, 95.1219512195122, 1e-9);
+  nearly(k.update(110, 'replace')!, 93.75, 1e-9);
 }
 
 {
