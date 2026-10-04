@@ -1,5 +1,6 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { DynamicLevelSettings, getDynamicLevelSettings } from './levelSettings';
+import { RollingMean } from './incrementalIndicatorKernel';
 
 export type StructureSide = 'support' | 'resistance';
 export type StructureLevelSource = 'KDE' | 'FRACTAL' | 'CLUSTER';
@@ -52,16 +53,51 @@ export interface TradingCoreVOptions {
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 const epoch = (ts: string | number) => Math.floor(new Date(ts).getTime() / 1000);
 
+function trueRangeAt(c: HistoricalCandle[], index: number): number {
+  if (index === 0) return Math.max(0, c[0]!.high - c[0]!.low);
+  const current = c[index]!;
+  const previousClose = c[index - 1]!.close;
+  return Math.max(
+    current.high - current.low,
+    Math.abs(current.high - previousClose),
+    Math.abs(current.low - previousClose),
+  );
+}
+
 function atrValue(c: HistoricalCandle[], period = 14): number {
   if (c.length < 2) return 0;
-  const trs = c.map((x, i) => i === 0
-    ? Math.max(0, x.high - x.low)
-    : Math.max(x.high - x.low, Math.abs(x.high - c[i - 1].close), Math.abs(x.low - c[i - 1].close)));
-  const p = Math.min(period, trs.length);
-  // Wilder-style seed for a stable structure scale.
-  let value = trs.slice(0, p).reduce((a, b) => a + b, 0) / Math.max(1, p);
-  for (let i = p; i < trs.length; i++) value = ((value * (p - 1)) + trs[i]) / p;
+  const p = Math.min(Math.max(1, Math.floor(period)), c.length);
+  let seed = 0;
+  let value = 0;
+  for (let i = 0; i < c.length; i += 1) {
+    const tr = trueRangeAt(c, i);
+    if (i < p) {
+      seed += tr;
+      if (i === p - 1) value = seed / p;
+    } else {
+      value = ((value * (p - 1)) + tr) / p;
+    }
+  }
   return Number.isFinite(value) ? value : 0;
+}
+
+function atrSeries(c: HistoricalCandle[], period = 14): number[] {
+  const out = new Array<number>(c.length).fill(0);
+  if (!c.length) return out;
+  const p = Math.min(Math.max(1, Math.floor(period)), c.length);
+  let seed = 0;
+  let value = 0;
+  for (let i = 0; i < c.length; i += 1) {
+    const tr = trueRangeAt(c, i);
+    if (i < p) {
+      seed += tr;
+      if (i === p - 1) value = seed / p;
+    } else {
+      value = ((value * (p - 1)) + tr) / p;
+    }
+    if (i >= p - 1) out[i] = Number.isFinite(value) ? value : 0;
+  }
+  return out;
 }
 
 function gaussian(u: number): number {
@@ -100,21 +136,28 @@ type WeightedPoint = { price: number; weight: number; source: 'KDE' | 'FRACTAL';
 
 function fractalPoints(c: HistoricalCandle[], period: number, start: number, end: number): WeightedPoint[] {
   const out: WeightedPoint[] = [];
-  for (let i = Math.max(period, start); i < Math.min(c.length - period, end); i++) {
-    let highPivot = true;
-    let lowPivot = true;
-    for (let j = 1; j <= period; j++) {
-      if (c[i].high < c[i - j].high || c[i].high < c[i + j].high) highPivot = false;
-      if (c[i].low > c[i - j].low || c[i].low > c[i + j].low) lowPivot = false;
-      if (!highPivot && !lowPivot) break;
-    }
-    const prior = c.slice(Math.max(0, i - 20), i);
-    const meanVolume = prior.length
-      ? prior.reduce((s, x) => s + Math.max(0, x.volume || 0), 0) / prior.length
+  const volumeMean = new RollingMean(20);
+  const first = Math.max(0, Math.min(c.length, start));
+  const last = Math.max(first, Math.min(c.length, end));
+  for (let i = 0; i < last; i += 1) {
+    const meanVolume = volumeMean.size > 0
+      ? volumeMean.sumValue / volumeMean.size
       : 0;
-    const volumeWeight = meanVolume > 0 ? Math.min(4, Math.max(0.5, (c[i].volume || 0) / meanVolume)) : 1;
-    if (highPivot) out.push({ price: c[i].high, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
-    if (lowPivot) out.push({ price: c[i].low, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
+    if (i >= Math.max(period, first) && i < Math.min(c.length - period, last)) {
+      let highPivot = true;
+      let lowPivot = true;
+      for (let j = 1; j <= period; j += 1) {
+        if (c[i]!.high < c[i - j]!.high || c[i]!.high < c[i + j]!.high) highPivot = false;
+        if (c[i]!.low > c[i - j]!.low || c[i]!.low > c[i + j]!.low) lowPivot = false;
+        if (!highPivot && !lowPivot) break;
+      }
+      const volumeWeight = meanVolume > 0
+        ? Math.min(4, Math.max(0.5, (c[i]!.volume || 0) / meanVolume))
+        : 1;
+      if (highPivot) out.push({ price: c[i]!.high, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
+      if (lowPivot) out.push({ price: c[i]!.low, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
+    }
+    volumeMean.update(Math.max(0, c[i]!.volume || 0));
   }
   return out;
 }
@@ -184,15 +227,21 @@ function clusterPoints(points: WeightedPoint[], tolerance: number, spot: number,
     .slice(0, Math.max(1, maxLevels));
 }
 
-function buildZones(c: HistoricalCandle[], start: number, multiplier: number, maxZones: number): TradingCoreVZone[] {
+function buildZones(
+  c: HistoricalCandle[],
+  start: number,
+  multiplier: number,
+  maxZones: number,
+  atrValues: readonly number[],
+): TradingCoreVZone[] {
   const zones: TradingCoreVZone[] = [];
-  for (let i = Math.max(1, start); i < c.length - 1; i++) {
-    const localAtr = atrValue(c.slice(0, i + 1), 14);
+  for (let i = Math.max(1, start); i < c.length - 1; i += 1) {
+    const localAtr = atrValues[i] || 0;
     if (!(localAtr > 0)) continue;
-    const body = Math.abs(c[i].close - c[i].open);
+    const body = Math.abs(c[i]!.close - c[i]!.open);
     if (body < multiplier * localAtr) continue;
-    const base = c[i - 1];
-    const bullish = c[i].close > c[i].open;
+    const base = c[i - 1]!;
+    const bullish = c[i]!.close > c[i]!.open;
     const upper = bullish ? Math.max(base.open, base.close) : base.high;
     const lower = bullish ? base.low : Math.min(base.open, base.close);
     const zone: TradingCoreVZone = {
@@ -206,9 +255,9 @@ function buildZones(c: HistoricalCandle[], start: number, multiplier: number, ma
       impulseIndex: i,
       baseIndex: i - 1,
     };
-    for (let j = i + 1; j < c.length; j++) {
-      if (zone.kind === 'Demand' && c[j].low <= zone.upper) { zone.mitigated = true; break; }
-      if (zone.kind === 'Supply' && c[j].high >= zone.lower) { zone.mitigated = true; break; }
+    for (let j = i + 1; j < c.length; j += 1) {
+      if (zone.kind === 'Demand' && c[j]!.low <= zone.upper) { zone.mitigated = true; break; }
+      if (zone.kind === 'Supply' && c[j]!.high >= zone.lower) { zone.mitigated = true; break; }
     }
     if (!zone.mitigated) zones.push(zone);
   }
@@ -238,7 +287,7 @@ export function buildTradingCoreVStructure(
   const fractals = fractalPoints(c, period, start, c.length - period);
   const kde = kdePeaks(c, start, safeAtr, options);
   const levels = clusterPoints([...fractals, ...kde.points], tolerance, c[c.length - 1].close, time, maxLevels);
-  const zones = buildZones(c, start, multiplier, maxZones);
+  const zones = buildZones(c, start, multiplier, maxZones, atrSeries(c, 14));
   return { levels, zones, atr: safeAtr, lookback, bandwidth: kde.bandwidth };
 }
 
