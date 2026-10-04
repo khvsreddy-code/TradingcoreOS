@@ -124,3 +124,10 @@ The canonical scalar compatibility layer was cleaned up to eliminate old per-win
 3. Columnar storage remains the canonical market-data representation.
 4. Compatibility object creation is explicit and measurable.
 5. Source contracts do not substitute for browser/GPU evidence.
+
+
+## Structural analytics cost model
+
+The v130 structure engine no longer performs a period-wide fractal comparison for every candidate bar. Fractal highs/lows use the same monotonic centered-extrema primitive as CoreSpirit, giving linear traversal for a fixed period. Zone mitigation no longer recomputes ATR from the beginning of history for every impulse and no longer scans every future candle per zone; it uses one causal ATR series plus threshold heaps, so each zone is inserted and removed at most once.
+
+This prevents structural analytics from becoming a hidden N×period or N² cost after ordinary indicators have already been made incremental.

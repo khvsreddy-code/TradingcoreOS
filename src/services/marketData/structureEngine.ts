@@ -1,3 +1,4 @@
+import { centeredRollingExtrema } from '../coreSpirit/statefulIndicatorKernel';
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { DynamicLevelSettings, getDynamicLevelSettings } from './levelSettings';
 
@@ -100,22 +101,31 @@ type WeightedPoint = { price: number; weight: number; source: 'KDE' | 'FRACTAL';
 
 function fractalPoints(c: HistoricalCandle[], period: number, start: number, end: number): WeightedPoint[] {
   const out: WeightedPoint[] = [];
-  for (let i = Math.max(period, start); i < Math.min(c.length - period, end); i++) {
-    let highPivot = true;
-    let lowPivot = true;
-    for (let j = 1; j <= period; j++) {
-      if (c[i].high < c[i - j].high || c[i].high < c[i + j].high) highPivot = false;
-      if (c[i].low > c[i - j].low || c[i].low > c[i + j].low) lowPivot = false;
-      if (!highPivot && !lowPivot) break;
-    }
-    const prior = c.slice(Math.max(0, i - 20), i);
-    const meanVolume = prior.length
-      ? prior.reduce((s, x) => s + Math.max(0, x.volume || 0), 0) / prior.length
-      : 0;
-    const volumeWeight = meanVolume > 0 ? Math.min(4, Math.max(0.5, (c[i].volume || 0) / meanVolume)) : 1;
-    if (highPivot) out.push({ price: c[i].high, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
-    if (lowPivot) out.push({ price: c[i].low, weight: 1 + volumeWeight, source: 'FRACTAL', index: i });
+  const highs = new Float64Array(c.length);
+  const lows = new Float64Array(c.length);
+  const volumeMean = new Float64Array(c.length);
+  let volumeSum = 0;
+  for (let i = 0; i < c.length; i += 1) {
+    highs[i] = c[i].high;
+    lows[i] = c[i].low;
+    volumeMean[i] = i > 0 ? volumeSum / Math.min(20, i) : 0;
+    volumeSum += Math.max(0, c[i].volume || 0);
+    if (i >= 20) volumeSum -= Math.max(0, c[i - 20].volume || 0);
   }
+  const addPoint = (index: number, price: number) => {
+    if (index < Math.max(period, start) || index >= Math.min(c.length - period, end)) return;
+    const meanVolume = volumeMean[index] || 0;
+    const volumeWeight = meanVolume > 0
+      ? Math.min(4, Math.max(0.5, (c[index].volume || 0) / meanVolume))
+      : 1;
+    out.push({ price, weight: 1 + volumeWeight, source: 'FRACTAL', index });
+  };
+  centeredRollingExtrema(highs, period, (i, _min, max) => {
+    if (highs[i] === max) addPoint(i, highs[i]);
+  });
+  centeredRollingExtrema(lows, period, (i, min, _max) => {
+    if (lows[i] === min) addPoint(i, lows[i]);
+  });
   return out;
 }
 
@@ -184,34 +194,86 @@ function clusterPoints(points: WeightedPoint[], tolerance: number, spot: number,
     .slice(0, Math.max(1, maxLevels));
 }
 
+type ZoneHeapMode = 'maxUpper' | 'minLower';
+
+function heapBetter(a: TradingCoreVZone, b: TradingCoreVZone, mode: ZoneHeapMode): boolean {
+  return mode === 'maxUpper' ? a.upper > b.upper : a.lower < b.lower;
+}
+
+function heapPush(heap: TradingCoreVZone[], zone: TradingCoreVZone, mode: ZoneHeapMode): void {
+  let index = heap.length;
+  heap.push(zone);
+  while (index > 0) {
+    const parent = (index - 1) >>> 1;
+    if (heapBetter(heap[parent]!, heap[index]!, mode)) break;
+    [heap[parent], heap[index]] = [heap[index]!, heap[parent]!];
+    index = parent;
+  }
+}
+
+function heapPop(heap: TradingCoreVZone[], mode: ZoneHeapMode): TradingCoreVZone | undefined {
+  if (!heap.length) return undefined;
+  const root = heap[0];
+  const last = heap.pop()!;
+  if (heap.length) {
+    heap[0] = last;
+    let index = 0;
+    for (;;) {
+      const left = index * 2 + 1;
+      const right = left + 1;
+      let best = index;
+      if (left < heap.length && heapBetter(heap[left]!, heap[best]!, mode)) best = left;
+      if (right < heap.length && heapBetter(heap[right]!, heap[best]!, mode)) best = right;
+      if (best === index) break;
+      [heap[index], heap[best]] = [heap[best]!, heap[index]!];
+      index = best;
+    }
+  }
+  return root;
+}
+
 function buildZones(c: HistoricalCandle[], start: number, multiplier: number, maxZones: number): TradingCoreVZone[] {
   const zones: TradingCoreVZone[] = [];
-  for (let i = Math.max(1, start); i < c.length - 1; i++) {
-    const localAtr = atrValue(c.slice(0, i + 1), 14);
+  const active = new Set<TradingCoreVZone>();
+  const demandHeap: TradingCoreVZone[] = [];
+  const supplyHeap: TradingCoreVZone[] = [];
+  const atrSeries = canonicalAtrSeries(c, 14);
+
+  for (let i = 0; i < c.length; i += 1) {
+    while (demandHeap.length && demandHeap[0]!.upper >= c[i].low) {
+      const zone = heapPop(demandHeap, 'maxUpper')!;
+      if (active.delete(zone)) zone.mitigated = true;
+    }
+    while (supplyHeap.length && supplyHeap[0]!.lower <= c[i].high) {
+      const zone = heapPop(supplyHeap, 'minLower')!;
+      if (active.delete(zone)) zone.mitigated = true;
+    }
+
+    if (i < Math.max(1, start) || i >= c.length - 1) continue;
+    const localAtr = atrSeries[i] || 0;
     if (!(localAtr > 0)) continue;
     const body = Math.abs(c[i].close - c[i].open);
     if (body < multiplier * localAtr) continue;
+
     const base = c[i - 1];
     const bullish = c[i].close > c[i].open;
-    const upper = bullish ? Math.max(base.open, base.close) : base.high;
-    const lower = bullish ? base.low : Math.min(base.open, base.close);
     const zone: TradingCoreVZone = {
       time: epoch(base.timestamp),
       startTime: epoch(base.timestamp),
-      upper,
-      lower,
+      upper: bullish ? Math.max(base.open, base.close) : base.high,
+      lower: bullish ? base.low : Math.min(base.open, base.close),
       kind: bullish ? 'Demand' : 'Supply',
       score: Math.min(1, body / Math.max(Number.EPSILON, multiplier * localAtr)),
       mitigated: false,
       impulseIndex: i,
       baseIndex: i - 1,
     };
-    for (let j = i + 1; j < c.length; j++) {
-      if (zone.kind === 'Demand' && c[j].low <= zone.upper) { zone.mitigated = true; break; }
-      if (zone.kind === 'Supply' && c[j].high >= zone.lower) { zone.mitigated = true; break; }
-    }
-    if (!zone.mitigated) zones.push(zone);
+    active.add(zone);
+    if (zone.kind === 'Demand') heapPush(demandHeap, zone, 'maxUpper');
+    else heapPush(supplyHeap, zone, 'minLower');
   }
+
+  zones.push(...active);
   return zones
     .sort((a, b) => b.score - a.score || b.baseIndex - a.baseIndex)
     .slice(0, Math.max(1, maxZones))

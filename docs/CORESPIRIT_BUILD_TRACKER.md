@@ -28,6 +28,8 @@ FYERS compact columns
 - [x] Bollinger, Donchian, Stochastic, CCI and MFI use stateful primitives.
 - [x] Scalar `indicatorKernel.ts` compatibility helpers no longer use period-window `slice/reduce/spread` implementations.
 - [x] Existing deep parity tests cover append and forming-bar replacement.
+- [x] Structural fractal detection uses centered monotonic-extrema traversal instead of an inner period loop.
+- [x] Structural zone mitigation uses one ATR pass plus threshold heaps instead of repeated historical ATR/future-candle scans.
 - [~] `seriesVector.ts` still contains duplicate private fused-state algorithms. Consolidating it onto the canonical kernel module remains open.
 
 ### 2. Vela true columnar history ABI
