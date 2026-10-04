@@ -363,7 +363,6 @@ export class CoreSpiritVelaEngine {
         const latestTime = barTimeMillis(latest.timestamp); const result = runtime.executeBar(latest); collect(result.outputs);
         lastTime = latestTime; emitModel(Number.isFinite(latestTime) ? { from:latestTime, to:latestTime } : undefined);
       },
-,
     };
   }
 }
