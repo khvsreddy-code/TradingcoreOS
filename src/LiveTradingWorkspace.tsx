@@ -6,6 +6,7 @@ import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import './services/core/chart/tcoVelaChrome';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
+import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v3-multichart';
@@ -138,10 +139,16 @@ export function LiveTradingWorkspace() {
   }, []);
 
   useEffect(() => {
+    const perfTimer = window.setInterval(() => {
+      const stats = workspaceRef.current?.getPerformanceStats?.() ?? [];
+      for (const sample of stats) {
+        chartPerformanceTelemetry.ingestRendererSnapshot(`vela:${sample.cellId}`, sample);
+      }
+    }, 1000);
     const timer = window.setInterval(() => {
       workspaceRef.current?.saveNow();
     }, 15 * 60 * 1000);
-    return () => window.clearInterval(timer);
+    return () => { window.clearInterval(perfTimer); window.clearInterval(timer); };
   }, []);
 
   return (
