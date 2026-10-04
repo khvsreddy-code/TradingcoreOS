@@ -465,12 +465,14 @@ function canonicalRejection(bar: HistoricalCandle, side: 'support' | 'resistance
   return Math.max(0, Math.min(1, (wick / range) * (wick > body ? 1 : 0.5)));
 }
 
-function canonicalAverageVolume(c: HistoricalCandle[], index: number, period = 20): number {
-  const values = c
-    .slice(Math.max(0, index - period + 1), index + 1)
-    .map(x => Math.max(0, x.volume || 0))
-    .filter(Boolean);
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+function rollingAverageVolume(c: HistoricalCandle[], period = 20): number[] {
+  const state = new RollingMean(period);
+  const out = new Array<number>(c.length).fill(0);
+  for (let i = 0; i < c.length; i += 1) {
+    state.update(Math.max(0, c[i]!.volume || 0));
+    out[i] = state.size > 0 ? state.sumValue / state.size : 0;
+  }
+  return out;
 }
 
 function canonicalReaction(
@@ -750,6 +752,7 @@ export function buildCanonicalLevelAnalytics(
   }
 
   const lifecycle = canonicalLifecycle(c, structure, settings);
+  const averageVolume = rollingAverageVolume(c, 20);
   const safeAtr = Math.max(atr, spot * 0.0002, Number.EPSILON);
 
   const core = (level: LifecycleLevel): CanonicalCoreLevel => {
@@ -758,7 +761,7 @@ export function buildCanonicalLevelAnalytics(
     const bar = c[index];
     const rejection = canonicalRejection(bar, level.side);
     const reaction = canonicalReaction(c, index, level.side, safeAtr);
-    const volumeRatio = (bar.volume || 0) / Math.max(1, canonicalAverageVolume(c, index));
+    const volumeRatio = (bar.volume || 0) / Math.max(1, averageVolume[index] || 0);
     const reactionScore = Math.min(1, reaction / 3);
     const volumeScore = Math.min(1, volumeRatio / 2);
     const recencyScore = Math.max(0, 1 - (c.length - 1 - index) / Math.max(1, settings.lookbackPeriod));
