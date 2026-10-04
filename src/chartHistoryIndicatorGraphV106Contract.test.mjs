@@ -8,7 +8,7 @@ const graph = fs.readFileSync(path.join(root, 'src/services/marketData/indicator
 const kernel = fs.readFileSync(path.join(root, 'src/services/marketData/coreIndicatorKernel.ts'), 'utf8');
 const settings = fs.readFileSync(path.join(root, 'src/components/indicators/IndicatorSettingsPanel.tsx'), 'utf8');
 const settingsSchema = fs.readFileSync(path.join(root, 'src/services/coreSpirit/indicatorSettingsSchema.ts'), 'utf8');
-const tracker = fs.readFileSync(path.join(root, 'docs/archive/legacy/PROJECT_REPAIR_AND_UI_NOTES.md'), 'utf8');
+const tracker = fs.readFileSync(path.join(root, 'docs/CORESPIRIT_BUILD_TRACKER.md'), 'utf8');
 
 if (!/maxBuckets = 32/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore LRU residency guard missing');
 if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/archive/legacy/CHARTING_LEGACY_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
