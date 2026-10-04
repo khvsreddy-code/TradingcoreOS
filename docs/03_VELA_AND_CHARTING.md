@@ -1,5 +1,7 @@
 # Vela and charting
 
+The **canonical columnar data plane** is the authoritative OHLCV transport between TradingCoreOS market data and Vela. Compatibility object projections are downstream only.
+
 ## Vendor boundary
 
 ```
