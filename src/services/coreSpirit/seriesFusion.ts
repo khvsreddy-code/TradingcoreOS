@@ -58,7 +58,11 @@ export function planCoreSpiritSeriesFusion(program:CoreSpiritIrProgram):CoreSpir
       stages.push({instruction:cur,nodeId:node?.id??`i:${cur}`,name:i.name as CoreSpiritSeriesOperationName,input:canon(i.args[0]),output:i.dest,length:nextLength});
       used.add(cur);
       const next:number[]=[];
-      for(let j=cur+1;j<ins.length;j++){const x=ins[j];if(x.op==='call'&&canon(x.args[0])===canon(i.dest))next.push(j);}
+      for(let j=cur+1;j<ins.length;j++){
+        const between = ins[j];
+        if (between?.op === 'emit' || between?.op === 'jump' || between?.op === 'jumpIfFalse') break;
+        if(between?.op==='call'&&canon(between.args[0])===canon(i.dest))next.push(j);
+      }
       if(next.length===1){const nextInstr=ins[next[0]!];cur=nextInstr.op==='call'&&fusable(nextInstr.name)?next[0]!: -1;}else{cur=-1;}
     }
     if(stages.length<2){for(const s of stages)used.delete(s.instruction);continue;}
