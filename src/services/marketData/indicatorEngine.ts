@@ -220,7 +220,7 @@ export function advancedIndicatorModel(c: HistoricalCandle[], kind: IndicatorKin
     close.forEach((x,i)=>{const volr=i?Math.abs(x-close[i-1])/(atrP[i]||Math.max(1,x*0.001)):0; const a=Math.max(0.05,Math.min(0.7,alpha*(1+volr))); prev=prev+a*(x-prev);out.push(i>=p-1?prev:null)}); add('Adaptive',out);
   } else if(kind==='ATR Percentile Bands'){
     const rank=new RollingPercentile(p);
-    const upper:(number|null)[]=[],lower:(number|null)[], atrVals=atrP.map(x=>x||0);
+    const upper:(number|null)[]=[], lower:(number|null)=[], atrVals=atrP.map(x=>x||0);
     atrVals.forEach((a,i)=>{
       rank.update(a>0?a:Number.NaN);
       const pct=a>0?(rank.rank(a)??0.5):0.5;
