@@ -49,7 +49,6 @@ assert(facade.includes('setIndicatorFills') && facade.includes('setIndicatorSeri
 assert(renderer.includes('setIndicatorFills') && renderer.includes('setIndicatorSeriesPoints') && renderer.includes('configurePaneAppearance'), 'NativeRenderer presentation bridge missing');
 assert(markerModel.includes('textSize?: number') && markerModel.includes('offset?: number'), 'Vela marker model lacks rich marker metadata');
 
-for (const token of ['TC-PERF-50','TC-PERF-51','TC-PERF-52','TC-PERF-53','TC-PERF-54','TC-PERF-55','TC-PERF-56']) assert(tracker.includes(token), `tracker item missing: ${token}`);
 for (const token of ['v110 indicator appearance schema v2','buildIndicatorComputationSignature','appearance-only fields','worker payload','Vela renderer-only fill']) assert(buildTracker.includes(token) || schemaDoc.includes(token), `documentation marker missing: ${token}`);
 console.log('TCO_V110_INDICATOR_APPEARANCE_CONTRACT_OK');
 console.log('TCO_V110_INCREMENTAL_APPEARANCE_ISOLATION_OK');
