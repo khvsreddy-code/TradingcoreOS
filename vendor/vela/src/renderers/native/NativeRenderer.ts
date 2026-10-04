@@ -300,6 +300,10 @@ export class NativeRenderer implements IChartRenderer {
     private perfLongFrames = 0;
     private perfLastFrameMs = 0;
     private perfLastFrameAt = 0;
+    private perfFirstFrameAt = 0;
+    private perfFrameBudgetMisses = 0;
+    private readonly perfRecentFrameMs: number[] = [];
+    private static readonly PERF_FRAME_BUDGET_MS = 1000 / 60;
 
     private skeletonClockMs = 0; // monotonic clock for the loading-skeleton pulse (advanced per animator frame)
     private candleBodyAlpha = 1; // candle body-fill opacity (constant; style layers may modulate later)
@@ -3621,10 +3625,18 @@ export class NativeRenderer implements IChartRenderer {
         longFrames: number;
         lastFrameMs: number;
         lastFrameAt: number;
+        p95FrameMs: number;
+        fps: number;
+        frameBudgetMs: number;
+        frameBudgetMisses: number;
+        frameBudgetMissRate: number;
         backend: 'webgl2' | 'canvas2d' | 'unknown';
     } {
         const name = this.backend?.constructor?.name ?? '';
         const backend = /webgl/i.test(name) ? 'webgl2' : /canvas/i.test(name) ? 'canvas2d' : 'unknown';
+        const ordered = this.perfRecentFrameMs.slice().sort((a, b) => a - b);
+        const p95Index = ordered.length ? Math.min(ordered.length - 1, Math.max(0, Math.ceil(ordered.length * 0.95) - 1)) : 0;
+        const elapsedMs = this.perfFirstFrameAt && this.perfLastFrameAt ? Math.max(1, this.perfLastFrameAt - this.perfFirstFrameAt) : 0;
         return {
             frames: this.perfFrames,
             totalFrameMs: this.perfTotalFrameMs,
@@ -3633,6 +3645,11 @@ export class NativeRenderer implements IChartRenderer {
             longFrames: this.perfLongFrames,
             lastFrameMs: this.perfLastFrameMs,
             lastFrameAt: this.perfLastFrameAt,
+            p95FrameMs: ordered.length ? ordered[p95Index]! : 0,
+            fps: elapsedMs ? (this.perfFrames * 1000) / elapsedMs : 0,
+            frameBudgetMs: NativeRenderer.PERF_FRAME_BUDGET_MS,
+            frameBudgetMisses: this.perfFrameBudgetMisses,
+            frameBudgetMissRate: this.perfFrames ? this.perfFrameBudgetMisses / this.perfFrames : 0,
             backend,
         };
         }
@@ -3641,7 +3658,11 @@ export class NativeRenderer implements IChartRenderer {
         this.perfLastFrameMs = Math.max(0, perfDuration);
         this.perfTotalFrameMs += this.perfLastFrameMs;
         this.perfWorstFrameMs = Math.max(this.perfWorstFrameMs, this.perfLastFrameMs);
+        if (this.perfFirstFrameAt === 0) this.perfFirstFrameAt = this.perfLastFrameAt || Date.now();
         if (this.perfLastFrameMs > 50) this.perfLongFrames += 1;
+        if (this.perfLastFrameMs > NativeRenderer.PERF_FRAME_BUDGET_MS) this.perfFrameBudgetMisses += 1;
+        if (this.perfRecentFrameMs.length >= 240) this.perfRecentFrameMs.shift();
+        this.perfRecentFrameMs.push(this.perfLastFrameMs);
         this.perfLastFrameAt = Date.now();
     }
 
