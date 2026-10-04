@@ -17,7 +17,7 @@ if (!/requestWarmHistory\(visibleBars\?: number\)/.test(plane) || !/this\.state\
 if (!/requestWarmHistory\(Math\.max\(1,Math\.abs/.test(live)) throw new Error('Live chart does not pass visible range demand to warm history');
 if (!/order: string\[\]/.test(graph) || !/contains a cycle/.test(graph) || !/source:\$\{source\}.*sma:\$\{source\}:\$\{p\}/s.test(graph)) throw new Error('Transitive/topological indicator graph contract missing');
 if (!/RollingMean|RollingVariance|RollingMinMax|RollingSum/.test(kernel)) throw new Error('Canonical rolling kernel marker missing');
-if (!/while \(highHead < highDeque\.length/.test(graph) || !/sumSquares/.test(kernel)) throw new Error('Canonical Donchian/Bollinger rolling kernel markers missing');
+if (!/while \(highHead < highDeque\.length/.test(graph) || !/sumSquares/.test(graph)) throw new Error('Canonical Donchian/Bollinger rolling kernel markers missing');
 for (const token of ['appearance.line.color','appearance.fill.upperColor','appearance.fill.lowerColor','appearance.line.width','appearance.line.style','appearance.line.opacity']) if (!settingsSchema.includes(token)) throw new Error(`Schema appearance control missing: ${token}`);
 for (const token of ['Initial chart load','Backward paging: 5,000 older candles','Maximum retained history: 50,000 candles','True columnar history ABI completion','Exact dirty-span completion']) {
   if (!tracker.includes(token)) throw new Error(`Current performance tracker marker missing: ${token}`);
