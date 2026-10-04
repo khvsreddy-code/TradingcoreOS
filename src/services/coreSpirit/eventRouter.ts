@@ -52,6 +52,12 @@ export class CoreSpiritEventRouter {
     this.transactionId = undefined;
   }
 
+  scriptEvent(payload: CoreEventMap['script.event']): void { this.emit('script.event', payload); }
+  scriptSignal(payload: CoreEventMap['script.signal']): void { this.emit('script.signal', payload); }
+  scriptAlert(payload: CoreEventMap['script.alert']): void { this.emit('script.alert', payload); }
+  scriptWebhook(payload: CoreEventMap['script.webhook']): void { this.emit('script.webhook', payload); }
+  executionIntent(source: string, payload: unknown): void { this.emit('execution.intent', { source, payload } as CoreEventMap['execution.intent']); }
+
   isTransactionActive(): boolean { return this.transactionActive; }
   getTransactionId(): string | undefined { return this.transactionId; }
   getPendingCount(): number { return this.buffered.length; }
