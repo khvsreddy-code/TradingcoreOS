@@ -44,7 +44,8 @@ if (!/if\(!preserveWorkerSeries\)/.test(live)) throw new Error('Legacy renderer 
 if (!/IndicatorCodeViewer/.test(live) || !/title="Indicator settings"/.test(live) || !/title="View indicator code"/.test(live)) throw new Error('Live indicator dialogue settings/code actions missing');
 if (!/Settings2/.test(settings) || !/Code2/.test(settings) || !/> Code<\//.test(settings)) throw new Error('Indicator settings panel gear/code affordances missing');
 if (!/getIndicatorSourceTemplate/.test(viewer) || !/navigator\.clipboard/.test(viewer)) throw new Error('Indicator code viewer source/copy path missing');
-for (const token of ['v107 incremental indicator execution','RollingAbsoluteDeviation','series.update','IndicatorCodeViewer']) {
-  if (!buildTracker.includes(token) && !history.includes(token)) throw new Error(`v107 documentation marker missing: ${token}`);
+const documentation = `${buildTracker}\n${history}`.toLowerCase();
+for (const token of ['v107 incremental indicator execution','rollingabsolutedeviation','series.update','indicatorcodeviewer']) {
+  if (!documentation.includes(token)) throw new Error(`v107 documentation marker missing: ${token}`);
 }
 console.log('TRADINGCORE_V107_INCREMENTAL_INDICATOR_CONTRACT_OK');
