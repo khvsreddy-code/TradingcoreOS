@@ -16,6 +16,25 @@
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments; presentation state never invalidates mathematical state.
 
+
+
+### v125 product/performance deepening — 2026-10-04
+
+- [x] Locked the Vela/FYERS history experience to 5,000 initial candles and 5,000-candle backward pages.
+- [x] Confirmed Vela's native backfill chunk is 5,000 bars with a left-edge trigger and a 50,000-bar retained cap.
+- [x] Added TCO host-facing Vela `saveNow()` for explicit 15-minute cloud autosave.
+- [x] Added TCO panel/profile chrome: bookmarks replaces the duplicated watchlist chrome surface; account panel resolves the authenticated profile/avatar from Supabase.
+- [x] Added a dedicated Panels action and profile action to the Vela topbar.
+- [x] Standardized workspace/module visual accents on royal purple/indigo and deep graphite.
+- [x] Preserved Motion as the DOM/UI animation layer; Vela owns chart motion. Three.js is not introduced for ordinary UI animation.
+- [x] Extended Supabase workspace persistence through the existing Vela snapshot path; chart layout, ticker/timeframe, drawings and panel state remain inside the persisted workspace document.
+- [x] Removed redundant workspace RLS policies and optimized remaining preference RLS evaluation.
+- [x] Public CoreSpirit indicator exploration, Models, Automations and CoreSpirit routes remain first-class product surfaces.
+- [~] Canonical typed data reaches the native Vela renderer; Vela's orchestration tape still retains an OHLCV compatibility representation.
+- [ ] Replace Vela orchestration `OHLCV[]` history storage with a columnar tape without breaking scripting/session/drawing APIs.
+- [ ] Dirty-span CoreSpirit execution and RenderPacket range revisions.
+- [ ] GPU/frame-budget telemetry and browser verification across 1/4/8 chart layouts.
+
 ### v109 architecture lock — 2026-09-29
 
 TradingCoreOS is locked to a **CoreSpirit-first + Vela chart engine + TCO-owned data/compute/broker systems** architecture. CoreSpirit is the only user-facing trading language. Vela is the production rendering backend and remains behind the renderer-neutral TCO chart contracts.
