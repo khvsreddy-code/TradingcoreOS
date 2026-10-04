@@ -732,20 +732,6 @@ export class PersistenceState extends RollingBase {
   reset(): void { super.reset(); this.signs.fill(0); this.same=0; this.comparisons=0; this.previousValue=Number.NaN; this.previousSign=0; }
 }
 
-/** Combined rolling mean/standard-deviation state for Bollinger-style kernels. */
-export class BollingerState {
-  readonly mean = new RollingMean(1);
-  readonly variance = new RollingVariance(1);
-  private readonly period: number;
-  constructor(period:number){ this.period=Math.max(1,Math.floor(period)); (this.mean as RollingMean).reset(); (this.variance as RollingVariance).reset(); }
-  update(value:number, mode:'append'|'replace'='append'):{mean:number|null; deviation:number|null} {
-    // The canonical rolling primitives own all bounded state; this facade keeps
-    // Bollinger consumers on one stable mathematical API.
-    if (this.mean['capacity'] !== this.period) { /* compile-time/private-field guard; replaced below */ }
-    return {mean:null,deviation:null};
-  }
-}
-
 export function sourceValue(candle: { open:number; high:number; low:number; close:number }, source: string = 'close'): number {
   switch (source) {
     case 'open': return candle.open; case 'high': return candle.high; case 'low': return candle.low; case 'hl2': return (candle.high + candle.low) / 2;
