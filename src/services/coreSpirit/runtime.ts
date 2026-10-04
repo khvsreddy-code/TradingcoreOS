@@ -79,7 +79,6 @@ export class CoreSpiritRuntime {
   private readonly eventResolver?: (eventName:string)=>boolean|unknown;
   private readonly executionTarget: CoreSpiritExecutionTarget = 'chart';
   private readonly layer: CoreSpiritProgramLayer = 'script';
-  private debugTrace: Array<Record<string, unknown>> = [];
   private realtimeRevision = 0;
   private loadedSurface?: CoreSpiritProgram['surface'];
   private seriesFusionPlan?: CoreSpiritSeriesFusionPlan;
@@ -175,6 +174,7 @@ export class CoreSpiritRuntime {
       this.realtimeRevision += 1;
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; this.reactiveReused += 1; }
       this.stateStore.rollbackRealtimeTransaction();
+      this.stateStore.beginRealtimeTransaction();
       for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
         const cursor = this.fusedCursors.get(groupId);
         if (cursor) cursor.copyFrom(snapshot);
