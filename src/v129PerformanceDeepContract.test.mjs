@@ -5,6 +5,7 @@ import path from 'node:path';
 const root=process.cwd(); const read=f=>fs.readFileSync(path.join(root,f),'utf8');
 const legacy=read('src/services/coreSpirit/indicatorKernel.ts');
 const standard=read('src/services/coreSpirit/indicatorEngine.ts');
+const marketKernel=read('src/services/marketData/coreIndicatorKernel.ts');
 const stateful=read('src/services/coreSpirit/statefulIndicatorKernel.ts');
 const runtime=read('src/services/coreSpirit/runtime.ts');
 const tape=read('vendor/vela/src/core/model/ColumnarHistoryTape.ts');
@@ -16,6 +17,8 @@ for(const pattern of [/\.slice\([^)]*period[^)]*\)/,/\.slice\([^)]*length[^)]*\)
 for(const name of ['RollingSum','RollingMean','RollingVariance','RollingMinMax','RollingMedian','RollingPercentile','RollingAbsoluteDeviation','EMAState','WilderState','ATRState','WMAState','VWAPSessionState']) assert.match(stateful,new RegExp('export class '+name));
 for(const name of ['bollinger','donchian','stochastic','cci','mfi']) assert.match(standard.toLowerCase(),new RegExp(name));
 assert.doesNotMatch(runtime,/trHistory\.slice\(-length\)\.reduce/);
+assert.doesNotMatch(marketKernel,/gains\.slice\(0,p\)\.reduce/);
+assert.doesNotMatch(marketKernel,/for\(let j=i-p\+1;j<=i;j\+=1\)/);
 
 for(const method of ['timeAt','lastIndexAtOrBefore','firstIndexAtOrAfter','countTimeRange']) assert.match(tape,new RegExp(method+'\\('));
 assert.match(vela,/rawTape\.countTimeRange/); assert.match(vela,/rawTape\.lastIndexAtOrBefore/); assert.match(vela,/rawTape\.timeAt/);

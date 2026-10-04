@@ -13,6 +13,7 @@ FYERS compact columns → TCO canonical data plane → Vela ColumnarHistoryTape 
 
 ### 1. Stateful indicator mathematics
 - [x] Canonical bounded kernels: RollingSum, RollingMean, RollingVariance, RollingMinMax, RollingMedian, RollingPercentile, MAD, EMA, Wilder, ATR, WMA, VWAP.
+- [x] `coreIndicatorKernel.ts` removed repeated EMA/RMA seed scans and RSI `slice().reduce()` seeding; VWAP reuses one timezone formatter.
 - [x] Bollinger, Donchian, Stochastic, CCI and MFI use bounded state.
 - [x] `indicatorKernel.ts` no longer uses per-bar rolling `slice`, repeated `reduce`, sort or spread max/min implementations.
 - [x] Full-history `*Series` helpers perform one chronological pass.

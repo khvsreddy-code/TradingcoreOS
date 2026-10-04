@@ -126,8 +126,8 @@ The standard rolling family covered by this architecture includes Bollinger, Don
 |---|---|---:|
 | SMA / rolling sum | `RollingMean` / `RollingSum` | O(1) |
 | Bollinger / variance | `RollingMean` + `RollingVariance` | O(1) |
-| Donchian / extrema | monotonic deque | amortized O(1) |
-| Stochastic | extrema + bounded smoothers | amortized O(1) |
+| Donchian / rolling extrema | bounded segment tree with point replacement | O(log period) |
+| Stochastic | bounded extrema + smoothers | O(log period) |
 | CCI / MAD | running mean + ordered state | O(log period) |
 | MFI | rolling positive/negative sums | O(1) |
 | Median / percentile | dual heap / ordered multiset | O(log period) expected |
