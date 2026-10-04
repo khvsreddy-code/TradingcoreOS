@@ -4,6 +4,7 @@ import type { Fill, Background, PriceLine } from './scene';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
 import type { InputSchema, InputValue } from './inputs';
+import type { DirtyRange } from './patch';
 
 /** Declaration metadata from the Pine `indicator()` / `strategy()` call. */
 export interface IndicatorMeta {
@@ -33,6 +34,8 @@ export type PaneAxis = 'none' | { bands: PaneAxisBand[] };
  * on the renderer. Renderer-neutral.
  */
 export interface IndicatorModel {
+    /** Exact timeline span invalidated by this execution. Consumers can avoid inferring it from payload size. */
+    dirty?: DirtyRange;
     /** Per-instance id (stable). */
     id: string;
     /** Full display name (picker, inspect, and every surface with no {@link shorttitle}). */
