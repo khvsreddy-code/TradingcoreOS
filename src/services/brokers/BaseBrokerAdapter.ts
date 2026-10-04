@@ -180,8 +180,9 @@ export abstract class BaseBrokerAdapter implements BrokerAdapter {
 
 function isHistoricalColumns(value: unknown): value is HistoricalCandleColumns {
   if (!isRecord(value)) return false;
-  const keys = ['time','open','high','low','close','volume'] as const;
-  if (!keys.every((key) => Array.isArray(value[key]) || ArrayBuffer.isView(value[key] as never))) return false;
+  const keys = ['time', 'open', 'high', 'low', 'close', 'volume'] as const;
+  if (!keys.every((key) => Array.isArray(value[key]))) return false;
   if (value.timeUnit !== 'milliseconds' && value.timeUnit !== 'seconds') return false;
-  return keys.every((key) => (value[key] as unknown[]).length === (value.time as unknown[]).length);
+  const length = (value.time as unknown[]).length;
+  return keys.every((key) => (value[key] as unknown[]).length === length);
 }
