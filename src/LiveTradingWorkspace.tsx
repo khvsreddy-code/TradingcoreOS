@@ -136,8 +136,27 @@ export function LiveTradingWorkspace() {
 
   useEffect(() => {
     const openBroker = () => setBrokerStatusOpen(true);
+    const openProfile = () => workspaceRef.current?.togglePanel('tco.account', true);
+    const togglePrimary = () => {
+      const workspace = workspaceRef.current;
+      if (!workspace) return;
+      workspace.togglePanel('tco.bookmarks');
+    };
     window.addEventListener('tco:open-broker', openBroker);
-    return () => window.removeEventListener('tco:open-broker', openBroker);
+    window.addEventListener('tco:open-profile-panel', openProfile);
+    window.addEventListener('tco:toggle-primary-panel', togglePrimary);
+    return () => {
+      window.removeEventListener('tco:open-broker', openBroker);
+      window.removeEventListener('tco:open-profile-panel', openProfile);
+      window.removeEventListener('tco:toggle-primary-panel', togglePrimary);
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      workspaceRef.current?.saveNow();
+    }, 15 * 60 * 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
