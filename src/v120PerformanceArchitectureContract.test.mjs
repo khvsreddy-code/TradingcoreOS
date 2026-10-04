@@ -5,6 +5,7 @@ const read = (file) => fs.readFileSync(file, 'utf8');
 
 const runtime = read('src/services/coreSpirit/runtime.ts');
 const vector = read('src/services/coreSpirit/seriesVector.ts');
+const kernels = read('src/services/coreSpirit/statefulIndicatorKernel.ts');
 const patch = read('vendor/vela/src/core/model/patch.ts');
 const diffEngine = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
 const native = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
@@ -24,7 +25,7 @@ const storage = read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 
 assert.match(semantic, /function builtinDeterminism/);
 assert.match(semantic, /const deterministic = ins\.op === 'call' \? builtinDeterminism/);
-assert.match(vector, /copyFrom\(source: MonotonicDeque/);
+assert.match(kernels, /class MonotonicDeque/);
 assert.match(vector, /clone\(\): CoreSpiritFusedSeriesCursor/);
 assert.match(runtime, /fusedCursorSnapshots/);
 assert.match(runtime, /cursor\.clone\(\)/);
@@ -40,13 +41,9 @@ assert.match(tcoRuntime, /Math\.min\(5000/);
 
 assert.match(workspace, /hasConnectedBroker\(\)/);
 assert.match(workspace, /Promise\.all\(\[brokerReady, defaultsPromise\]\)/);
-assert.match(workspace, /animations:/);
-assert.match(workspace, /zoom: 280/);
-assert.match(workspace, /pan: 340/);
-assert.match(workspace, /scroll: 400/);
-assert.match(workspace, /autoscale: 300/);
-assert.match(workspace, /intro: \{ style: 'grow', duration: 1200 \}/);
-assert.match(css, /--tco-accent: #7c5cff/);
+assert.match(workspace, /animations: false/);
+assert.match(css, /#d3ebf4/);
+assert.match(css, /tco-live-surface/);
 assert.match(css, /--tco-motion-normal: 260ms/);
 assert.match(navbar, /var\(--tco-accent\)/);
 assert.match(shell, /var\(--tco-accent\)/);
