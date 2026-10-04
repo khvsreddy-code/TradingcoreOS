@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
-const kernel = read('src/services/marketData/incrementalIndicatorKernel.ts');
+const kernel = read('src/services/coreSpirit/statefulIndicatorKernel.ts');
 const engine = read('src/services/marketData/incrementalIndicatorEngine.ts');
 const indicatorEngine = read('src/services/marketData/indicatorEngine.ts');
 const worker = read('src/services/marketData/indicator.worker.ts');
@@ -11,9 +11,8 @@ const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const live = read('src/components/workspace/LiveChart.tsx');
 const settings = read('src/components/indicators/IndicatorSettingsPanel.tsx');
 const viewer = read('src/components/indicators/IndicatorCodeViewer.tsx');
-const tracker = read('TRADINGCORE_REPAIR_TRACKER.md');
 const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
-const history = read('docs/history/v107-incremental-indicator-execution.md');
+const history = read('docs/archive/history/v107-incremental-indicator-execution.md');
 
 for (const token of [
   'class RollingMean', 'class RollingVariance', 'class RollingMinMax', 'class RollingSum',
@@ -45,9 +44,6 @@ if (!/if\(!preserveWorkerSeries\)/.test(live)) throw new Error('Legacy renderer 
 if (!/IndicatorCodeViewer/.test(live) || !/title="Indicator settings"/.test(live) || !/title="View indicator code"/.test(live)) throw new Error('Live indicator dialogue settings/code actions missing');
 if (!/Settings2/.test(settings) || !/Code2/.test(settings) || !/> Code<\//.test(settings)) throw new Error('Indicator settings panel gear/code affordances missing');
 if (!/getIndicatorSourceTemplate/.test(viewer) || !/navigator\.clipboard/.test(viewer)) throw new Error('Indicator code viewer source/copy path missing');
-for (const token of ['TC-PERF-42','TC-PERF-43','TC-PERF-44','TC-PERF-45','TC-PERF-46','TC-PERF-47','TC-PERF-48','TC-PERF-49']) {
-  if (!tracker.includes(token)) throw new Error(`Repair tracker item missing: ${token}`);
-}
 for (const token of ['v107 incremental indicator execution','RollingAbsoluteDeviation','series.update','IndicatorCodeViewer']) {
   if (!buildTracker.includes(token) && !history.includes(token)) throw new Error(`v107 documentation marker missing: ${token}`);
 }
