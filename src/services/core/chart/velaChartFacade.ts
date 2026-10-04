@@ -31,6 +31,7 @@ export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 export type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../../../vendor/vela/src/core/model/columnar-bars';
 export { registerSidePanel, unregisterSidePanel, registerWidgetAction, unregisterWidgetAction } from '../../../../vendor/vela/src/widget/contributions';
 export type { SidePanelDescriptor, SidePanelHandle, SidePanelHeader, WidgetActionDescriptor, WidgetContext } from '../../../../vendor/vela/src/widget/contributions';
+export type { VelaStorage } from '../../../../vendor/vela/src/widget/persist';
 
 export type IChartApi = VelaChartFacade;
 export type ISeriesApi<T = string> = VelaSeriesFacade<T>;
