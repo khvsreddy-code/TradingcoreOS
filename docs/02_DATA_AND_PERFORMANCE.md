@@ -176,3 +176,29 @@ Browser verification can inspect `window.__TCO_PERF__`. Actual browser/deployed 
 3. A 5,000-bar historical prepend does not imply a full retained-series renderer replacement.
 4. Columnar data remains the canonical market-data representation through the hot path.
 5. Compatibility object materialization is explicit and measurable.
+
+## v128 — deep performance closure
+
+### Stateful mathematical kernels
+
+The canonical CoreSpirit kernel layer now owns bounded-period primitives used by the runtime and market-data indicator engine. The market-data compatibility module is a re-export, so new code does not create a second kernel implementation.
+
+Rolling sum/mean/variance are O(1) append/replace operations; min/max use monotonic deques; median uses bounded dual-heap state; percentile and mean-absolute-deviation use an ordered statistic structure; EMA/Wilder/ATR/WMA/VWAP use persistent state machines. Forming-bar updates use replacement state rather than rebuilding a window.
+
+Standard indicators such as Bollinger, Donchian, Stochastic, CCI and MFI therefore execute as approximately O(N) over history for their bounded rolling portions, with O(log P) expected work only for ordered-statistic operations.
+
+### Columnar deep backfill
+
+Vela's retained history is now columnar through the backward paging path as well as the renderer path. The engine asks the provider for `loadRangeColumns`, prepends the returned typed columns directly into `ColumnarHistoryTape`, and sends the same retained columns to the renderer.
+
+On identity price charts, only the newly introduced compatibility head page is materialized into `OHLCV[]`; the already-retained tail is reused by reference. Full compatibility rebuilding remains isolated to transformed price styles or an explicit fallback.
+
+### Dirty-span closure
+
+Backfill calculates a causal dirty span using the newly prepended region plus the maximum registered lookback. CoreSpirit evaluates that bounded range, `IndicatorModel.dirty` carries the exact time span, `rangeSeriesDelta` finds binary time bounds, and Vela applies `replace-range` only to the changed section.
+
+### Telemetry
+
+Native Vela telemetry now reports p95 frame duration, FPS estimate, 16.67ms frame-budget misses, budget-miss rate, long-frame count and rendering backend. A bounded 240-sample frame history is maintained without per-frame allocation.
+
+Browser verification accepts multiple URLs/cell-count expectations through `TCO_BROWSER_URLS` and `TCO_EXPECTED_CELLS`, with an optional `TCO_MAX_P95_FRAME_MS` gate.
