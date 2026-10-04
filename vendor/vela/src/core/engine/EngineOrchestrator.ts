@@ -1821,7 +1821,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 this.bars[this.bars.length - 1] = viewBar;
             }
         } else if (!Number.isFinite(lastTime) || bar.time > lastTime) {
-            this.rawTape.appendRow(bar);
+            this.rawTape.appendValues(bar.time, bar.open, bar.high, bar.low, bar.close, bar.volume);
             // A new bar opened, so the one before it is now FINAL — the distinction
             // `script:run` carries as `cause: 'bar'`.
             this.barCause = 'bar';
