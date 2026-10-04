@@ -19,6 +19,13 @@ for(const name of ['bollinger','donchian','stochastic','cci','mfi']) assert.matc
 assert.doesNotMatch(runtime,/trHistory\.slice\(-length\)\.reduce/);
 assert.doesNotMatch(marketKernel,/gains\.slice\(0,p\)\.reduce/);
 assert.doesNotMatch(marketKernel,/for\(let j=i-p\+1;j<=i;j\+=1\)/);
+assert.match(stateful,/mode==='replace'\\s*\\&\\&this\\.count/);
+assert.match(stateful,/this\\.replaceCurrentSlot\\(v\\)/);
+assert.match(stateful,/this\\.tree\\.set\\(slot,v\\)/);
+assert.match(legacy,/RollingMean/);
+assert.match(legacy,/RollingVariance/);
+assert.match(legacy,/RollingMinMax/);
+assert.match(runtime,/maxLookback/);
 
 for(const method of ['timeAt','lastIndexAtOrBefore','firstIndexAtOrAfter','countTimeRange']) assert.match(tape,new RegExp(method+'\\('));
 assert.match(vela,/rawTape\.countTimeRange/); assert.match(vela,/rawTape\.lastIndexAtOrBefore/); assert.match(vela,/rawTape\.timeAt/);
