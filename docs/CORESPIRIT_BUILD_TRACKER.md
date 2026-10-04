@@ -3763,3 +3763,24 @@ v123 deepens the existing v119–v122 performance work instead of replacing it. 
 - [ ] Browser verification of first 5k paint, left-edge 5k prepend, live forming-bar patching and workspace motion.
 
 The v123 contract is additive: no PineScript/PineTS compatibility path, no second chart vendor, no broker authority in CoreSpirit, and no renderer-specific language semantics are introduced.
+
+### v128 deep performance closure — 2026-10-04
+
+- [x] Promoted stateful rolling indicator kernels into the canonical CoreSpirit layer; market-data kernel module is a compatibility re-export.
+- [x] Added parity coverage for RollingSum/Mean/Variance/MinMax/Median/Percentile/MAD/EMA/Wilder/ATR/WMA/VWAP, including forming-bar replacement.
+- [x] Removed CoreSpirit runtime dependence on repeated `window()` history slices for bounded direct series built-ins.
+- [x] Extended Vela's `ColumnarHistoryTape` with zero-object `prependColumns()`.
+- [x] Added Vela `loadRangeColumns` feed seams and routed FYERS backward pages through compact columns.
+- [x] Deep-history identity charts materialize only the new compatibility head page; transformed styles retain the explicit projection fallback.
+- [x] Kept exact causal dirty-span execution: new head + maximum registered lookback → CoreSpirit range execution → `replace-range` Vela patch.
+- [x] Added p95/FPS/frame-budget telemetry with a bounded 240-sample native frame ring.
+- [x] Deepened browser verification for multiple URL/cell-count cases and configurable p95 frame thresholds.
+- [x] Consolidated versioned docs under `docs/archive/history/` and archived compatibility copies under `docs/archive/compatibility/`.
+- [x] Added `TRADINGCORE_V128` CI contract and stateful-kernel parity suite.
+
+### Remaining architectural debt after v128
+
+- [ ] Move the remaining Vela session/replay/drawing compatibility consumers from `OHLCV[]` to the columnar history ABI.
+- [ ] Replace residual whole-history advanced indicators (group/day/structural calculations where applicable) with incremental state only when their semantics permit it; do not force rolling abstractions onto non-rolling logic.
+- [ ] Connect runtime dirty-span telemetry to user-facing performance diagnostics so a slow update can be attributed to transport, compute, patch or frame stages.
+- [ ] Execute authenticated browser verification against a deployed/live environment and capture 1/4/8-chart measurements; source-level contracts are not a substitute for that runtime measurement.
