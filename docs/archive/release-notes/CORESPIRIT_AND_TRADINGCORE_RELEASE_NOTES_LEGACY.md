@@ -1688,3 +1688,38 @@ No broker transport, history pagination, live quote heartbeat, chart data plane,
 - `TRADINGCORE_V100_TERMINAL_VISUAL_DENSITY_CONTRACT_OK`
 - Existing contract suite remains the required regression gate.
 - Full dependency-backed typecheck/build remains deployment-environment dependent when dependencies are unavailable in the archive.
+
+# SOURCE: CORESPIRIT_V94_DATA_PLANE_RELEASE_NOTES.md
+
+# TradingCoreOS v94 — zero-copy canonical chart data plane
+
+## Scope
+
+v94 deepens chart/data performance while preserving the current Lightweight Charts production renderer.
+
+## Implemented
+
+- MarketDataStore is the canonical columnar market-data plane.
+- ColumnarCandleStore remains a compatibility class over MarketDataStore.
+- Added OI, bid/ask, bid/ask volume, trade count, session and metadata storage.
+- Added timeline-aligned IndicatorStore, ModelStore, StructureStore, LiquidityStore and OrderFlowStore.
+- Added zero-object ChartLodIndex with geometric capacity growth.
+- Added incremental LOD dirty-bucket updates for realtime changes.
+- Added retained ChartGpuCandleBuffer.
+- Added native WebGL2 instanced candle rendering and partial GPU buffer uploads.
+- Removed object-row/legacy LOD materialization from ChartCore's native path.
+- Kept Lightweight Charts object conversion isolated to its compatibility adapter.
+- Added zero-copy canonical data-plane and renderer-migration documentation.
+
+## Explicit non-goals
+
+- Lightweight Charts was still the production backend at v94.
+- Native WebGL2 was still experimental.
+- SharedArrayBuffer adoption was not forced in v94.
+- v94 did not claim TradingView-level renderer parity.
+
+## Verification
+
+Focused chart TypeScript compilation and dependency-free runtime/source contracts passed.
+
+---
