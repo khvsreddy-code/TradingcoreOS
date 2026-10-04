@@ -179,7 +179,7 @@ export class CoreSpiritSeriesStore {
       existed: existing !== undefined,
       original: existing,
       originalLength: existing?.length ?? 0,
-      replaced: false;
+      replaced: false,
       removed: [],
     });
   }
