@@ -29,16 +29,16 @@ class MonotonicDeque {
 
 abstract class RollingBase {
   protected readonly capacity: number;
-  protected readonly buffer: number[];
-  protected readonly versions: number[];
+  protected readonly buffer: Float64Array;
+  protected readonly versions: Uint32Array;
   protected cursor = 0;
   protected count = 0;
   protected absoluteIndex = 0;
   protected latestValue: number | null = null;
   constructor(period: number) {
     this.capacity = Math.max(1, Math.floor(period));
-    this.buffer = new Array(this.capacity).fill(0);
-    this.versions = new Array(this.capacity).fill(0);
+    this.buffer = new Float64Array(this.capacity);
+    this.versions = new Uint32Array(this.capacity);
   }
   protected slotForCurrent() { return (this.cursor - 1 + this.capacity) % this.capacity; }
   protected appendSlot(value: number) {
