@@ -50,6 +50,8 @@ export function LiveTradingWorkspace() {
 
       workspace = new VelaWorkspace(host.current, {
         layout: initialLayout,
+        provider: 'tco',
+        brand: 'TradingCoreOS × Vela',
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
         bars: 5000,
@@ -127,13 +129,16 @@ export function LiveTradingWorkspace() {
       if (!workspace) return;
       workspace.togglePanel('tco.bookmarks');
     };
+    const toggleJournal = () => { workspaceRef.current?.togglePanel('tco.journal'); };
     window.addEventListener('tco:open-broker', openBroker);
     window.addEventListener('tco:open-profile-panel', openProfile);
     window.addEventListener('tco:toggle-primary-panel', togglePrimary);
+    window.addEventListener('tco:toggle-journal-panel', toggleJournal);
     return () => {
       window.removeEventListener('tco:open-broker', openBroker);
       window.removeEventListener('tco:open-profile-panel', openProfile);
       window.removeEventListener('tco:toggle-primary-panel', togglePrimary);
+      window.removeEventListener('tco:toggle-journal-panel', toggleJournal);
     };
   }, []);
 
@@ -159,7 +164,7 @@ export function LiveTradingWorkspace() {
   return (
     <div
       ref={host}
-      className="fixed inset-0 z-[100] bg-[#050609]"
+      className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
       aria-label="TradingCoreOS Vela live trading chart"
     >
       {brokerStatusOpen && (

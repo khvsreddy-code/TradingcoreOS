@@ -16,6 +16,7 @@ const QUICK_TOOLS: readonly DrawingTypeKey[] = [
 
 const CSS = `
 .vela-alt-wheel {
+    --tco-wheel-highlight: #7c5cff;
     position: absolute;
     left: 0;
     top: 0;

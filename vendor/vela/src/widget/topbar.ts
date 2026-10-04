@@ -26,6 +26,7 @@ const CSS = `
     font-size: var(--vela-font-size-md);
     flex: none;
 }
+.vela-widget-brand { display:inline-flex; align-items:center; padding:0 10px 0 2px; color:var(--vela-fg-bright); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; font-weight:900; letter-spacing:.055em; text-transform:uppercase; white-space:nowrap; text-shadow:1px 0 0 currentColor; }
 .vela-widget-symbol, .vela-widget-tf, .vela-widget-style, .vela-widget-indicators, .vela-widget-action-left {
     all: unset;
     display: inline-flex;
@@ -169,6 +170,7 @@ export function priceStyleIcon(id: string): string | undefined {
 }
 
 export interface TopbarOptions {
+    brand?: string;
     symbol: string;
     onSymbolClick?: () => void;
     timeframe: string;
@@ -281,6 +283,8 @@ export class Topbar {
 
         this.el = doc.createElement('div');
         this.el.className = 'vela-widget-topbar';
+        const brand = opts.brand?.trim() ? doc.createElement('span') : null;
+        if (brand) { brand.className = 'vela-widget-brand'; brand.textContent = opts.brand!.trim(); brand.setAttribute('aria-label', opts.brand!.trim()); }
         this.symbolEl = doc.createElement('button');
         this.symbolEl.className = 'vela-widget-symbol';
         // The button DISPLAYS the bare ticker; the venue-prefixed identity stays in the
@@ -428,7 +432,7 @@ export class Topbar {
         const right = doc.createElement('span');
         right.className = 'vela-topbar-right';
         right.append(...sideEls(this.comp.right, false));
-        this.el.append(...sideEls(this.comp.left, true), right);
+        this.el.append(...(brand ? [brand] : []), ...sideEls(this.comp.left, true), right);
         host.appendChild(this.el);
         this.renderTfChips();
         // Snap after layout; RO catches later reflows (symbol / timeframe length).
@@ -592,6 +596,7 @@ export class Topbar {
                 console.warn(`[vela] widget action "${action.id}": iconOnly needs an \`icon\` — rendering the label instead.`);
             }
             const b = doc.createElement('button');
+            b.dataset.velaActionId = action.id;
             // Left actions wear the primary-chrome styling (the built-in Indicators
             // button's own class list); right actions keep the compact tool look — and
             // icon-only ones on the right take the native 32px TOOL chrome outright,

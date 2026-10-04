@@ -94,6 +94,7 @@ export interface VelaWorkspaceOptions extends Omit<VelaOptions, 'height'>, VelaS
      *  dormant in the pool). No `cells` entry is needed — the top-level chart
      *  options seed the single chart. */
     layout?: string | LayoutDefinition | false;
+    brand?: string;
     /** Per-cell overrides of the top-level chart defaults, keyed by a FREE-FORM cell
      *  name — the name is the cell's durable IDENTITY (persistence, `sync` groups,
      *  `ws.cell(name)`), never its position: DECLARATION ORDER fills the layout's
@@ -443,7 +444,7 @@ export class VelaWorkspace {
         // presentation the mode overrides, while its charts still restore (first one
         // live, the rest dormant in the pool).
         this.monoLayout = opts.layout === false;
-        const optLayout = opts.layout === false || opts.layout === undefined ? '4' : opts.layout;
+        const optLayout = opts.layout === false || opts.layout === undefined ? '1' : opts.layout;
         this.def = this.resolveLayout(this.monoLayout ? '1' : (boot?.layout && ensureLayout(boot.layout) ? boot.layout : optLayout));
         this.alertCap = Math.max(1, opts.alertCap ?? ALERT_CAP);
         // The topbar composition also gates the matching MOBILE entries (bar stop,
@@ -518,6 +519,7 @@ export class VelaWorkspace {
         // ── topbar (shared) — reflects the active cell; the layout dropdown reads the registry live ──
         this.topbar = new Topbar(this.root, {
             symbol: '',
+            brand: opts.brand,
             // RAW option, not the resolved lists — the bar distinguishes a host-declared
             // side (list is law) from a default one (an override's `order` may flow).
             composition: opts.topbar,
