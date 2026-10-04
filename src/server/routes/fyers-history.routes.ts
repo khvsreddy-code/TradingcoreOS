@@ -59,6 +59,38 @@ function canonicalFyersSymbol(value: string): string {
   return raw;
 }
 
+function normalizeColumns(rows: any[], limit: number) {
+  const sorted: Array<[number, number, number, number, number, number]> = [];
+  for (const row of rows || []) {
+    if (!Array.isArray(row) || row.length < 5) continue;
+    const raw = Number(row[0]);
+    const time = raw > 1e12 ? raw : raw * 1000;
+    const open = Number(row[1]), high = Number(row[2]), low = Number(row[3]), close = Number(row[4]);
+    if (!Number.isFinite(time) || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) continue;
+    sorted.push([time, open, high, low, close, Number.isFinite(Number(row[5])) ? Number(row[5]) : 0]);
+  }
+  sorted.sort((a, b) => a[0] - b[0]);
+  const time: number[] = [], open: number[] = [], high: number[] = [], low: number[] = [], close: number[] = [], volume: number[] = [];
+  let previous = Number.NaN;
+  const start = Math.max(0, sorted.length - limit);
+  for (let i = start; i < sorted.length; i += 1) {
+    const row = sorted[i]!;
+    if (row[0] === previous) continue;
+    previous = row[0];
+    time.push(row[0]); open.push(row[1]); high.push(row[2]); low.push(row[3]); close.push(row[4]); volume.push(row[5]);
+  }
+  return { time, open, high, low, close, volume, timeUnit: 'milliseconds' as const };
+}
+
+function columnsFromCandleRows(rows: any[]) {
+  const time: number[] = [], open: number[] = [], high: number[] = [], low: number[] = [], close: number[] = [], volume: number[] = [];
+  for (const row of rows || []) {
+    const parsed = Date.parse(String(row?.timestamp || ''));
+    if (!Number.isFinite(parsed)) continue;
+    time.push(parsed); open.push(Number(row.open)); high.push(Number(row.high)); low.push(Number(row.low)); close.push(Number(row.close)); volume.push(Number.isFinite(Number(row.volume)) ? Number(row.volume) : 0);
+  }
+  return { time, open, high, low, close, volume, timeUnit: 'milliseconds' as const };
+}
 function normalize(rows: any[], limit: number): any[] {
   const byTime = new Map<number, any>();
   for (const row of rows || []) {
@@ -109,8 +141,8 @@ async function fallbackQuoteCandle(accessToken: string, symbol: string): Promise
   }];
 }
 
-const cache = new Map<string, { expiresAt: number; data: any[] }>();
-const inflight = new Map<string, Promise<any[]>>();
+const cache = new Map<string, { expiresAt: number; data: any }>();
+const inflight = new Map<string, Promise<any>>();
 
 fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
@@ -126,6 +158,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   const interval = String(req.query.interval || '').trim();
   const resolution = resolutionMap[interval] || interval;
   const beforeRaw = String(req.query.before || '').trim();
+  const columnar = String(req.query.format || '').toLowerCase() === 'columns';
   const beforeDate = beforeRaw ? new Date(beforeRaw) : null;
   if (beforeRaw && (!beforeDate || !Number.isFinite(beforeDate.getTime()))) {
     res.status(400).json({ success: false, error: 'before must be a valid ISO timestamp' });
@@ -142,11 +175,11 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   }
 
   const beforeKey = beforeDate ? beforeDate.toISOString() : 'latest';
-  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}:${beforeKey}`;
+  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}:${beforeKey}:${columnar ? 'columns' : 'rows'}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data: cached.data, requested: limit, returned: cached.data.length, cached: true, before: beforeDate?.toISOString() || null });
+    res.json({ success: true, data: cached.data, requested: limit, returned: columnar ? cached.data.time.length : cached.data.length, cached: true, before: beforeDate?.toISOString() || null });
     return;
   }
 
@@ -155,7 +188,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     try {
       const data = await existing;
       res.setHeader('Cache-Control', 'private, max-age=20');
-      res.json({ success: true, data, requested: limit, returned: data.length, cached: true, before: beforeDate?.toISOString() || null });
+      res.json({ success: true, data, requested: limit, returned: columnar ? data.time.length : data.length, cached: true, before: beforeDate?.toISOString() || null });
     } catch (error: any) {
       res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
     }
@@ -194,19 +227,24 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
         throw new Error(payload?.message || `Fyers history failed (${response.status})`);
       }
-      let data = normalize(payload?.candles || [], limit);
-      if (!beforeDate && data.length < 2) {
+      let data = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
+      const dataLength = columnar ? data.time.length : data.length;
+      if (!beforeDate && dataLength < 2) {
         const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
-        if (seed.length) data = seed;
+        if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
       }
-      if (!data.length) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
+      const finalLength = columnar ? data.time.length : data.length;
+      if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
     });
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
-    res.json({ success: true, data, requested: limit, returned: data.length, before: beforeDate?.toISOString() || null, oldestTimestamp: data[0]?.timestamp || null, newestTimestamp: data[data.length - 1]?.timestamp || null, liveSeed: data.length === 1 && data[0]?.liveSeed === true });
+    const returned = columnar ? data.time.length : data.length;
+    const oldestTimestamp = columnar ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
+    const newestTimestamp = columnar ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
+    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !columnar && data.length === 1 && data[0]?.liveSeed === true });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
   } finally {
