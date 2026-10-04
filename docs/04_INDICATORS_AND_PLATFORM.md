@@ -111,3 +111,11 @@ sort(...)
 ```
 
 inside historical loops when a canonical stateful kernel exists. The compiler/runtime should absorb this complexity so CoreSpirit scripts remain simple while execution stays bounded.
+
+## v128 — one canonical stateful kernel layer
+
+`src/services/coreSpirit/statefulIndicatorKernel.ts` is the canonical bounded-state math layer. The older market-data kernel module is now a compatibility re-export, preventing the two subsystems from drifting into separate implementations.
+
+Every bounded rolling primitive supports `append` and, where semantically valid, `replace` for a forming candle. Authors should express the calculation normally in CoreSpirit; the runtime absorbs ring buffers, monotonic queues and ordered statistics.
+
+The standard rolling family covered by this architecture includes Bollinger, Donchian, Stochastic, CCI, MFI, rolling median/percentile, EMA/RMA, ATR and VWAP. A bounded structural algorithm may still use a fixed-size or centered scan when its cost is independent of user-selected period, but arbitrary `O(N × period)` window construction is prohibited.
