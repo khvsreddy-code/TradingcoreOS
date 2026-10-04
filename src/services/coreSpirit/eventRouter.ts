@@ -58,16 +58,6 @@ export class CoreSpiritEventRouter {
   scriptWebhook(payload: CoreEventMap['script.webhook']): void { this.emit('script.webhook', payload); }
   executionIntent(source: string, payload: unknown): void { this.emit('execution.intent', { source, payload } as CoreEventMap['execution.intent']); }
 
-  scriptEvent(scriptId: string, time: number, name: string, metadata?: Record<string, unknown>): void { this.emit('script.event', { scriptId, time, name, metadata }); }
-
-  executionIntent(source: string, intent: Record<string, unknown>): void { this.emit('execution.intent', { source, payload: intent }); }
-
-  scriptSignal(scriptId: string, time: number, type: string, metadata?: Record<string, unknown>): void { this.emit('script.signal', { scriptId, time, type, metadata }); }
-
-  scriptAlert(scriptId: string, time: number, payload: Record<string, unknown>): void { this.emit('script.alert', { scriptId, time, payload }); }
-
-  scriptWebhook(scriptId: string, time: number, endpoint: string | undefined, payload: Record<string, unknown>): void { this.emit('script.webhook', { scriptId, time, endpoint, payload }); }
-
   isTransactionActive(): boolean { return this.transactionActive; }
   getTransactionId(): string | undefined { return this.transactionId; }
   getPendingCount(): number { return this.buffered.length; }
