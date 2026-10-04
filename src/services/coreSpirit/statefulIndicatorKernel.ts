@@ -89,6 +89,7 @@ export class RollingMax {
     return { count: snapshot.count, value: snapshot.max };
   }
   value(): number | null { return this.state.max(); }
+  get latest(): number | null { return this.state.latest; }
   get size(): number { return this.state.size; }
   reset(): void { this.state.reset(); }
 }
