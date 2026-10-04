@@ -26,7 +26,7 @@ FYERS compact columns
 - [x] Median/percentile/MAD use ordered state rather than sorting every period window.
 - [x] EMA/Wilder/ATR/WMA/VWAP use persistent state.
 - [x] Bollinger, Donchian, Stochastic, CCI and MFI use stateful primitives.
-- [x] Scalar `indicatorKernel.ts` compatibility helpers no longer use period-window `slice/reduce/spread` implementations.
+- [x] Scalar `coreIndicatorKernel.ts` delegates standard math to canonical stateful kernels without period-window rescans.
 - [x] Existing deep parity tests cover append and forming-bar replacement.
 - [x] Structural fractal detection uses centered monotonic-extrema traversal instead of an inner period loop.
 - [x] Structural zone mitigation uses one ATR pass plus threshold heaps instead of repeated historical ATR/future-candle scans.
