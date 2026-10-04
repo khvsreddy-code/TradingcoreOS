@@ -347,3 +347,11 @@ This is the intended rule:
 history -> setData once -> live tail patches -> style state patches -> affected overlay patches -> repaint only invalidated surfaces.
 
 No live tick should reconstruct a 20k-point series merely because the chart has 20k loaded bars.
+
+## v122 — Vela typecheck and history-demand hardening
+
+The Vela engine's 5,000-bar left-edge demand path now has explicit trigger/cap constants in the engine module, preventing undefined-symbol regressions while preserving the 5k page contract.
+
+The retained collection diff path is typed against heterogeneous renderer collections through an explicit `unknown[]` delta boundary. This keeps the patch ABI renderer-neutral while retaining concrete collection types at their source.
+
+The native latest-price chrome now reads the current candle through SceneGraph scalar accessors and no longer references an out-of-scope legacy bar variable.

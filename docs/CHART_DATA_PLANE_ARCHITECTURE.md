@@ -568,3 +568,9 @@ This is the intended rule:
 history -> setData once -> live tail patches -> style state patches -> affected overlay patches -> repaint only invalidated surfaces.
 
 No live tick should reconstruct a 20k-point series merely because the chart has 20k loaded bars.
+
+## v122 — 5k Fyers chart path and hot-window behavior
+
+The production Fyers chart path is bounded around a 5,000-candle hot window. Initial history is capped at 5k; older history is fetched only as the user approaches the loaded tape's left edge, in another 5k page. Requests are cached/deduplicated and older pages are merged into the shared chart data plane before the Vela columnar view is exposed.
+
+This is intentionally broker-first for time-to-first-candle: Supabase is used for user/workspace persistence, not as a latency-sensitive candle database. Canonical typed market data remains the hot chart transport.

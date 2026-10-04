@@ -3648,3 +3648,9 @@ This is the intended rule:
 history -> setData once -> live tail patches -> style state patches -> affected overlay patches -> repaint only invalidated surfaces.
 
 No live tick should reconstruct a 20k-point series merely because the chart has 20k loaded bars.
+
+## v122 — fused-kernel rollback/type safety
+
+The fused CoreSpirit series cursor is now rollback-safe at the stage level: each fused stage exposes a typed `copyFrom` state transfer, so realtime forming-bar revisions can clone/restore bounded kernel state without rebuilding any history-sized intermediate arrays.
+
+The execution model remains one chronological traversal: source value → fused stage state updates → final output write. Intermediate operation results live only in the cursor's scalar stage chain for the current bar.

@@ -73,6 +73,10 @@ const PREVIEW_BARS = 300;
  * their SOURCE decides what is paintable, snapshot by snapshot.)
  */
 const SINGLE_LOAD_BARS = 5_000;
+/** Start one 5k older-history request before the loaded tape is exhausted. */
+const LEFT_HISTORY_TRIGGER_BARS = 200;
+/** Hard client-side cap for a retained Vela history tape. */
+const MAX_HISTORY_BARS = 50_000;
 /**
  * Beyond {@link SINGLE_LOAD_BARS} the history loads BACKWARD in chunks of this many bars:
  * the chart is interactive after the first chunk while older ones stream in behind it
@@ -3123,7 +3127,7 @@ function shallowCollectionEqual(a: unknown, b: unknown): boolean {
     return true;
 }
 
-function incrementalCollectionDelta<T>(previous: readonly T[], current: readonly T[]): { op: 'append' | 'replace-last'; values: T[] } | null {
+function incrementalCollectionDelta(previous: readonly unknown[], current: readonly unknown[]): { op: 'append' | 'replace-last'; values: unknown[] } | null {
     if (current.length === previous.length) {
         if (current.length === 0) return null;
         const next = current[current.length - 1]!;

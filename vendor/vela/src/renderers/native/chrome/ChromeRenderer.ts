@@ -428,7 +428,7 @@ export class ChromeRenderer {
      * series itself is drawn: candle/bar body up-down, the line/area line color, or the
      * baseline side (above/below the baseline price).
      */
-    private priceElementColor(scene: SceneGraph, _coords: CoordinateSystem, theme: VelaTheme, open: number, close: number): string {
+    private priceElementColor(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, open: number, close: number): string {
         const st = scene.style;
         switch (scene.priceStyle) {
             case 'bars':
@@ -443,7 +443,7 @@ export class ChromeRenderer {
                 return close >= baseline ? (st.baseline.topLineColor ?? theme.upColor) : (st.baseline.bottomLineColor ?? theme.downColor);
             }
             default: // 'candles'
-                return last.close >= last.open ? theme.upColor : theme.downColor;
+                return close >= open ? theme.upColor : theme.downColor;
         }
     }
 

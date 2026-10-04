@@ -25,7 +25,7 @@ export function ChartToolbar({
   return <div className="absolute left-1 top-2 z-30 flex w-10 flex-col items-center gap-1 rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1 shadow-2xl backdrop-blur">
     {CORE_DRAWING_TOOLS.filter(tool => tool.uiReady).map(({ kind, label }) => {
       const Icon = icons[kind] || MousePointer2;
-      return <button key={kind} title={label} onClick={() => onSelectTool(kind)} className={`flex h-8 w-8 items-center justify-center rounded ${activeTool === kind ? 'bg-[#2563eb]/20 text-[#60a5fa]' : 'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}><Icon size={15} /></button>;
+      return <button key={kind} title={label} onClick={() => onSelectTool(kind)} className={`flex h-8 w-8 items-center justify-center rounded ${activeTool === kind ? 'bg-[var(--tco-accent)]/20 text-[var(--tco-accent-soft)]' : 'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}><Icon size={15} /></button>;
     })}
     <div className="my-1 h-px w-7 bg-[var(--tco-border)]" />
     <button title="Undo last drawing" onClick={onUndo} className="flex h-8 w-8 items-center justify-center rounded text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white"><Undo2 size={15} /></button>

@@ -859,3 +859,14 @@ This is the intended rule:
 history -> setData once -> live tail patches -> style state patches -> affected overlay patches -> repaint only invalidated surfaces.
 
 No live tick should reconstruct a 20k-point series merely because the chart has 20k loaded bars.
+
+## v122 — current CI repair
+
+Latest GitHub CI on `b6aa30b` had contracts/build passing and typecheck failing on five isolated errors. The fixes are:
+- CoreSpirit fused stage `copyFrom` for realtime rollback cloning.
+- Vela 5k history trigger/cap constants restored in `EngineOrchestrator`.
+- Heterogeneous retained collection delta typing corrected.
+- ChromeRenderer latest-price scope corrected.
+- Chart drawing toolbar active state now uses the TCO indigo-violet accent token instead of the old hardcoded blue.
+
+No trading logic or broker authorization behavior was changed by these compile repairs.

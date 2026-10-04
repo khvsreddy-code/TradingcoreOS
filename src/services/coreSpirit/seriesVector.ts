@@ -596,13 +596,18 @@ class FusedSeriesStage {
     return this.op;
   }
 
+  copyFrom(source: FusedSeriesStage): void {
+    if (source.op.name !== this.op.name || len(source.op) !== len(this.op)) throw new Error('incompatible fused stage state');
+    if (this.rolling && source.rolling) this.rolling.copyFrom(source.rolling);
+    if (this.median && source.median) this.median.copyFrom(source.median);
+    if (this.persistence && source.persistence) this.persistence.copyFrom(source.persistence);
+    if (this.ema && source.ema) this.ema.copyFrom(source.ema);
+    if (this.change && source.change) this.change.copyFrom(source.change);
+  }
+
   clone(): FusedSeriesStage {
     const next = new FusedSeriesStage(this.op);
-    if (this.rolling && next.rolling) next.rolling.copyFrom(this.rolling);
-    if (this.median && next.median) next.median.copyFrom(this.median);
-    if (this.persistence && next.persistence) next.persistence.copyFrom(this.persistence);
-    if (this.ema && next.ema) next.ema.copyFrom(this.ema);
-    if (this.change && next.change) next.change.copyFrom(this.change);
+    next.copyFrom(this);
     return next;
   }
 
