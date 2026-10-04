@@ -15,7 +15,7 @@ const facade = read('src/services/core/chart/velaChartFacade.ts');
 const renderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
 const markerModel = read('vendor/vela/src/core/model/series.ts');
 const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
-const schemaDoc = read('docs/INDICATOR_SETTINGS_SCHEMA.md');
+const schemaDoc = read('docs/04_INDICATORS_AND_PLATFORM.md');
 
 assert(exists('src/services/coreSpirit/indicatorAppearance.ts'), 'indicator appearance module missing');
 for (const token of ['IndicatorLineAppearance','IndicatorFillAppearance','IndicatorMarkerAppearance','IndicatorLevelAppearance','IndicatorPaneAppearance']) assert(appearance.includes(token), `appearance contract missing ${token}`);
