@@ -49,7 +49,7 @@ export function LiveTradingWorkspace() {
     if (!host.current) return;
 
     let workspace: VelaWorkspace | null = null;
-    let cleanupWorkspaceListeners: (() => void) | undefined;
+    const workspaceListenerDisposers: Array<() => void> = [];
     let cancelled = false;
 
     const mount = async () => {
@@ -67,7 +67,7 @@ export function LiveTradingWorkspace() {
         layout: defaults.layout || '4',
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
-        bars: 750,
+        bars: 5000,
         timeframes: ['1', '3', '5', '10', '15'],
         live: true,
         theme: 'dark',
@@ -100,14 +100,12 @@ export function LiveTradingWorkspace() {
       });
       workspaceRef.current = workspace;
       const bindActiveChart = () => undefined;
-      const offCell = workspace.on('cell:active', bindActiveChart);
-      const offLayout = workspace.on('layout:changed', bindActiveChart);
+      workspaceListenerDisposers.push(
+        workspace.on('cell:active', bindActiveChart),
+        workspace.on('layout:changed', bindActiveChart),
+      );
       bindActiveChart();
       workspaceRef.current = workspace;
-      cleanupWorkspaceListeners = () => {
-        offCell();
-        offLayout();
-      };
     };
 
     void mount();
@@ -115,7 +113,8 @@ export function LiveTradingWorkspace() {
     return () => {
       cancelled = true;
       workspaceRef.current = null;
-      cleanupWorkspaceListeners?.();
+      for (const dispose of workspaceListenerDisposers) dispose();
+      workspaceListenerDisposers.length = 0;
       workspace?.destroy();
     };
   }, []);
