@@ -41,8 +41,8 @@ assert.match(runtime,/maxLookback/);
 for(const method of ['timeAt','lastIndexAtOrBefore','firstIndexAtOrAfter','countTimeRange']) assert.match(tape,new RegExp(method+'\\('));
 assert.match(vela,/rawTape\.countTimeRange/); assert.match(vela,/rawTape\.lastIndexAtOrBefore/); assert.match(vela,/rawTape\.timeAt/);
 
-assert.match(engine,/notifyBars\(reason,dirtyRange\)/);
-assert.match(engine,/collectRange\(rangeResult\.outputs,dirtyRange\)/);
+assert.match(engine,/notifyBars\(reason\s*,\s*dirtyRange\)/);
+assert.match(engine,/collectRange\(rangeResult\.outputs\s*,\s*dirtyRange\)/);
 assert.match(engine,/executionStart = Math\.max\(0,start - maxLookback\)/);
 assert.doesNotMatch(engine,/reason === 'backfill'[\s\S]{0,700}points\.clear\(\)/);
 
