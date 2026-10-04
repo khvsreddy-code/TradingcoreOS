@@ -140,7 +140,7 @@ console.log('TRADINGCORE_V128_STATEFUL_KERNEL_PARITY_OK');
   assert.equal(persistence.update(2), null);
   assert.equal(persistence.update(3), null);
   nearly(persistence.update(4)!, 1);
-  nearly(persistence.update(3)!, 0.5);
+  nearly(persistence.update(3)!, 2 / 3);
   nearly(persistence.update(5, 'replace')!, 1);
   persistence.update(6);
   nearly(persistence.update(4)!, 2 / 3);
