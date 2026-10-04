@@ -59,11 +59,15 @@ function objectToSeries(
   const existing = points.get(id) || [];
   const time = Number(output.time);
   const value = output.value == null ? null : Number(output.value);
-  const index = existing.findIndex(point => Number(point.time) === time);
   const point: SeriesPoint = { time: time as SeriesPoint['time'], value: Number.isFinite(Number(value)) ? value : null };
-  if (index >= 0) existing[index] = point;
-  else existing.push(point);
-  existing.sort((a, b) => Number(a.time) - Number(b.time));
+  if (!existing.length || time > Number(existing[existing.length - 1]!.time)) existing.push(point);
+  else if (time === Number(existing[existing.length - 1]!.time)) existing[existing.length - 1] = point;
+  else {
+    let lo = 0, hi = existing.length;
+    while (lo < hi) { const mid = (lo + hi) >>> 1; if (Number(existing[mid]!.time) < time) lo = mid + 1; else hi = mid; }
+    if (lo < existing.length && Number(existing[lo]!.time) === time) existing[lo] = point;
+    else existing.splice(lo, 0, point);
+  }
   points.set(id, existing);
 }
 
@@ -89,7 +93,7 @@ function makeModel(
     kind: 'line',
     points: seriesPoints,
     style: {
-      color: index === 0 ? '#60a5fa' : '#38bdf8',
+      color: index === 0 ? '#9b8aff' : '#c4b5fd',
       width: 2,
       lineStyle: 'solid',
     },
@@ -201,7 +205,7 @@ export class CoreSpiritVelaEngine {
             time,
             position: output.metadata?.position === 'below' ? 'belowBar' : 'aboveBar',
             shape: output.metadata?.shape === 'arrowUp' ? 'arrowUp' : 'circle',
-            color: String(output.metadata?.color || '#60a5fa'),
+            color: String(output.metadata?.color || '#9b8aff'),
             text: String(output.type || 'SIGNAL'),
           });
         } else if (output.kind === 'hline') {
@@ -255,8 +259,14 @@ export class CoreSpiritVelaEngine {
     };
 
     const emitModel = (dirty?: DirtyRange) => {
-      const first = [...points.values()].flat()[0];
-      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markers, priceLines, first?.time, dirty));
+      let firstTime: number | undefined;
+      for (const values of points.values()) {
+        const value = values[0]?.time;
+        if (value == null) continue;
+        const time = Number(value);
+        if (firstTime == null || time < firstTime) firstTime = time;
+      }
+      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markers, priceLines, firstTime, dirty));
     };
 
     try {
