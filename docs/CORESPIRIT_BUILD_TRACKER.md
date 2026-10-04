@@ -102,3 +102,8 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 - [x] Appearance-only fields do not invalidate computation.
 - [x] Worker transport carries computation inputs separately from presentation metadata.
 - [x] Vela renderer-only fill mutation remains the presentation path.
+
+
+### v94 canonical data-plane inheritance
+- [x] v94 implementation record retained in the living tracker.
+- [x] zero-copy canonical chart data plane: typed market columns feed LOD/GPU/Vela-native paths without object conversion in the hot renderer path.
