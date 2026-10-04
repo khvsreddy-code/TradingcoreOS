@@ -21,9 +21,9 @@ function panelRoot(body: HTMLElement): HTMLDivElement {
 }
 
 const bookmarksPanel: SidePanelDescriptor = {
-  id: 'tco.bookmarks', title: 'Bookmarks', icon: 'star', order: 10, width: 300, resizable: true, minWidth: 240, maxWidth: 420,
+  id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 300, resizable: true, minWidth: 240, maxWidth: 420,
   mount(ctx, body, header) {
-    header.setTitle('Market bookmarks');
+    header.setTitle('Watchlist');
     const root = panelRoot(body);
     const meta = document.createElement('div');
     meta.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;';
@@ -144,6 +144,21 @@ const accountPanel: SidePanelDescriptor = {
 
 registerSidePanel(accountPanel);
 
+const brandAction: WidgetActionDescriptor = {
+  id: 'tco.brand', target: 'topbar', label: 'TradingCoreOS × Vela', iconOnly: false, align: 'left', order: 0, mobile: 'menu',
+  run() {},
+};
+
+const watchlistAction: WidgetActionDescriptor = {
+  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: false, align: 'right', order: 0, mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.bookmarks'); },
+};
+
+const journalAction: WidgetActionDescriptor = {
+  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: false, align: 'right', order: 1, mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.journal'); },
+};
+
 const panelsAction: WidgetActionDescriptor = {
   id: 'tco.panels', target: 'topbar', label: 'Panels', icon: 'layout', iconOnly: false, align: 'right', order: 2, mobile: 'menu',
   run() { window.dispatchEvent(new Event('tco:toggle-primary-panel')); },
@@ -161,6 +176,9 @@ const brokerAction: WidgetActionDescriptor = {
 
 registerSidePanel(bookmarksPanel);
 registerSidePanel(journalPanel);
+registerWidgetAction(brandAction);
+registerWidgetAction(watchlistAction);
+registerWidgetAction(journalAction);
 registerWidgetAction(panelsAction);
 registerWidgetAction(profileAction);
 registerWidgetAction(brokerAction);
