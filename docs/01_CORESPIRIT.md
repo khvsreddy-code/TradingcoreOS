@@ -73,7 +73,7 @@ source series
   → final output
 ```
 
-The current `seriesVector.ts` still contains a second private fused-state implementation. It is bounded and tested, but deduplication into the canonical kernel layer remains open and is tracked explicitly.
+`seriesVector.ts` now delegates fused stages to the canonical stateful kernel classes. It remains a fusion/execution planner, not a second mathematical kernel library.
 
 ## Indicator authoring
 
@@ -117,13 +117,13 @@ The fallback full recomputation path remains legal when a dependency cannot prov
 
 The runtime should optimize the user's source without expanding CoreSpirit into a large collection of manual optimization keywords. Stateful kernels, semantic scheduling, dirty ranges and fused execution are compiler/runtime machinery.
 
-## v130 deep kernel pass
+## v131 deep kernel pass
 
 - Scalar indicator compatibility helpers now route period work through the canonical stateful kernels rather than reconstructing windows with `slice/reduce/spread`.
 - The forming-bar replacement path for `RollingMinMax` is corrected so replacement does not advance the rolling cursor.
 - Recursive EMA/Wilder/ATR state keeps an explicit stable prior value; ATR replacements use the prior bar's close rather than the forming bar's own revised close.
 - The existing numerical kernel tests continue to serve as parity guards.
-- Kernel deduplication between `statefulIndicatorKernel.ts` and `seriesVector.ts` remains explicitly open.
+- Fused kernel deduplication is complete; the remaining deep phases are Vela's final columnar ABI, universal dirty-span propagation and authenticated browser/GPU verification.
 
 ## Authority boundary
 
