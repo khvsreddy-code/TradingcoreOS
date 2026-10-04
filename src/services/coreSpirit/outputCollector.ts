@@ -6,8 +6,9 @@ export class CoreSpiritOutputCollector {
 
   constructor(private readonly maxPerBar: number) {}
 
-  beginBar(): void {
+  beginBar(clear = false): void {
     this.count = 0;
+    if (clear) this.items.length = 0;
   }
 
   push(value: CoreSpiritObject): void {
