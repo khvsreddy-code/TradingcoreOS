@@ -1445,6 +1445,12 @@ export class VelaWorkspace {
         }
     }
 
+    /** Host-facing persistence hook. TCO uses this for periodic cloud autosave. */
+    saveNow(): void { this.persistNow(); }
+
+    /** Host-facing panel control; keeps Vela's dock as the sole panel owner. */
+    togglePanel(id: string, open?: boolean): void { this.dock.toggle(id, open); }
+
     /** Write the current state through the storage adapter now (fire-and-forget). */
     private persistNow(): void {
         if (this.persistKey === null || this.destroyed) return;
