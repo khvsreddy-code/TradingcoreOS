@@ -1,6 +1,6 @@
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { DynamicLevelSettings, getDynamicLevelSettings } from './levelSettings';
-import { RollingMean } from './incrementalIndicatorKernel';
+import { RollingMean, centeredRollingExtrema } from './incrementalIndicatorKernel';
 
 export type StructureSide = 'support' | 'resistance';
 export type StructureLevelSource = 'KDE' | 'FRACTAL' | 'CLUSTER';
