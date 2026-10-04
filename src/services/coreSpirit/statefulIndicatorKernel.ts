@@ -474,6 +474,12 @@ export class RollingMinMax extends RollingBase {
   min(){ return this.count===this.capacity ? this.tree.min() : null; }
   max(){ return this.count===this.capacity ? this.tree.max() : null; }
   reset(){ super.reset(); this.tree.clear(); }
+  copyFrom(source: RollingMinMax): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible rolling min/max state');
+    this.buffer.set(source.buffer); this.versions.set(source.versions);
+    this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
+    this.tree.copyFrom(source.tree);
+  }
 }
 export class RollingSum extends RollingBase {
   private sum = 0;
@@ -492,6 +498,123 @@ export class RollingSum extends RollingBase {
     this.buffer.set(source.buffer); this.versions.set(source.versions);
     this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
     this.sum = source.sum;
+  }
+}
+
+export class ChangeState {
+  private previous = Number.NaN;
+  constructor(private readonly percentage: boolean) {}
+  update(value: number): number {
+    const v = Number(value);
+    const previous = this.previous;
+    this.previous = v;
+    if (!Number.isFinite(v) || !Number.isFinite(previous)) return Number.NaN;
+    return this.percentage
+      ? previous === 0 ? Number.NaN : v / previous - 1
+      : v - previous;
+  }
+  reset(): void { this.previous = Number.NaN; }
+  copyFrom(source: ChangeState): void {
+    if (source.percentage !== this.percentage) throw new Error('incompatible change state');
+    this.previous = source.previous;
+  }
+}
+
+/** Exact rolling persistence of consecutive delta directions in O(1) amortized time. */
+export class RollingPersistenceState extends RollingBase {
+  private readonly signs: Int8Array;
+  private readonly comparisonValid: Uint8Array;
+  private readonly comparisonSame: Uint8Array;
+  private comparisons = 0;
+  private same = 0;
+  private validCount = 0;
+  private seen = 0;
+
+  constructor(period: number) {
+    super(period);
+    this.signs = new Int8Array(this.capacity);
+    this.comparisonValid = new Uint8Array(this.capacity);
+    this.comparisonSame = new Uint8Array(this.capacity);
+  }
+
+  update(value: number, mode: 'append' | 'replace' = 'append'): number | null {
+    const v = Number(value);
+    if (mode === 'replace' && this.count) {
+      // Replace the latest value and recompute only the two comparisons that
+      // can involve it. For a forming bar this is constant-time.
+      const latestSlot = this.slotForCurrent();
+      const previousIndex = this.absoluteIndex - 2;
+      const previousSlot = (latestSlot - 1 + this.capacity) % this.capacity;
+      const oldSign = this.signs[latestSlot]!;
+      const oldPreviousSign = this.signs[previousSlot]!;
+      if (this.comparisonValid[latestSlot]) {
+        this.comparisons -= 1; this.same -= this.comparisonSame[latestSlot] ? 1 : 0;
+        this.comparisonValid[latestSlot] = 0; this.comparisonSame[latestSlot] = 0;
+      }
+      this.replaceCurrentSlot(v);
+      const previousValue = this.count > 1 ? this.buffer[previousSlot]! : Number.NaN;
+      const sign = Number.isFinite(v) && Number.isFinite(previousValue)
+        ? (v > previousValue ? 1 : v < previousValue ? -1 : 0) : 0;
+      this.signs[latestSlot] = sign;
+      void oldSign; void oldPreviousSign; void previousIndex;
+      if (latestSlot !== previousSlot && sign !== 0 && oldPreviousSign !== 0) {
+        this.comparisonValid[latestSlot] = 1;
+        this.comparisonSame[latestSlot] = sign === oldPreviousSign ? 1 : 0;
+        this.comparisons += 1; this.same += sign === oldPreviousSign ? 1 : 0;
+      }
+      this.validCount = this.count;
+      return this.value();
+    }
+
+    const absoluteIndex = this.seen;
+    const slot = this.cursor;
+    const previousSlot = (absoluteIndex - 1 + this.capacity) % this.capacity;
+    const previousValue = absoluteIndex > 0 && this.count > 0 ? this.buffer[previousSlot]! : Number.NaN;
+    const previousSign = absoluteIndex > 0 ? this.signs[previousSlot]! : 0;
+
+    if (this.count === this.capacity) {
+      const comparisonSlot = (slot + 1) % this.capacity;
+      if (this.comparisonValid[comparisonSlot]) {
+        this.comparisons -= 1; this.same -= this.comparisonSame[comparisonSlot] ? 1 : 0;
+        this.comparisonValid[comparisonSlot] = 0; this.comparisonSame[comparisonSlot] = 0;
+      }
+    }
+
+    this.appendSlot(v);
+    const sign = Number.isFinite(v) && Number.isFinite(previousValue)
+      ? (v > previousValue ? 1 : v < previousValue ? -1 : 0) : 0;
+    this.signs[slot] = sign;
+    this.validCount += Number.isFinite(v) ? 1 : 0;
+
+    if (absoluteIndex >= 2 && sign !== 0 && previousSign !== 0) {
+      this.comparisonValid[slot] = 1;
+      this.comparisonSame[slot] = sign === previousSign ? 1 : 0;
+      this.comparisons += 1; this.same += sign === previousSign ? 1 : 0;
+    } else {
+      this.comparisonValid[slot] = 0; this.comparisonSame[slot] = 0;
+    }
+
+    this.seen += 1;
+    return this.value();
+  }
+
+  private value(): number | null {
+    return this.count === this.capacity && this.validCount === this.capacity && this.comparisons > 0
+      ? this.same / this.comparisons
+      : this.count === this.capacity && this.validCount === this.capacity ? 0 : null;
+  }
+
+  reset(): void {
+    super.reset(); this.signs.fill(0); this.comparisonValid.fill(0); this.comparisonSame.fill(0);
+    this.comparisons = 0; this.same = 0; this.validCount = 0; this.seen = 0;
+  }
+
+  copyFrom(source: RollingPersistenceState): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible rolling persistence state');
+    this.buffer.set(source.buffer); this.versions.set(source.versions);
+    this.signs.set(source.signs); this.comparisonValid.set(source.comparisonValid); this.comparisonSame.set(source.comparisonSame);
+    this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
+    this.comparisons = source.comparisons; this.same = source.same; this.validCount = source.validCount; this.seen = source.seen;
   }
 }
 
@@ -518,6 +641,10 @@ export class EMAState {
   }
   reset() { this.seed.reset(); this.valueState = null; this.previousOutput = null; this.currentInput = null; }
   get value() { return this.valueState; }
+  copyFrom(source: EMAState): void {
+    if (source.period !== this.period) throw new Error('incompatible EMA state');
+    this.seed.copyFrom(source.seed); this.valueState = source.valueState; this.previousOutput = source.previousOutput; this.currentInput = source.currentInput;
+  }
 }
 
 export class WilderState {
@@ -543,6 +670,10 @@ export class WilderState {
   }
   reset() { this.seed.reset(); this.valueState = null; this.previousOutput = null; this.currentInput = null; }
   get value() { return this.valueState; }
+  copyFrom(source: WilderState): void {
+    if (source.period !== this.period) throw new Error('incompatible Wilder state');
+    this.seed.copyFrom(source.seed); this.valueState = source.valueState; this.previousOutput = source.previousOutput; this.currentInput = source.currentInput;
+  }
 }
 
 export class ATRState {
@@ -561,6 +692,9 @@ export class ATRState {
   get trueRange() { return this.latestTR; }
   get value() { return this.wilder.value; }
   reset() { this.wilder.reset(); this.previousClose = null; this.latestTR = null; }
+  copyFrom(source: ATRState): void {
+    this.wilder.copyFrom(source.wilder); this.previousClose = source.previousClose; this.latestTR = source.latestTR;
+  }
 }
 
 export class WMAState extends RollingBase {
@@ -593,6 +727,12 @@ export class WMAState extends RollingBase {
     return this.count === p ? this.weighted / (p * (p + 1) / 2) : null;
   }
   reset() { super.reset(); this.weighted = 0; this.sum = 0; this.currentInput = null; }
+  copyFrom(source: WMAState): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible WMA state');
+    this.buffer.set(source.buffer); this.versions.set(source.versions);
+    this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
+    this.weighted = source.weighted; this.sum = source.sum; this.currentInput = source.currentInput;
+  }
 }
 
 export class VWAPSessionState {
