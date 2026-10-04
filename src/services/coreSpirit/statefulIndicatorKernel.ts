@@ -67,23 +67,30 @@ abstract class RollingBase {
   get latest() { return this.latestValue; }
 }
 
-/** O(1) bounded rolling minimum using the shared monotonic-deque state. */
-export class RollingMin extends RollingBase {
+/** Rolling minimum backed by the canonical forming-bar-safe extrema state. */
+export class RollingMin {
   private readonly state: RollingMinMax;
-  constructor(period:number){super(period);this.state=new RollingMinMax(period);}
-  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.value?.min??null};}
-  value():number|null{return this.state.min();}
-  reset(){super.reset();this.state.reset();}
-  private appendMirror(_value:number,_mode:'append'|'replace'):void{}
+  constructor(period: number) { this.state = new RollingMinMax(period); }
+  update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
+    const snapshot = this.state.update(value, mode);
+    return { count: snapshot.count, value: snapshot.min };
+  }
+  value(): number | null { return this.state.min(); }
+  get size(): number { return this.state.size; }
+  reset(): void { this.state.reset(); }
 }
-/** O(1) bounded rolling maximum using the shared monotonic-deque state. */
-export class RollingMax extends RollingBase {
+
+/** Rolling maximum backed by the canonical forming-bar-safe extrema state. */
+export class RollingMax {
   private readonly state: RollingMinMax;
-  constructor(period:number){super(period);this.state=new RollingMinMax(period);}
-  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.value?.max??null};}
-  value():number|null{return this.state.max();}
-  reset(){super.reset();this.state.reset();}
-  private appendMirror(_value:number,_mode:'append'|'replace'):void{}
+  constructor(period: number) { this.state = new RollingMinMax(period); }
+  update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
+    const snapshot = this.state.update(value, mode);
+    return { count: snapshot.count, value: snapshot.max };
+  }
+  value(): number | null { return this.state.max(); }
+  get size(): number { return this.state.size; }
+  reset(): void { this.state.reset(); }
 }
 
 export class RollingMean extends RollingBase {
@@ -101,6 +108,12 @@ export class RollingMean extends RollingBase {
   value() { return this.count === this.capacity ? this.sum / this.capacity : null; }
   reset() { super.reset(); this.sum = 0; }
   get sumValue() { return this.sum; }
+  copyFrom(source: RollingMean): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible rolling mean state');
+    this.buffer.set(source.buffer); this.versions.set(source.versions);
+    this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
+    this.sum = source.sum;
+  }
 }
 
 export class RollingVariance extends RollingBase {
@@ -123,6 +136,12 @@ export class RollingVariance extends RollingBase {
   get sumValue() { return this.sum; }
   reset() { super.reset(); this.sum = 0; this.sumSquares = 0; }
   get countValue() { return this.count; }
+  copyFrom(source: RollingVariance): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible rolling variance state');
+    this.buffer.set(source.buffer); this.versions.set(source.versions);
+    this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
+    this.sum = source.sum; this.sumSquares = source.sumSquares;
+  }
 }
 
 type OrderedNode = { key:number; priority:number; count:number; size:number; sum:number; left:OrderedNode|null; right:OrderedNode|null; };
@@ -432,6 +451,11 @@ class RollingExtremaTree {
   min():number { return this.minTree[1] ?? Number.POSITIVE_INFINITY; }
   max():number { return this.maxTree[1] ?? Number.NEGATIVE_INFINITY; }
   clear():void { this.minTree.fill(Number.POSITIVE_INFINITY); this.maxTree.fill(Number.NEGATIVE_INFINITY); }
+  copyFrom(source: RollingExtremaTree): void {
+    if (source.size !== this.size) throw new Error('incompatible rolling extrema tree');
+    this.minTree.set(source.minTree);
+    this.maxTree.set(source.maxTree);
+  }
 }
 
 /** Exact bounded rolling extrema. A segment tree is used because forming-bar replacement is a point update: unlike a plain monotonic deque, it never loses dominated values that may become extrema after replacement. */
@@ -442,7 +466,8 @@ export class RollingMinMax extends RollingBase {
     const v=Number(value);
     if(!Number.isFinite(v)) return {count:this.count,min:this.min(),max:this.max()};
     const slot=mode==='replace'&&this.count ? this.slotForCurrent() : this.cursor;
-    this.appendSlot(v);
+    if (mode === 'replace' && this.count) this.replaceCurrentSlot(v);
+    else this.appendSlot(v);
     this.tree.set(slot,v);
     return {count:this.count,min:this.min(),max:this.max()};
   }
@@ -462,6 +487,12 @@ export class RollingSum extends RollingBase {
   value(): number | null { return this.count === this.capacity ? this.sum : null; }
   sumValue() { return this.sum; }
   reset() { super.reset(); this.sum = 0; }
+  copyFrom(source: RollingSum): void {
+    if (source.capacity !== this.capacity) throw new Error('incompatible rolling sum state');
+    this.buffer.set(source.buffer); this.versions.set(source.versions);
+    this.cursor = source.cursor; this.count = source.count; this.absoluteIndex = source.absoluteIndex; this.latestValue = source.latestValue;
+    this.sum = source.sum;
+  }
 }
 
 export class EMAState {
