@@ -16,6 +16,7 @@ Everything else under this directory is historical or compatibility material:
 - `release-notes/` contains consolidated version notes.
 - `fyers-legacy/` contains historical FYERS checklists and implementation notes.
 - `compatibility/` contains archived copies of root compatibility documents that are still required by machine contracts.
+- `reference/` contains orphaned historical CoreSpirit/ML/performance references that have no active code dependency.
 - The old `docs/archive/source/` convention is retired; no new source-note subtree should be created.
 
 Do not create a new one-off architecture Markdown file for a subsystem already covered by the canonical four. Update the canonical document and the tracker instead.
