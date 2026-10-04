@@ -356,3 +356,180 @@ chart renderer / bounded shared compute
 No CoreSpirit language or execution authority changes are part of v104.
 
 ---
+
+# SOURCE: CORESPIRIT_V105_RELEASE_NOTES.md
+
+# TradingCoreOS v105 Release Notes — Deeper History Demand + Indicator Dependency Graph
+
+Date: 2026-09-29
+
+> CoreSpirit language/compiler/IR/VM version remains **v98**. v105 is a chart/data-plane performance and indicator presentation release.
+
+## History / multi-chart
+
+- viewport-sized older-history pages are now derived from visible bar demand;
+- duplicate left-edge requests get a short anchor/page cooldown in addition to per-dataset single-flight;
+- older-history prepend events expose `olderAdded` so the chart restores the logical range without jumping;
+- retained history and worker compute residency are now explicitly separated;
+- indicator worker input is centered on the visible logical range with bounded warmup and a hard 10,000-candle ceiling;
+- worker cache identity now includes the compute-window identity.
+
+## Indicator dependency graph
+
+- explicit dependency planning added for EMA, SMA, HMA, VWAP, Bollinger Bands, Keltner Channels, RSI, MACD, ATR, Supertrend and Donchian Channels;
+- true range and ATR are reusable graph nodes;
+- HMA reuses WMA primitives;
+- composite studies reuse upstream EMA/SMA/ATR nodes;
+- worker graph caches are dataset/revision/window scoped;
+- appearance changes do not participate in mathematical cache signatures.
+
+## Indicator presentation
+
+- primary, signal, upper and lower colors;
+- line width 1–6;
+- solid/dotted/dashed line styles;
+- opacity;
+- settings are persisted through the existing indicator settings store and exposed directly from the chart indicator menu.
+
+## Preserved boundaries
+
+No broker execution authority, CoreSpirit language semantics, IR/VM, realtime symbol-feed ownership, terminal dock ownership or chart renderer ownership was changed by this release.
+
+---
+
+# SOURCE: CORESPIRIT_V106_RELEASE_NOTES.md
+
+# TradingCoreOS v106 Release Notes — Deeper Demand History + Indicator Graph Execution
+
+Date: 2026-09-29
+
+> CoreSpirit language/compiler/IR/VM version remains **v98**. v106 continues the chart host/data-plane performance track.
+
+## History
+
+- `HistoryStore` is now an LRU-bounded shared retention cache with a maximum of 32 dataset buckets.
+- Active-chart warm history can use the current visible bar count rather than blindly requesting a full page.
+- Failed warm requests release the warm latch for later retry.
+- Older-history events report actual net prepend growth after normalization and retention limits.
+- Deep-history loading remains demand-driven; no mounted chart performs an unbounded background crawl.
+
+## Indicator dependency graph
+
+- Composite graph plans now contain explicit transitive source/base dependencies.
+- Graph plans return deterministic topological order and reject cycles.
+- WMA, Bollinger and Donchian shared kernels avoid repeated full-window rescans.
+- Shared TR/ATR/EMA/SMA/WMA dependencies remain cached by dataset/revision/compute window.
+
+## Indicator presentation
+
+- Primary, signal, upper and lower plot colors remain configurable.
+- Line width remains configurable from 1–6.
+- Line style supports solid, dotted and dashed.
+- Opacity is configurable and persisted.
+- Presentation changes remain outside mathematical cache identity.
+
+## Preserved boundaries
+
+No CoreSpirit language semantics, compiler/IR/VM authority, broker execution/risk authority, shared realtime symbol feed ownership, terminal dock ownership, or chart-local drawing ownership was changed by this release.
+
+---
+
+# SOURCE: CORESPIRIT_V107_RELEASE_NOTES.md
+
+# TradingCoreOS v107 Release Notes — Incremental Indicator Execution
+
+Date: 2026-09-29
+
+> CoreSpirit language/compiler/IR/VM remains **v98**. v107 continues the host/data-plane/indicator performance track after v106.
+
+## Incremental calculation
+
+- Added reusable rolling state for mean, variance, min/max, sum, exact MAD, EMA, Wilder, ATR, WMA and session VWAP.
+- Standard indicators now have a stateful forming-bar lane covering EMA, SMA, HMA, VWAP, Bollinger, Keltner, Donchian, RSI, MACD, ATR, ADX, Stochastic, CCI, OBV, MFI, Supertrend and Ichimoku.
+- Six advanced indicators now have stateful tail updates: Adaptive Ehlers, Fractional EMA Kalman Filter, Trend Pressure, Trend Target Ribbon, Trinity and Neural Weight Oscillator.
+- Batch fallbacks for the named rolling-window indicators no longer perform repeated full period scans.
+- Advanced normalized/standard-deviation helpers now use rolling mean/variance state.
+
+## Live correctness
+
+- Same-bar snapshot identity includes the forming candle's OHLCV tuple.
+- Incremental `replace` and `append` operations are explicit.
+- Lost or incompatible worker state triggers one controlled full resync.
+- Snapshot priming and incremental ticks share a stable worker affinity key.
+
+## Rendering
+
+- Incremental line, channel, MACD, Stochastic, Supertrend, Ichimoku and Ribbon outputs update only the affected tail points.
+- Legacy studies can coexist without clearing primed worker series on every tick.
+
+## Indicator dialogue
+
+- Per-indicator settings gear is available from the live indicator dialogue.
+- `Code` opens a read-only CoreSpirit source viewer with copy support.
+- The shared settings panel exposes the same source action.
+- Indicator Studio remains the editable source workflow.
+
+## Validation
+
+Completed: standard numerical parity and same-bar replacement checks, state-reset/WMA correctness checks, static v107 contract checks, full Markdown inventory and tracker/doc alignment.
+
+Pending in this archive environment: dependency-backed full TypeScript check, complete Vite build, and connected FYERS/browser performance stress testing.
+
+## Preserved boundaries
+
+No CoreSpirit language semantics, compiler/IR/VM authority, broker execution/risk authority, shared realtime feed ownership, terminal dock ownership, or chart-local drawing ownership was changed by this release.
+
+---
+
+# SOURCE: CORESPIRIT_V108_RELEASE_NOTES.md
+
+# CoreSpirit v108 Release Notes
+
+Date: 2026-09-29
+
+## Theme
+
+**CoreSpirit-first platform + Vela production chart engine**
+
+## Architecture lock
+
+TradingCoreOS is now locked to:
+
+```text
+CoreSpirit
+   ↓
+TCO compiler / IR / VM / reactive runtime
+   ↓
+renderer-neutral chart output
+   ↓
+TCO chart contracts
+   ↓
+Vela NativeRenderer
+   ├── WebGL2
+   └── Canvas2D fallback
+```
+
+TCO remains the authority for canonical market data, compute, indicator/model execution, risk/policy, automation, persistence and broker authorization. Vela is a rendering backend, not a trading-system owner.
+
+## Included
+
+- Removed the retained external scripting compatibility translator/runtime/catalog from application source.
+- Removed the external public-script catalog dependency from the community indicator surface.
+- Removed `lightweight-charts` from application dependencies and the npm lockfile.
+- Added vendored Vela source with upstream Apache-2.0 `LICENSE` and `NOTICE`.
+- Added a TCO-owned Vela chart facade that preserves the existing workspace chart vocabulary without making React or CoreSpirit depend on vendor APIs.
+- Added a Vela-backed `ChartRenderer` implementation and made `vela-native` the only production chart backend.
+- Reused Vela's native WebGL2 renderer and Canvas2D fallback rather than maintaining a second production renderer selection in TradingCoreOS.
+- Kept canonical columnar market data and incremental update semantics outside the renderer boundary.
+- Reworked the Indicators community surface around versioned CoreSpirit Community Indicators.
+- Documented the upstream Vela attribution requirement and retained visible attribution.
+- Added D1–D6 deepening work for typed-array ingress, viewport LOD, stable render packets, native drawings, multi-chart sync and measurable GPU/frame budgets.
+
+## Verification
+
+- `TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK` passes.
+- Focused TypeScript validation reaches the Vela adapter cleanly; the validation harness supplied declarations for optional Vela UI packages that are absent from the uploaded archive's installed dependency environment.
+- Full application build is **not claimed** because dependency installation in the isolated archive environment timed out.
+- Browser/live-deployment smoke verification remains pending.
+
+---
