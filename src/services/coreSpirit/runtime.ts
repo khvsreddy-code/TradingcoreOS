@@ -19,6 +19,12 @@ import { trueRange, rsiFromAverages } from './indicatorKernel';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
+import { CoreSpiritExecutionVM } from './executionVM';
+import { CoreSpiritStateStore } from './stateStore';
+import { CoreSpiritOutputCollector } from './outputCollector';
+import { CoreSpiritEventRouter } from './eventRouter';
+import { CoreSpiritCapabilityHost } from './capabilityHost';
+import { CoreSpiritDebugHost } from './debugHost';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
 export type CoreSpiritRuntimeOptions = {
@@ -53,7 +59,7 @@ export class CoreSpiritRuntime {
   private committedSeriesState: Record<string, number[]> = {};
   private committedLocalSeries: Record<string, Array<number | boolean | string | null>> = {};
   private committedCrossState: Record<string, { a:number; b:number }> = {};
-  private currentBarSnapshot?: { seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; crossState: Record<string, {a:number;b:number}>; historyLength:number };
+  private currentBarSnapshot?: { historyLength:number };
   private realtime = false;
   private lastBarWasRealtime = false;
   private plotOrdinal = 0;
@@ -86,6 +92,12 @@ export class CoreSpiritRuntime {
   /** Direct stateful built-ins that are not absorbed into a fusion group. */
   private readonly directKernelCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
   private readonly directKernelSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
+  private readonly executionVm = new CoreSpiritExecutionVM();
+  private readonly stateStore = new CoreSpiritStateStore();
+  private readonly outputCollector: CoreSpiritOutputCollector;
+  private readonly eventRouter: CoreSpiritEventRouter;
+  private readonly capabilityHost: CoreSpiritCapabilityHost;
+  private readonly debugHost = new CoreSpiritDebugHost();
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
@@ -102,6 +114,9 @@ export class CoreSpiritRuntime {
     this.maxHistoryBars = Math.max(2048, Math.floor(options.maxHistoryBars || 60000));
     this.executionContext = createCoreSpiritExecutionContext({ mode: options.executionMode || 'historical', symbol: this.options.symbol, timeframe: this.options.timeframe, timezone: this.timezone, runId: options.runId, policy: options.executionPolicy });
     this.bus = bus;
+    this.outputCollector = new CoreSpiritOutputCollector(this.maxOutputsPerBar);
+    this.eventRouter = new CoreSpiritEventRouter(this.bus);
+    this.capabilityHost = new CoreSpiritCapabilityHost(this.executionTarget, this.dataResolver, this.modelOutputResolver, this.eventResolver);
   }
 
   reset(): void {
@@ -109,13 +124,21 @@ export class CoreSpiritRuntime {
     this.appRuntime.reset();
     this.declarativeVisualState = { version:1, revision:0, specs:[] };
     this.reactiveRevision = 0; this.reactiveRecomputed = 0; this.reactiveReused = 0; this.reactiveEffects = 0;
-    this.realtimeRevision = 0; this.debugTrace = []; this.realtimeLifecycle='idle';
+    this.realtimeRevision = 0; this.debugHost.reset(); this.realtimeLifecycle='idle';
     this.state = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
     this.history = []; this.crossState = {}; this.committedSeriesState = {}; this.committedLocalSeries = {}; this.committedCrossState = {};
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
+    this.stateStore.bind(this.state.seriesState, this.state.localSeries, this.crossState);
+    this.stateStore.commitRealtimeTransaction();
     this.resetFusedSeriesCursors();
   }
-  getState(): CoreSpiritRuntimeState { this.state.workspaceState=this.workspaceSnapshot(); return { ...this.state, workspaceState:this.workspaceSnapshot(), locals: { ...this.state.locals }, seriesState: Object.fromEntries(Object.entries(this.state.seriesState).map(([k,v]) => [k,[...v]])), localSeries: Object.fromEntries(Object.entries(this.state.localSeries).map(([k,v]) => [k,[...v]])) }; }
+  getState(options: { clone?: boolean } = {}): CoreSpiritRuntimeState {
+    this.state.workspaceState=this.workspaceSnapshot();
+    if (options.clone === false) {
+      return { ...this.state, workspaceState:this.state.workspaceState, locals:this.state.locals, seriesState:this.state.seriesState, localSeries:this.state.localSeries };
+    }
+    return { ...this.state, workspaceState:this.workspaceSnapshot(), locals:{...this.state.locals}, seriesState:Object.fromEntries(Object.entries(this.state.seriesState).map(([k,v])=>[k,[...v]])), localSeries:Object.fromEntries(Object.entries(this.state.localSeries).map(([k,v])=>[k,[...v]])) };
+  }
 
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
     const compiled = this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer:this.layer, surface:program.surface });
@@ -137,7 +160,9 @@ export class CoreSpiritRuntime {
   executeBar(bar: HistoricalCandle): CoreSpiritExecutionResult {
     this.throwIfAborted();
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
-    const outputs: CoreSpiritObject[] = [], diagnostics: string[] = [];
+    const diagnostics: string[] = [];
+    this.outputCollector.beginBar(true);
+    const outputs = this.outputCollector.values();
     const normalized = { ...bar };
     const last = this.history[this.history.length - 1];
     const sameBucket = !!last && this.toEpoch(last.timestamp) === this.toEpoch(normalized.timestamp);
@@ -149,9 +174,7 @@ export class CoreSpiritRuntime {
     if (sameBucket && this.currentBarSnapshot) {
       this.realtimeRevision += 1;
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; this.reactiveReused += 1; }
-      this.state.seriesState = cloneNumberMap(this.currentBarSnapshot.seriesState);
-      this.state.localSeries = cloneValueMap(this.currentBarSnapshot.localSeries);
-      this.crossState = cloneCrossMap(this.currentBarSnapshot.crossState);
+      this.stateStore.rollbackRealtimeTransaction();
       for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
         const cursor = this.fusedCursors.get(groupId);
         if (cursor) cursor.copyFrom(snapshot);
@@ -164,12 +187,8 @@ export class CoreSpiritRuntime {
     } else {
       this.realtimeRevision = 0;
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; }
-      this.currentBarSnapshot = {
-        seriesState: cloneNumberMap(this.state.seriesState),
-        localSeries: cloneValueMap(this.state.localSeries),
-        crossState: cloneCrossMap(this.crossState),
-        historyLength: this.history.length,
-      };
+      this.currentBarSnapshot = { historyLength: this.history.length };
+      this.stateStore.beginRealtimeTransaction();
       for (const [groupId, cursor] of this.fusedCursors) {
         const snapshot = this.fusedCursorSnapshots.get(groupId);
         if (snapshot) snapshot.copyFrom(cursor);
@@ -197,7 +216,7 @@ export class CoreSpiritRuntime {
     this.lastBarWasRealtime = true;
     try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, outputs, diagnostics); }
     catch (error) { diagnostics.push(`bar ${barIndex}: ${error instanceof Error ? error.message : String(error)}`); }
-    return { outputs, state: this.getState(), diagnostics };
+    return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
 
   /** Execute a host-supplied tick against the current realtime bar. The VM remains socket-free. */
@@ -251,6 +270,7 @@ export class CoreSpiritRuntime {
     this.committedSeriesState = cloneNumberMap(this.state.seriesState);
     this.committedLocalSeries = cloneValueMap(this.state.localSeries);
     this.committedCrossState = cloneCrossMap(this.crossState);
+    this.stateStore.commitRealtimeTransaction();
     this.currentBarSnapshot = undefined;
     this.fusedCursorSnapshots.clear();
     this.lastBarWasRealtime = false;
@@ -260,9 +280,7 @@ export class CoreSpiritRuntime {
 
   rollbackRealtimeBar(): void {
     if (!this.currentBarSnapshot) return;
-    this.state.seriesState=cloneNumberMap(this.currentBarSnapshot.seriesState);
-    this.state.localSeries=cloneValueMap(this.currentBarSnapshot.localSeries);
-    this.crossState=cloneCrossMap(this.currentBarSnapshot.crossState);
+    this.stateStore.rollbackRealtimeTransaction();
     for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
       this.fusedCursors.set(groupId, snapshot.clone());
     }
@@ -291,15 +309,18 @@ export class CoreSpiritRuntime {
   dispatchUiEvent(event: CoreSpiritUiEvent): CoreSpiritUiAction | undefined { return this.uiRuntime.dispatch(event); }
   getWorkspaceState() { return this.workspaceSnapshot(); }
   getDeclarativeVisualScene(identity: CoreSpiritSceneIdentity, revision = this.declarativeVisualState.revision): CoreSpiritScene { return buildCoreSpiritSceneFromDeclarativeVisuals(identity,this.declarativeVisualState.specs,this.options.sourceId,revision); }
-  getDebugTrace() { return this.debugTrace.map(entry=>({...entry})); }
+  getDebugTrace() { return this.debugHost.snapshot(); }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
-    const outputs: CoreSpiritObject[] = [], diagnostics: string[] = [];
+    const diagnostics: string[] = [];
+    this.outputCollector.beginBar(true);
+    const outputs = this.outputCollector.values();
     this.compiledIr = ir; this.installSeriesFusion(ir); this.reset();
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.plotOrdinal = 0;
       this.indicatorMemo.clear();
+      this.outputCollector.beginBar();
       this.outputCount = 0;
       const bar = bars[i];
       this.validateBar(bar); this.state.barIndex = i; this.state.time = this.toEpoch(bar.timestamp); this.state.locals = {};
@@ -403,40 +424,36 @@ export class CoreSpiritRuntime {
     return true;
   }
 
-  private executeBlock(instructions: CoreSpiritIrInstruction[], bar: HistoricalCandle, bars: HistoricalCandle[], barIndex: number, outputs: CoreSpiritObject[], diagnostics: string[]): void {
-    const values = new Map<string, unknown>(); let pc = 0; let steps = 0;
-    while (pc < instructions.length) {
-      if (++steps > this.options.maxStepsPerBar) throw new Error('execution step limit exceeded');
-      if ((steps & 1023) === 0) this.throwIfAborted();
-      const ins = instructions[pc];
-      switch (ins.op) {
-        case 'const': values.set(ins.dest, ins.value); pc++; break;
-        case 'loadSeries': values.set(ins.dest, this.loadSeries(ins.name, ins.offset, bar, bars, barIndex)); pc++; break;
-        case 'move': values.set(ins.dest, this.state.locals[ins.source]); pc++; break;
-        case 'setLocal': { const value = values.get(ins.source); this.state.locals[ins.name] = value; if (ins.series !== false) this.pushLocalState(ins.name, value as any); pc++; break; }
-        case 'unary': values.set(ins.dest, this.unary(ins.operator, values.get(ins.operand))); pc++; break;
-        case 'binary': values.set(ins.dest, this.binary(ins.operator, values.get(ins.left), values.get(ins.right))); pc++; break;
-        case 'call': {
-          const fusion = this.fusedStageByInstruction.get(pc);
-          if (fusion && (fusion.stageIndex > 0 || this.fusedStageValues(pc, values, barIndex, instructions))) {
-            pc++;
-            break;
-          }
-          const args = ins.args.map(a => values.get(a));
-          values.set(ins.dest, this.call(ins.callId || ins.dest, ins.name,args,bar,bars,barIndex,ins.seriesArgs||[]));
-          pc++;
-          break;
-        }
-        case 'index': {
-          const index = Number(values.get(ins.index));
-          if (!Number.isInteger(index) || index < 0) throw new Error(`invalid historical index ${String(index)}`);
-          values.set(ins.dest, ins.seriesName ? this.loadIndexedValue(ins.seriesName,index,bar,bars,barIndex) : (index > barIndex ? null : values.get(ins.target))); pc++; break;
-        }
-        case 'jumpIfFalse': pc = this.truthy(values.get(ins.condition)) ? pc + 1 : ins.target; break;
-        case 'jump': pc = ins.target; break;
-        case 'emit': this.emitIntent(ins.kind, ins.args.slice(1).map(a=>values.get(a)),bar,barIndex,outputs,diagnostics,ins.outputId); pc++; break;
-      }
-    }
+  private executeBlock(
+    instructions: CoreSpiritIrInstruction[],
+    bar: HistoricalCandle,
+    bars: HistoricalCandle[],
+    barIndex: number,
+    outputs: CoreSpiritOutputCollector,
+    diagnostics: string[],
+  ): void {
+    this.executionVm.run(instructions, barIndex, {
+      maxStepsPerBar: this.options.maxStepsPerBar,
+      throwIfAborted: () => this.throwIfAborted(),
+      loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
+      moveLocal: (source) => this.state.locals[source],
+      setLocal: (name, value, series) => {
+        this.state.locals[name] = value;
+        if (series) this.pushLocalState(name, value as CoreSpiritValue);
+      },
+      unary: (operator, value) => this.unary(operator, value),
+      binary: (operator, left, right) => this.binary(operator, left, right),
+      tryFused: (pc, values, ir, index) => {
+        const fusion = this.fusedStageByInstruction.get(pc);
+        return !!fusion && (fusion.stageIndex > 0 || this.fusedStageValues(pc, values, index, ir));
+      },
+      call: (instruction, args) => this.call(instruction.callId || instruction.dest, instruction.name, args, bar, bars, barIndex, instruction.seriesArgs || []),
+      loadIndexed: (instruction, index, values) => instruction.seriesName
+        ? this.loadIndexedValue(instruction.seriesName, index, bar, bars, barIndex)
+        : (index > barIndex ? null : values.get(instruction.target) as CoreSpiritValue),
+      truthy: (value) => this.truthy(value),
+      emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
+    }, outputs);
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
@@ -452,15 +469,13 @@ export class CoreSpiritRuntime {
     const memoKey = `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(',')}`;
     if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
     const finish = (value: unknown) => { this.indicatorMemo.set(memoKey, value); return value; };
-    if(name.startsWith('visual.') && !['chart','replay'].includes(this.executionTarget)) throw new Error(`execution target '${this.executionTarget}' does not allow capability 'visuals'`);
-    if(name.startsWith('ui.') && !['chart','replay'].includes(this.executionTarget)) throw new Error(`execution target '${this.executionTarget}' does not allow capability 'interactive-ui'`);
-    if(name.startsWith('app.') && !['chart','replay'].includes(this.executionTarget)) throw new Error(`execution target '${this.executionTarget}' does not allow capability 'visuals'`);
+    this.capabilityHost.assert(name);
     if(name==='meta') {
       const out:Record<string,unknown>={};
       for(let i=0;i+1<args.length;i+=2) out[String(args[i])]=args[i+1];
       return finish(out);
     }
-    if(name==='event') { const value=String(args[0]??''); return finish(Boolean(this.eventResolver?.(value))); }
+    if(name==='event') { const value=String(args[0]??''); return finish(Boolean(this.capabilityHost.resolveEvent(value))); }
     if(name==='__model_get') {
       const rawRef=args[0]; const field=String(args[1]??'');
       const modelName=rawRef && typeof rawRef==='object' && '__coreSpiritModelRef' in (rawRef as Record<string,unknown>)
@@ -468,7 +483,7 @@ export class CoreSpiritRuntime {
         : String(rawRef ?? '').replace(/^model:/,'');
       const declaration=this.loadedSurface?.declarations.find(item=>item.kind==='model' && item.name===modelName);
       const binding=declaration?.kind==='model' ? declaration.binding : undefined;
-      return finish(this.modelOutputResolver?.({modelName,field,binding}) ?? null);
+      return finish(this.capabilityHost.resolveModel({modelName,field,binding}));
     }
     if(name==='model') return finish({ __coreSpiritModelRef:true, modelName:String(args[0]??'') });
     if(name==='market') return finish({ kind:'market', symbol:String(args[0]??this.executionContext.symbol) });
@@ -507,7 +522,7 @@ export class CoreSpiritRuntime {
     if (name==='crossover'||name==='crossunder') {
       const a=Number(args[0]), b=Number(args[1]);
       const previous=this.crossState[callKey];
-      this.crossState[callKey]={a,b};
+      this.stateStore.setCross(callKey,{a,b});
       if(!Number.isFinite(a)||!Number.isFinite(b)||!previous) return finish(false);
       return finish(name==='crossover' ? previous.a <= previous.b && a > b : previous.a >= previous.b && a < b);
     }
@@ -544,7 +559,7 @@ export class CoreSpiritRuntime {
       this.pushState(key,value);
       return finish(value);
     }
-    if(name==='vwap') { const day=this.sessionDay(bar.timestamp),dayKey='vwap:day',pvKey='vwap:pv',volKey='vwap:vol'; const dayNumber=Number(day.replace(/-/g,'')); const previousDay=this.state.seriesState[dayKey]?.at(-1); if(previousDay!==dayNumber){this.state.seriesState[pvKey]=[];this.state.seriesState[volKey]=[];this.state.seriesState[dayKey]=[];} this.pushState(dayKey,Number(day.replace(/-/g,''))); const pv=Number(this.state.seriesState[pvKey]?.at(-1)||0)+((Number(bar.high)+Number(bar.low)+Number(bar.close))/3)*Math.max(0,Number(bar.volume)||0),vol=Number(this.state.seriesState[volKey]?.at(-1)||0)+Math.max(0,Number(bar.volume)||0);this.pushState(pvKey,pv);this.pushState(volKey,vol);return finish(vol?pv/vol:null); }
+    if(name==='vwap') { const day=this.sessionDay(bar.timestamp),dayKey='vwap:day',pvKey='vwap:pv',volKey='vwap:vol'; const dayNumber=Number(day.replace(/-/g,'')); const previousDay=this.state.seriesState[dayKey]?.at(-1); if(previousDay!==dayNumber){this.stateStore.replaceSeries(pvKey,[]);this.stateStore.replaceSeries(volKey,[]);this.stateStore.replaceSeries(dayKey,[]);} this.pushState(dayKey,Number(day.replace(/-/g,''))); const pv=Number(this.state.seriesState[pvKey]?.at(-1)||0)+((Number(bar.high)+Number(bar.low)+Number(bar.close))/3)*Math.max(0,Number(bar.volume)||0),vol=Number(this.state.seriesState[volKey]?.at(-1)||0)+Math.max(0,Number(bar.volume)||0);this.pushState(pvKey,pv);this.pushState(volKey,vol);return finish(vol?pv/vol:null); }
     if(name==='__member_get') {
       const ref=args[0]; const member=String(args[1]??'');
       if (ref && typeof ref === 'object') {
@@ -613,14 +628,14 @@ export class CoreSpiritRuntime {
     return position >= 0 ? values[position] ?? null : null;
   }
 
-  private pushLocalState(key:string,value:CoreSpiritValue):void { const a=this.state.localSeries[key]||[]; a.push(value); if(a.length>this.stateHistoryLimit)a.splice(0,a.length-this.stateHistoryLimit); this.state.localSeries[key]=a; }
+  private pushLocalState(key:string,value:CoreSpiritValue):void { this.stateStore.pushLocal(key,value,this.stateHistoryLimit); }
   private sessionDay(timestamp:string):string { const d=new Date(timestamp); return new Intl.DateTimeFormat('en-CA',{timeZone:this.timezone}).format(d); }
   private averageGain(series:string,length:number,bars:HistoricalCandle[],index:number):number { let total=0; for(let i=index-length+1;i<=index;i++){ if(i<=0)continue; const c=Number((bars[i] as any)[series]),p=Number((bars[i-1] as any)[series]); total+=Math.max(0,c-p); } return total/length; }
   private averageLoss(series:string,length:number,bars:HistoricalCandle[],index:number):number { let total=0; for(let i=index-length+1;i<=index;i++){ if(i<=0)continue; const c=Number((bars[i] as any)[series]),p=Number((bars[i-1] as any)[series]); total+=Math.max(0,p-c); } return total/length; }
 
-  private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:HistoricalCandle,barIndex:number,outputs:CoreSpiritObject[],diagnostics:string[],outputId?:string):void {
+  private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:HistoricalCandle,barIndex:number,outputs:CoreSpiritOutputCollector,diagnostics:string[],outputId?:string):void {
     const time=this.toEpoch(bar.timestamp);
-    if (++this.outputCount > this.maxOutputsPerBar) throw new Error(`output limit exceeded (${this.maxOutputsPerBar})`);
+    this.outputCount += 1;
     const finite = (v:unknown) => Number.isFinite(Number(v));
     const num = (v:unknown) => Number(v);
     const color = (v:unknown, fallback:string) => typeof v === 'string' && v ? v : fallback;
@@ -745,7 +760,7 @@ export class CoreSpiritRuntime {
         const name=String(args[0]??'event');
         const event={kind:'event' as const,id:`${this.options.sourceId}:event:${barIndex}:${outputId||name}`,time,name,metadata:{source:this.options.sourceId,barIndex}};
         outputs.push(event);
-        this.bus.emit('script.event',{scriptId:this.options.sourceId,time,name,metadata:{barIndex}});
+        this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time,name,metadata:{barIndex}});
       }
       else if(kind==='orderIntent'){
         const side=normalizeCoreSpiritOrderDirection(String(args[0]??'long'));
@@ -757,7 +772,7 @@ export class CoreSpiritRuntime {
           target:Number.isFinite(Number(args[4]))?Number(args[4]):null,
         },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||'orderIntent'}`,time,sourceId:this.options.sourceId,barIndex,mode:this.executionContext.mode,runId:this.executionContext.runId});
         outputs.push(intent);
-        this.bus.emit('execution.intent',{source:this.options.sourceId,payload:intent});
+        this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='buy' || kind==='sell'){
         const quantity=Number(args[0]);
@@ -768,11 +783,11 @@ export class CoreSpiritRuntime {
           tag:typeof args[1]==='string'?args[1]:undefined,
         },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||kind}`,time,sourceId:this.options.sourceId,barIndex,mode:this.executionContext.mode,runId:this.executionContext.runId});
         outputs.push(intent);
-        this.bus.emit('execution.intent',{source:this.options.sourceId,payload:intent});
+        this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='signal'){
         const type=String(args[0]??'signal'); outputs.push({kind:'signal',time,type,metadata:{source:this.options.sourceId,barIndex}});
-        this.bus.emit('script.signal',{scriptId:this.options.sourceId,time,type,metadata:{barIndex}});
+        this.eventRouter.scriptSignal({scriptId:this.options.sourceId,time,type,metadata:{barIndex}});
       }
       else if(kind==='entry') {
         const condition=Boolean(args[0]); if(!condition) return;
@@ -785,20 +800,20 @@ export class CoreSpiritRuntime {
         const id=`${this.options.sourceId}:entry:${barIndex}:${tag||normalizedSide}`;
         const intent={kind:'orderIntent' as const,id,time,side:normalizedSide,confidence,stop,target,tag,metadata:{source:this.options.sourceId,barIndex,mode:this.executionContext.mode}};
         outputs.push(intent);
-        this.bus.emit('execution.intent',{source:this.options.sourceId,payload:intent});
+        this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='exit') {
         const condition=Boolean(args[0]); if(!condition) return;
         const tag=typeof args[1]==='string'?args[1]:undefined;
         const intent={kind:'orderIntent' as const,id:`${this.options.sourceId}:exit:${barIndex}:${tag||'exit'}`,time,side:'flat' as const,confidence:1,stop:null,target:null,tag,metadata:{source:this.options.sourceId,barIndex,exit:true,mode:this.executionContext.mode}};
         outputs.push(intent);
-        this.bus.emit('execution.intent',{source:this.options.sourceId,payload:intent});
+        this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
-      else if(kind==='alert') this.bus.emit('script.alert',{scriptId:this.options.sourceId,time,payload:{args,barIndex}});
-      else if(kind==='webhook') this.bus.emit('script.webhook',{scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex}});
+      else if(kind==='alert') this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,barIndex}});
+      else if(kind==='webhook') this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex}});
     } catch(error) { diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
   }
-  private pushState(key:string,value:number|string):void { const a=this.state.seriesState[key]||[];a.push(Number(value));if(a.length>this.stateHistoryLimit)a.splice(0,a.length-this.stateHistoryLimit);this.state.seriesState[key]=a; }
+  private pushState(key:string,value:number|string):void { this.stateStore.pushSeries(key,Number(value),this.stateHistoryLimit); }
   private unary(operator:string,value:unknown):unknown { if(operator==='!')return !this.truthy(value);if(operator==='+')return Number(value);return -Number(value); }
   private binary(operator:string,left:unknown,right:unknown):unknown { if(['+','-','*','/','%','<','<=','>','>='].includes(operator)&&(left==null||right==null))return null;switch(operator){case'+':return Number(left)+Number(right);case'-':return Number(left)-Number(right);case'*':return Number(left)*Number(right);case'/':return Number(right)===0?null:Number(left)/Number(right);case'%':return Number(left)%Number(right);case'==':return left===right;case'!=':return left!==right;case'<':return Number(left)<Number(right);case'<=':return Number(left)<=Number(right);case'>':return Number(left)>Number(right);case'>=':return Number(left)>=Number(right);case'and':return this.truthy(left)&&this.truthy(right);case'or':return this.truthy(left)||this.truthy(right);default:return null;} }
   private truthy(value:unknown):boolean{return Boolean(value);}
