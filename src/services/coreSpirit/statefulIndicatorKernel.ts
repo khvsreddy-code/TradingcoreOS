@@ -405,36 +405,41 @@ export class RollingAbsoluteDeviation extends RollingBase {
   reset(){super.reset();this.ordered.clear();this.sum=0;}
 }
 
-export class RollingMinMax extends RollingBase {
-  private readonly minDeque = new MonotonicDeque('min');
-  private readonly maxDeque = new MonotonicDeque('max');
-  private refreshWindow() {
-    const start = Math.max(0, this.absoluteIndex - this.count);
-    this.minDeque.evictBefore(start);
-    this.maxDeque.evictBefore(start);
+class RollingExtremaTree {
+  private readonly size: number;
+  private readonly minTree: Float64Array;
+  private readonly maxTree: Float64Array;
+  constructor(capacity:number){
+    let size=1; while(size<Math.max(1,capacity)) size<<=1; this.size=size;
+    this.minTree=new Float64Array(size*2); this.maxTree=new Float64Array(size*2);
+    this.minTree.fill(Number.POSITIVE_INFINITY); this.maxTree.fill(Number.NEGATIVE_INFINITY);
   }
-  update(value: number, mode: 'append' | 'replace' = 'append') {
-    const v = Number(value);
-    if (!Number.isFinite(v)) return { count: this.count, min: this.min(), max: this.max() };
-    if (mode === 'replace' && this.count) {
-      const entry = this.replaceCurrentSlot(v);
-      this.minDeque.removeBackIndex(entry.index);
-      this.maxDeque.removeBackIndex(entry.index);
-      this.minDeque.push({ index: entry.index, value: v });
-      this.maxDeque.push({ index: entry.index, value: v });
-    } else {
-      const entry = this.appendSlot(v);
-      this.minDeque.push({ index: entry.index, value: v });
-      this.maxDeque.push({ index: entry.index, value: v });
-    }
-    this.refreshWindow();
-    return { count: this.count, min: this.min(), max: this.max() };
+  set(slot:number,value:number):void {
+    let node=this.size+slot; this.minTree[node]=value; this.maxTree[node]=value;
+    node>>=1;
+    while(node){ const l=node*2,r=l+1; this.minTree[node]=Math.min(this.minTree[l]!,this.minTree[r]!); this.maxTree[node]=Math.max(this.maxTree[l]!,this.maxTree[r]!); node>>=1; }
   }
-  min() { const x = this.minDeque.peek(); return this.count === this.capacity && x ? x.value : null; }
-  max() { const x = this.maxDeque.peek(); return this.count === this.capacity && x ? x.value : null; }
-  reset() { super.reset(); this.minDeque.clear(); this.maxDeque.clear(); }
+  min():number { return this.minTree[1] ?? Number.POSITIVE_INFINITY; }
+  max():number { return this.maxTree[1] ?? Number.NEGATIVE_INFINITY; }
+  clear():void { this.minTree.fill(Number.POSITIVE_INFINITY); this.maxTree.fill(Number.NEGATIVE_INFINITY); }
 }
 
+/** Exact bounded rolling extrema. A segment tree is used because forming-bar replacement is a point update: unlike a plain monotonic deque, it never loses dominated values that may become extrema after replacement. */
+export class RollingMinMax extends RollingBase {
+  private readonly tree: RollingExtremaTree;
+  constructor(period:number){super(period);this.tree=new RollingExtremaTree(this.capacity);}
+  update(value:number,mode:'append'|'replace'='append'){
+    const v=Number(value);
+    if(!Number.isFinite(v)) return {count:this.count,min:this.min(),max:this.max()};
+    const slot=mode==='replace'&&this.count ? this.slotForCurrent() : this.cursor;
+    this.appendSlot(v);
+    this.tree.set(slot,v);
+    return {count:this.count,min:this.min(),max:this.max()};
+  }
+  min(){ return this.count===this.capacity ? this.tree.min() : null; }
+  max(){ return this.count===this.capacity ? this.tree.max() : null; }
+  reset(){ super.reset(); this.tree.clear(); }
+}
 export class RollingSum extends RollingBase {
   private sum = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
