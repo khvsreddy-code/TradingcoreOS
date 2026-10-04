@@ -7,6 +7,7 @@ import type { IndicatorConfig } from '../marketData/indicatorEngine';
 import { buildIndicatorSettingsSnapshot } from './indicatorSettingsSchema';
 
 export type IndicatorPublicationStatus = 'draft' | 'published' | 'archived';
+export type CoreSpiritScriptKind = 'indicator' | 'strategy';
 export type IndicatorPublicationVisibility = 'public' | 'unlisted';
 
 export type UserIndicatorScript = {
@@ -28,6 +29,7 @@ export type IndicatorPublication = {
   id: string;
   script_id: string;
   version_id: string;
+  script_kind: CoreSpiritScriptKind;
   user_id?: string;
   slug: string;
   title: string;
@@ -71,6 +73,7 @@ export type PublishIndicatorInput = SaveIndicatorDraftInput & {
   visibility?: IndicatorPublicationVisibility;
   profile: Pick<UserProfile, 'name' | 'avatar'>;
   settings?: IndicatorConfig;
+  scriptKind?: CoreSpiritScriptKind;
 };
 
 function indicatorSettingsSnapshot(item?: IndicatorConfig) {
@@ -249,6 +252,7 @@ export async function publishUserIndicator(input: PublishIndicatorInput) {
     license: input.license || 'MIT',
     open_source: input.openSource ?? true,
     visibility: input.visibility || 'public',
+    script_kind: input.scriptKind || 'indicator',
     indicator_settings: settingsSnapshot,
     status: 'published',
     published_at: new Date().toISOString(),
@@ -261,8 +265,9 @@ export async function publishUserIndicator(input: PublishIndicatorInput) {
   return { publication: publication.data as IndicatorPublication, script: saved.script, version: saved.version };
 }
 
-export async function listPublicIndicatorPublications(options?: { query?: string; category?: string; openSourceOnly?: boolean; sort?: 'popular' | 'newest' | 'used' }) {
-  let request = getSupabaseClient().from('indicator_publications').select('id,script_id,version_id,slug,title,description,category,tags,cover_image_path,cover_image_url,author_name,author_avatar_url,source_snapshot,language_version,source_hash,license,open_source,visibility,status,views_count,installs_count,indicator_settings,created_at,published_at,updated_at').eq('status', 'published').eq('visibility', 'public');
+export async function listPublicIndicatorPublications(options?: { query?: string; category?: string; openSourceOnly?: boolean; sort?: 'popular' | 'newest' | 'used'; scriptKind?: CoreSpiritScriptKind }) {
+  let request = getSupabaseClient().from('indicator_publications').select('id,script_id,version_id,script_kind,slug,title,description,category,tags,cover_image_path,cover_image_url,author_name,author_avatar_url,source_snapshot,language_version,source_hash,license,open_source,visibility,status,views_count,installs_count,indicator_settings,created_at,published_at,updated_at').eq('status', 'published').eq('visibility', 'public');
+  request = request.eq('script_kind', options?.scriptKind || 'indicator');
   if (options?.category && options.category !== 'All') request = request.eq('category', options.category);
   if (options?.openSourceOnly) request = request.eq('open_source', true);
   if (options?.sort === 'used') request = request.order('installs_count', { ascending: false }).order('published_at', { ascending: false });
@@ -275,13 +280,14 @@ export async function listPublicIndicatorPublications(options?: { query?: string
 }
 
 
-export async function getPublicIndicatorPublicationBySlug(slug: string) {
+export async function getPublicIndicatorPublicationBySlug(slug: string, scriptKind: CoreSpiritScriptKind = 'indicator') {
   const normalized = String(slug || '').trim().toLowerCase();
   if (!normalized) return null;
   const { data, error } = await getSupabaseClient()
     .from('indicator_publications')
-    .select('id,script_id,version_id,slug,title,description,category,tags,cover_image_path,cover_image_url,author_name,author_avatar_url,source_snapshot,language_version,source_hash,license,open_source,visibility,status,views_count,installs_count,indicator_settings,created_at,published_at,updated_at')
+    .select('id,script_id,version_id,script_kind,slug,title,description,category,tags,cover_image_path,cover_image_url,author_name,author_avatar_url,source_snapshot,language_version,source_hash,license,open_source,visibility,status,views_count,installs_count,indicator_settings,created_at,published_at,updated_at')
     .eq('slug', normalized)
+    .eq('script_kind', scriptKind)
     .eq('status', 'published')
     .eq('visibility', 'public')
     .maybeSingle();
