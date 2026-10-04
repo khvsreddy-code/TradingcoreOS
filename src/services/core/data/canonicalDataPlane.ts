@@ -54,6 +54,17 @@ export class CanonicalDataPlane {
   get length(): number { return this.market.length; }
 
   replace(rows: readonly MarketDataPoint[]): void { this.market.replace(rows); }
+  /** Direct typed-column ingress used by the Vela native history fast path. */
+  replaceColumns(columns: {
+    time: ArrayLike<number>;
+    open: ArrayLike<number>;
+    high: ArrayLike<number>;
+    low: ArrayLike<number>;
+    close: ArrayLike<number>;
+    volume: ArrayLike<number>;
+    timeUnit?: 'milliseconds' | 'seconds';
+  }, from = 0, to = columns.time.length): void { this.market.replaceColumns(columns, from, to); }
+
   /** Direct OHLCV compatibility ingress; avoids a second row-object allocation pass. */
   replaceHistoricalCandleRows(rows: readonly { timestamp: string; open: number; high: number; low: number; close: number; volume: number }[], from = 0, to = rows.length): void { this.market.replaceHistoricalCandleRows(rows, from, to); }
   append(row: MarketDataPoint): void { this.market.append(row); }
