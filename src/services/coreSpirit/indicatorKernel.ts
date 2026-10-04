@@ -89,8 +89,11 @@ export function wma(values: readonly number[], length: number): number | null {
   const period = Math.max(1, Math.floor(length));
   if (values.length < period) return null;
   const state = new WMAState(period);
-  for (let i = 0; i < period; i += 1) state.update(Number(values[i]));
-  return state.update(Number(values[period - 1]), 'replace');
+  // WMAState assigns the largest weight to the newest state entry. Feed the
+  // scalar compatibility window newest-to-oldest to preserve this helper's
+  // historical descending-weight semantics.
+  for (let i = period - 1; i >= 0; i -= 1) state.update(Number(values[i]));
+  return state.value;
 }
 
 export function stochastic(

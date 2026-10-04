@@ -8,7 +8,7 @@ const graph = fs.readFileSync(path.join(root, 'src/services/marketData/indicator
 const kernel = fs.readFileSync(path.join(root, 'src/services/marketData/coreIndicatorKernel.ts'), 'utf8');
 const settings = fs.readFileSync(path.join(root, 'src/components/indicators/IndicatorSettingsPanel.tsx'), 'utf8');
 const settingsSchema = fs.readFileSync(path.join(root, 'src/services/coreSpirit/indicatorSettingsSchema.ts'), 'utf8');
-const tracker = fs.readFileSync(path.join(root, 'docs/archive/legacy/PROJECT_REPAIR_AND_UI_NOTES.md'), 'utf8');
+const tracker = fs.readFileSync(path.join(root, 'docs/CORESPIRIT_BUILD_TRACKER.md'), 'utf8');
 
 if (!/maxBuckets = 32/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore LRU residency guard missing');
 if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/archive/legacy/CHARTING_LEGACY_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
@@ -19,5 +19,7 @@ if (!/order: string\[\]/.test(graph) || !/contains a cycle/.test(graph) || !/sou
 if (!/rolling-sum|rolling sum|rollingSum/.test(kernel) && !/rollingSum/.test(graph)) throw new Error('Rolling kernel marker missing');
 if (!/while \(highHead < highDeque\.length/.test(graph) || !/sumSquares/.test(graph)) throw new Error('Linear rolling Donchian/Bollinger kernel markers missing');
 for (const token of ['appearance.line.color','appearance.fill.upperColor','appearance.fill.lowerColor','appearance.line.width','appearance.line.style','appearance.line.opacity']) if (!settingsSchema.includes(token)) throw new Error(`Schema appearance control missing: ${token}`);
-for (const token of ['TC-PERF-33','TC-PERF-36','TC-PERF-38','TC-PERF-39','TC-PERF-40','TC-PERF-41']) if (!tracker.includes(token)) throw new Error(`Tracker item missing: ${token}`);
+for (const token of ['Initial chart load: **5,000 candles**','Backward paging: 5,000 older candles','Maximum retained history: 50,000 candles','True columnar history ABI completion','Exact dirty-span completion']) {
+  if (!tracker.includes(token)) throw new Error(`Current performance tracker marker missing: ${token}`);
+}
 console.log('TRADINGCORE_V106_HISTORY_INDICATOR_DEPTH_CONTRACT_OK');
