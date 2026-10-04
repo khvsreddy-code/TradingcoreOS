@@ -251,7 +251,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     const returned = isColumnarData(data) ? data.time.length : data.length;
     const oldestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
     const newestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
-    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !columnar && data.length === 1 && data[0]?.liveSeed === true });
+    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !isColumnarData(data) && data.length === 1 && data[0]?.liveSeed === true });
   } catch (error: any) {
     res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
   } finally {
