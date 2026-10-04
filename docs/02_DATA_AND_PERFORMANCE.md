@@ -22,7 +22,7 @@ Canonical market data is time/open/high/low/close/volume typed storage. `Histori
 - Identical history requests are cached and single-flight deduplicated.
 - Older history is fetched on demand instead of preloading 50k bars.
 
-## Stateful indicator mathematics
+## Stateful indicator mathematics — v131
 
 The canonical CoreSpirit kernel layer provides bounded state for rolling and recursive calculations:
 
@@ -35,7 +35,7 @@ RollingAbsoluteDeviation
 EMA / Wilder / ATR / WMA / VWAP
 ```
 
-The standard indicator engine uses these primitives for Bollinger, Donchian, Stochastic, CCI and MFI. This makes their bounded rolling portion linear over N for fixed-period sum/mean/variance operations, with logarithmic expected/update work for ordered-statistic operations.
+The standard indicator engine uses these primitives for Bollinger, Donchian, Stochastic, CCI and MFI. Production historical traversal is O(N) for fixed-period O(1) families and O(N log P) expected for ordered-statistic families; no P-sized window is constructed and rescanned for every bar.
 
 The market-data `incrementalIndicatorKernel.ts` is only a compatibility re-export of the same canonical kernel layer. It must never become a second mathematical implementation.
 
@@ -50,7 +50,7 @@ The market-data `incrementalIndicatorKernel.ts` is only a compatibility re-expor
 | CCI / MAD | O(log P) expected |
 | MFI | O(1) |
 | Median / percentile | O(log P) expected |
-| EMA / Wilder / ATR / WMA / VWAP | O(1) |
+| EMA / Wilder / ATR / RSI / WMA / VWAP | O(1) |
 
 ## Avoiding false performance claims
 
