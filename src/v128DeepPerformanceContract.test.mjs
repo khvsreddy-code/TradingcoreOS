@@ -70,7 +70,8 @@ assert.match(verifier, /TCO_MAX_P95_FRAME_MS/);
 assert.match(verifier, /p95FrameMs/);
 
 assert.ok(fs.existsSync(path.join(root, 'docs/archive/history/README.md')));
-assert.ok(fs.existsSync(path.join(root, 'docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md')));
+assert.ok(fs.existsSync(path.join(root, 'docs/archive/history/README.md')));
+assert.doesNotMatch(read('docs/archive/history/README.md'), /CORESPIRIT_BUILD_TRACKER_LEGACY/);
 assert.ok(!fs.existsSync(path.join(root, 'docs/history')));
 assert.ok(!fs.existsSync(path.join(root, 'docs/archive/compatibility/CORESPIRIT_BUILD_TRACKER.md')));
 assert.ok(!fs.existsSync(path.join(root, 'docs/archive/compatibility/CHART_RENDERER_MIGRATION.md')));
