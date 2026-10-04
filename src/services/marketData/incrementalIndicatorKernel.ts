@@ -67,6 +67,25 @@ abstract class RollingBase {
   get latest() { return this.latestValue; }
 }
 
+/** O(1) bounded rolling minimum using the shared monotonic-deque state. */
+export class RollingMin extends RollingBase {
+  private readonly state: RollingMinMax;
+  constructor(period:number){super(period);this.state=new RollingMinMax(period);}
+  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.value?.min??null};}
+  value():number|null{return this.state.min();}
+  reset(){super.reset();this.state.reset();}
+  private appendMirror(_value:number,_mode:'append'|'replace'):void{}
+}
+/** O(1) bounded rolling maximum using the shared monotonic-deque state. */
+export class RollingMax extends RollingBase {
+  private readonly state: RollingMinMax;
+  constructor(period:number){super(period);this.state=new RollingMinMax(period);}
+  update(value:number,mode:'append'|'replace'='append'):RollingWindowSnapshot{const snapshot=this.state.update(value,mode);this.appendMirror(value,mode);return {count:snapshot.count,value:snapshot.value?.max??null};}
+  value():number|null{return this.state.max();}
+  reset(){super.reset();this.state.reset();}
+  private appendMirror(_value:number,_mode:'append'|'replace'):void{}
+}
+
 export class RollingMean extends RollingBase {
   private sum = 0;
   update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
