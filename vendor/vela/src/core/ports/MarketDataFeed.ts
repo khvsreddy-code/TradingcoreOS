@@ -43,6 +43,8 @@ export interface MarketDataFeed {
     load(cfg: MarketConfig): Promise<OHLCV[]>;
     /** Optional columnar fast path. Returning null means the feed cannot provide it. */
     loadColumns?(cfg: MarketConfig): Promise<import('../model/columnar-bars').ColumnarBars | null>;
+    /** Optional zero-object bounded range path used by deep backward history paging. */
+    loadRangeColumns?(cfg: MarketConfig, range: BarRange): Promise<import('../model/columnar-bars').ColumnarBars | null>;
     /**
      * Progressive load: emit growing snapshots while the source heals a cold symbol,
      * resolve with the final answer — `DataProvider.getBarsProgressive` semantics
