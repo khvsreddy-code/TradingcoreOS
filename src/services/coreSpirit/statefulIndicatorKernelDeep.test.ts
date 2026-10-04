@@ -12,6 +12,7 @@ import {
   ATRState,
   WMAState,
   VWAPSessionState,
+  RSIState,
 } from './statefulIndicatorKernel';
 
 const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
@@ -110,6 +111,16 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   nearly(k.update(3)!, 14 / 6);
   nearly(k.update(4)!, 20 / 6);
   nearly(k.update(10, 'replace')!, 38 / 6);
+}
+
+{
+  const k = new RSIState(3);
+  assert.equal(k.update(100), null);
+  assert.equal(k.update(101), null);
+  assert.equal(k.update(103), null);
+  nearly(k.update(102)!, 80);
+  nearly(k.update(104)!, 85.71428571428571, 1e-9);
+  nearly(k.update(110, 'replace')!, 100, 1e-9);
 }
 
 {
