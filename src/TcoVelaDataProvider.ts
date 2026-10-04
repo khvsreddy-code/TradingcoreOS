@@ -127,6 +127,26 @@ export class TcoVelaDataProvider implements DataProvider {
     return marketViewToColumns(plane.readCanonical(), range, requested);
   }
 
+  /**
+   * Explicit ranged-history seam used by Vela's 5k backward paging. Keeping this
+   * method on the TCO provider guarantees that deep scrolls go through the shared
+   * ChartDataPlane/Fyers cache instead of opening a second broker-history path.
+   */
+  async loadRange(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const requested = Math.max(2, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    await plane.ensureReady(5000);
+    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+    const current = plane.readCanonical();
+    const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+    if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
+      await plane.loadOlderHistory('visible', { visibleBars: requested });
+    }
+    return marketViewToBars(plane.readCanonical(), range, requested);
+  }
+
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
