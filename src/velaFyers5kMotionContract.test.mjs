@@ -21,7 +21,7 @@ assert(engine.includes('const CHUNK_BARS = 5_000'));
 assert(cache.includes('const PAGE_BARS = 5_000'));
 assert(options.includes('ZOOM_EASE_DEFAULT_MS = 260'));
 assert(options.includes('PAN_INERTIA_DEFAULT_MS = 360'));
-assert(theme.includes("accent: '#7c5cff'"));
+assert(theme.includes("accent: '#d3ebf4'"));
 assert(storage.includes("from('workspace_layouts')"));
 assert(options.includes('SCROLL_EASE_DEFAULT_MS = 320'));
 assert(options.includes('AUTOSCALE_EASE_DEFAULT_MS = 260'));
