@@ -6,8 +6,8 @@ const workspace = fs.readFileSync(path.join(root, 'src', 'LiveTradingWorkspace.t
 assert.ok(workspace.includes('VelaWorkspace'));
 assert.ok(workspace.includes('layout: defaults.layout || \'4\''));
 assert.ok(workspace.includes('bars: 5000'));
-assert.ok(workspace.includes("background: '#090a0e'"));
+assert.ok(workspace.includes("background: '#07080c'"));
 assert.ok(workspace.includes('drawingToolbar: true'));
 assert.ok(workspace.includes('watermark: true'));
 assert.equal(/\.tc4\b|tct-|tco-terminal-shell|liveTerminalPolish\.css/.test(workspace), false);
-console.log('TRADINGCORE_V100_TERMINAL_VISUAL_DENSITY_CONTRACT_OK');
+console.log('TRADINGCORE_V124_TERMINAL_VISUAL_DENSITY_CONTRACT_OK');
