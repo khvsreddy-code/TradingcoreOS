@@ -11,7 +11,7 @@ const webgl = read('src/services/core/chart/webgl2ChartRenderer.ts');
 const renderer = read('src/services/core/chart/chartRenderer.ts');
 const derived = read('src/services/core/data/derivedDataStores.ts');
 const chartDocs = read('docs/03_VELA_AND_CHARTING.md');
-const migration = read('docs/CHART_RENDERER_MIGRATION.md');
+const migration = read('docs/03_VELA_AND_CHARTING.md');
 const tracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
 const v95Docs = read('docs/03_VELA_AND_CHARTING.md');
 
