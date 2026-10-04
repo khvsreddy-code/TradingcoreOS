@@ -483,24 +483,26 @@ export class EMAState {
   protected readonly period: number;
   protected readonly seed: RollingMean;
   protected valueState: number | null = null;
-  protected previousOutput: number | null = null;
+  protected stableBeforeCurrent: number | null = null;
   protected currentInput: number | null = null;
   constructor(period: number) { this.period = Math.max(1, Math.floor(period)); this.seed = new RollingMean(this.period); }
   update(value: number, mode: 'append' | 'replace' = 'append') {
     const v = Number(value); if (!Number.isFinite(v)) return this.valueState;
     if (mode === 'replace' && this.currentInput != null) {
       this.seed.update(v, 'replace'); this.currentInput = v;
-      if (this.seed.size < this.period) { this.valueState = null; this.previousOutput = null; }
-      else if (this.valueState == null) { this.valueState = this.seed.value(); this.previousOutput = null; }
-      else { const alpha = 2 / (this.period + 1); this.valueState = alpha * v + (1 - alpha) * (this.previousOutput ?? this.valueState); }
+      if (this.seed.size < this.period) { this.valueState = null; this.stableBeforeCurrent = null; }
+      else if (this.stableBeforeCurrent == null) { this.valueState = this.seed.value(); }
+      else { const alpha = 2 / (this.period + 1); this.valueState = alpha * v + (1 - alpha) * this.stableBeforeCurrent; }
       return this.valueState;
     }
     this.seed.update(v, 'append'); this.currentInput = v;
     if (this.seed.size < this.period) { this.valueState = null; return null; }
-    if (this.valueState == null) { this.valueState = this.seed.value(); this.previousOutput = null; return this.valueState; }
-    this.previousOutput = this.valueState; const alpha = 2 / (this.period + 1); this.valueState = alpha * v + (1 - alpha) * this.valueState; return this.valueState;
+    if (this.valueState == null) { this.valueState = this.seed.value(); this.stableBeforeCurrent = null; return this.valueState; }
+    this.stableBeforeCurrent = this.valueState;
+    const alpha = 2 / (this.period + 1); this.valueState = alpha * v + (1 - alpha) * this.valueState;
+    return this.valueState;
   }
-  reset() { this.seed.reset(); this.valueState = null; this.previousOutput = null; this.currentInput = null; }
+  reset() { this.seed.reset(); this.valueState = null; this.stableBeforeCurrent = null; this.currentInput = null; }
   get value() { return this.valueState; }
 }
 
@@ -508,24 +510,26 @@ export class WilderState {
   readonly period: number;
   private readonly seed: RollingMean;
   private valueState: number | null = null;
-  private previousOutput: number | null = null;
+  private stableBeforeCurrent: number | null = null;
   private currentInput: number | null = null;
   constructor(period: number) { this.period = Math.max(1, Math.floor(period)); this.seed = new RollingMean(this.period); }
   updateWilder(value: number, mode: 'append' | 'replace' = 'append') {
     const v = Number(value); if (!Number.isFinite(v)) return this.valueState;
     if (mode === 'replace' && this.currentInput != null) {
       this.seed.update(v, 'replace'); this.currentInput = v;
-      if (this.seed.size < this.period) { this.valueState = null; this.previousOutput = null; }
-      else if (this.valueState == null) { this.valueState = this.seed.value(); this.previousOutput = null; }
-      else { this.valueState = ((this.period - 1) * (this.previousOutput ?? this.valueState) + v) / this.period; }
+      if (this.seed.size < this.period) { this.valueState = null; this.stableBeforeCurrent = null; }
+      else if (this.stableBeforeCurrent == null) { this.valueState = this.seed.value(); }
+      else { this.valueState = ((this.period - 1) * this.stableBeforeCurrent + v) / this.period; }
       return this.valueState;
     }
     this.seed.update(v, 'append'); this.currentInput = v;
     if (this.seed.size < this.period) { this.valueState = null; return null; }
-    if (this.valueState == null) { this.valueState = this.seed.value(); this.previousOutput = null; return this.valueState; }
-    this.previousOutput = this.valueState; this.valueState = ((this.period - 1) * this.valueState + v) / this.period; return this.valueState;
+    if (this.valueState == null) { this.valueState = this.seed.value(); this.stableBeforeCurrent = null; return this.valueState; }
+    this.stableBeforeCurrent = this.valueState;
+    this.valueState = ((this.period - 1) * this.valueState + v) / this.period;
+    return this.valueState;
   }
-  reset() { this.seed.reset(); this.valueState = null; this.previousOutput = null; this.currentInput = null; }
+  reset() { this.seed.reset(); this.valueState = null; this.stableBeforeCurrent = null; this.currentInput = null; }
   get value() { return this.valueState; }
 }
 
