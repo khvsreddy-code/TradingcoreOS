@@ -16,7 +16,7 @@ FYERS compact columns
  → frame/backend telemetry
 ```
 
-## v130 — deep performance pass
+## v131 — canonical incremental kernel pass
 
 ### 1. O(N × period) indicator elimination
 
@@ -30,7 +30,9 @@ FYERS compact columns
 - [x] Existing deep parity tests cover append and forming-bar replacement.
 - [x] Structural fractal detection uses centered monotonic-extrema traversal instead of an inner period loop.
 - [x] Structural zone mitigation uses one ATR pass plus threshold heaps instead of repeated historical ATR/future-candle scans.
-- [~] `seriesVector.ts` still contains duplicate private fused-state algorithms. Consolidating it onto the canonical kernel module remains open.
+- [x] `seriesVector.ts` fused execution now delegates to the canonical stateful kernel classes; its duplicate private rolling/heap implementation is removed.
+- [x] `coreIndicatorKernel.ts` delegates standard scalar math to the canonical CoreSpirit kernel.
+- [x] CI contract guards against reintroducing private fused kernels and per-window rescans in the primary standard indicators.
 
 ### 2. Vela true columnar history ABI
 
@@ -62,14 +64,14 @@ FYERS compact columns
 - [ ] Live forming-bar replacement measurement.
 - [ ] GPU vendor/utilization counters where actually exposed by the browser/backend.
 
-## Explicit remaining deep phases
+## Explicit remaining deep phases — intentionally not finished
 
 These are intentionally **not falsely marked as finished**:
 
 1. **True columnar history ABI completion** — migrate the remaining Vela compatibility consumers and remove the final OHLCV mirror.
 2. **Exact dirty-span completion** — propagate one proven causal range through CoreSpirit → renderer/model packet collections → Vela invalidation end-to-end.
 3. **GPU/frame runtime verification** — collect real browser measurements for 1/4/8 charts, 5k initial load, 5k prepend and live ticks; then add GPU counters where meaningful.
-4. **Kernel deduplication** — remove the second private fused-state implementation from `seriesVector.ts`.
+3. **GPU/frame runtime verification** — collect real browser measurements for 1/4/8 charts, 5k initial load, 5k prepend and live ticks; add GPU counters where meaningful.
 
 ## Retained product baseline
 
