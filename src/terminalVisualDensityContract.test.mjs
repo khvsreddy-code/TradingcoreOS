@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const workspace = fs.readFileSync(path.join(root, 'src', 'LiveTradingWorkspace.tsx'), 'utf8');
 assert.ok(workspace.includes('VelaWorkspace'));
-assert.ok(workspace.includes('layout: defaults.layout || \'4\''));
+assert.ok(workspace.includes('layout: defaults.layout || \'1\''));
 assert.ok(workspace.includes('bars: 5000'));
 assert.ok(workspace.includes("background: '#07080c'"));
 assert.ok(workspace.includes('drawingToolbar: true'));
