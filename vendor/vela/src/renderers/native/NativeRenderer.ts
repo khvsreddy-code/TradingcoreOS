@@ -293,6 +293,13 @@ export class NativeRenderer implements IChartRenderer {
     /** A data-tier paint has happened (scales + drawing resolvers are real) — gates the
      *  cheap chrome-only repaint so it never draws over placeholder state. */
     private paintedData = false;
+    // ── render telemetry ──
+    private perfFrames = 0;
+    private perfTotalFrameMs = 0;
+    private perfWorstFrameMs = 0;
+    private perfLongFrames = 0;
+    private perfLastFrameMs = 0;
+    private perfLastFrameAt = 0;
 
     private skeletonClockMs = 0; // monotonic clock for the loading-skeleton pulse (advanced per animator frame)
     private candleBodyAlpha = 1; // candle body-fill opacity (constant; style layers may modulate later)
@@ -3515,6 +3522,8 @@ export class NativeRenderer implements IChartRenderer {
 
     /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
     private paintData(): void {
+        const perfStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        try {
         // Layer-canvas stacking follows the indicators' z keys — recomputed lazily here so
         // every path that can move them (a z write, a restored config, a mount/remove, a
         // pane move) is covered without its own call site. No-op when unchanged.
@@ -3602,6 +3611,42 @@ export class NativeRenderer implements IChartRenderer {
 
         if (easeLive && liveActual) this.bars[li] = liveActual; // restore the true forming bar
         this.paintedData = true; // scales are real from here on — the chrome-only tier may run
+    }
+
+    /** Renderer-local performance counters exposed through the host-safe Vela workspace API. */
+    getPerformanceStats(): {
+        frames: number;
+        totalFrameMs: number;
+        averageFrameMs: number;
+        worstFrameMs: number;
+        longFrames: number;
+        lastFrameMs: number;
+        lastFrameAt: number;
+        backend: 'webgl2' | 'canvas2d' | 'unknown';
+    } {
+        const name = this.backend?.constructor?.name ?? '';
+        const backend = /webgl/i.test(name) ? 'webgl2' : /canvas/i.test(name) ? 'canvas2d' : 'unknown';
+        return {
+            frames: this.perfFrames,
+            totalFrameMs: this.perfTotalFrameMs,
+            averageFrameMs: this.perfFrames ? this.perfTotalFrameMs / this.perfFrames : 0,
+            worstFrameMs: this.perfWorstFrameMs,
+            longFrames: this.perfLongFrames,
+            lastFrameMs: this.perfLastFrameMs,
+            lastFrameAt: this.perfLastFrameAt,
+            backend,
+        };
+        }
+        this.perfFrames += 1;
+        const perfDuration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - perfStart;
+        this.perfLastFrameMs = Math.max(0, perfDuration);
+        this.perfTotalFrameMs += this.perfLastFrameMs;
+        this.perfWorstFrameMs = Math.max(this.perfWorstFrameMs, this.perfLastFrameMs);
+        if (this.perfLastFrameMs > 50) this.perfLongFrames += 1;
+        this.perfLastFrameAt = Date.now();
+        } finally {
+        }
+
     }
 
     /** Build the data→pixel projector user drawings resolve their anchors through. */
