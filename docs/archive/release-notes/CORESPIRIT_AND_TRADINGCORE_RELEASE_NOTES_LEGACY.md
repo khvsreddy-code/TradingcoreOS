@@ -1185,3 +1185,240 @@ A registered component receives only the explicit runtime context and arguments 
 > Keep the language small. Move complexity into typed semantics, graphs, contracts, planning, and runtime infrastructure.
 
 ---
+
+# SOURCE: CORESPIRIT_V91_RELEASE_NOTES.md
+
+# CoreSpirit v91 — Semantic Components and Progressive Authoring Depth
+
+## Goal
+
+Make reusable CoreSpirit capability substantially deeper without turning CoreSpirit into a large general-purpose programming language.
+
+## Frozen surface
+
+```text
+DATA
+LET
+WHEN
+SHOW
+MODEL
+AUTOMATE
+```
+
+No new `FN`, `FUNCTION`, `COMPONENT`, `PIPELINE`, `GPU` or `WORKER` source keywords are required by this stage.
+
+## Semantic component system
+
+Reusable composition is defined first through typed semantic contracts. Components carry:
+
+- stable identity and aliases
+- typed input/output ports
+- dependencies and lineage
+- determinism/statefulness
+- state lifecycle
+- execution class
+- latency and cost metadata
+- cacheability/parallelism
+- backend eligibility
+- optional documentation metadata
+
+A validated composition graph can be materialized and explicitly registered as a reusable typed component. It continues to execute through the canonical CoreSpirit compiler/IR/VM path.
+
+## Progressive authoring
+
+### Level 1 — Simple
+
+Readable DATA/LET/SHOW/WHEN workflows with minimal runtime detail.
+
+### Level 2 — Advanced
+
+Composition, models, multi-symbol/timeframe data, richer visuals and automation remain available without requiring IR/backend knowledge.
+
+### Level 3 — Professional
+
+Component contracts, execution targets, research, backtesting, optimization, performance controls, IR inspection and runtime inspection become visible through the same language and runtime.
+
+The levels are presentation/inspection profiles, not grammar forks or authority escalation.
+
+## Explicit non-goals
+
+- Public user-defined function/declaration syntax
+- Arbitrary higher-order function system
+- Second evaluator/runtime
+- Automatic untrusted component discovery
+- Automatic GPU execution guarantees
+
+## Design invariant
+
+> Make reusable capability more powerful before making the grammar larger.
+
+---
+
+# SOURCE: CORESPIRIT_V92_RELEASE_NOTES.md
+
+# CoreSpirit v92 — Complexity Absorption, Namespaced Library, and Deep Composition
+
+## Goal
+
+Push CoreSpirit deeper without increasing the public language vocabulary. v92 treats complexity absorption and library scaling as compiler/runtime concerns rather than syntax expansion.
+
+## Frozen source surface
+
+```text
+DATA
+LET
+WHEN
+SHOW
+MODEL
+AUTOMATE
+```
+
+## Deepened architecture
+
+### Reusable semantic components
+
+Components now sit at the boundary between simple source values and arbitrarily complex execution graphs. Contracts retain typed ports, lineage, state lifecycle, determinism, cost, latency, cacheability, parallelism and backend eligibility.
+
+### Complexity absorber
+
+Internal complexity is organized as:
+
+```text
+source → semantic graph → component graph → model ABI → dependency graph → execution plan → reactive plan → backend/host
+```
+
+The source language does not need a keyword for each layer.
+
+### Namespaced standard library
+
+Qualified paths are discovery/lowering aliases into existing canonical builtins or registered components:
+
+```text
+market.*
+series.*
+math.*
+stats.*
+time.*
+structure.*
+volatility.*
+liquidity.*
+probability.*
+model.*
+visual.*
+automation.*
+data.*
+state.*
+```
+
+Catalog-only members are explicitly distinguishable from executable members.
+
+### MODEL as semantic component
+
+Validated MODEL ABI manifests can be projected into typed component contracts. Backend, capability and rollback metadata stay inside the host/runtime contract.
+
+### Progressive authoring
+
+Simple, Advanced and Professional remain one language. Advanced adds composition/library discovery; Professional exposes engineering inspection such as component contracts, IR, runtime and backend planning.
+
+## Not introduced
+
+- no public `fn` or `component` keyword
+- no second evaluator/runtime
+- no namespace-specific execution engine
+- no authority escalation through component registration
+- no claim that catalog-only future capabilities already execute
+
+## Verification
+
+The focused v92 TypeScript contract and source-governance contract pass. Full Vite production build remains dependent on a complete installed dependency environment.
+
+---
+
+# SOURCE: CORESPIRIT_V93_RELEASE_NOTES.md
+
+# CoreSpirit v93 Release Notes
+
+## Theme
+
+First-class vector/series execution and operation fusion.
+
+## Implemented
+
+- Dense numeric series execution through `Float64Array`.
+- Typed vector execution contracts on canonical builtin metadata.
+- Deterministic `pctchange`, `zscore`, `normalize`, and `persistence` series extensions.
+- Alias-aware pure-series fusion planner.
+- Single-pass streaming fused kernels with bounded rolling workspace.
+- Fusion visibility inside the existing host-owned execution planner.
+- Explicit non-fusible stateful boundary for EMA/RMA.
+- Focused conformance test covering vector execution, fusion and backend metadata.
+- CoreSpirit roadmap extended from 70 to 76 validated stages.
+
+## Validation
+
+```text
+STAGE93_FIRST_CLASS_SERIES_OK
+STAGE93_OPERATION_FUSION_OK
+STAGE93_SERIES_BACKEND_METADATA_OK
+```
+
+## Architectural rule
+
+CoreSpirit source syntax remains unchanged. Vectorization and fusion are compiler/runtime optimizations over the same semantic language, IR and VM contracts.
+
+---
+
+# SOURCE: CORESPIRIT_V95_RELEASE_NOTES.md
+
+# CoreSpirit v95 — canonical shared data plane + chart engine decomposition
+
+## Scope
+
+v95 deepens the v94 zero-copy work into a shared market-data ownership plane and a renderer-neutral chart platform architecture. Lightweight Charts remains the production workspace backend.
+
+## #12 — Shared canonical history ownership
+
+- CanonicalDataPlane owns one MarketDataStore per timeline key.
+- IndicatorStore, ModelStore, StructureStore, LiquidityStore and OrderFlowStore remain derived-output domains and borrow the canonical timeline.
+- Indicator and model bindings expose typed views directly from canonical market columns.
+- A shared consumer registry makes chart/indicator/model attachment inspectable.
+- Revisions and dirty ranges remain owned by the canonical market store.
+- Legacy object-array APIs remain explicit compatibility boundaries.
+
+## #13 — Chart engine as the major platform subsystem
+
+- ChartDataEngine isolates market-data access from rendering.
+- ChartInteractionEngine isolates gestures and hit testing from React and renderer APIs.
+- ChartScaleModel provides renderer-neutral time, price, volume, percent and log transforms.
+- ChartRenderingEngine coordinates retained scene rendering independently of the UI framework.
+
+## #14 — Recommended chart architecture
+
+```text
+TradingCore Chart
+├── Data Engine
+│   ├── CanonicalDataPlane
+│   ├── MarketDataStore
+│   ├── IndicatorStore
+│   ├── ModelStore
+│   ├── StructureStore
+│   ├── LiquidityStore
+│   └── OrderFlowStore
+├── Interaction Engine
+│   ├── pointer
+│   ├── pan/zoom/pinch
+│   └── hit testing
+└── Rendering Engine
+    ├── viewport/scales
+    ├── retained scene
+    ├── panes/layers
+    ├── WebGL2 experimental
+    ├── Canvas2D fallback
+    └── Lightweight Charts production bridge
+```
+
+## Migration status
+
+Native WebGL2 remains experimental. No production switch is made in v95.
+
+---
