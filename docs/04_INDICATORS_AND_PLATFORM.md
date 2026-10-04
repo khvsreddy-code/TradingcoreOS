@@ -105,3 +105,8 @@ Indicator/model computation cannot directly control broker execution. Risk, orde
 
 ## v130 incremental-kernel status
 Bollinger, Donchian, Stochastic, CCI and MFI standard paths already use canonical rolling kernels. Runtime RSI/ATR/session VWAP now use the same stateful kernel family and no longer maintain history-sized hot arrays for those calculations.
+
+
+## v107 incremental indicator execution
+
+CoreSpirit and the market-data indicator engine use bounded incremental kernels for repeated indicator updates, with tail-only forming-bar updates where the data-plane contract permits. IndicatorCodeViewer remains available for source inspection without introducing a second scripting language.
