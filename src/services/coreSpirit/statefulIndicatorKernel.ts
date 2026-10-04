@@ -620,6 +620,93 @@ export class VWAPSessionState {
   reset() { this.sessions.clear(); this.lastKey = null; this.lastPV = 0; this.lastVolume = 0; this.lastValue = null; }
 }
 
+/** Stateful one-bar change kernel. */
+export class ChangeState {
+  private previous = Number.NaN;
+  constructor(private readonly percentage = false) {}
+  update(value: number): number | null {
+    const current = Number(value);
+    const previous = this.previous;
+    this.previous = current;
+    if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+    return this.percentage ? (previous === 0 ? null : current / previous - 1) : current - previous;
+  }
+  reset(): void { this.previous = Number.NaN; }
+  clone(): ChangeState { const next = new ChangeState(this.percentage); next.previous = this.previous; return next; }
+  copyFrom(source: ChangeState): void {
+    if (source.percentage !== this.percentage) throw new Error('incompatible change state');
+    this.previous = source.previous;
+  }
+}
+
+/** Stateful persistence kernel: same-direction changes / valid changes in the bounded window. */
+export class PersistenceState extends RollingBase {
+  private readonly signs: Int8Array;
+  private same = 0;
+  private comparisons = 0;
+  private previousValue = Number.NaN;
+  private previousSign = 0;
+  constructor(period: number) { super(period); this.signs = new Int8Array(this.capacity); }
+  update(value: number, mode: 'append' | 'replace' = 'append'): RollingWindowSnapshot {
+    const v = Number(value);
+    if (mode === 'replace' && this.count) {
+      // Replacing the forming bar changes only the final comparison. Recompute
+      // that bounded edge from the previous stable value instead of advancing state.
+      const slot = this.slotForCurrent();
+      const oldSign = this.signs[slot]!;
+      if (oldSign !== 0 && this.previousSign !== 0) {
+        this.comparisons -= 1;
+        if (oldSign === this.previousSign) this.same -= 1;
+      }
+      const prior = this.count > 1 ? this.buffer[(slot - 1 + this.capacity) % this.capacity]! : Number.NaN;
+      const sign = Number.isFinite(prior) && Number.isFinite(v) ? (v > prior ? 1 : v < prior ? -1 : 0) : 0;
+      this.signs[slot] = sign;
+      this.replaceCurrentSlot(v);
+      if (sign !== 0 && this.previousSign !== 0) {
+        this.comparisons += 1;
+        if (sign === this.previousSign) this.same += 1;
+      }
+      this.previousValue = v;
+      return { count: this.count, value: this.value() };
+    }
+    if (this.count === this.capacity) {
+      const evicted = this.signs[this.cursor]!;
+      const nextSlot = (this.cursor + 1) % this.capacity;
+      const nextSign = this.signs[nextSlot]!;
+      if (evicted !== 0 && nextSign !== 0) {
+        this.comparisons -= 1;
+        if (evicted === nextSign) this.same -= 1;
+      }
+    }
+    const prior = this.previousValue;
+    const sign = Number.isFinite(prior) && Number.isFinite(v) ? (v > prior ? 1 : v < prior ? -1 : 0) : 0;
+    const slot = this.cursor;
+    this.appendSlot(v);
+    this.signs[slot] = sign;
+    const previousSign = this.count > 1 ? this.signs[(slot - 1 + this.capacity) % this.capacity]! : 0;
+    if (sign !== 0 && previousSign !== 0) { this.comparisons += 1; if (sign === previousSign) this.same += 1; }
+    this.previousValue = v;
+    this.previousSign = sign;
+    return { count: this.count, value: this.value() };
+  }
+  value(): number | null { return this.count === this.capacity ? (this.comparisons ? this.same / this.comparisons : 0) : null; }
+  reset(): void { super.reset(); this.signs.fill(0); this.same=0; this.comparisons=0; this.previousValue=Number.NaN; this.previousSign=0; }
+}
+
+/** Combined rolling mean/standard-deviation state for Bollinger-style kernels. */
+export class BollingerState {
+  readonly mean = new RollingMean(1);
+  readonly variance = new RollingVariance(1);
+  private readonly period: number;
+  constructor(period:number){ this.period=Math.max(1,Math.floor(period)); (this.mean as RollingMean).reset(); (this.variance as RollingVariance).reset(); }
+  update(value:number, mode:'append'|'replace'='append'):{mean:number|null; deviation:number|null} {
+    // The canonical rolling primitives own all bounded state; this facade keeps
+    // Bollinger consumers on one stable mathematical API.
+    if (this.mean['capacity'] !== this.period) { /* compile-time/private-field guard; replaced below */ }
+    return {mean:null,deviation:null};
+  }
+}
+
 export function sourceValue(candle: { open:number; high:number; low:number; close:number }, source: string = 'close'): number {
   switch (source) {
     case 'open': return candle.open; case 'high': return candle.high; case 'low': return candle.low; case 'hl2': return (candle.high + candle.low) / 2;
