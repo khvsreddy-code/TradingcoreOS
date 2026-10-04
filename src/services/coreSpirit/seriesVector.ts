@@ -246,99 +246,72 @@ class RollingState {
 
 }
 
+class CoreSpiritHeap {
+  private readonly data:number[]=[];
+  constructor(private readonly higher:(a:number,b:number)=>boolean){}
+  get size(){return this.data.length;}
+  peek(){return this.data[0];}
+  push(v:number){let i=this.data.length;this.data.push(v);while(i>0){const p=(i-1)>>>1;if(this.higher(this.data[p]!,v))break;this.data[i]=this.data[p]!;i=p;}this.data[i]=v;}
+  pop(){if(!this.data.length)return undefined;const root=this.data[0]!;const last=this.data.pop()!;if(this.data.length){let i=0;while(true){const l=i*2+1;if(l>=this.data.length)break;const r=l+1;let child=l;if(r<this.data.length&&this.higher(this.data[r]!,this.data[l]!))child=r;if(this.higher(last,this.data[child]!))break;this.data[i]=this.data[child]!;i=child;}this.data[i]=last;}return root;}
+  values(){return this.data.slice();}
+  replace(values:number[]){this.data.length=0;for(const v of values)this.push(v);}
+}
+
+class CoreSpiritDualHeapMedian {
+  private readonly lower=new CoreSpiritHeap((a,b)=>a>b);
+  private readonly upper=new CoreSpiritHeap((a,b)=>a<b);
+  private readonly delayed=new Map<number,number>();
+  private lowerSize=0;
+  private upperSize=0;
+
+  private prune(heap:CoreSpiritHeap){while(heap.size){const v=heap.peek()!;const n=this.delayed.get(v)||0;if(n<=0)return;heap.pop();if(n===1)this.delayed.delete(v);else this.delayed.set(v,n-1);}}
+  private rebalance(){this.prune(this.lower);this.prune(this.upper);if(this.lowerSize>this.upperSize+1){const v=this.lower.pop()!;this.lowerSize--;this.upper.push(v);this.upperSize++;this.prune(this.lower);}else if(this.lowerSize<this.upperSize){const v=this.upper.pop()!;this.upperSize--;this.lower.push(v);this.lowerSize++;this.prune(this.upper);}}
+  add(v:number){if(!Number.isFinite(v))return;this.prune(this.lower);if(!this.lower.size||v<=this.lower.peek()!){this.lower.push(v);this.lowerSize++;}else{this.upper.push(v);this.upperSize++;}this.rebalance();}
+  remove(v:number){if(!Number.isFinite(v))return;this.prune(this.lower);this.prune(this.upper);if(this.lower.size&&v<=this.lower.peek()!)this.lowerSize--;else this.upperSize--;this.delayed.set(v,(this.delayed.get(v)||0)+1);this.prune(this.lower);this.prune(this.upper);this.rebalance();}
+  median(){this.prune(this.lower);this.prune(this.upper);if(!this.lowerSize&&!this.upperSize)return Number.NaN;return this.lowerSize>this.upperSize?this.lower.peek()!:(this.lower.peek()!+this.upper.peek()!)/2;}
+  clear(){this.lower.replace([]);this.upper.replace([]);this.delayed.clear();this.lowerSize=0;this.upperSize=0;}
+  clone(){const next=new CoreSpiritDualHeapMedian();next.lower.replace(this.lower.values());next.upper.replace(this.upper.values());for(const [v,n] of this.delayed)next.delayed.set(v,n);next.lowerSize=this.lowerSize;next.upperSize=this.upperSize;return next;}
+  copyFrom(source:CoreSpiritDualHeapMedian){this.lower.replace(source.lower.values());this.upper.replace(source.upper.values());this.delayed.clear();for(const [v,n] of source.delayed)this.delayed.set(v,n);this.lowerSize=source.lowerSize;this.upperSize=source.upperSize;}
+}
+
+/** Exact rolling median: O(log period) expected per append/replace, with bounded dual heaps. */
 class MedianState {
   private readonly values: Float64Array;
-  private readonly sorted: Float64Array;
   private readonly period: number;
+  private readonly median = new CoreSpiritDualHeapMedian();
   private cursor = 0;
   private count = 0;
   private validCount = 0;
-  private sortedCount = 0;
 
-  constructor(period: number) {
-    this.period = Math.max(1, period);
-    this.values = new Float64Array(this.period);
+  constructor(period:number){
+    this.period=Math.max(1,Math.floor(period));
+    this.values=new Float64Array(this.period);
     this.values.fill(Number.NaN);
-    this.sorted = new Float64Array(this.period);
   }
 
-  private lowerBound(value: number): number {
-    let lo = 0;
-    let hi = this.sortedCount;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (this.sorted[mid]! < value) lo = mid + 1;
-      else hi = mid;
+  update(value:number):number{
+    if(this.count===this.period){
+      const old=this.values[this.cursor]!;
+      if(Number.isFinite(old)){this.median.remove(old);this.validCount--;}
+      this.values[this.cursor]=value;
+      if(Number.isFinite(value)){this.median.add(value);this.validCount++;}
+      this.cursor=(this.cursor+1)%this.period;
+    }else{
+      this.values[this.count]=value;
+      if(Number.isFinite(value)){this.median.add(value);this.validCount++;}
+      this.count++;
+      if(this.count===this.period)this.cursor=0;
     }
-    return lo;
+    return this.count===this.period&&this.validCount===this.period?this.median.median():Number.NaN;
   }
 
-  private insert(value: number): void {
-    const pos = this.lowerBound(value);
-    for (let i = this.sortedCount; i > pos; i -= 1) this.sorted[i] = this.sorted[i - 1]!;
-    this.sorted[pos] = value;
-    this.sortedCount += 1;
-  }
-
-  private remove(value: number): void {
-    if (!Number.isFinite(value)) return;
-    const pos = this.lowerBound(value);
-    if (pos >= this.sortedCount || this.sorted[pos] !== value) return;
-    for (let i = pos; i + 1 < this.sortedCount; i += 1) this.sorted[i] = this.sorted[i + 1]!;
-    this.sortedCount -= 1;
-  }
-
-  update(value: number): number {
-    if (this.count === this.period) {
-      const old = this.values[this.cursor]!;
-      if (Number.isFinite(old)) {
-        this.remove(old);
-        this.validCount -= 1;
-      }
-      this.values[this.cursor] = value;
-      if (Number.isFinite(value)) {
-        this.insert(value);
-        this.validCount += 1;
-      }
-      this.cursor = (this.cursor + 1) % this.period;
-    } else {
-      this.values[this.count] = value;
-      if (Number.isFinite(value)) {
-        this.insert(value);
-        this.validCount += 1;
-      }
-      this.count += 1;
-      if (this.count === this.period) this.cursor = 0;
-    }
-
-    if (this.count !== this.period || this.validCount !== this.period) return Number.NaN;
-    const mid = Math.floor(this.sortedCount / 2);
-    return this.sortedCount % 2 === 1
-      ? this.sorted[mid]!
-      : (this.sorted[mid - 1]! + this.sorted[mid]!) / 2;
-  }
-  
-  clone(): MedianState {
-    const next = new MedianState(this.period);
-    next.values.set(this.values);
-    next.sorted.set(this.sorted);
-    next.cursor = this.cursor;
-    next.count = this.count;
-    next.validCount = this.validCount;
-    next.sortedCount = this.sortedCount;
-    return next;
-  }
-
-  copyFrom(source: MedianState): void {
-    if (source.period !== this.period) throw new Error('incompatible median state');
+  clone():MedianState{const next=new MedianState(this.period);next.copyFrom(this);return next;}
+  copyFrom(source:MedianState){
+    if(source.period!==this.period)throw new Error('incompatible median state');
     this.values.set(source.values);
-    this.sorted.set(source.sorted);
-    this.cursor = source.cursor;
-    this.count = source.count;
-    this.validCount = source.validCount;
-    this.sortedCount = source.sortedCount;
+    this.cursor=source.cursor;this.count=source.count;this.validCount=source.validCount;
+    this.median.copyFrom(source.median);
   }
-
 }
 
 class PersistenceState {
