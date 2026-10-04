@@ -92,11 +92,11 @@ The public concept is **CoreSpirit Community Indicators**. Published artifacts c
 
 Not every advanced indicator reduces to a scalar rolling statistic. Pattern/structure features can use semantic session grouping, confirmed swings, fixed-size candle relationships, centered extrema or other purpose-built state. Those paths are evaluated against their actual dependency/complexity rather than being mislabeled as generic O(1).
 
-## v130 indicator math cleanup
+## v131 indicator math cleanup
 
-The scalar compatibility module no longer contains period-window `slice/reduce/spread` implementations. It delegates to the canonical bounded-state classes, keeping one mathematical source of truth for rolling operations.
+The scalar indicator kernel delegates to `statefulIndicatorKernel.ts`, and the `seriesVector.ts` fused executor now uses the same canonical Rolling/EMA/Wilder/WMA/change/persistence classes. There is no second private median/heap/rolling-state implementation.
 
-The separate `seriesVector.ts` fused executor is still a deduplication target because it retains private fused-state copies. Until that is removed, the tracker intentionally marks kernel deduplication as open.
+The remaining optimization target is execution granularity: exact dirty spans must eventually flow through every indicator/render packet consumer rather than falling back to broad series replacement.
 
 ## Authority boundary
 
