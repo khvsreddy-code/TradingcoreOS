@@ -130,6 +130,38 @@ export class MarketDataStore {
     this.markDirty(0, this._length);
   }
 
+  /** Replace typed OHLCV columns without materializing per-bar objects. */
+  replaceColumns(columns: {
+    time: ArrayLike<number>;
+    open: ArrayLike<number>;
+    high: ArrayLike<number>;
+    low: ArrayLike<number>;
+    close: ArrayLike<number>;
+    volume: ArrayLike<number>;
+    timeUnit?: 'milliseconds' | 'seconds';
+  }, from = 0, to = columns.time.length): void {
+    const count = Math.max(0, Math.min(columns.time.length, columns.open.length, columns.high.length, columns.low.length, columns.close.length, columns.volume.length));
+    const start = Math.max(0, Math.min(count, Math.floor(from)));
+    const end = Math.max(start, Math.min(count, Math.ceil(to)));
+    const length = end - start;
+    this.ensure(length);
+    const multiplier = columns.timeUnit === 'seconds' ? 1 : 0.001;
+    for (let i = 0; i < length; i += 1) {
+      const source = start + i;
+      this._time[i] = Number(columns.time[source]) * multiplier;
+      this._open[i] = Number(columns.open[source]);
+      this._high[i] = Number(columns.high[source]);
+      this._low[i] = Number(columns.low[source]);
+      this._close[i] = Number(columns.close[source]);
+      const volume = Number(columns.volume[source]);
+      this._volume[i] = Number.isFinite(volume) ? volume : 0;
+      this._oi[i] = NaN; this._bid[i] = NaN; this._ask[i] = NaN;
+      this._bidVolume[i] = NaN; this._askVolume[i] = NaN; this._trades[i] = NaN; this._session[i] = NaN;
+    }
+    this._length = length;
+    this.markDirty(0, this._length);
+  }
+
   /**
    * Replace OHLCV history directly from an existing broker/history object array.
    * No intermediate MarketDataPoint objects are created; the caller's rows are
