@@ -56,7 +56,7 @@ Prefer incremental kernels:
 
 - EMA/RMA state
 - rolling mean/variance
-- monotonic min/max deques
+- replace-safe bounded min/max state; centered append-only extrema use monotonic deques
 - bounded median state
 - VWAP session state
 - ATR state
@@ -81,7 +81,7 @@ Indicator implementations are split into two paths.
 ```
 RollingSum · RollingMean · RollingVariance
 RollingMin/Max · RollingMedian · RollingPercentile
-EMA · Wilder · ATR · VWAP
+EMA · Wilder · ATR · WMA · VWAP
 ```
 
 **Structural/semantic path** for pattern logic where the window is not a simple rolling statistic. Even there, centered extrema and other bounded lookbacks use monotonic state instead of repeated array slicing.
@@ -127,7 +127,7 @@ The standard rolling family covered by this architecture includes Bollinger, Don
 | SMA / rolling sum | `RollingMean` / `RollingSum` | O(1) |
 | Bollinger / variance | `RollingMean` + `RollingVariance` | O(1) |
 | Donchian / rolling extrema | bounded segment tree with point replacement | O(log period) |
-| Stochastic | bounded extrema + smoothers | O(log period) |
+| Stochastic | bounded replace-safe extrema + smoothers | O(log period) |
 | CCI / MAD | running mean + ordered state | O(log period) |
 | MFI | rolling positive/negative sums | O(1) |
 | Median / percentile | dual heap / ordered multiset | O(log period) expected |
