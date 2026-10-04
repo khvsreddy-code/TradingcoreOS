@@ -110,9 +110,9 @@ Vela exposes frame/backend statistics and TCO aggregates stage-level telemetry. 
 
 **Runtime browser verification is still open.** Source contracts do not claim that authenticated browser or GPU measurements have been captured.
 
-## v130 boundary cleanup
+## v131 boundary cleanup
 
-The canonical stateful mathematical path is now separated from the legacy scalar compatibility helpers. Vela's retained history remains columnar by default, while compatibility object materialization stays explicit and tracked.
+The canonical stateful mathematical path is shared by CoreSpirit, scalar indicator execution and fused execution. Vela's retained history remains columnar by default, while compatibility object materialization stays explicit and tracked.
 
 ## Three remaining deep phases
 
