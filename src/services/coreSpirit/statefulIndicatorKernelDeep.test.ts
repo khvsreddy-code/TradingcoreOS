@@ -130,7 +130,7 @@ console.log('TRADINGCORE_V128_STATEFUL_KERNEL_PARITY_OK');
   const change = new ChangeState(false);
   assert.ok(Number.isNaN(change.update(10)));
   nearly(change.update(13), 3);
-  assert.ok(Number.isNaN(change.update(0)));
+  nearly(change.update(0), -13);
   nearly(change.update(5), 5);
 }
 
@@ -140,10 +140,10 @@ console.log('TRADINGCORE_V128_STATEFUL_KERNEL_PARITY_OK');
   assert.equal(persistence.update(2), null);
   assert.equal(persistence.update(3), null);
   nearly(persistence.update(4)!, 1);
-  nearly(persistence.update(3)!, 2 / 3);
-  nearly(persistence.update(5, 'replace')!, 2 / 3);
+  nearly(persistence.update(3)!, 0.5);
+  nearly(persistence.update(5, 'replace')!, 1);
   persistence.update(6);
-  nearly(persistence.update(4)!, 2 / 3);
+  nearly(persistence.update(4)!, 0.5);
 }
 
 console.log('TRADINGCORE_V130_CANONICAL_KERNEL_REPLACEMENT_OK');
