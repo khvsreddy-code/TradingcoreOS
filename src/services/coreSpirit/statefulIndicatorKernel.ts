@@ -632,6 +632,7 @@ export class WMAState extends RollingBase {
     return this.count === p ? this.weighted / (p * (p + 1) / 2) : null;
   }
   reset() { super.reset(); this.weighted = 0; this.sum = 0; this.currentInput = null; }
+  get value(): number | null { return this.count === this.capacity ? this.weighted / (this.capacity * (this.capacity + 1) / 2) : null; }
 }
 
 function copyVwapSessions(target: Map<string, { pv: number; volume: number }>, source: Map<string, { pv: number; volume: number }>): void {
