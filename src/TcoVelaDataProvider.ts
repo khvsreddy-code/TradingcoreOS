@@ -116,6 +116,15 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    if (range.to != null) {
+      const before = Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000;
+      const direct = await tradingCoreRuntime.getHistoricalDataColumns(symbol, tcoTimeframe, undefined, requested, before);
+      if (direct) return {
+        time: Float64Array.from(direct.time, (value) => Number(value) / 1000),
+        open: Float64Array.from(direct.open), high: Float64Array.from(direct.high), low: Float64Array.from(direct.low),
+        close: Float64Array.from(direct.close), volume: Float64Array.from(direct.volume), length: Math.min(direct.time.length, direct.open.length, direct.high.length, direct.low.length, direct.close.length, direct.volume.length), timeUnit: 'seconds',
+      };
+    }
     const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
     await plane.ensureReadyColumns(requested);
     const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
