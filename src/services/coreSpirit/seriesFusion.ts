@@ -7,6 +7,7 @@ import {
   coreSpiritSeriesLength,
   coreSpiritSeriesMaxLookback,
   executeCoreSpiritFusedSeriesPipeline,
+  executeCoreSpiritFusedSeriesPipelineInto,
   asCoreSpiritNumericSeries,
   isCoreSpiritSeriesOperationFusible,
 } from './seriesVector';
