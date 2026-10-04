@@ -3,6 +3,7 @@ import type { MarketDataFeed, BarRange } from '../ports/MarketDataFeed';
 import type { ScriptingEngine, ExecutionMarket, VisibleBarRange, BarsChangeReason, PreparedScript } from '../ports/ScriptingEngine';
 import type { Unsubscribe } from '../util/types';
 import type { OHLCV } from '../model/ohlcv';
+import type { ColumnarBars, ColumnarBarUpdate, ColumnarTimeUnit } from '../model/columnar-bars';
 import type { IndicatorModel } from '../model/indicator';
 import type { ValuePatch, SeriesValueDelta } from '../model/patch';
 import { isLineLikeSeries } from '../model/series';
@@ -149,6 +150,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private activeEngineStyle: string | null = null;
     /** The chart's current price style (tracked from the renderer's change events + initial read). */
     private priceStyle: PriceStyle = 'candles';
+    /** Explicit time unit of the active native columnar market source. */
+    private columnarTimeUnit: ColumnarTimeUnit = 'milliseconds';
     private readonly readyPromise: Promise<void>;
     private unresolvedUnsub: Unsubscribe | null = null;
     /** Latest chart visible range (left/right bar times), fed to viewport-dependent scripts. */
@@ -472,7 +475,27 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // Only a DEEP request is worth splitting, and only when a requested initial window
         // does not pin the frame (a chunked load would paint the wrong range, then jump).
         const deep = !market.data?.length && initialRange == null && requested > SINGLE_LOAD_BARS;
-        // PROGRESSIVE-CAPABLE source first: paint every snapshot it emits while it heals —
+        // Native columnar history is the preferred initial-load path for the canonical TCO provider.
+        // Only the identity bar view can use it: transforms such as Heikin-Ashi need object semantics.
+        // Large/deep requests continue through the existing progressive/backfill paths until their
+        // ranged columnar equivalents are implemented.
+        let columnarServed = false;
+        if (!market.data?.length && initialRange == null && requested <= SINGLE_LOAD_BARS && !this.barTransform && this.feed.loadColumns) {
+            const columns = await this.feed.loadColumns(market);
+            if (this.generation !== gen) return;
+            if (columns && columns.length > 0) {
+                this.setBarSeriesColumns(columns);
+                if (opts.firstLoad) this.activateBarLayers();
+                this.completeHistory('depth');
+                columnarServed = true;
+            }
+        }
+        if (columnarServed) {
+            // The columnar load is already painted and history is complete. The live session starts
+            // from the same canonical mirror below.
+        }
+        if (!columnarServed) {
+            // PROGRESSIVE-CAPABLE source first: paint every snapshot it emits while it heals —
         // first candles in seconds on a cold symbol, depth growing behind them — and
         // complete when the final answer resolves. The pipeline returns at the FIRST paint
         // (exactly the deep head + backfill shape below); the remainder streams in,
@@ -568,6 +591,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             if (opts.firstLoad) this.activateBarLayers();
             this.completeHistory('depth');
         }
+        }
         // Frame the requested window NOW: `setBarSeries` only invalidated, so this lands in the
         // very first painted frame — no wrong-window flash, no re-frame jump.
         if (initialRange != null) {
@@ -583,7 +607,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     /** Start the live tick subscription + the tab-restore catch-up listener. */
     private startLive(): void {
         if (!this.config.live) return;
-        this.live = new LiveSession(this.feed, this.config.market, (bar) => this.onBar(bar));
+        const compactLive = !this.barTransform && typeof this.renderer.updateBarColumns === 'function' && typeof this.feed.subscribeColumns === 'function';
+        this.live = new LiveSession(
+            this.feed,
+            this.config.market,
+            (bar) => this.onBar(bar),
+            compactLive ? (update) => this.onColumnarBar(update) : undefined,
+        );
         this.live.start();
         // Tab-restore catch-up: browsers throttle hidden tabs (timers → 1/min, sockets can
         // freeze), so bars close unseen while backgrounded. On return, backfill from the last
@@ -1584,6 +1614,53 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         }
     }
 
+    private onColumnarBar(update: ColumnarBarUpdate): void {
+        const unit = update.timeUnit ?? this.columnarUnit();
+        const time = unit === 'seconds' ? update.time * 1000 : update.time;
+        if (this.healing) {
+            this.healBuffer.push(this.columnarUpdateToBar(update));
+            return;
+        }
+        const last = this.rawBars[this.rawBars.length - 1];
+        if (last && this.canHeal() && time > last.time + this.barIntervalMs() * GAP_FACTOR && Date.now() - this.lastHealAt > HEAL_COOLDOWN_MS) {
+            this.healBuffer.push(this.columnarUpdateToBar(update));
+            void this.healGap(last.time);
+            return;
+        }
+        this.applyColumnarBar(update);
+    }
+
+    private applyColumnarBar(update: ColumnarBarUpdate, notify = true): void {
+        const unit = update.timeUnit ?? this.columnarUnit();
+        const time = unit === 'seconds' ? update.time * 1000 : update.time;
+        const volume = update.volume != null && Number.isFinite(update.volume) ? update.volume : undefined;
+        const bar: OHLCV = { time, open: update.open, high: update.high, low: update.low, close: update.close, volume };
+        const last = this.rawBars[this.rawBars.length - 1];
+        if (last && time === last.time) {
+            this.rawBars[this.rawBars.length - 1] = bar;
+            this.barCause = 'tick';
+        } else if (!last || time > last.time) {
+            this.rawBars.push(bar);
+            this.barCause = 'bar';
+        } else return;
+        this.renderer.updateBarColumns(update);
+        this.events.emit('bar', bar);
+        if (notify) this.notifySessionsBars(this.historyState === 'backfill' ? 'backfill' : undefined);
+    }
+
+    private columnarUpdateToBar(update: ColumnarBarUpdate): OHLCV {
+        const unit = update.timeUnit ?? this.columnarUnit();
+        return {
+            time: unit === 'seconds' ? update.time * 1000 : update.time,
+            open: update.open, high: update.high, low: update.low, close: update.close,
+            volume: update.volume != null && Number.isFinite(update.volume) ? update.volume : undefined,
+        };
+    }
+
+    private columnarUnit(): ColumnarTimeUnit {
+        return this.columnarTimeUnit;
+    }
+
     private onBar(bar: OHLCV): void {
         if (this.healing) {
             this.healBuffer.push(bar); // replayed once the backfill lands (ordering preserved)
@@ -1609,7 +1686,27 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * (identity when no transform), and hand the view to the renderer. Everything downstream
      * (engines via `getBars`, natives, visible-range presets) reads `this.bars` — the view.
      */
+    private setBarSeriesColumns(columns: ColumnarBars, opts?: { preserveView?: boolean; clearing?: boolean }): void {
+        const n = Math.max(0, Math.min(columns.length, columns.time.length, columns.open.length, columns.high.length, columns.low.length, columns.close.length, columns.volume.length));
+        const unit = columns.timeUnit ?? 'milliseconds';
+        this.columnarTimeUnit = unit;
+        const raw = new Array<OHLCV>(n);
+        for (let i = 0; i < n; i += 1) {
+            raw[i] = {
+                time: unit === 'seconds' ? columns.time[i]! * 1000 : columns.time[i]!,
+                open: columns.open[i]!, high: columns.high[i]!, low: columns.low[i]!, close: columns.close[i]!,
+                volume: Number.isFinite(columns.volume[i]!) ? columns.volume[i]! : undefined,
+            };
+        }
+        this.rawBars = raw;
+        this.bars = raw;
+        if (typeof this.renderer.setBarsColumns === 'function') this.renderer.setBarsColumns(columns, { preserveView: opts?.preserveView });
+        else this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
+        if (!opts?.clearing && this.bars.length > 0) this.endLoad();
+    }
+
     private setBarSeries(raw: OHLCV[], opts?: { preserveView?: boolean; clearing?: boolean }): void {
+        this.columnarTimeUnit = 'milliseconds';
         this.rawBars = raw;
         this.bars = this.barTransform ? this.barTransform.full(raw) : raw;
         this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });

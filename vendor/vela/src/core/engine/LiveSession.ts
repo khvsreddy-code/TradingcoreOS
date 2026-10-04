@@ -1,6 +1,7 @@
 import type { MarketDataFeed } from '../ports/MarketDataFeed';
 import type { MarketConfig } from '../options';
 import type { OHLCV } from '../model/ohlcv';
+import type { ColumnarBarUpdate } from '../model/columnar-bars';
 import type { Unsubscribe } from '../util/types';
 
 /**
@@ -15,10 +16,18 @@ export class LiveSession {
         private readonly feed: MarketDataFeed,
         private readonly market: MarketConfig,
         private readonly onBar: (bar: OHLCV) => void,
+        private readonly onColumnarBar?: (bar: ColumnarBarUpdate) => void,
     ) {}
 
     start(): void {
         if (this.unsubscribe) return;
+        if (this.onColumnarBar && this.feed.subscribeColumns) {
+            const compact = this.feed.subscribeColumns(this.market, this.onColumnarBar);
+            if (compact) {
+                this.unsubscribe = compact;
+                return;
+            }
+        }
         this.unsubscribe = this.feed.subscribe(this.market, this.onBar);
     }
 

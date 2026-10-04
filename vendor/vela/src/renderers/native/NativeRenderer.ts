@@ -19,6 +19,8 @@ import type {
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
 import type { OHLCV } from '../../core/model/ohlcv';
+import { createMutableColumnarBars, appendColumnarBar } from '../../core/model/columnar-bars';
+import type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../core/model/columnar-bars';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
 import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
@@ -281,6 +283,10 @@ export class NativeRenderer implements IChartRenderer {
     private panVelocity = 0; // inertial rightOffset velocity (logical units / ms)
 
     private bars: OHLCV[] = [];
+    /** Canonical numeric source for the native base-price renderer. Object bars remain only
+     * as a compatibility mirror for legacy scripting/data-window/drawing code. */
+    private columnarBars: ColumnarBars | null = null;
+    private columnarLod: ColumnarLodIndex | null = null;
     private didInitialFit = false;
     /** A data-tier paint has happened (scales + drawing resolvers are real) — gates the
      *  cheap chrome-only repaint so it never draws over placeholder state. */
@@ -1876,7 +1882,80 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     // ── price data ──
+    setBarsColumns(columns: ColumnarBars, opts?: { preserveView?: boolean }): void {
+        if (this.introRaf != null) { cancelAnimationFrame(this.introRaf); this.introRaf = null; this.modelAlpha = 1; }
+        this.liveEaseTime = 0;
+        const prevBars = this.bars;
+        const prevHeadTime = prevBars[0]?.time;
+        if (columns.length <= 0) {
+            // Keep an OWNED mutable columnar store even for an empty series. A live update may
+            // arrive immediately after a cold/empty response; storing the caller's readonly
+            // buffers here would make the append path unsafe because it expects capacity.
+            this.columnarBars = createMutableColumnarBars(columns);
+            this.columnarLod = null;
+            this.bars = [];
+            this.scene.bars = this.bars;
+            this.scene.candleColumns = this.columnarBars;
+            this.scene.candleLodIndex = undefined;
+            this.coords.setBars([]);
+            this.scheduler.invalidate(InvalidateLevel.Full);
+            return;
+        }
+        // One numeric copy establishes a Vela-owned capacity buffer. This is deliberately
+        // NOT an OHLCV object graph: live updates can append/update the typed columns in O(1)
+        // and the renderer never needs to rebuild bars just to paint them.
+        this.columnarBars = createMutableColumnarBars(columns);
+        this.columnarLod = null;
+        this.bars = materializeColumnarBars(this.columnarBars); // compatibility mirror only
+        this.scene.bars = this.bars;
+        this.scene.candleColumns = this.columnarBars;
+        this.scene.candleLodIndex = undefined;
+        this.coords.setBars(this.bars.map((b) => b.time));
+        for (const model of this.scene.indicators.values()) this.refreshAnchorOffset(model);
+        if (opts?.preserveView === true && prevHeadTime != null && this.bars.length > 0) {
+            const newHeadTime = this.bars[0]!.time;
+            if (newHeadTime !== prevHeadTime) {
+                const prepended = this.bars.findIndex((b) => b.time === prevHeadTime);
+                if (prepended > 0) this.zoomAnchorLogical += prepended;
+                else {
+                    const trimmed = prevBars.findIndex((b) => b.time === newHeadTime);
+                    if (trimmed > 0) this.zoomAnchorLogical -= trimmed;
+                }
+            }
+        }
+        const skipFit = opts?.preserveView === true && this.didInitialFit;
+        if (this.coords.width > 0 && !skipFit) {
+            if (this.didInitialFit) this.reframeKeepZoom();
+            else this.fitContent();
+            this.didInitialFit = true;
+        }
+        if (!this.introPlayed && this.bars.length > 0) {
+            this.introPlayed = true;
+            if (this.intro.style) {
+                this.playIntro();
+                return;
+            }
+        }
+        this.scheduler.invalidate(InvalidateLevel.Full);
+    }
+
+    updateBarColumns(update: ColumnarBarUpdate): void {
+        const unit = update.timeUnit ?? this.columnarBars?.timeUnit ?? 'milliseconds';
+        const barTime = update.time;
+        this.applyColumnarBar(barTime, unit, update.open, update.high, update.low, update.close, update.volume);
+    }
+
+    setLodIndex(index: ColumnarLodIndex | null): void {
+        this.columnarLod = index;
+        this.scene.candleLodIndex = index ?? undefined;
+        this.scheduler.invalidate(InvalidateLevel.Full);
+    }
+
     setBars(bars: OHLCV[], opts?: { preserveView?: boolean }): void {
+        this.columnarBars = null;
+        this.columnarLod = null;
+        this.scene.candleColumns = undefined;
+        this.scene.candleLodIndex = undefined;
         if (this.introRaf != null) { cancelAnimationFrame(this.introRaf); this.introRaf = null; this.modelAlpha = 1; } // a re-set interrupts a running reveal
         // A series replacement invalidates the forming-bar glide: after an in-place market
         // switch the NEW market's forming bar shares the same bucket open-time, so a stale
@@ -1942,7 +2021,38 @@ export class NativeRenderer implements IChartRenderer {
         this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
+    private applyColumnarBar(timeValue: number, timeUnit: 'seconds' | 'milliseconds', open: number, high: number, low: number, close: number, volume?: number): void {
+        const columns = this.columnarBars;
+        if (!columns) return;
+        const n = columns.length;
+        const incoming = timeUnit === columns.timeUnit ? timeValue : (columns.timeUnit === 'seconds' ? timeValue / 1000 : timeValue * 1000);
+        if (n > 0 && columns.time[n - 1] === incoming) {
+            columns.open[n - 1] = open; columns.high[n - 1] = high; columns.low[n - 1] = low; columns.close[n - 1] = close; columns.volume[n - 1] = Number.isFinite(volume ?? Number.NaN) ? volume! : Number.NaN;
+            const mirror = this.bars[n - 1];
+            if (mirror) { mirror.open = open; mirror.high = high; mirror.low = low; mirror.close = close; mirror.volume = Number.isFinite(volume ?? Number.NaN) ? volume : undefined; }
+            this.scene.bars = this.bars;
+            return;
+        }
+        if (n > 0 && incoming < columns.time[n - 1]!) return;
+        const next = appendColumnarBar(columns, incoming, open, high, low, close, volume);
+        this.bars.push({ time: next.time, open, high, low, close, volume: Number.isFinite(volume ?? Number.NaN) ? volume : undefined });
+        this.coords.appendBar(this.bars[this.bars.length - 1]!.time);
+        this.scene.bars = this.bars;
+    }
+
     updateBar(bar: OHLCV): void {
+        if (this.columnarBars) {
+            const columns = this.columnarBars;
+            const lastTimeMs = columns.length > 0 ? (columns.timeUnit === 'seconds' ? columns.time[columns.length - 1]! * 1000 : columns.time[columns.length - 1]!) : -Infinity;
+            const vp = this.coords.getViewport();
+            const holdView = columns.length > 0 && vp.rightOffset < 0 && this.scrollTargetRO === null;
+            const wasAppend = columns.length === 0 || bar.time > lastTimeMs;
+            this.applyColumnarBar(bar.time, 'milliseconds', bar.open, bar.high, bar.low, bar.close, bar.volume);
+            if (wasAppend && holdView) this.coords.setViewport({ ...vp, rightOffset: vp.rightOffset - 1 });
+            this.syncLiveEase(bar);
+            this.scheduler.invalidate(InvalidateLevel.Full);
+            return;
+        }
         const n = this.bars.length;
         const last = this.bars[n - 1];
         if (last && bar.time === last.time) {
@@ -4457,6 +4567,23 @@ function formatVolume(v: number): string {
     if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
     if (a >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
     return v.toFixed(2);
+}
+
+function materializeColumnarBars(columns: ColumnarBars): OHLCV[] {
+    const n = Math.max(0, Math.min(columns.length, columns.time.length, columns.open.length, columns.high.length, columns.low.length, columns.close.length, columns.volume.length));
+    const out = new Array<OHLCV>(n);
+    const unit = columns.timeUnit ?? 'milliseconds';
+    for (let i = 0; i < n; i += 1) {
+        out[i] = {
+            time: unit === 'seconds' ? columns.time[i]! * 1000 : columns.time[i]!,
+            open: columns.open[i]!,
+            high: columns.high[i]!,
+            low: columns.low[i]!,
+            close: columns.close[i]!,
+            volume: Number.isFinite(columns.volume[i]!) ? columns.volume[i]! : undefined,
+        };
+    }
+    return out;
 }
 
 /** Sort ascending + dedupe by time (last write wins). */

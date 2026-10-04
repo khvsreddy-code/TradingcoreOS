@@ -717,3 +717,82 @@ The indicator parameter validator had a two-step regression: an earlier repair i
 ### v115 architectural rule
 
 `HistoricalCandle[]` is now an **edge representation**, not a cross-thread or cross-stage transport representation. New compute/data APIs must prefer typed canonical views, typed packet transport or renderer-neutral packets. Any new object-array API must be justified as an explicit compatibility boundary and must not silently become the canonical store again.
+
+
+## v116 — genuine columnar Vela consumption + native shell integration
+
+v116 closes the next representation-churn boundary instead of merely adding another adapter method. The production TCO Vela path now has three explicit numeric stages:
+
+```text
+CanonicalMarketView
+    ↓ typed views
+TCO Vela provider
+    ↓ ColumnarBars
+Vela feed/orchestrator
+    ↓ ColumnarBars
+NativeRenderer.setBarsColumns()
+    ↓ typed channels
+Canvas2D / WebGL2 candle geometry
+```
+
+### History path
+
+`TcoVelaDataProvider.getBarsColumns()` returns subarray views over the canonical `Float64Array` channels. The Vela registry/feed and `EngineOrchestrator` prefer `loadColumns()` for bounded identity-bar loads. The renderer stores those channels in a Vela-owned mutable typed buffer with spare capacity. This is intentionally **zero-object at the render/data boundary**, but it is not described as mathematical zero-copy: the renderer establishes ownership with one numeric buffer copy so later forming-bar updates can remain O(1) and safe.
+
+The native canvas and WebGL candle painters read `time/open/high/low/close` directly from those arrays. They do not allocate one `OHLCV` object per candle in the render loop. Vela retains a single internal `OHLCV[]` compatibility mirror because legacy scripting, data-window and some non-candle features still read that model. The mirror is created on series replacement, not used as the candle render transport.
+
+### Live path
+
+The same rule now continues through the forming-candle stream. `subscribeColumns()` is an optional provider/feed capability. TradingCoreOS emits a compact `ColumnarBarUpdate` from the canonical tail, and `LiveSession` selects that path when the chart is an identity series and the renderer exposes `updateBarColumns()`.
+
+The live sequence is therefore:
+
+```text
+canonical tail
+    ↓
+ColumnarBarUpdate
+    ↓
+LiveSession
+    ↓
+EngineOrchestrator.onColumnarBar()
+    ├── native renderer.updateBarColumns()
+    └── one compatibility OHLCV for legacy bar/session consumers
+```
+
+This removes the previous provider → engine object allocation for every live packet while retaining the existing compatibility ABI for consumers that have not yet migrated.
+
+### LOD and viewport contract
+
+`setLodIndex()` now carries the renderer-neutral `ChartLodIndex` into Vela as typed bucket arrays. The native candle renderer uses those buckets when its density tier reaches aggregate mode; it does not rebuild reduced candle objects on every frame. `setVisibleRange()` remains the stable renderer contract for viewport changes, so TCO does not reach into Vela's coordinate or viewport internals.
+
+The old `setReducedCandles()` path remains only as a compatibility route for renderers that have not adopted the typed LOD contract. It is no longer the preferred TCO/native path.
+
+### Ownership and mutation rules
+
+1. TCO canonical arrays remain owned by `CanonicalDataPlane` and are never mutated by Vela.
+2. Vela takes ownership of its own mutable capacity buffers at the renderer boundary.
+3. Forming-bar updates mutate only the Vela-owned numeric tail and the required legacy mirror entry.
+4. LOD arrays are treated as immutable snapshots until the next explicit `setLodIndex()` call.
+5. Viewport operations remain contract-level calls (`setVisibleRange`) rather than Vela-internal calls.
+6. `SharedArrayBuffer` remains deferred until buffer ownership, revisioning and reclamation are explicit.
+
+### Vendor boundary
+
+TradingCoreOS still exposes Vela only through `velaChartFacade.ts` and the TCO adapter. TCO feature code does not import `NativeRenderer`, `SceneGraph`, renderer backends or other Vela implementation classes. The vendored fork can therefore change without leaking its internal representation across the TradingCoreOS application boundary.
+
+### Shell chrome changes
+
+The former React/floating watchlist and floating broker controls have been removed from the chart workspace. The Vela topbar now owns the chrome:
+
+```text
+Vela topbar
+  ├── Watchlist  ← Vela side-panel toggle, renamed from TCO's old watchlist control
+  ├── Journal    ← Vela side-panel toggle
+  └── Broker Connection  ← contributed topbar action, inside the actual topbar flow
+```
+
+The Watchlist and Journal are registered through Vela's contribution API and therefore use the same panel docking/exclusivity/persistence mechanism as native Vela panels. Broker Connection is a contributed topbar action rather than an absolutely positioned TCO overlay, so it moves/reflows with the actual Vela topbar and stays inside its chrome.
+
+### What remains
+
+The columnar boundary is now real for identity OHLCV history, native candle rendering, typed LOD and forming-bar updates. The next conversion is deliberately downstream: migrate CoreSpirit and native indicator kernels from the Vela compatibility `OHLCV[]` mirror to typed `CanonicalMarketView`/series inputs, then migrate deep/backfill/transformed chart paths to columnar range operations. Only after those steps should the remaining Vela compatibility mirror be retired and SAB be reconsidered.

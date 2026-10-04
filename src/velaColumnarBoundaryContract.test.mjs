@@ -1,0 +1,42 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+
+const read = (p) => fs.readFileSync(new URL(`./${p}`, import.meta.url), 'utf8');
+
+const nativeAdapter = read('services/core/chart/velaNativeChartRenderer.ts');
+const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
+const iRenderer = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
+const provider = read('TcoVelaDataProvider.ts');
+const chrome = read('services/core/chart/tcoVelaChrome.ts');
+const liveSession = read('../vendor/vela/src/core/engine/LiveSession.ts');
+const dataProviderPort = read('../vendor/vela/src/core/ports/DataProvider.ts');
+const feedPort = read('../vendor/vela/src/core/ports/MarketDataFeed.ts');
+const workspace = read('LiveTradingWorkspace.tsx');
+const scene = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
+
+assert.match(nativeAdapter, /setBarsColumns\(/, 'TCO native adapter must use setBarsColumns');
+assert.doesNotMatch(nativeAdapter, /new Array<OHLCV>\(store\.length\)/, 'TCO store path must not materialize OHLCV rows');
+assert.match(nativeAdapter, /setLodIndex\(/, 'TCO native adapter must forward LOD index');
+assert.match(nativeRenderer, /setBarsColumns\(columns:/, 'Vela native renderer must accept columnar bars');
+assert.match(nativeRenderer, /setLodIndex\(index:/, 'Vela native renderer must accept external LOD');
+assert.match(nativeRenderer, /createMutableColumnarBars/, 'Vela must retain numeric history in a typed buffer');
+assert.match(nativeRenderer, /updateBarColumns\(/, 'Vela must expose scalar columnar live updates');
+assert.match(iRenderer, /setBarsColumns\?/, 'chart renderer contract must expose optional columnar seam');
+assert.match(provider, /getBarsColumns\(/, 'TCO provider must expose canonical columnar history');
+assert.match(scene, /candleColumns\?: ColumnarBars/, 'native scene must carry columnar source');
+assert.match(chrome, /id: 'tco\.broker-connection'/, 'Broker must be a TCO topbar contribution');
+assert.match(chrome, /id: 'tco\.watchlist'/, 'Watchlist must be a Vela side panel');
+assert.match(chrome, /id: 'tco\.journal'/, 'Journal must be a Vela side panel');
+assert.match(chrome, /target: 'topbar'/, 'Broker must be projected into Vela topbar');
+assert.match(chrome, /label: 'Broker Connection'/, 'Broker topbar label must be explicit');
+assert.doesNotMatch(workspace, /absolute top-1\.5 right-\\[92px\\]/, 'legacy floating top controls must be removed');
+assert.doesNotMatch(workspace, /BriefcaseBusiness|Broker Connection Status|watchlistOpen/, 'legacy React watchlist/broker overlay must be removed');
+assert.match(dataProviderPort, /getBarsColumns/);
+assert.match(dataProviderPort, /subscribeColumns/);
+assert.match(feedPort, /loadColumns\?/);
+assert.match(feedPort, /subscribeColumns\?/);
+assert.match(liveSession, /subscribeColumns/);
+assert.match(provider, /subscribeColumns/);
+assert.match(nativeRenderer, /setVisibleRange\(range:/);
+assert.match(nativeRenderer, /updateBarColumns\(update:/);
+console.log('TRADINGCORE_V116_VELA_COLUMNAR_BOUNDARY_CONTRACT_OK');

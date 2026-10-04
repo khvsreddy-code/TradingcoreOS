@@ -1,4 +1,5 @@
 import type { OHLCV } from '../model/ohlcv';
+import type { ColumnarBarUpdate } from '../model/columnar-bars';
 import type { MarketConfig } from '../options';
 import type { Unsubscribe } from '../util/types';
 
@@ -40,6 +41,8 @@ export interface BarRange {
 export interface MarketDataFeed {
     /** Load the initial history (from a provider or the offline `data` array). */
     load(cfg: MarketConfig): Promise<OHLCV[]>;
+    /** Optional columnar fast path. Returning null means the feed cannot provide it. */
+    loadColumns?(cfg: MarketConfig): Promise<import('../model/columnar-bars').ColumnarBars | null>;
     /**
      * Progressive load: emit growing snapshots while the source heals a cold symbol,
      * resolve with the final answer — `DataProvider.getBarsProgressive` semantics
@@ -50,6 +53,9 @@ export interface MarketDataFeed {
     loadProgressive?(cfg: MarketConfig, onBatch: (bars: OHLCV[]) => void, opts?: { signal?: AbortSignal }): Promise<OHLCV[] | null>;
     /** Subscribe to live forming-candle ticks. Returns an unsubscribe fn. */
     subscribe(cfg: MarketConfig, onBar: (bar: OHLCV) => void): Unsubscribe;
+    /** Optional scalar/columnar live seam for identity-bar renderers. The update is one compact
+     * numeric packet, not a newly materialized HistoricalCandle graph. */
+    subscribeColumns?(cfg: MarketConfig, onBar: (bar: ColumnarBarUpdate) => void): Unsubscribe | undefined;
     /** Optional symbol metadata for engines that need it; absent/undefined ≡ engine synthesizes. */
     symbolInfo?(cfg: MarketConfig): SymbolInfo | undefined;
     /**

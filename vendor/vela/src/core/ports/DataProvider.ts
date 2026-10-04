@@ -1,4 +1,5 @@
 import type { OHLCV } from '../model/ohlcv';
+import type { ColumnarBarUpdate } from '../model/columnar-bars';
 import type { BarRange, SymbolInfo } from './MarketDataFeed';
 import type { Unsubscribe } from '../util/types';
 
@@ -89,6 +90,12 @@ export interface DataProvider {
     getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]>;
 
     /**
+     * Optional zero-object history path for native renderers. Returned buffers are sorted
+     * and de-duplicated like {@link getBars}; `timeUnit` makes the epoch unit explicit.
+     */
+    getBarsColumns?(ticker: string, timeframe: string, range: BarRange): Promise<import('../model/columnar-bars').ColumnarBars>;
+
+    /**
      * Progressive variant of {@link getBars}, for sources that HEAL a cold symbol while
      * answering: instead of holding the load until the whole depth converged, the
      * provider emits growing snapshots as history lands and the chart paints each one.
@@ -137,6 +144,8 @@ export interface DataProvider {
      * live source cannot filter by session may fall back to polling internally.
      */
     subscribe?(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void, opts?: { session?: string }): Unsubscribe;
+    /** Optional scalar live path for native columnar renderers. */
+    subscribeColumns?(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void, opts?: { session?: string }): Unsubscribe;
 
     /**
      * Resolved market-calendar windows over `[range.from, range.to)`: ascending epoch-ms

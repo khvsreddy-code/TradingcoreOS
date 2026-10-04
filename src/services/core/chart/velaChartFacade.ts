@@ -28,6 +28,9 @@ export type { InputValue, InputSchema } from '../../../../vendor/vela/src/core/m
 export type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
 export type { SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
 export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
+export type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../../../vendor/vela/src/core/model/columnar-bars';
+export { registerSidePanel, unregisterSidePanel, registerWidgetAction, unregisterWidgetAction } from '../../../../vendor/vela/src/widget/contributions';
+export type { SidePanelDescriptor, SidePanelHandle, SidePanelHeader, WidgetActionDescriptor, WidgetContext } from '../../../../vendor/vela/src/widget/contributions';
 
 export type IChartApi = VelaChartFacade;
 export type ISeriesApi<T = string> = VelaSeriesFacade<T>;

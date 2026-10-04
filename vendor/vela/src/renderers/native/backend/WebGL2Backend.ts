@@ -673,6 +673,10 @@ export class WebGL2Backend implements IRenderBackend {
         if (scene.basePainting === 'none') return; // plugin style fully replaces the price series
         const bars = scene.bars;
         const st = scene.style;
+        if (scene.candleColumns && (scene.priceStyle === 'candles' || scene.priceStyle === 'heikinashi')) {
+            this.emitCandlesColumns(b, scene, scene.candleColumns, i0, i1, coords, pane, theme, barColors);
+            return;
+        }
         switch (scene.priceStyle) {
             case 'bars':
                 this.emitBars(b, bars, i0, i1, coords, pane, st.bars.upColor ?? theme.upColor, st.bars.downColor ?? theme.downColor, barColors);
@@ -693,6 +697,51 @@ export class WebGL2Backend implements IRenderBackend {
                 // order-flow layer) and 'heikinashi' (the bars themselves arrive already transformed)
                 this.emitCandles(b, scene, bars, i0, i1, coords, pane, theme, barColors);
         }
+    }
+
+    private emitCandlesColumns(b: Batch, scene: SceneGraph, columns: import('../../../core/model/columnar-bars').ColumnarBars, i0: number, i1: number, coords: CoordinateSystem, pane: PaneNode, theme: VelaTheme, barColors: ReadonlyMap<number, string>): void {
+        const spacing = coords.bodySpacing();
+        const tier = candleTier(spacing);
+        const paint = effectiveCandlePaint(scene.style.candle, scene.candleOverride, theme.upColor, theme.downColor);
+        const cs = paint.candle;
+        if (tier === 'aggregate' && scene.candleLodIndex && scene.candleLodIndex.count > 0) {
+            const lod = scene.candleLodIndex;
+            for (let k = 0; k < lod.count; k += 1) {
+                const from = lod.from[k]!, to = lod.to[k]!;
+                if (to < i0 - 1 || from > i1 + 1) continue;
+                const up = lod.close[k]! >= lod.open[k]!; const raw = lod.time[k]!;
+                const tMs = (lod.timeUnit ?? 'milliseconds') === 'seconds' ? raw * 1000 : raw;
+                const color = barColors.get(tMs) ?? ((up ? cs.wickUpColor : cs.wickDownColor) ?? (up ? paint.up : paint.down));
+                const x = Math.round(coords.logicalToX(from));
+                b.rect(x, coords.priceToY(lod.high[k]!, pane.scale, pane.bounds), 1, coords.priceToY(lod.low[k]!, pane.scale, pane.bounds) - coords.priceToY(lod.high[k]!, pane.scale, pane.bounds), parseColor(color));
+            }
+            return;
+        }
+        const drawBody = tier === 'full';
+        const fading = this.candleStructureAlpha > this.candleBodyAlpha + 0.001;
+        for (let i = i0; i <= i1; i += 1) {
+            if (i < 0 || i >= columns.length) continue;
+            const o = columns.open[i]!, h = columns.high[i]!, l = columns.low[i]!, c = columns.close[i]!;
+            if (h <= l) continue;
+            const raw = columns.time[i]!; const tMs = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? raw * 1000 : raw;
+            const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
+            const up = c >= o; const dir = up ? paint.up : paint.down; const bc = barColors.get(tMs); const bodyColor = bc ?? dir;
+            const body = parseColor(bodyColor);
+            let top = 0, bodyH = 0;
+            if (drawBody) { const oY = coords.priceToY(o, pane.scale, pane.bounds), cY = coords.priceToY(c, pane.scale, pane.bounds); top = snapY(Math.min(oY,cY), coords.dpr); bodyH = Math.max(1/coords.dpr, snapY(Math.max(oY,cY), coords.dpr)-top); }
+            if (cs.wickVisible) {
+                const wick = parseColor((up ? cs.wickUpColor : cs.wickDownColor) ?? (drawBody ? dir : bodyColor));
+                const hY = snapY(coords.priceToY(h,pane.scale,pane.bounds),coords.dpr), lY=snapY(coords.priceToY(l,pane.scale,pane.bounds),coords.dpr);
+                b.alpha = this.candleStructureAlpha;
+                if (drawBody) { b.rect(g.wickX,hY,g.wickW,Math.max(0,top-hY),wick); b.rect(g.wickX,top+bodyH,g.wickW,Math.max(0,lY-(top+bodyH)),wick); }
+                else b.rect(g.wickX,hY,g.wickW,lY-hY,wick);
+            }
+            if (drawBody) {
+                if (cs.bodyVisible) { b.alpha=this.candleBodyAlpha; b.rect(g.bodyX,top,g.bodyW,bodyH,body); }
+                if (cs.borderVisible || (fading && cs.bodyVisible)) { b.alpha=this.candleStructureAlpha; const bord=parseColor(cs.borderVisible ? ((up?cs.borderUpColor:cs.borderDownColor) ?? bodyColor) : bodyColor); b.rectStroke(g.bodyX+0.5,top+0.5,Math.max(0,g.bodyW-1),Math.max(0,bodyH-1),1,bord); }
+            }
+        }
+        b.alpha = 1;
     }
 
     /** OHLC bars: high-low stick + left open tick + right close tick (no body). */

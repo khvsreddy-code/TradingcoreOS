@@ -1,6 +1,7 @@
 import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV } from './services/core/chart/velaChartFacade';
 import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
+import type { ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaChartFacade';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
 const SYMBOLS: readonly SymbolDescriptor[] = [
@@ -53,6 +54,25 @@ function marketViewToBars(view: CanonicalMarketView, range: BarRange, limit: num
   return bars;
 }
 
+
+function marketViewToColumns(view: CanonicalMarketView, range: BarRange, limit: number): ColumnarBars {
+  const from = range.from == null ? Number.NEGATIVE_INFINITY : Number(range.from);
+  const to = range.to == null ? Number.POSITIVE_INFINITY : Number(range.to);
+  const start = Math.max(0, Number.isFinite(from) ? lowerBound(view.time, from > 2e12 ? from / 1000 : from) : 0);
+  const end = Number.isFinite(to) ? Math.min(view.length, upperBound(view.time, to > 2e12 ? to / 1000 : to)) : view.length;
+  const first = Math.max(start, end - limit);
+  return {
+    time: view.time.subarray(first, end),
+    open: view.open.subarray(first, end),
+    high: view.high.subarray(first, end),
+    low: view.low.subarray(first, end),
+    close: view.close.subarray(first, end),
+    volume: view.volume.subarray(first, end),
+    length: Math.max(0, end - first),
+    timeUnit: 'seconds',
+  };
+}
+
 function lowerBound(values: Float64Array, target: number): number {
   let lo = 0, hi = values.length;
   while (lo < hi) { const mid = (lo + hi) >>> 1; if (values[mid]! < target) lo = mid + 1; else hi = mid; }
@@ -90,6 +110,15 @@ export class TcoVelaDataProvider implements DataProvider {
 
   listSymbols(): Promise<SymbolDescriptor[]> {
     return Promise.resolve(SYMBOLS.map(symbol => ({ ...symbol })));
+  }
+
+  async getBarsColumns(ticker: string, timeframe: string, range: BarRange): Promise<ColumnarBars> {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
+    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    await plane.ensureReady(requested);
+    return marketViewToColumns(plane.readCanonical(), range, requested);
   }
 
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
@@ -133,6 +162,27 @@ export class TcoVelaDataProvider implements DataProvider {
   getSymbolInfo(ticker: string) {
     const symbol = runtimeSymbol(ticker);
     return Promise.resolve({ ticker: symbol, exchange: symbol.startsWith('BSE:') ? 'BSE' : 'NSE', type: 'index' });
+  }
+
+  subscribeColumns(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void): () => void {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    let fingerprint = '';
+    const stop = plane.subscribe((event) => {
+      if (event.type !== 'snapshot' && event.type !== 'tick') return;
+      const view = plane.readCanonical();
+      if (!view.length) return;
+      const i = view.length - 1;
+      const time = view.time[i]!;
+      const open = view.open[i]!, high = view.high[i]!, low = view.low[i]!, close = view.close[i]!;
+      const volume = Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined;
+      const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
+      if (nextKey === fingerprint) return;
+      fingerprint = nextKey;
+      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds' });
+    });
+    return stop;
   }
 
   subscribe(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void): () => void {

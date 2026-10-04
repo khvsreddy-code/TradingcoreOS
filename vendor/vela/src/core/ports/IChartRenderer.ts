@@ -238,6 +238,16 @@ export interface IChartRenderer {
      * candles don't jump.
      */
     setBars(bars: OHLCV[], opts?: { preserveView?: boolean }): void;
+    /**
+     * Optional columnar fast path. The native renderer may retain the typed buffers and
+     * paint the base price series directly from them; object `setBars()` remains the
+     * compatibility ABI for other renderers and transformed bar types.
+     */
+    setBarsColumns?(bars: import('../model/columnar-bars').ColumnarBars, opts?: { preserveView?: boolean }): void;
+    /** Optional scalar forming-bar fast path. */
+    updateBarColumns?(bar: import('../model/columnar-bars').ColumnarBarUpdate): void;
+    /** Optional externally computed LOD index. */
+    setLodIndex?(index: import('../model/columnar-bars').ColumnarLodIndex | null): void;
     /** Append a new bar or replace the forming (last) bar, decided by time. */
     updateBar(bar: OHLCV): void;
 

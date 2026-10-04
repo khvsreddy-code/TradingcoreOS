@@ -2,6 +2,7 @@ import type { MarketDataFeed, BarRange, SymbolInfo } from '../core/ports/MarketD
 import type { DataProvider, ProviderInfo, ProviderCapabilities, SymbolDescriptor } from '../core/ports/DataProvider';
 import type { MarketConfig } from '../core/options';
 import type { OHLCV } from '../core/model/ohlcv';
+import type { ColumnarBarUpdate } from '../core/model/columnar-bars';
 
 import type { Unsubscribe } from '../core/util/types';
 import { ProviderRegistry, parseSymbol, type Resolved } from './ProviderRegistry';
@@ -172,6 +173,14 @@ export class MultiProviderFeed implements MarketDataFeed {
 
     // ── MarketDataFeed ─────────────────────────────────────────────────────
 
+    async loadColumns(cfg: MarketConfig): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+        if (cfg.data && cfg.data.length > 0) return null;
+        const resolved = await this.registry.whenResolvable(rawSymbol(cfg), { default: this.primaryProvider });
+        this.primaryProvider = resolved.provider;
+        this.prefetchSymbolInfo(resolved);
+        return this.cache.loadColumns ? this.cache.loadColumns(canonical(cfg, resolved)) : null;
+    }
+
     async load(cfg: MarketConfig): Promise<OHLCV[]> {
         if (cfg.data && cfg.data.length > 0) {
             this.liveBars = cfg.data.map((b) => ({ ...b }));
@@ -231,6 +240,15 @@ export class MultiProviderFeed implements MarketDataFeed {
         const resolved = this.registry.resolve(rawSymbol(cfg), { default: this.primaryProvider });
         if (!resolved) return () => {};
         return this.cache.subscribe(canonical(cfg, resolved), onBar);
+    }
+
+    subscribeColumns(cfg: MarketConfig, onBar: (bar: ColumnarBarUpdate) => void): Unsubscribe | undefined {
+        if (cfg.data && cfg.data.length > 0) return undefined;
+        const resolved = this.registry.resolve(rawSymbol(cfg), { default: this.primaryProvider });
+        if (!resolved || !this.cache.subscribeColumns) return undefined;
+        this.primaryProvider = resolved.provider;
+        this.prefetchSymbolInfo(resolved);
+        return this.cache.subscribeColumns(canonical(cfg, resolved), onBar);
     }
 
     /**
@@ -312,6 +330,18 @@ async function safeBars(provider: DataProvider, ticker: string, tf: string, rang
 class RegistryFetchFeed implements MarketDataFeed {
     constructor(private readonly registry: ProviderRegistry) {}
 
+    async loadColumns(cfg: MarketConfig): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+        const { provider: name, ticker } = parseSymbol(cfg.symbol ?? '');
+        const provider = this.registry.get(name ?? '');
+        if (!provider?.getBarsColumns) return null;
+        try {
+            return await provider.getBarsColumns(ticker, cfg.timeframe ?? '60', { limit: cfg.bars ?? 500, session: cfg.session });
+        } catch (e) {
+            console.warn(`[vela] columnar fetch failed for ${ticker} ${cfg.timeframe ?? '60'} — ${e instanceof Error ? e.message : String(e)}`);
+            return null;
+        }
+    }
+
     load(cfg: MarketConfig): Promise<OHLCV[]> {
         const { provider: name, ticker } = parseSymbol(cfg.symbol ?? '');
         const provider = this.registry.get(name ?? '');
@@ -339,6 +369,13 @@ class RegistryFetchFeed implements MarketDataFeed {
         const provider = this.registry.get(name ?? '');
         if (!provider) return Promise.resolve([]);
         return safeBars(provider, ticker, cfg.timeframe ?? '60', { ...range, session: cfg.session });
+    }
+
+    subscribeColumns(cfg: MarketConfig, onBar: (bar: ColumnarBarUpdate) => void): Unsubscribe | undefined {
+        const { provider: name, ticker } = parseSymbol(cfg.symbol ?? '');
+        const provider = this.registry.get(name ?? '');
+        if (!provider?.subscribeColumns) return undefined;
+        return provider.subscribeColumns(ticker, cfg.timeframe ?? '60', onBar, cfg.session ? { session: cfg.session } : undefined);
     }
 
     subscribe(cfg: MarketConfig, onBar: (bar: OHLCV) => void): Unsubscribe {

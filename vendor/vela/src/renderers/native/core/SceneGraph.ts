@@ -1,4 +1,5 @@
 import type { OHLCV } from '../../../core/model/ohlcv';
+import type { ColumnarBars, ColumnarLodIndex } from '../../../core/model/columnar-bars';
 
 import type { VolumeLayerData, VpvrLayerData } from '../../../core/model/volume-layers';
 import type { PaneKind } from '../../../core/model/scene';
@@ -133,6 +134,10 @@ export class SceneGraph {
     readonly panes = new Map<string, PaneNode>();
     readonly indicators = new Map<string, IndicatorModel>();
     bars: OHLCV[] = [];
+    /** Numeric base-price source. Present when the renderer received a columnar history set. */
+    candleColumns?: ColumnarBars;
+    /** Optional host-computed candle LOD buckets keyed to candleColumns. */
+    candleLodIndex?: ColumnarLodIndex;
     /** Volume-layer config pushed by the volume native indicator (null ⇒ layer off). Ephemeral. */
     volumeLayer: VolumeLayerData | null = null;
     /** Generic native-data channels for SDK renderer layers (`setNativeData(id, …)`). Ephemeral. */

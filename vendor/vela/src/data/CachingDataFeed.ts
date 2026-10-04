@@ -1,6 +1,7 @@
 import type { MarketDataFeed, BarRange, SymbolInfo } from '../core/ports/MarketDataFeed';
 import type { MarketConfig } from '../core/options';
 import type { OHLCV } from '../core/model/ohlcv';
+import type { ColumnarBarUpdate } from '../core/model/columnar-bars';
 import type { Unsubscribe } from '../core/util/types';
 import { BarStore, seriesKey, sharedBarStore } from './BarStore';
 import { parseSymbol } from './ProviderRegistry';
@@ -40,6 +41,10 @@ export class CachingDataFeed implements MarketDataFeed {
         private readonly inner: MarketDataFeed,
         private readonly store: BarStore = sharedBarStore,
     ) {}
+
+    async loadColumns(cfg: MarketConfig): Promise<import('../core/model/columnar-bars').ColumnarBars | null> {
+        return this.inner.loadColumns ? this.inner.loadColumns(cfg) : null;
+    }
 
     async load(cfg: MarketConfig): Promise<OHLCV[]> {
         // Offline data is already in memory — nothing to cache.
@@ -227,6 +232,11 @@ export class CachingDataFeed implements MarketDataFeed {
 
     subscribe(cfg: MarketConfig, onBar: (bar: OHLCV) => void): Unsubscribe {
         return this.inner.subscribe(cfg, onBar);
+    }
+
+    subscribeColumns(cfg: MarketConfig, onBar: (bar: ColumnarBarUpdate) => void): Unsubscribe | undefined {
+        if (!this.inner.subscribeColumns) return undefined;
+        return this.inner.subscribeColumns(cfg, onBar);
     }
 
     symbolInfo(cfg: MarketConfig): SymbolInfo | undefined {
