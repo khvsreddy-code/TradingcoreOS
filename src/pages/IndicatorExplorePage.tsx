@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, Code2, Copy, Eye, Filter, Grid2X2, Search, Sparkles, UserRound, X } from 'lucide-react';
 import { useAuth } from '../auth/hooks/useAuth';
 import { ThemeToggle } from '../components/common/ThemeToggle';
-import { getPublicIndicatorPublicationBySlug, incrementIndicatorInstall, incrementIndicatorView, listPublicIndicatorPublications, type IndicatorPublication, saveIndicatorSourceLocally } from '../services/coreSpirit/indicatorPublicationService';
+import { getPublicIndicatorPublicationBySlug, incrementIndicatorInstall, incrementIndicatorView, listPublicIndicatorPublications, type IndicatorPublication, type CoreSpiritScriptKind, saveIndicatorSourceLocally } from '../services/coreSpirit/indicatorPublicationService';
 
 const formatCount = (value: number) => value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K` : String(value || 0);
 
@@ -21,7 +21,7 @@ export function IndicatorExplorePage() {
   const initialKind: CoreSpiritScriptKind = params.get('type') === 'strategy' ? 'strategy' : 'indicator';
   const [scriptKind, setScriptKind] = useState<CoreSpiritScriptKind>(initialKind);
   const [tab, setTab] = useState<'popular'|'marketplace'|'newest'>('popular');
-  const slug = (() => { const parts = window.location.pathname.split('/').filter(Boolean); return parts[0] === 'explore' && parts[1] === 'indicators' && parts[2] ? decodeURIComponent(parts[2]) : ''; })();
+  const slug = (() => { const parts = window.location.pathname.split('/').filter(Boolean); return parts[0] === 'explore' && (parts[1] === 'indicators' || parts[1] === 'scripts') && parts[2] ? decodeURIComponent(parts[2]) : ''; })();
 
   const load = async () => { setLoading(true); setError(''); try { if (slug) { const detail = await getPublicIndicatorPublicationBySlug(slug, scriptKind); setItems(detail ? [detail] : []); setSelected(detail); if (detail) void incrementIndicatorView(detail.id); return; } const result = await listPublicIndicatorPublications({ query, category, openSourceOnly, sort: tab==='newest'?'newest':sort, scriptKind }); setItems(result); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [query, category, openSourceOnly, sort, tab, slug, scriptKind]);
