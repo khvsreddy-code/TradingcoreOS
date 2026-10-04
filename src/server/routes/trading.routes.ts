@@ -158,6 +158,7 @@ async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: Brok
   const signature = createHmac('sha256', gatewaySecret).update(signingInput).digest('hex');
   const response = await fetch(`${gatewayUrl}/v1/fyers/order`, {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'content-type': 'application/json',
       'x-tradingcore-timestamp': timestamp,
@@ -201,10 +202,10 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       const isClientReject = status >= 400 && status < 500 && status !== 408 && status !== 429;
       if (isClientReject) {
         await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response);
-        await AuditLogRepository.append({ userId, actorType: 'broker', eventType: 'order.rejected', requestId, correlationId: idempotencyKey, payload: { brokerId, error: message, status } }).catch(() => undefined);
+        void AuditLogRepository.append({ userId, actorType: 'broker', eventType: 'order.rejected', requestId, correlationId: idempotencyKey, payload: { brokerId, error: message, status } }).catch(() => undefined);
       } else {
         await OrderIdempotencyRepository.markUnknown(userId, brokerId, idempotencyKey, response, message);
-        await AuditLogRepository.append({ userId, actorType: 'system', eventType: 'order.unknown', requestId, correlationId: idempotencyKey, payload: { brokerId, error: message, status } }).catch(() => undefined);
+        void AuditLogRepository.append({ userId, actorType: 'system', eventType: 'order.unknown', requestId, correlationId: idempotencyKey, payload: { brokerId, error: message, status } }).catch(() => undefined);
       }
       res.status(502).json(response);
       return;
@@ -214,7 +215,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     const response = { success: true, data };
     try {
       await OrderIdempotencyRepository.complete(userId, brokerId, idempotencyKey, response);
-      await AuditLogRepository.append({ userId, actorType: 'user', eventType: 'order.completed', requestId, correlationId: idempotencyKey, payload: { brokerId, idempotencyKey, orderId } }).catch(() => undefined);
+      void AuditLogRepository.append({ userId, actorType: 'user', eventType: 'order.completed', requestId, correlationId: idempotencyKey, payload: { brokerId, idempotencyKey, orderId } }).catch(() => undefined);
       res.json(response);
     } catch (ledgerError: unknown) {
       const message = getErrorMessage(ledgerError, 'Order accepted but safety ledger completion failed');
