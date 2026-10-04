@@ -481,3 +481,38 @@ html[data-tco-theme="black"] .tco-premium-surface {
     var(--tco-surface);
   border-color: rgba(255,255,255,.07);
 }
+
+/* TradingCoreOS interaction/motion baseline — deliberate, restrained motion.
+   Motion is for continuity, not decoration. Heavy transforms stay opt-in. */
+:root {
+  --tco-accent: #7c5cff;
+  --tco-accent-soft: #9b8aff;
+  --tco-motion-fast: 160ms;
+  --tco-motion-standard: 240ms;
+  --tco-motion-slow: 320ms;
+  --tco-motion-ease: cubic-bezier(.22,1,.36,1);
+}
+html[data-tco-theme="white"] {
+  --tco-accent: #6648d8;
+  --tco-accent-soft: #8066e8;
+}
+.tco-interactive {
+  transition: transform var(--tco-motion-standard) var(--tco-motion-ease),
+    opacity var(--tco-motion-standard) ease,
+    background-color var(--tco-motion-standard) ease,
+    border-color var(--tco-motion-standard) ease,
+    box-shadow var(--tco-motion-standard) var(--tco-motion-ease),
+    color var(--tco-motion-standard) ease;
+  will-change: auto;
+}
+.tco-interactive:hover { transform: translateY(-1px); }
+.tco-panel-enter { animation: tco-panel-in var(--tco-motion-slow) var(--tco-motion-ease) both; }
+@keyframes tco-panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  .tco-interactive:hover { transform: none; }
+}
