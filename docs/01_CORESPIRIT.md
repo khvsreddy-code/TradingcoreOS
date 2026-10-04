@@ -128,3 +128,89 @@ The runtime should optimize the user's source without expanding CoreSpirit into 
 ## Authority boundary
 
 Indicator and model computation cannot directly authorize broker execution. Risk and execution authority remain outside the numeric VM.
+
+## Runtime architecture — hot VM extraction (v132)
+
+The CoreSpirit runtime is an orchestration facade, not the hot execution loop. The hot loop now lives in CoreSpiritExecutionVM.
+
+```text
+CoreSpiritRuntime
+  ├─ CoreSpiritExecutionVM       ← tiny instruction dispatch loop
+  ├─ CoreSpiritStateStore        ← transactional runtime state
+  │    └─ CoreSpiritSeriesStore  ← bounded series + mutation journal
+  ├─ CoreSpiritOutputCollector   ← bounded output sink
+  ├─ CoreSpiritEventRouter       ← event emission boundary
+  ├─ CoreSpiritCapabilityHost    ← data/model/capability boundary
+  └─ CoreSpiritDebugHost         ← bounded diagnostics/trace host
+```
+
+The VM is deliberately dependency-light. It does not know about the DOM, broker, network, Vela renderer, Supabase or workspace behavior. Runtime-specific operations are supplied through a narrow host interface.
+
+This preserves the single CoreSpirit IR / single VM model while removing orchestration responsibilities from the instruction-dispatch hot path.
+
+### Hot-loop invariant
+
+The hot VM should remain close to:
+
+```text
+fetch instruction
+→ execute primitive
+→ advance program counter
+```
+
+Abort checks are amortized every 1024 instructions. Fused series dispatch remains an indexed lookup and the VM emits into a bounded collector rather than constructing another output pipeline.
+
+## Realtime state architecture — checkpoint + copy-on-write journal (v132)
+
+Forming-bar evaluation no longer clones the complete CoreSpirit series/local/cross state on every tick.
+
+The realtime lifecycle is:
+
+```text
+committed bar N
+   ↓
+begin mutation journal
+   ↓
+mutate working state
+   ↓
+evaluate + publish
+   ↓
+tick replacement
+   ↓
+rollback journal
+   ↓
+begin new journal
+   ↓
+evaluate again
+```
+
+The journal records only state keys touched by the forming-bar evaluation. Existing bounded arrays retain their identity where possible; replacements retain the previous array reference. Cross-state entries are journaled per key.
+
+This makes rollback proportional to **mutated state**, not the entire runtime state graph.
+
+Cold-path checkpoint export/import is still allowed to clone state because persistence and recovery are not realtime hot paths.
+
+### State-safety rules
+
+- A forming candle is never committed twice.
+- Replacing a forming candle never advances a historical cursor.
+- A realtime rollback restores the pre-forming-bar state without rebuilding the complete state graph.
+- getState({ clone: false }) is used by the realtime execution result path; callers requiring an isolated snapshot continue to use the default cloned form.
+- Broker execution authority remains outside the CoreSpirit VM.
+
+## Runtime boundaries
+
+The following responsibilities are explicitly outside CoreSpiritExecutionVM:
+
+| Concern | Owner |
+|---|---|
+| instruction dispatch | CoreSpiritExecutionVM |
+| series/local/cross transactional state | CoreSpiritStateStore / CoreSpiritSeriesStore |
+| emitted script objects | CoreSpiritOutputCollector |
+| event delivery | CoreSpiritEventRouter |
+| data/model/capability resolution | CoreSpiritCapabilityHost |
+| debug trace | CoreSpiritDebugHost |
+| workspace/UI orchestration | CoreSpiritRuntime + host application |
+| broker order authorization | TCO risk/execution layer |
+
+The architecture deliberately does not introduce new CoreSpirit language keywords for these mechanisms.
