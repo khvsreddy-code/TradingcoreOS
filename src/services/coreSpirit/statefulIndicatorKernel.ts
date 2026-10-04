@@ -25,6 +25,16 @@ class MonotonicDeque {
   }
   peek() { return this.head < this.data.length ? this.data[this.head] : undefined; }
   clear() { this.data = []; this.head = 0; }
+  copyFrom(source: MonotonicDeque): void {
+    if (source.direction !== this.direction) throw new Error('incompatible monotonic deque');
+    this.data = source.data.map((entry) => ({ ...entry }));
+    this.head = source.head;
+  }
+  clone(): MonotonicDeque {
+    const next = new MonotonicDeque(this.direction);
+    next.copyFrom(this);
+    return next;
+  }
 }
 
 abstract class RollingBase {
