@@ -36,7 +36,7 @@ if (!/chartPredictionCoordinator/.test(liveChart)) throw new Error('LiveChart st
 if (!/consumerId/.test(controller) || !/attachConsumer\(consumerId, 'chart'\)/.test(controller)) throw new Error('Chart controller does not identify canonical consumer ownership');
 if (!/upsertLatest\(/.test(history) || !/mutateExisting = false/.test(history)) throw new Error('O(1) forming-candle/history update path missing');
 if (!/getBefore\(/.test(history)) throw new Error('HistoryStore older-page cache lookup missing');
-if (!/1_500/.test(historyPolicy) || !/300/.test(historyPolicy) || /25_000/.test(historyPolicy)) throw new Error('Demand-driven initial history policy is invalid');
+if (!/'5m': 5000/.test(historyPolicy) || !/historyDemandPageCandles/.test(historyPolicy) || /25_000/.test(historyPolicy)) throw new Error('5k demand-driven history policy is invalid');
 if (!/maxConcurrent = 2/.test(historyCoordinator)) throw new Error('Global history request budget missing');
 if (!/chartHistoryCoordinator\.request/.test(dataPlane)) throw new Error('Global history request coordinator is not used');
 if (!/requestWarmHistory\(/.test(dataPlane) || !/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm history stage missing');
