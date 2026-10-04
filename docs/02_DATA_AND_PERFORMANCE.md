@@ -210,3 +210,29 @@ The performance model now separates transport, compute, patch and renderer/frame
 The 5,000-first / 5,000-backward / 50,000-retention history policy remains fixed.
 
 Browser runtime measurements are intentionally separate from source contracts.
+
+
+## v130 — kernel closure and quadratic-path removal
+
+The mathematical hot path is now consolidated around one canonical CoreSpirit kernel layer.
+
+- `seriesVector.ts` no longer contains private copies of rolling, median, EMA, change or persistence algorithms; it is an execution/fusion coordinator over `statefulIndicatorKernel.ts`.
+- `RollingMinMax` uses a bounded segment tree because forming-bar replacement is a point mutation; this is O(log P) and is the correct trade-off for exact live-bar revisions. Pure append-only centered extrema remain O(1) amortized with monotonic deques.
+- `ChangeState` and `RollingPersistenceState` are canonical kernels, so fused execution no longer carries a second implementation of those state machines.
+- `src/services/coreSpirit/indicatorKernel.ts` no longer constructs period windows with `slice`, `reduce` or spread min/max. Scalar helpers delegate to bounded kernels or use a single linear loop.
+- `structureEngine.ts` no longer computes `atrValue(c.slice(0, i + 1))` for every candidate zone. ATR and rolling volume averages are materialized once and reused, removing the previous quadratic prefix-scan path.
+- HMA now uses three bounded WMA states in one chronological traversal instead of creating two full WMA histories plus a raw intermediate series.
+
+### Complexity contract
+
+| Primitive | Append | Forming-bar replace |
+|---|---:|---:|
+| sum / mean / variance | O(1) | O(1) |
+| min / max on replace-capable `RollingMinMax` | O(log P) | O(log P) |
+| centered extrema | O(1) amortized | n/a |
+| EMA / Wilder / ATR | O(1) | O(1) |
+| WMA | O(1) | O(1) |
+| median / percentile / MAD | O(log P) expected | O(log P) expected |
+| persistence / change | O(1) amortized | O(1) |
+
+The reference parity tests may intentionally use naive window scans because they are test oracles. That does not authorize the same pattern in production indicator code.
