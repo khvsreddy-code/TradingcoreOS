@@ -579,6 +579,14 @@ export class ATRState {
   get trueRange() { return this.latestTR; }
   get value() { return this.wilder.value; }
   reset() { this.wilder.reset(); this.previousBarClose = null; this.currentClose = null; this.latestTR = null; }
+  clone(): ATRState { const next = new ATRState(this.wilder.period); next.copyFrom(this); return next; }
+  copyFrom(source: ATRState): void {
+    if (source.wilder.period !== this.wilder.period) throw new Error('incompatible ATR state');
+    this.wilder.copyFrom(source.wilder);
+    this.previousBarClose = source.previousBarClose;
+    this.currentClose = source.currentClose;
+    this.latestTR = source.latestTR;
+  }
 }
 
 export class WMAState extends RollingBase {
@@ -615,6 +623,11 @@ export class WMAState extends RollingBase {
   reset() { super.reset(); this.weighted = 0; this.sum = 0; this.currentInput = null; }
 }
 
+function copyVwapSessions(target: Map<string, { pv: number; volume: number }>, source: Map<string, { pv: number; volume: number }>): void {
+  target.clear();
+  for (const [key, value] of source) target.set(key, { pv: value.pv, volume: value.volume });
+}
+
 export class VWAPSessionState {
   private sessions = new Map<string, { pv: number; volume: number }>();
   private lastKey: string | null = null;
@@ -633,6 +646,14 @@ export class VWAPSessionState {
     return this.lastValue;
   }
   reset() { this.sessions.clear(); this.lastKey = null; this.lastPV = 0; this.lastVolume = 0; this.lastValue = null; }
+  clone(): VWAPSessionState { const next = new VWAPSessionState(); next.copyFrom(this); return next; }
+  copyFrom(source: VWAPSessionState): void {
+    copyVwapSessions(this.sessions, source.sessions);
+    this.lastKey = source.lastKey;
+    this.lastPV = source.lastPV;
+    this.lastVolume = source.lastVolume;
+    this.lastValue = source.lastValue;
+  }
 }
 
 /** Stateful one-bar change kernel. */
@@ -666,6 +687,14 @@ export class RSIState {
     this.currentValue=this.valueFrom(this.avgGain??0,this.avgLoss??0); return this.currentValue;
   }
   reset(){this.previous=null;this.avgGain=null;this.avgLoss=null;this.stableGain=null;this.stableLoss=null;this.seedGain=0;this.seedLoss=0;this.seedCount=0;this.currentValue=null;}
+  clone(): RSIState { const next = new RSIState(this.period); next.copyFrom(this); return next; }
+  copyFrom(source: RSIState): void {
+    if (source.period !== this.period) throw new Error('incompatible RSI state');
+    this.previous = source.previous; this.avgGain = source.avgGain; this.avgLoss = source.avgLoss;
+    this.stableGain = source.stableGain; this.stableLoss = source.stableLoss;
+    this.seedGain = source.seedGain; this.seedLoss = source.seedLoss; this.seedCount = source.seedCount;
+    this.currentValue = source.currentValue;
+  }
 }
 
 export class ChangeState {

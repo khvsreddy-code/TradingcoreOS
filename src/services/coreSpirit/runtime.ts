@@ -15,7 +15,7 @@ import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDat
 import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './visualApp';
 import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
-import { trueRange, rsiFromAverages } from './indicatorKernel';
+import { ATRState, RSIState, VWAPSessionState } from './statefulIndicatorKernel';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
@@ -92,6 +92,13 @@ export class CoreSpiritRuntime {
   /** Direct stateful built-ins that are not absorbed into a fusion group. */
   private readonly directKernelCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
   private readonly directKernelSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
+  private readonly rsiKernels = new Map<string, RSIState>();
+  private readonly atrKernels = new Map<string, ATRState>();
+  private readonly vwapKernels = new Map<string, VWAPSessionState>();
+  private readonly rsiKernelSnapshots = new Map<string, RSIState>();
+  private readonly atrKernelSnapshots = new Map<string, ATRState>();
+  private readonly vwapKernelSnapshots = new Map<string, VWAPSessionState>();
+  private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly stateStore = new CoreSpiritStateStore();
   private readonly outputCollector: CoreSpiritOutputCollector;
@@ -139,6 +146,10 @@ export class CoreSpiritRuntime {
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
     this.stateStore.bind(this.state.seriesState, this.state.localSeries, this.crossState);
     this.stateStore.commitRealtimeTransaction();
+    this.eventRouter.rollbackTransaction();
+    this.realtimeTransactionId = undefined;
+    this.rsiKernels.clear(); this.atrKernels.clear(); this.vwapKernels.clear();
+    this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
     this.resetFusedSeriesCursors();
   }
   getState(options: { clone?: boolean } = {}): CoreSpiritRuntimeState {
@@ -196,6 +207,9 @@ export class CoreSpiritRuntime {
         const cursor = this.directKernelCursors.get(key);
         if (cursor) cursor.copyFrom(snapshot);
       }
+      for (const [key, snapshot] of this.rsiKernelSnapshots) this.rsiKernels.get(key)?.copyFrom(snapshot);
+      for (const [key, snapshot] of this.atrKernelSnapshots) this.atrKernels.get(key)?.copyFrom(snapshot);
+      for (const [key, snapshot] of this.vwapKernelSnapshots) this.vwapKernels.get(key)?.copyFrom(snapshot);
       this.history[this.history.length - 1] = normalized;
     } else {
       this.realtimeRevision = 0;
@@ -213,6 +227,18 @@ export class CoreSpiritRuntime {
         const snapshot = this.directKernelSnapshots.get(key);
         if (snapshot) snapshot.copyFrom(cursor);
         else this.directKernelSnapshots.set(key, cursor.clone());
+      }
+      for (const [key, cursor] of this.rsiKernels) {
+        const snapshot = this.rsiKernelSnapshots.get(key);
+        if (snapshot) snapshot.copyFrom(cursor); else this.rsiKernelSnapshots.set(key, cursor.clone());
+      }
+      for (const [key, cursor] of this.atrKernels) {
+        const snapshot = this.atrKernelSnapshots.get(key);
+        if (snapshot) snapshot.copyFrom(cursor); else this.atrKernelSnapshots.set(key, cursor.clone());
+      }
+      for (const [key, cursor] of this.vwapKernels) {
+        const snapshot = this.vwapKernelSnapshots.get(key);
+        if (snapshot) snapshot.copyFrom(cursor); else this.vwapKernelSnapshots.set(key, cursor.clone());
       }
       this.history.push(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
@@ -288,8 +314,12 @@ export class CoreSpiritRuntime {
     if (this.realtimeEventTransactionId) this.eventRouter.commitTransaction(this.realtimeEventTransactionId);
     this.realtimeEventTransactionId = undefined;
     this.stateStore.commitRealtimeTransaction();
+    if (this.realtimeTransactionId) this.eventRouter.commitTransaction(this.realtimeTransactionId);
+    this.realtimeTransactionId = undefined;
     this.currentBarSnapshot = undefined;
     this.fusedCursorSnapshots.clear();
+    this.directKernelSnapshots.clear();
+    this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
     this.lastBarWasRealtime = false;
   }
 
@@ -311,6 +341,8 @@ export class CoreSpiritRuntime {
     if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false}); this.executionContext.session=this.executionContext.frame.session; }
     this.currentBarSnapshot=undefined;
     this.fusedCursorSnapshots.clear();
+    this.directKernelSnapshots.clear();
+    this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
     this.reactiveRecomputed=0; this.reactiveReused=0; this.reactiveEffects=0;
@@ -559,26 +591,26 @@ export class CoreSpiritRuntime {
       const result = cursor.update(current, index)[0];
       return finish(Number.isFinite(result) ? result : null);
     }
-    if(name==='rsi') { const key=`rsi:${series}:${length}`, current=Number(args[0]), previous=index>0?Number(this.loadSeries(series,1,bar,bars,index)):NaN; if(args[0] == null || !Number.isFinite(current)||!Number.isFinite(previous)||index<length)return finish(null); const gain=Math.max(0,current-previous),loss=Math.max(0,previous-current),g=`${key}:gain`,l=`${key}:loss`,pg=Number(this.state.seriesState[g]?.at(-1)),pl=Number(this.state.seriesState[l]?.at(-1)); const ag=Number.isFinite(pg)?(pg*(length-1)+gain)/length:this.averageGain(series,length,bars,index),al=Number.isFinite(pl)?(pl*(length-1)+loss)/length:this.averageLoss(series,length,bars,index); this.pushState(g,ag);this.pushState(l,al);return finish(rsiFromAverages(ag,al)); }
-    if(name==='atr') {
-      const key=`atr:${length}`, trKey=`atr:tr:${length}`, sumKey=`atr:trsum:${length}`;
-      const previousClose=index>0?Number(this.loadSeries('close',1,bar,bars,index)):Number(bar.open);
-      const h=Number(bar.high),l=Number(bar.low);
-      const tr=Math.max(h-l,Math.abs(h-previousClose),Math.abs(l-previousClose));
-      this.pushState(trKey,tr);
-      const trHistory=this.state.seriesState[trKey]||[];
-      const previousSum=Number(this.state.seriesState[sumKey]?.at(-1));
-      const rollingSum=Number.isFinite(previousSum)
-        ? previousSum + tr - (trHistory.length>length ? Number(trHistory[trHistory.length-length-1]) : 0)
-        : tr;
-      this.pushState(sumKey,rollingSum);
-      if(trHistory.length<length)return null;
-      const prev=Number(this.state.seriesState[key]?.at(-1));
-      const value=Number.isFinite(prev)?(prev*(length-1)+tr)/length:rollingSum/length;
-      this.pushState(key,value);
-      return finish(value);
+    if(name==='rsi') {
+      const current = Number(args[0]); if (!Number.isFinite(current)) return finish(null);
+      const key = 'rsi:' + series + ':' + length;
+      let kernel = this.rsiKernels.get(key); if (!kernel) { kernel = new RSIState(length); this.rsiKernels.set(key, kernel); }
+      const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
+      return finish(kernel.update(current, mode));
     }
-    if(name==='vwap') { const day=this.sessionDay(bar.timestamp),dayKey='vwap:day',pvKey='vwap:pv',volKey='vwap:vol'; const dayNumber=Number(day.replace(/-/g,'')); const previousDay=this.state.seriesState[dayKey]?.at(-1); if(previousDay!==dayNumber){this.stateStore.replaceSeries(pvKey,[]);this.stateStore.replaceSeries(volKey,[]);this.stateStore.replaceSeries(dayKey,[]);} this.pushState(dayKey,Number(day.replace(/-/g,''))); const pv=Number(this.state.seriesState[pvKey]?.at(-1)||0)+((Number(bar.high)+Number(bar.low)+Number(bar.close))/3)*Math.max(0,Number(bar.volume)||0),vol=Number(this.state.seriesState[volKey]?.at(-1)||0)+Math.max(0,Number(bar.volume)||0);this.pushState(pvKey,pv);this.pushState(volKey,vol);return finish(vol?pv/vol:null); }
+    if(name==='atr') {
+      const key = 'atr:' + length;
+      let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(length); this.atrKernels.set(key, kernel); }
+      const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
+      return finish(kernel.update(Number(bar.high), Number(bar.low), Number(bar.close), mode));
+    }
+    if(name==='vwap') {
+      const key = 'vwap:session';
+      let kernel = this.vwapKernels.get(key); if (!kernel) { kernel = new VWAPSessionState(); this.vwapKernels.set(key, kernel); }
+      const price = (Number(bar.high) + Number(bar.low) + Number(bar.close)) / 3;
+      const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
+      return finish(kernel.update(bar.timestamp, price, Number(bar.volume) || 0, Number(bar.close), mode));
+    }
     if(name==='__member_get') {
       const ref=args[0]; const member=String(args[1]??'');
       if (ref && typeof ref === 'object') {
@@ -649,9 +681,6 @@ export class CoreSpiritRuntime {
 
   private pushLocalState(key:string,value:CoreSpiritValue):void { this.stateStore.pushLocal(key,value,this.stateHistoryLimit); }
   private sessionDay(timestamp:string):string { const d=new Date(timestamp); return new Intl.DateTimeFormat('en-CA',{timeZone:this.timezone}).format(d); }
-  private averageGain(series:string,length:number,bars:HistoricalCandle[],index:number):number { let total=0; for(let i=index-length+1;i<=index;i++){ if(i<=0)continue; const c=Number((bars[i] as any)[series]),p=Number((bars[i-1] as any)[series]); total+=Math.max(0,c-p); } return total/length; }
-  private averageLoss(series:string,length:number,bars:HistoricalCandle[],index:number):number { let total=0; for(let i=index-length+1;i<=index;i++){ if(i<=0)continue; const c=Number((bars[i] as any)[series]),p=Number((bars[i-1] as any)[series]); total+=Math.max(0,p-c); } return total/length; }
-
   private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:HistoricalCandle,barIndex:number,outputs:CoreSpiritOutputCollector,diagnostics:string[],outputId?:string):void {
     const time=this.toEpoch(bar.timestamp);
     this.outputCount += 1;
