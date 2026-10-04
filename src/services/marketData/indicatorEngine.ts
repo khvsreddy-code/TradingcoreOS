@@ -2,7 +2,7 @@ import type { IndicatorAppearanceConfig } from '../coreSpirit/indicatorAppearanc
 import { HistoricalCandle } from '../brokers/BrokerAdapter';
 import { buildTradingCoreVStructure } from './structureEngine';
 import { sma, ema, rma as wilder, trueRanges, atr, wma as weightedMovingAverage } from './coreIndicatorKernel';
-import { RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingAbsoluteDeviation, RollingPercentile, EMAState, centeredRollingExtrema } from './incrementalIndicatorKernel';
+import { RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingAbsoluteDeviation, RollingPercentile, EMAState, WMAState, centeredRollingExtrema } from './incrementalIndicatorKernel';
 import { CORE_PRICE_SOURCE_OPTIONS } from '../coreSpirit/indicatorSettingsSchema';
 import type { IndicatorSettingsSchema } from '../coreSpirit/indicatorSettingsSchema';
 
@@ -163,7 +163,18 @@ export function cci(c: HistoricalCandle[], period=20, source: PriceSource = 'hlc
 export function obv(c: HistoricalCandle[], source: PriceSource = 'close'): IndicatorPoint[] { const vals=sourceValues(c, source); let value=0; return c.map((x,i)=>{if(i>0){if(vals[i]>vals[i-1])value+=x.volume||0;else if(vals[i]<vals[i-1])value-=x.volume||0;}return {time:Math.floor(new Date(x.timestamp).getTime()/1000),value};}); }
 export function mfi(c: HistoricalCandle[], period=14, source: PriceSource = 'hlc3'): IndicatorPoint[] { const tp=sourceValues(c,source),p=Math.max(1,Math.floor(period)),pos=new RollingSum(p),neg=new RollingSum(p),out:IndicatorPoint[]=[];for(let i=0;i<tp.length;i++){if(i===0)continue;const flow=tp[i]*(c[i].volume||0);pos.update(tp[i]>tp[i-1]?flow:0);neg.update(tp[i]<tp[i-1]?flow:0);if(pos.size!==p||neg.size!==p)continue;const pv=pos.sumValue(),nv=neg.sumValue(),value=nv===0?(pv===0?50:100):100-(100/(1+pv/nv));out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),value});}return out; }
 export function adx(c: HistoricalCandle[], period=14): Array<number|null> { if(c.length<period*2)return c.map(()=>null); const tr=trueRanges(c), plus:number[]=[],minus:number[]=[]; for(let i=0;i<c.length;i++){if(i===0){plus.push(0);minus.push(0);continue;}const up=c[i].high-c[i-1].high,down=c[i-1].low-c[i].low;plus.push(up>down&&up>0?up:0);minus.push(down>up&&down>0?down:0);}const atrs=wilder(tr,period),p=wilder(plus,period),m=wilder(minus,period);const dx:Array<number|null>=c.map((_,i)=>{if(atrs[i]==null||p[i]==null||m[i]==null)return null;const pi=100*p[i]!/atrs[i]!,mi=100*m[i]!/atrs[i]!,sum=pi+mi;return sum===0?0:100*Math.abs(pi-mi)/sum;});return wilder(dx.map(x=>x??0),period); }
-export function hma(values:number[],period=20):Array<number|null>{const p=Math.max(1,Math.floor(period)),half=Math.max(1,Math.floor(p/2)),sqrt=Math.max(1,Math.floor(Math.sqrt(p))),a=weightedMovingAverage(values,half),b=weightedMovingAverage(values,p),raw=values.map((_,i)=>a[i]!=null&&b[i]!=null?2*a[i]!-b[i]!:null);return weightedMovingAverage(raw,sqrt);}
+export function hma(values:number[],period=20):Array<number|null>{
+  const p=Math.max(1,Math.floor(period)),half=Math.max(1,Math.floor(p/2)),sqrt=Math.max(1,Math.floor(Math.sqrt(p)));
+  const halfState=new WMAState(half), fullState=new WMAState(p), rawState=new WMAState(sqrt);
+  const out:Array<number|null>=new Array(values.length).fill(null);
+  for(let i=0;i<values.length;i+=1){
+    const a=halfState.update(values[i]!);
+    const b=fullState.update(values[i]!);
+    const raw=a!=null&&b!=null?2*a-b:null;
+    out[i]=rawState.update(raw??Number.NaN);
+  }
+  return out;
+}
 export function supertrend(c: HistoricalCandle[], period=10, multiplier=3): SupertrendPoint[] { const atrs=atr(c,period); let finalUpper=0,finalLower=0,trend=1; const out:SupertrendPoint[]=[]; for(let i=0;i<c.length;i++){ const a=atrs[i]; if(a==null)continue; const mid=(c[i].high+c[i].low)/2; const upper=mid+multiplier*a,lower=mid-multiplier*a; if(i===period-1){finalUpper=upper;finalLower=lower;} else {const prevUpper=finalUpper,prevLower=finalLower;finalUpper=upper<prevUpper||c[i-1].close>prevUpper?upper:prevUpper;finalLower=lower>prevLower||c[i-1].close<prevLower?lower:prevLower;if(trend===-1&&c[i].close>prevUpper)trend=1;else if(trend===1&&c[i].close<prevLower)trend=-1;} out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),value:trend===1?finalLower:finalUpper,direction:trend as 1|-1}); } return out; }
 export function ichimoku(c: HistoricalCandle[], conversion=9, base=26, displacement=26): IchimokuPoint[] { void displacement;const ch=new RollingMinMax(conversion),cl=new RollingMinMax(conversion),bh=new RollingMinMax(base),bl=new RollingMinMax(base),sh=new RollingMinMax(52),sl=new RollingMinMax(52),out:IchimokuPoint[]=[];for(let i=0;i<c.length;i++){const tenH=ch.update(c[i].high).max,tenL=cl.update(c[i].low).min,baseH=bh.update(c[i].high).max,baseL=bl.update(c[i].low).min,spanH=sh.update(c[i].high).max,spanL=sl.update(c[i].low).min;if(tenH==null||tenL==null||baseH==null||baseL==null)continue;const ten=(tenH+tenL)/2,kij=(baseH+baseL)/2,spanA=(ten+kij)/2,spanB=spanH!=null&&spanL!=null?(spanH+spanL)/2:spanA;out.push({time:Math.floor(new Date(c[i].timestamp).getTime()/1000),tenkan:ten,kijun:kij,spanA,spanB});}return out; }
 
