@@ -20,10 +20,10 @@ function panelRoot(body: HTMLElement): HTMLDivElement {
   return root;
 }
 
-const watchlistPanel: SidePanelDescriptor = {
-  id: 'tco.watchlist', title: 'Watchlist', icon: 'objects', order: 10, width: 300, resizable: true, minWidth: 240, maxWidth: 420,
+const bookmarksPanel: SidePanelDescriptor = {
+  id: 'tco.bookmarks', title: 'Bookmarks', icon: 'star', order: 10, width: 300, resizable: true, minWidth: 240, maxWidth: 420,
   mount(ctx, body, header) {
-    header.setTitle('Watchlist');
+    header.setTitle('Market bookmarks');
     const root = panelRoot(body);
     const meta = document.createElement('div');
     meta.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;';
@@ -118,11 +118,49 @@ const journalPanel: SidePanelDescriptor = {
   },
 };
 
+const accountPanel: SidePanelDescriptor = {
+  id: 'tco.account', title: 'Account', icon: 'user', order: 5, width: 300, resizable: false, minWidth: 280, maxWidth: 360,
+  mount(_ctx, body, header) {
+    header.setTitle('TradingCoreOS Account');
+    const root = panelRoot(body);
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:linear-gradient(145deg,#11131a,#090b10);';
+    const avatar = document.createElement('img');
+    avatar.alt = 'Profile picture'; avatar.width = 64; avatar.height = 64;
+    avatar.style.cssText = 'width:64px;height:64px;border-radius:50%;object-fit:cover;border:1px solid rgba(124,92,255,.45);box-shadow:0 0 30px rgba(124,92,255,.16);';
+    avatar.src = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#12141a"/><circle cx="32" cy="25" r="12" fill="#7c5cff"/><path d="M12 58c3-15 12-21 20-21s17 6 20 21" fill="#7c5cff"/></svg>');
+    const name = document.createElement('div'); name.style.cssText='font-size:13px;font-weight:700;color:#f8fafc;';
+    const email = document.createElement('div'); email.style.cssText='font-size:10px;color:#7f899e;';
+    const actions = document.createElement('div'); actions.style.cssText='display:flex;gap:6px;width:100%;margin-top:8px;';
+    const profile = document.createElement('button'); profile.type='button'; profile.textContent='Profile'; profile.style.cssText='flex:1;border:1px solid rgba(124,92,255,.3);border-radius:8px;padding:8px;background:rgba(124,92,255,.10);color:#ddd6fe;font:600 10px ui-monospace;cursor:pointer;';
+    profile.onclick=()=>{ window.history.pushState({},'', '/profile'); window.dispatchEvent(new PopStateEvent('popstate')); };
+    const settings = document.createElement('button'); settings.type='button'; settings.textContent='Settings'; settings.style.cssText='flex:1;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px;background:#0d1017;color:#cbd5e1;font:600 10px ui-monospace;cursor:pointer;';
+    settings.onclick=()=>{ window.dispatchEvent(new Event('tco:open-settings')); };
+    actions.append(profile,settings); card.append(avatar,name,email,actions); root.append(card);
+    void (async()=>{ try { const client=(await import('../../auth/supabaseClient')).getSupabaseClient(); const u=(await client.auth.getUser()).data.user; if(!u)return; name.textContent=u.user_metadata?.full_name||u.email||'Trader'; email.textContent=u.email||''; const {data}=await client.from('profiles').select('name,email,avatar').eq('id',u.id).maybeSingle(); if(data){name.textContent=data.name||name.textContent;email.textContent=data.email||email.textContent;if(data.avatar)avatar.src=String(data.avatar);} } catch {} })();
+    return {};
+  },
+};
+
+registerSidePanel(accountPanel);
+
+const panelsAction: WidgetActionDescriptor = {
+  id: 'tco.panels', target: 'topbar', label: 'Panels', icon: 'layout', iconOnly: false, align: 'right', order: 2, mobile: 'menu',
+  run() { window.dispatchEvent(new Event('tco:toggle-primary-panel')); },
+};
+
+const profileAction: WidgetActionDescriptor = {
+  id: 'tco.profile', target: 'topbar', label: 'Account', icon: 'user', iconOnly: true, align: 'right', order: 1, mobile: 'menu',
+  run() { window.dispatchEvent(new Event('tco:open-profile-panel')); },
+};
+
 const brokerAction: WidgetActionDescriptor = {
   id: 'tco.broker-connection', target: 'topbar', label: 'Broker Connection', icon: 'gear', iconOnly: true, align: 'right', order: 10, mobile: 'menu',
   run() { window.dispatchEvent(new Event('tco:open-broker')); },
 };
 
-registerSidePanel(watchlistPanel);
+registerSidePanel(bookmarksPanel);
 registerSidePanel(journalPanel);
+registerWidgetAction(panelsAction);
+registerWidgetAction(profileAction);
 registerWidgetAction(brokerAction);
