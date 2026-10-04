@@ -267,7 +267,6 @@ export class AltDrawingWheel {
     }
 
     destroy(): void {
-        this.active = false;
         this.host.ownerDocument.removeEventListener('keydown', this.onKeyDown, true);
         this.host.ownerDocument.removeEventListener('keyup', this.onKeyUp, true);
         window.removeEventListener('resize', this.onResize);
