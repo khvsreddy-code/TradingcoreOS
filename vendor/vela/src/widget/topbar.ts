@@ -597,6 +597,7 @@ export class Topbar {
             // icon-only ones on the right take the native 32px TOOL chrome outright,
             // so a slot override is pixel-faithful to the button it replaces.
             b.className = left ? 'vela-widget-action-left' : iconOnly ? 'vela-widget-tool' : 'vela-widget-action';
+            b.dataset.actionId = action.id;
             if (action.icon) b.appendChild(iconEl(action.icon, doc));
             if (iconOnly) {
                 // The label still speaks — as the accessible name and the hover tooltip.
