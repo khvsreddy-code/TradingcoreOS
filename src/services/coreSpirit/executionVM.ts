@@ -12,7 +12,7 @@ export type CoreSpiritExecutionVMHost = {
   binary: (operator: string, left: unknown, right: unknown) => unknown;
   tryFused: (pc: number, values: Map<string, unknown>, instructions: CoreSpiritIrInstruction[], barIndex: number) => boolean;
   call: (instruction: CoreSpiritIrInstruction, args: unknown[]) => unknown;
-  loadIndexed: (instruction: CoreSpiritIrInstruction, index: number) => number | null | CoreSpiritValue;
+  loadIndexed: (instruction: CoreSpiritIrInstruction, index: number, values: Map<string, unknown>) => number | null | CoreSpiritValue;
   truthy: (value: unknown) => boolean;
   emit: (instruction: CoreSpiritIrInstruction, values: Map<string, unknown>, output: CoreSpiritOutputCollector) => void;
 };
@@ -69,7 +69,7 @@ export class CoreSpiritExecutionVM {
         case 'index': {
           const index = Number(values.get(ins.index));
           if (!Number.isInteger(index) || index < 0) throw new Error(`invalid historical index ${String(index)}`);
-          values.set(ins.dest, host.loadIndexed(ins, index));
+          values.set(ins.dest, host.loadIndexed(ins, index, values));
           pc += 1;
           break;
         }
