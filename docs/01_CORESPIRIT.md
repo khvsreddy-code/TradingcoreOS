@@ -214,3 +214,12 @@ The following responsibilities are explicitly outside CoreSpiritExecutionVM:
 | broker order authorization | TCO risk/execution layer |
 
 The architecture deliberately does not introduce new CoreSpirit language keywords for these mechanisms.
+
+
+## v130 hot-path architecture
+CoreSpirit's execution VM is the smallest instruction-dispatch layer. Runtime remains lifecycle/orchestration; state, series mutation, events, outputs, capabilities and debugging are host services. Forming-bar rollback uses a checkpoint plus mutation journal instead of cloning retained-bar state. Runtime RSI, ATR and session VWAP use canonical incremental kernels with append/replace semantics.
+
+### Canonical v92 architecture record
+- Complexity absorber: complexity is absorbed by semantic/compiler/runtime layers rather than language forks.
+- Standard-library namespaces: library discovery is namespaced and deterministic.
+- Progressive authoring: deeper capabilities stay behind DATA / LET / WHEN / SHOW / MODEL / AUTOMATE.

@@ -101,3 +101,7 @@ The remaining optimization target is execution granularity: exact dirty spans mu
 ## Authority boundary
 
 Indicator/model computation cannot directly control broker execution. Risk, order authority and broker interaction stay outside the numeric VM.
+
+
+## v130 incremental-kernel status
+Bollinger, Donchian, Stochastic, CCI and MFI standard paths already use canonical rolling kernels. Runtime RSI/ATR/session VWAP now use the same stateful kernel family and no longer maintain history-sized hot arrays for those calculations.

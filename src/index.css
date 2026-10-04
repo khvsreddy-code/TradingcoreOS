@@ -534,3 +534,31 @@ html[data-tco-theme="white"] {
   text-shadow: 0 0 14px rgba(211,235,244,.10);
 }
 .vela-widget-action-left[data-action-id="tco.brand"] .vela-icon { opacity: .9; }
+
+
+/* v130 non-live product surface. The live terminal opts out and keeps its trading palette. */
+html:not(:has(.tco-live-surface)) {
+  --tco-accent: #d3ebf4;
+  --tco-accent-soft: #e4f6fb;
+  --tco-accent-bright: #f2fbfd;
+  --tco-accent-rgb: 211 235 244;
+}
+html:not(:has(.tco-live-surface)) body {
+  background: radial-gradient(circle at 78% -12%, rgba(211,235,244,.055), transparent 34rem), var(--tco-bg);
+}
+html:not(:has(.tco-live-surface)) [class*="text-[#7c5cff]"] { color: #d3ebf4 !important; }
+html:not(:has(.tco-live-surface)) [class*="text-[#9b8aff]"] { color: #e4f6fb !important; }
+html:not(:has(.tco-live-surface)) [class*="text-[#c4b5fd]"] { color: #f2fbfd !important; }
+html:not(:has(.tco-live-surface)) [class*="border-[#7c5cff]"] { border-color: rgba(211,235,244,.38) !important; }
+html:not(:has(.tco-live-surface)) [class*="bg-[#7c5cff]"] { background-color: rgba(211,235,244,.14) !important; }
+html:not(:has(.tco-live-surface)) [class*="from-[#7c5cff]"] { --tw-gradient-from: #d3ebf4 var(--tw-gradient-from-position) !important; }
+html:not(:has(.tco-live-surface)) [class*="to-[#7c5cff]"] { --tw-gradient-to: #d3ebf4 var(--tw-gradient-to-position) !important; }
+html:not(:has(.tco-live-surface)) [class*="via-[#7c5cff]"] { --tw-gradient-via: #d3ebf4 var(--tw-gradient-via-position) !important; }
+html:not(:has(.tco-live-surface)) .tco-interactive,
+html:not(:has(.tco-live-surface)) .premium-button,
+html:not(:has(.tco-live-surface)) .tco-premium-surface {
+  transition: transform 360ms cubic-bezier(.16,1,.3,1), opacity 300ms ease, background-color 360ms ease, border-color 360ms ease, box-shadow 420ms cubic-bezier(.16,1,.3,1), color 300ms ease;
+}
+html:not(:has(.tco-live-surface)) .tco-panel-enter { animation: tco-product-panel-in 460ms cubic-bezier(.16,1,.3,1) both; }
+@keyframes tco-product-panel-in { from { opacity:0; transform:translate3d(0,12px,0) scale(.988); filter:blur(1px); } to { opacity:1; transform:translate3d(0,0,0) scale(1); filter:blur(0); } }
+.tco-live-surface { --tco-accent:#7c5cff; --tco-accent-soft:#9b8aff; --tco-accent-bright:#c4b5fd; --tco-accent-rgb:124 92 255; }

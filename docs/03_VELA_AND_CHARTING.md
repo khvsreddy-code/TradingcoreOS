@@ -171,3 +171,11 @@ empty column response
 This closes the failure mode where the quote stream could be alive while Vela received zero candles and rendered a blank chart.
 
 The canonical path still prefers typed columns and zero-object rendering whenever actual history is available.
+
+
+## v130 Vela product chrome
+- Default live workspace is one chart and uses a v4 persistence key to isolate legacy four-chart layouts.
+- Host-owned topbar brand: TradingCoreOS × Vela.
+- Panels opens the TCO watchlist; Journal is a first-class topbar action.
+- Alt drawing-wheel selection is royal purple; non-live product accent is #d3ebf4.
+- Vela provider registry, columnar feed, retained tape, panel dock, persistence and telemetry remain the preferred seams.

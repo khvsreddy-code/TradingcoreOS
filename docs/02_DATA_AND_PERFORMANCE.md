@@ -131,3 +131,11 @@ The canonical scalar compatibility layer was cleaned up to eliminate old per-win
 The v130 structure engine no longer performs a period-wide fractal comparison for every candidate bar. Fractal highs/lows use the same monotonic centered-extrema primitive as CoreSpirit, giving linear traversal for a fixed period. Zone mitigation no longer recomputes ATR from the beginning of history for every impulse and no longer scans every future candle per zone; it uses one causal ATR series plus threshold heaps, so each zone is inserted and removed at most once.
 
 This prevents structural analytics from becoming a hidden N×period or N² cost after ordinary indicators have already been made incremental.
+
+
+## v130 realtime performance
+- Realtime rollback is journal-based and bounded by mutated keys, not retained-bar count.
+- RSI/ATR/VWAP runtime paths use stateful incremental kernels with forming-bar replacement.
+- Vela history remains columnar at the renderer boundary; OHLCV objects are a compatibility seam only.
+- Non-live product surfaces use longer, smoother motion; the live terminal stays chart-native.
+- FYERS history remains 5,000 candles per request with 5,000-candle backward pages and bounded 50,000 retention.

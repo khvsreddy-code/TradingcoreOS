@@ -34,7 +34,7 @@ export async function tradingApi(path: string, options: RequestInit = {}): Promi
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${session.access_token}`);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  return fetch(path, { ...options, headers, credentials: 'same-origin' });
+  return fetch(path, { ...options, headers, credentials: 'same-origin', cache: options.cache ?? 'no-store' });
 }
 
 
