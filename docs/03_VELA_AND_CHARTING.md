@@ -62,7 +62,7 @@ Retention remains bounded at 50,000 bars.
 
 ## LOD
 
-LOD uses typed bucket arrays and source ranges. Legacy reduced-candle object input is compatibility-only.
+LOD uses typed bucket arrays and source ranges. The target is **zero-object LOD** on the native path; legacy reduced-candle object input is compatibility-only.
 
 ## Motion
 
