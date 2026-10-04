@@ -26,5 +26,5 @@ if(!roadmap.includes("id: 70, name: 'Progressive authoring depth without languag
 if(!core.includes('dependency graph') || !core.includes('one VM')) throw new Error('active CoreSpirit architecture doc lost the canonical execution/dependency model');
 if(!composition.includes('Dependency graph') || !composition.includes('Universal parameters')) throw new Error('active indicator/platform doc lost dependency or parameter architecture');
 if(!scripting.includes('Authoring rules') || !scripting.includes('Stateful math')) throw new Error('active CoreSpirit doc lost authoring/performance guidance');
-if(!tracker.includes('v130') || !tracker.includes('Canonical stateful mathematics')) throw new Error('living tracker does not contain the current performance record');
+if(!tracker.includes('## v130') || !tracker.includes('One canonical stateful kernel owner')) throw new Error('living tracker does not contain the current performance record');
 console.log('CORESPIRIT_STAGE92_DEEP_CONTRACT_OK');
