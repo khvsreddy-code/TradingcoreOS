@@ -11,8 +11,8 @@ const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const live = read('src/components/workspace/LiveChart.tsx');
 const settings = read('src/components/indicators/IndicatorSettingsPanel.tsx');
 const viewer = read('src/components/indicators/IndicatorCodeViewer.tsx');
-const buildTracker = read('docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md');
-const history = read('docs/archive/history/v107-incremental-indicator-execution.md');
+const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
+const indicatorDocs = read('docs/04_INDICATORS_AND_PLATFORM.md');
 
 for (const token of [
   'class RollingMean', 'class RollingVariance', 'class RollingMinMax', 'class RollingSum',
@@ -45,6 +45,6 @@ if (!/IndicatorCodeViewer/.test(live) || !/title="Indicator settings"/.test(live
 if (!/Settings2/.test(settings) || !/Code2/.test(settings) || !/> Code<\//.test(settings)) throw new Error('Indicator settings panel gear/code affordances missing');
 if (!/getIndicatorSourceTemplate/.test(viewer) || !/navigator\.clipboard/.test(viewer)) throw new Error('Indicator code viewer source/copy path missing');
 for (const token of ['v107 incremental indicator execution','RollingAbsoluteDeviation','series.update','IndicatorCodeViewer']) {
-  if (!buildTracker.includes(token) && !history.includes(token)) throw new Error(`v107 documentation marker missing: ${token}`);
+  if (!buildTracker.includes(token) && !indicatorDocs.includes(token)) throw new Error(`incremental-indicator documentation marker missing: ${token}`);
 }
 console.log('TRADINGCORE_V107_INCREMENTAL_INDICATOR_CONTRACT_OK');
