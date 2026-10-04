@@ -91,6 +91,7 @@ These are intentionally **not falsely marked as finished**:
 - [x] Historical checkpoint export/import remains clone-safe because it is a cold recovery path.
 - [x] Realtime execution results use the non-cloning state view; explicit snapshot callers retain the cloned API.
 - [x] Added CI coverage for the hot VM and copy-on-write invariants.
+- [x] Realtime event/order/signal emissions are buffered by CoreSpiritEventRouter and committed only with the forming-bar transaction.
 
 ### 7. Vela workspace and data-path hardening
 
