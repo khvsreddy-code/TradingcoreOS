@@ -67,7 +67,8 @@ const fusedEmaCompiled = compiler.compile(fusedEmaParsed.ast, 'stage93-ema', { s
 if (!fusedEmaCompiled.ir) throw new Error(fusedEmaCompiled.diagnostics.map(item => item.message).join('; '));
 const fusedEmaPlan = planCoreSpiritSeriesFusion(fusedEmaCompiled.ir);
 if (fusedEmaPlan.groups.length !== 1) throw new Error('EMA chain was not fused');
-if (fusedEmaPlan.groups[0].operations.map(operation => operation.name).join('>') !== 'ema>change>normalize') throw new Error('EMA chain was not maximally fused');
+const fusedEmaNames = fusedEmaPlan.groups[0].operations.map(operation => operation.name).join('>');
+if (fusedEmaNames !== 'ema>change>normalize') throw new Error('EMA chain was not maximally fused: got ' + fusedEmaNames);
 
 const fusionInput = new Float64Array([100, 102, 101, 105, 106, 104, 108, 110, 112, 111]);
 const fusionRun = executeCoreSpiritSeriesFusionGroup(fusedEmaPlan.groups[0], { register: fusedEmaPlan.groups[0].inputRegister, values: fusionInput });
