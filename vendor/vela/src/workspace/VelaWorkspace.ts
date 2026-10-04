@@ -852,6 +852,11 @@ export class VelaWorkspace {
         longFrames: number;
         lastFrameMs: number;
         lastFrameAt: number;
+        p95FrameMs: number;
+        fps: number;
+        frameBudgetMs: number;
+        frameBudgetMisses: number;
+        frameBudgetMissRate: number;
         backend: 'webgl2' | 'canvas2d' | 'unknown';
     }> {
         return this.cells().flatMap((cell) => {
@@ -859,6 +864,7 @@ export class VelaWorkspace {
                 getPerformanceStats?: () => {
                     frames: number; totalFrameMs: number; averageFrameMs: number; worstFrameMs: number;
                     longFrames: number; lastFrameMs: number; lastFrameAt: number;
+                    p95FrameMs: number; fps: number; frameBudgetMs: number; frameBudgetMisses: number; frameBudgetMissRate: number;
                     backend: 'webgl2' | 'canvas2d' | 'unknown';
                 };
             };
