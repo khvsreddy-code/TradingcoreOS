@@ -8,10 +8,10 @@ const graph = fs.readFileSync(path.join(root, 'src/services/marketData/indicator
 const kernel = fs.readFileSync(path.join(root, 'src/services/marketData/coreIndicatorKernel.ts'), 'utf8');
 const settings = fs.readFileSync(path.join(root, 'src/components/indicators/IndicatorSettingsPanel.tsx'), 'utf8');
 const settingsSchema = fs.readFileSync(path.join(root, 'src/services/coreSpirit/indicatorSettingsSchema.ts'), 'utf8');
-const tracker = fs.readFileSync(path.join(root, 'TRADINGCORE_REPAIR_TRACKER.md'), 'utf8');
+const tracker = fs.readFileSync(path.join(root, 'docs/archive/legacy/PROJECT_REPAIR_AND_UI_NOTES.md'), 'utf8');
 
 if (!/maxBuckets = 32/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore LRU residency guard missing');
-if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/CHART_HISTORY_DEMAND_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
+if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/archive/legacy/CHARTING_LEGACY_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
 if (!/const previousLength = this\.state\.candles\.length/.test(plane) || !/olderAdded = Math\.max\(0, merged\.length - previousLength\)/.test(plane)) throw new Error('Actual older prepend count missing');
 if (!/requestWarmHistory\(visibleBars\?: number\)/.test(plane) || !/this\.state\.warmHistoryRequested = false/.test(plane)) throw new Error('Warm history viewport/retry contract missing');
 if (!/requestWarmHistory\(Math\.max\(1,Math\.abs/.test(live)) throw new Error('Live chart does not pass visible range demand to warm history');
