@@ -870,3 +870,10 @@ Latest GitHub CI on `b6aa30b` had contracts/build passing and typecheck failing 
 - Chart drawing toolbar active state now uses the TCO indigo-violet accent token instead of the old hardcoded blue.
 
 No trading logic or broker authorization behavior was changed by these compile repairs.
+
+
+## v121 — Fyers page transport + motion correction
+
+The Fyers history route remains a strict 5,000-candle page, but it now derives a narrow resolution-aware calendar lookback around that page instead of downloading a much larger fixed window and trimming it locally. This reduces broker payload and normalization work while retaining a market-session safety multiplier.
+
+The performance mode no longer forces ultra-fast 90ms UI motion. It now uses slower, deliberate motion while preserving expensive-effect suppression and chart-frame optimizations.

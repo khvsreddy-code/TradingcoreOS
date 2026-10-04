@@ -150,7 +150,8 @@ export class CoreSpiritRuntime {
       this.state.localSeries = cloneValueMap(this.currentBarSnapshot.localSeries);
       this.crossState = cloneCrossMap(this.currentBarSnapshot.crossState);
       for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
-        this.fusedCursors.set(groupId, snapshot.clone());
+        const cursor = this.fusedCursors.get(groupId);
+        if (cursor) cursor.copyFrom(snapshot);
       }
       this.history[this.history.length - 1] = normalized;
     } else {
@@ -162,9 +163,10 @@ export class CoreSpiritRuntime {
         crossState: cloneCrossMap(this.crossState),
         historyLength: this.history.length,
       };
-      this.fusedCursorSnapshots.clear();
       for (const [groupId, cursor] of this.fusedCursors) {
-        this.fusedCursorSnapshots.set(groupId, cursor.clone());
+        const snapshot = this.fusedCursorSnapshots.get(groupId);
+        if (snapshot) snapshot.copyFrom(cursor);
+        else this.fusedCursorSnapshots.set(groupId, cursor.clone());
       }
       this.history.push(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);

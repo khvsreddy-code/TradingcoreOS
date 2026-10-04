@@ -3654,3 +3654,8 @@ No live tick should reconstruct a 20k-point series merely because the chart has 
 The fused CoreSpirit series cursor is now rollback-safe at the stage level: each fused stage exposes a typed `copyFrom` state transfer, so realtime forming-bar revisions can clone/restore bounded kernel state without rebuilding any history-sized intermediate arrays.
 
 The execution model remains one chronological traversal: source value → fused stage state updates → final output write. Intermediate operation results live only in the cursor's scalar stage chain for the current bar.
+
+
+## v121 — deeper fused realtime state
+
+CoreSpirit fused execution now reuses bounded realtime checkpoints instead of cloning a fused cursor on every forming-bar revision. The first checkpoint allocation is retained; subsequent revisions copy state in place. The fused cursor also exposes a scalar incremental output seam for append/realtime consumers. This keeps rollback cost bounded by kernel state rather than allocating a new checkpoint graph per tick.

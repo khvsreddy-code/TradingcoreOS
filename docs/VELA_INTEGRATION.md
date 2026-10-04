@@ -355,3 +355,8 @@ The Vela engine's 5,000-bar left-edge demand path now has explicit trigger/cap c
 The retained collection diff path is typed against heterogeneous renderer collections through an explicit `unknown[]` delta boundary. This keeps the patch ABI renderer-neutral while retaining concrete collection types at their source.
 
 The native latest-price chrome now reads the current candle through SceneGraph scalar accessors and no longer references an out-of-scope legacy bar variable.
+
+
+## v121 — deeper runtime/performance boundary
+
+Vela remains the render owner and TCO remains the data owner. The current chart path is 5,000-candle first load, 5,000-candle left-edge pages, canonical columnar transport, retained-scene deltas, and Vela-native rendering. UI motion is intentionally slower than the terminal's previous fast-mode defaults; Vela chart animation remains on the native renderer scheduler. Supabase is used for workspace/default/journal persistence, not as a market-tick transport.

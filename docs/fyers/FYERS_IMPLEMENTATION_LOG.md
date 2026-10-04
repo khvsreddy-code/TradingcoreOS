@@ -144,3 +144,8 @@
 
 ### Commit
 - `fb0cf18c4f4739a7fee58ae30f81e69696765e29`
+
+
+## v121 — 5k request optimization
+
+The Fyers history endpoint continues to expose a 5,000-candle page for the chart. The server now derives its request lookback from the selected resolution and requested page size, with a market-session safety multiplier. This avoids requesting an unnecessarily large 30/50/90/180-day window and trimming it after the broker response. Older pages remain keyed by the exact oldest candle boundary, deduplicated in flight, and cached briefly in memory.

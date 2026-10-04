@@ -166,7 +166,14 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const task = withBrokerRequestGate('fyers', accessToken, async () => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
-      const lookbackDays = resolution === 'D' ? 3650 : resolution === '60' ? 365 : resolution === '30' ? 210 : resolution === '15' ? 180 : resolution === '10' ? 140 : resolution === '5' ? 90 : resolution === '3' ? 50 : 30;
+      const minuteResolution = Number(resolution);
+      const barsPerDay = Number.isFinite(minuteResolution) && minuteResolution > 0 ? (6.25 * 60) / minuteResolution : 1;
+      const estimatedCalendarDays = Number.isFinite(minuteResolution)
+        ? Math.ceil((limit / Math.max(1, barsPerDay)) * 1.65)
+        : 3650;
+      const lookbackDays = resolution === 'D'
+        ? Math.max(3650, limit)
+        : Math.min(3650, Math.max(7, estimatedCalendarDays));
       const from = new Date(end.getTime() - lookbackDays * 86_400_000);
       const params = new URLSearchParams({
         symbol: instrumentKey,

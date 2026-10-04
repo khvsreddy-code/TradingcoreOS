@@ -633,9 +633,21 @@ export class CoreSpiritFusedSeriesCursor {
   }  
   clone(): CoreSpiritFusedSeriesCursor {
     const next = new CoreSpiritFusedSeriesCursor(this.stages.map((stage) => stage.getOperation()));
-    for (let i = 0; i < this.stages.length; i += 1) next.stages[i]!.copyFrom(this.stages[i]!);
-    next.outputs.set(this.outputs);
+    next.copyFrom(this);
     return next;
+  }
+
+  copyFrom(source: CoreSpiritFusedSeriesCursor): void {
+    if (source.stages.length !== this.stages.length) throw new Error('incompatible fused cursor stage count');
+    for (let i = 0; i < this.stages.length; i += 1) this.stages[i]!.copyFrom(source.stages[i]!);
+    this.outputs.set(source.outputs);
+  }
+
+  updateInto(sourceValue: number, absoluteIndex: number, output: Float64Array, outputIndex: number): number {
+    const values = this.update(sourceValue, absoluteIndex);
+    const value = values[values.length - 1]!;
+    output[outputIndex] = value;
+    return value;
   }
 
 }

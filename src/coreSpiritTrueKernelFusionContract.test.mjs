@@ -9,6 +9,8 @@ const stdlib = read('src/services/coreSpirit/standardLibrary.ts');
 if (!vector.includes('export class CoreSpiritFusedSeriesCursor')) throw new Error('fused cursor missing');
 if (!vector.includes('const output = new Float64Array(source.length)')) throw new Error('final output buffer missing');
 if (!vector.includes('intermediateAllocations: 0')) throw new Error('zero-intermediate contract missing');
+if (!vector.includes('copyFrom(source: CoreSpiritFusedSeriesCursor)')) throw new Error('reusable cursor checkpoint missing');
+if (!vector.includes('updateInto(sourceValue: number, absoluteIndex: number')) throw new Error('scalar fused output seam missing');
 if (/current\s*=\s*executeOne/.test(vector)) throw new Error('legacy full-series stage loop remains');
 if (vector.includes('executeLegacySingleOperation')) throw new Error('legacy production executor remains');
 if (!fusion.includes('isCoreSpiritSeriesOperationFusible')) throw new Error('fusion eligibility is not tied to kernel registry');

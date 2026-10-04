@@ -335,14 +335,14 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
    ------------------------------------------------------------------------- */
 html[data-tco-fast="1"] {
   scroll-behavior: auto;
-  --tco-motion-fast: 90ms;
+  --tco-motion-fast: 220ms;
 }
 
 html[data-tco-fast="1"] *,
 html[data-tco-fast="1"] *::before,
 html[data-tco-fast="1"] *::after {
   transition-duration: var(--tco-motion-fast) !important;
-  animation-duration: 140ms !important;
+  animation-duration: 320ms !important;
 }
 
 html[data-tco-fast="1"] .backdrop-blur,
