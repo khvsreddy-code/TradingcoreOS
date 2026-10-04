@@ -768,7 +768,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             !identityChanged &&
             this.rawTape.length > 0 &&
             !m.data?.length &&
-            ((next.bars ?? 0) <= this.rawBars.length || typeof this.feed.loadRange === 'function');
+            ((next.bars ?? 0) <= this.rawTape.length || typeof this.feed.loadRange === 'function');
         if (!identityChanged && !depthChanged) {
             // Nothing to reload — honor at most a framing request.
             if (typeof next.visibleRange === 'string') this.setVisibleRangePreset(next.visibleRange);
@@ -1704,7 +1704,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             this.healBuffer.push(this.columnarUpdateToBar(update));
             return;
         }
-        const last = this.rawBars[this.rawBars.length - 1];
+        const last = this.rawTape.at(this.rawTape.length - 1);
         if (last && this.canHeal() && time > last.time + this.barIntervalMs() * GAP_FACTOR && Date.now() - this.lastHealAt > HEAL_COOLDOWN_MS) {
             this.healBuffer.push(this.columnarUpdateToBar(update));
             void this.healGap(last.time);
