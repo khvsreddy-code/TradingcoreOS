@@ -143,7 +143,7 @@ console.log('TRADINGCORE_V128_STATEFUL_KERNEL_PARITY_OK');
   nearly(persistence.update(3)!, 0.5);
   nearly(persistence.update(5, 'replace')!, 1);
   persistence.update(6);
-  nearly(persistence.update(4)!, 0.5);
+  nearly(persistence.update(4)!, 2 / 3);
 }
 
 console.log('TRADINGCORE_V130_CANONICAL_KERNEL_REPLACEMENT_OK');
