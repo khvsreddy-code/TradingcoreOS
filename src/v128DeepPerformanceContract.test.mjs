@@ -23,11 +23,11 @@ const verifier = read('tools/verify-chart-performance.mjs');
 for (const name of ['RollingSum','RollingMean','RollingVariance','RollingMinMax','RollingMedian','RollingPercentile','RollingAbsoluteDeviation','EMAState','WilderState','ATRState','WMAState','VWAPSessionState']) {
   assert.match(stateful, new RegExp('export class ' + name), name + ' missing from CoreSpirit canonical kernel layer');
 }
-assert.match(stateful, /mode:s*'append's*|s*'replace'/);
+assert.match(stateful, /mode\s*:\s*'append'\s*\|\s*'replace'/);
 assert.match(stateful, /replaceCurrentSlot/);
 assert.match(stateful, /DualHeapMedian/);
 assert.match(stateful, /MonotonicDeque/);
-assert.match(compatibility, /export * from '..\/coreSpirit\/statefulIndicatorKernel'/);
+assert.match(compatibility, /export\s*\*\s*from\s*['"]\.\.\/coreSpirit\/statefulIndicatorKernel['"]/);
 
 for (const name of ['Bollinger','Donchian','Stochastic','CCI','MFI']) {
   const lowered = coreIndicatorEngine.toLowerCase();
