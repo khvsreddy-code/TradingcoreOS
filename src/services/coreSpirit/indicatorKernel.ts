@@ -3,7 +3,6 @@ import {
   RollingMean,
   RollingMinMax,
   RollingVariance,
-  WMAState,
 } from './statefulIndicatorKernel';
 
 export function mean(values: readonly number[]): number | null {
@@ -74,9 +73,11 @@ export function standardDeviation(values: readonly number[], length: number): nu
 
 export function wma(values: readonly number[], length: number): number | null {
   if (length < 1 || values.length < length) return null;
-  const state = new WMAState(length);
-  for (let i = 0; i < length; i += 1) state.update(Number(values[i]));
-  return state.value ?? null;
+  const p = Math.floor(length);
+  const denominator = p * (p + 1) / 2;
+  let total = 0;
+  for (let i = 0; i < p; i += 1) total += Number(values[i]) * (p - i);
+  return total / denominator;
 }
 
 export function stochastic(
