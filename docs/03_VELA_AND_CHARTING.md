@@ -151,3 +151,10 @@ The historical renderer migration material has been consolidated here. The impor
 ## Stage 94 retained zero-copy contract
 
 The canonical columnar data plane feeds the `Vela NativeRenderer` without object materialization in the hot LOD/GPU path. The active chart boundary retains the historical `canonical columnar data plane`, `Vela NativeRenderer`, `object materialization`, and `zero-object LOD` terminology so the retired standalone renderer-migration document is no longer needed.
+
+
+## v130 — performance ABI boundaries remain explicit
+
+Vela's retained `ColumnarHistoryTape`, range patching and frame telemetry are now treated as separate measurable boundaries. The next ABI step is still to eliminate remaining `OHLCV[]` projections from session/replay/drawing/transform consumers wherever direct column access can preserve semantics. Dirty-range handling also remains open until every relevant RenderPacket collection and Vela overlay can consume the same exact causal interval without broad replacement fallback.
+
+No source-level claim substitutes for runtime evidence: authenticated browser measurements for 1/4/8 charts, 5k initial load, 5k prepend and live ticks, plus GPU-specific counters, remain explicit validation gates.
