@@ -12,7 +12,7 @@ const renderer = read('src/services/core/chart/chartRenderer.ts');
 const derived = read('src/services/core/data/derivedDataStores.ts');
 const chartDocs = read('docs/03_VELA_AND_CHARTING.md');
 const migration = read('docs/03_VELA_AND_CHARTING.md');
-const tracker = read('docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md');
+const tracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
 const v95Docs = read('docs/03_VELA_AND_CHARTING.md');
 
 for (const token of ['MarketDataStore', 'timelineKey', 'oi', 'bid', 'ask', 'bidVolume', 'askVolume', 'trades', 'session', 'metadata']) {
