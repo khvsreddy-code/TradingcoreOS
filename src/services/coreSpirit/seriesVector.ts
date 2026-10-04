@@ -1,3 +1,5 @@
+import { RollingMean, RollingVariance, RollingMinMax, RollingSum, RollingMedian, WMAState, EMAState, WilderState, ChangeState, PersistenceState } from './statefulIndicatorKernel';
+
 export type CoreSpiritNumericSeries = Float64Array;
 
 export type CoreSpiritSeriesOperationName =
