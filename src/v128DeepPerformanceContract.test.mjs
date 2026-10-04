@@ -7,7 +7,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 const stateful = read('src/services/coreSpirit/statefulIndicatorKernel.ts');
 const compatibility = read('src/services/marketData/incrementalIndicatorKernel.ts');
-const coreIndicatorEngine = read('src/services/coreSpirit/indicatorEngine.ts');
+const coreIndicatorEngine = read('src/services/marketData/indicatorEngine.ts');
 const runtime = read('src/services/coreSpirit/runtime.ts');
 const tape = read('vendor/vela/src/core/model/ColumnarHistoryTape.ts');
 const velaEngine = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
