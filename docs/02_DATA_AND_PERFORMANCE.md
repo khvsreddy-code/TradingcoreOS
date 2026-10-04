@@ -117,3 +117,62 @@ The ordinary `HistoricalCandle[]` route remains as a compatibility boundary for 
 ### Remaining hot-path debt
 
 The remaining materialization is concentrated in Vela orchestration/history compatibility and ranged/secondary-series consumers. That should be removed only after a true columnar history-tape ABI exists for replay, session windows, drawings and transformed chart types.
+
+## v127 — stateful indicator kernels
+
+All bounded-period math must use incremental state rather than creating a new window per output bar. The implementation now includes:
+
+- `RollingSum` and `RollingMean` with ring-buffer state
+- `RollingVariance` using running sum and sum-of-squares
+- `RollingMinMax` with monotonic deques
+- `RollingMedian` with dual heaps and delayed deletion
+- `RollingPercentile` using the ordered multiset's order-statistic selection
+- EMA/Wilder/ATR/VWAP state machines
+- centered extrema scans implemented as one-pass monotonic-deque traversals
+
+Bollinger, Donchian, Stochastic, CCI, MFI and the standard indicator engine now consume these stateful primitives. Advanced structure/volatility paths were also removed from repeated per-bar rolling scans where bounded state provides the same semantics.
+
+The remaining slices in the indicator engine are either fixed-size pattern checks or whole-group/day calculations; they are not `O(N × period)` rolling windows.
+
+## v127 — Vela columnar history tape
+
+Vela's retained raw history now has a dedicated `ColumnarHistoryTape` source of truth for time/open/high/low/close/volume. The tape is bounded at 50,000 bars and supports replace, prepend, append, replace-last and trim operations without rebuilding the retained object array.
+
+The renderer already owns its own numeric column store, so the Vela orchestration layer now passes numeric history through the columnar seam and materializes `OHLCV[]` only when compatibility consumers explicitly need it.
+
+## v127 — exact dirty-span execution
+
+The data path now carries exact dirty spans from history mutation into script execution. Each CoreSpirit artifact exposes its maximum causal lookback; a prepend re-run includes that warmup before replacing only the affected model range.
+
+This changes the expensive path from:
+
+```
+prepend 5k
+→ execute all retained history
+→ rebuild all plots
+→ full renderer replacement
+```
+
+to:
+
+```
+prepend 5k
+→ bounded causal warmup
+→ execute affected span
+→ replace-range patch
+→ preserve untouched series
+```
+
+## v127 — frame/backend telemetry
+
+Vela's native renderer records frame-paint duration, worst frame, long-frame count and backend type (`webgl2` / `canvas2d`). VelaWorkspace aggregates those metrics across mounted cells, and TCO ingests them into `chartPerformanceTelemetry`.
+
+Browser verification can inspect `window.__TCO_PERF__`. Actual browser/deployed verification remains a separate environment-dependent gate; source contracts do not claim that a browser session was executed when it was not.
+
+## Performance invariants
+
+1. O(N × period) rolling implementations are forbidden when bounded state can express the same calculation.
+2. A live tick updates only the forming-bar state.
+3. A 5,000-bar historical prepend does not imply a full retained-series renderer replacement.
+4. Columnar data remains the canonical market-data representation through the hot path.
+5. Compatibility object materialization is explicit and measurable.
