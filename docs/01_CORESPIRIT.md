@@ -130,3 +130,11 @@ history prepend
 ```
 
 A full historical re-run remains the compatibility path for operations without a valid bounded causal range.
+
+## v129 — bounded indicator state
+
+CoreSpirit rolling mathematics now uses bounded state machines rather than period-window reconstruction. Sums/means use running aggregates, variance maintains running moments, extrema use monotonic deques, median/percentile use ordered state, and EMA/Wilder/ATR/WMA/VWAP retain incremental state.
+
+The legacy indicator compatibility surface was rewritten to remove repeated `slice`, `reduce`, sort and spread max/min patterns. Full-history callers should use the vector/fused path or the new `*Series` helpers.
+
+`seriesVector.ts` remains a deduplication target because it still carries private fused-state implementations even though those implementations are bounded and linear.

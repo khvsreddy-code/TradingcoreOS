@@ -143,3 +143,7 @@ History backfill supplies a causal dirty interval based on the new head plus ind
 Per-cell Vela performance now includes `p95FrameMs`, `fps`, `frameBudgetMs`, `frameBudgetMisses` and `frameBudgetMissRate` in addition to average/worst/long-frame counters. The frame sample buffer is fixed at 240 entries, keeping telemetry overhead bounded.
 
 The browser verification harness can exercise one, four and eight-cell deployments by supplying matching URL/cell-count pairs. It also fails when observed p95 frame time exceeds the configured threshold.
+
+## Archived renderer migration reference
+
+The historical renderer migration material has been consolidated here. The important durable rule is that Vela is the sole chart/rendering engine and TradingCoreOS talks to it through TCO-owned facades/adapters. Renderer-specific compatibility belongs behind that boundary; new chart capabilities should extend Vela's headless interfaces, columnar data path and retained patch model rather than reintroducing a second chart stack.

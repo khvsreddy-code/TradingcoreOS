@@ -145,6 +145,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      *  event, gap-heal reconciliation, and `chart.data` stay on this plane; nothing synthetic
      *  is ever stored or emitted as data. */
     /** Retained RAW history source-of-truth. Columnar storage is canonical; OHLCV is a compatibility view. */
+    /** Prefer rawTape time/length/search primitives in orchestration; materialize rawBars only for true compatibility consumers. */
     private readonly rawTape = new ColumnarHistoryTape(MAX_HISTORY_BARS);
     private rawBarsCompat: OHLCV[] | null = null;
     private get rawBars(): OHLCV[] { return this.rawBarsCompat ??= this.rawTape.toOHLCV(); }
@@ -407,8 +408,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             // Base-history demand is owned by Vela here: the first 5k bars are hot, and as the
             // user approaches the loaded tape's left edge we grow depth by exactly one 5k page.
             // The existing backfill loop preserves the viewport and merges live ticks safely.
-            if (window.left <= LEFT_HISTORY_TRIGGER_BARS && this.historyState !== 'backfill' && this.rawBars.length > 0) {
-                const currentDepth = Math.max(SINGLE_LOAD_BARS, this.rawBars.length);
+            if (window.left <= LEFT_HISTORY_TRIGGER_BARS && this.historyState !== 'backfill' && this.rawTape.length > 0) {
+                const currentDepth = Math.max(SINGLE_LOAD_BARS, this.rawTape.length);
                 if (currentDepth < MAX_HISTORY_BARS) this.extendDepth(this.generation, Math.min(MAX_HISTORY_BARS, currentDepth + SINGLE_LOAD_BARS));
             }
             // An active chart-type data engine streams in newly-visible data as the user scrolls.
@@ -728,8 +729,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             }
         }
         const replayCarry =
-            this.replayQueue && sameClock && this.rawBars.length > 0
-                ? { revealedEnd: this.rawBars[this.rawBars.length - 1]!.time + this.barIntervalMs(), playing: this.replayPlaying, cancelled: false }
+            this.replayQueue && sameClock && this.rawTape.length > 0
+                ? { revealedEnd: this.rawTape.lastTime() + this.barIntervalMs(), playing: this.replayPlaying, cancelled: false }
                 : pending && sameClock
                   ? { revealedEnd: pending.revealedEnd, playing: pending.playing, cancelled: false }
                   : null;
@@ -765,7 +766,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const depthOnly =
             depthChanged &&
             !identityChanged &&
-            this.rawBars.length > 0 &&
+            this.rawTape.length > 0 &&
             !m.data?.length &&
             ((next.bars ?? 0) <= this.rawBars.length || typeof this.feed.loadRange === 'function');
         if (!identityChanged && !depthChanged) {
@@ -793,7 +794,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             (next.timeframe === undefined || next.timeframe === m.timeframe);
         const carried = sessionOnly && next.visibleRange === undefined ? this.currentVisibleRange() : undefined;
         // How many bars the user is LOOKING at — the pixel zoom, in series-neutral form.
-        const carriedCount = carried ? this.rawBars.filter((b) => b.time >= carried.left && b.time <= carried.right).length : 0;
+        const carriedCount = carried ? this.rawTape.countTimeRange(carried.left, carried.right) : 0;
 
         const gen = this.bumpGeneration();
         this.switchingMarket = true;
@@ -879,12 +880,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // window from the bars that actually LOADED: same BAR COUNT on screen (the
         // pixel zoom), the newest visible time as the anchor. Skipped when the old
         // view held no bars (whitespace) — the time window is the only truth there.
-        if (carried && carriedCount >= 2 && this.rawBars.length > 0) {
-            const bars = this.rawBars;
-            let idx = bars.length - 1;
-            while (idx > 0 && bars[idx]!.time > carried.right) idx -= 1;
-            const from = bars[Math.max(0, idx - (carriedCount - 1))]!.time;
-            this.renderer.setVisibleRange({ from, to: Math.max(carried.right, bars[idx]!.time + 1) });
+        if (carried && carriedCount >= 2 && this.rawTape.length > 0) {
+            const idx = this.rawTape.lastIndexAtOrBefore(carried.right);
+            if (idx >= 0) {
+                const from = this.rawTape.timeAt(Math.max(0, idx - (carriedCount - 1)));
+                const anchor = this.rawTape.timeAt(idx);
+                this.renderer.setVisibleRange({ from, to: Math.max(carried.right, anchor + 1) });
+            }
         }
 
         // A carried replay whose point is inside the new bars cuts them right here (no history
@@ -893,7 +895,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // has to deepen first — the switch completes as usual and the replay resumes after.
         const carry = replayCarry && !replayCarry.cancelled ? replayCarry : null; // stopped during the load ⇒ gone
         const carryFrom = carry ? carry.revealedEnd - this.barIntervalMs() : 0;
-        const carryNow = carry != null && this.rawBars.length > 0 && carryFrom >= this.rawBars[0]!.time;
+        const carryNow = carry != null && this.rawTape.length > 0 && carryFrom >= this.rawTape.firstTime();
         const replayBack = carryNow && this.resumeCarriedReplay(this.replayStart({ from: carryFrom }), carry);
 
         // Restart every consumer over the new market (records/panes/drawings survive). A
@@ -1128,20 +1130,20 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * active chart-type engine is rebuilt without live data.
      */
     async replayStart(opts: ReplayStartOptions): Promise<void> {
-        if (this.rawBars.length === 0) {
+        if (this.rawTape.length === 0) {
             console.warn('[vela] chart.replay.start() ignored — the chart has no bars yet');
             return;
         }
         let gen = this.generation;
-        if (opts.from < this.rawBars[0]!.time) {
+        if (opts.from < this.rawTape.firstTime()) {
             await this.historyCompletePromise;
-            if (this.generation !== gen || this.rawBars.length === 0) return; // a market switch superseded the request
+            if (this.generation !== gen || this.rawTape.length === 0) return; // a market switch superseded the request
         }
-        const oldest = this.rawBars[0]!.time;
+        const oldest = this.rawTape.firstTime();
         if (opts.from < oldest && this.canHeal() && typeof this.feed.loadRange === 'function') {
             // Deepen through the depth-only path. Bars per interval overestimates on
             // session-bound markets, which only over-fetches; genesis clamps the rest.
-            const held = this.rawBars.length + (this.replayQueue?.length ?? 0);
+            const held = this.rawTape.length + (this.replayQueue?.length ?? 0);
             const bars = held + Math.ceil((oldest - opts.from) / this.barIntervalMs()) + 1;
             const seek = this.replayQueue !== null;
             if (seek) this.endReplay(null, { restore: true, resume: false }); // a seek, not an end
@@ -1153,7 +1155,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             await deepened;
             gen = this.generation;
             await this.historyCompletePromise;
-            if (!this.replayLoading || this.generation !== gen || this.rawBars.length === 0) return; // cancelled or superseded
+            if (!this.replayLoading || this.generation !== gen || this.rawTape.length === 0) return; // cancelled or superseded
             this.replayLoading = null;
         }
         this.settleFormingBar();
@@ -1297,7 +1299,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         return {
             active: active || this.replayCarrying !== null, // a replay carried over a switch stays on while the new bars load
             playing: this.replayCarrying?.playing ?? this.replayPlaying,
-            cursorTime: active ? (this.rawBars[this.rawBars.length - 1]?.time ?? null) : null,
+            cursorTime: active ? (this.rawTape.lastTime() || null) : null,
             remaining: this.replayQueue?.length ?? 0,
             nextTime: this.replayForming?.bar.time ?? this.replayQueue?.[0]?.time ?? null,
             intervalMs: this.replayIntervalMs,
@@ -1305,8 +1307,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     }
 
     replayBounds(): ReplayBounds | null {
-        const first = this.rawBars[0];
-        const last = this.replayQueue?.[this.replayQueue.length - 1] ?? this.rawBars[this.rawBars.length - 1];
+        const first = this.rawTape.at(0);
+        const last = this.replayQueue?.[this.replayQueue.length - 1] ?? this.rawTape.at(this.rawTape.length - 1);
         return first && last ? { first: first.time, last: last.time } : null;
     }
 
@@ -1423,9 +1425,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private mergeHistoryIntoReplay(bars: OHLCV[]): void {
         const queue = this.replayQueue;
-        const head = this.rawBars[0];
+        const head = this.rawTape.at(0);
         if (!queue || !head) return;
-        const tail = queue[queue.length - 1] ?? this.rawBars[this.rawBars.length - 1]!;
+        const tail = queue[queue.length - 1] ?? this.rawTape.at(this.rawTape.length - 1)!;
         let older = 0;
         while (older < bars.length && bars[older]!.time < head.time) older += 1;
         let newer = bars.length;
@@ -1515,7 +1517,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         }
         if (opts.restore) {
             const keep = depth ? (depth.bars ?? 500) : Infinity;
-            if (queue.length > 0 || this.rawBars.length > keep) {
+            if (queue.length > 0 || this.rawTape.length > keep) {
                 const full = [...this.rawBars, ...queue];
                 this.setBarSeries(full.length > keep ? full.slice(full.length - keep) : full);
                 this.restartBarConsumers({ blank: false });
@@ -1528,7 +1530,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         }
         if (opts.resume && this.config.live) {
             this.startLive();
-            const last = this.rawBars[this.rawBars.length - 1];
+            const last = this.rawTape.at(this.rawTape.length - 1);
             if (last && this.canHeal()) void this.healGap(last.time);
         }
         if (reason) this.events.emit('replay:end', { reason });
@@ -1657,7 +1659,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const transform = barTransformFor(style);
         if (transform === this.barTransform) return; // singletons per style — identity is enough
         this.barTransform = transform;
-        if (this.rawBars.length === 0) return;
+        if (this.rawTape.length === 0) return;
         this.bars = transform ? transform.full(this.rawBars) : this.rawBars;
         this.renderer.setBars(this.bars, { preserveView: true });
         this.reexecuteIndicators();

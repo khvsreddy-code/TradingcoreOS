@@ -202,3 +202,11 @@ Backfill calculates a causal dirty span using the newly prepended region plus th
 Native Vela telemetry now reports p95 frame duration, FPS estimate, 16.67ms frame-budget misses, budget-miss rate, long-frame count and rendering backend. A bounded 240-sample frame history is maintained without per-frame allocation.
 
 Browser verification accepts multiple URLs/cell-count expectations through `TCO_BROWSER_URLS` and `TCO_EXPECTED_CELLS`, with an optional `TCO_MAX_P95_FRAME_MS` gate.
+
+## v129 — latency budget model
+
+The performance model now separates transport, compute, patch and renderer/frame costs. Columnar market data is the preferred transport shape, CoreSpirit indicator state is bounded by lookback/period, and dirty backfills execute only the causal span required to repair an invalidated range.
+
+The 5,000-first / 5,000-backward / 50,000-retention history policy remains fixed.
+
+Browser runtime measurements are intentionally separate from source contracts.

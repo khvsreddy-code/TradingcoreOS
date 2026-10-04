@@ -2,19 +2,77 @@
 
 > Living implementation truth for CoreSpirit.
 >
-> `docs/CORESPIRIT.md` is the stable architecture brain. This file records what is actually built, what has been verified, what remains incomplete, and the next concrete work.
+> `docs/01_CORESPIRIT.md` is the stable CoreSpirit architecture brain. This file records what is actually built, what has been verified, what remains incomplete, and the next concrete work.
 
 ## Current release
 
-**Release:** CoreSpirit v115 — typed canonical data ingress + Vela workspace integration
+**Release:** CoreSpirit v127 — stateful indicator kernels + columnar Vela history + dirty-span rendering telemetry
 
-**Tracker state:** current implementation truth for the CoreSpirit indicator/component ABI plus the v115 canonical typed-data and Vela workspace boundary.
+**Tracker state:** current implementation truth for the CoreSpirit indicator/component ABI, stateful math kernels, columnar Vela history boundary, dirty-span execution/patching and renderer telemetry.
 
-**Architecture document:** `docs/CORESPIRIT.md`
+**Architecture document:** `docs/01_CORESPIRIT.md`
 
 **Machine release record:** `CORESPIRIT_V111_MANIFEST.json`
 
 **Primary invariant:** one language → one compiler → one stable IR → one VM → multiple host execution environments; presentation state never invalidates mathematical state.
+
+
+
+
+### v127 deep performance architecture — 2026-10-04
+
+- [x] Replaced repeated bounded rolling-window scans in the indicator engine with stateful kernels: RollingSum, RollingMean, RollingVariance, RollingMinMax, RollingMedian and RollingPercentile.
+- [x] Added dual-heap rolling median with delayed deletion and order-statistic percentile selection.
+- [x] Added one-pass centered rolling extrema using monotonic deques.
+- [x] Migrated Bollinger, Donchian, Stochastic, CCI and MFI paths onto stateful incremental calculations; removed the remaining O(N × period) structure-window implementations found in Market Structure, Liquidity Sweeps, NR7, Pivot Consolidation and related advanced scans.
+- [x] Removed the hidden nested rolling-mean recomputation in OrderBlock AI.
+- [x] Added numerical parity coverage for stateful kernels, including append and forming-bar replacement behavior.
+- [x] Added Vela ColumnarHistoryTape as the retained raw-history source of truth with a bounded 50,000-bar capacity and direct prepend/append/replace-last mutation.
+- [x] Added exact dirty ranges to IndicatorModel and PreparedScript lookback metadata.
+- [x] Propagated dirty ranges through Vela execution sessions and translated them into replace-range series patches.
+- [x] Added causal warmup before dirty-range CoreSpirit execution so bounded lookback semantics remain valid.
+- [x] Added renderer frame-paint telemetry: frame count, average/worst frame time, long-frame count and backend classification.
+- [x] Aggregated Vela telemetry at workspace level and exposed browser-testable `window.__TCO_PERF__`.
+- [x] Consolidated active architecture documentation into four canonical batches and moved redundant legacy architecture/repair/FYERS material into `docs/archive/`.
+- [~] The Vela renderer still maintains a compatibility OHLCV mirror internally for some legacy scene/session consumers. The retained orchestration source itself is now columnar; eliminating the renderer mirror is a separate ABI migration.
+- [~] Browser verification is instrumented and contract-tested, but an actual browser session/deployed smoke run is environment-dependent and is not marked complete without execution evidence.
+- [ ] Add real GPU timer-query instrumentation (where supported) to distinguish CPU paint time from GPU execution time.
+- [ ] Convert the remaining renderer/session compatibility consumers from OHLCV objects to columnar/tape readers.
+
+
+### v125 product/performance deepening — 2026-10-04
+
+- [x] Locked the Vela/FYERS history experience to 5,000 initial candles and 5,000-candle backward pages.
+- [x] Confirmed Vela's native backfill chunk is 5,000 bars with a left-edge trigger and a 50,000-bar retained cap.
+- [x] Added TCO host-facing Vela `saveNow()` for explicit 15-minute cloud autosave.
+- [x] Added TCO panel/profile chrome: bookmarks replaces the duplicated watchlist chrome surface; account panel resolves the authenticated profile/avatar from Supabase.
+- [x] Added a dedicated Panels action and profile action to the Vela topbar.
+- [x] Standardized workspace/module visual accents on royal purple/indigo and deep graphite.
+- [x] Preserved Motion as the DOM/UI animation layer; Vela owns chart motion. Three.js is not introduced for ordinary UI animation.
+- [x] Extended Supabase workspace persistence through the existing Vela snapshot path; chart layout, ticker/timeframe, drawings and panel state remain inside the persisted workspace document.
+- [x] Removed redundant workspace RLS policies and optimized remaining preference RLS evaluation.
+- [x] Public CoreSpirit indicator exploration, Models, Automations and CoreSpirit routes remain first-class product surfaces.
+- [x] Canonical typed data reaches the native Vela renderer and the orchestration source of truth is now the Vela columnar tape; compatibility OHLCV projection is explicit.
+- [x] Replaced Vela orchestration `OHLCV[]` history storage with a bounded columnar tape while retaining an explicit compatibility projection for scripting/session/drawing consumers.
+- [x] Dirty-span CoreSpirit execution and Vela `replace-range` model revisions are implemented.
+- [~] Renderer frame/backend telemetry and browser instrumentation are implemented; actual browser-session evidence across 1/4/8 layouts remains environment-dependent.
+
+### v126 data/UX depth pass — 2026-10-04
+
+- [x] Added a compact broker history contract (`HistoricalCandleColumns`) so supported brokers can deliver numeric OHLCV columns without constructing one object per candle in the chart hot path.
+- [x] Added a compact FYERS history response (`format=columns`) while preserving the 5,000-candle request ceiling, exact backward boundaries, server cache and in-flight deduplication.
+- [x] Added direct typed-column ingress from broker runtime → ChartDataPlane → CanonicalDataPlane → MarketDataStore.
+- [x] Vela's first 5,000-candle native load now uses the compact column path; legacy OHLCV conversion remains an explicit compatibility representation.
+- [x] Kept older-history demand at exactly 5,000-candle pages near the Vela left-edge trigger, with 50,000-candle retention.
+- [x] Added a Vela-native Alt-held radial drawing wheel using the registered drawing-tool catalog, including a central Panels action.
+- [x] Removed the duplicate React Alt indicator wheel so there is one authoritative Vela interaction surface.
+- [x] Added public CoreSpirit `script_kind` support for `indicator` and `strategy` publications plus a matching Supabase index and `/explore/scripts` surface.
+- [x] Routed `/models` to the dedicated Models page instead of the Prediction Center alias.
+- [x] Elevated the shared workspace shell with graphite/indigo chrome, slower transitions and a direct Community Scripts entry point.
+- [~] Public script detail/reuse is unified with the existing CoreSpirit editor flow; a dedicated strategy-authoring workspace is still future work.
+- [ ] Replace Vela's internal OHLCV orchestration tape with a true columnar history tape while preserving session/replay/drawing compatibility.
+- [x] Propagated exact dirty ranges through CoreSpirit execution and RenderPacket/Vela `replace-range` revisions.
+- [~] Added renderer frame/backend telemetry and browser-testable instrumentation; actual browser execution evidence remains a separate environment gate.
 
 ### v109 architecture lock — 2026-09-29
 
@@ -3705,3 +3763,24 @@ v123 deepens the existing v119–v122 performance work instead of replacing it. 
 - [ ] Browser verification of first 5k paint, left-edge 5k prepend, live forming-bar patching and workspace motion.
 
 The v123 contract is additive: no PineScript/PineTS compatibility path, no second chart vendor, no broker authority in CoreSpirit, and no renderer-specific language semantics are introduced.
+
+### v128 deep performance closure — 2026-10-04
+
+- [x] Promoted stateful rolling indicator kernels into the canonical CoreSpirit layer; market-data kernel module is a compatibility re-export.
+- [x] Added parity coverage for RollingSum/Mean/Variance/MinMax/Median/Percentile/MAD/EMA/Wilder/ATR/WMA/VWAP, including forming-bar replacement.
+- [x] Removed CoreSpirit runtime dependence on repeated `window()` history slices for bounded direct series built-ins.
+- [x] Extended Vela's `ColumnarHistoryTape` with zero-object `prependColumns()`.
+- [x] Added Vela `loadRangeColumns` feed seams and routed FYERS backward pages through compact columns.
+- [x] Deep-history identity charts materialize only the new compatibility head page; transformed styles retain the explicit projection fallback.
+- [x] Kept exact causal dirty-span execution: new head + maximum registered lookback → CoreSpirit range execution → `replace-range` Vela patch.
+- [x] Added p95/FPS/frame-budget telemetry with a bounded 240-sample native frame ring.
+- [x] Deepened browser verification for multiple URL/cell-count cases and configurable p95 frame thresholds.
+- [x] Consolidated versioned docs under `docs/archive/history/` and archived compatibility copies under `docs/archive/compatibility/`.
+- [x] Added `TRADINGCORE_V128` CI contract and stateful-kernel parity suite.
+
+### Remaining architectural debt after v128
+
+- [ ] Move the remaining Vela session/replay/drawing compatibility consumers from `OHLCV[]` to the columnar history ABI.
+- [ ] Replace residual whole-history advanced indicators (group/day/structural calculations where applicable) with incremental state only when their semantics permit it; do not force rolling abstractions onto non-rolling logic.
+- [ ] Connect runtime dirty-span telemetry to user-facing performance diagnostics so a slow update can be attributed to transport, compute, patch or frame stages.
+- [ ] Execute authenticated browser verification against a deployed/live environment and capture 1/4/8-chart measurements; source-level contracts are not a substitute for that runtime measurement.

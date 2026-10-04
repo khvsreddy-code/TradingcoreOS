@@ -21,6 +21,7 @@ export type ChartPerformanceSnapshot = {
   frameBudgetMissRate: number;
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
+  stageMs: Readonly<{ transport:number; compute:number; patch:number; renderer:number; frame:number }>;
 };
 
 type MutableMetrics = {
@@ -40,6 +41,7 @@ type MutableMetrics = {
   frameBudgetMissRate: number;
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
+  stageMs: { transport:number; compute:number; patch:number; renderer:number; frame:number };
 };
 
 class ChartPerformanceTelemetry {
@@ -48,7 +50,7 @@ class ChartPerformanceTelemetry {
   private entry(key: string): MutableMetrics {
     let value = this.metrics.get(key);
     if (!value) {
-      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0, frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown' };
+      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0, frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown', stageMs: { transport:0, compute:0, patch:0, renderer:0, frame:0 } };
       this.metrics.set(key, value);
     }
     return value;
@@ -57,6 +59,10 @@ class ChartPerformanceTelemetry {
   recordPacket(key: string): void { this.entry(key).packets += 1; }
   recordReactNotificationRequest(key: string): void { this.entry(key).reactNotificationRequests += 1; }
   recordReactFrame(key: string): void { this.entry(key).reactFrames += 1; }
+  recordStage(key: string, stage: 'transport'|'compute'|'patch'|'renderer'|'frame', durationMs: number): void {
+    const duration = Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : 0;
+    this.entry(key).stageMs[stage] += duration;
+  }
 
   recordRendererUpdate(key: string, durationMs: number): void {
     const m = this.entry(key);
@@ -84,7 +90,7 @@ class ChartPerformanceTelemetry {
   }
 
   snapshot(key: string): ChartPerformanceSnapshot {
-    const m = this.metrics.get(key) || { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0, frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown' as const };
+    const m = this.metrics.get(key) || { packets:0, rendererUpdates:0, reactNotificationRequests:0, reactFrames:0, totalRendererMs:0, worstRendererMs:0, frames:0, totalFrameMs:0, worstFrameMs:0, p95FrameMs:0, fps:0, frameBudgetMs:1000/60, frameBudgetMisses:0, frameBudgetMissRate:0, longFrames:0, backend:'unknown' as const, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0} };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     return {
       key,
@@ -109,6 +115,7 @@ class ChartPerformanceTelemetry {
       frameBudgetMissRate: m.frameBudgetMissRate,
       longFrames: m.longFrames,
       backend: m.backend,
+      stageMs: Object.freeze({ ...m.stageMs }),
     };
   }
 

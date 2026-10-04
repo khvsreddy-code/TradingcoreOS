@@ -119,3 +119,19 @@ inside historical loops when a canonical stateful kernel exists. The compiler/ru
 Every bounded rolling primitive supports `append` and, where semantically valid, `replace` for a forming candle. Authors should express the calculation normally in CoreSpirit; the runtime absorbs ring buffers, monotonic queues and ordered statistics.
 
 The standard rolling family covered by this architecture includes Bollinger, Donchian, Stochastic, CCI, MFI, rolling median/percentile, EMA/RMA, ATR and VWAP. A bounded structural algorithm may still use a fixed-size or centered scan when its cost is independent of user-selected period, but arbitrary `O(N × period)` window construction is prohibited.
+
+## v129 — indicator complexity contract
+
+| Family | Hot-path state | Complexity per bar |
+|---|---|---:|
+| SMA / rolling sum | `RollingMean` / `RollingSum` | O(1) |
+| Bollinger / variance | `RollingMean` + `RollingVariance` | O(1) |
+| Donchian / extrema | monotonic deque | amortized O(1) |
+| Stochastic | extrema + bounded smoothers | amortized O(1) |
+| CCI / MAD | running mean + ordered state | O(log period) |
+| MFI | rolling positive/negative sums | O(1) |
+| Median / percentile | dual heap / ordered multiset | O(log period) expected |
+| EMA / Wilder / ATR | recursive state | O(1) |
+| VWAP | session accumulator | O(1) |
+
+Grouping, pivot and structural indicators may use different state machines when their semantics require them. The hard rule is that a historical loop must not rebuild and rescan the same period-sized window for every bar.

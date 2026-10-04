@@ -255,7 +255,7 @@ export class CoreSpiritVelaEngine {
         existing.splice(from, Math.max(0,to-from), ...fresh);
         points.set(id, existing);
       }
-      if (other.length) collect(other);
+      if (other.length) for (const output of other) { if (output.kind !== 'signal') continue; const time=Number(output.time); if (Number.isFinite(time) && time>=dirty.from && time<=dirty.to) collect([output]); }
     };
 
     const emitModel = (dirty?: DirtyRange) => {
@@ -335,48 +335,35 @@ export class CoreSpiritVelaEngine {
       setVisibleRange() {
         // CoreSpirit currently has renderer-neutral range-insensitive execution.
       },
-      notifyBars(reason) {
+      notifyBars(reason, dirtyRange) {
         if (stopped) return;
         const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
         if (!currentBars.length) return;
-        if (reason === 'backfill' || reason === 'complete') {
-          points.clear();
-          markers.clear();
-          priceLines.splice(0, priceLines.length);
-          runtime.loadIr(token.ir);
-          if (reason === 'complete') return;
-          if (dirty && Number.isFinite(dirty.from) && Number.isFinite(dirty.to)) {
-            const start = lowerBoundBarTime(currentBars, dirty.from);
-            const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirty.to));
-            const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
-            const executionStart = Math.max(0, start - maxLookback);
-            const rangeBars = currentBars.slice(executionStart, end);
-            if (rangeBars.length) {
-              const rangeRuntime = new CoreSpiritRuntime({ symbol: req.market.symbol, timeframe: req.market.timeframe, sourceId: token.sourceId, executionMode: req.mode === 'live' ? 'realtime' : 'historical', executionTarget: 'chart' });
-              rangeRuntime.loadIr(token.ir);
-              const rangeResult = rangeRuntime.executeIr(token.ir, rangeBars);
-              collectRange(rangeResult.outputs, dirty);
-              emitModel(dirty);
-              return;
-            }
+        if (reason === 'complete') {
+          points.clear(); markers.clear(); priceLines.splice(0, priceLines.length); runtime.loadIr(token.ir);
+          const result = runtime.executeIr(token.ir, currentBars); collect(result.outputs); liveStarted = req.mode === 'live';
+          lastTime = barTimeMillis(currentBars.at(-1)?.timestamp); const firstTime = barTimeMillis(currentBars[0]?.timestamp);
+          emitModel(Number.isFinite(firstTime) && Number.isFinite(lastTime) ? { from:firstTime, to:lastTime } : undefined); return;
+        }
+        if (reason === 'backfill' && dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
+          const start = lowerBoundBarTime(currentBars, dirtyRange.from);
+          const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirtyRange.to));
+          const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
+          const executionStart = Math.max(0, start - maxLookback);
+          const rangeBars = currentBars.slice(executionStart, end);
+          if (rangeBars.length) {
+            const rangeRuntime = new CoreSpiritRuntime({ symbol:req.market.symbol, timeframe:req.market.timeframe, sourceId:token.sourceId, executionMode:req.mode === 'live' ? 'realtime' : 'historical', executionTarget:'chart' });
+            rangeRuntime.loadIr(token.ir); const rangeResult = rangeRuntime.executeIr(token.ir, rangeBars);
+            // Do not clear retained output: merge only the exact dirty interval.
+            collectRange(rangeResult.outputs, dirtyRange); emitModel(dirtyRange); return;
           }
-          const result = runtime.executeIr(token.ir, currentBars);
-          collect(result.outputs);
-          liveStarted = req.mode === 'live';
-          lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
-          const firstTime = barTimeMillis(currentBars[0]?.timestamp);
-          emitModel(Number.isFinite(firstTime) && Number.isFinite(lastTime) ? { from: firstTime, to: lastTime } : undefined);
-          return;
         }
         if (!liveStarted) rehydrateForLive();
-        const latest = currentBars.at(-1);
-        if (!latest) return;
-        const latestTime = barTimeMillis(latest.timestamp);
-        const result = runtime.executeBar(latest);
-        collect(result.outputs);
-        lastTime = latestTime;
-        emitModel(Number.isFinite(latestTime) ? { from: latestTime, to: latestTime } : undefined);
+        const latest = currentBars.at(-1); if (!latest) return;
+        const latestTime = barTimeMillis(latest.timestamp); const result = runtime.executeBar(latest); collect(result.outputs);
+        lastTime = latestTime; emitModel(Number.isFinite(latestTime) ? { from:latestTime, to:latestTime } : undefined);
       },
+,
     };
   }
 }

@@ -1,7 +1,5 @@
-# Archived documentation history
+# History Archive
 
-Versioned implementation notes live here so the active `docs/` surface stays architectural rather than chronological.
+Superseded chronological implementation notes only. Current architecture belongs in the active `docs/` documents.
 
-Active documentation: `docs/README.md`, `docs/01_CORESPIRIT.md`, `docs/02_DATA_AND_PERFORMANCE.md`, `docs/03_VELA_AND_CHARTING.md`, `docs/04_INDICATORS_AND_PLATFORM.md`.
-
-Compatibility copies are kept under `docs/archive/compatibility/` only when an architecture contract still requires a stable root path.
+`CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md` preserves the previous large tracker before the living tracker was reduced to current state and explicit open debt.

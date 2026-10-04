@@ -70,11 +70,11 @@ assert.match(verifier, /TCO_MAX_P95_FRAME_MS/);
 assert.match(verifier, /p95FrameMs/);
 
 assert.ok(fs.existsSync(path.join(root, 'docs/archive/history/README.md')));
-assert.ok(fs.existsSync(path.join(root, 'docs/archive/compatibility/CORESPIRIT_BUILD_TRACKER.md')));
-assert.ok(fs.existsSync(path.join(root, 'docs/archive/compatibility/CHART_RENDERER_MIGRATION.md')));
+assert.ok(fs.existsSync(path.join(root, 'docs/archive/history/CORESPIRIT_BUILD_TRACKER_LEGACY_20261004.md')));
 assert.ok(!fs.existsSync(path.join(root, 'docs/history')));
-assert.ok(!fs.existsSync(path.join(root, 'docs/archive/CORESPIRIT_BUILD_TRACKER.md')));
-assert.ok(!fs.existsSync(path.join(root, 'docs/archive/CHART_RENDERER_MIGRATION.md')));
+assert.ok(!fs.existsSync(path.join(root, 'docs/archive/compatibility/CORESPIRIT_BUILD_TRACKER.md')));
+assert.ok(!fs.existsSync(path.join(root, 'docs/archive/compatibility/CHART_RENDERER_MIGRATION.md')));
+assert.ok(!fs.existsSync(path.join(root, 'docs/CHART_RENDERER_MIGRATION.md')));
 
 console.log('TRADINGCORE_V128_STATEFUL_INDICATOR_KERNELS_OK');
 console.log('TRADINGCORE_V128_COLUMNAR_BACKFILL_OK');

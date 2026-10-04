@@ -36,6 +36,21 @@ export class ColumnarHistoryTape {
     get close(): Float64Array { return this._close.subarray(0, this._length); }
     get volume(): Float64Array { return this._volume.subarray(0, this._length); }
 
+    get isEmpty(): boolean { return this._length === 0; }
+    timeAt(index: number): number { return index >= 0 && index < this._length ? this._time[index]! : Number.NaN; }
+    lastIndexAtOrBefore(time: number): number {
+        let lo=0,hi=this._length-1,answer=-1; const target=Number(time);
+        while(lo<=hi){const mid=(lo+hi)>>>1;if(this._time[mid]!<=target){answer=mid;lo=mid+1;}else hi=mid-1;} return answer;
+    }
+    firstIndexAtOrAfter(time: number): number {
+        let lo=0,hi=this._length,answer=this._length; const target=Number(time);
+        while(lo<hi){const mid=(lo+hi)>>>1;if(this._time[mid]!>=target){answer=mid;hi=mid;}else lo=mid+1;} return answer;
+    }
+    countTimeRange(from: number, to: number): number {
+        if(!this._length||to<from)return 0; const start=this.firstIndexAtOrAfter(from); const end=this.lastIndexAtOrBefore(to)+1;
+        return Math.max(0,Math.min(this._length,end)-Math.min(this._length,start));
+    }
+
     firstTime(): number { return this._length ? this._time[0]! : Number.NaN; }
     lastTime(): number { return this._length ? this._time[this._length - 1]! : Number.NaN; }
 
