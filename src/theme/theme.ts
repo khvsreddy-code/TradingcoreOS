@@ -24,8 +24,8 @@ export const BLACK_THEME = Object.freeze({
   axis: '#252b3a',
   surfaceBlue: '#0c1728',
   codeBgDeep: '#06080d',
-  accent: '#7c5cff',
-  accentSoft: '#9b8aff',
+  accent: '#d3ebf4',
+  accentSoft: '#e5f5fa',
 });
 
 export const WHITE_THEME = Object.freeze({
@@ -47,8 +47,8 @@ export const WHITE_THEME = Object.freeze({
   axis: '#c5ccd5',
   surfaceBlue: '#eef3f8',
   codeBgDeep: '#e7ebf0',
-  accent: '#6648d8',
-  accentSoft: '#3b82f6',
+  accent: '#9fc6d1',
+  accentSoft: '#6e9eac',
 });
 
 export function getInitialTheme(): TradingCoreTheme {
