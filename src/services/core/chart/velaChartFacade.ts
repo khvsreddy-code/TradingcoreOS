@@ -3,6 +3,7 @@ import type { IndicatorRenderHandle, ClickEvent, CrosshairEvent, VisibleRange } 
 import type { Unsubscribe } from '../../../../vendor/vela/src/core/util/types';
 import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
 import type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
+import type { ColumnarBars, ColumnarBarUpdate } from '../../../../vendor/vela/src/core/model/columnar-bars';
 import type { IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
 import type { SeriesPoint, SeriesSpec, LineLikeSeries, LineStyle as VelaLineStyle, MarkerPoint } from '../../../../vendor/vela/src/core/model/series';
 import type { PriceLine, Pane, Fill } from '../../../../vendor/vela/src/core/model/scene';
