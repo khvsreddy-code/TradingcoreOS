@@ -12,6 +12,8 @@ import {
   ATRState,
   WMAState,
   VWAPSessionState,
+  ChangeState,
+  RollingPersistenceState,
 } from './statefulIndicatorKernel';
 
 const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
@@ -52,6 +54,10 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
   nearly(k.min()!, 3); nearly(k.max()!, 7);
   k.update(2, 'replace');
   nearly(k.min()!, 2); nearly(k.max()!, 5);
+  k.update(9);
+  nearly(k.min()!, 2); nearly(k.max()!, 9);
+  k.update(1);
+  nearly(k.min()!, 1); nearly(k.max()!, 9);
 }
 
 {
@@ -119,3 +125,26 @@ const nearly = (actual: number | null, expected: number, eps = 1e-9) => {
 }
 
 console.log('TRADINGCORE_V128_STATEFUL_KERNEL_PARITY_OK');
+
+{
+  const change = new ChangeState(false);
+  assert.ok(Number.isNaN(change.update(10)));
+  nearly(change.update(13), 3);
+  assert.ok(Number.isNaN(change.update(0)));
+  nearly(change.update(5), 5);
+}
+
+{
+  const persistence = new RollingPersistenceState(4);
+  assert.equal(persistence.update(1), null);
+  assert.equal(persistence.update(2), null);
+  assert.equal(persistence.update(3), null);
+  nearly(persistence.update(4)!, 1);
+  nearly(persistence.update(3)!, 2 / 3);
+  nearly(persistence.update(5, 'replace')!, 2 / 3);
+  persistence.update(6);
+  nearly(persistence.update(4)!, 2 / 3);
+}
+
+console.log('TRADINGCORE_V130_CANONICAL_KERNEL_REPLACEMENT_OK');
+console.log('TRADINGCORE_V130_CANONICAL_CHANGE_PERSISTENCE_OK');
