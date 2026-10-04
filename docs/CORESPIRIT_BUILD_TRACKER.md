@@ -35,6 +35,23 @@
 - [ ] Dirty-span CoreSpirit execution and RenderPacket range revisions.
 - [ ] GPU/frame-budget telemetry and browser verification across 1/4/8 chart layouts.
 
+### v126 data/UX depth pass — 2026-10-04
+
+- [x] Added a compact broker history contract (`HistoricalCandleColumns`) so supported brokers can deliver numeric OHLCV columns without constructing one object per candle in the chart hot path.
+- [x] Added a compact FYERS history response (`format=columns`) while preserving the 5,000-candle request ceiling, exact backward boundaries, server cache and in-flight deduplication.
+- [x] Added direct typed-column ingress from broker runtime → ChartDataPlane → CanonicalDataPlane → MarketDataStore.
+- [x] Vela's first 5,000-candle native load now uses the compact column path; legacy OHLCV conversion remains an explicit compatibility representation.
+- [x] Kept older-history demand at exactly 5,000-candle pages near the Vela left-edge trigger, with 50,000-candle retention.
+- [x] Added a Vela-native Alt-held radial drawing wheel using the registered drawing-tool catalog, including a central Panels action.
+- [x] Removed the duplicate React Alt indicator wheel so there is one authoritative Vela interaction surface.
+- [x] Added public CoreSpirit `script_kind` support for `indicator` and `strategy` publications plus a matching Supabase index and `/explore/scripts` surface.
+- [x] Routed `/models` to the dedicated Models page instead of the Prediction Center alias.
+- [x] Elevated the shared workspace shell with graphite/indigo chrome, slower transitions and a direct Community Scripts entry point.
+- [~] Public script detail/reuse is unified with the existing CoreSpirit editor flow; a dedicated strategy-authoring workspace is still future work.
+- [ ] Replace Vela's internal OHLCV orchestration tape with a true columnar history tape while preserving session/replay/drawing compatibility.
+- [ ] Propagate exact dirty ranges through CoreSpirit execution and RenderPacket/Vela scene revisions.
+- [ ] Add GPU/frame telemetry and browser verification for first paint, 5k prepend, live ticks and 1/4/8-chart layouts.
+
 ### v109 architecture lock — 2026-09-29
 
 TradingCoreOS is locked to a **CoreSpirit-first + Vela chart engine + TCO-owned data/compute/broker systems** architecture. CoreSpirit is the only user-facing trading language. Vela is the production rendering backend and remains behind the renderer-neutral TCO chart contracts.
