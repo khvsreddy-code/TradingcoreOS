@@ -168,3 +168,8 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 ### Verification truth
 - [ ] Authenticated browser candle-render evidence.
 - [ ] Measured FYERS order round-trip latency.
+
+
+## v94 implementation record
+
+The chart data plane established the zero-copy canonical chart data plane at the Vela boundary, with typed column transport and retained GPU-buffer reuse for identity-chart rendering.
