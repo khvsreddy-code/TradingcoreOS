@@ -9,8 +9,8 @@ export function LandingPage({
   onOpenAuthModal,
   onLaunchPlatform,
   onNavigate,
-  currentView,
-}: Pick<NavbarProps, 'onOpenAuthModal' | 'onLaunchPlatform' | 'onNavigate' | 'currentView'>) {
+  currentView = 'landing',
+}: Omit<Pick<NavbarProps, 'onOpenAuthModal' | 'onLaunchPlatform' | 'onNavigate' | 'currentView'>, 'currentView'> & { currentView?: NavbarProps['currentView'] }) {
   const [loadBelowFold, setLoadBelowFold] = useState(false);
   const loadSentinelRef = useRef<HTMLDivElement | null>(null);
 
