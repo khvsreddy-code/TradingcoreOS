@@ -317,6 +317,17 @@ export function buildCoreSpiritSemanticDependencyGraph(
       }
 
       case 'memberCall': {
+        if(node.member==='timeframe' && node.target.type==='call' && node.target.name==='market'){
+          const symbol=literalString(node.target.args[0]) ?? '?';
+          const timeframe=literalString(node.args[0]) ?? '?';
+          return addNode({
+            id:'data:market:'+symbol+':'+timeframe,
+            kind:'data-source',
+            name:'market("'+symbol+'").timeframe("'+timeframe+'")',
+            type:'market:ref',
+            source:sourceSpan(node),
+          });
+        }
         const target = NAMESPACE_NAMES.has(node.target.type === 'identifier' ? node.target.name : '')
           ? addNode({
               id:'namespace:' + (node.target.type === 'identifier' ? node.target.name : 'unknown'),
