@@ -16,8 +16,19 @@ function compilePlan(
   specializedPlan?:CoreSpiritSpecializedPlan,
 ):CompiledPlan {
   const plan = specializedPlan ?? buildCoreSpiritSpecializedPlan(instructions, seriesRegistry);
+  const boundInstructions = seriesRegistry
+    ? plan.instructions.map((instruction) => {
+      if (instruction.op === 'setLocal' && instruction.series && instruction.seriesId < 0) {
+        return { ...instruction, seriesId: seriesRegistry.idFor(instruction.name) };
+      }
+      if (instruction.op === 'index' && instruction.seriesId < 0 && instruction.instruction.seriesName) {
+        return { ...instruction, seriesId: seriesRegistry.idFor(instruction.instruction.seriesName) };
+      }
+      return instruction;
+    })
+    : plan.instructions;
   return {
-    instructions: plan.instructions,
+    instructions: Object.freeze(boundInstructions),
     store: new CoreSpiritSlotValueStore(plan.slotByName, plan.slotCount),
   };
 }
