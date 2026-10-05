@@ -110,3 +110,18 @@ The Vela execution adapter selects the optimized tier for production chart execu
 Realtime execution is persistent: a live `CoreSpiritRuntime` owns state across ticks and evaluates the forming bar through `executeBar()`. Historical backfill replays only a bounded causal window (`dirty range + maxLookback`) rather than rebuilding the entire chart state.
 
 Vela exposes a retained `ScenePatch` ABI and its orchestrator converts tick/bar model changes into `append`, `replace-last`, and range patches. CoreSpirit therefore treats a full model as the initial mount/state boundary; the steady-state path is **state kernel → changed values → retained scene patch → Vela renderer**. Full `replace` remains the fallback for structural or history-wide changes.
+## Dependency-aware dirty graph
+
+Every CoreSpirit IR node now carries execution metadata for incremental planning: id, source inputs, output register, lookback, stateful/incremental capability, viewport dependence, and realtime safety.
+
+On a forming-bar update, CoreSpirit compares changed market columns and propagates dirtiness through the compiled dependency graph. A close change invalidates only nodes causally downstream of close; an unrelated column does not dirty that branch.
+
+Bounded rolling operations extend their dirty range by causal lookback. Recursive/stateful operations use a forward-to-end dependency when historical data changes. Tail ticks remain one-bar dirty.
+
+Stateful kernels are currently treated as execution barriers during realtime rollback. The dirty graph identifies their data-dependent consumers precisely, while the runtime still replays stateful kernels each forming-bar revision so transactional rollback/commit semantics remain exact. The next optimization is per-kernel realtime state snapshots, which will allow unaffected stateful branches to be restored instead of replayed.
+
+## Columnar-first CoreSpirit execution
+
+CoreSpirit keeps a canonical typed-array market history alongside the compatibility HistoricalCandle[] view. Numeric series loads (open/high/low/close/volume/time) read from columnar history first.
+
+The object view remains a compatibility boundary for language and host APIs, not the numerical source of truth. Production market transport is already columnar at the TradingCoreOS market-data plane and Vela worker boundary; CoreSpirit now follows the same rule internally.
