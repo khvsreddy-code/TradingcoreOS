@@ -57,11 +57,11 @@ export class CoreSpiritOptimizedExecutionVM {
       if(++steps>host.maxStepsPerBar)throw new Error('execution step limit exceeded');
       if((steps&1023)===0)host.throwIfAborted();
       const ins=plan.instructions[pc];
-      const computational = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'call' || ins.op === 'index';
+      const computational = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'loadState' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'call' || ins.op === 'index';
       if(dirty && computational && !dirty.has(pc)){ pc += 1; continue; }
       switch(ins.op){
         case 'const':values.set(ins.dest,ins.value);pc+=1;break;
-        case 'loadSeries':values.set(ins.dest,host.loadSeries(ins.name,ins.offset));pc+=1;break;
+        case 'loadSeries':values.set(ins.dest,host.loadSeries(ins.name,ins.offset));pc+=1;break;\n        case 'loadState':values.set(ins.dest,host.loadState(ins.name));pc+=1;break;
         case 'move':values.set(ins.dest,host.moveLocal(ins.source));pc+=1;break;
         case 'setLocal':
           if(ins.series!==false && ins.seriesId>=0 && host.setLocalBySeriesId) host.setLocalBySeriesId(ins.seriesId,ins.name,values.get(ins.source));
@@ -75,7 +75,7 @@ export class CoreSpiritOptimizedExecutionVM {
           const value=ins.seriesId>=0 && host.loadIndexedSeriesById ? host.loadIndexedSeriesById(ins.seriesId,index) : host.loadIndexed(ins.instruction,index,values);
           values.set(ins.dest,value);pc+=1;break;
         }
-        case 'jumpIfFalse':pc=host.truthy(values.get(ins.condition))?pc+1:ins.target;break;
+        case 'eventGate':pc=host.eventActive(ins.eventName)?pc+1:ins.target;break;\n        case 'jumpIfFalse':pc=host.truthy(values.get(ins.condition))?pc+1:ins.target;break;
         case 'jump':pc=ins.target;break;
         case 'emit':host.emit(ins.instruction,values,output);pc+=1;break;
       }
