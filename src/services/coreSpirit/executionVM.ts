@@ -80,7 +80,10 @@ export class CoreSpiritExecutionVM {
           pc += 1;
           break;
         }
-        case 'eventGate':\n          pc = host.eventActive(ins.eventName) ? pc + 1 : ins.target;\n          break;\n        case 'jumpIfFalse':
+        case 'eventGate':
+          pc = host.eventActive(ins.eventName) ? pc + 1 : ins.target;
+          break;
+        case 'jumpIfFalse':
           pc = host.truthy(values.get(ins.condition)) ? pc + 1 : ins.target;
           break;
         case 'jump':
