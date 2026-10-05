@@ -90,6 +90,85 @@ The build now emits a Vite manifest, groups large third-party dependencies into 
 
 CI currently uses staged safety ceilings of 320 KB (landing), 260 KB (login), 400 KB (dashboard) and 650 KB (live) so regressions are blocked before the long-term targets are tightened. These are guardrails, not claims that the targets have already been achieved.
 
+
+## Vela capability graph — prevent the fork from becoming one mandatory payload
+
+The Vela fork is **384 source files** on the current branch. The largest individual modules include:
+
+| Module | Source size | Role |
+| --- | ---: | --- |
+| `vendor/vela/src/renderers/native/NativeRenderer.ts` | ~258 KB | native renderer |
+| `vendor/vela/src/core/engine/EngineOrchestrator.ts` | ~181 KB | orchestration/runtime |
+| `vendor/vela/src/workspace/VelaWorkspace.ts` | ~135 KB | multi-chart workspace |
+| `vendor/vela/src/renderers/native/drawings/DrawingPainter.ts` | ~83 KB | drawing paint path |
+| `vendor/vela/src/workspace/ChartCell.ts` | ~82 KB | workspace cell |
+| `vendor/vela/src/renderers/native/chrome/SettingsDialog.ts` | ~78 KB | settings UI |
+| `vendor/vela/src/widget/object-tree.ts` | ~68 KB | object-tree widget |
+| `vendor/vela/src/renderers/native/backend/WebGL2Backend.ts` | ~64 KB | WebGL2 renderer backend |
+
+The most important eager-import hotspot is the native renderer. `NativeRenderer.ts` previously imported `UserDrawingController` as a runtime dependency; that controller imports `DrawingPainter`, `DrawingInteraction`, `DrawingSettingsPopup`, `DrawingToolbar`, hit testing, color-picker UI and the drawing registry. The registry itself statically imports dozens of drawing implementations including Fibonacci, Gann, harmonic, Elliott, geometry, markup and volume-profile tools.
+
+That created this unwanted dependency shape:
+
+```
+basic chart
+  → NativeRenderer
+      → UserDrawingController
+          → Drawing registry
+              → dozens of drawing implementations
+          → drawing toolbar/settings/painter
+```
+
+The renderer now treats interactive drawings as an **optional capability**. `UserDrawingController` is type-only in the renderer core, and the concrete implementation is loaded through a dynamic import when the host first asks for `userDrawingsPort`. The proxy preserves the synchronous renderer-port contract while deferring the heavy implementation chunk.
+
+The chart facade also no longer re-exports `VelaWorkspace` as a runtime value. Multi-chart workspace functionality is exposed through `velaWorkspaceLoader.ts`, where it can be loaded on demand instead of joining every chart import.
+
+### Capability boundaries
+
+```
+CORE
+  ├─ React/auth/routing/theme
+  └─ lightweight TradingCore shell
+
+TRADING
+  ├─ chart renderer
+  ├─ Vela native chart core
+  ├─ broker
+  └─ realtime gateway client
+
+RESEARCH
+  ├─ CoreSpirit editor
+  ├─ model center
+  └─ backtest/replay
+
+ADVANCED
+  ├─ drawing registry
+  ├─ multi-chart workspace
+  ├─ automation/scanners
+  └─ ML/prediction overlays
+```
+
+### Drawing policy
+
+A basic chart must not download the entire drawing catalog. The critical chart payload may contain the renderer's drawing *port* and serialized data types, but actual interactive drawing implementations belong to a capability chunk. The long-term split is:
+
+```
+basic chart
+  └─ renderer core
+
+open Draw / drawing UI
+  └─ drawing capability chunk
+       ├─ lean tools
+       ├─ toolbar
+       ├─ interaction
+       └─ advanced drawing families on demand
+```
+
+The next refinement is to split `registry.ts` itself into lean-core and advanced families so enabling one advanced family (for example Fibonacci) does not pull Gann, harmonics, Elliott and volume-profile classes into the same chunk.
+
+### Native-indicator policy
+
+The Vela public composition root still registers its complete native indicator catalog eagerly for backwards-compatible SDK semantics. TradingCoreOS does not use that composition root for its production chart path; the TCO chart facade talks directly to `NativeRenderer`. The next Vela SDK cut should add an explicit `registerNativeCatalog()` capability loader if/when the SDK composition root becomes part of the browser bundle.
 ## Request plane vs realtime plane
 
 TradingCoreOS now treats request/response work and realtime market delivery as separate planes.
