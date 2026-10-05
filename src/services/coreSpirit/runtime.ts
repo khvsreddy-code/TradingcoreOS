@@ -29,6 +29,7 @@ import { CoreSpiritOutputCollector } from './outputCollector';
 import { CoreSpiritEventRouter } from './eventRouter';
 import { CoreSpiritCapabilityHost } from './capabilityHost';
 import { CoreSpiritDebugHost } from './debugHost';
+import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId } from './seriesRegistry';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
 export type CoreSpiritRuntimeOptions = {
@@ -60,9 +61,6 @@ export class CoreSpiritRuntime {
   private loadedProgramId?: string;
   private history: HistoricalCandle[] = [];
   private crossState: Record<string, { a: number; b: number }> = {};
-  private committedSeriesState: Record<string, number[]> = {};
-  private committedLocalSeries: Record<string, Array<number | boolean | string | null>> = {};
-  private committedCrossState: Record<string, { a:number; b:number }> = {};
   private currentBarSnapshot?: { historyLength:number };
   private realtime = false;
   private lastBarWasRealtime = false;
@@ -107,6 +105,8 @@ export class CoreSpiritRuntime {
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly stateStore = new CoreSpiritStateStore();
+  /** Numeric IDs are stable for one loaded runtime/program. Names are resolved only during lowering. */
+  private readonly seriesRegistry: CoreSpiritSeriesRegistry = this.stateStore.series;
   private readonly outputCollector: CoreSpiritOutputCollector;
   private readonly eventRouter: CoreSpiritEventRouter;
   private readonly capabilityHost: CoreSpiritCapabilityHost;
@@ -148,8 +148,10 @@ export class CoreSpiritRuntime {
     this.declarativeVisualState = { version:1, revision:0, specs:[] };
     this.reactiveRevision = 0; this.reactiveRecomputed = 0; this.reactiveReused = 0; this.reactiveEffects = 0;
     this.realtimeRevision = 0; this.eventRouter.rollbackTransaction(); this.realtimeEventTransactionId = undefined; this.debugHost.reset(); this.realtimeLifecycle='idle';
-    this.state = { barIndex: -1, time: 0, locals: {}, seriesState: {}, localSeries: {}, barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
-    this.history = []; this.crossState = {}; this.committedSeriesState = {}; this.committedLocalSeries = {}; this.committedCrossState = {};
+    this.state = { barIndex: -1, time: 0, locals: {}, seriesState: this.seriesRegistry.createNumericCompatibilityView(), localSeries: this.seriesRegistry.createValueCompatibilityView(), barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
+    this.history = []; this.crossState = {};
+    this.seriesRegistry.reset();
+    this.stateStore.bind(this.crossState);
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
     this.stateStore.bind(this.state.seriesState, this.state.localSeries, this.crossState);
     this.stateStore.commitRealtimeTransaction();
@@ -164,7 +166,7 @@ export class CoreSpiritRuntime {
     if (options.clone === false) {
       return { ...this.state, workspaceState:this.state.workspaceState, locals:this.state.locals, seriesState:this.state.seriesState, localSeries:this.state.localSeries };
     }
-    return { ...this.state, workspaceState:this.workspaceSnapshot(), locals:{...this.state.locals}, seriesState:Object.fromEntries(Object.entries(this.state.seriesState).map(([k,v])=>[k,[...v]])), localSeries:Object.fromEntries(Object.entries(this.state.localSeries).map(([k,v])=>[k,[...v]])) };
+    return { ...this.state, workspaceState:this.workspaceSnapshot(), locals:{...this.state.locals}, seriesState:this.seriesRegistry.snapshotNumericObject(), localSeries:this.seriesRegistry.snapshotValueObject() };
   }
 
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
@@ -172,6 +174,8 @@ export class CoreSpiritRuntime {
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
+    this.prepareSeriesBindings(compiled.ir);
+    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry);
     this.installSeriesFusion(compiled.ir);
     // State retention must always cover the program's declared lookback plus a safety margin.
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
@@ -385,7 +389,7 @@ export class CoreSpiritRuntime {
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
-    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset();
+    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry);
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.plotOrdinal = 0;
@@ -423,21 +427,23 @@ export class CoreSpiritRuntime {
       state: this.getState(),
       history: (this as any).history.map((x:any)=>({ ...x })),
       crossState: cloneCrossMap((this as any).crossState),
-      committedSeriesState: cloneNumberMap((this as any).committedSeriesState),
-      committedLocalSeries: cloneValueMap((this as any).committedLocalSeries),
-      committedCrossState: cloneCrossMap((this as any).committedCrossState),
+      committedSeriesState: this.seriesRegistry.snapshotNumericObject(),
+      committedLocalSeries: this.seriesRegistry.snapshotValueObject(),
+      committedCrossState: cloneCrossMap(this.crossState),
     };
   }
 
   restoreCheckpoint(checkpoint: { state: CoreSpiritRuntimeState; history:any[]; crossState:Record<string,{a:number;b:number}>; committedSeriesState:Record<string,number[]>; committedLocalSeries:Record<string,Array<number|boolean|string|null>>; committedCrossState:Record<string,{a:number;b:number}> }): boolean {
     try {
-      this.state = { ...checkpoint.state, locals:{...checkpoint.state.locals}, seriesState:cloneNumberMap(checkpoint.state.seriesState), localSeries:cloneValueMap(checkpoint.state.localSeries) };
+      this.seriesRegistry.reset();
+      this.seriesRegistry.restoreNumericObject(checkpoint.state.seriesState);
+      this.seriesRegistry.restoreValueObject(checkpoint.state.localSeries);
+      this.state = { ...checkpoint.state, locals:{...checkpoint.state.locals}, seriesState:this.seriesRegistry.createNumericCompatibilityView(), localSeries:this.seriesRegistry.createValueCompatibilityView() };
+      this.stateStore.bind(this.crossState = cloneCrossMap(checkpoint.crossState));
       (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
       this.columnarHistory.replaceRows((this as any).history);
-      (this as any).crossState = cloneCrossMap(checkpoint.crossState);
-      (this as any).committedSeriesState = cloneNumberMap(checkpoint.committedSeriesState);
-      (this as any).committedLocalSeries = cloneValueMap(checkpoint.committedLocalSeries);
-      (this as any).committedCrossState = cloneCrossMap(checkpoint.committedCrossState);
+      this.crossState = cloneCrossMap(checkpoint.crossState);
+      this.stateStore.bind(this.crossState);
       return true;
     } catch { return false; }
   }
@@ -514,7 +520,11 @@ export class CoreSpiritRuntime {
       moveLocal: (source) => this.state.locals[source],
       setLocal: (name, value, series) => {
         this.state.locals[name] = value;
-        if (series) this.pushLocalState(name, value as CoreSpiritValue);
+        if (series) this.pushLocalState(this.seriesRegistry.idFor(name), value as CoreSpiritValue);
+      },
+      setLocalBySeriesId: (id, name, value) => {
+        this.state.locals[name] = value;
+        this.pushLocalState(id, value as CoreSpiritValue);
       },
       unary: (operator, value) => this.unary(operator, value),
       binary: (operator, left, right) => this.binary(operator, left, right),
@@ -526,11 +536,12 @@ export class CoreSpiritRuntime {
       loadIndexed: (instruction, index, values) => instruction.seriesName
         ? this.loadIndexedValue(instruction.seriesName, index, bar, bars, barIndex)
         : (index > barIndex ? null : values.get(instruction.target) as CoreSpiritValue),
+      loadIndexedSeriesById: (id, index) => this.seriesRegistry.getValueAt(id, index),
       truthy: (value) => this.truthy(value),
       emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
-    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, executionOptions);
+    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry });
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
@@ -703,12 +714,10 @@ export class CoreSpiritRuntime {
     if (!Number.isInteger(index) || index < 0) throw new Error(`future indexing is not allowed for ${name}[${index}]`);
     if (index > barIndex) return null;
     if (['open','high','low','close','volume','time'].includes(name)) return this.loadSeries(name,index,bar,bars,barIndex);
-    const values = this.state.localSeries[name] || [];
-    const position = values.length - 1 - index;
-    return position >= 0 ? values[position] ?? null : null;
+    const id = this.seriesRegistry.existingId(name);
+    return id >= 0 ? this.seriesRegistry.getValueAt(id, index) : null;
   }
 
-  private pushLocalState(key:string,value:CoreSpiritValue):void { this.stateStore.pushLocal(key,value,this.stateHistoryLimit); }
   private sessionDay(timestamp:string):string { const d=new Date(timestamp); return new Intl.DateTimeFormat('en-CA',{timeZone:this.timezone}).format(d); }
   private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:HistoricalCandle,barIndex:number,outputs:CoreSpiritOutputCollector,diagnostics:string[],outputId?:string):void {
     const time=this.toEpoch(bar.timestamp);
@@ -890,7 +899,8 @@ export class CoreSpiritRuntime {
       else if(kind==='webhook') this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex}});
     } catch(error) { diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
   }
-  private pushState(key:string,value:number|string):void { this.stateStore.pushSeries(key,Number(value),this.stateHistoryLimit); }
+  private pushState(key:string,value:number|string):void { this.stateStore.pushSeries(this.seriesRegistry.idFor(key),Number(value),this.stateHistoryLimit); }
+  private pushLocalState(id:CoreSpiritSeriesId,value:CoreSpiritValue):void { this.stateStore.pushLocal(id,value,this.stateHistoryLimit); }
   private unary(operator:string,value:unknown):unknown { if(operator==='!')return !this.truthy(value);if(operator==='+')return Number(value);return -Number(value); }
   private binary(operator:string,left:unknown,right:unknown):unknown { if(['+','-','*','/','%','<','<=','>','>='].includes(operator)&&(left==null||right==null))return null;switch(operator){case'+':return Number(left)+Number(right);case'-':return Number(left)-Number(right);case'*':return Number(left)*Number(right);case'/':return Number(right)===0?null:Number(left)/Number(right);case'%':return Number(left)%Number(right);case'==':return left===right;case'!=':return left!==right;case'<':return Number(left)<Number(right);case'<=':return Number(left)<=Number(right);case'>':return Number(left)>Number(right);case'>=':return Number(left)>=Number(right);case'and':return this.truthy(left)&&this.truthy(right);case'or':return this.truthy(left)||this.truthy(right);default:return null;} }
   private truthy(value:unknown):boolean{return Boolean(value);}
