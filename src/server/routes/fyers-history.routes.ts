@@ -241,7 +241,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
       const dataLength = isColumnarData(data) ? data.time.length : data.length;
       if (!beforeDate && dataLength < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, signal!);
+        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
         if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
       }
       const finalLength = isColumnarData(data) ? data.time.length : data.length;
