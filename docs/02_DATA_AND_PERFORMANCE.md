@@ -22,6 +22,74 @@ Canonical market data is time/open/high/low/close/volume typed storage. `Histori
 - Identical history requests are cached and single-flight deduplicated.
 - Older history is fetched on demand instead of preloading 50k bars.
 
+
+## Regional placement — Mumbai is the locked request-region
+
+The repository intentionally keeps Vercel Functions in **Mumbai (`bom1`)**. This is not a generic “move to Edge” optimization: database-bound trading requests should keep compute close to the primary data source. Vercel documents that globally distributed compute can add latency when it sits far from the database, and recommends colocating function execution with the services the request depends on. citeturn208679search4turn208679search13
+
+The connected production Supabase project is in **AWS Mumbai (`ap-south-1`)**, which aligns with `bom1`. Supabase documents `ap-south-1` as its Mumbai region and recommends choosing the region closest to users for performance. citeturn208679search0
+
+Target topology:
+
+```
+India browser
+    ↓
+Vercel CDN (global static delivery)
+    ↓
+Vercel Functions — bom1 / Mumbai
+    ├── Supabase — ap-south-1 / Mumbai
+    └── FYERS request APIs
+
+India browser
+    ↓
+Realtime gateway — Mumbai / measured nearest FYERS path
+    ↓
+Redis — Mumbai primary where the selected Upstash product supports it
+    ↓
+FYERS WebSocket
+    ↓
+normalized ticks → canonical data plane → CoreSpirit / Vela
+```
+
+The realtime gateway is intentionally not assumed to share the Vercel Function lifecycle. Deploy it in Mumbai (or the lowest-latency Indian execution region available) and measure the actual browser→gateway→FYERS and gateway→Redis paths before changing regions. Upstash currently lists Mumbai (`ap-south-1`) as an operational Redis region. citeturn684593search0
+
+Do **not** move the trading request plane to Edge merely because the users are distributed. The decision point is the slowest dependency round trip: browser → function, function → Supabase/broker, and function → shared coordination. Static/cacheable assets remain globally served by the Vercel CDN. citeturn208679search13turn208679search4
+
+## Frontend startup budget — route graph, not one giant chunk
+
+The previous production build reported a roughly **2.1 MB minified main JS chunk**. The repo now treats that as an architectural issue rather than a warning to ignore.
+
+The critical-path rules are:
+
+```
+Initial browser
+  → App shell + auth bootstrap
+  → Navbar + Hero
+  → no TradingCoreRuntime
+  → no chart engine
+  → no CoreSpirit editor
+  → no below-fold marketing sections
+```
+
+The protected application is loaded as a separate graph:
+
+```
+Dashboard / Live
+  → route chunk
+  → TradingCoreRuntime
+  → broker + market-data + chart dependencies
+```
+
+The landing page defers below-fold marketing modules until the page is near them or the short startup grace period has elapsed. This keeps the initial graph focused on the first viewport rather than paying for every section of the marketing page.
+
+The build now emits a Vite manifest, groups large third-party dependencies into explicit vendor chunks, and runs a graph-aware gzip budget across the landing, login, dashboard and live route roots. The strategic performance target remains:
+
+- **150–250 KB gzip** for first interactive landing/startup JavaScript.
+- **<300 KB gzip** for the live workspace's critical route graph once the live route has been fully measured and trimmed.
+- Editor, models, prediction, indicators and other non-critical modules remain route/on-demand chunks.
+
+CI currently uses staged safety ceilings of 320 KB (landing), 260 KB (login), 400 KB (dashboard) and 650 KB (live) so regressions are blocked before the long-term targets are tightened. These are guardrails, not claims that the targets have already been achieved.
+
 ## Request plane vs realtime plane
 
 TradingCoreOS now treats request/response work and realtime market delivery as separate planes.
