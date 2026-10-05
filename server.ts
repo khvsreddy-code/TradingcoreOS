@@ -95,7 +95,7 @@ app.get('/api/health/diagnostics', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   const checks = healthChecks();
-  const ready = checks.database && checks.encryption && checks.fyers;
+  const ready = checks.database && checks.encryption && checks.fyers && (!checks.coordinationRequired || checks.coordination);
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', version: '0.5.0', checks, timestamp: new Date().toISOString() });
 });
 
