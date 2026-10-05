@@ -23,6 +23,22 @@ assert.deepEqual(
 );
 assert.ok(result.ir?.specializedPlan);
 
+const structures = compiler.compileSource(`
+let ob = market("NSE:NIFTY50").orderbook;
+let fp = market("NSE:NIFTY50").footprint;
+let vp = market("NSE:NIFTY50").volumeProfile;
+`, 'trading-native-structures');
+assert.equal(structures.diagnostics.filter((d) => d.severity === 'error').length, 0);
+assert.deepEqual(
+  structures.ir?.tradingNativePlan.dataDependencies.map((dep) => ({ id: dep.id, batchable: dep.batchable })),
+  [
+    { id:'market:NSE:NIFTY50:chart', batchable:false },
+  ],
+);
+assert.ok(structures.ir?.tradingNativePlan.dataDependencies[0].fields.includes('orderbook'));
+assert.ok(structures.ir?.tradingNativePlan.dataDependencies[0].fields.includes('footprint'));
+assert.ok(structures.ir?.tradingNativePlan.dataDependencies[0].fields.includes('volumeProfile'));
+
 const surface = makeCoreSpiritSurfaceMetadata(
   ['AUTOMATE', 'WHEN'],
   [{
@@ -35,6 +51,12 @@ const surface = makeCoreSpiritSurfaceMetadata(
 );
 const ast = new CoreSpiritParser('let x = close;').parse();
 const plan = buildCoreSpiritTradingNativePlan(ast, surface);
+const eventAst = new CoreSpiritParser('if (event("fill")) { let x = close; }').parse();
+const eventPlan = buildCoreSpiritTradingNativePlan(eventAst);
+assert.equal(eventPlan.eventTriggers.length, 1);
+assert.equal(eventPlan.eventTriggers[0].kind, 'fill');
+assert.equal(eventPlan.eventTriggers[0].busEvent, 'execution.fill');
+
 assert.equal(plan.eventTriggers.length, 3);
 assert.deepEqual(plan.eventTriggers.map((x) => x.kind), ['bar','tick','session.open']);
 assert.ok(plan.eventNative);
