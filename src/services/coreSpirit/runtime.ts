@@ -191,10 +191,10 @@ export class CoreSpiritRuntime {
     return this.executeIr(this.compiledIr!, bars).outputs;
   }
 
-  executeBar(bar: HistoricalCandle): CoreSpiritExecutionResult {
+  executeBar(bar: HistoricalCandle, profilePhase: 'historical'|'realtime' = 'realtime'): CoreSpiritExecutionResult {
     this.throwIfAborted();
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
-    this.profiler.beginBar('realtime', this.compiledIr.entry.instructions.length);
+    this.profiler.beginBar(profilePhase, this.compiledIr.entry.instructions.length);
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
@@ -300,7 +300,7 @@ export class CoreSpiritRuntime {
       close: price,
       volume: Math.max(0, Number(baseBar.volume || 0) + Number(tick.volume || 0)),
     };
-    const result = this.executeBar(bar);
+    const result = this.executeBar(bar, historicalTick ? 'historical' : 'realtime');
     this.state.barState = { ...this.state.barState, isRealtime: !historicalTick, isConfirmed: historicalTick };
     return result;
   }
