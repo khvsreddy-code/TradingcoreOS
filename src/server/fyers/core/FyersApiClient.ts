@@ -56,8 +56,9 @@ export class FyersApiClient {
   }
 
   private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs = API_LATENCY_BUDGET_MS.quote): Promise<T> {
+    const deadlineSignal = timeoutSignal(timeoutMs, signal);
     const execute = async (gateSignal?: AbortSignal): Promise<T> => {
-      const requestSignal = timeoutSignal(timeoutMs, gateSignal);
+      const requestSignal = gateSignal || deadlineSignal;
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
       const url = `${base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
@@ -101,6 +102,6 @@ export class FyersApiClient {
     // Every FYERS REST call shares the authenticated-user scheduler. This keeps
     // history, quotes, option chain, depth and account calls from independently
     // consuming the same broker quota.
-    return withBrokerRequestGate('fyers', this.accessToken, execute, signal);
+    return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal);
   }
 }
