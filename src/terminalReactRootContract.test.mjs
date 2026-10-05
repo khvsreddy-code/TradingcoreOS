@@ -49,7 +49,7 @@ for (const retired of [
   'src/quickOrderHotfix.ts',
 ]) assert.equal(fs.existsSync(path.join(root, retired)), false, `retired frontend mount/bridge still exists: ${retired}`);
 
-assert.match(app, /workspacePath===['"]\/live['"][\s\S]*?<LiveTradingTerminal\s*\/>/, 'live route must render the canonical terminal directly in the application tree');
+assert.match(app, /workspacePath\s*===\s*['"]\/live['"][\s\S]*?<LiveTradingTerminal\s*\/>/, 'live route must render the canonical terminal directly in the application tree');
 assert.match(terminal, /<LiveTradingWorkspace\s*\/>/);
 assert.doesNotMatch(terminal, /useEffect\(|history\.|popstate|setTimeout\(/);
 
