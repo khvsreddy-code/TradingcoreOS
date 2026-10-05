@@ -126,7 +126,7 @@ async function touchSubscription(connection: LocalConnection): Promise<void> {
     kind: connection.kind,
     symbols: connection.symbols,
     updatedAt: Date.now(),
-  } satisfies ConnectionRecord), { PX: SUB_TTL_MS });
+  } satisfies ConnectionRecord), { px: SUB_TTL_MS });
 }
 
 async function removeSubscription(connection: LocalConnection): Promise<void> {
