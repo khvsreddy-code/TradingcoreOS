@@ -354,3 +354,154 @@ Event routing remains transactional. An automation can therefore subscribe to an
 
 This makes `when` a scheduler concept rather than another indicator function. The semantic graph can reason about an event-triggered region independently from the numerical data graph.
 
+
+
+## Branch 12 — explicit temporal type system
+
+CoreSpirit does not collapse every time-aware value into one implicit series model.
+
+The canonical temporal type algebra is:
+
+```
+scalar<T>
+series<T>
+window<T>
+state<T>
+event<T>
+snapshot<T>
+stream<T>
+
+confirmed<T>
+developing<T>
+forecast<T>
+```
+
+The semantics are intentionally different:
+
+- **`series<T>`** is historical/vector market data. It is indexable, typed, columnar-first, and remains subject to causal lookback rules.
+- **`window<T>`** is a bounded computational view over a series. It does not own persistent program history and should be disposable/reusable by kernels.
+- **`state<T>`** is explicit persistent program memory. It survives across bars but is transactionally rolled back during an unconfirmed realtime revision.
+- **`event<T>`** and **`stream<T>`** represent event-fed domains rather than bar-aligned historical arrays.
+- **`snapshot<T>`** is an immutable point-in-time capture.
+- **`confirmed<T>`**, **`developing<T>`**, and **`forecast<T>`** explicitly encode temporal certainty.
+
+This makes a strategy's memory model visible in the program instead of inferring it from whether a value happened to be historical.
+
+### State is not a disguised series
+
+For example:
+
+```corespirit
+let trailingStop: state<float> = na
+
+on bar {
+  trailingStop := max(trailingStop, close - atr(14) * 2)
+}
+```
+
+The compiler lowers this to explicit `loadState` / `setState` operations. The state lives in the CoreSpirit transactional state store, not in the local historical-series registry.
+
+During a forming-bar revision:
+
+```
+confirmed state
+     │
+     ├── begin realtime transaction
+     │
+     ├── execute developing bar
+     │
+     ├── rollback on revision
+     │       ↓
+     │   restore prior state
+     │
+     └── execute latest revision
+             ↓
+          commit once
+```
+
+This makes state mutation deterministic under realtime rollback.
+
+### Series has explicit temporal context
+
+A `series<T>` access is still associated with a data identity:
+
+```
+series<T>
+  ├── element type
+  ├── symbol
+  ├── timeframe
+  ├── temporal phase
+  └── causal lookback
+```
+
+The current chart `close` is therefore not merely a JavaScript number. Its semantic identity includes the market context and the temporal domain in which it was produced.
+
+Inside an event scope, CoreSpirit may **sample the current value of a series into scalar state**. That conversion is explicit in the type checker rather than being a hidden historical-series coercion.
+
+### Temporal certainty is executable
+
+The language surface exposes:
+
+```corespirit
+if bar.confirmed {
+  signal("confirmed")
+}
+
+if bar.realtime {
+  signal("developing")
+}
+
+if bar.historical {
+  // historical-only work
+}
+```
+
+These lower to runtime temporal-phase checks. The runtime distinguishes:
+
+```
+historical
+confirmed
+developing / realtime
+forecast
+```
+
+and the semantic graph can use those phases when determining whether a computation is realtime-safe.
+
+### Explicit event regions
+
+```corespirit
+on bar {
+  ...
+}
+
+on tick {
+  ...
+}
+
+on session.open {
+  ...
+}
+```
+
+becomes an `eventGate` region in executable IR.
+
+The event gate is a scheduler boundary, not another indicator function. This allows future scheduling to keep numerical work, event-triggered work, and side effects separate.
+
+### Why this is strategically different from Pine's model
+
+Pine's series model is tightly coupled to its sequential execution semantics. CoreSpirit keeps historical data, bounded windows, mutable strategy state, events, immutable snapshots, streams, and temporal certainty as distinct language concepts.
+
+That lets optimization reason about them separately:
+
+```
+series<T>   -> columnar / dirty-range / SIMD
+window<T>   -> fused rolling kernel
+state<T>    -> transactional persistent state
+event<T>    -> event scheduler
+snapshot<T> -> immutable replay boundary
+stream<T>   -> asynchronous host stream
+confirmed<T>/developing<T>
+            -> temporal safety analysis
+```
+
+This is a core language property, not a compatibility layer.
