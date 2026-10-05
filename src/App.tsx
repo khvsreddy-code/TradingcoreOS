@@ -100,6 +100,10 @@ function AppContent() {
 
   useEffect(() => {
     if (!isAuthenticated || publicIndicatorRoute || !protectedEntry) return;
+    if (runtime) {
+      setBrokerRestoreReady(true);
+      return;
+    }
 
     let cancelled = false;
     setBrokerRestoreReady(false);
@@ -119,7 +123,7 @@ function AppContent() {
       });
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, user?.id, publicIndicatorRoute, protectedEntry]);
+  }, [isAuthenticated, user?.id, publicIndicatorRoute, protectedEntry, runtime]);
 
   useEffect(() => {
     if (!runtime) return;
