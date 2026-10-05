@@ -561,6 +561,7 @@ export class CoreSpiritRuntime {
     if(!plan?.dataDependencies.length || !batchResolver) return;
     const requests:CoreSpiritDataRequest[]=[];
     for(const dependency of plan.dataDependencies){
+      if(!dependency.batchable) continue;
       const symbol=dependency.symbol==='current'?this.options.symbol:dependency.symbol;
       const timeframe=dependency.timeframe==='chart'?this.options.timeframe:dependency.timeframe;
       for(const field of dependency.fields){
