@@ -523,6 +523,7 @@ export class CoreSpiritRuntime {
     diagnostics: string[],
     executionOptions: { reuseValues?: boolean; dirtyInstructions?: ReadonlySet<number> } = {},
   ): void {
+    this.prefetchTradingNativeData(barIndex);
     const host: CoreSpiritExecutionVMHost = {
       maxStepsPerBar: this.options.maxStepsPerBar,
       throwIfAborted: () => this.throwIfAborted(),
@@ -552,6 +553,33 @@ export class CoreSpiritRuntime {
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
     else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan });
+  }
+
+  private prefetchTradingNativeData(barIndex:number): void {
+    const plan=this.compiledIr?.tradingNativePlan;
+    const batchResolver=this.dataResolver?.requestBatch;
+    if(!plan?.dataDependencies.length || !batchResolver) return;
+    const requests:CoreSpiritDataRequest[]=[];
+    for(const dependency of plan.dataDependencies){
+      const symbol=dependency.symbol==='current'?this.options.symbol:dependency.symbol;
+      const timeframe=dependency.timeframe==='chart'?this.options.timeframe:dependency.timeframe;
+      for(const field of dependency.fields){
+        if(!['open','high','low','close','volume','time'].includes(field)) continue;
+        requests.push({symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0});
+      }
+    }
+    if(!requests.length) return;
+    const value=batchResolver(requests);
+    if(value && typeof (value as any).then==='function') return;
+    const snapshots=value as CoreSpiritDataSnapshot[];
+    if(snapshots.length!==requests.length) return;
+    for(let i=0;i<requests.length;i+=1){
+      const request=requests[i]!;
+      const snapshot=snapshots[i]!;
+      if(snapshot?.timestamp!=null && Number(snapshot.timestamp)>this.state.time) continue;
+      const key=`request:${barIndex}:${request.symbol}:${request.timeframe}:${request.field}:0`;
+      this.dataMemo.set(key,snapshot?.value ?? null);
+    }
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
@@ -680,11 +708,15 @@ export class CoreSpiritRuntime {
           const field=member as CoreSpiritDataRequest['field'];
           if(['open','high','low','close','volume','time'].includes(field)) {
             const req={symbol,timeframe,field,offset:0};
+            const memoKey=`request:${index}:${symbol}:${timeframe}:${field}:0`;
+            if(this.dataMemo.has(memoKey)) return finish(this.dataMemo.get(memoKey));
             const ctx: CoreSpiritDataResolutionContext={asOfTimestamp:this.toEpoch(bar.timestamp),baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment:'last-confirmed'};
             const resolver=this.dataResolver;
             const value=resolver?.requestAt ? resolver.requestAt(req,ctx) : resolver?.request?.(req);
             if(value && typeof (value as any).then==='function') return finish(null);
-            return finish((value as any)?.value ?? null);
+            const resolved=(value as any)?.value ?? null;
+            this.dataMemo.set(memoKey,resolved);
+            return finish(resolved);
           }
         }
       }
