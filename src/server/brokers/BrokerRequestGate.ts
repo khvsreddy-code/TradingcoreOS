@@ -54,13 +54,30 @@ async function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> 
   if (signal?.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
   if (ms <= 0) return;
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const onAbort = () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }));
     };
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+async function waitForPromiseWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      const onAbort = () => reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }));
+      signal.addEventListener('abort', onAbort, { once: true });
+    }),
+  ]);
 }
 
 function distributedEnabled(): boolean {
@@ -73,50 +90,51 @@ export async function withBrokerRequestGate<T>(
   task: (signal?: AbortSignal) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
+  const effectiveSignal = signal || AbortSignal.timeout(15_000);
   const key = broker + ':' + identity;
   const localState = getState(key);
   const limit = LIMITS[broker];
 
   let localRelease!: () => void;
+  let localReleased = false;
   const previous = localState.tail;
   const localTurn = new Promise<void>((resolve) => { localRelease = resolve; });
   localState.tail = previous.then(() => localTurn);
-  await previous;
-
-  const distributed = getSharedRedis();
-  const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
-  const lockKey = 'tco:broker:gate:' + broker + ':' + identityHash;
-  const owner = crypto.randomUUID();
-  const lockTtl = Math.max(15_000, limit.minIntervalMs + 12_000);
-  let distributedRelease: (() => Promise<void>) | undefined;
 
   try {
-    if (signal?.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
+    // The local queue is an admission queue only. It must never keep the next
+    // request waiting for the previous network call to finish.
+    await waitForPromiseWithSignal(previous, effectiveSignal);
+    if (effectiveSignal.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
+
+    const distributed = getSharedRedis();
+    const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
 
     if (distributedEnabled() && distributed.configured) {
-      while (!(await distributed.acquireLock(lockKey, owner, lockTtl, signal))) {
-        await sleepWithSignal(Math.min(100, limit.minIntervalMs), signal);
+      const lockKey = 'tco:broker:admit:' + broker + ':' + identityHash;
+      const owner = crypto.randomUUID();
+      let acquired = false;
+      try {
+        while (!(acquired = await distributed.acquireLock(lockKey, owner, 2_000, effectiveSignal))) {
+          await sleepWithSignal(Math.min(50, limit.minIntervalMs), effectiveSignal);
+        }
+
+        const now = Date.now();
+        const window = Math.floor(now / 60_000);
+        const countKey = 'tco:broker:minute:' + broker + ':' + identityHash + ':' + window;
+        const count = await distributed.incrementWindow(countKey, 61_000, effectiveSignal);
+        if (count > limit.maxPerMinute) {
+          throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429 });
+        }
+
+        const lastKey = 'tco:broker:last:' + broker + ':' + identityHash;
+        const last = Number(await distributed.get<string | number>(lastKey, effectiveSignal) || 0);
+        const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
+        if (spacing) await sleepWithSignal(spacing, effectiveSignal);
+        await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, effectiveSignal);
+      } finally {
+        if (acquired) await distributed.releaseLock(lockKey, owner).catch(() => undefined);
       }
-
-      distributedRelease = async () => {
-        await distributed.releaseLock(lockKey, owner).catch(() => undefined);
-      };
-
-      const now = Date.now();
-      const window = Math.floor(now / 60_000);
-      const countKey = 'tco:broker:minute:' + broker + ':' + identityHash + ':' + window;
-      const count = await distributed.incrementWindow(countKey, 61_000, signal);
-      if (count > limit.maxPerMinute) {
-        await distributedRelease();
-        distributedRelease = undefined;
-        throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429 });
-      }
-
-      const lastKey = 'tco:broker:last:' + broker + ':' + identityHash;
-      const last = Number(await distributed.get<string | number>(lastKey, signal) || 0);
-      const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
-      if (spacing) await sleepWithSignal(spacing, signal);
-      await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, signal);
     } else if (distributedEnabled() && process.env.NODE_ENV === 'production') {
       const marker = globalThis as typeof globalThis & { __tradingCoreRedisWarningLogged?: boolean };
       if (!marker.__tradingCoreRedisWarningLogged) {
@@ -132,18 +150,20 @@ export async function withBrokerRequestGate<T>(
       ? 60_000 - (now - oldest) + 25
       : 0;
     const spacingWait = Math.max(0, localState.nextAvailableAt - now);
-    await sleep(Math.max(minuteWait, spacingWait), signal);
+    await sleep(Math.max(minuteWait, spacingWait), effectiveSignal);
 
     const startedAt = Date.now();
     localState.timestamps.push(startedAt);
     localState.nextAvailableAt = startedAt + limit.minIntervalMs;
-    return await task(signal);
+
+    // Release the local admission turn before the actual network request so
+    // quotes/orders can overlap a slow history response while preserving the
+    // broker's global start-rate limit.
+    localRelease();
+    localReleased = true;
+    return await task(effectiveSignal);
   } finally {
-    try {
-      await distributedRelease?.();
-    } finally {
-      localRelease();
-    }
+    if (!localReleased) localRelease();
   }
 }
 /** Use for Upstox order placement where the broker documents a 10 req/s combined order limit. */
