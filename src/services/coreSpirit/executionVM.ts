@@ -13,11 +13,13 @@ export type CoreSpiritExecutionVMHost = {
   loadSeries: (name: string, offset: number) => number | null;
   moveLocal: (source: string) => unknown;
   setLocal: (name: string, value: unknown, series: boolean) => void;
+  setLocalBySeriesId?: (id: number, name: string, value: unknown) => void;
   unary: (operator: string, value: unknown) => unknown;
   binary: (operator: string, left: unknown, right: unknown) => unknown;
   tryFused: (pc: number, values: CoreSpiritValueStore, instructions: CoreSpiritIrInstruction[], barIndex: number) => boolean;
   call: (instruction: CoreSpiritCallInstruction, args: unknown[]) => unknown;
   loadIndexed: (instruction: CoreSpiritIndexInstruction, index: number, values: CoreSpiritValueStore) => number | null | CoreSpiritValue;
+  loadIndexedSeriesById?: (id: number, index: number) => number | null | CoreSpiritValue;
   truthy: (value: unknown) => boolean;
   emit: (instruction: CoreSpiritEmitInstruction, values: CoreSpiritValueStore, output: CoreSpiritOutputCollector) => void;
 };
