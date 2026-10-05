@@ -67,7 +67,7 @@ export type CoreSpiritTradingNativePlan = Readonly<{
   eventNative:boolean;
 }>;
 
-const FIELD_SET = new Set(['open','high','low','close','volume','time','bid','ask','depth','trade','footprint']);
+const FIELD_SET = new Set(['open','high','low','close','volume','time','bid','ask','depth','trade','orderbook','footprint','volumeProfile']);
 
 function literalString(node?:CoreSpiritAstNode):string|undefined {
   return node?.type === 'string' ? String(node.value) : undefined;
@@ -231,9 +231,9 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
     batches:Object.freeze(
       [...new Map(deps.map((dep)=>[dep.batchKey,dep])).entries()].map(([batchKey])=>{
         const ids=deps.filter((dep)=>dep.batchKey===batchKey && dep.batchable).map((dep)=>dep.id);
-        return Object.freeze({batchKey,dependencyIds:Object.freeze(ids),requestCount:ids.length});
+        return ids.length ? Object.freeze({batchKey,dependencyIds:Object.freeze(ids),requestCount:ids.length}) : null;
       }),
-    ),
+    ).filter((batch): batch is NonNullable<typeof batch> => batch !== null),
     eventTriggers:Object.freeze(eventTriggers),
     computeClasses:Object.freeze(['scalar','fused','simd','worker','wasm','gpu'] as const),
     multiSymbol,
