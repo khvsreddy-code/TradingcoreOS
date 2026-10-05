@@ -31,7 +31,7 @@ export interface CoreSpiritDirtyExecutionPlan {
 }
 
 function inferLookback(node: CoreSpiritDirtyNode, instructionName: string | undefined, constantValue?: number): number {
-  if (node.stateful && /^(ema|rma|rsi|atr|vwap|cross|crossover|crossunder|bar_index)$/.test(instructionName || '')) return Number.POSITIVE_INFINITY;
+  if (node.stateful && /^(ema|rma|rsi|atr|vwap|cross|crossover|crossunder|bar_index)$/.test(instructionName || '')) return -1;
   if (instructionName === 'change' || instructionName === 'pctchange' || instructionName === 'cross' || instructionName === 'crossover' || instructionName === 'crossunder') return 1;
   if (instructionName === 'rising' || instructionName === 'falling') return Math.max(1, Math.floor(constantValue || 1));
   if (node.stateful) return Number.POSITIVE_INFINITY;
@@ -80,7 +80,7 @@ export class CoreSpiritDirtyGraph {
     for(const node of this.nodesById.values()) if(node.alwaysRecompute) mark(node.id,barIndex,barIndex);
     while(queue.length){
       const id=queue.shift()!, node=this.nodesById.get(id)!; const range=dirty.get(id)!;
-      const nextTo=Number.isFinite(node.lookback) ? Math.min(executionEnd,range.to+node.lookback) : executionEnd;
+      const nextTo=node.lookback >= 0 ? Math.min(executionEnd,range.to+node.lookback) : executionEnd;
       for(const dependent of node.dependents) mark(dependent,range.from,nextTo);
     }
     const instructions=new Set<number>(); for(const id of dirty.keys()) instructions.add(this.nodesById.get(id)!.instruction);
