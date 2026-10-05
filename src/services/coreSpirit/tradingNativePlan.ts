@@ -1,4 +1,5 @@
 import type { CoreSpiritAst, CoreSpiritAstNode } from './ast';
+import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
 export type CoreSpiritDataDomain =
   | 'bar-series'
@@ -155,10 +156,17 @@ function visit(
   }
 }
 
-export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst):CoreSpiritTradingNativePlan {
+export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:CoreSpiritSurfaceMetadata):CoreSpiritTradingNativePlan {
   const dependencies=new Map<string,{domain:CoreSpiritDataDomain;symbol:string;timeframe:string;fields:Set<string>}>();
   const events=new Map<string,CoreSpiritEventTrigger>();
   visit(ast,dependencies,events);
+  for(const declaration of surface?.declarations ?? []){
+    if(declaration.kind!=='automation') continue;
+    for(const trigger of declaration.triggers){
+      const normalized=eventTrigger(trigger);
+      events.set(`${declaration.name}:${normalized.source}`,Object.freeze({...normalized,source:`${declaration.name}:${normalized.source}`}));
+    }
+  }
 
   const deps:CoreSpiritDataDependency[]=[];
   for(const [key,value] of dependencies){
