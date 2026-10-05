@@ -114,8 +114,8 @@ async function publishControl(record: ConnectionRecord, action: 'upsert' | 'remo
 
 async function writeSubscription(record: ConnectionRecord): Promise<string> {
   const key = userSubscriptionKey(record);
-  await redis.set(key, JSON.stringify(record), { PX: SUB_TTL_MS });
-  await redis.sAdd(subscriptionSetKey(record.userId), key);
+  await redis.set(key, JSON.stringify(record), { px: SUB_TTL_MS });
+  await redis.sAdd(subscriptionSetKey(record.userId), [key]);
   return key;
 }
 
@@ -131,13 +131,13 @@ async function touchSubscription(connection: LocalConnection): Promise<void> {
 
 async function removeSubscription(connection: LocalConnection): Promise<void> {
   await redis.del(connection.subscriptionKey);
-  await redis.sRem(subscriptionSetKey(connection.userId), connection.subscriptionKey);
+  await redis.sRem(subscriptionSetKey(connection.userId), [connection.subscriptionKey]);
 }
 
 async function acquireOwnership(userId: string): Promise<boolean> {
   if (ownedUsers.has(userId)) return true;
   const value = INSTANCE_ID + ':' + userId;
-  const acquired = await redis.set(ownerKey(userId), value, { NX: true, PX: OWNER_TTL_MS });
+  const acquired = await redis.set(ownerKey(userId), value, { nx: true, px: OWNER_TTL_MS });
   if (acquired !== 'OK') return false;
 
   const marketListener = (event: any) => {
@@ -159,10 +159,7 @@ async function acquireOwnership(userId: string): Promise<boolean> {
 async function renewOwnership(userId: string): Promise<void> {
   const owned = ownedUsers.get(userId);
   if (!owned) return;
-  const renewed = Number(await redis.eval(RENEW_LOCK_LUA, {
-    keys: [ownerKey(userId)],
-    arguments: [owned.ownerValue, String(OWNER_TTL_MS)],
-  })) === 1;
+  const renewed = Number(await redis.eval(RENEW_LOCK_LUA, [ownerKey(userId)], [owned.ownerValue, String(OWNER_TTL_MS)])) === 1;
   if (renewed) return;
   await stopOwnership(userId);
 }
@@ -174,10 +171,7 @@ async function stopOwnership(userId: string): Promise<void> {
   ownedUsers.delete(userId);
   FyersMarketDataTransport.disconnect(userId);
   FyersOrderStreamTransport.disconnect(userId);
-  await redis.eval(RELEASE_LOCK_LUA, {
-    keys: [ownerKey(userId)],
-    arguments: [owned.ownerValue],
-  }).catch(() => undefined);
+  await redis.eval(RELEASE_LOCK_LUA, [ownerKey(userId)], [owned.ownerValue]).catch(() => undefined);
 }
 
 async function loadDesiredConnections(userId: string): Promise<ConnectionRecord[]> {
