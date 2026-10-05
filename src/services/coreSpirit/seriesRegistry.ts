@@ -45,9 +45,7 @@ type ValueJournalEntry = {
 };
 
 function nextCapacity(required: number): number {
-  let capacity = 16;
-  while (capacity < Math.max(1, required)) capacity *= 2;
-  return capacity;
+  return Math.max(1, Math.floor(required));
 }
 
 function isNumericValue(value: CoreSpiritStoredValue): value is number {
