@@ -1,16 +1,9 @@
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navbar } from '../components/navigation/Navbar';
 import { Hero } from '../components/hero/Hero';
-import { WorkspacePreview } from '../components/workspace/WorkspacePreview';
-import { BrokerStrip } from '../components/brokers/BrokerStrip';
-import { WhyTradingCore } from '../components/features/WhyTradingCore';
-import { ArchitectureSection } from '../components/architecture/ArchitectureSection';
-import { FeaturesDeepDive } from '../components/features/FeaturesDeepDive';
-import { HowItWorks } from '../components/howItWorks/HowItWorks';
-import { PricingSection } from '../components/pricing/PricingSection';
-import { FutureModules } from '../components/roadmap/FutureModules';
-import { FAQSection } from '../components/faq/FAQSection';
-import { Footer } from '../components/footer/Footer';
 import type { NavbarProps } from '../types/navigation';
+
+const LandingBelowFold = lazy(() => import('./LandingBelowFold').then(m => ({ default: m.LandingBelowFold })));
 
 export function LandingPage({
   onOpenAuthModal,
@@ -18,6 +11,35 @@ export function LandingPage({
   onNavigate,
   currentView,
 }: Pick<NavbarProps, 'onOpenAuthModal' | 'onLaunchPlatform' | 'onNavigate' | 'currentView'>) {
+  const [loadBelowFold, setLoadBelowFold] = useState(false);
+  const loadSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const sentinel = loadSentinelRef.current;
+    if (!sentinel) return;
+
+    let loaded = false;
+    const load = () => {
+      if (loaded) return;
+      loaded = true;
+      setLoadBelowFold(true);
+      observer.disconnect();
+      window.clearTimeout(fallbackTimer);
+    };
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) load();
+    }, { rootMargin: '0px 0px 500px 0px' });
+
+    observer.observe(sentinel);
+    const fallbackTimer = window.setTimeout(load, 1200);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(fallbackTimer);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[var(--tco-surface-2)] text-[var(--tco-text)] font-sans selection:bg-[#3b82f6]/30 selection:text-[#3b82f6] overflow-x-hidden">
       <Navbar
@@ -28,17 +50,13 @@ export function LandingPage({
       />
       <main className="pt-16">
         <Hero onLaunch={onLaunchPlatform} />
-        <WorkspacePreview onLaunch={onLaunchPlatform} />
-        <BrokerStrip onSelectBroker={onLaunchPlatform} />
-        <ArchitectureSection />
-        <WhyTradingCore />
-        <FeaturesDeepDive />
-        <HowItWorks onLaunch={onLaunchPlatform} />
-        <PricingSection onSelectPlan={onLaunchPlatform} />
-        <FutureModules />
-        <FAQSection />
+        <div ref={loadSentinelRef} aria-hidden="true" className="h-px" />
+        {loadBelowFold && (
+          <Suspense fallback={null}>
+            <LandingBelowFold onLaunchPlatform={onLaunchPlatform} />
+          </Suspense>
+        )}
       </main>
-      <Footer onLaunch={onLaunchPlatform} />
     </div>
   );
 }
