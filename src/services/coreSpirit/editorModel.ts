@@ -1,5 +1,8 @@
 import { CoreSpiritIncrementalCompiler } from './incrementalCompiler';
 import { CoreSpiritIncrementalAst } from './incrementalAst';
+import { CoreSpiritParser } from './parser';
+import { analyzeCoreSpiritRepaintSafety, type CoreSpiritRepaintSafetyReport } from './repaintSafety';
+import type { CoreSpiritProfilerSnapshot } from './profiler';
 import { getCoreSpiritEditorSnapshot, getCoreSpiritHover, getCoreSpiritCompletionContext, getCoreSpiritDefinitionAt, getCoreSpiritCodeActions, type CoreSpiritCompletion, type CoreSpiritEditorDiagnostic, type CoreSpiritSemanticToken, type CoreSpiritDefinition, type CoreSpiritCodeAction, type CoreSpiritFoldingRange } from './languageService';
 
 export type CoreSpiritSymbol = {
@@ -19,6 +22,8 @@ export type CoreSpiritEditorModelSnapshot = {
   definitions: CoreSpiritDefinition[];
   folds: CoreSpiritFoldingRange[];
   formatted: string;
+  repaintSafety: CoreSpiritRepaintSafetyReport;
+  profiler?: CoreSpiritProfilerSnapshot;
 };
 
 export type CoreSpiritEditorEdit = { start: number; end: number; text: string };
@@ -33,6 +38,7 @@ export class CoreSpiritEditorModel {
   private lastCompile: ReturnType<CoreSpiritIncrementalCompiler['compile']> | null = null;
   private undoStack: string[] = [];
   private redoStack: string[] = [];
+  private profilerSnapshot?: CoreSpiritProfilerSnapshot;
   private readonly incrementalAst = new CoreSpiritIncrementalAst();
   private readonly incrementalCompiler = new CoreSpiritIncrementalCompiler();
 
@@ -44,6 +50,8 @@ export class CoreSpiritEditorModel {
   getSnapshot() { return this.snapshot; }
   getSource() { return this.source; }
   getVersion() { return this.version; }
+  getProfilerSnapshot() { return this.profilerSnapshot; }
+  setProfilerSnapshot(snapshot: CoreSpiritProfilerSnapshot | undefined) { this.profilerSnapshot = snapshot; return this.snapshot; }
 
   updateSource(source: string, completionPrefix = '') {
     if (source === this.source && !completionPrefix) return this.snapshot;
@@ -81,12 +89,21 @@ export class CoreSpiritEditorModel {
 
   private compute(prefix: string): CoreSpiritEditorModelSnapshot {
     const base = getCoreSpiritEditorSnapshot(this.source, prefix);
+    let repaintSafety: CoreSpiritRepaintSafetyReport;
+    try {
+      const parsed = new CoreSpiritParser(this.source).parseDetailed();
+      repaintSafety = parsed.diagnostics.length
+        ? Object.freeze({version:1,causality:'unknown',lookahead:'unknown',realtimeSafe:'unknown',backtestLiveEquivalent:'unknown',nodes:[],warnings:['Repaint analysis unavailable while source contains syntax errors.'],errors:[]})
+        : analyzeCoreSpiritRepaintSafety(parsed.ast);
+    } catch {
+      repaintSafety = Object.freeze({version:1,causality:'unknown',lookahead:'unknown',realtimeSafe:'unknown',backtestLiveEquivalent:'unknown',nodes:[],warnings:['Repaint analysis unavailable.'],errors:[]});
+    }
     const symbols: CoreSpiritSymbol[] = [];
     const lines = this.source.split(/\r?\n/);
     lines.forEach((line, index) => {
       const match = line.match(/^\s*(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
       if (match) symbols.push({ name: match[1], kind: 'variable', line: index + 1, column: (match.index ?? 0) + line.slice(match.index ?? 0).indexOf(match[1]) + 1 });
     });
-    return { source: this.source, version: this.version, diagnostics: base.diagnostics, completions: base.completions, tokens: base.tokens, symbols, definitions: base.definitions, folds: base.folds, formatted: base.formatted };
+    return { source: this.source, version: this.version, diagnostics: base.diagnostics, completions: base.completions, tokens: base.tokens, symbols, definitions: base.definitions, folds: base.folds, formatted: base.formatted, repaintSafety, profiler:this.profilerSnapshot };
   }
 }
