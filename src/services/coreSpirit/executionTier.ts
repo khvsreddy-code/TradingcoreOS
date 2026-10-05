@@ -1,0 +1,2 @@
+export type CoreSpiritExecutionTier = 'reference' | 'optimized' | 'auto';
+export const CORE_SPIRIT_EXECUTION_TIERS = Object.freeze({ reference:'reference', optimized:'optimized', auto:'auto' } as const);
