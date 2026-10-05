@@ -91,7 +91,7 @@ export function buildCoreSpiritSpecializedPlan(
     const instruction=lowered[i]!;
     if(instruction.op!=='call' || instruction.args.length<1) continue;
     const builtin=getCoreSpiritBuiltin(instruction.name);
-    if(!builtin?.seriesExecution?.vectorizable || !builtin.seriesExecution.fusible) continue;
+    if(!builtin?.seriesExecution?.vectorizable) continue;
     const input=instruction.args[0]!;
     const sourceName=instructions[i]?.op==='call' ? (instructions[i] as Extract<CoreSpiritIrInstruction,{op:'call'}>).seriesArgs?.[0] : undefined;
     const originalInput='callId' in instruction.instruction ? instruction.instruction.callId ?? String(input) : String(input);
