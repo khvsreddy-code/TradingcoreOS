@@ -115,13 +115,22 @@ export class BackgroundJobRepository {
     });
   }
 
-  static async markFailed(id: string, error: string): Promise<void> {
+  static async markFailedIfQueued(id: string, error: string): Promise<void> {
     await this.update(id, {
       status: 'failed',
       error: error.slice(0, 4000),
       completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, 'queued');
+  }
+
+  static async markFailed(id: string, error: string): Promise<void> {
+    await this.update(id, {
+      status: 'failed',
+      error: error.slice(0, 4000),
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
   }
 
   private static async update(id: string, patch: Record<string, unknown>, expectedStatus?: BackgroundJobStatus): Promise<void> {
