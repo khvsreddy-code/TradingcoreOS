@@ -30,14 +30,13 @@ let vp = market("NSE:NIFTY50").volumeProfile;
 `, 'trading-native-structures');
 assert.equal(structures.diagnostics.filter((d) => d.severity === 'error').length, 0);
 assert.deepEqual(
-  structures.ir?.tradingNativePlan.dataDependencies.map((dep) => ({ id: dep.id, batchable: dep.batchable })),
+  structures.ir?.tradingNativePlan.dataDependencies.map((dep) => ({ id: dep.id, domain: dep.domain, batchable: dep.batchable })),
   [
-    { id:'market:NSE:NIFTY50:chart', batchable:false },
+    { id:'orderbook:NSE:NIFTY50:chart', domain:'orderbook', batchable:false },
+    { id:'footprint:NSE:NIFTY50:chart', domain:'footprint', batchable:false },
+    { id:'volume-profile:NSE:NIFTY50:chart', domain:'volume-profile', batchable:false },
   ],
 );
-assert.ok(structures.ir?.tradingNativePlan.dataDependencies[0].fields.includes('orderbook'));
-assert.ok(structures.ir?.tradingNativePlan.dataDependencies[0].fields.includes('footprint'));
-assert.ok(structures.ir?.tradingNativePlan.dataDependencies[0].fields.includes('volumeProfile'));
 
 const surface = makeCoreSpiritSurfaceMetadata(
   ['AUTOMATE', 'WHEN'],
