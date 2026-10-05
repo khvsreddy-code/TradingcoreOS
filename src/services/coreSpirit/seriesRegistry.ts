@@ -168,13 +168,16 @@ export class CoreSpiritSeriesRegistry {
   }
 
   pushValue(id: CoreSpiritSeriesId, value: CoreSpiritStoredValue, limit: number): void {
-    if (isNumericValue(value)) {
+    if (isNumericValue(value) && !this.values.has(id)) {
       const existing = this.numeric.get(id);
       this.recordNumeric(id, existing);
       const slot = this.ensureNumericSlot(id, limit);
       this.pushNumeric(slot, value);
       return;
     }
+
+    if (!isNumericValue(value) && this.numeric.has(id)) this.migrateNumericToValues(id, limit);
+
     const existing = this.values.get(id);
     this.recordValue(id, existing);
     const slot = this.ensureValueSlot(id, limit);
@@ -310,6 +313,17 @@ export class CoreSpiritSeriesRegistry {
           : undefined;
       },
     });
+  }
+
+  private migrateNumericToValues(id: CoreSpiritSeriesId, limit: number): void {
+    const numeric = this.numeric.get(id);
+    if (!numeric) return;
+    const existingValues = this.values.get(id);
+    this.recordNumeric(id, numeric);
+    this.recordValue(id, existingValues);
+    const values = this.makeValueSlot(id, Array.from(this.numericSnapshot(id)), nextCapacity(Math.max(limit, numeric.length)));
+    this.values.set(id, values);
+    this.numeric.delete(id);
   }
 
   private ensureNumericSlot(id: CoreSpiritSeriesId, limit: number): CoreSpiritNumericSeries {
