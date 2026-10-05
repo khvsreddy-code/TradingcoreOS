@@ -286,6 +286,7 @@ export class CoreSpiritSeriesRegistry {
   restoreValueObject(values: Record<string, CoreSpiritStoredValue[]>): void {
     for (const [name, data] of Object.entries(values)) {
       const id = this.idFor(name);
+      if (this.numeric.has(id) && data.every((value) => typeof value === 'number')) continue;
       this.values.set(id, this.makeValueSlot(id, data));
     }
     this.commit();
