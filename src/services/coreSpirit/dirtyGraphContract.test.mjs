@@ -7,7 +7,7 @@ const node=(id,instruction,inputs,dependencies,dependents,extra={})=>({
 });
 const nodes=[
   node('i:close',0,['close'],[],['i:ema','i:rsi','i:vwap']),
-  node('i:ema',1,['close'],['i:close'],['i:signal'],{stateful:true,lookback:Number.POSITIVE_INFINITY}),
+  node('i:ema',1,['close'],['i:close'],['i:signal'],{stateful:true,lookback:-1}),
   node('i:rsi',2,['close'],['i:close'],['i:signal'],{stateful:true,lookback:Number.POSITIVE_INFINITY}),
   node('i:signal',3,[],['i:ema','i:rsi'],['i:plot']),
   node('i:plot',4,[],['i:signal'],[],{alwaysRecompute:true}),
