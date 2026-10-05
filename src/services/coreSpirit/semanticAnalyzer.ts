@@ -1,6 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
-import { CoreSpiritType, compatible, isBooleanType, isNumericType, joinTypes } from './typeSystem';
+import { CoreSpiritType, compatible, isBooleanType, isNumericType, isStateType, joinTypes, normalizeDeclaredType, elementType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
@@ -37,19 +37,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
     severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
   });
 
-  const mapDeclaredType=(name:string):CoreSpiritType=>{
-    if(name==='number'||name==='float'||name==='int') return 'number';
-    if(name==='bool'||name==='boolean') return 'boolean';
-    if(name==='string') return 'string';
-    if(name==='null'||name==='na') return 'null';
-    if(name==='price'||name==='volume'||name==='time'||name==='duration') return 'number';
-    if(/^series<(number|float|int|price|volume|time|duration|currency|boolean|string)>$/.test(name)) return name.includes('boolean') ? 'series<boolean>' : name.includes('string') ? 'series<string>' : 'series<number>';
-    if(name.startsWith('array<')) return name as CoreSpiritType;
-    if(name.startsWith('matrix<')) return name as CoreSpiritType;
-    if(name.startsWith('tensor<')) return name as CoreSpiritType;
-    if(['trade','orderbook','footprint','volume-profile'].includes(name)) return name as CoreSpiritType;
-    return `udt:${name}`;
-  };
+  const mapDeclaredType=(name:string):CoreSpiritType=> normalizeDeclaredType(name);
 
   const infer=(n:CoreSpiritAstNode, scope:Map<string,CoreSpiritType>):CoreSpiritType=>{
     switch(n.type){
