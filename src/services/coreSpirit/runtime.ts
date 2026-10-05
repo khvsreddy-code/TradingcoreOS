@@ -268,7 +268,12 @@ export class CoreSpiritRuntime {
     this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false });
     this.executionContext.session = this.executionContext.frame.session;
     this.lastBarWasRealtime = true;
-    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, { reuseValues: sameBucket && this.executionTier === 'optimized', dirtyInstructions: sameBucket ? dirtyPlan?.instructions : undefined }); }
+    if (sameBucket && dirtyPlan) {
+      this.realtimeDirtyInstructions.clear();
+      for (const instruction of dirtyPlan.instructions) this.realtimeDirtyInstructions.add(instruction);
+      for (const instruction of this.dirtyGraph?.statefulInstructions ?? []) this.realtimeDirtyInstructions.add(instruction);
+    }
+    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, { reuseValues: sameBucket && this.executionTier === 'optimized', dirtyInstructions: sameBucket ? this.realtimeDirtyInstructions : undefined }); }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
