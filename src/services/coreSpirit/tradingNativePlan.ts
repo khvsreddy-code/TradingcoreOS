@@ -77,6 +77,14 @@ function fieldName(node:CoreSpiritAstNode):string|undefined {
   return node.type === 'member' && FIELD_SET.has(node.member) ? node.member : undefined;
 }
 
+function domainForField(field:string):CoreSpiritDataDomain {
+  if(field==='orderbook') return 'orderbook';
+  if(field==='trade') return 'trade';
+  if(field==='footprint') return 'footprint';
+  if(field==='volumeProfile') return 'volume-profile';
+  return 'market';
+}
+
 function eventTrigger(value:string):CoreSpiritEventTrigger {
   const normalized=value.trim().toLowerCase().replace(/\s+/g,'.');
   const aliases:Record<string,CoreSpiritEventKind> = {
@@ -147,8 +155,9 @@ function visit(
         const symbol=node.target.name==='market' ? (literalString(node.target.args[0]) ?? 'current') : 'current';
         const timeframe=node.target.name==='timeframe' ? (literalString(node.target.args[0]) ?? 'requested') : 'chart';
         const field=fieldName(node);
-        const key=`market:${symbol}:${timeframe}`;
-        const dep=dependencies.get(key) ?? {domain:'market',symbol,timeframe,fields:new Set<string>()};
+        const domain=field ? domainForField(field) : 'market';
+        const key=`${domain}:${symbol}:${timeframe}`;
+        const dep=dependencies.get(key) ?? {domain,symbol,timeframe,fields:new Set<string>()};
         if(field) dep.fields.add(field);
         dependencies.set(key,dep);
       }
