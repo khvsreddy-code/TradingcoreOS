@@ -149,6 +149,15 @@ function visit(
     case 'let': visit(node.expression,dependencies,events); return;
     case 'if': visit(node.condition,dependencies,events); node.thenBranch.forEach((child)=>visit(child,dependencies,events)); node.elseBranch?.forEach((child)=>visit(child,dependencies,events)); return;
     case 'expressionStatement': visit(node.expression,dependencies,events); return;
+    case 'identifier': {
+      if(FIELD_SET.has(node.name)){
+        const key='market:current:chart';
+        const dep=dependencies.get(key) ?? {domain:'bar-series',symbol:'current',timeframe:'chart',fields:new Set<string>()};
+        dep.fields.add(node.name);
+        dependencies.set(key,dep);
+      }
+      return;
+    }
     case 'binary': visit(node.left,dependencies,events); visit(node.right,dependencies,events); return;
     case 'unary': visit(node.operand,dependencies,events); return;
     case 'index': visit(node.target,dependencies,events); visit(node.index,dependencies,events); return;
@@ -186,7 +195,9 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
 
   const concreteSymbols=new Set(deps.map((dep)=>dep.symbol).filter((symbol)=>symbol!=='current'));
   const concreteTimeframes=new Set(deps.map((dep)=>dep.timeframe).filter((timeframe)=>timeframe!=='chart'));
-  const multiSymbol=concreteSymbols.size>1;
+  const multiSymbol=concreteSymbols.size>0 && (
+    concreteSymbols.size>1 || deps.some((dep)=>dep.symbol==='current')
+  );
   const multiTimeframe=concreteTimeframes.size>0 && (
     concreteTimeframes.size>1 || deps.some((dep)=>dep.timeframe==='chart')
   );
