@@ -706,10 +706,10 @@ export class CoreSpiritRuntime {
           const symbol=kind==='market' ? String(r.symbol ?? this.executionContext.symbol) : this.executionContext.symbol;
           const timeframe=kind==='timeframe' ? String(r.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
           const field=member as CoreSpiritDataRequest['field'];
-          if(field==='trade') return finish(this.dataResolver?.trade?.() ?? null);
-          if(field==='orderbook') return finish(this.dataResolver?.orderbook?.() ?? null);
-          if(field==='footprint') return finish(this.dataResolver?.footprint?.() ?? null);
-          if(field==='volumeProfile') return finish(this.dataResolver?.volumeProfile?.() ?? null);
+          if(field==='trade') return finish(this.dataResolver?.trade?.(symbol,timeframe) ?? null);
+          if(field==='orderbook') return finish(this.dataResolver?.orderbook?.(symbol,timeframe) ?? null);
+          if(field==='footprint') return finish(this.dataResolver?.footprint?.(symbol,timeframe) ?? null);
+          if(field==='volumeProfile') return finish(this.dataResolver?.volumeProfile?.(symbol,timeframe) ?? null);
           if(['open','high','low','close','volume','time'].includes(field)) {
             const req={symbol,timeframe,field,offset:0};
             const memoKey=`request:${index}:${symbol}:${timeframe}:${field}:0`;
