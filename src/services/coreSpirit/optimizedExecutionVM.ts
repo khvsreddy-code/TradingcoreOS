@@ -43,14 +43,16 @@ function compilePlan(instructions:readonly CoreSpiritIrInstruction[]):CompiledPl
 export class CoreSpiritOptimizedExecutionVM {
   private readonly plans=new WeakMap<object,CompiledPlan>();
   prepare(instructions:readonly CoreSpiritIrInstruction[]):void{if(!this.plans.has(instructions as object))this.plans.set(instructions as object,compilePlan(instructions));}
-  run(instructions:CoreSpiritIrInstruction[],barIndex:number,host:CoreSpiritExecutionVMHost,output:CoreSpiritOutputCollector):void{
+  run(instructions:CoreSpiritIrInstruction[],barIndex:number,host:CoreSpiritExecutionVMHost,output:CoreSpiritOutputCollector,options:{reuseValues?:boolean;dirtyInstructions?:ReadonlySet<number>} = {}):void{
     let plan=this.plans.get(instructions as object);
     if(!plan){plan=compilePlan(instructions);this.plans.set(instructions as object,plan);}
-    const values=plan.store; values.clear(); let pc=0; let steps=0;
+    const values=plan.store; if(options.reuseValues !== true) values.clear(); const dirty=options.dirtyInstructions; let pc=0; let steps=0;
     while(pc<plan.instructions.length){
       if(++steps>host.maxStepsPerBar)throw new Error('execution step limit exceeded');
       if((steps&1023)===0)host.throwIfAborted();
       const ins=plan.instructions[pc];
+      const computational = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'call' || ins.op === 'index';
+      if(dirty && computational && !dirty.has(pc)){ pc += 1; continue; }
       switch(ins.op){
         case 'const':values.set(ins.dest,ins.value);pc+=1;break;
         case 'loadSeries':values.set(ins.dest,host.loadSeries(ins.name,ins.offset));pc+=1;break;
