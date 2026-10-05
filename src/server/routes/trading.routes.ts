@@ -132,6 +132,8 @@ tradingRoutes.get('/:brokerId/market-stream', injectBrokerSession, (req: BrokerS
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-TradingCore-Realtime-Plane', 'legacy-vercel-stream');
+  if (process.env.REALTIME_GATEWAY_URL) res.setHeader('X-TradingCore-Realtime-Migration', '/api/realtime/ticket');
   res.flushHeaders();
   const write = (event: unknown) => {
     try { res.write(`${JSON.stringify(event)}\n`); } catch {}
