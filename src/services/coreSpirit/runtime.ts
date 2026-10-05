@@ -540,6 +540,8 @@ export class CoreSpiritRuntime {
       throwIfAborted: () => this.throwIfAborted(),
       loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
       moveLocal: (source) => this.state.locals[source],
+      loadState: (name) => this.stateStore.getState(name),
+      setState: (name,value) => { this.stateStore.setState(name, value as CoreSpiritValue); this.state.locals[name] = value; },
       setLocal: (name, value, series) => {
         this.state.locals[name] = value;
         if (series) this.pushLocalState(this.seriesRegistry.idFor(name), value as CoreSpiritValue);
@@ -560,6 +562,7 @@ export class CoreSpiritRuntime {
         : (index > barIndex ? null : values.get(instruction.target) as CoreSpiritValue),
       loadIndexedSeriesById: (id, index) => this.seriesRegistry.getValueAt(id, index),
       truthy: (value) => this.truthy(value),
+      eventActive: (eventName) => this.eventActive(eventName),
       emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
       profileInstruction: this.profiler.hooks(),
     };
