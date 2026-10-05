@@ -6,6 +6,7 @@ import type { CoreSpiritExecutionPlan } from './executionPlanner';
 import type { CoreSpiritCompilerPipelineTrace } from './compilerPipeline';
 import type { CoreSpiritIrEmitKind } from './callContract';
 import type { CoreSpiritSpecializedPlan } from './specializedPlan';
+import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 /** CoreSpirit IR is deterministic, serializable, and independent of the chart renderer. */
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
 export type CoreSpiritIrValue = { kind:'const'; value:number|string|boolean|null } | { kind:'series'; name:string; offset:number } | { kind:'local'; name:string };
@@ -66,5 +67,6 @@ export type CoreSpiritIrProgram = {
   optimizationPlan?: CoreSpiritOptimizationPlan;
   executionPlan?: CoreSpiritExecutionPlan;
   specializedPlan?: CoreSpiritSpecializedPlan;
+  tradingNativePlan?: CoreSpiritTradingNativePlan;
   compilerPipeline?: CoreSpiritCompilerPipelineTrace;
 };
