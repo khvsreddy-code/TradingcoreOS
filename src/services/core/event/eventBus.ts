@@ -5,6 +5,9 @@ export type CoreEventMap = {
   'market.tick': { symbol: string; timeframe?: string; tick: Record<string, unknown>; brokerId?: string; receivedAt?: number; sequence?: number; source?: 'live' | 'replay' };
   'market.trade': { symbol: string; timeframe?: string; trade: Record<string, unknown>; sequence?: number; source?: 'live' | 'replay' };
   'market.orderbook': { symbol: string; timestamp: number; bids: Record<string, unknown>[]; asks: Record<string, unknown>[]; sequence?: number };
+  'market.session.open': { symbol: string; timeframe: string; timestamp: number; sessionId: string; sequence?: number };
+  'market.session.close': { symbol: string; timeframe: string; timestamp: number; sessionId: string; sequence?: number };
+  'market.breakout': { symbol: string; timeframe: string; timestamp: number; direction: 'up'|'down'; level: number; sequence?: number };
   'execution.order': { source: string; order: Record<string, unknown>; time: number; sequence?: number };
   'execution.fill': { source: string; fill: Record<string, unknown>; time: number; sequence?: number };
   'market.calculation': { symbol: string; timeframe: string; mode: 'tick' | 'bar'; timestamp: number; barIndex: number; isBarClose: boolean; values: Record<string, number | null>; sequence?: number };
