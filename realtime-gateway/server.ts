@@ -130,7 +130,7 @@ async function touchSubscription(connection: LocalConnection): Promise<void> {
     kind: connection.kind,
     symbols: connection.symbols,
     updatedAt: Date.now(),
-  } satisfies ConnectionRecord), { XX: true, PX: SUB_TTL_MS });
+  } satisfies ConnectionRecord), { PX: SUB_TTL_MS });
 }
 
 async function removeSubscription(connection: LocalConnection): Promise<void> {
@@ -434,8 +434,12 @@ async function shutdown(): Promise<void> {
 async function start(): Promise<void> {
   await redis.connect();
   await subscriber.connect();
-  await subscriber.subscribe(EVENT_CHANNEL, (message) => broadcastEvent(JSON.parse(message)));
-  await subscriber.subscribe(CONTROL_CHANNEL, (message) => { void handleControl(message); });
+  await subscriber.subscribe(EVENT_CHANNEL, (message) => {
+    try { broadcastEvent(JSON.parse(message)); } catch (error) { console.error('[TradingCore realtime event]', error); }
+  });
+  await subscriber.subscribe(CONTROL_CHANNEL, (message) => {
+    void handleControl(message).catch((error) => console.error('[TradingCore realtime control]', error));
+  });
   server.listen(PORT, '0.0.0.0', () => {
     console.log('[TradingCore realtime] gateway listening on :' + PORT + ' instance=' + INSTANCE_ID);
   });
