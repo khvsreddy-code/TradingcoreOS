@@ -281,8 +281,8 @@ export function getCoreSpiritSemanticTokens(source: string): CoreSpiritSemanticT
   const lines=source.replace(/\r/g,'').split('\n');
   lines.forEach((line,lineIndex)=>{
     const comment=line.indexOf('//'); if(comment>=0) out.push({line:lineIndex,column:comment,length:line.length-comment,token:'comment'});
-    const re=/\b(?:let|if|else|true|false)\b|\b(?:open|high|low|close|volume|time)\b|\b(?:[A-Za-z_][A-Za-z0-9_]*)\b|\b(?:\d+(?:\.\d+)?)\b|"(?:[^"\\]|\\.)*"/g;
-    let m:RegExpExecArray|null; while((m=re.exec(line))){ const text=m[0]; if(comment>=0 && m.index>=comment) break; let token:'keyword'|'function'|'series'|'number'|'string'|'identifier'='identifier'; if(/^(let|if|else|true|false|when|show|model|automate|crossesAbove|crossesBelow)$/.test(text)) token='keyword'; else if(/^(open|high|low|close|volume|time)$/.test(text)) token='series'; else if(/^\d/.test(text)) token='number'; else if(/^"/.test(text)) token='string'; else if(/\s*\(/.test(line.slice(m.index+text.length))) token='function'; out.push({line:lineIndex,column:m.index,length:text.length,token}); }
+    const re=/@(?:causal|noncausal|futureDependent|repainting|realtimeSafe|lookahead)|\b(?:let|if|else|true|false|on)\b|\b(?:open|high|low|close|volume|time)\b|\b(?:[A-Za-z_][A-Za-z0-9_]*)\b|\b(?:\d+(?:\.\d+)?)\b|"(?:[^"\\]|\\.)*"/g;
+    let m:RegExpExecArray|null; while((m=re.exec(line))){ const text=m[0]; if(comment>=0 && m.index>=comment) break; let token:'keyword'|'function'|'series'|'number'|'string'|'identifier'='identifier'; if(/^@/.test(text) || /^(let|if|else|true|false|when|show|model|automate|on|crossesAbove|crossesBelow)$/.test(text)) token='keyword'; else if(/^(open|high|low|close|volume|time)$/.test(text)) token='series'; else if(/^\d/.test(text)) token='number'; else if(/^"/.test(text)) token='string'; else if(/\s*\(/.test(line.slice(m.index+text.length))) token='function'; out.push({line:lineIndex,column:m.index,length:text.length,token}); }
   });
   return out;
 }
