@@ -34,7 +34,7 @@ export function parseProductionPredictionInput(body: any): ProductionPredictionI
 
 export async function runProductionPrediction(
   input: ProductionPredictionInput,
-  timeoutMs = API_LATENCY_BUDGET_MS.predictionSync,
+  timeoutMs: number = API_LATENCY_BUDGET_MS.predictionSync,
 ) {
   const serviceUrl = String(process.env.ML_SERVICE_URL || '').trim().replace(/\/$/, '');
   if (!serviceUrl) {
