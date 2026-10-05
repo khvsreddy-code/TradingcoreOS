@@ -107,7 +107,8 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name.startsWith('array<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
-  if (['trade','orderbook','footprint','volume-profile'].includes(name)) return name as CoreSpiritType;
+  if (['trade','orderbook','footprint'].includes(name)) return name as CoreSpiritType;
+  if (name === 'volumeProfile' || name === 'volume-profile') return 'volume-profile';
   return `udt:${name}`;
 }
 
