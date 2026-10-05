@@ -14,6 +14,10 @@ import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 import { newsRoutes } from './src/server/routes/news.routes.js';
+import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
+import { realtimeTicketRoutes } from './src/server/routes/realtime-ticket.routes.js';
+import { requestDeadline } from './src/server/middleware/requestDeadline.js';
+import { sharedRedisConfigured } from './src/server/coordination/UpstashRedisRest.js';
 import { requestContext, type TradingCoreRequest } from './src/server/middleware/requestContext.js';
 import { createRateLimiter } from './src/server/middleware/rateLimit.js';
 import { recordRequest, getRequestMetrics } from './src/server/observability/requestMetrics.js';
@@ -22,6 +26,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(requestContext);
+app.use(requestDeadline);
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   next();
@@ -62,10 +67,14 @@ app.use((req, res, next) => {
 });
 
 function healthChecks() {
+  const coordinationRequired = process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true';
   return {
     database: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     encryption: Boolean(process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.length >= 32),
     fyers: Boolean(process.env.FYERS_CLIENT_ID && process.env.FYERS_CLIENT_SECRET && process.env.FYERS_REDIRECT_URI),
+    coordination: sharedRedisConfigured(),
+    coordinationRequired,
+    realtimeGateway: Boolean(process.env.REALTIME_GATEWAY_URL && process.env.REALTIME_GATEWAY_SHARED_SECRET),
   };
 }
 
@@ -75,7 +84,7 @@ app.get('/api/health/live', (_req, res) => {
 
 app.get('/api/health/ready', (_req, res) => {
   const checks = healthChecks();
-  const ready = checks.database && checks.encryption && checks.fyers;
+  const ready = checks.database && checks.encryption && checks.fyers && (!checks.coordinationRequired || checks.coordination);
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', checks, timestamp: new Date().toISOString() });
 });
 
@@ -86,7 +95,7 @@ app.get('/api/health/diagnostics', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   const checks = healthChecks();
-  const ready = checks.database && checks.encryption && checks.fyers;
+  const ready = checks.database && checks.encryption && checks.fyers && (!checks.coordinationRequired || checks.coordination);
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', version: '0.5.0', checks, timestamp: new Date().toISOString() });
 });
 
@@ -111,6 +120,8 @@ app.use('/api/trading', brokerMarketDataRoutes);
 app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
+app.use('/api/jobs', backgroundJobRoutes);
+app.use('/api/realtime/ticket', realtimeTicketRoutes);
 app.use('/api', newsRoutes);
 
 app.use('/api', (req, res) => {

@@ -1,6 +1,6 @@
 # TradingCoreOS / CoreSpirit Build Tracker
 
-**Last updated:** 2026-10-04  
+**Last updated:** 2026-10-05  
 **Architecture lock:** CoreSpirit-first scripting + Vela chart engine + TCO-owned data/compute/broker systems. PineScript/PineTS compatibility is not part of the product architecture.
 
 ## Current performance path
@@ -173,3 +173,109 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 ## v94 implementation record
 
 The chart data plane established the zero-copy canonical chart data plane at the Vela boundary, with typed column transport and retained GPU-buffer reuse for identity-chart rendering.
+
+## v135 — Vela capability splitting and eager-import removal
+
+### 14. Vela renderer capability graph
+- [x] Audited the Vela fork: 384 source files with large renderer, engine, workspace, drawing and settings modules.
+- [x] Confirmed the native renderer statically pulled `UserDrawingController` and therefore the full drawing implementation graph.
+- [x] `UserDrawingController` is now type-only from `NativeRenderer`; concrete drawing implementation is loaded with a dynamic import.
+- [x] Added a lazy proxy so Vela's drawing port remains synchronous to callers while the capability loads on first use.
+- [x] Removed runtime `VelaWorkspace` re-export from the chart facade.
+- [x] Added `velaWorkspaceLoader.ts` as the explicit on-demand workspace capability.
+- [x] Added CI/source contracts protecting these capability boundaries.
+- [~] Advanced drawing families are still grouped inside `vendor/vela/src/core/drawings/registry.ts`.
+- [ ] Split the drawing registry into lean-core and advanced family chunks (Fibonacci, Gann, harmonic/Elliott/pattern, volume-profile/measurements, etc.).
+- [ ] Lazy-load optional renderer modules such as VPVR/settings/other heavyweight chrome where runtime semantics permit.
+
+### 15. Evidence gate
+- [ ] Capture the post-split landing/dashboard/live gzip graph from a successful Vercel or local production build.
+- [ ] Capture a browser network trace proving drawing-capability JS is absent before Draw/drawing UI is opened.
+- [ ] Capture a second trace proving only the requested drawing family chunk loads when advanced tools are opened.
+## v134 — regional topology lock and frontend startup split
+
+### 12. Vercel / Supabase regional placement
+- [x] Vercel Function region remains locked to `bom1` (Mumbai).
+- [x] Connected Supabase project is confirmed in `ap-south-1` (Mumbai).
+- [x] Documentation explicitly rejects an indiscriminate Edge migration for database-bound trading APIs.
+- [x] Realtime gateway deployment target is Mumbai/lowest-latency Indian region, subject to measured gateway↔FYERS performance.
+- [ ] Capture measured browser→gateway→FYERS and gateway→Redis latency from the production Indian network path.
+
+### 13. Frontend bundle architecture
+- [x] `TradingCoreRuntime` is removed from the static `App.tsx` dependency graph.
+- [x] Landing page is isolated behind a lazy route root.
+- [x] Below-fold landing sections are deferred instead of downloaded with the first viewport.
+- [x] Auth modal and broker/legal callback surfaces are on-demand chunks.
+- [x] Vite manifest and explicit vendor chunk groups are enabled.
+- [x] Graph-aware gzip budgets cover landing, login, dashboard and live route roots.
+- [~] Strategic target is **150–250 KB gzip** for initial startup and **<300 KB gzip** for live workspace critical JS; current CI ceilings are staged above target pending measured build output.
+- [ ] Tighten staged ceilings to the strategic targets after the next build report proves the new graph.
+- [ ] Add authenticated browser evidence for route startup, route-to-route loading and live workspace JS transfer.
+
+## v133 — request/realtime plane separation and distributed coordination
+
+### 9. Vercel request-plane hardening
+- [x] Catch-all `api/index.ts` max duration reduced from 300s to 15s.
+- [x] P0 broker/API calls carry explicit absolute deadlines.
+- [x] Authentication validation has a bounded upstream deadline.
+- [x] Long-running production prediction supports durable asynchronous execution.
+- [x] HTTP market/order stream fallback has a bounded lease.
+
+### 10. Distributed coordination
+- [x] Upstash Redis REST coordination client added without blocking the hot path on a long-lived TCP connection.
+- [x] Broker request admission/rate budgeting can coordinate across Vercel instances.
+- [x] Broker-session short cache can be shared across instances while Supabase remains the durable source of truth.
+- [x] Realtime ownership/subscription metadata uses Redis.
+- [x] Realtime cross-instance event fanout uses Redis Pub/Sub.
+
+### 11. Dedicated realtime plane
+- [x] Signed, short-lived browser realtime tickets.
+- [x] Dedicated Node WebSocket gateway with Redis owner election.
+- [x] One FYERS broker socket owner per user across gateway instances.
+- [x] Browser market feed prefers the dedicated gateway and falls back to the bounded legacy stream.
+- [~] Production realtime gateway is not yet provisioned/connected to the Vercel project; environment variables are intentionally not fabricated.
+
+### Remaining rollout gates
+1. Provision a Redis/Upstash database and populate the request-plane Redis credentials in Vercel.
+2. Deploy `realtime-gateway/server.ts` as a long-lived service with the same Redis and shared ticket secret.
+3. Set `REALTIME_GATEWAY_URL` in Vercel, validate the browser gateway path, and only then set `TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED=true`.
+4. After cutover, disable the legacy `/market-stream` and `/order-stream` HTTP bridges rather than retaining two competing realtime topologies.
+
+
+
+## v136 — Vela drawing registry capability split
+
+- [x] Keep the common drawing registry free of Fibonacci/Gann/pattern/volume-profile implementation imports.
+- [x] Move advanced drawing families into separate registry modules.
+- [x] Dynamically load advanced families only when the drawings toolbar is shown.
+- [x] Preserve custom toolbar definitions during lazy catalog hydration.
+- [x] Add a source contract test for the module-graph boundary.
+- [~] Advanced families are still hydrated together when the drawing toolbar is shown.
+- [ ] Load a family only when its flyout is opened, then prove the network trace.
+
+
+## v137 — CoreSpirit compiler pipeline
+
+- [x] Make the source → CST → AST → semantic-analysis path explicit in compiler contracts.
+- [x] Build and attach an AST-level semantic dependency graph.
+- [x] Emit one IR artifact with semantic graph + source provenance metadata.
+- [x] Record compiler stage order in `compilerPipeline`.
+- [x] Preserve the existing IR v1 / CoreSpiritExecutionVM contract.
+- [x] Add IR validation for pipeline/graph/optimizer/execution-plan metadata.
+- [x] Runtime continues to execute only the canonical compiled artifact.
+
+## v138 — CoreSpirit first-class optimizer
+
+- [x] Keep constant folding.
+- [x] Add safe pure common-subexpression elimination.
+- [x] Reuse duplicate historical series reads such as repeated `close`.
+- [x] Keep stateful indicator calls out of generic CSE.
+- [x] Emit per-bar cost model: pure/effect/stateful work, history reads, saved work and register pressure.
+- [x] Feed optimized pure-work cost into the execution planner.
+- [x] Preserve a single chronological traversal.
+- [x] Runtime consumes the compiler-produced series-fusion plan.
+- [x] Add a regression contract covering the full compiler → optimizer → execution-plan chain.
+- [~] The optimizer is still conservative: no generic state-identity analysis for shareable stateful calls.
+- [ ] Add DAG critical-path/fan-out scheduling and a richer cost model.
+- [ ] Add representative 5k/50k/500k-bar benchmark evidence.
+- [ ] Prove family-level Vela drawing requests and CoreSpirit optimized runtime speedups in browser traces.

@@ -32,6 +32,7 @@ export async function requireUser(req: AuthenticatedRequest, res: Response, next
   try {
     const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: supabaseKey },
+      signal: AbortSignal.timeout(2_000),
     });
     const user = await response.json();
     if (!response.ok || !user?.id) {

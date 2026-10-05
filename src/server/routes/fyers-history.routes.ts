@@ -3,6 +3,7 @@ import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 
 /**
  * Safe FYERS historical-data route.
@@ -122,10 +123,11 @@ function normalize(rows: any[], limit: number): any[] {
  * not presented as historical data; subsequent websocket ticks build the live
  * candle normally in the browser.
  */
-async function fallbackQuoteCandle(accessToken: string, symbol: string): Promise<any[]> {
+async function fallbackQuoteCandle(accessToken: string, symbol: string, signal: AbortSignal): Promise<any[]> {
   const params = new URLSearchParams({ symbols: symbol });
   const response = await fetch(`https://api-t1.fyers.in/data/quotes?${params.toString()}`, {
     headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+    signal,
   });
   const text = await response.text();
   let payload: any;
@@ -204,7 +206,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const task = withBrokerRequestGate('fyers', accessToken, async () => {
+    const requestSignal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
+    const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
       const minuteResolution = Number(resolution);
       const barsPerDay = Number.isFinite(minuteResolution) && minuteResolution > 0 ? (6.25 * 60) / minuteResolution : 1;
@@ -227,6 +230,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       });
       const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
         headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
+        signal,
       });
       const text = await response.text();
       let payload: any;
@@ -237,14 +241,14 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
       const dataLength = isColumnarData(data) ? data.time.length : data.length;
       if (!beforeDate && dataLength < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey);
+        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
         if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
       }
       const finalLength = isColumnarData(data) ? data.time.length : data.length;
       if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    });
+    }, requestSignal);
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireUser } from '../auth/requireUser.js';
+import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 
 type Row = Record<string, any>;
 
@@ -49,7 +50,7 @@ async function loadMasters(): Promise<Row[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.rows;
   if (inflight) return inflight;
   inflight = Promise.all(MASTERS.map(async (url) => {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(API_LATENCY_BUDGET_MS.symbolSearch) });
     if (!response.ok) throw new Error(`FYERS symbol master failed (${response.status})`);
     return normalize(await response.json());
   })).then((parts) => {

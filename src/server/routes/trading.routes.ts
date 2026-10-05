@@ -12,6 +12,7 @@ import { getErrorMessage, getErrorStatus, isRecord } from '../../services/bounda
 import { createHmac, createHash, randomUUID } from 'node:crypto';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
+import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 
 export const tradingRoutes = Router();
 
@@ -131,12 +132,24 @@ tradingRoutes.get('/:brokerId/market-stream', injectBrokerSession, (req: BrokerS
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-TradingCore-Realtime-Plane', 'legacy-vercel-stream');
+  if (process.env.REALTIME_GATEWAY_URL) res.setHeader('X-TradingCore-Realtime-Migration', '/api/realtime/ticket');
   res.flushHeaders();
   const write = (event: unknown) => {
     try { res.write(`${JSON.stringify(event)}\n`); } catch {}
   };
+  res.setHeader('X-TradingCore-Stream-Lease-Ms', String(API_LATENCY_BUDGET_MS.streamLease));
   const unsubscribe = FyersMarketDataTransport.subscribe(req.tradingCoreUserId!, req.accessToken, instrumentKeys, write);
-  req.on('close', unsubscribe);
+  const leaseTimer = setTimeout(() => {
+    write({ type: 'status', status: 'disconnected', reason: 'stream_lease_expired' });
+    unsubscribe();
+    if (!res.writableEnded) res.end();
+  }, API_LATENCY_BUDGET_MS.streamLease);
+
+  req.on('close', () => {
+    clearTimeout(leaseTimer);
+    unsubscribe();
+  });
 });
 
 tradingRoutes.get('/:brokerId/option-chain', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
@@ -158,6 +171,7 @@ async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: Brok
   const signature = createHmac('sha256', gatewaySecret).update(signingInput).digest('hex');
   const response = await fetch(`${gatewayUrl}/v1/fyers/order`, {
     method: 'POST',
+    signal: AbortSignal.timeout(API_LATENCY_BUDGET_MS.order),
     cache: 'no-store',
     headers: {
       'content-type': 'application/json',

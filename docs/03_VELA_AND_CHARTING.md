@@ -4,6 +4,83 @@ Vela is TradingCoreOS's sole charting/rendering engine. Application code crosses
 
 ## Vendor boundary
 
+## Vela capability architecture — v135
+
+The vendored Vela fork currently contains **384 source files**. The bundle risk is not just file count; the renderer composition root can make optional chart capabilities part of the same JavaScript graph.
+
+The audited hotspots include:
+
+| Capability | Largest module | Approx. source size |
+| --- | --- | ---: |
+| Native renderer | `renderers/native/NativeRenderer.ts` | 258 KB |
+| Engine orchestration | `core/engine/EngineOrchestrator.ts` | 181 KB |
+| Multi-chart workspace | `workspace/VelaWorkspace.ts` | 135 KB |
+| Drawing paint | `renderers/native/drawings/DrawingPainter.ts` | 83 KB |
+| Chart-cell workspace | `workspace/ChartCell.ts` | 82 KB |
+| Settings UI | `renderers/native/chrome/SettingsDialog.ts` | 78 KB |
+| WebGL2 backend | `renderers/native/backend/WebGL2Backend.ts` | 64 KB |
+
+### Critical import leak found
+
+```
+basic chart
+  → NativeRenderer
+  → UserDrawingController
+  → DrawingPainter / Interaction / Toolbar / Settings
+  → drawing registry
+  → dozens of drawing implementations
+```
+
+The drawing registry statically imports Fibonacci, Gann, harmonic, Elliott, geometry, markup and volume-profile implementations. A trader opening a basic candle chart should not pay for those classes.
+
+The renderer boundary has therefore been changed:
+
+- `NativeRenderer` uses a **type-only** `UserDrawingController` reference.
+- The concrete controller is loaded with a **dynamic import** when `userDrawingsPort` is first requested.
+- A lazy proxy preserves the existing synchronous drawing-port contract while the implementation chunk loads.
+- `velaChartFacade.ts` no longer re-exports `VelaWorkspace` as a runtime value.
+- `velaWorkspaceLoader.ts` exposes the multi-chart workspace as an explicit on-demand capability.
+
+### Locked capability layers
+
+```
+CORE
+  auth / routing / theme / lightweight shell
+
+TRADING
+  chart renderer / Vela native core / broker / realtime
+
+RESEARCH
+  CoreSpirit editor / models / backtest-replay
+
+ADVANCED
+  drawing registry / workspace layouts / automation / scanners / ML
+```
+
+The production TCO chart path is intentionally built through `velaChartFacade` + `NativeRenderer`, not through the Vela SDK composition root, so the application does not eagerly import Vela's multi-provider SDK catalog or multi-chart workspace just to display a single chart.
+
+### Remaining Vela split
+
+The current change removes the highest-confidence eager drawing/workspace edges. It does **not** yet claim that all advanced Vela code is independently chunked.
+
+Next gates:
+
+```
+drawing capability
+  ├─ lean-core tools
+  ├─ Fibonacci
+  ├─ Gann
+  ├─ harmonics / Elliott / patterns
+  └─ volume-profile / measurement
+
+renderer optional capabilities
+  ├─ VPVR
+  ├─ settings/chrome
+  └─ other feature-specific UI
+```
+
+Advanced families should be independently loaded only when their UI or drawing type is requested. The acceptance criterion is network evidence: a basic chart has no drawing-family JavaScript request until the user opens the relevant capability.
+
 TCO feature code crosses into the vendored Vela fork only through the TCO chart facade/provider boundary. Vela renderer internals stay behind that seam.
 
 ## Boundary
@@ -179,3 +256,38 @@ The canonical path still prefers typed columns and zero-object rendering wheneve
 - Panels opens the TCO watchlist; Journal is a first-class topbar action.
 - Alt drawing-wheel selection is royal purple; non-live product accent is #d3ebf4.
 - Vela provider registry, columnar feed, retained tape, panel dock, persistence and telemetry remain the preferred seams.
+
+
+## v136 — drawing registry capability split
+
+The first drawing boundary made `UserDrawingController` lazy, but its registry was still one static catalog. The deeper split is now explicit:
+
+```text
+basic chart
+  → NativeRenderer
+      → no drawing controller at startup
+
+drawing capability
+  → UserDrawingController
+      → core registry (common lines / annotations)
+      → optional family chunks
+           ↳ channels / pitchforks
+           ↳ Fibonacci / Gann
+           ↳ patterns / Elliott / harmonics
+           ↳ shapes / stamps
+           ↳ measurement / position / magnifier
+           ↳ anchored VWAP / fixed-range volume profile
+```
+
+`vendor/vela/src/core/drawings/registry.ts` no longer statically imports advanced drawing implementations. `loadAdvancedDrawingCatalog()` dynamically loads the family registries only when the drawings toolbar capability is shown. Custom toolbar definitions remain authoritative.
+
+This is a dependency-graph boundary, not a claim that every individual drawing is independently requested. The family chunks are all optional; a later refinement can load an individual family only when that flyout is opened.
+
+### Evidence gate
+
+- [x] Core registry has no static Fibonacci/Gann/pattern/volume-profile imports.
+- [x] Channels, Fibonacci/Gann and patterns/measurement/volume tools are separated into dynamic modules.
+- [x] Toolbar visibility is the capability trigger.
+- [x] Source contract protects the lazy boundary.
+- [ ] Browser trace proving no advanced drawing JS request on chart startup and family requests only after drawings UI.
+- [ ] Load only the family whose flyout is opened.

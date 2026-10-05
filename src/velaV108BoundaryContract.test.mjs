@@ -29,6 +29,7 @@ const directVendorImports = sourceFiles.filter((p) => /from ['"][^'"]*vendor\/ve
 const allowed = new Set([
   path.join(root, 'src/services/core/chart/velaChartFacade.ts'),
   path.join(root, 'src/services/core/chart/velaNativeChartRenderer.ts'),
+  path.join(root, 'src/services/core/chart/velaWorkspaceLoader.ts'),
 ]);
 for (const file of directVendorImports) if (!allowed.has(file)) throw new Error(`Vela import crossed facade boundary: ${path.relative(root, file)}`);
 

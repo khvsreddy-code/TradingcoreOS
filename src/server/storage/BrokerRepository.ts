@@ -1,5 +1,6 @@
 import { EncryptedPayload } from '../encryption/EncryptionService.js';
 import { createClient } from '@supabase/supabase-js';
+import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
 
 export interface BrokerSessionRecord {
   brokerId: string;
@@ -43,6 +44,10 @@ export class BrokerRepository {
 
   private static getKey(session: Pick<BrokerSessionRecord, 'userId' | 'brokerId'>): string {
     return `${session.userId}:${session.brokerId.toLowerCase()}`;
+  }
+
+  private static getSharedCacheKey(userId: string, brokerId: string): string {
+    return `tco:broker:session:${userId}:${brokerId.toLowerCase()}`;
   }
 
   private static fromRow(row: any): BrokerSessionRecord {
@@ -90,6 +95,15 @@ export class BrokerRepository {
 
     if (!this.supabase) this.devStore().set(key, session);
     this.sessionCache.set(key, { session, expiresAt: Date.now() + this.SESSION_CACHE_MS });
+
+    const shared = getSharedRedis();
+    if (shared.configured) {
+      await shared.set(
+        this.getSharedCacheKey(session.userId, session.brokerId),
+        JSON.stringify(session),
+        { px: this.SESSION_CACHE_MS },
+      ).catch(() => undefined);
+    }
   }
 
   public static async getSession(brokerId: string, userId: string): Promise<BrokerSessionRecord | undefined> {
@@ -98,6 +112,21 @@ export class BrokerRepository {
     const key = `${userId}:${brokerId.toLowerCase()}`;
     const cached = this.sessionCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.session;
+
+    const shared = getSharedRedis();
+    if (shared.configured) {
+      const raw = await shared.get<string>(this.getSharedCacheKey(userId, brokerId)).catch(() => null);
+      if (raw) {
+        try {
+          const session = JSON.parse(raw) as BrokerSessionRecord;
+          this.sessionCache.set(key, { session, expiresAt: Date.now() + this.SESSION_CACHE_MS });
+          return session;
+        } catch {
+          // Ignore malformed shared-cache entries and recover from the durable store.
+        }
+      }
+    }
+
     if (!this.supabase) {
       const session = this.devStore().get(key);
       this.sessionCache.set(key, { session, expiresAt: Date.now() + this.SESSION_CACHE_MS });
@@ -116,11 +145,15 @@ export class BrokerRepository {
     }
     if (!data) {
       this.sessionCache.set(key, { session: undefined, expiresAt: Date.now() + this.SESSION_CACHE_MS });
+      if (shared.configured) await shared.del(this.getSharedCacheKey(userId, brokerId)).catch(() => undefined);
       return undefined;
     }
 
     const session = this.fromRow(data);
     this.sessionCache.set(key, { session, expiresAt: Date.now() + this.SESSION_CACHE_MS });
+    if (shared.configured) {
+      await shared.set(this.getSharedCacheKey(userId, brokerId), JSON.stringify(session), { px: this.SESSION_CACHE_MS }).catch(() => undefined);
+    }
     return session;
   }
 
@@ -160,11 +193,13 @@ export class BrokerRepository {
         .eq('broker_id', brokerId.toLowerCase());
       if (error) throw new Error(`Unable to update broker session: ${error.message}`);
       this.sessionCache.delete(`${userId}:${brokerId.toLowerCase()}`);
+      await getSharedRedis().del(this.getSharedCacheKey(userId, brokerId)).catch(() => undefined);
       return;
     }
     const session = this.devStore().get(`${userId}:${brokerId.toLowerCase()}`);
     if (session) session.status = status;
     this.sessionCache.delete(`${userId}:${brokerId.toLowerCase()}`);
+    await getSharedRedis().del(this.getSharedCacheKey(userId, brokerId)).catch(() => undefined);
   }
 
   public static async deleteSession(brokerId: string, userId: string): Promise<boolean> {
@@ -174,6 +209,7 @@ export class BrokerRepository {
     const deletedFromMemory = this.devStore().delete(key);
 
     this.sessionCache.delete(key);
+    await getSharedRedis().del(this.getSharedCacheKey(userId, brokerId)).catch(() => undefined);
     if (!this.supabase) return deletedFromMemory;
 
     const { error } = await this.supabase

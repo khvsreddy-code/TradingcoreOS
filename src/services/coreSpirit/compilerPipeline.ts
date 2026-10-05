@@ -39,3 +39,39 @@ export function createCoreSpiritCompilationUnit(
   ];
   return { source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
 }
+
+
+export const CORE_SPIRIT_COMPILER_PIPELINE_VERSION = 1 as const;
+export const CORE_SPIRIT_COMPILER_STAGE_ORDER = Object.freeze([
+  'source',
+  'cst',
+  'ast',
+  'semantic-analysis',
+  'semantic-graph',
+  'typed-ir',
+  'dependency-graph',
+  'optimizer',
+  'execution-plan',
+] as const);
+export type CoreSpiritCompilerStage = typeof CORE_SPIRIT_COMPILER_STAGE_ORDER[number];
+
+export type CoreSpiritCompilerPipelineTrace = Readonly<{
+  version: typeof CORE_SPIRIT_COMPILER_PIPELINE_VERSION;
+  stages: readonly CoreSpiritCompilerStage[];
+  runtimeBoundary: 'CoreSpiritExecutionVM';
+}>;
+
+export function makeCoreSpiritCompilerPipelineTrace(): CoreSpiritCompilerPipelineTrace {
+  return Object.freeze({
+    version: CORE_SPIRIT_COMPILER_PIPELINE_VERSION,
+    stages: CORE_SPIRIT_COMPILER_STAGE_ORDER,
+    runtimeBoundary: 'CoreSpiritExecutionVM' as const,
+  });
+}
+
+export function validateCoreSpiritCompilerPipelineTrace(value: unknown): value is CoreSpiritCompilerPipelineTrace {
+  const trace=value as CoreSpiritCompilerPipelineTrace|undefined;
+  if(!trace || trace.version!==CORE_SPIRIT_COMPILER_PIPELINE_VERSION || trace.runtimeBoundary!=='CoreSpiritExecutionVM' || !Array.isArray(trace.stages)) return false;
+  return trace.stages.length===CORE_SPIRIT_COMPILER_STAGE_ORDER.length &&
+    trace.stages.every((stage,index)=>stage===CORE_SPIRIT_COMPILER_STAGE_ORDER[index]);
+}

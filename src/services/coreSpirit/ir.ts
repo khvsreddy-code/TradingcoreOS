@@ -1,5 +1,9 @@
 import type { CoreSpiritGraphBundle } from './semanticGraph';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
+import type { CoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
+import type { CoreSpiritOptimizationPlan } from './optimizer';
+import type { CoreSpiritExecutionPlan } from './executionPlanner';
+import type { CoreSpiritCompilerPipelineTrace } from './compilerPipeline';
 import type { CoreSpiritIrEmitKind } from './callContract';
 /** CoreSpirit IR is deterministic, serializable, and independent of the chart renderer. */
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
@@ -47,4 +51,18 @@ export function coreSpiritSourceMapFromInstructions(
   };
 }
 
-export type CoreSpiritIrProgram = { version:1; sourceId:string; entry:CoreSpiritIrBlock; locals:string[]; maxLookback:number; diagnostics:string[]; sourceMap:CoreSpiritSourceMap; graphs?: CoreSpiritGraphBundle; surface?: CoreSpiritSurfaceMetadata };
+export type CoreSpiritIrProgram = {
+  version:1;
+  sourceId:string;
+  entry:CoreSpiritIrBlock;
+  locals:string[];
+  maxLookback:number;
+  diagnostics:string[];
+  sourceMap:CoreSpiritSourceMap;
+  graphs?: CoreSpiritGraphBundle;
+  surface?: CoreSpiritSurfaceMetadata;
+  semanticDependencyGraph?: CoreSpiritSemanticDependencyGraph;
+  optimizationPlan?: CoreSpiritOptimizationPlan;
+  executionPlan?: CoreSpiritExecutionPlan;
+  compilerPipeline?: CoreSpiritCompilerPipelineTrace;
+};

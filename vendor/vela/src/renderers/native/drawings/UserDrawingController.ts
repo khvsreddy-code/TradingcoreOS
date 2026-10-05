@@ -12,7 +12,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { deserializeDrawing, getDrawingType, resetDrawingSettings, Callout, Magnifier, TextLabel } from '../../../core/drawings';
+import { deserializeDrawing, getDrawingType, resetDrawingSettings, loadAdvancedDrawingCatalog, defaultToolbar, Callout, Magnifier, TextLabel } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -140,6 +140,8 @@ export class UserDrawingController implements IDrawingsRendererPort {
      *  shrinking selection does with it. */
     private popupMulti = false;
     private readonly toolbar: DrawingToolbar;
+    private toolbarDefinition: ToolbarDefinition = defaultToolbar();
+    private customToolbar = false;
 
     constructor(
         private readonly toolbarHost: HTMLElement, // the left gutter (docked toolbar)
@@ -187,12 +189,22 @@ export class UserDrawingController implements IDrawingsRendererPort {
 
     // ── IDrawingsRendererPort (commands down) ──
     setToolbar(def: ToolbarDefinition): void {
+        this.customToolbar = true;
+        this.toolbarDefinition = def;
         this.toolbar.setDefinition(def);
     }
 
     showToolbar(visible: boolean): void {
         this.toolbarVisible = visible;
         this.toolbar.setVisible(visible && !this.mobileLayout);
+        if (visible) {
+            void loadAdvancedDrawingCatalog().then(() => {
+                if (!this.customToolbar) {
+                    this.toolbarDefinition = defaultToolbar();
+                    this.toolbar.setDefinition(this.toolbarDefinition);
+                }
+            });
+        }
         this.syncToolbarGutter(); // reserve/release the left gutter so the bar never overlaps the plot
     }
 

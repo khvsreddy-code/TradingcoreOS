@@ -50,6 +50,9 @@ export interface CoreSpiritWorkloadEstimate {
   timeframes: number;
   bars: number;
   workUnits: number;
+  estimatedBarWork: number;
+  estimatedPureBarWork: number;
+  estimatedSavedBarWork: number;
 }
 
 export interface CoreSpiritExecutionBatch {
@@ -84,6 +87,9 @@ export interface CoreSpiritExecutionPlan {
   lanes: Readonly<{ hot: readonly string[]; warm: readonly string[]; cold: readonly string[] }>;
   barriers: readonly string[];
   seriesFusion: CoreSpiritSeriesFusionPlan;
+  chronologicalPasses: 1;
+  sourceReadReuse: number;
+  estimatedSavedWorkUnits: number;
 }
 
 export const CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS: readonly CoreSpiritComputeBackendProfile[] = Object.freeze([
@@ -118,6 +124,9 @@ export function estimateCoreSpiritWorkload(
   const pureInstructionCount = nodes.filter(node => node.pure && !node.effectful).length;
   const effectInstructionCount = nodes.filter(node => node.effectful).length;
   const vectorizableInstructionCount = nodes.filter(node => node.pure && !node.effectful && ['binary','unary','call','loadSeries','index'].includes(node.op)).length;
+  const estimatedPureBarWork = program.optimizationPlan?.cost.pureBarWork ?? Math.max(1, pureInstructionCount);
+  const estimatedBarWork = program.optimizationPlan?.cost.estimatedBarWork ?? Math.max(1, pureInstructionCount + effectInstructionCount * 0.25);
+  const estimatedSavedBarWork = program.optimizationPlan?.cost.estimatedSavedBarWork ?? 0;
   return {
     instructionCount: nodes.length,
     pureInstructionCount,
@@ -126,7 +135,10 @@ export function estimateCoreSpiritWorkload(
     symbols,
     timeframes,
     bars,
-    workUnits: Math.max(1, pureInstructionCount) * symbols * timeframes * bars,
+    workUnits: Math.max(1, estimatedPureBarWork) * symbols * timeframes * bars,
+    estimatedBarWork,
+    estimatedPureBarWork,
+    estimatedSavedBarWork,
   };
 }
 
@@ -196,7 +208,7 @@ export function planCoreSpiritExecution(
   const seriesFusion = planCoreSpiritSeriesFusion(program);
 
   const explanation: string[] = [
-    `workload=${workload.workUnits} units (${workload.symbols} symbols × ${workload.timeframes} timeframes × ${workload.bars} bars × ${Math.max(1, workload.pureInstructionCount)} pure instructions)`,
+    `workload=${workload.workUnits.toFixed(2)} units (${workload.symbols} symbols × ${workload.timeframes} timeframes × ${workload.bars} bars × ${workload.estimatedPureBarWork.toFixed(2)} optimized pure work/bar)`,
   ];
 
   let strategy: CoreSpiritExecutionPlan['strategy'];
@@ -263,6 +275,7 @@ export function planCoreSpiritExecution(
     strategy,
   });
   explanation.push(`execution lanes: hot=${lanes.hot.length}, warm=${lanes.warm.length}, cold=${lanes.cold.length}`);
+  explanation.push(`chronological traversal: 1 pass; estimated optimizer savings=${workload.estimatedSavedBarWork.toFixed(2)} work/bar`);
   if (seriesFusion.groups.length) explanation.push(`series fusion: ${seriesFusion.groups.length} group(s), ${seriesFusion.fusedInstructionCount} instruction(s) lowered to single-pass kernels`);
   return {
     version: 1,
@@ -277,6 +290,9 @@ export function planCoreSpiritExecution(
     lanes,
     barriers: effectNodes.map(node => node.id),
     seriesFusion,
+    chronologicalPasses:1,
+    sourceReadReuse: program.optimizationPlan?.cost.sourceReadReuse ?? 0,
+    estimatedSavedWorkUnits: workload.estimatedSavedBarWork * workload.symbols * workload.timeframes * workload.bars,
   };
 }
 

@@ -1,4 +1,5 @@
 import { withBrokerRequestGate } from '../../brokers/BrokerRequestGate.js';
+import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
 
 export class FyersApiError extends Error {
   status: number;
@@ -42,30 +43,32 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 export class FyersApiClient {
   constructor(private readonly accessToken: string, private readonly appId = process.env.FYERS_CLIENT_ID || '') {}
 
-  async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(DATA_BASE, path, params, signal);
+  async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
+    return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs);
   }
 
-  async apiGet<T = unknown>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(API_BASE, path, params, signal, 'GET');
+  async apiGet<T = unknown>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.account): Promise<T> {
+    return this.request<T>(API_BASE, path, params, signal, 'GET', undefined, timeoutMs);
   }
 
-  async apiPost<T = unknown>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(API_BASE, path, {}, signal, 'POST', body);
+  async apiPost<T = unknown>(path: string, body: unknown, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.order): Promise<T> {
+    return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs);
   }
 
-  private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown): Promise<T> {
+private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
+    const deadlineSignal = timeoutSignal(timeoutMs, signal);
     const execute = async (gateSignal?: AbortSignal): Promise<T> => {
+      const requestSignal = gateSignal || deadlineSignal;
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
       const url = `${base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
       let lastError: unknown;
       for (let attempt = 0; attempt < 3; attempt += 1) {
-        if (gateSignal?.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
+        if (requestSignal.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
         try {
           const response = await fetch(url, {
             method,
-            signal: gateSignal,
+            signal: requestSignal,
             headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
             body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
           });
@@ -83,14 +86,14 @@ export class FyersApiClient {
           lastError = err;
           if (!isRetryableStatus(status) || attempt === 2) throw err;
           const delay = Math.min(15000, Math.max(err.retryAfterMs || 0, 500 * 2 ** attempt));
-          await sleep(delay, gateSignal);
+          await sleep(delay, requestSignal);
         } catch (error: unknown) {
           if (error instanceof Error && error.name === 'AbortError') throw error;
           lastError = error;
           const errorRecord = error && typeof error === 'object' ? error as Record<string, unknown> : {};
           const status = Number(errorRecord.status || 0);
           if ((!isRetryableStatus(status)) || attempt === 2) throw error;
-          await sleep(Math.min(15000, Math.max(Number(errorRecord.retryAfterMs || 0), 500 * 2 ** attempt)), gateSignal);
+          await sleep(Math.min(15000, Math.max(Number(errorRecord.retryAfterMs || 0), 500 * 2 ** attempt)), requestSignal);
         }
       }
       throw lastError || new Error('FYERS request failed');
@@ -99,6 +102,6 @@ export class FyersApiClient {
     // Every FYERS REST call shares the authenticated-user scheduler. This keeps
     // history, quotes, option chain, depth and account calls from independently
     // consuming the same broker quota.
-    return withBrokerRequestGate('fyers', this.accessToken, execute, signal);
+    return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal);
   }
 }

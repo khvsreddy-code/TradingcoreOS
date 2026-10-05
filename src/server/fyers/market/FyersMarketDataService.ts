@@ -1,4 +1,5 @@
 import { FyersApiClient } from '../core/FyersApiClient.js';
+import { API_LATENCY_BUDGET_MS } from '../../latency/budgets.js';
 
 export class FyersMarketDataService {
   constructor(private readonly client: FyersApiClient) {}
@@ -12,7 +13,7 @@ export class FyersMarketDataService {
       range_to: rangeTo,
       oi_flag: options.oi ? 1 : undefined,
       cont_flag: options.continuous ? 1 : undefined,
-    }, options.signal);
+    }, options.signal, API_LATENCY_BUDGET_MS.history);
   }
 
   quotes(symbols: string[], signal?: AbortSignal) {

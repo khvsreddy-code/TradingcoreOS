@@ -34,3 +34,5 @@ Compatibility representations are allowed only at explicit boundaries. Source-le
 ## Performance truth
 
 CI proves source and contract invariants. It does not prove authenticated broker latency, browser FPS, GPU utilization or visual quality. Those measurements remain explicit validation gates.
+
+The current performance/compiler audit is tracked through Vela capability splitting (v136), the CoreSpirit compiler pipeline (v137) and the first-class time-series optimizer (v138) in `CORESPIRIT_BUILD_TRACKER.md`.

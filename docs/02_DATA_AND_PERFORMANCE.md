@@ -22,6 +22,204 @@ Canonical market data is time/open/high/low/close/volume typed storage. `Histori
 - Identical history requests are cached and single-flight deduplicated.
 - Older history is fetched on demand instead of preloading 50k bars.
 
+
+## Regional placement — Mumbai is the locked request-region
+
+The repository intentionally keeps Vercel Functions in **Mumbai (`bom1`)**. This is not a generic “move to Edge” optimization: database-bound trading requests should keep compute close to the primary data source. Vercel documents that globally distributed compute can add latency when it sits far from the database, and recommends colocating function execution with the services the request depends on. citeturn208679search4turn208679search13
+
+The connected production Supabase project is in **AWS Mumbai (`ap-south-1`)**, which aligns with `bom1`. Supabase documents `ap-south-1` as its Mumbai region and recommends choosing the region closest to users for performance. citeturn208679search0
+
+Target topology:
+
+```
+India browser
+    ↓
+Vercel CDN (global static delivery)
+    ↓
+Vercel Functions — bom1 / Mumbai
+    ├── Supabase — ap-south-1 / Mumbai
+    └── FYERS request APIs
+
+India browser
+    ↓
+Realtime gateway — Mumbai / measured nearest FYERS path
+    ↓
+Redis — Mumbai primary where the selected Upstash product supports it
+    ↓
+FYERS WebSocket
+    ↓
+normalized ticks → canonical data plane → CoreSpirit / Vela
+```
+
+The realtime gateway is intentionally not assumed to share the Vercel Function lifecycle. Deploy it in Mumbai (or the lowest-latency Indian execution region available) and measure the actual browser→gateway→FYERS and gateway→Redis paths before changing regions. Upstash currently lists Mumbai (`ap-south-1`) as an operational Redis region. citeturn684593search0
+
+Do **not** move the trading request plane to Edge merely because the users are distributed. The decision point is the slowest dependency round trip: browser → function, function → Supabase/broker, and function → shared coordination. Static/cacheable assets remain globally served by the Vercel CDN. citeturn208679search13turn208679search4
+
+## Frontend startup budget — route graph, not one giant chunk
+
+The previous production build reported a roughly **2.1 MB minified main JS chunk**. The repo now treats that as an architectural issue rather than a warning to ignore.
+
+The critical-path rules are:
+
+```
+Initial browser
+  → App shell + auth bootstrap
+  → Navbar + Hero
+  → no TradingCoreRuntime
+  → no chart engine
+  → no CoreSpirit editor
+  → no below-fold marketing sections
+```
+
+The protected application is loaded as a separate graph:
+
+```
+Dashboard / Live
+  → route chunk
+  → TradingCoreRuntime
+  → broker + market-data + chart dependencies
+```
+
+The landing page defers below-fold marketing modules until the page is near them or the short startup grace period has elapsed. This keeps the initial graph focused on the first viewport rather than paying for every section of the marketing page.
+
+The build now emits a Vite manifest, groups large third-party dependencies into explicit vendor chunks, and runs a graph-aware gzip budget across the landing, login, dashboard and live route roots. The strategic performance target remains:
+
+- **150–250 KB gzip** for first interactive landing/startup JavaScript.
+- **<300 KB gzip** for the live workspace's critical route graph once the live route has been fully measured and trimmed.
+- Editor, models, prediction, indicators and other non-critical modules remain route/on-demand chunks.
+
+CI currently uses staged safety ceilings of 320 KB (landing), 260 KB (login), 400 KB (dashboard) and 650 KB (live) so regressions are blocked before the long-term targets are tightened. These are guardrails, not claims that the targets have already been achieved.
+
+
+## Vela capability graph — prevent the fork from becoming one mandatory payload
+
+The Vela fork is **384 source files** on the current branch. The largest individual modules include:
+
+| Module | Source size | Role |
+| --- | ---: | --- |
+| `vendor/vela/src/renderers/native/NativeRenderer.ts` | ~258 KB | native renderer |
+| `vendor/vela/src/core/engine/EngineOrchestrator.ts` | ~181 KB | orchestration/runtime |
+| `vendor/vela/src/workspace/VelaWorkspace.ts` | ~135 KB | multi-chart workspace |
+| `vendor/vela/src/renderers/native/drawings/DrawingPainter.ts` | ~83 KB | drawing paint path |
+| `vendor/vela/src/workspace/ChartCell.ts` | ~82 KB | workspace cell |
+| `vendor/vela/src/renderers/native/chrome/SettingsDialog.ts` | ~78 KB | settings UI |
+| `vendor/vela/src/widget/object-tree.ts` | ~68 KB | object-tree widget |
+| `vendor/vela/src/renderers/native/backend/WebGL2Backend.ts` | ~64 KB | WebGL2 renderer backend |
+
+The most important eager-import hotspot is the native renderer. `NativeRenderer.ts` previously imported `UserDrawingController` as a runtime dependency; that controller imports `DrawingPainter`, `DrawingInteraction`, `DrawingSettingsPopup`, `DrawingToolbar`, hit testing, color-picker UI and the drawing registry. The registry itself statically imports dozens of drawing implementations including Fibonacci, Gann, harmonic, Elliott, geometry, markup and volume-profile tools.
+
+That created this unwanted dependency shape:
+
+```
+basic chart
+  → NativeRenderer
+      → UserDrawingController
+          → Drawing registry
+              → dozens of drawing implementations
+          → drawing toolbar/settings/painter
+```
+
+The renderer now treats interactive drawings as an **optional capability**. `UserDrawingController` is type-only in the renderer core, and the concrete implementation is loaded through a dynamic import when the host first asks for `userDrawingsPort`. The proxy preserves the synchronous renderer-port contract while deferring the heavy implementation chunk.
+
+The chart facade also no longer re-exports `VelaWorkspace` as a runtime value. Multi-chart workspace functionality is exposed through `velaWorkspaceLoader.ts`, where it can be loaded on demand instead of joining every chart import.
+
+### Capability boundaries
+
+```
+CORE
+  ├─ React/auth/routing/theme
+  └─ lightweight TradingCore shell
+
+TRADING
+  ├─ chart renderer
+  ├─ Vela native chart core
+  ├─ broker
+  └─ realtime gateway client
+
+RESEARCH
+  ├─ CoreSpirit editor
+  ├─ model center
+  └─ backtest/replay
+
+ADVANCED
+  ├─ drawing registry
+  ├─ multi-chart workspace
+  ├─ automation/scanners
+  └─ ML/prediction overlays
+```
+
+### Drawing policy
+
+A basic chart must not download the entire drawing catalog. The critical chart payload may contain the renderer's drawing *port* and serialized data types, but actual interactive drawing implementations belong to a capability chunk. The long-term split is:
+
+```
+basic chart
+  └─ renderer core
+
+open Draw / drawing UI
+  └─ drawing capability chunk
+       ├─ lean tools
+       ├─ toolbar
+       ├─ interaction
+       └─ advanced drawing families on demand
+```
+
+The next refinement is to split `registry.ts` itself into lean-core and advanced families so enabling one advanced family (for example Fibonacci) does not pull Gann, harmonics, Elliott and volume-profile classes into the same chunk.
+
+### Native-indicator policy
+
+The Vela public composition root still registers its complete native indicator catalog eagerly for backwards-compatible SDK semantics. TradingCoreOS does not use that composition root for its production chart path; the TCO chart facade talks directly to `NativeRenderer`. The next Vela SDK cut should add an explicit `registerNativeCatalog()` capability loader if/when the SDK composition root becomes part of the browser bundle.
+## Request plane vs realtime plane
+
+TradingCoreOS now treats request/response work and realtime market delivery as separate planes.
+
+### Request/response plane
+
+```text
+Browser
+  → Vercel CDN / Functions
+  → auth + broker REST + Supabase
+  → bounded JSON response
+```
+
+The Vercel request function is a short-lived control/data API. P0 routes have explicit deadlines and the catch-all api/index.ts is capped at 15 seconds; long computation belongs on the queue/worker path instead of extending the HTTP invocation.
+
+### Realtime plane
+
+```text
+Browser
+  → signed realtime ticket from Vercel
+  → dedicated realtime gateway
+  → Redis ownership / PubSub / subscription metadata
+  → one FYERS owner per user
+  → normalized ticks / order events
+  → gateway fanout
+  → browser / canonical data plane / Vela
+```
+
+Vercel Functions must not be treated as the durable owner of a websocket session. The realtime gateway therefore owns broker sockets, while Redis coordinates ownership and cross-instance fanout. Supabase remains the durable source of record for broker sessions, jobs and product state.
+
+### Shared-state policy
+
+Process-local maps are now explicitly divided into two categories:
+
+- Ephemeral local state: per-instance connection objects, in-memory cache entries, local listener sets and local admission queues. These are performance optimizations only and may disappear on instance recycle.
+- Shared coordination state: broker request admission/rate budget, realtime owner election, subscription metadata, cross-instance event fanout and short-lived broker-session cache. These live in Redis when distributed coordination is enabled.
+
+A Vercel instance must never make a safety decision based solely on an in-memory map when another instance can concurrently act for the same user.
+
+### Rollout state
+
+The dedicated realtime gateway and distributed coordination code are implemented behind environment configuration. Production Vercel currently has no Redis/realtime-gateway integration configured, so the existing bounded HTTP stream remains an explicit fallback until the gateway is provisioned and its environment is populated.
+
+Required runtime configuration:
+
+- UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN for request-plane distributed admission.
+- REALTIME_GATEWAY_URL + REALTIME_GATEWAY_SHARED_SECRET for browser handoff.
+- REALTIME_REDIS_REST_URL + REALTIME_REDIS_REST_TOKEN + REALTIME_GATEWAY_SHARED_SECRET for the dedicated gateway.
+- Set TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED=true only after shared Redis has been verified in production.
+
+
 ## Stateful indicator mathematics — v131
 
 The canonical CoreSpirit kernel layer provides bounded state for rolling and recursive calculations:
@@ -139,3 +337,67 @@ This prevents structural analytics from becoming a hidden N×period or N² cost 
 - Vela history remains columnar at the renderer boundary; OHLCV objects are a compatibility seam only.
 - Non-live product surfaces use longer, smoother motion; the live terminal stays chart-native.
 - FYERS history remains 5,000 candles per request with 5,000-candle backward pages and bounded 50,000 retention.
+
+
+## v137 — CoreSpirit time-series query optimizer
+
+The compiler now emits a cost model instead of treating optimization as constant folding only.
+
+### Costed pipeline
+
+```text
+CoreSpirit source
+      ↓
+semantic dependency graph
+      ↓
+typed IR
+      ↓
+safe local rewrites
+      ↓
+cost model
+      ↓
+chronological execution plan
+```
+
+The optimizer currently performs three high-value operations:
+
+1. **Constant folding** for compile-time scalar expressions.
+2. **Pure CSE and input-read reuse** for repeated `loadSeries`, unary/binary/index work and proven pure deterministic calls.
+3. **Cost estimation** for per-bar pure work, effect work, stateful work, history reads, duplicate work removed, and peak temporary register pressure.
+
+The optimizer deliberately does **not** alias generic stateful indicator call sites. EMA/RMA/RSI/ATR/VWAP and similar kernels remain ordered stream state. Their reuse comes from the chronological execution model and series-fusion planner, not an unsafe assumption that two stateful calls are interchangeable.
+
+### Example
+
+For:
+
+```
+let a = ema(close, 20)
+let b = ema(close, 50)
+let c = atr(14)
+let d = sma(a, 10)
+let e = sma(b, 10)
+```
+
+the compiler can now plan:
+
+```text
+one chronological traversal
+close ──┬─ EMA20 ── SMA10(a) ──┐
+        ├─ EMA50 ── SMA10(b) ──┤
+        └─ ATR14 ───────────────┘
+```
+
+Repeated source reads are reused where it is provably safe, while stateful kernels keep their chronological identities. The execution plan exposes the resulting read reuse and estimated saved work to the host planner.
+
+This is the beginning of a true time-series query optimizer. It is not yet a global algebraic optimizer: no speculative loop reordering, cross-bar reassociation, or generic stateful-call merging is performed.
+
+### Performance acceptance
+
+- [x] Optimizer metadata is attached to the executable IR.
+- [x] Execution planner consumes optimized pure-work cost.
+- [x] Runtime consumes compiler-produced series-fusion plan.
+- [x] Regression contract proves repeated series reads are reused.
+- [ ] Add global DAG scheduling based on critical-path and fan-out cost.
+- [ ] Add state-identity analysis so explicitly shareable stateful kernels can be reused without changing language semantics.
+- [ ] Benchmark optimized plans against the pre-optimizer VM on representative 5k/50k/500k-bar workloads.
