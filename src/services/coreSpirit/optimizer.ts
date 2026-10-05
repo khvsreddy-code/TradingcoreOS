@@ -216,15 +216,14 @@ function buildOptimizationPlan(
   const statefulBarWork=nodes.filter(n=>n.stateful).reduce((s,n)=>s+n.estimatedBarWork,0);
   const estimatedBarWork=pureBarWork+effectBarWork;
   const originalWork=original.reduce((s,i)=>s+info(i).work,0);
+  const lastUse=new Map<string,number>();
+  instructions.forEach((instruction,index)=>{ for(const register of deps(instruction)) lastUse.set(register,index); });
   const live=new Set<string>();
   let peakLiveRegisters=0;
   for(let index=0;index<instructions.length;index+=1){
     const instruction=instructions[index]!;
     if('dest' in instruction && instruction.dest) live.add(instruction.dest);
-    for(const r of deps(instruction)){
-      const future=nodes.flatMap((n,j)=>j>index ? (deps(instructions[j]!).includes(r)?[j]:[]) : []);
-      if(future.length===0) live.delete(r);
-    }
+    for(const register of deps(instruction)) if(lastUse.get(register)===index) live.delete(register);
     peakLiveRegisters=Math.max(peakLiveRegisters,live.size);
   }
   const roots=nodes.filter(n=>n.dependencies.length===0).map(n=>n.instruction);
