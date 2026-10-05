@@ -78,7 +78,9 @@ export class CoreSpiritCompiler {
         }
         case 'identifier': {
           const dest = `t${temp++}`;
-          if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
+          const semanticType=semantic.symbols.get(n.name);
+          if (isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
+          else if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
           else if (n.name === 'bar_index') emitInstruction(n, { op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') emitInstruction(n, { op:'const', dest, value:null });
           else emitInstruction(n, { op:'move', dest, source:n.name });
@@ -195,6 +197,13 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'member': {
+          if (n.target.type === 'identifier' && n.target.name === 'bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) {
+            const phaseDest=`t${temp++}`;
+            emitInstruction(n,{op:'const',dest:phaseDest,value:n.member});
+            const memberDest=`t${temp++}`;
+            emitInstruction(n,{op:'call',dest:memberDest,name:'__bar_phase',args:[phaseDest],callId:`bar.phase:${n.member}:${n.span?.start ?? temp}`});
+            return memberDest;
+          }
           if (n.target.type === 'identifier' && n.target.name === 'chart' && ['price','volume','indicator','custom'].includes(n.member)) {
             const memberDest=`t${temp++}`; const areaDest=`t${temp++}`;
             emitInstruction(n, { op:'const', dest:areaDest, value:n.member });
@@ -250,6 +259,18 @@ export class CoreSpiritCompiler {
       switch(n.type){
         case 'program': n.body.forEach(stmt); break;
         case 'typeDeclaration': break;
+        case 'onEvent': {
+          const gateIndex=instructions.length;
+          emitInstruction(n,{op:'eventGate',eventName:n.eventName,target:-1});
+          n.body.forEach(stmt);
+          (instructions[gateIndex] as Extract<CoreSpiritIrInstruction,{op:'eventGate'}>).target=instructions.length;
+          break;
+        }
+        case 'assignment': {
+          const source=expr(n.expression);
+          emitInstruction(n,{op:'setState',name:n.name,source});
+          break;
+        }
         case 'let': {
           const source=expr(n.expression);
           const isDataRef = isDataRefExpression(n.expression);
