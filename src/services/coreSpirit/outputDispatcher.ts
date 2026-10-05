@@ -4,7 +4,7 @@ import { CoreDrawingDispatcher } from '../core/drawing/drawingDispatcher';
 import { CoreSpiritObject } from './types';
 
 export type CoreSpiritPlotPoint = { time: number; value: number | null };
-export type CoreSpiritOutputFrame = { plots: Map<string, CoreSpiritPlotPoint[]>; plotStyles: Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>; drawingCount: number; signals: CoreSpiritObject[]; drawings: CoreSpiritObject[]; visuals: CoreSpiritObject[]; labels: Extract<CoreSpiritObject,{kind:'label'}>[]; tables: Extract<CoreSpiritObject,{kind:'table'}>[] };
+export type CoreSpiritOutputFrame = {\n  /** Plot arrays are retained by the dispatcher and are not cloned per frame. Consumers must treat them as read-only. */\n  plots: Map<string, CoreSpiritPlotPoint[]>;\n  plotStyles: Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>;\n  drawingCount: number;\n  signals: CoreSpiritObject[];\n  drawings: CoreSpiritObject[];\n  visuals: CoreSpiritObject[];\n  labels: Extract<CoreSpiritObject,{kind:'label'}>[];\n  tables: Extract<CoreSpiritObject,{kind:'table'}>[];\n};
 
 /** Main-thread boundary: turns CoreSpirit's declarative outputs into chart-owned data. */
 export class CoreSpiritOutputDispatcher {
