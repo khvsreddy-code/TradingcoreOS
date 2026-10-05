@@ -136,7 +136,7 @@ function inferNodeLookback(ins: CoreSpiritIrInstruction, instructions: readonly 
   if (ins.op === 'loadSeries') return Math.max(0, ins.offset);
   if (ins.op === 'index') return Math.max(0, Math.floor(constantValueForInstruction(instructions, ins.index) ?? 0));
   if (ins.op === 'call') {
-    if (/^(ema|rma|rsi|atr|vwap|cross|crossover|crossunder)$/.test(ins.name)) return Number.POSITIVE_INFINITY;
+    if (/^(ema|rma|rsi|atr|vwap|cross|crossover|crossunder)$/.test(ins.name)) return -1;
     if (/^(change|pctchange)$/.test(ins.name)) return 1;
     const length = Math.max(0, Math.floor(constantValueForInstruction(instructions, ins.args[1]) ?? 0));
     if (/^(sma|mean|sum|highest|lowest|stdev|wma|median|variance|zscore|normalize|persistence|rising|falling)$/.test(ins.name)) return Math.max(0, length - 1);
