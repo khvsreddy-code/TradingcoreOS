@@ -20,6 +20,9 @@ import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normali
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
 import { CoreSpiritExecutionVM } from './executionVM';
+import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM';
+import type { CoreSpiritValueStore } from './executionValueStore';
+import type { CoreSpiritExecutionTier } from './executionTier';
 import { CoreSpiritStateStore } from './stateStore';
 import { CoreSpiritOutputCollector } from './outputCollector';
 import { CoreSpiritEventRouter } from './eventRouter';
@@ -30,7 +33,7 @@ export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:st
 export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
-  layer?: CoreSpiritProgramLayer; executionTarget?: CoreSpiritExecutionTarget; reactiveExecution?: boolean;
+  layer?: CoreSpiritProgramLayer; executionTarget?: CoreSpiritExecutionTarget; reactiveExecution?: boolean; executionTier?: CoreSpiritExecutionTier;
   modelOutputResolver?: CoreSpiritModelOutputResolver; eventResolver?: (eventName:string) => boolean | unknown;
 };
 export type CoreSpiritRuntimeState = {
@@ -100,6 +103,8 @@ export class CoreSpiritRuntime {
   private readonly vwapKernelSnapshots = new Map<string, VWAPSessionState>();
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
+  private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
+  private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly stateStore = new CoreSpiritStateStore();
   private readonly outputCollector: CoreSpiritOutputCollector;
   private readonly eventRouter: CoreSpiritEventRouter;
@@ -111,6 +116,7 @@ export class CoreSpiritRuntime {
     this.modelOutputResolver = options.modelOutputResolver;
     this.eventResolver = options.eventResolver;
     this.executionTarget = options.executionTarget || 'chart';
+    this.executionTier = options.executionTier === 'reference' ? 'reference' : 'optimized';
     this.layer = options.layer || 'script';
     this.reactiveExecution = options.reactiveExecution !== false;
     this.options = { symbol: options.symbol || '', timeframe: options.timeframe || 'unknown', sourceId: options.sourceId || 'coreSpirit', maxStepsPerBar: Math.max(100, options.maxStepsPerBar || 10000), timezone: options.timezone || 'Asia/Kolkata', stateHistoryLimit: Math.max(512, Math.floor(options.stateHistoryLimit || 2048)) };
@@ -389,9 +395,11 @@ export class CoreSpiritRuntime {
   getExecutionContext(): CoreSpiritExecutionContext { return { ...this.executionContext }; }
   getLoadedProgramId(): string | undefined { return this.loadedProgramId; }
   getLoadedIr(): CoreSpiritIrProgram | undefined { return this.compiledIr; }
+  getExecutionTier(): Exclude<CoreSpiritExecutionTier, 'auto'> { return this.executionTier; }
   loadIr(ir: CoreSpiritIrProgram): void {
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
+    this.optimizedExecutionVm.prepare(ir.entry.instructions);
     this.installSeriesFusion(ir);
     this.stateHistoryLimit = Math.min(this.maxHistoryBars, Math.max(this.stateHistoryLimit, ir.maxLookback + 32));
   }
@@ -444,7 +452,7 @@ export class CoreSpiritRuntime {
     }
   }
 
-  private fusedStageValues(instructionIndex: number, values: Map<string, unknown>, barIndex: number, instructions: CoreSpiritIrInstruction[]): boolean {
+  private fusedStageValues(instructionIndex: number, values: CoreSpiritValueStore, barIndex: number, instructions: CoreSpiritIrInstruction[]): boolean {
     const binding = this.fusedStageByInstruction.get(instructionIndex);
     if (!binding || !this.seriesFusionPlan) return false;
     const group = this.fusedGroupById.get(binding.groupId);
@@ -483,7 +491,7 @@ export class CoreSpiritRuntime {
     outputs: CoreSpiritOutputCollector,
     diagnostics: string[],
   ): void {
-    this.executionVm.run(instructions, barIndex, {
+    const host = {
       maxStepsPerBar: this.options.maxStepsPerBar,
       throwIfAborted: () => this.throwIfAborted(),
       loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
@@ -504,7 +512,9 @@ export class CoreSpiritRuntime {
         : (index > barIndex ? null : values.get(instruction.target) as CoreSpiritValue),
       truthy: (value) => this.truthy(value),
       emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
-    }, outputs);
+    };
+    if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
+    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs);
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
