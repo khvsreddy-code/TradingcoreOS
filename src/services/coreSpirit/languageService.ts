@@ -39,6 +39,24 @@ const KEYWORDS: CoreSpiritCompletion[] = [
   { label: 'true', kind: 'keyword', detail: 'boolean literal' },
   { label: 'false', kind: 'keyword', detail: 'boolean literal' },
 ];
+const TEMPORAL_TYPES: CoreSpiritCompletion[] = [
+  {label:'scalar<float>',kind:'type',detail:'explicit scalar numeric type'},
+  {label:'series<T>',kind:'type',detail:'typed historical/vector data'},
+  {label:'window<T>',kind:'type',detail:'bounded computational window'},
+  {label:'state<T>',kind:'type',detail:'persistent transactional program memory'},
+  {label:'event<T>',kind:'type',detail:'event occurrence domain'},
+  {label:'snapshot<T>',kind:'type',detail:'immutable point-in-time value'},
+  {label:'stream<T>',kind:'type',detail:'event-fed stream domain'},
+  {label:'confirmed<T>',kind:'type',detail:'temporally confirmed value'},
+  {label:'developing<T>',kind:'type',detail:'forming/realtime value'},
+  {label:'forecast<T>',kind:'type',detail:'forward/forecast value • never causal by default'},
+];
+const SAFETY_ANNOTATIONS: CoreSpiritCompletion[] = [
+  {label:'@causal',kind:'keyword',detail:'assert the expression is future-independent'},
+  {label:'@realtimeSafe',kind:'keyword',detail:'assert historical/live execution semantics remain equivalent'},
+  {label:'@lookahead(false)',kind:'keyword',detail:'forbid future/lookahead data'},
+  {label:'@repainting',kind:'keyword',detail:'declare known repainting behavior'},
+];
 const SERIES: CoreSpiritCompletion[] = [
   {label:'open',kind:'series',detail:'series<price> • current symbol • chart timeframe'},
   {label:'high',kind:'series',detail:'series<price> • current symbol • chart timeframe'},
@@ -134,7 +152,7 @@ function allCompletions(): CoreSpiritCompletion[] {
     kind:'visual' as const,
     detail:'advanced/compatibility visual API • SHOW is the primary surface',
   }));
-  return [...READABLE_OPERATORS, ...KEYWORDS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
+  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
 }
 
 
