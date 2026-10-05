@@ -18,8 +18,14 @@ productionPredictionRoutes.post('/', async (req: AuthenticatedRequest, res: Resp
       res.status(503).json({ success: false, error: 'Production ML service is not configured. Set ML_SERVICE_URL on the server.' });
       return;
     }
+    let input;
     try {
-      const input = parseProductionPredictionInput(req.body);
+      input = parseProductionPredictionInput(req.body);
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error?.message || 'Invalid production prediction payload.' });
+      return;
+    }
+    try {
       const queued = await enqueueBackgroundJob(req.tradingCoreUserId!, 'production_prediction', input);
       res.status(202).json({
         success: true,
