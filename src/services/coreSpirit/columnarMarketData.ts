@@ -30,6 +30,7 @@ export class CoreSpiritColumnarHistory {
   get volume(): Float64Array { return this._volume.subarray(0, this._length); }
 
   clear(): void { this._length = 0; }
+  trimTo(length:number):void { const target=Math.max(0,Math.min(this._length,Math.floor(length))); if(target===this._length)return; const start=this._length-target; this._time.copyWithin(0,start,this._length); this._open.copyWithin(0,start,this._length); this._high.copyWithin(0,start,this._length); this._low.copyWithin(0,start,this._length); this._close.copyWithin(0,start,this._length); this._volume.copyWithin(0,start,this._length); this._length=target; }
 
   replaceRows(rows: readonly HistoricalCandle[]): void {
     this.ensure(rows.length);
