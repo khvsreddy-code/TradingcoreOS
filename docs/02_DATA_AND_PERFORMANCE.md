@@ -69,7 +69,7 @@ Required runtime configuration:
 
 - UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN for request-plane distributed admission.
 - REALTIME_GATEWAY_URL + REALTIME_GATEWAY_SHARED_SECRET for browser handoff.
-- REALTIME_REDIS_URL + REALTIME_GATEWAY_SHARED_SECRET for the dedicated gateway.
+- REALTIME_REDIS_REST_URL + REALTIME_REDIS_REST_TOKEN + REALTIME_GATEWAY_SHARED_SECRET for the dedicated gateway.
 - Set TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED=true only after shared Redis has been verified in production.
 
 
