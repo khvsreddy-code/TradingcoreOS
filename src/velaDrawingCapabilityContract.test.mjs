@@ -8,7 +8,7 @@ const fibonacci = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings
 const patterns = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings/advancedRegistryPatterns.ts'), 'utf8');
 const controller = fs.readFileSync(path.join(root, 'vendor/vela/src/renderers/native/drawings/UserDrawingController.ts'), 'utf8');
 
-const assert=(condition:boolean,message:string)=>{if(!condition)throw new Error(message);};
+const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 
 assert(!registry.includes("from './types/FibRetracement'"),'core drawing registry still imports Fibonacci implementation');
 assert(!registry.includes("from './types/GannFan'"),'core drawing registry still imports Gann implementation');
