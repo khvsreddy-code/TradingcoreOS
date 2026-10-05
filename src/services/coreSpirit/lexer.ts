@@ -37,7 +37,7 @@ export class CoreSpiritLexer {
     const s=this.pos(); const c=this.advance(); const two=c+this.peek();
     const pairs:Record<string,CoreSpiritTokenType>={'==':'equalEqual','!=':'bangEqual','<=':'lessEqual','>=':'greaterEqual',':=':'colonEqual'};
     if(pairs[two]){this.advance();return {...s,type:pairs[two],lexeme:two};}
-    const one:Record<string,CoreSpiritTokenType>={'+':'plus','-':'minus','*':'star','/':'slash','%':'percent','!':'bang','=':'equal','<':'less','>':'greater','(':'leftParen',')':'rightParen','[':'leftBracket',']':'rightBracket','{':'leftBrace','}':'rightBrace',',':'comma',';':'semicolon',':':'colon','.':'dot'};
+    const one:Record<string,CoreSpiritTokenType>={'+':'plus','-':'minus','*':'star','/':'slash','%':'percent','!':'bang','=':'equal','<':'less','>':'greater','(':'leftParen',')':'rightParen','[':'leftBracket',']':'rightBracket','{':'leftBrace','}':'rightBrace',',':'comma',';':'semicolon',':':'colon','@':'at','.':'dot'};
     const type=one[c]; if(!type) throw new CoreSpiritSyntaxError(`Unexpected character '${c}'`,s); return {...s,type,lexeme:c};
   }
   private skipLineComment(){while(!this.atEnd()&&this.peek()!=='\n')this.advance();}
