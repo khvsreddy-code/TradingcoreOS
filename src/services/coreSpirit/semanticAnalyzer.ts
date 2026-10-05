@@ -32,7 +32,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const componentBindings=new Map<string,string>();
   const semanticSymbols=new Map<string,CoreSpiritSemanticType>();
   const componentSource=options.components;
-  let maxLookback=0;
+  let maxLookback=0;\n  let eventScopeDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
     severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
   });
