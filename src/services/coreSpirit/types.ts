@@ -243,10 +243,10 @@ export type CoreSpiritDataResolver = {
   intrabars?: (timeframe: string) => CoreSpiritIntrabar[] | Promise<CoreSpiritIntrabar[]>;
   market?: () => CoreSpiritMarketSnapshot | null;
   depthImbalance?: () => number | null;
-  footprint?: () => CoreSpiritFootprint | null;
-  trade?: () => CoreSpiritTrade | null;
-  orderbook?: () => CoreSpiritOrderBook | null;
-  volumeProfile?: () => CoreSpiritVolumeProfile | null;
+  footprint?: (symbol?: string, timeframe?: string) => CoreSpiritFootprint | null;
+  trade?: (symbol?: string, timeframe?: string) => CoreSpiritTrade | null;
+  orderbook?: (symbol?: string, timeframe?: string) => CoreSpiritOrderBook | null;
+  volumeProfile?: (symbol?: string, timeframe?: string) => CoreSpiritVolumeProfile | null;
   /** Optional host cache hook; the VM remains network-free. */
   cacheKey?: (request: CoreSpiritDataRequest) => string;
 };
