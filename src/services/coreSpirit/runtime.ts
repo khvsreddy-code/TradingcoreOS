@@ -37,7 +37,8 @@ export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
   layer?: CoreSpiritProgramLayer; executionTarget?: CoreSpiritExecutionTarget; reactiveExecution?: boolean; executionTier?: CoreSpiritExecutionTier;
-  modelOutputResolver?: CoreSpiritModelOutputResolver; eventResolver?: (eventName:string) => boolean | unknown;\n  profiler?: CoreSpiritProfilerOptions;
+  modelOutputResolver?: CoreSpiritModelOutputResolver; eventResolver?: (eventName:string) => boolean | unknown;
+  profiler?: CoreSpiritProfilerOptions;
 };
 export type CoreSpiritRuntimeState = {
   barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean; revision:number; symbol:string; timeframe:string; mode:CoreSpiritExecutionMode };
@@ -198,6 +199,7 @@ export class CoreSpiritRuntime {
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
     const normalized = { ...bar };
+    this.profiler.recordAllocation(1);
     const last = this.history[this.history.length - 1];
     const sameBucket = !!last && this.toEpoch(last.timestamp) === this.toEpoch(normalized.timestamp);
     const dirtyPlan = sameBucket && this.dirtyGraph
