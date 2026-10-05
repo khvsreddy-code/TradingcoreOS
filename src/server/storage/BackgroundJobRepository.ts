@@ -79,11 +79,10 @@ export class BackgroundJobRepository {
 
   static async markQueued(id: string, messageId: string | null): Promise<void> {
     await this.update(id, {
-      status: 'queued',
       queue_message_id: messageId,
       error: null,
       updated_at: new Date().toISOString(),
-    });
+    }, 'queued');
   }
 
   static async markRunning(id: string, attempts: number): Promise<void> {
@@ -122,13 +121,15 @@ export class BackgroundJobRepository {
       error: error.slice(0, 4000),
       completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    }, 'queued');
   }
 
-  private static async update(id: string, patch: Record<string, unknown>): Promise<void> {
+  private static async update(id: string, patch: Record<string, unknown>, expectedStatus?: BackgroundJobStatus): Promise<void> {
     const db = createServerClient();
     if (!db) throw new Error('Background job storage is not configured');
-    const { error } = await db.from('background_jobs').update(patch).eq('id', id);
+    let query = db.from('background_jobs').update(patch).eq('id', id);
+    if (expectedStatus) query = query.eq('status', expectedStatus);
+    const { error } = await query;
     if (error) throw new Error('Unable to update background job: ' + error.message);
   }
 }
