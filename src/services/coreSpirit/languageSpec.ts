@@ -9,7 +9,8 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   userConcepts: Object.freeze(['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE'] as const),
   statements: Object.freeze(['let', 'if', 'else', 'type', 'on', ':='] as const),
   scalarTypes: Object.freeze(['int', 'float', 'number', 'boolean', 'string', 'null', 'price', 'volume', 'time', 'duration', 'currency'] as const),
-  temporalTypes: Object.freeze(['scalar<float>', 'scalar<number>', 'scalar<int>', 'series<T>', 'window<T>', 'state<T>', 'event<T>', 'snapshot<T>', 'stream<T>', 'confirmed<T>', 'developing<T>', 'forecast<T>'] as const),\n  temporalPhases: Object.freeze(['historical', 'confirmed', 'developing', 'realtime', 'forecast'] as const),\n  seriesTypes: Object.freeze([
+  temporalTypes: Object.freeze(['scalar<float>', 'scalar<number>', 'scalar<int>', 'series<T>', 'window<T>', 'state<T>', 'event<T>', 'snapshot<T>', 'stream<T>', 'confirmed<T>', 'developing<T>', 'forecast<T>'] as const),\n  temporalPhases: Object.freeze(['historical', 'confirmed', 'developing', 'realtime', 'forecast'] as const),
+  safetyAnnotations: Object.freeze(['@causal', '@noncausal', '@futureDependent', '@repainting', '@realtimeSafe', '@lookahead(false)', '@lookahead(true)'] as const),\n  seriesTypes: Object.freeze([
     'series<int>',
     'series<float>',
     'series<number>',
@@ -42,6 +43,8 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
     'SHOW is the universal visual projection; plot() and other visual calls are compatibility/advanced APIs',
     'MODEL and AUTOMATE declarations are artifact metadata plus existing executable calls',
     'DATA is the read-only market/context concept; it is not a broker API',\n    'series<T> is typed historical/vector data; window<T> is a bounded view; state<T> is persistent mutable program memory; event<T>/stream<T> are event-fed domains',\n    'confirmed<T>, developing<T>, and forecast<T> make temporal certainty explicit instead of hiding it inside historical-series behavior',\n    'on event { ... } scopes are explicit execution regions; := is reserved for state<T> mutation',
+    'repaint-safety annotations are compiler assertions; an assertion that contradicts inferred causality fails compilation rather than merely suppressing a warning',
+    '@lookahead(false) forbids proven future-dependent inputs; unresolved provenance remains visible as unknown rather than being silently treated as safe',
   ] as const),
   nonGoals: Object.freeze([
     'arbitrary host/network access from the VM',
