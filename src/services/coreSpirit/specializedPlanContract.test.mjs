@@ -18,6 +18,11 @@ assert.equal(plan.strategy, 'specialized-straight-line');
 assert.equal(plan.slotCount, 9);
 assert.equal(plan.seriesFanouts.length, 1);
 assert.equal(plan.seriesFanouts[0].stages.length, 2);
+assert.equal(plan.regions.length, 1);
+assert.deepEqual(plan.regions[0].seriesInstructions, [2, 4]);
+assert.deepEqual(plan.regions[0].scalarInstructions, [6, 7, 8]);
+assert.equal(plan.regions[0].singleTraversal, true);
+assert.deepEqual(plan.regions[0].eligibleBackends, ['cpu', 'wasm']);
 assert.deepEqual(
   plan.seriesFanouts[0].stages.map((stage) => stage.name),
   ['ema', 'rsi'],
