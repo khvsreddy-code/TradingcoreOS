@@ -65,8 +65,8 @@ function isNumericValue(value: CoreSpiritStoredValue): value is number {
 export class CoreSpiritSeriesRegistry {
   private readonly ids = new Map<string, CoreSpiritSeriesId>();
   private readonly names: string[] = [];
-  private readonly numeric = new Map<CoreSpiritSeriesId, CoreSpiritNumericSeries>();
-  private readonly values = new Map<CoreSpiritSeriesId, CoreSpiritValueSeries>();
+  private readonly numeric: Array<CoreSpiritNumericSeries | undefined> = [];
+  private readonly values: Array<CoreSpiritValueSeries | undefined> = [];
   private readonly numericJournal = new Map<CoreSpiritSeriesId, NumericJournalEntry>();
   private readonly valueJournal = new Map<CoreSpiritSeriesId, ValueJournalEntry>();
   private activeTransaction = false;
@@ -95,8 +95,8 @@ export class CoreSpiritSeriesRegistry {
   reset(): void {
     this.ids.clear();
     this.names.length = 0;
-    this.numeric.clear();
-    this.values.clear();
+    this.numeric.length = 0;
+    this.values.length = 0;
     this.numericJournal.clear();
     this.valueJournal.clear();
     this.activeTransaction = false;
@@ -119,10 +119,10 @@ export class CoreSpiritSeriesRegistry {
 
     for (const [id, entry] of this.numericJournal) {
       if (!entry.existed) {
-        this.numeric.delete(id);
+        delete this.numeric[id];
         continue;
       }
-      let slot = this.numeric.get(id);
+      let slot = this.numeric[id];
       if (!slot && entry.originalBuffer) {
         slot = {
           id,
@@ -132,7 +132,7 @@ export class CoreSpiritSeriesRegistry {
           length: entry.originalLength,
           capacity: entry.originalCapacity,
         };
-        this.numeric.set(id, slot);
+        this.numeric[id] = slot;
       }
       if (!slot) continue;
       for (let i = entry.writes.length - 1; i >= 0; i -= 1) {
@@ -147,10 +147,10 @@ export class CoreSpiritSeriesRegistry {
 
     for (const [id, entry] of this.valueJournal) {
       if (!entry.existed) {
-        this.values.delete(id);
+        delete this.values[id];
         continue;
       }
-      let slot = this.values.get(id);
+      let slot = this.values[id];
       if (!slot && entry.originalBuffer) {
         slot = {
           id,
@@ -160,7 +160,7 @@ export class CoreSpiritSeriesRegistry {
           length: entry.originalLength,
           capacity: entry.originalCapacity,
         };
-        this.values.set(id, slot);
+        this.values[id] = slot;
       }
       if (!slot) continue;
       for (let i = entry.writes.length - 1; i >= 0; i -= 1) {
@@ -181,31 +181,31 @@ export class CoreSpiritSeriesRegistry {
   }
 
   pushNumber(id: CoreSpiritSeriesId, value: number, limit: number): void {
-    const existing = this.numeric.get(id);
+    const existing = this.numeric[id];
     this.recordNumeric(id, existing);
     const slot = this.ensureNumericSlot(id, limit);
     this.pushNumeric(slot, Number(value));
   }
 
   pushValue(id: CoreSpiritSeriesId, value: CoreSpiritStoredValue, limit: number): void {
-    if (isNumericValue(value) && !this.values.has(id)) {
-      const existing = this.numeric.get(id);
+    if (isNumericValue(value) && !this.values[id] !== undefined) {
+      const existing = this.numeric[id];
       this.recordNumeric(id, existing);
       const slot = this.ensureNumericSlot(id, limit);
       this.pushNumeric(slot, value);
       return;
     }
 
-    if (!isNumericValue(value) && this.numeric.has(id)) this.migrateNumericToValues(id, limit);
+    if (!isNumericValue(value) && this.numeric[id] !== undefined) this.migrateNumericToValues(id, limit);
 
-    const existing = this.values.get(id);
+    const existing = this.values[id];
     this.recordValue(id, existing);
     const slot = this.ensureValueSlot(id, limit);
     this.pushValueRing(slot, value);
   }
 
   replaceNumber(id: CoreSpiritSeriesId, values: number[]): void {
-    const existing = this.numeric.get(id);
+    const existing = this.numeric[id];
     this.recordNumeric(id, existing);
     const capacity = nextCapacity(values.length);
     const slot: CoreSpiritNumericSeries = {
@@ -217,29 +217,29 @@ export class CoreSpiritSeriesRegistry {
       capacity,
     };
     slot.buffer.set(values);
-    this.numeric.set(id, slot);
+    this.numeric[id] = slot;
     const entry = this.numericJournal.get(id);
     if (entry) entry.replaced = true;
   }
 
   getNumberAt(id: CoreSpiritSeriesId, offset: number): number | null {
-    const slot = this.numeric.get(id);
+    const slot = this.numeric[id];
     if (!slot || offset < 0 || offset >= slot.length) return null;
     const index = (slot.head + slot.length - 1 - offset + slot.capacity) % slot.capacity;
     return slot.buffer[index] ?? null;
   }
 
   getValueAt(id: CoreSpiritSeriesId, offset: number): CoreSpiritStoredValue {
-    const numeric = this.numeric.get(id);
+    const numeric = this.numeric[id];
     if (numeric && offset >= 0 && offset < numeric.length) return this.getNumberAt(id, offset);
-    const values = this.values.get(id);
+    const values = this.values[id];
     if (!values || offset < 0 || offset >= values.length) return null;
     const index = (values.head + values.length - 1 - offset + values.capacity) % values.capacity;
     return values.buffer[index] ?? null;
   }
 
   numericSnapshot(id: CoreSpiritSeriesId): Float64Array {
-    const slot = this.numeric.get(id);
+    const slot = this.numeric[id];
     if (!slot || slot.length === 0) return new Float64Array(0);
     const out = new Float64Array(slot.length);
     for (let i = 0; i < slot.length; i += 1) {
@@ -250,9 +250,9 @@ export class CoreSpiritSeriesRegistry {
   }
 
   valueSnapshot(id: CoreSpiritSeriesId): CoreSpiritStoredValue[] {
-    const numeric = this.numeric.get(id);
-    if (numeric && !this.values.has(id)) return Array.from(this.numericSnapshot(id));
-    const values = this.values.get(id);
+    const numeric = this.numeric[id];
+    if (numeric && !this.values[id] !== undefined) return Array.from(this.numericSnapshot(id));
+    const values = this.values[id];
     if (!values || values.length === 0) return [];
     const out: CoreSpiritStoredValue[] = new Array(values.length);
     for (let i = 0; i < values.length; i += 1) {
@@ -264,7 +264,7 @@ export class CoreSpiritSeriesRegistry {
 
   snapshotNumericObject(): Record<string, number[]> {
     const out: Record<string, number[]> = {};
-    for (const [id] of this.numeric) out[this.names[id] ?? String(id)] = Array.from(this.numericSnapshot(id));
+    for (const id of this.numeric.keys()) out[this.names[id] ?? String(id)] = Array.from(this.numericSnapshot(id));
     return out;
   }
 
@@ -273,7 +273,7 @@ export class CoreSpiritSeriesRegistry {
     for (const id of this.names.keys()) {
       const values = this.valueSnapshot(id);
       if (values.length) out[this.names[id]!] = values;
-      else if (this.numeric.has(id)) out[this.names[id]!] = Array.from(this.numericSnapshot(id));
+      else if (this.numeric[id] !== undefined) out[this.names[id]!] = Array.from(this.numericSnapshot(id));
     }
     return out;
   }
@@ -286,8 +286,8 @@ export class CoreSpiritSeriesRegistry {
   restoreValueObject(values: Record<string, CoreSpiritStoredValue[]>): void {
     for (const [name, data] of Object.entries(values)) {
       const id = this.idFor(name);
-      if (this.numeric.has(id) && data.every((value) => typeof value === 'number')) continue;
-      this.values.set(id, this.makeValueSlot(id, data));
+      if (this.numeric[id] !== undefined && data.every((value) => typeof value === 'number')) continue;
+      this.values[id] = this.makeValueSlot(id, data);
     }
     this.commit();
   }
@@ -337,19 +337,19 @@ export class CoreSpiritSeriesRegistry {
   }
 
   private migrateNumericToValues(id: CoreSpiritSeriesId, limit: number): void {
-    const numeric = this.numeric.get(id);
+    const numeric = this.numeric[id];
     if (!numeric) return;
-    const existingValues = this.values.get(id);
+    const existingValues = this.values[id];
     this.recordNumeric(id, numeric);
     this.recordValue(id, existingValues);
     const values = this.makeValueSlot(id, Array.from(this.numericSnapshot(id)), nextCapacity(Math.max(limit, numeric.length)));
-    this.values.set(id, values);
-    this.numeric.delete(id);
+    this.values[id] = values;
+    delete this.numeric[id];
   }
 
   private ensureNumericSlot(id: CoreSpiritSeriesId, limit: number): CoreSpiritNumericSeries {
     const required = Math.max(1, Math.floor(limit));
-    const existing = this.numeric.get(id);
+    const existing = this.numeric[id];
     if (!existing) {
       const capacity = nextCapacity(required);
       const slot: CoreSpiritNumericSeries = {
@@ -360,7 +360,7 @@ export class CoreSpiritSeriesRegistry {
         length: 0,
         capacity,
       };
-      this.numeric.set(id, slot);
+      this.numeric[id] = slot;
       return slot;
     }
     if (existing.capacity >= required) return existing;
@@ -373,17 +373,17 @@ export class CoreSpiritSeriesRegistry {
       head: 0,
     };
     for (let i = 0; i < existing.length; i += 1) grown.buffer[i] = existing.buffer[(existing.head + i) % existing.capacity]!;
-    this.numeric.set(id, grown);
+    this.numeric[id] = grown;
     return grown;
   }
 
   private ensureValueSlot(id: CoreSpiritSeriesId, limit: number): CoreSpiritValueSeries {
     const required = Math.max(1, Math.floor(limit));
-    const existing = this.values.get(id);
+    const existing = this.values[id];
     if (!existing) {
       const capacity = nextCapacity(required);
       const slot = this.makeValueSlot(id, [], capacity);
-      this.values.set(id, slot);
+      this.values[id] = slot;
       return slot;
     }
     if (existing.capacity >= required) return existing;
@@ -391,7 +391,7 @@ export class CoreSpiritSeriesRegistry {
     const grown = this.makeValueSlot(id, [], nextCapacity(required));
     grown.length = existing.length;
     for (let i = 0; i < existing.length; i += 1) grown.buffer[i] = existing.buffer[(existing.head + i) % existing.capacity]!;
-    this.values.set(id, grown);
+    this.values[id] = grown;
     return grown;
   }
 
