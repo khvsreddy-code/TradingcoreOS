@@ -98,3 +98,15 @@ Do not add CORESPIRIT_VNN_MANIFEST.json files at repository root, tsconfig.stage
 If historical material is genuinely useful to a human, put it in docs/archive/. Otherwise rely on Git history.
 
 The architecture guard in src/architectureConsolidationGuard.test.mjs enforces this policy.
+## Execution tiers and incremental rendering
+
+CoreSpirit has two execution tiers with one semantic contract:
+
+- **Reference VM** is the correctness/debugging implementation. It interprets IR directly and remains the semantic oracle.
+- **Optimized runtime** lowers IR registers to stable numeric slots once per executable program, then runs the same host callbacks without per-instruction string-keyed `Map` access. Existing fused/stateful kernels stay behind the same host seam.
+
+The Vela execution adapter selects the optimized tier for production chart execution. Debugging and compatibility tests can explicitly request the reference tier from `CoreSpiritRuntime`.
+
+Realtime execution is persistent: a live `CoreSpiritRuntime` owns state across ticks and evaluates the forming bar through `executeBar()`. Historical backfill replays only a bounded causal window (`dirty range + maxLookback`) rather than rebuilding the entire chart state.
+
+Vela exposes a retained `ScenePatch` ABI and its orchestrator converts tick/bar model changes into `append`, `replace-last`, and range patches. CoreSpirit therefore treats a full model as the initial mount/state boundary; the steady-state path is **state kernel → changed values → retained scene patch → Vela renderer**. Full `replace` remains the fallback for structural or history-wide changes.
