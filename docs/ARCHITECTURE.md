@@ -125,3 +125,51 @@ Stateful kernels are currently treated as execution barriers during realtime rol
 CoreSpirit keeps a canonical typed-array market history alongside the compatibility HistoricalCandle[] view. Numeric series loads (open/high/low/close/volume/time) read from columnar history first.
 
 The object view remains a compatibility boundary for language and host APIs, not the numerical source of truth. Production market transport is already columnar at the TradingCoreOS market-data plane and Vela worker boundary; CoreSpirit now follows the same rule internally.
+
+## ID-addressed series storage
+
+CoreSpirit local series history is now split into a numeric-ID registry rather than using `Record<string, number[]>` as the execution data structure.
+
+The hot path is:
+
+```
+program preparation
+  name -> SeriesId
+        |
+        v
+optimized VM
+  SeriesId -> ring slot
+        |
+        v
+Float64Array buffer
+```
+
+Each numeric series is a bounded ring with `head`, `length`, `capacity`, and a `Float64Array`. Realtime transactions journal only metadata plus overwritten ring slots, so rollback does not copy a history-sized array. A mixed/non-numeric local series is migrated to a compatibility value ring only when the script actually changes its value kind.
+
+`state.seriesState` and `state.localSeries` remain public `Record<string, ...[]>` views for compatibility. They are lazy proxies; the numerical ring is the source of truth and array materialization happens at the API/checkpoint boundary.
+
+The optimized VM lowers `setLocal` and historical local-series `index` operations to numeric series IDs during program preparation. The reference VM keeps the string-keyed form as the correctness/debugging oracle.
+
+## Fused-series backend dispatch
+
+Series fusion is a two-level optimization:
+
+1. the fusion planner proves that a compatible chronological chain can share one pass and zero full intermediate-series allocations;
+2. the backend dispatcher decides where that fused group should run for the current workload.
+
+The dispatch policy is deliberately asymmetric:
+
+| Workload | Backend |
+| --- | --- |
+| forming-bar / realtime | fused CPU cursor |
+| small historical pass | fused CPU |
+| long historical pass | WASM/SIMD when an executable kernel is available |
+| very large, stateless, highly parallel pass | GPU/WebGPU when enabled and policy allows it |
+| stateful recurrence or unsupported offload | fused CPU |
+
+GPU dispatch is not merely a “bigger threshold”: recursive operations such as EMA/RMA/change/persistence remain on chronological CPU unless a backend explicitly provides equivalent deterministic state semantics. Deterministic execution also suppresses a GPU profile marked nondeterministic.
+
+The dispatcher is host-kernel based. If a WASM or GPU profile is selected but no registered executable kernel exists, CoreSpirit falls back to the fused CPU implementation with identical IR semantics. This prevents backend availability metadata from becoming a correctness dependency.
+
+A production offload implementation should therefore provide three additional pieces without changing the language or semantic graph: a batch ABI over `Float64Array` inputs/outputs, a kernel capability manifest, and asynchronous completion fencing for non-realtime work. Realtime never waits on a GPU round trip.
+
