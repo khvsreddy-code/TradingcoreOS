@@ -4,6 +4,8 @@ import type { NextFunction, Request, Response } from 'express';
 export interface TradingCoreRequest extends Request {
   tradingCoreRequestId?: string;
   tradingCoreStartedAt?: number;
+  tradingCoreAbortController?: AbortController;
+  tradingCoreAbortSignal?: AbortSignal;
 }
 
 export function requestContext(req: TradingCoreRequest, res: Response, next: NextFunction): void {
