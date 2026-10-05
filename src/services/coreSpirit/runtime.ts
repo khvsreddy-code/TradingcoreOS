@@ -416,7 +416,8 @@ export class CoreSpiritRuntime {
   loadIr(ir: CoreSpiritIrProgram): void {
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
-    this.optimizedExecutionVm.prepare(ir.entry.instructions);
+    this.prepareSeriesBindings(ir);
+    this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry);
     this.installSeriesFusion(ir);
     this.stateHistoryLimit = Math.min(this.maxHistoryBars, Math.max(this.stateHistoryLimit, ir.maxLookback + 32));
   }
