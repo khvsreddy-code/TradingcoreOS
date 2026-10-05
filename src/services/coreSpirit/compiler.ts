@@ -59,6 +59,12 @@ export class CoreSpiritCompiler {
     const modelRefRegisters = new Map<string, string>();
     const componentRefRegisters = new Map<string, string>();
     const dataMemberSources = new Map<CoreSpiritAstNode, { ref: string; field: 'open'|'high'|'low'|'close'|'volume'|'time' }>();
+    const isDataRefExpression = (node: CoreSpiritAstNode): boolean =>
+      (node.type === 'call' && (node.name === 'market' || node.name === 'timeframe')) ||
+      (node.type === 'memberCall' && node.member === 'timeframe' && (
+        node.target.type === 'call' && node.target.name === 'market' ||
+        (node.target.type === 'identifier' && dataRefRegisters.has(node.target.name))
+      ));
     let temp = 0;
 
     const expr = (n: CoreSpiritAstNode): string => {
@@ -101,6 +107,23 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
+          if (n.member === 'timeframe' && (
+            (n.target.type === 'call' && n.target.name === 'market') ||
+            (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name))
+          )) {
+            if (n.args.length !== 1) throw new Error('market(...).timeframe(...) expects exactly one timeframe argument.');
+            const target = expr(n.target);
+            const timeframe = expr(n.args[0]!);
+            const dest = `t${temp++}`;
+            emitInstruction(n, {
+              op:'call',
+              dest,
+              name:'__market_timeframe',
+              args:[target,timeframe],
+              callId:`market.timeframe:${n.span?.start ?? temp}`,
+            });
+            return dest;
+          }
           if (n.target.type === 'identifier' && CORE_SPIRIT_ROOT_NAMESPACES.includes(n.target.name as typeof CORE_SPIRIT_ROOT_NAMESPACES[number])) {
             const contract = getCoreSpiritMemberContract(n.target.name, n.member);
             if (contract) {
@@ -196,7 +219,10 @@ export class CoreSpiritCompiler {
             return memberDest;
           }
           const target = expr(n.target);
-          const isDataRef = n.target.type === 'identifier' && dataRefRegisters.has(n.target.name) || n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe');
+          const isDataRef =
+            (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name)) ||
+            (n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe')) ||
+            (n.target.type === 'memberCall' && n.target.member === 'timeframe');
           if (!isDataRef) throw new Error(`Member access '${n.member}' is only executable for market()/timeframe() references or chart areas.`);
           const memberDest=`t${temp++}`; const memberName=`t${temp++}`;
           emitInstruction(n, {op:'const',dest:memberName,value:n.member});
@@ -223,7 +249,7 @@ export class CoreSpiritCompiler {
         case 'typeDeclaration': break;
         case 'let': {
           const source=expr(n.expression);
-          const isDataRef = n.expression.type === 'call' && (n.expression.name === 'market' || n.expression.name === 'timeframe');
+          const isDataRef = isDataRefExpression(n.expression);
           const isModelRef = n.expression.type === 'call' && n.expression.name === 'model';
           if (isDataRef) dataRefRegisters.set(n.name, source);
           if (isModelRef) modelRefRegisters.set(n.name, source);
