@@ -9,11 +9,14 @@ import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import { buildCoreSpiritGraphBundle } from './semanticGraph';
 import { getCoreSpiritBuiltin } from './standardLibrary';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
+import { makeCoreSpiritSurfaceMetadata, extractCoreSpiritSurfaceMetadata } from './languageConcepts';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreSpiritComponents';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
-import { createCoreSpiritCompilationUnit } from './compilerPipeline';
+import { createCoreSpiritCompilationUnit, makeCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
+import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
+import { planCoreSpiritExecution } from './executionPlanner';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
@@ -25,7 +28,8 @@ export class CoreSpiritCompiler {
   ): CoreSpiritCompileResult {
     const unit = createCoreSpiritCompilationUnit(source, options);
     if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) return { diagnostics: unit.diagnostics };
-    return this.compile(unit.ast, sourceId, options);
+    const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(source);
+    return this.compile(unit.ast, sourceId, { ...options, surface });
   }
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata; components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritCompileResult {
@@ -35,6 +39,8 @@ export class CoreSpiritCompiler {
     const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface, components: componentSource });
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
     if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics };
+    const surface = options.surface ?? makeCoreSpiritSurfaceMetadata([]);
+    const semanticDependencyGraph = buildCoreSpiritSemanticDependencyGraph(ast, semantic, surface);
     const instructions: CoreSpiritIrInstruction[] = [];
     const locals: string[] = [];
     const originFor = (node: CoreSpiritAstNode) => node.span ? {
@@ -239,9 +245,23 @@ export class CoreSpiritCompiler {
     };
     try {
       stmt(ast);
-      const rawIr:CoreSpiritIrProgram={version:1,sourceId,entry:{instructions},locals,maxLookback:semantic.maxLookback,diagnostics:[],sourceMap:coreSpiritSourceMapFromInstructions(sourceId,instructions),...(options.surface ? { surface: options.surface } : {})};
+      const rawIr:CoreSpiritIrProgram={
+        version:1,
+        sourceId,
+        entry:{instructions},
+        locals,
+        maxLookback:semantic.maxLookback,
+        diagnostics:[],
+        sourceMap:coreSpiritSourceMapFromInstructions(sourceId,instructions),
+        surface,
+        semanticDependencyGraph,
+        compilerPipeline:makeCoreSpiritCompilerPipelineTrace(),
+      };
       const optimized = optimizeCoreSpiritIr(rawIr);
-      const ir = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), graphs: buildCoreSpiritGraphBundle(optimized, { components: componentSource }) } as CoreSpiritIrProgram;
+      const graphInput = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), semanticDependencyGraph } as CoreSpiritIrProgram;
+      const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
+      const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs });
+      const ir = { ...graphInput, graphs, executionPlan, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {
