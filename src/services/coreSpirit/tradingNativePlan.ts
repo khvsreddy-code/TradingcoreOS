@@ -176,6 +176,13 @@ function visit(
       return;
     }
     case 'let': visit(node.expression,dependencies,events); return;
+    case 'assignment': visit(node.expression,dependencies,events); return;
+    case 'onEvent': {
+      const trigger=eventTrigger(node.eventName);
+      events.set(trigger.source,trigger);
+      node.body.forEach((child)=>visit(child,dependencies,events));
+      return;
+    }
     case 'if': visit(node.condition,dependencies,events); node.thenBranch.forEach((child)=>visit(child,dependencies,events)); node.elseBranch?.forEach((child)=>visit(child,dependencies,events)); return;
     case 'expressionStatement': visit(node.expression,dependencies,events); return;
     case 'identifier': {
