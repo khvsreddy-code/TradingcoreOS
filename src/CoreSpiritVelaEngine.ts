@@ -195,11 +195,14 @@ export class CoreSpiritVelaEngine {
     let stopped = false;
     let liveStarted = false;
     let lastTime = Number.NaN;
+    let firstSeriesTime = Number.NaN;
+    let markerListCache: Array<{ time:number; position:'aboveBar'|'belowBar'|'inBar'; shape:string; color:string; text?:string }> | null = null;
 
     const collect = (objects: CoreSpiritObject[]) => {
       for (const output of objects) {
         if (output.kind === 'series') {
           objectToSeries(token.sourceId, points, output);
+          if (!Number.isFinite(firstSeriesTime)) firstSeriesTime = Number(output.time);
         } else if (output.kind === 'signal') {
           const time = Number(output.time);
           const key = `${output.type}:${time}`;
@@ -210,6 +213,7 @@ export class CoreSpiritVelaEngine {
             color: String(output.metadata?.color || '#9b8aff'),
             text: String(output.type || 'SIGNAL'),
           });
+          markerListCache = null;
         } else if (output.kind === 'hline') {
           const price = Number(output.price);
           if (!Number.isFinite(price)) continue;
@@ -261,14 +265,9 @@ export class CoreSpiritVelaEngine {
     };
 
     const emitModel = (dirty?: DirtyRange) => {
-      let firstTime: number | undefined;
-      for (const values of points.values()) {
-        const value = values[0]?.time;
-        if (value == null) continue;
-        const time = Number(value);
-        if (firstTime == null || time < firstTime) firstTime = time;
-      }
-      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markers, priceLines, firstTime, dirty));
+      if (!markerListCache) markerListCache = [...markers.values()].sort((a, b) => a.time - b.time);
+      const firstTime = Number.isFinite(firstSeriesTime) ? firstSeriesTime : undefined;
+      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, new Map(markerListCache.map((marker) => [String(marker.time) + ':' + marker.text, marker])), priceLines, firstTime, dirty));
     };
 
     try {
@@ -326,6 +325,8 @@ export class CoreSpiritVelaEngine {
         const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
         points.clear();
         markers.clear();
+        markerListCache = null;
+        firstSeriesTime = Number.NaN;
         priceLines.splice(0, priceLines.length);
         runtime.loadIr(token.ir);
         const result = runtime.executeIr(token.ir, currentBars);
@@ -342,7 +343,7 @@ export class CoreSpiritVelaEngine {
         const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
         if (!currentBars.length) return;
         if (reason === 'complete') {
-          points.clear(); markers.clear(); priceLines.splice(0, priceLines.length); runtime.loadIr(token.ir);
+          points.clear(); markers.clear(); markerListCache = null; firstSeriesTime = Number.NaN; priceLines.splice(0, priceLines.length); runtime.loadIr(token.ir);
           const result = runtime.executeIr(token.ir, currentBars); collect(result.outputs); liveStarted = req.mode === 'live';
           lastTime = barTimeMillis(currentBars.at(-1)?.timestamp); const firstTime = barTimeMillis(currentBars[0]?.timestamp);
           emitModel(Number.isFinite(firstTime) && Number.isFinite(lastTime) ? { from:firstTime, to:lastTime } : undefined); return;
