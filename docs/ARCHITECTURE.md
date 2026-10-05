@@ -306,3 +306,51 @@ CoreSpirit semantic core         -> trading-native systems language
 
 The implementation intentionally keeps the market host/network boundary outside the VM. A `market()` handle is data identity plus execution context; resolution, caching, freshness and provider access belong to the host.
 
+
+
+### Trading-native scheduling contract
+
+The compiled trading-native plan is the bridge between language semantics and host scheduling. It records the concrete symbol/timeframe contexts, the fields or market structures each context needs, and whether each dependency can cross the batched OHLCV resolver boundary.
+
+For example:
+
+```text
+close                         -> current/chart
+market("NIFTY50").close      -> NIFTY50/chart
+market("NIFTY50").timeframe("15m").close
+                              -> NIFTY50/15m
+```
+
+becomes one dependency set with one batchable host request boundary for compatible OHLCV fields. The chart-native `current/chart` columns are intentionally excluded from that host batch because they already live in CoreSpirit's local columnar tape.
+
+Structured domains remain separate:
+
+```text
+NIFTY50/chart/orderbook
+NIFTY50/chart/footprint
+NIFTY50/chart/volume-profile
+```
+
+They are not coerced into OHLCV requests and are resolved through symbol/timeframe-scoped host hooks.
+
+The runtime deduplicates identical `symbol + timeframe + field` requests before calling `requestBatch`. This turns multi-symbol/multi-timeframe data access into a scheduler problem instead of repeated per-expression calls.
+
+### Event-native scheduling contract
+
+Surface automation triggers and normalized `event(...)` expressions become typed event triggers with concrete TradingCore bus names:
+
+```text
+bar           -> market.bar
+tick          -> market.tick
+session.open  -> market.session.open
+session.close -> market.session.close
+breakout      -> market.breakout
+signal        -> script.signal
+order         -> execution.order
+fill          -> execution.fill
+```
+
+Event routing remains transactional. An automation can therefore subscribe to an event class without being allowed to commit an order/notification side effect before the current realtime evaluation is confirmed.
+
+This makes `when` a scheduler concept rather than another indicator function. The semantic graph can reason about an event-triggered region independently from the numerical data graph.
+
