@@ -179,6 +179,7 @@ export class CoreSpiritVelaEngine {
       sourceId: token.sourceId,
       executionMode: req.mode === 'live' ? 'realtime' : 'historical',
       executionTarget: 'chart',
+      executionTier: 'optimized',
     });
     runtime.loadIr(token.ir);
 
@@ -353,7 +354,7 @@ export class CoreSpiritVelaEngine {
           const executionStart = Math.max(0, start - maxLookback);
           const rangeBars = currentBars.slice(executionStart, end);
           if (rangeBars.length) {
-            const rangeRuntime = new CoreSpiritRuntime({ symbol:req.market.symbol, timeframe:req.market.timeframe, sourceId:token.sourceId, executionMode:req.mode === 'live' ? 'realtime' : 'historical', executionTarget:'chart' });
+            const rangeRuntime = new CoreSpiritRuntime({ symbol:req.market.symbol, timeframe:req.market.timeframe, sourceId:token.sourceId, executionMode:req.mode === 'live' ? 'realtime' : 'historical', executionTarget:'chart', executionTier:'optimized' });
             rangeRuntime.loadIr(token.ir); const rangeResult = rangeRuntime.executeIr(token.ir, rangeBars);
             // Do not clear retained output: merge only the exact dirty interval.
             collectRange(rangeResult.outputs, dirtyRange); emitModel(dirtyRange); return;
