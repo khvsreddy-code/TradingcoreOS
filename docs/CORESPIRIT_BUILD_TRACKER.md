@@ -173,3 +173,33 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 ## v94 implementation record
 
 The chart data plane established the zero-copy canonical chart data plane at the Vela boundary, with typed column transport and retained GPU-buffer reuse for identity-chart rendering.
+
+## v133 — request/realtime plane separation and distributed coordination
+
+### 9. Vercel request-plane hardening
+- [x] Catch-all `api/index.ts` max duration reduced from 300s to 15s.
+- [x] P0 broker/API calls carry explicit absolute deadlines.
+- [x] Authentication validation has a bounded upstream deadline.
+- [x] Long-running production prediction supports durable asynchronous execution.
+- [x] HTTP market/order stream fallback has a bounded lease.
+
+### 10. Distributed coordination
+- [x] Upstash Redis REST coordination client added without blocking the hot path on a long-lived TCP connection.
+- [x] Broker request admission/rate budgeting can coordinate across Vercel instances.
+- [x] Broker-session short cache can be shared across instances while Supabase remains the durable source of truth.
+- [x] Realtime ownership/subscription metadata uses Redis.
+- [x] Realtime cross-instance event fanout uses Redis Pub/Sub.
+
+### 11. Dedicated realtime plane
+- [x] Signed, short-lived browser realtime tickets.
+- [x] Dedicated Node WebSocket gateway with Redis owner election.
+- [x] One FYERS broker socket owner per user across gateway instances.
+- [x] Browser market feed prefers the dedicated gateway and falls back to the bounded legacy stream.
+- [~] Production realtime gateway is not yet provisioned/connected to the Vercel project; environment variables are intentionally not fabricated.
+
+### Remaining rollout gates
+1. Provision a Redis/Upstash database and populate the request-plane Redis credentials in Vercel.
+2. Deploy `realtime-gateway/server.ts` as a long-lived service with the same Redis and shared ticket secret.
+3. Set `REALTIME_GATEWAY_URL` in Vercel, validate the browser gateway path, and only then set `TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED=true`.
+4. After cutover, disable the legacy `/market-stream` and `/order-stream` HTTP bridges rather than retaining two competing realtime topologies.
+
