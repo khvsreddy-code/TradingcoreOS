@@ -252,3 +252,30 @@ The chart data plane established the zero-copy canonical chart data plane at the
 - [x] Add a source contract test for the module-graph boundary.
 - [~] Advanced families are still hydrated together when the drawing toolbar is shown.
 - [ ] Load a family only when its flyout is opened, then prove the network trace.
+
+
+## v137 — CoreSpirit compiler pipeline
+
+- [x] Make the source → CST → AST → semantic-analysis path explicit in compiler contracts.
+- [x] Build and attach an AST-level semantic dependency graph.
+- [x] Emit one IR artifact with semantic graph + source provenance metadata.
+- [x] Record compiler stage order in `compilerPipeline`.
+- [x] Preserve the existing IR v1 / CoreSpiritExecutionVM contract.
+- [x] Add IR validation for pipeline/graph/optimizer/execution-plan metadata.
+- [x] Runtime continues to execute only the canonical compiled artifact.
+
+## v138 — CoreSpirit first-class optimizer
+
+- [x] Keep constant folding.
+- [x] Add safe pure common-subexpression elimination.
+- [x] Reuse duplicate historical series reads such as repeated `close`.
+- [x] Keep stateful indicator calls out of generic CSE.
+- [x] Emit per-bar cost model: pure/effect/stateful work, history reads, saved work and register pressure.
+- [x] Feed optimized pure-work cost into the execution planner.
+- [x] Preserve a single chronological traversal.
+- [x] Runtime consumes the compiler-produced series-fusion plan.
+- [x] Add a regression contract covering the full compiler → optimizer → execution-plan chain.
+- [~] The optimizer is still conservative: no generic state-identity analysis for shareable stateful calls.
+- [ ] Add DAG critical-path/fan-out scheduling and a richer cost model.
+- [ ] Add representative 5k/50k/500k-bar benchmark evidence.
+- [ ] Prove family-level Vela drawing requests and CoreSpirit optimized runtime speedups in browser traces.
