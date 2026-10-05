@@ -107,3 +107,7 @@ on demand
 ```
 
 `vite.config.ts` emits a manifest and explicit vendor chunks. `tools/check-bundle-budget.mjs` computes gzip size for the actual route dependency graph instead of judging only the largest emitted file.
+
+## Canonical architecture (TradingCoreOS 2)
+
+Production architecture is now expressed as five permanent planes: **Market Data → CoreSpirit → Compute → Vela → TradingCoreOS**. Numbered stages are development history, not production architecture. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the dependency rules and history policy.

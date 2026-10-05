@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { TRADINGCOREOS_ARCHITECTURE, TRADINGCOREOS_ARCHITECTURE_VERSION, validateTradingCoreOSDependency } from './architectureContract.ts';
+assert.equal(TRADINGCOREOS_ARCHITECTURE_VERSION, 2);
+assert.deepEqual(TRADINGCOREOS_ARCHITECTURE.map((plane) => plane.id), ['marketData', 'coreSpirit', 'compute', 'vela', 'trading']);
+assert.equal(validateTradingCoreOSDependency('coreSpirit', 'marketData'), true);
+assert.equal(validateTradingCoreOSDependency('coreSpirit', 'compute'), true);
+assert.equal(validateTradingCoreOSDependency('vela', 'coreSpirit'), true);
+assert.equal(validateTradingCoreOSDependency('trading', 'coreSpirit'), true);
+assert.equal(validateTradingCoreOSDependency('marketData', 'vela'), false);
+assert.equal(validateTradingCoreOSDependency('compute', 'vela'), false);
+console.log('TRADINGCOREOS_ARCHITECTURE_CONTRACT_OK');
