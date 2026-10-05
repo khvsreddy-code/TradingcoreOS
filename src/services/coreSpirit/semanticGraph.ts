@@ -126,6 +126,24 @@ function instructionDest(ins: CoreSpiritIrInstruction): string | undefined {
   return 'dest' in ins ? ins.dest : undefined;
 }
 
+function constantValueForInstruction(instructions: readonly CoreSpiritIrInstruction[], register?: string): number | undefined {
+  if (!register) return undefined;
+  const found = instructions.find((instruction) => instruction.op === 'const' && instruction.dest === register);
+  return found?.op === 'const' && typeof found.value === 'number' && Number.isFinite(found.value) ? found.value : undefined;
+}
+
+function inferNodeLookback(ins: CoreSpiritIrInstruction, instructions: readonly CoreSpiritIrInstruction[], stateful: boolean): number {
+  if (ins.op === 'loadSeries') return Math.max(0, ins.offset);
+  if (ins.op === 'index') return Math.max(0, Math.floor(constantValueForInstruction(instructions, ins.index) ?? 0));
+  if (ins.op === 'call') {
+    if (/^(ema|rma|rsi|atr|vwap|cross|crossover|crossunder)$/.test(ins.name)) return Number.POSITIVE_INFINITY;
+    if (/^(change|pctchange)$/.test(ins.name)) return 1;
+    const length = Math.max(0, Math.floor(constantValueForInstruction(instructions, ins.args[1]) ?? 0));
+    if (/^(sma|mean|sum|highest|lowest|stdev|wma|median|variance|zscore|normalize|persistence|rising|falling)$/.test(ins.name)) return Math.max(0, length - 1);
+  }
+  return stateful ? Number.POSITIVE_INFINITY : 0;
+}
+
 function instructionName(ins: CoreSpiritIrInstruction): string | undefined {
   if (ins.op === 'call') return ins.name;
   if (ins.op === 'emit') return ins.kind;
@@ -220,7 +238,7 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options
       deterministic,
       parallelizable,
       ...(() => { const descriptor = deriveCoreSpiritNodeExecutionDescriptor({ nodeId: id, effectful, stateful, latencyClass, kind, parallelizable, deterministic }); return { executionLane: descriptor.lane, executionClass: descriptor.class, cacheable: descriptor.cacheable }; })(),
-      lookback: 0,
+      lookback: inferNodeLookback(ins, program.entry.instructions, stateful),
       incremental: deterministic && (pure || stateful),
       viewportDependent: ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right/.test(ins.name),
       realtimeSafe: deterministic && !external && !(ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right/.test(ins.name)),
