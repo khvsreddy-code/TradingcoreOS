@@ -18,6 +18,7 @@ import { executionLaneForNode } from './coreSpiritExecutionModel';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import type { CoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
+import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 
 export type CoreSpiritComputeBackend = 'cpu' | 'wasm' | 'gpu';
 
@@ -41,6 +42,7 @@ export interface CoreSpiritExecutionPlannerOptions {
   timeframeCount?: number;
   barCount?: number;
   sandbox?: { requireComputeBackend(backend: CoreSpiritComputeBackend): void };
+  tradingNativePlan?: CoreSpiritTradingNativePlan;
 }
 
 export interface CoreSpiritWorkloadEstimate {
@@ -90,6 +92,7 @@ export interface CoreSpiritExecutionPlan {
   barriers: readonly string[];
   seriesFusion: CoreSpiritSeriesFusionPlan;
   specializedPlan: CoreSpiritSpecializedPlan;
+  tradingNativePlan: CoreSpiritTradingNativePlan;
   chronologicalPasses: 1;
   sourceReadReuse: number;
   estimatedSavedWorkUnits: number;
@@ -210,6 +213,17 @@ export function planCoreSpiritExecution(
   const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits });
   const seriesFusion = planCoreSpiritSeriesFusion(program);
   const specializedPlan = program.specializedPlan ?? buildCoreSpiritSpecializedPlan(program.entry.instructions);
+  const tradingNativePlan = options.tradingNativePlan ?? program.tradingNativePlan ?? {
+    version:1,
+    dataDependencies:[],
+    batches:[],
+    eventTriggers:[],
+    computeClasses:['scalar','fused','simd','worker','wasm','gpu'] as const,
+    multiSymbol:false,
+    multiTimeframe:false,
+    dataNative:false,
+    eventNative:false,
+  };
 
   const explanation: string[] = [
     `workload=${workload.workUnits.toFixed(2)} units (${workload.symbols} symbols × ${workload.timeframes} timeframes × ${workload.bars} bars × ${workload.estimatedPureBarWork.toFixed(2)} optimized pure work/bar)`,
@@ -277,11 +291,18 @@ export function planCoreSpiritExecution(
     semanticGraph: program.graphs?.semantic.checksum ?? '',
     dimensions: { symbols: workload.symbols, timeframes: workload.timeframes, bars: workload.bars },
     strategy,
+    tradingNative: {
+      multiSymbol: tradingNativePlan.multiSymbol,
+      multiTimeframe: tradingNativePlan.multiTimeframe,
+      dataDependencyCount: tradingNativePlan.dataDependencies.length,
+      eventCount: tradingNativePlan.eventTriggers.length,
+    },
   });
   explanation.push(`execution lanes: hot=${lanes.hot.length}, warm=${lanes.warm.length}, cold=${lanes.cold.length}`);
   explanation.push(`chronological traversal: 1 pass; estimated optimizer savings=${workload.estimatedSavedBarWork.toFixed(2)} work/bar`);
   if (seriesFusion.groups.length) explanation.push(`series fusion: ${seriesFusion.groups.length} group(s), ${seriesFusion.fusedInstructionCount} instruction(s) lowered to single-pass kernels`);
   explanation.push(`specialized plan: ${specializedPlan.strategy}, ${specializedPlan.slotCount} slots, ${specializedPlan.seriesFanouts.length} shared-input fanout group(s)`);
+  explanation.push(`trading-native plan: symbols=${tradingNativePlan.multiSymbol ? 'multi' : 'single'}, timeframes=${tradingNativePlan.multiTimeframe ? 'multi' : 'single'}, dataDeps=${tradingNativePlan.dataDependencies.length}, events=${tradingNativePlan.eventTriggers.length}`);
   return {
     version: 1,
     strategy,
@@ -296,6 +317,7 @@ export function planCoreSpiritExecution(
     barriers: effectNodes.map(node => node.id),
     seriesFusion,
     specializedPlan,
+    tradingNativePlan,
     chronologicalPasses:1,
     sourceReadReuse: program.optimizationPlan?.cost.sourceReadReuse ?? 0,
     estimatedSavedWorkUnits: workload.estimatedSavedBarWork * workload.symbols * workload.timeframes * workload.bars,
