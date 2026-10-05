@@ -130,7 +130,6 @@ export class CoreSpiritSeriesRegistry {
         const write = entry.writes[i]!;
         slot.buffer[write.index] = write.value;
       }
-      if (entry.replaced && entry.originalBuffer) slot.buffer = entry.originalBuffer;
       if (entry.originalBuffer) slot.buffer = entry.originalBuffer;
       slot.head = entry.originalHead;
       slot.length = entry.originalLength;
@@ -162,20 +161,23 @@ export class CoreSpiritSeriesRegistry {
   }
 
   pushNumber(id: CoreSpiritSeriesId, value: number, limit: number): void {
+    const existing = this.numeric.get(id);
+    this.recordNumeric(id, existing);
     const slot = this.ensureNumericSlot(id, limit);
-    this.recordNumeric(id, slot);
     this.pushNumeric(slot, Number(value));
   }
 
   pushValue(id: CoreSpiritSeriesId, value: CoreSpiritStoredValue, limit: number): void {
     if (isNumericValue(value)) {
+      const existing = this.numeric.get(id);
+      this.recordNumeric(id, existing);
       const slot = this.ensureNumericSlot(id, limit);
-      this.recordNumeric(id, slot);
       this.pushNumeric(slot, value);
       return;
     }
+    const existing = this.values.get(id);
+    this.recordValue(id, existing);
     const slot = this.ensureValueSlot(id, limit);
-    this.recordValue(id, slot);
     this.pushValueRing(slot, value);
   }
 
