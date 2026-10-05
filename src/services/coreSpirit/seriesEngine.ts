@@ -1,4 +1,6 @@
 import type { CoreSpiritMarketBar } from './marketData';
+import type { CoreSpiritColumnarSeries } from './columnarSeries';
+import { columnarSeriesLength, columnarSeriesValue } from './columnarSeries';
 
 export type CoreSpiritSeriesField = 'open'|'high'|'low'|'close'|'volume'|'time';
 export type CoreSpiritSeriesMode = 'historical'|'realtime'|'replay'|'backtest'|'historicalTick';
@@ -11,15 +13,19 @@ export class CoreSpiritSeriesEngine {
   private currentBarIndex = -1;
   private currentTimestamp = 0;
   private currentConfirmed = true;
+  private columns: CoreSpiritColumnarSeries | undefined;
 
-  reset(bars: CoreSpiritMarketBar[] = []) { this.bars=[...bars]; this.revision=0; this.currentBarIndex=-1; this.currentTimestamp=0; this.currentConfirmed=true; }
-  setBars(bars: CoreSpiritMarketBar[]) { this.bars=[...bars]; }
+  reset(bars: CoreSpiritMarketBar[] = []) { this.columns=undefined; this.bars=[...bars]; this.revision=0; this.currentBarIndex=-1; this.currentTimestamp=0; this.currentConfirmed=true; }
+  /** Bind the canonical typed tape without copying it into object bars. */
+  bindColumns(columns: CoreSpiritColumnarSeries): void { this.columns=columns; this.bars=[]; this.currentBarIndex=-1; }
+  get columnar() { return this.columns; }
+  setBars(bars: CoreSpiritMarketBar[]) { this.columns=undefined; this.bars=[...bars]; }
   beginBar(index:number, bar:CoreSpiritMarketBar, confirmed:boolean, revision:number) {
     this.currentBarIndex=index; this.currentTimestamp=Date.parse(String(bar.timestamp)); this.currentConfirmed=confirmed; this.revision=revision;
     if (index < 0) throw new Error('invalid bar index');
   }
   getRevision(): CoreSpiritSeriesRevision { return { barIndex:this.currentBarIndex, timestamp:this.currentTimestamp, revision:this.revision, confirmed:this.currentConfirmed }; }
-  get length(){ return this.bars.length; }
+  get length(){ return this.columns ? columnarSeriesLength(this.columns) : this.bars.length; }
   get currentIndex(){ return this.currentBarIndex; }
   get currentBar(){ return this.bars[this.currentBarIndex]; }
   getBars(){ return this.bars; }
@@ -29,6 +35,7 @@ export class CoreSpiritSeriesEngine {
     if(!Number.isInteger(offset)||offset<0) throw new Error(`future indexing is not allowed for ${field}[${offset}]`);
     const index=this.currentBarIndex-offset;
     if(index<0) return null;
+    if (this.columns) return columnarSeriesValue(this.columns, field, index);
     const bar=this.bars[index]; if(!bar)return null;
     const raw=field==='time'?Date.parse(String(bar.timestamp)):(bar as any)[field];
     const n=Number(raw); return Number.isFinite(n)?n:null;
