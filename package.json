@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && npm run bundle:budget",
     "start": "vite preview",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
@@ -19,7 +19,9 @@
     "ci": "npm run test:contracts && npm run typecheck && npm run build",
     "verify:browser": "node tools/verify-chart-performance.mjs",
     "realtime:gateway": "tsx realtime-gateway/server.ts",
-    "latency:contracts": "node src/realtimeArchitectureContract.test.mjs"
+    "latency:contracts": "node src/realtimeArchitectureContract.test.mjs",
+    "bundle:budget": "node tools/check-bundle-budget.mjs",
+    "bundle:report": "TCO_MAX_LANDING_GZIP_KB=100000 TCO_MAX_DASHBOARD_GZIP_KB=100000 TCO_MAX_LIVE_GZIP_KB=100000 node tools/check-bundle-budget.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
