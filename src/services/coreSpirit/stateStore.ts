@@ -3,10 +3,16 @@ import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId, type CoreSpiritStore
 export type CoreSpiritCrossState = Record<string, { a: number; b: number }>;
 
 export class CoreSpiritStateStore {
-  readonly series = new CoreSpiritSeriesRegistry();
+  readonly series: CoreSpiritSeriesRegistry;
+  private crossState: CoreSpiritCrossState = {};
 
-  bind(registry: CoreSpiritSeriesRegistry): void {
+  constructor(registry = new CoreSpiritSeriesRegistry()) {
+    this.series = registry;
+  }
+
+  bind(registry: CoreSpiritSeriesRegistry, crossState: CoreSpiritCrossState): void {
     (this as any).series = registry;
+    this.crossState = crossState;
   }
 
   beginRealtimeTransaction(): void {
@@ -15,10 +21,18 @@ export class CoreSpiritStateStore {
 
   commitRealtimeTransaction(): void {
     this.series.commit();
+    this.seriesCrossJournal?.clear();
   }
 
   rollbackRealtimeTransaction(): void {
     this.series.rollback();
+    if (this.seriesCrossJournal) {
+      for (const [key, value] of this.seriesCrossJournal) {
+        if (value) this.crossState[key] = value;
+        else delete this.crossState[key];
+      }
+      this.seriesCrossJournal.clear();
+    }
   }
 
   hasRealtimeTransaction(): boolean {
@@ -38,9 +52,13 @@ export class CoreSpiritStateStore {
   }
 
   setCross(key: string, value: { a: number; b: number }): void {
-    // Cross state remains a scalar keyed map; only chronological series buffers
-    // are lowered to numeric IDs in this tier.
-    void key;
-    void value;
+    this.seriesCrossJournal ??= new Map();
+    if (this.series.hasActiveTransaction() && !this.seriesCrossJournal.has(key)) {
+      const previous = this.crossState[key];
+      this.seriesCrossJournal.set(key, previous ? { ...previous } : null);
+    }
+    this.crossState[key] = value;
   }
+
+  private seriesCrossJournal?: Map<string, { a: number; b: number } | null>;
 }
