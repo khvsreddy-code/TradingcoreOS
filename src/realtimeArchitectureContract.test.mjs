@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 assert.equal(vercel.functions['api/index.ts'].maxDuration, 15);
+assert.deepEqual(vercel.regions, ['bom1'], 'India-first Vercel functions must remain in Mumbai (bom1)');
 assert.ok(vercel.functions['api/queue.ts'], 'queue worker must remain separate from api/index');
 
 const server = fs.readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
@@ -29,6 +30,9 @@ assert.match(gateway, /tco:realtime:owner/);
 assert.match(gateway, /tco:realtime:events/);
 assert.match(gateway, /verifyRealtimeTicket/);
 assert.match(gateway, /WebSocketServer/);
+
+const frontend = fs.readFileSync(new URL('./frontendPerformanceContract.test.mjs', import.meta.url), 'utf8');
+assert.match(frontend, /frontend performance architecture contract: OK/);
 
 const marketClient = fs.readFileSync(new URL('./services/marketData/BrokerMarketDataClient.ts', import.meta.url), 'utf8');
 assert.match(marketClient, /\/api\/realtime\/ticket/);
