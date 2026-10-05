@@ -34,6 +34,10 @@ export * from './incrementalAst';
 export * from './hotReload';
 export * from './monacoAdapter';
 export * from './languageSpec';
+export * from './temporalTypes';
+export * from './repaintSafety';
+export * from './profiler';
+export * from './typeSystem';
 
 export * from './executionContext';
 export * from './seriesEngine';
