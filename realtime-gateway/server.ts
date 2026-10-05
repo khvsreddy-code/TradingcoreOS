@@ -40,8 +40,8 @@ type OwnedUser = {
   orderListener: (event: any) => void;
 };
 
-if (!REDIS_URL) {
-  throw new Error('REALTIME_REDIS_URL (or REDIS_URL) is required for the realtime gateway.');
+if (!REDIS_URL || !REDIS_TOKEN) {
+  throw new Error('REALTIME_REDIS_REST_URL/UPSTASH_REDIS_REST_URL and matching token are required for the realtime gateway.');
 }
 if (!process.env.REALTIME_GATEWAY_SHARED_SECRET) {
   throw new Error('REALTIME_GATEWAY_SHARED_SECRET is required for the realtime gateway.');
@@ -96,9 +96,6 @@ function parseSymbols(value: string): string[] {
   )];
 }
 
-function activeLocalUsers(): string[] {
-  return [...connectionsByUser.keys()];
-}
 
 function userHasLocalConnections(userId: string): boolean {
   return (connectionsByUser.get(userId)?.size || 0) > 0;
@@ -426,8 +423,6 @@ async function shutdown(): Promise<void> {
   for (const connection of localConnections.values()) {
     try { connection.socket.close(1001, 'Gateway shutting down'); } catch {}
   }
-  await subscriber.quit().catch(() => undefined);
-  await redis.quit().catch(() => undefined);
   server.close();
 }
 
