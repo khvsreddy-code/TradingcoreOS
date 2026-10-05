@@ -1,6 +1,7 @@
 import type { CoreSpiritIrInstruction } from './ir';
 import type { CoreSpiritObject, CoreSpiritValue } from './types';
 import type { CoreSpiritOutputCollector } from './outputCollector';
+import type { CoreSpiritValueStore } from './executionValueStore';
 
 type CoreSpiritCallInstruction = Extract<CoreSpiritIrInstruction, { op: 'call' }>;
 type CoreSpiritIndexInstruction = Extract<CoreSpiritIrInstruction, { op: 'index' }>;
@@ -14,11 +15,11 @@ export type CoreSpiritExecutionVMHost = {
   setLocal: (name: string, value: unknown, series: boolean) => void;
   unary: (operator: string, value: unknown) => unknown;
   binary: (operator: string, left: unknown, right: unknown) => unknown;
-  tryFused: (pc: number, values: Map<string, unknown>, instructions: CoreSpiritIrInstruction[], barIndex: number) => boolean;
+  tryFused: (pc: number, values: CoreSpiritValueStore, instructions: CoreSpiritIrInstruction[], barIndex: number) => boolean;
   call: (instruction: CoreSpiritCallInstruction, args: unknown[]) => unknown;
-  loadIndexed: (instruction: CoreSpiritIndexInstruction, index: number, values: Map<string, unknown>) => number | null | CoreSpiritValue;
+  loadIndexed: (instruction: CoreSpiritIndexInstruction, index: number, values: CoreSpiritValueStore) => number | null | CoreSpiritValue;
   truthy: (value: unknown) => boolean;
-  emit: (instruction: CoreSpiritEmitInstruction, values: Map<string, unknown>, output: CoreSpiritOutputCollector) => void;
+  emit: (instruction: CoreSpiritEmitInstruction, values: CoreSpiritValueStore, output: CoreSpiritOutputCollector) => void;
 };
 
 export class CoreSpiritExecutionVM {
