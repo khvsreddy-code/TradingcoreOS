@@ -130,6 +130,7 @@ export {
     createDrawing,
     resetDrawingSettings,
     deserializeDrawing,
+    loadAdvancedDrawingCatalog,
     type DrawingTypeMeta,
 } from './registry';
 export { migrate, isValidSerialized, clonePlain, DRAWINGS_DOC_VERSION, type DrawingsDocument } from './document';
