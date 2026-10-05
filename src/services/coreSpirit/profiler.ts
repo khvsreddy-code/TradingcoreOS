@@ -153,12 +153,13 @@ export class CoreSpiritProfiler {
     finally { this.compileMs += nowMs()-start; this.recordPhase('compile',nowMs()-start); }
   }
 
-  beginBar(phase:'historical'|'realtime'): void {
+  beginBar(phase:'historical'|'realtime', instructionCount=0): void {
     if(!this.enabled) return;
     this.currentRuntimePhase=phase;
     this.tickStart=nowMs();
     this.ticks += 1;
     this.bars += 1;
+    if(this.mode==='summary') this.instructions += Math.max(0,Math.floor(instructionCount));
   }
 
   endBar(): void {
