@@ -4,7 +4,7 @@ export type CoreSpiritTokenType =
   | 'plus' | 'minus' | 'star' | 'slash' | 'percent' | 'bang'
   | 'equal' | 'equalEqual' | 'bangEqual' | 'less' | 'lessEqual' | 'greater' | 'greaterEqual'
   | 'leftParen' | 'rightParen' | 'leftBracket' | 'rightBracket' | 'leftBrace' | 'rightBrace'
-  | 'comma' | 'semicolon' | 'colon' | 'colonEqual' | 'dot' | 'eof';
+  | 'comma' | 'semicolon' | 'colon' | 'colonEqual' | 'at' | 'dot' | 'eof';
 
 export type CoreSpiritToken = { type: CoreSpiritTokenType; lexeme: string; value?: string | number | boolean | null; offset: number; line: number; column: number };
 
