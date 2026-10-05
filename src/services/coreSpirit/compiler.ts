@@ -18,7 +18,7 @@ import { createCoreSpiritCompilationUnit, makeCoreSpiritCompilerPipelineTrace } 
 import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import { planCoreSpiritExecution } from './executionPlanner';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
-import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
+import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';\nimport { isStateType } from './typeSystem';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
@@ -256,7 +256,7 @@ export class CoreSpiritCompiler {
           if (isModelRef) modelRefRegisters.set(n.name, source);
           const component = n.expression.type === 'call' ? resolveCoreSpiritComponent(componentSource,n.expression.name) : undefined;
           if (component && component.outputs.length > 1) componentRefRegisters.set(n.name, component.id);
-          emitInstruction(n, {op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef});
+          const isState=isStateType(semantic.symbols.get(n.name) as any);\n          emitInstruction(n, {op:'setLocal',name:n.name,source,series:!isDataRef && !isModelRef && !isState});
           if(!locals.includes(n.name))locals.push(n.name);
           break;
         }
