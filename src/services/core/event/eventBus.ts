@@ -3,6 +3,10 @@ export type CoreMarketStatus = 'connecting' | 'connected' | 'disconnected' | 'er
 export type CoreEventMap = {
   'market.bar': { symbol: string; timeframe: string; bar: Record<string, unknown>; sequence?: number; source?: 'live' | 'replay' };
   'market.tick': { symbol: string; timeframe?: string; tick: Record<string, unknown>; brokerId?: string; receivedAt?: number; sequence?: number; source?: 'live' | 'replay' };
+  'market.trade': { symbol: string; timeframe?: string; trade: Record<string, unknown>; sequence?: number; source?: 'live' | 'replay' };
+  'market.orderbook': { symbol: string; timestamp: number; bids: Record<string, unknown>[]; asks: Record<string, unknown>[]; sequence?: number };
+  'execution.order': { source: string; order: Record<string, unknown>; time: number; sequence?: number };
+  'execution.fill': { source: string; fill: Record<string, unknown>; time: number; sequence?: number };
   'market.calculation': { symbol: string; timeframe: string; mode: 'tick' | 'bar'; timestamp: number; barIndex: number; isBarClose: boolean; values: Record<string, number | null>; sequence?: number };
   'market.history.loaded': { symbol: string; timeframe: string; count: number; timestamp: number; sequence?: number };
   'market.status': { brokerId?: string; status: CoreMarketStatus; timestamp: number; sequence?: number };
