@@ -586,8 +586,16 @@ export class CoreSpiritRuntime {
       return finish(this.capabilityHost.resolveModel({modelName,field,binding}));
     }
     if(name==='model') return finish({ __coreSpiritModelRef:true, modelName:String(args[0]??'') });
-    if(name==='market') return finish({ kind:'market', symbol:String(args[0]??this.executionContext.symbol) });
+    if(name==='market') return finish({ kind:'market', symbol:String(args[0]??this.executionContext.symbol), timeframe:this.executionContext.timeframe });
     if(name==='timeframe') return finish({ kind:'timeframe', timeframe:String(args[0]??this.executionContext.timeframe) });
+    if(name==='__market_timeframe') {
+      const ref=args[0] as Record<string, unknown> | null | undefined;
+      const timeframe=String(args[1] ?? this.executionContext.timeframe);
+      const symbol=ref?.kind === 'market'
+        ? String(ref.symbol ?? this.executionContext.symbol)
+        : this.executionContext.symbol;
+      return finish({ kind:'market', symbol, timeframe });
+    }
     if(name==='ui.panel') return finish(this.uiRuntime.panel(String(args[0]??'panel'),String(args[0]??'Panel')));
     if(name==='ui.panel.number') return finish(this.uiRuntime.number(args[0],String(args[1]??''),args[2],typeof args[3]==='string'?args[3]:undefined));
     if(name==='ui.panel.button') return finish(this.uiRuntime.button(args[0],String(args[1]??''),typeof args[2]==='string'?args[2]:undefined));
