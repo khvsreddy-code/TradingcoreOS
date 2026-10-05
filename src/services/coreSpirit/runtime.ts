@@ -193,6 +193,10 @@ export class CoreSpiritRuntime {
     const normalized = { ...bar };
     const last = this.history[this.history.length - 1];
     const sameBucket = !!last && this.toEpoch(last.timestamp) === this.toEpoch(normalized.timestamp);
+    const dirtyPlan = sameBucket && this.dirtyGraph
+      ? this.dirtyGraph.planTail(dirtySourcesForBar({ open:Number(last!.open), high:Number(last!.high), low:Number(last!.low), close:Number(last!.close), volume:Number(last!.volume) }, { open:Number(normalized.open), high:Number(normalized.high), low:Number(normalized.low), close:Number(normalized.close), volume:Number(normalized.volume) }), this.history.length - 1)
+      : this.dirtyGraph?.planFull(this.history.length);
+    this.lastDirtyPlan = dirtyPlan;
 
     // A realtime bar may be evaluated many times. Roll back the previous
     // unconfirmed evaluation so stateful functions commit exactly once.
@@ -218,6 +222,7 @@ export class CoreSpiritRuntime {
       for (const [key, snapshot] of this.atrKernelSnapshots) this.atrKernels.get(key)?.copyFrom(snapshot);
       for (const [key, snapshot] of this.vwapKernelSnapshots) this.vwapKernels.get(key)?.copyFrom(snapshot);
       this.history[this.history.length - 1] = normalized;
+      this.columnarHistory.replaceLast(normalized);
     } else {
       this.realtimeRevision = 0;
       if (this.reactiveExecution) { this.reactiveRevision += 1; this.reactiveRecomputed += 1; this.reactiveEffects += 1; }
@@ -248,6 +253,7 @@ export class CoreSpiritRuntime {
         if (snapshot) snapshot.copyFrom(cursor); else this.vwapKernelSnapshots.set(key, cursor.clone());
       }
       this.history.push(normalized);
+      this.columnarHistory.append(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
     }
     const barIndex = this.history.length - 1;
@@ -262,7 +268,7 @@ export class CoreSpiritRuntime {
     this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false });
     this.executionContext.session = this.executionContext.frame.session;
     this.lastBarWasRealtime = true;
-    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics); }
+    try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, { reuseValues: sameBucket && this.executionTier === 'optimized', dirtyInstructions: sameBucket ? dirtyPlan?.instructions : undefined }); }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
@@ -352,6 +358,7 @@ export class CoreSpiritRuntime {
     this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
+    this.lastDirtyPlan=undefined;
     this.reactiveRecomputed=0; this.reactiveReused=0; this.reactiveEffects=0;
   }
 
@@ -491,6 +498,7 @@ export class CoreSpiritRuntime {
     barIndex: number,
     outputs: CoreSpiritOutputCollector,
     diagnostics: string[],
+    executionOptions: { reuseValues?: boolean; dirtyInstructions?: ReadonlySet<number> } = {},
   ): void {
     const host: CoreSpiritExecutionVMHost = {
       maxStepsPerBar: this.options.maxStepsPerBar,
@@ -515,7 +523,7 @@ export class CoreSpiritRuntime {
       emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
-    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs);
+    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, executionOptions);
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
