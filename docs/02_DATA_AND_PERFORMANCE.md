@@ -22,6 +22,57 @@ Canonical market data is time/open/high/low/close/volume typed storage. `Histori
 - Identical history requests are cached and single-flight deduplicated.
 - Older history is fetched on demand instead of preloading 50k bars.
 
+## Request plane vs realtime plane
+
+TradingCoreOS now treats request/response work and realtime market delivery as separate planes.
+
+### Request/response plane
+
+```text
+Browser
+  → Vercel CDN / Functions
+  → auth + broker REST + Supabase
+  → bounded JSON response
+```
+
+The Vercel request function is a short-lived control/data API. P0 routes have explicit deadlines and the catch-all api/index.ts is capped at 15 seconds; long computation belongs on the queue/worker path instead of extending the HTTP invocation.
+
+### Realtime plane
+
+```text
+Browser
+  → signed realtime ticket from Vercel
+  → dedicated realtime gateway
+  → Redis ownership / PubSub / subscription metadata
+  → one FYERS owner per user
+  → normalized ticks / order events
+  → gateway fanout
+  → browser / canonical data plane / Vela
+```
+
+Vercel Functions must not be treated as the durable owner of a websocket session. The realtime gateway therefore owns broker sockets, while Redis coordinates ownership and cross-instance fanout. Supabase remains the durable source of record for broker sessions, jobs and product state.
+
+### Shared-state policy
+
+Process-local maps are now explicitly divided into two categories:
+
+- Ephemeral local state: per-instance connection objects, in-memory cache entries, local listener sets and local admission queues. These are performance optimizations only and may disappear on instance recycle.
+- Shared coordination state: broker request admission/rate budget, realtime owner election, subscription metadata, cross-instance event fanout and short-lived broker-session cache. These live in Redis when distributed coordination is enabled.
+
+A Vercel instance must never make a safety decision based solely on an in-memory map when another instance can concurrently act for the same user.
+
+### Rollout state
+
+The dedicated realtime gateway and distributed coordination code are implemented behind environment configuration. Production Vercel currently has no Redis/realtime-gateway integration configured, so the existing bounded HTTP stream remains an explicit fallback until the gateway is provisioned and its environment is populated.
+
+Required runtime configuration:
+
+- UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN for request-plane distributed admission.
+- REALTIME_GATEWAY_URL + REALTIME_GATEWAY_SHARED_SECRET for browser handoff.
+- REALTIME_REDIS_URL + REALTIME_GATEWAY_SHARED_SECRET for the dedicated gateway.
+- Set TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED=true only after shared Redis has been verified in production.
+
+
 ## Stateful indicator mathematics — v131
 
 The canonical CoreSpirit kernel layer provides bounded state for rolling and recursive calculations:
