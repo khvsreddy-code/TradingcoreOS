@@ -9,26 +9,28 @@ export const CORE_SPIRIT_IR_FORMAT = 'coreSpirit-ir' as const;
 export const CORE_SPIRIT_IR_VERSION = 1 as const;
 
 export const CORE_SPIRIT_IR_OPCODES = [
-  'const','loadSeries','move','unary','binary','call','index','setLocal',
-  'jumpIfFalse','jump','emit',
+  'const','loadSeries','loadState','move','unary','binary','call','index','setLocal','setState',
+  'eventGate','jumpIfFalse','jump','emit',
 ] as const;
 export type CoreSpiritIrOpcode = typeof CORE_SPIRIT_IR_OPCODES[number];
 
 function hasValidInstructionOrigin(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const origin=value as Record<string,unknown>;
-  const start=origin.start;
-  const end=origin.end;
-  const line=origin.line;
-  const column=origin.column;
-  return typeof origin.sourceNodeId === 'string' && typeof start === 'number' && typeof end === 'number' && typeof line === 'number' && typeof column === 'number' && Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start && Number.isInteger(line) && line >= 1 && Number.isInteger(column) && column >= 1;
+  const start=origin.start; const end=origin.end; const line=origin.line; const column=origin.column;
+  return typeof origin.sourceNodeId === 'string' &&
+    typeof start === 'number' && typeof end === 'number' &&
+    typeof line === 'number' && typeof column === 'number' &&
+    Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start &&
+    Number.isInteger(line) && line >= 1 && Number.isInteger(column) && column >= 1;
 }
 
 export function isCoreSpiritIrInstruction(value: unknown): value is CoreSpiritIrInstruction {
   const instruction = value as CoreSpiritIrInstruction | undefined;
   return !!instruction && typeof instruction === 'object' &&
     typeof (instruction as any).op === 'string' &&
-    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op) && ((instruction as any).origin === undefined || hasValidInstructionOrigin((instruction as any).origin));
+    (CORE_SPIRIT_IR_OPCODES as readonly string[]).includes((instruction as any).op) &&
+    ((instruction as any).origin === undefined || hasValidInstructionOrigin((instruction as any).origin));
 }
 
 export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrProgram {
