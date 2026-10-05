@@ -337,3 +337,67 @@ This prevents structural analytics from becoming a hidden N×period or N² cost 
 - Vela history remains columnar at the renderer boundary; OHLCV objects are a compatibility seam only.
 - Non-live product surfaces use longer, smoother motion; the live terminal stays chart-native.
 - FYERS history remains 5,000 candles per request with 5,000-candle backward pages and bounded 50,000 retention.
+
+
+## v137 — CoreSpirit time-series query optimizer
+
+The compiler now emits a cost model instead of treating optimization as constant folding only.
+
+### Costed pipeline
+
+```text
+CoreSpirit source
+      ↓
+semantic dependency graph
+      ↓
+typed IR
+      ↓
+safe local rewrites
+      ↓
+cost model
+      ↓
+chronological execution plan
+```
+
+The optimizer currently performs three high-value operations:
+
+1. **Constant folding** for compile-time scalar expressions.
+2. **Pure CSE and input-read reuse** for repeated `loadSeries`, unary/binary/index work and proven pure deterministic calls.
+3. **Cost estimation** for per-bar pure work, effect work, stateful work, history reads, duplicate work removed, and peak temporary register pressure.
+
+The optimizer deliberately does **not** alias generic stateful indicator call sites. EMA/RMA/RSI/ATR/VWAP and similar kernels remain ordered stream state. Their reuse comes from the chronological execution model and series-fusion planner, not an unsafe assumption that two stateful calls are interchangeable.
+
+### Example
+
+For:
+
+```
+let a = ema(close, 20)
+let b = ema(close, 50)
+let c = atr(14)
+let d = sma(a, 10)
+let e = sma(b, 10)
+```
+
+the compiler can now plan:
+
+```text
+one chronological traversal
+close ──┬─ EMA20 ── SMA10(a) ──┐
+        ├─ EMA50 ── SMA10(b) ──┤
+        └─ ATR14 ───────────────┘
+```
+
+Repeated source reads are reused where it is provably safe, while stateful kernels keep their chronological identities. The execution plan exposes the resulting read reuse and estimated saved work to the host planner.
+
+This is the beginning of a true time-series query optimizer. It is not yet a global algebraic optimizer: no speculative loop reordering, cross-bar reassociation, or generic stateful-call merging is performed.
+
+### Performance acceptance
+
+- [x] Optimizer metadata is attached to the executable IR.
+- [x] Execution planner consumes optimized pure-work cost.
+- [x] Runtime consumes compiler-produced series-fusion plan.
+- [x] Regression contract proves repeated series reads are reused.
+- [ ] Add global DAG scheduling based on critical-path and fan-out cost.
+- [ ] Add state-identity analysis so explicitly shareable stateful kernels can be reused without changing language semantics.
+- [ ] Benchmark optimized plans against the pre-optimizer VM on representative 5k/50k/500k-bar workloads.
