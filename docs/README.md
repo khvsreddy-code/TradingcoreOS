@@ -34,3 +34,5 @@ Compatibility representations are allowed only at explicit boundaries. Source-le
 ## Performance truth
 
 CI proves source and contract invariants. It does not prove authenticated broker latency, browser FPS, GPU utilization or visual quality. Those measurements remain explicit validation gates.
+
+<!-- stage 5-7 audit work continues -->
