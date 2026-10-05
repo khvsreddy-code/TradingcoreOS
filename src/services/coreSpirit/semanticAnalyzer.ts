@@ -45,6 +45,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
     if(name==='price'||name==='volume'||name==='time'||name==='duration') return 'number';
     if(/^series<(number|float|int|price|volume|time|duration|currency|boolean|string)>$/.test(name)) return name.includes('boolean') ? 'series<boolean>' : name.includes('string') ? 'series<string>' : 'series<number>';
     if(name.startsWith('array<')) return name as CoreSpiritType;
+    if(name.startsWith('matrix<')) return name as CoreSpiritType;
+    if(name.startsWith('tensor<')) return name as CoreSpiritType;
+    if(['trade','orderbook','footprint','volume-profile'].includes(name)) return name as CoreSpiritType;
     return `udt:${name}`;
   };
 
