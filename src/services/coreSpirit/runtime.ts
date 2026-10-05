@@ -178,7 +178,7 @@ export class CoreSpiritRuntime {
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
     this.reset();
     this.prepareSeriesBindings(compiled.ir);
-    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry);
+    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry, compiled.ir.specializedPlan);
     return compiled.ir;
   }
 
@@ -388,7 +388,7 @@ export class CoreSpiritRuntime {
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
-    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry);
+    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan);
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.plotOrdinal = 0;
@@ -550,7 +550,7 @@ export class CoreSpiritRuntime {
       emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
-    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry });
+    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan });
   }
 
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
