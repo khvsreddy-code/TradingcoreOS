@@ -34,7 +34,7 @@ function workUnits(c: CoreSpiritSeriesDispatchContext, g: CoreSpiritSeriesFusion
   return Math.max(1, c.bars) * Math.max(1, c.symbols ?? 1) * Math.max(1, c.timeframes ?? 1) * Math.max(1, g.operations.length);
 }
 function hasRecurrence(g: CoreSpiritSeriesFusionGroup): boolean {
-  return g.operations.some((x) => ['ema', 'rma', 'change', 'pctchange', 'persistence'].includes(x.name));
+  return g.operations.some((x) => ['ema', 'rma', 'change', 'pctchange', 'persistence', 'rsi', 'atr', 'vwap'].includes(x.name));
 }
 
 export function selectCoreSpiritSeriesBackend(
