@@ -4,6 +4,8 @@ export type CoreSpiritLiteral = number | string | boolean | null;
 export type CoreSpiritAstNode =
   | CoreSpiritProgramNode
   | CoreSpiritLetNode
+  | CoreSpiritAssignmentNode
+  | CoreSpiritOnEventNode
   | CoreSpiritExpressionStatementNode
   | CoreSpiritIfNode
   | CoreSpiritLiteralNode
@@ -18,6 +20,8 @@ export type CoreSpiritAstNode =
 
 export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritLetNode = { type: 'let'; name: string; declaredType?: string; expression: CoreSpiritAstNode; span?: CoreSpiritSpan };
+export type CoreSpiritAssignmentNode = { type: 'assignment'; name: string; expression: CoreSpiritAstNode; span?: CoreSpiritSpan };
+export type CoreSpiritOnEventNode = { type: 'onEvent'; eventName: string; body: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritExpressionStatementNode = { type: 'expressionStatement'; expression: CoreSpiritAstNode; span?: CoreSpiritSpan };
 export type CoreSpiritIfNode = { type: 'if'; condition: CoreSpiritAstNode; thenBranch: CoreSpiritAstNode[]; elseBranch?: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritLiteralNode = { type: 'number' | 'string' | 'boolean' | 'null'; value: CoreSpiritLiteral; span?: CoreSpiritSpan };
