@@ -44,18 +44,46 @@ export class CoreSpiritParser {
   }
 
   private statement():CoreSpiritAstNode {
-    if(this.match('type')) return this.typeDeclaration();
-    if(this.match('let')) return this.letStatement();
-    if(this.match('on')) return this.onEventStatement();
-    if(this.match('if')) return this.ifStatement();
-
-    if(this.check('identifier') && this.peek(1).type === 'colonEqual') {
-      return this.assignmentStatement();
+    const annotations=this.parseAnnotations();
+    let node:CoreSpiritAstNode;
+    if(this.match('type')) node=this.typeDeclaration();
+    else if(this.match('let')) node=this.letStatement();
+    else if(this.match('on')) node=this.onEventStatement();
+    else if(this.match('if')) node=this.ifStatement();
+    else if(this.check('identifier') && this.peek(1).type === 'colonEqual') node=this.assignmentStatement();
+    else {
+      const expression=this.expression();
+      this.match('semicolon');
+      node={type:'expressionStatement',expression,span:this.span(expression)};
     }
+    if(annotations.length) (node as any).annotations=annotations;
+    return node;
+  }
 
-    const expression=this.expression();
-    this.match('semicolon');
-    return {type:'expressionStatement',expression,span:this.span(expression)};
+  private parseAnnotations():Array<{name:string;args:string[];span?:CoreSpiritSpan}> {
+    const annotations:Array<{name:string;args:string[];span?:CoreSpiritSpan}>=[];
+    while(this.match('at')){
+      const at=this.previous();
+      const nameToken=this.consume('identifier','Expected annotation name after @');
+      const args:string[]=[];
+      let end=nameToken;
+      if(this.match('leftParen')){
+        if(!this.check('rightParen')){
+          do {
+            const token=this.peek();
+            if(this.match('identifier','string','number','true','false','null')) {
+              args.push(String(this.previous().value ?? this.previous().lexeme));
+              end=this.previous();
+            } else {
+              throw this.error('Expected annotation argument');
+            }
+          } while(this.match('comma'));
+        }
+        end=this.consume('rightParen','Expected ) after annotation arguments');
+      }
+      annotations.push({name:nameToken.lexeme,args,span:this.makeSpan(at,end)});
+    }
+    return annotations;
   }
 
   private assignmentStatement():CoreSpiritAstNode {
