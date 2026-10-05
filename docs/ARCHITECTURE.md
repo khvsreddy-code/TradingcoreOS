@@ -173,3 +173,102 @@ The dispatcher is host-kernel based. If a WASM or GPU profile is selected but no
 
 A production offload implementation should therefore provide three additional pieces without changing the language or semantic graph: a batch ABI over `Float64Array` inputs/outputs, a kernel capability manifest, and asynchronous completion fencing for non-realtime work. Realtime never waits on a GPU round trip.
 
+
+
+## WASM backend milestone
+
+CoreSpirit now has a concrete batch WASM ABI seam. The engine does not cross the JS/WASM boundary once per bar. A backend kernel receives contiguous buffers through a single batch entry point:
+
+```text
+inputPtrsPtr
+inputCount
+outputPtrsPtr
+outputCount
+barCount
+paramsPtr
+paramsCount
+```
+
+The module exports `memory`, `alloc`, and `runKernel`; `free` is optional. Numeric columns and series outputs remain `Float64Array` values, and pointer tables are stored as little-endian `i32` entries inside WASM linear memory.
+
+The manifest declares each kernel's arity, output count, deterministic property, statefulness, and `scalar|simd` variant. That lets the CoreSpirit dispatcher distinguish:
+
+- a portable scalar WASM kernel;
+- a SIMD kernel operating on the same batch ABI;
+- a stateful chronological kernel such as EMA/RSI/ATR/VWAP;
+- a stateless wide kernel suitable for eventual GPU dispatch.
+
+SIMD is therefore a backend capability, not a new language semantic. The WebAssembly SIMD extension uses the `v128` type and SIMD instruction space; feature support should be established by validating/instantiating the actual kernel artifact rather than assuming the host CPU exposes a particular ISA. citeturn638160search0turn646416search0
+
+The first production kernel pack should target the same ABI for SMA, EMA, WMA, rolling variance/stdev, rolling extrema, RSI, ATR, VWAP, normalization, and z-score. Median/percentile should use their ordered-window kernels rather than pretending to be simple SIMD reductions.
+
+The repository includes a benchmark harness at `tools/benchmark-core-spirit-wasm.mjs`. It compares:
+
+```text
+current JS VM
+current JS fused cursor
+WASM scalar kernel
+WASM SIMD kernel
+```
+
+at exactly:
+
+```text
+5,000
+50,000
+500,000
+5,000,000 bars
+```
+
+The WASM lanes are intentionally reported as `not-configured` until a compatible module is supplied through environment variables. This keeps performance claims empirical rather than speculative.
+
+## Compile-to-specialized-plan
+
+After semantic optimization, CoreSpirit now emits a second compiled representation rather than forcing every backend to rediscover structure from generic IR.
+
+A specialized plan contains:
+
+```text
+stable numeric register slots
+      +
+lowered instruction kinds
+      +
+shared-input series fanouts
+      +
+fused kernel regions
+      +
+WASM-eligible operations
+```
+
+For:
+
+```text
+ema = ta.ema(close, 20)
+rsi = ta.rsi(close, 14)
+signal = ema > close and rsi < 30
+```
+
+the specialized representation identifies the conceptual region:
+
+```text
+FUSED_KERNEL_0
+    input: close
+    series: EMA(20), RSI(14)
+    scalar: ema > close
+            rsi < 30
+            AND
+```
+
+This does not yet claim that EMA+RSI is executed by one native WASM kernel. Instead, it gives the backend a stable region contract from which such a kernel can be generated. The optimized JS VM consumes the same specialized numeric-slot instruction representation, preserving one semantic source.
+
+The important performance boundary is now explicit:
+
+```text
+source -> semantic graph -> optimized IR
+      -> specialized plan
+      -> backend lowering
+          CPU / fused JS / WASM scalar / WASM SIMD
+```
+
+A future native kernel compiler can therefore consume the specialized region directly instead of reparsing the AST or generic VM instructions.
+
