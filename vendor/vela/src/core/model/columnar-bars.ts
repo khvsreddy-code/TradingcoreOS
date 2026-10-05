@@ -18,7 +18,10 @@ export interface ColumnarBars {
     readonly timeUnit?: ColumnarTimeUnit;
 }
 
-/** One forming-bar update. Kept scalar so callers do not need a one-element OHLCV array. */
+/** One forming-bar update. Scalar by design: live updates never require a one-element OHLCV array.
+ * `sequence` and `timelineKey` identify the canonical mutation stream and allow consumers
+ * to detect gaps instead of silently rendering stale or out-of-order market state.
+ */
 export interface ColumnarBarUpdate {
     readonly time: number;
     readonly open: number;
@@ -27,6 +30,8 @@ export interface ColumnarBarUpdate {
     readonly close: number;
     readonly volume?: number;
     readonly timeUnit?: ColumnarTimeUnit;
+    readonly sequence?: number;
+    readonly timelineKey?: string;
 }
 
 export interface ColumnarLodIndex {
