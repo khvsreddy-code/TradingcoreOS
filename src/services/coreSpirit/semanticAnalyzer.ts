@@ -21,7 +21,7 @@ export type CoreSpiritSemanticResult = {
 };
 
 const seriesNames=new Set(['open','high','low','close','volume','time']);
-const specialIdentifiers=new Set(['na','bar_index']);
+const specialIdentifiers=new Set(['na','bar_index','bar']);
 const comparisonOps=new Set(['==','!=','<','<=','>','>=']);
 
 export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticOptions = {}):CoreSpiritSemanticResult {
@@ -32,7 +32,8 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const componentBindings=new Map<string,string>();
   const semanticSymbols=new Map<string,CoreSpiritSemanticType>();
   const componentSource=options.components;
-  let maxLookback=0;\n  let eventScopeDepth=0;
+  let maxLookback=0;
+  let eventScopeDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
     severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
   });
@@ -49,9 +50,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(seriesNames.has(n.name)) return 'series<number>';
         if(n.name==='na') return 'null';
         if(n.name==='bar_index') return 'number';
+        if(n.name==='bar') return 'udt:bar:context';
         return scope.get(n.name) || 'unknown';
 
       case 'member': {
+        if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return 'boolean';
         if(n.target.type==='identifier' && n.target.name==='chart' && ['price','volume','indicator','custom'].includes(n.member)) return `visual:area`;
         if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
         if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='trade') return 'trade';
@@ -232,10 +235,12 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'identifier': {
         if(n.name==='open'||n.name==='high'||n.name==='low'||n.name==='close'||n.name==='volume'||n.name==='time') return semanticSeriesField(n.name);
         if(n.name==='bar_index') return semanticScalar('number');
+        if(n.name==='bar') return semanticScalar('number');
         if(n.name==='na') return undefined;
         return scope.get(n.name) || semanticSymbols.get(n.name);
       }
       case 'member': {
+        if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return semanticScalar('boolean', { temporalContainer:'bar-context', temporalPhase:n.member as any });
         if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe')) {
           const symbol = n.target.name==='market' && n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'current';
           const tf = n.target.name==='timeframe' ? (n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'requested') : 'chart';
@@ -330,7 +335,8 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
       case 'let': {
         if(symbols.has(n.name)) report(n,`Variable '${n.name}' is already declared`,'DUPLICATE_VARIABLE');
-        const type=infer(n.expression,scope);
+        const inferredType=infer(n.expression,scope);
+        const type=n.declaredType ? mapDeclaredType(n.declaredType) : inferredType;
         visit(n.expression,scope);
         const semanticType=inferSemantic(n.expression,semanticSymbols);
         if(n.declaredType){
@@ -349,6 +355,23 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
       case 'expressionStatement':
         visit(n.expression,scope); infer(n.expression,scope); break;
+      case 'assignment': {
+        const current=scope.get(n.name);
+        if(!current) { report(n,`Unknown state variable '${n.name}'`,'UNKNOWN_STATE'); break; }
+        if(!isStateType(current)) { report(n,`':=' can only update state<T>; '${n.name}' is '${current}'`,'STATE_ASSIGNMENT_TARGET'); break; }
+        const value=infer(n.expression,scope);
+        visit(n.expression,scope);
+        const expected=elementType(current);
+        const assignmentElement=value.startsWith('series<') ? value.slice(7,-1) as CoreSpiritType : value;
+        const eventSampleAllowed=eventScopeDepth>0 && value.startsWith('series<');
+        if(value!=='unknown' && value!=='null' && !(eventSampleAllowed ? compatible(expected,assignmentElement) : compatible(expected,value))) report(n,`State '${n.name}' expects '${expected}' but received '${value}'`,'STATE_ASSIGNMENT_TYPE');
+        break;
+      }
+      case 'onEvent':
+        eventScopeDepth+=1;
+        n.body.forEach(x=>visit(x,new Map(scope)));
+        eventScopeDepth-=1;
+        break;
       case 'if': {
         const condition=infer(n.condition,scope); visit(n.condition,scope);
         if(!isBooleanType(condition)) report(n.condition,'if condition must be boolean','TYPE_IF_CONDITION');
