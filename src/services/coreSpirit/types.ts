@@ -7,6 +7,34 @@ import type { CoreSpiritVisualGeometry, CoreSpiritVisualPlacement, CoreSpiritVis
 export type HistoricalCandle = CoreSpiritMarketBar;
 
 export type CoreSpiritValue = number | boolean | string | null;
+export type CoreSpiritTrade = Readonly<{
+  timestamp:number;
+  price:number;
+  volume:number;
+  side:'buy'|'sell'|'unknown';
+  symbol:string;
+  sequence?:number;
+}>;
+
+export type CoreSpiritOrderBookLevel = Readonly<{ price:number; quantity:number; side:'bid'|'ask' }>;
+export type CoreSpiritOrderBook = Readonly<{
+  timestamp:number;
+  symbol:string;
+  bids:readonly CoreSpiritOrderBookLevel[];
+  asks:readonly CoreSpiritOrderBookLevel[];
+  sequence?:number;
+}>;
+
+export type CoreSpiritVolumeProfileRow = Readonly<{ price:number; volume:number; buyVolume?:number; sellVolume?:number; delta?:number }>;
+export type CoreSpiritVolumeProfile = Readonly<{
+  startTime:number;
+  endTime:number;
+  rows:readonly CoreSpiritVolumeProfileRow[];
+  poc?:number;
+  vah?:number;
+  val?:number;
+}>;
+
 export type CoreSpiritSeries = Array<CoreSpiritValue>;
 
 /** Runtime bar-state flags exposed to the execution engine. */
