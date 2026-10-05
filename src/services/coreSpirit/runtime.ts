@@ -420,7 +420,7 @@ export class CoreSpiritRuntime {
   }
 
   private installSeriesFusion(ir: CoreSpiritIrProgram): void {
-    const plan = planCoreSpiritSeriesFusion(ir);
+    const plan = ir.executionPlan?.seriesFusion ?? planCoreSpiritSeriesFusion(ir);
     this.seriesFusionPlan = plan;
     this.fusedStageByInstruction.clear();
     for (const group of plan.groups) {
