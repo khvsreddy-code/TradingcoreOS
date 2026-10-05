@@ -432,6 +432,7 @@ export class CoreSpiritRuntime {
     try {
       this.state = { ...checkpoint.state, locals:{...checkpoint.state.locals}, seriesState:cloneNumberMap(checkpoint.state.seriesState), localSeries:cloneValueMap(checkpoint.state.localSeries) };
       (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
+      this.columnarHistory.replaceRows((this as any).history);
       (this as any).crossState = cloneCrossMap(checkpoint.crossState);
       (this as any).committedSeriesState = cloneNumberMap(checkpoint.committedSeriesState);
       (this as any).committedLocalSeries = cloneValueMap(checkpoint.committedLocalSeries);
