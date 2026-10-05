@@ -10,7 +10,7 @@ export type CoreSpiritBuiltin = {
   capability?: 'alert' | 'webhook' | 'market' | 'ai';
   emitKind?: CoreSpiritIrEmitKind;
   category: 'series' | 'math' | 'condition' | 'market' | 'state' | 'output' | 'extension';
-  seriesExecution?: Readonly<{ vectorizable: boolean; fusible: boolean; strategy: 'elementwise' | 'rolling' | 'stateful' }>;
+  seriesExecution?: Readonly<{ vectorizable: boolean; fusible: boolean; strategy: 'elementwise' | 'rolling' | 'stateful' }>;\n  temporalSafety?: Readonly<{ causality:'causal'|'noncausal'|'future-dependent'|'repainting'|'unknown'; lookahead:boolean; realtimeSafe:boolean }>;
 };
 
 export type CoreSpiritLibraryGroupId =
@@ -101,12 +101,12 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'signal' },
   { name:'emit', minArgs:1, maxArgs:1, returnType:'event', pure:false, category:'extension', emitKind:'event' },
 
-  { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
-  { name:'event', minArgs:1, maxArgs:1, returnType:'boolean', pure:false, category:'extension' },
+  { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'event', minArgs:1, maxArgs:1, returnType:'boolean', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'model', minArgs:1, maxArgs:1, returnType:'model:ref', pure:false, category:'extension' },
 
   { name:'variance', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
-  { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
+  { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'change', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'elementwise'} },
   { name:'isNa', minArgs:1, maxArgs:1, returnType:'boolean', pure:true, category:'extension' },
   { name:'exp', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
@@ -123,8 +123,8 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'toTime', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
   { name:'toDuration', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
   { name:'toCurrency', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
-  { name:'request', minArgs:3, maxArgs:4, returnType:'number', pure:false, category:'extension', capability:'market' },
-  { name:'requestBatch', minArgs:3, maxArgs:15, returnType:'number', pure:false, category:'extension', capability:'market' },
+  { name:'request', minArgs:3, maxArgs:4, returnType:'number', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'requestBatch', minArgs:3, maxArgs:15, returnType:'number', pure:false, category:'extension', capability:'market', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'bid', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
   { name:'ask', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
   { name:'spread', minArgs:0, maxArgs:0, returnType:'number', pure:false, category:'extension', capability:'market' },
