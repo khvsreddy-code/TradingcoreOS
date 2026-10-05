@@ -505,3 +505,188 @@ confirmed<T>/developing<T>
 ```
 
 This is a core language property, not a compatibility layer.
+
+## Branch 14 — repaint safety as a language contract
+
+CoreSpirit treats temporal safety as compiler-visible semantics.
+
+Every compiled program receives a `repaintSafety` proof containing:
+
+~~~
+causal
+lookahead
+realtimeSafe
+backtestLiveEquivalent
+~~~
+
+and a per-node evidence chain.
+
+The language supports:
+
+~~~corespirit
+@causal
+@realtimeSafe
+@lookahead(false)
+let signal: series<float> = ema(close, 20)
+~~~
+
+Assertions are not warning suppressors. They are claims that the compiler checks.
+
+For example:
+
+~~~corespirit
+@causal
+let signal = future_lookup(close)
+~~~
+
+must fail the causal assertion if the provenance analysis classifies the dependency as future-dependent.
+
+Safety categories are distinct:
+
+- `causal`: only information available at or before the evaluated point is used.
+- `noncausal`: output depends on information outside the causal execution frontier.
+- `future-dependent`: the compiler can identify a forward/future dependency.
+- `repainting`: a declared or proven historical value can change because future information changes the past result.
+- `unknown`: provenance is not strong enough to prove safety.
+
+Unknown is deliberately not silently promoted to safe.
+
+The resulting editor diagnostics can say:
+
+~~~
+⚠ Future-dependent data detected.
+⚠ Strategy result is not causal.
+⚠ Backtest/live equivalence is not guaranteed.
+~~~
+
+### Safety proof architecture
+
+~~~
+source
+  ↓
+typed AST + safety annotations
+  ↓
+causality analysis
+  ├── data provenance
+  ├── lookahead policy
+  ├── realtime safety
+  └── annotation assertions
+  ↓
+repaintSafety report
+  ↓
+executable IR
+~~~
+
+The safety report is serialized into the executable artifact. A downstream runtime therefore receives the safety contract instead of having to rediscover repaint semantics.
+
+The key distinction from a normal warning system is that `@causal` and `@realtimeSafe` are type-like assertions. A strategy author can intentionally declare noncausal research code, but a production strategy can require the compiler to prove causal behavior.
+
+## Branch 15 — first-class profiler
+
+CoreSpirit now exposes a profiler API designed for the editor rather than a logfile.
+
+The profiler records:
+
+~~~
+compile time
+historical execution
+realtime/tick execution
+instruction count
+time per instruction/node
+phase breakdown
+tracked allocations
+tracked allocation bytes
+flame graph samples
+~~~
+
+The runtime exposes:
+
+~~~ts
+runtime.getProfilerSnapshot()
+runtime.resetProfiler()
+~~~
+
+and the editor model can consume the same immutable snapshot.
+
+The editor-facing summary is intentionally structured so a UI can render:
+
+~~~
+Execution time
+──────────────────────────
+EMA                 8.2%
+RSI                 5.1%
+Market structure   31.8%
+HTF request        17.3%
+Rendering           4.7%
+~~~
+
+alongside:
+
+~~~
+5,000 bars
+12,430 instructions
+3.2 ms compile
+7.8 ms historical
+0.031 ms/tick
+~~~
+
+The profiler also exposes a flame-oriented stream:
+
+~~~
+CoreSpirit
+ ├── data
+ │    ├── request
+ │    └── market
+ ├── execution
+ │    ├── EMA
+ │    ├── RSI
+ │    ├── structure
+ │    └── signal
+ └── rendering
+      └── plot
+~~~
+
+Profiling is opt-in. The normal optimized VM does not install profiling callbacks unless profiling is enabled.
+
+### Allocation accounting
+
+CoreSpirit reports **tracked runtime allocations**, not an invented exact JavaScript heap-allocation number.
+
+This distinction matters because JavaScript engines and browser GC do not expose a universal exact “allocations per tick” primitive. The profiler therefore reports:
+
+~~~
+trackedAllocations
+trackedAllocationBytes
+trackedAllocationsPerTick
+~~~
+
+with an explicit note in the snapshot.
+
+That gives the editor a stable optimization metric while avoiding fake precision.
+
+### Profiler architecture
+
+~~~
+CoreSpiritRuntime
+      │
+      ├── compile timing
+      ├── bar/tick timing
+      │
+      ▼
+Reference VM / Optimized VM
+      │
+      └── optional instruction hooks
+             │
+             ├── node timing
+             ├── phase timing
+             └── flame samples
+                    │
+                    ▼
+          CoreSpiritProfilerSnapshot
+                    │
+                    ├── editor tables
+                    ├── flame graph
+                    └── optimization feedback
+~~~
+
+The profiler is therefore a language/runtime capability, not a Vela-specific diagnostic layer.
