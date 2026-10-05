@@ -1,6 +1,6 @@
 # TradingCoreOS / CoreSpirit Build Tracker
 
-**Last updated:** 2026-10-04  
+**Last updated:** 2026-10-05  
 **Architecture lock:** CoreSpirit-first scripting + Vela chart engine + TCO-owned data/compute/broker systems. PineScript/PineTS compatibility is not part of the product architecture.
 
 ## Current performance path
@@ -173,6 +173,26 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 ## v94 implementation record
 
 The chart data plane established the zero-copy canonical chart data plane at the Vela boundary, with typed column transport and retained GPU-buffer reuse for identity-chart rendering.
+
+## v134 — regional topology lock and frontend startup split
+
+### 12. Vercel / Supabase regional placement
+- [x] Vercel Function region remains locked to `bom1` (Mumbai).
+- [x] Connected Supabase project is confirmed in `ap-south-1` (Mumbai).
+- [x] Documentation explicitly rejects an indiscriminate Edge migration for database-bound trading APIs.
+- [x] Realtime gateway deployment target is Mumbai/lowest-latency Indian region, subject to measured gateway↔FYERS performance.
+- [ ] Capture measured browser→gateway→FYERS and gateway→Redis latency from the production Indian network path.
+
+### 13. Frontend bundle architecture
+- [x] `TradingCoreRuntime` is removed from the static `App.tsx` dependency graph.
+- [x] Landing page is isolated behind a lazy route root.
+- [x] Below-fold landing sections are deferred instead of downloaded with the first viewport.
+- [x] Auth modal and broker/legal callback surfaces are on-demand chunks.
+- [x] Vite manifest and explicit vendor chunk groups are enabled.
+- [x] Graph-aware gzip budgets cover landing, login, dashboard and live route roots.
+- [~] Strategic target is **150–250 KB gzip** for initial startup and **<300 KB gzip** for live workspace critical JS; current CI ceilings are staged above target pending measured build output.
+- [ ] Tighten staged ceilings to the strategic targets after the next build report proves the new graph.
+- [ ] Add authenticated browser evidence for route startup, route-to-route loading and live workspace JS transfer.
 
 ## v133 — request/realtime plane separation and distributed coordination
 
