@@ -16,6 +16,7 @@ import { productionPredictionRoutes } from './src/server/routes/production-predi
 import { newsRoutes } from './src/server/routes/news.routes.js';
 import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
 import { realtimeTicketRoutes } from './src/server/routes/realtime-ticket.routes.js';
+import { requestDeadline } from './src/server/middleware/requestDeadline.js';
 import { requestContext, type TradingCoreRequest } from './src/server/middleware/requestContext.js';
 import { createRateLimiter } from './src/server/middleware/rateLimit.js';
 import { recordRequest, getRequestMetrics } from './src/server/observability/requestMetrics.js';
@@ -24,6 +25,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(requestContext);
+app.use(requestDeadline);
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   next();
