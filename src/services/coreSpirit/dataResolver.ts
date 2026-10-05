@@ -31,6 +31,25 @@ export class CoreSpiritDataResolverService {
     };
   }
 
+  resolveBatch(requests: CoreSpiritDataRequest[], index: number): CoreSpiritDataSnapshot[] | null {
+    const resolver = this.resolver;
+    if (!resolver?.requestBatch) {
+      const values = requests.map((request) => {
+        const value = resolver?.requestAt
+          ? resolver.requestAt(request, this.resolutionContext(index, 'last-confirmed'))
+          : resolver?.request?.(request);
+        return value && typeof (value as any).then === 'function' ? null : value as CoreSpiritDataSnapshot | undefined;
+      });
+      if (values.some((value) => value == null)) return null;
+      return values as CoreSpiritDataSnapshot[];
+    }
+    const value = resolver.requestBatch(requests);
+    if (value && typeof (value as any).then === 'function') return null;
+    const snapshots = value as CoreSpiritDataSnapshot[];
+    if (snapshots.length !== requests.length) return null;
+    return snapshots;
+  }
+
   resolveValue(symbol: string, timeframe: string, field: any, index: number, offset = 0): number | null {
     const resolverAt = this.resolver?.requestAt;
     const resolver = this.resolver?.request;
