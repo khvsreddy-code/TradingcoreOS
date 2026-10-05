@@ -560,12 +560,16 @@ export class CoreSpiritRuntime {
     const batchResolver=this.dataResolver?.requestBatch;
     if(!plan?.dataDependencies.length || !batchResolver) return;
     const requests:CoreSpiritDataRequest[]=[];
+    const requestKeys=new Set<string>();
     for(const dependency of plan.dataDependencies){
       if(!dependency.batchable) continue;
       const symbol=dependency.symbol==='current'?this.options.symbol:dependency.symbol;
       const timeframe=dependency.timeframe==='chart'?this.options.timeframe:dependency.timeframe;
       for(const field of dependency.fields){
         if(!['open','high','low','close','volume','time'].includes(field)) continue;
+        const requestKey=`${symbol}:${timeframe}:${field}`;
+        if(requestKeys.has(requestKey)) continue;
+        requestKeys.add(requestKey);
         requests.push({symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0});
       }
     }
