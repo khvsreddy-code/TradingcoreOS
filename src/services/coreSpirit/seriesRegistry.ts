@@ -188,7 +188,7 @@ export class CoreSpiritSeriesRegistry {
   }
 
   pushValue(id: CoreSpiritSeriesId, value: CoreSpiritStoredValue, limit: number): void {
-    if (isNumericValue(value) && !this.values[id] !== undefined) {
+    if (isNumericValue(value) && this.values[id] === undefined) {
       const existing = this.numeric[id];
       this.recordNumeric(id, existing);
       const slot = this.ensureNumericSlot(id, limit);
@@ -251,7 +251,7 @@ export class CoreSpiritSeriesRegistry {
 
   valueSnapshot(id: CoreSpiritSeriesId): CoreSpiritStoredValue[] {
     const numeric = this.numeric[id];
-    if (numeric && !this.values[id] !== undefined) return Array.from(this.numericSnapshot(id));
+    if (numeric && this.values[id] === undefined) return Array.from(this.numericSnapshot(id));
     const values = this.values[id];
     if (!values || values.length === 0) return [];
     const out: CoreSpiritStoredValue[] = new Array(values.length);
@@ -302,12 +302,12 @@ export class CoreSpiritSeriesRegistry {
         return id < 0 ? undefined : Array.from(registry.numericSnapshot(id));
       },
       ownKeys() {
-        return registry.names.filter((name) => registry.numeric.has(registry.existingId(name)));
+        return registry.names.filter((name) => registry.numeric[registry.existingId(name)] !== undefined);
       },
       getOwnPropertyDescriptor(_target, property: string | symbol) {
         if (typeof property !== 'string') return undefined;
         const id = registry.existingId(property);
-        return id >= 0 && registry.numeric.has(id)
+        return id >= 0 && registry.numeric[id] !== undefined
           ? { enumerable: true, configurable: true, writable: false, value: Array.from(registry.numericSnapshot(id)) }
           : undefined;
       },
@@ -324,12 +324,12 @@ export class CoreSpiritSeriesRegistry {
         return id < 0 ? undefined : registry.valueSnapshot(id);
       },
       ownKeys() {
-        return registry.names.filter((name) => registry.values.has(registry.existingId(name)) || registry.numeric.has(registry.existingId(name)));
+        return registry.names.filter((name) => registry.values[registry.existingId(name)] !== undefined || registry.numeric.has(registry.existingId(name)));
       },
       getOwnPropertyDescriptor(_target, property: string | symbol) {
         if (typeof property !== 'string') return undefined;
         const id = registry.existingId(property);
-        return id >= 0 && (registry.values.has(id) || registry.numeric.has(id))
+        return id >= 0 && (registry.values[id] !== undefined || registry.numeric.has(id))
           ? { enumerable: true, configurable: true, writable: false, value: registry.valueSnapshot(id) }
           : undefined;
       },
