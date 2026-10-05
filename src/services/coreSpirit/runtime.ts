@@ -284,6 +284,7 @@ export class CoreSpiritRuntime {
     }
     try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, { reuseValues: sameBucket && this.executionTier === 'optimized', dirtyInstructions: sameBucket ? this.realtimeDirtyInstructions : undefined }); }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
+    this.profiler.endBar();
     return { outputs, state: this.getState({ clone:false }), diagnostics };
   }
 
