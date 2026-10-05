@@ -18,7 +18,8 @@ import { createCoreSpiritCompilationUnit, makeCoreSpiritCompilerPipelineTrace } 
 import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import { planCoreSpiritExecution } from './executionPlanner';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
-import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';\nimport { isStateType } from './typeSystem';
+import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
+import { isStateType } from './typeSystem';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
