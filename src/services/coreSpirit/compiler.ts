@@ -261,8 +261,8 @@ export class CoreSpiritCompiler {
       const optimized = optimizeCoreSpiritIr(rawIr);
       const graphInput = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), semanticDependencyGraph } as CoreSpiritIrProgram;
       const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
-      const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs });
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
+      const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan });
       const ir = { ...graphInput, graphs, executionPlan, specializedPlan, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
