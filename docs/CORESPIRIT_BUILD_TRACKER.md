@@ -174,6 +174,24 @@ CI contracts prove source-level invariants. They do not prove browser FPS, netwo
 
 The chart data plane established the zero-copy canonical chart data plane at the Vela boundary, with typed column transport and retained GPU-buffer reuse for identity-chart rendering.
 
+## v135 — Vela capability splitting and eager-import removal
+
+### 14. Vela renderer capability graph
+- [x] Audited the Vela fork: 384 source files with large renderer, engine, workspace, drawing and settings modules.
+- [x] Confirmed the native renderer statically pulled `UserDrawingController` and therefore the full drawing implementation graph.
+- [x] `UserDrawingController` is now type-only from `NativeRenderer`; concrete drawing implementation is loaded with a dynamic import.
+- [x] Added a lazy proxy so Vela's drawing port remains synchronous to callers while the capability loads on first use.
+- [x] Removed runtime `VelaWorkspace` re-export from the chart facade.
+- [x] Added `velaWorkspaceLoader.ts` as the explicit on-demand workspace capability.
+- [x] Added CI/source contracts protecting these capability boundaries.
+- [~] Advanced drawing families are still grouped inside `vendor/vela/src/core/drawings/registry.ts`.
+- [ ] Split the drawing registry into lean-core and advanced family chunks (Fibonacci, Gann, harmonic/Elliott/pattern, volume-profile/measurements, etc.).
+- [ ] Lazy-load optional renderer modules such as VPVR/settings/other heavyweight chrome where runtime semantics permit.
+
+### 15. Evidence gate
+- [ ] Capture the post-split landing/dashboard/live gzip graph from a successful Vercel or local production build.
+- [ ] Capture a browser network trace proving drawing-capability JS is absent before Draw/drawing UI is opened.
+- [ ] Capture a second trace proving only the requested drawing family chunk loads when advanced tools are opened.
 ## v134 — regional topology lock and frontend startup split
 
 ### 12. Vercel / Supabase regional placement
