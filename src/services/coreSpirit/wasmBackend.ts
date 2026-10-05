@@ -59,9 +59,14 @@ export class CoreSpiritWasmBackend {
   ):Promise<void> {
     if (manifest.abiVersion !== 1) throw new Error('unsupported CoreSpirit WASM ABI');
     let instance:WebAssembly.Instance;
-    if (source instanceof WebAssembly.Instance) instance=source;
-    else if (source instanceof WebAssembly.Module) instance=await WebAssembly.instantiate(source, {});
-    else instance=await WebAssembly.instantiate(source, {});
+    if (source instanceof WebAssembly.Instance) {
+      instance=source;
+    } else if (source instanceof WebAssembly.Module) {
+      instance=await WebAssembly.instantiate(source, {});
+    } else {
+      const instantiated=await WebAssembly.instantiate(source, {});
+      instance=instantiated instanceof WebAssembly.Instance ? instantiated : instantiated.instance;
+    }
     const exports=instance.exports as unknown as Partial<CoreSpiritWasmExports>;
     if (!exports.memory || !exports.alloc || !exports.runKernel) throw new Error('CoreSpirit WASM module is missing memory/alloc/runKernel exports');
     this.instance=instance;
@@ -167,8 +172,4 @@ export class CoreSpiritWasmBackend {
   }
 }
 
-export function coreSpiritWasmBackendManifest(
-  backend:CoreSpiritWasmBackend,
-):CoreSpiritWasmKernelManifest|undefined {
-  return backend['manifest'];
-}
+
