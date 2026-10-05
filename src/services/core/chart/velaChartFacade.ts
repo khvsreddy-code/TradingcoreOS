@@ -12,7 +12,6 @@ import type { ScenePatch, SeriesPatchOperation } from '../../../../vendor/vela/s
 export type Time = number;
 export type LineStyleValue = 0 | 1 | 2;
 export const LineStyle = Object.freeze({ Solid: 0 as LineStyleValue, Dashed: 1 as LineStyleValue, Dotted: 2 as LineStyleValue });
-export { VelaWorkspace } from '../../../../vendor/vela/src/workspace';
 export type { VelaWorkspaceOptions, WorkspaceEventMap } from '../../../../vendor/vela/src/workspace';
 
 export type { DataProvider, ProviderInfo, SymbolDescriptor } from '../../../../vendor/vela/src/core/ports/DataProvider';
