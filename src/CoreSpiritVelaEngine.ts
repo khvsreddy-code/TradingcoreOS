@@ -76,13 +76,13 @@ function makeModel(
   id: string,
   meta: IndicatorMeta,
   points: Map<string, SeriesPoint[]>,
-  markers: Map<string, {
+  markers: readonly {
     time: number;
     position: 'aboveBar' | 'belowBar' | 'inBar';
     shape: string;
     color: string;
     text?: string;
-  }>,
+  }[],
   priceLines: Array<{ id: string; paneId: string; price: number; color?: string; lineStyle?: 'solid' | 'dashed' | 'dotted'; width?: number; title?: string }>,
   anchorTime?: number,
   dirty?: DirtyRange,
@@ -102,7 +102,7 @@ function makeModel(
     overlay: true,
   }));
 
-  const markerList = [...markers.values()].sort((a, b) => a.time - b.time);
+  const markerList = markers;
   if (markerList.length) {
     series.push({
       id: `${id}:signals`,
@@ -267,7 +267,7 @@ export class CoreSpiritVelaEngine {
     const emitModel = (dirty?: DirtyRange) => {
       if (!markerListCache) markerListCache = [...markers.values()].sort((a, b) => a.time - b.time);
       const firstTime = Number.isFinite(firstSeriesTime) ? firstSeriesTime : undefined;
-      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, new Map(markerListCache.map((marker) => [String(marker.time) + ':' + marker.text, marker])), priceLines, firstTime, dirty));
+      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markerListCache ?? [], priceLines, firstTime, dirty));
     };
 
     try {
