@@ -43,15 +43,15 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 export class FyersApiClient {
   constructor(private readonly accessToken: string, private readonly appId = process.env.FYERS_CLIENT_ID || '') {}
 
-  async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, timeoutMs = API_LATENCY_BUDGET_MS.quote): Promise<T> {
+  async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
     return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs);
   }
 
-  async apiGet<T = unknown>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal, timeoutMs = API_LATENCY_BUDGET_MS.account): Promise<T> {
+  async apiGet<T = unknown>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.account): Promise<T> {
     return this.request<T>(API_BASE, path, params, signal, 'GET', undefined, timeoutMs);
   }
 
-  async apiPost<T = unknown>(path: string, body: unknown, signal?: AbortSignal, timeoutMs = API_LATENCY_BUDGET_MS.order): Promise<T> {
+  async apiPost<T = unknown>(path: string, body: unknown, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.order): Promise<T> {
     return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs);
   }
 
