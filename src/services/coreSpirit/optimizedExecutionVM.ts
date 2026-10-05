@@ -59,7 +59,7 @@ export class CoreSpiritOptimizedExecutionVM {
       const ins=plan.instructions[pc];
       const computational = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'loadState' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'call' || ins.op === 'index';
       if(dirty && computational && !dirty.has(pc)){ pc += 1; continue; }
-      switch(ins.op){
+      try {\n      switch(ins.op){
         case 'const':values.set(ins.dest,ins.value);pc+=1;break;
         case 'loadSeries':values.set(ins.dest,host.loadSeries(ins.name,ins.offset));pc+=1;break;\n        case 'loadState':values.set(ins.dest,host.loadState(ins.name));pc+=1;break;
         case 'move':values.set(ins.dest,host.moveLocal(ins.source));pc+=1;break;
