@@ -186,26 +186,19 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       break;
 
     case 'identifier': {
-      if (['open','high','low','volume','time','close','bar_index','na','bar'].includes(node.name)) {
-        inferred = {
-          causality:'causal',
-          lookahead:'false',
-          realtimeSafe:true,
-          evidence:[spanEvidence(node,`built-in temporal source '${node.name}'`)],
-        };
-      } else {
-        inferred = {
-          causality:'unknown',
-          lookahead:'unknown',
-          realtimeSafe:'unknown',
-          evidence:[spanEvidence(node,`unresolved temporal provenance for '${node.name}'`)],
-        };
-      }
+      inferred = {
+        causality:'causal',
+        lookahead:'false',
+        realtimeSafe:true,
+        evidence:[spanEvidence(node, ['open','high','low','volume','time','close','bar_index','na','bar'].includes(node.name)
+          ? `built-in temporal source '${node.name}'`
+          : `local symbol '${node.name}'; producer is analyzed separately`)],
+      };
       break;
     }
 
     case 'member':
-      inferred = merge(inferNode(node.target,annotations), inferNode({ ...node.target } as CoreSpiritAstNode, annotations), node, `member access '${node.member}'`);
+      inferred = merge(inferNode(node.target,annotations), {causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]}, node, `member access '${node.member}'`);
       break;
 
     case 'index': {
@@ -230,6 +223,8 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
         inferred = merge(child,builtinSafety(builtin),node,`builtin '${node.name}'`);
       } else if (['market','timeframe','__market_timeframe'].includes(node.name)) {
         inferred = merge(child,{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]},node,`market context '${node.name}'`);
+      } else if (['signal','emit','plot','show','marker','label','labelAt','line','zone','box','band','fill','barcolor','order','entry','exit','buy','sell'].includes(node.name)) {
+        inferred = merge(child,{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[spanEvidence(node,`transactional output '${node.name}'`)]},node,'transactional effect');
       } else if (node.name === '__bar_phase' || node.name === 'event') {
         inferred = merge(child,{causality:'causal',lookahead:'false',realtimeSafe:true,evidence:[]},node,`temporal runtime '${node.name}'`);
       } else if (/future|forward|lookahead|offset_future/i.test(node.name)) {
