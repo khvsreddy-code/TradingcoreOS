@@ -18,6 +18,7 @@ import { createCoreSpiritCompilationUnit, makeCoreSpiritCompilerPipelineTrace } 
 import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import { planCoreSpiritExecution } from './executionPlanner';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
+import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
@@ -288,8 +289,9 @@ export class CoreSpiritCompiler {
       const graphInput = { ...optimized, sourceMap: coreSpiritSourceMapFromInstructions(sourceId, optimized.entry.instructions), semanticDependencyGraph } as CoreSpiritIrProgram;
       const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
-      const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan });
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
+      const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {
