@@ -30,3 +30,11 @@ if (pkg.scripts?.build !== 'vite build && npm run bundle:budget') throw new Erro
 if (vercel.regions?.length !== 1 || vercel.regions[0] !== 'bom1') throw new Error('India-first Vercel region must remain bom1');
 
 console.log('frontend performance architecture contract: OK');
+
+
+const velaFacade = read('src/services/core/chart/velaChartFacade.ts');
+if (/export\s+\{\s*VelaWorkspace\s*\}/.test(velaFacade)) throw new Error('VelaWorkspace must not be a runtime export of the chart facade');
+const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
+if (/import\s+\{\s*UserDrawingController\s*\}/.test(nativeRenderer)) throw new Error('NativeRenderer must not eagerly import UserDrawingController');
+if (!nativeRenderer.includes("import('./drawings/UserDrawingController')")) throw new Error('NativeRenderer must lazy-load drawing capability');
+console.log('Vela capability-splitting contract: OK');
