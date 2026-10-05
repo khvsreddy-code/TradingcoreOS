@@ -241,3 +241,14 @@ The chart data plane established the zero-copy canonical chart data plane at the
 3. Set `REALTIME_GATEWAY_URL` in Vercel, validate the browser gateway path, and only then set `TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED=true`.
 4. After cutover, disable the legacy `/market-stream` and `/order-stream` HTTP bridges rather than retaining two competing realtime topologies.
 
+
+
+## v136 — Vela drawing registry capability split
+
+- [x] Keep the common drawing registry free of Fibonacci/Gann/pattern/volume-profile implementation imports.
+- [x] Move advanced drawing families into separate registry modules.
+- [x] Dynamically load advanced families only when the drawings toolbar is shown.
+- [x] Preserve custom toolbar definitions during lazy catalog hydration.
+- [x] Add a source contract test for the module-graph boundary.
+- [~] Advanced families are still hydrated together when the drawing toolbar is shown.
+- [ ] Load a family only when its flyout is opened, then prove the network trace.
