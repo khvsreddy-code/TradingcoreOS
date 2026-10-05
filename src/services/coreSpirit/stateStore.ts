@@ -10,8 +10,7 @@ export class CoreSpiritStateStore {
     this.series = registry;
   }
 
-  bind(registry: CoreSpiritSeriesRegistry, crossState: CoreSpiritCrossState): void {
-    (this as any).series = registry;
+  bind(crossState: CoreSpiritCrossState): void {
     this.crossState = crossState;
   }
 
