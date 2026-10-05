@@ -35,6 +35,17 @@ export type CoreSpiritVolumeProfile = Readonly<{
   val?:number;
 }>;
 
+export type CoreSpiritMatrix = Readonly<{
+  rows:number;
+  columns:number;
+  data:Float64Array;
+}>;
+
+export type CoreSpiritTensor = Readonly<{
+  shape:readonly number[];
+  data:Float64Array;
+}>;
+
 export type CoreSpiritSeries = Array<CoreSpiritValue>;
 
 /** Runtime bar-state flags exposed to the execution engine. */
@@ -233,6 +244,9 @@ export type CoreSpiritDataResolver = {
   market?: () => CoreSpiritMarketSnapshot | null;
   depthImbalance?: () => number | null;
   footprint?: () => CoreSpiritFootprint | null;
+  trade?: () => CoreSpiritTrade | null;
+  orderbook?: () => CoreSpiritOrderBook | null;
+  volumeProfile?: () => CoreSpiritVolumeProfile | null;
   /** Optional host cache hook; the VM remains network-free. */
   cacheKey?: (request: CoreSpiritDataRequest) => string;
 };
