@@ -1,11 +1,5 @@
-/**
- * CoreSpirit's static type algebra.
- *
- * Runtime values are still represented by JavaScript numbers/strings/booleans,
- * but the compiler keeps the distinction between a value on the current bar
- * and a historical series. `number` remains a compatibility alias for the
- * numeric scalar family used by the existing v1 IR.
- */
+import { isCoreSpiritTemporalType, parseCoreSpiritTemporalType, temporalAssignmentCompatible } from './temporalTypes';
+
 export type CoreSpiritScalarType =
   | 'int'
   | 'float'
@@ -16,11 +10,16 @@ export type CoreSpiritScalarType =
 
 export type CoreSpiritType =
   | CoreSpiritScalarType
-  | 'series<int>'
-  | 'series<float>'
-  | 'series<number>'
-  | 'series<boolean>'
-  | 'series<string>'
+  | `scalar<${string}>`
+  | `series<${string}>`
+  | `window<${string}>`
+  | `state<${string}>`
+  | `event<${string}>`
+  | `snapshot<${string}>`
+  | `stream<${string}>`
+  | `confirmed<${string}>`
+  | `developing<${string}>`
+  | `forecast<${string}>`
   | `array<${string}>`
   | `matrix<${string}>`
   | `tensor<${string}>`
@@ -51,30 +50,60 @@ export type CoreSpiritType =
   | 'unknown';
 
 export type CoreSpiritNumericScalar = 'int' | 'float' | 'number';
-export type CoreSpiritSeriesType =
-  | 'series<int>'
-  | 'series<float>'
-  | 'series<number>'
-  | 'series<boolean>'
-  | 'series<string>';
+export type CoreSpiritSeriesType = `series<${string}>`;
+export type CoreSpiritStateType = `state<${string}>`;
+export type CoreSpiritWindowType = `window<${string}>`;
+export type CoreSpiritTemporalValueType =
+  | `confirmed<${string}>`
+  | `developing<${string}>`
+  | `forecast<${string}>`;
 
 export const isNumericScalarType = (type: CoreSpiritType): type is CoreSpiritNumericScalar =>
-  type === 'int' || type === 'float' || type === 'number';
+  type === 'int' || type === 'float' || type === 'number' || type === 'scalar<float>' || type === 'scalar<int>' || type === 'scalar<number>';
 
 export const isSeriesType = (type: CoreSpiritType): type is CoreSpiritSeriesType =>
   type.startsWith('series<') && type.endsWith('>');
 
-export const isNumericType = (type: CoreSpiritType): boolean =>
-  isNumericScalarType(type) ||
-  type === 'series<int>' ||
-  type === 'series<float>' ||
-  type === 'series<number>';
+export const isStateType = (type: CoreSpiritType): type is CoreSpiritStateType =>
+  type.startsWith('state<') && type.endsWith('>');
 
-export const isBooleanType = (type: CoreSpiritType): boolean =>
-  type === 'boolean' || type === 'series<boolean>';
+export const isWindowType = (type: CoreSpiritType): type is CoreSpiritWindowType =>
+  type.startsWith('window<') && type.endsWith('>');
 
-export const isStringType = (type: CoreSpiritType): boolean =>
-  type === 'string' || type === 'series<string>';
+export const isTemporalValueType = (type: CoreSpiritType): type is CoreSpiritTemporalValueType =>
+  type.startsWith('confirmed<') || type.startsWith('developing<') || type.startsWith('forecast<');
+
+export const isEventType = (type: CoreSpiritType): boolean =>
+  type.startsWith('event<') || type === 'event';
+
+export const isStreamType = (type: CoreSpiritType): boolean =>
+  type.startsWith('stream<');
+
+export const isSnapshotType = (type: CoreSpiritType): boolean =>
+  type.startsWith('snapshot<');
+
+export const isNumericType = (type: CoreSpiritType): boolean => {
+  if (isNumericScalarType(type)) return true;
+  if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type)) {
+    const parsed = parseCoreSpiritTemporalType(type);
+    return parsed ? ['int', 'float', 'number', 'price', 'volume', 'currency', 'duration', 'time'].includes(parsed.element) : false;
+  }
+  return false;
+};
+
+export const isBooleanType = (type: CoreSpiritType): boolean => {
+  if (type === 'boolean') return true;
+  if (type === 'series<boolean>' || type === 'state<boolean>' || type === 'window<boolean>') return true;
+  const parsed = parseCoreSpiritTemporalType(type);
+  return parsed?.element === 'boolean' && ['confirmed', 'developing', 'forecast'].includes(parsed.container);
+};
+
+export const isStringType = (type: CoreSpiritType): boolean => {
+  if (type === 'string') return true;
+  if (type === 'series<string>' || type === 'state<string>' || type === 'window<string>') return true;
+  const parsed = parseCoreSpiritTemporalType(type);
+  return parsed?.element === 'string' && ['confirmed', 'developing', 'forecast'].includes(parsed.container);
+};
 
 export const isNullableType = (type: CoreSpiritType): boolean =>
   type === 'null' || type === 'unknown' || type.endsWith('>');
@@ -86,9 +115,22 @@ export function seriesOf(type: CoreSpiritType): CoreSpiritType {
   return 'unknown';
 }
 
+export function stateOf(type: CoreSpiritType): CoreSpiritType {
+  if (type === 'int' || type === 'float' || type === 'number' || type === 'boolean' || type === 'string') return `state<${type}>` as CoreSpiritType;
+  if (isStateType(type)) return type;
+  return 'unknown';
+}
+
+export function windowOf(type: CoreSpiritType): CoreSpiritType {
+  if (type === 'int' || type === 'float' || type === 'number' || type === 'boolean' || type === 'string') return `window<${type}>` as CoreSpiritType;
+  if (isWindowType(type)) return type;
+  return 'unknown';
+}
+
 export function elementType(type: CoreSpiritType): CoreSpiritType {
-  if (!isSeriesType(type)) return 'unknown';
-  return type.slice('series<'.length, -1) as CoreSpiritType;
+  const parsed = parseCoreSpiritTemporalType(type);
+  if (!parsed) return 'unknown';
+  return parsed.element as CoreSpiritType;
 }
 
 export function normalizeDeclaredType(typeName: string): CoreSpiritType {
@@ -99,11 +141,8 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'number') return 'number';
   if (name === 'string') return 'string';
   if (name === 'null' || name === 'na') return 'null';
-  if (name === 'series<float>') return 'series<float>';
-  if (name === 'series<int>') return 'series<int>';
-  if (name === 'series<number>') return 'series<number>';
-  if (name === 'series<boolean>') return 'series<boolean>';
-  if (name === 'series<string>') return 'series<string>';
+  if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
+  if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
   if (name.startsWith('array<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
@@ -116,12 +155,13 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'unknown' || actual === 'unknown') return true;
   if (expected === actual) return true;
   if (actual === 'null') return true;
+  if (temporalAssignmentCompatible(expected, actual)) return true;
   if (expected === 'number') return isNumericType(actual);
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
-  if (expected === 'series<number>') return actual === 'series<int>' || actual === 'series<float>' || actual === 'series<number>';
-  if (expected === 'series<float>') return actual === 'series<int>' || actual === 'series<float>' || actual === 'series<number>';
-  if (expected === 'boolean') return actual === 'series<boolean>';
-  if (expected === 'string') return actual === 'series<string>';
+  if (expected === 'series<number>') return isSeriesType(actual);
+  if (expected === 'series<float>') return isSeriesType(actual);
+  if (expected === 'boolean') return actual === 'series<boolean>' || actual === 'boolean';
+  if (expected === 'string') return actual === 'series<string>' || actual === 'string';
   if (expected === 'series<boolean>') return actual === 'boolean';
   if (expected === 'series<string>') return actual === 'string';
   if (expected === 'series<int>') return actual === 'int';
@@ -132,11 +172,9 @@ export function joinTypes(a: CoreSpiritType, b: CoreSpiritType): CoreSpiritType 
   if (a === 'null') return b;
   if (b === 'null') return a;
   if (a === b) return a;
-  const aSeries = isSeriesType(a);
-  const bSeries = isSeriesType(b);
-  if (aSeries || bSeries) {
-    const ae = aSeries ? elementType(a) : a;
-    const be = bSeries ? elementType(b) : b;
+  if (isSeriesType(a) || isSeriesType(b)) {
+    const ae = isSeriesType(a) ? elementType(a) : a;
+    const be = isSeriesType(b) ? elementType(b) : b;
     const joined = joinScalarTypes(ae, be);
     return joined === 'unknown' ? 'unknown' : seriesOf(joined);
   }
