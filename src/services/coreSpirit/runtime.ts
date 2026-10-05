@@ -409,6 +409,7 @@ export class CoreSpiritRuntime {
   getLoadedProgramId(): string | undefined { return this.loadedProgramId; }
   getLoadedIr(): CoreSpiritIrProgram | undefined { return this.compiledIr; }
   getExecutionTier(): Exclude<CoreSpiritExecutionTier, 'auto'> { return this.executionTier; }
+  getLastDirtyPlan(): CoreSpiritDirtyExecutionPlan | undefined { return this.lastDirtyPlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
