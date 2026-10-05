@@ -36,7 +36,7 @@ export class CoreSpiritColumnarHistory {
     this.ensure(rows.length);
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i]!;
-      this.write(i, Number(row.timestamp), row.open, row.high, row.low, row.close, row.volume);
+      this.write(i, this.timeFrom(row.timestamp), row.open, row.high, row.low, row.close, row.volume);
     }
     this._length = rows.length;
   }
