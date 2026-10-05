@@ -16,7 +16,16 @@
   ],
   "functions": {
     "api/index.ts": {
-      "maxDuration": 300
+      "maxDuration": 15
+    },
+    "api/queue.ts": {
+      "maxDuration": 240,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "tradingcore-background"
+        }
+      ]
     }
   }
 }
