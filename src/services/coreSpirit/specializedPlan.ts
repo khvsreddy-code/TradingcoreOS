@@ -26,6 +26,19 @@ export type CoreSpiritSpecializedSeriesFanout = Readonly<{
   }>[];
 }>;
 
+export type CoreSpiritSpecializedKernelRegion = Readonly<{
+  id:string;
+  inputRegister:number;
+  inputName:string;
+  instructions:readonly number[];
+  seriesInstructions:readonly number[];
+  scalarInstructions:readonly number[];
+  outputRegisters:readonly number[];
+  stateful:boolean;
+  singleTraversal:true;
+  eligibleBackends:readonly ('cpu'|'wasm'|'gpu')[];
+}>;
+
 export type CoreSpiritSpecializedPlan = Readonly<{
   version:1;
   strategy:'specialized-straight-line'|'specialized-control-flow';
@@ -33,6 +46,7 @@ export type CoreSpiritSpecializedPlan = Readonly<{
   slotByName:ReadonlyMap<string,number>;
   instructions:readonly CoreSpiritSpecializedInstruction[];
   seriesFanouts:readonly CoreSpiritSpecializedSeriesFanout[];
+  regions:readonly CoreSpiritSpecializedKernelRegion[];
   hasControlFlow:boolean;
   hasEffects:boolean;
   wasmEligible:readonly number[];
@@ -118,6 +132,43 @@ export function buildCoreSpiritSpecializedPlan(
     }));
   }
 
+  const regions:CoreSpiritSpecializedKernelRegion[]=[];
+  for(let groupIndex=0;groupIndex<seriesFanouts.length;groupIndex+=1){
+    const fanout=seriesFanouts[groupIndex]!;
+    const owned=new Set<number>();
+    const queue:number[]=[];
+    for(const stage of fanout.stages){ owned.add(stage.instruction); queue.push(stage.dest); }
+    const scalar:number[]=[];
+    for(let i=0;i<lowered.length;i+=1){
+      const instruction=lowered[i]!;
+      const refs=instruction.op==='binary' ? [instruction.left,instruction.right]
+        : instruction.op==='unary' ? [instruction.operand]
+        : instruction.op==='call' ? instruction.args
+        : instruction.op==='index' ? [instruction.target,instruction.index]
+        : [];
+      if(refs.some((ref)=>queue.includes(ref)) && instruction.op!=='call'){
+        if(!owned.has(i)){ owned.add(i); scalar.push(i); }
+        if('dest' in instruction && instruction.dest) queue.push(instruction.dest);
+      }
+    }
+    const seriesInstructions=fanout.stages.map((stage)=>stage.instruction);
+    const instructions=Object.freeze([...seriesInstructions,...scalar].sort((a,b)=>a-b));
+    const outputRegisters=Object.freeze(scalar.length ? scalar.map((index)=>('dest' in lowered[index]! ? (lowered[index] as any).dest : -1)).filter((id)=>id>=0) : fanout.stages.map((stage)=>stage.dest));
+    const stateful=fanout.stages.some((stage)=>['ema','rma','rsi','atr','vwap','change','pctchange','persistence'].includes(stage.name));
+    regions.push(Object.freeze({
+      id:`fused-kernel:${groupIndex}`,
+      inputRegister:fanout.inputRegister,
+      inputName:fanout.inputName,
+      instructions,
+      seriesInstructions:Object.freeze(seriesInstructions),
+      scalarInstructions:Object.freeze(scalar),
+      outputRegisters,
+      stateful,
+      singleTraversal:true,
+      eligibleBackends:Object.freeze(stateful ? ['cpu','wasm'] as const : ['cpu','wasm','gpu'] as const),
+    }));
+  }
+
   const hasControlFlow=lowered.some((instruction)=>instruction.op==='jump'||instruction.op==='jumpIfFalse');
   const hasEffects=lowered.some((instruction)=>instruction.op==='setLocal'||instruction.op==='emit');
   const wasmEligible=lowered.flatMap((instruction,index)=>{
@@ -137,6 +188,7 @@ export function buildCoreSpiritSpecializedPlan(
     slotByName:names,
     instructions:Object.freeze(lowered),
     seriesFanouts:Object.freeze(seriesFanouts),
+    regions:Object.freeze(regions),
     hasControlFlow,
     hasEffects,
     wasmEligible:Object.freeze(wasmEligible),
