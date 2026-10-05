@@ -180,6 +180,15 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
 
       case 'memberCall': {
+        if (n.member === 'timeframe' && (
+          (n.target.type === 'call' && n.target.name === 'market') ||
+          (n.target.type === 'identifier' && scope.get(n.target.name) === 'market:ref')
+        )) {
+          if (n.args.length !== 1 || !compatible('string', infer(n.args[0]!, scope))) {
+            report(n, 'market(...).timeframe(...) expects one string timeframe', 'TYPE_MARKET_TIMEFRAME');
+          }
+          return 'market:ref';
+        }
         let contract;
         if(n.target.type==='identifier') {
           contract=getCoreSpiritMemberContract(n.target.name==='panel' ? 'panel' : n.target.name,n.member);
@@ -295,7 +304,19 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(semanticNumericFunctions.has(n.name)) return args[0];
         return undefined;
       }
-      case 'memberCall': return undefined;
+      case 'memberCall': {
+        if (n.member === 'timeframe') {
+          const target = inferSemantic(n.target, scope);
+          if (target?.kind === 'series' || (target as any)?.atom === 'market:ref') {
+            const timeframe = n.args[0]?.type === 'string' ? String(n.args[0].value) : 'requested';
+            const symbol = target?.symbol ?? (n.target.type === 'call' && n.target.name === 'market'
+              ? (n.target.args[0]?.type === 'string' ? String(n.target.args[0].value) : 'current')
+              : 'current');
+            return semanticSeries('number', { symbol, timeframe });
+          }
+        }
+        return undefined;
+      }
       default: return undefined;
     }
   };
