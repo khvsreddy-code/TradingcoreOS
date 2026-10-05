@@ -1,3 +1,6 @@
+import crypto from 'node:crypto';
+import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
+
 type BrokerLimit = {
   minIntervalMs: number;
   maxPerMinute: number;
@@ -47,50 +50,102 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  * margin below documented per-minute limits. This is especially important on
  * Vercel, where multiple React effects can otherwise fan out simultaneously.
  */
-export async function withBrokerRequestGate<T>(broker: 'fyers' | 'upstox', identity: string, task: (signal?: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
-  const key = `${broker}:${identity}`;
-  const state = getState(key);
+async function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
+  if (ms <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function distributedEnabled(): boolean {
+  return process.env.TRADINGCORE_DISTRIBUTED_COORDINATION !== 'false';
+}
+
+export async function withBrokerRequestGate<T>(
+  broker: 'fyers' | 'upstox',
+  identity: string,
+  task: (signal?: AbortSignal) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const key = broker + ':' + identity;
+  const localState = getState(key);
   const limit = LIMITS[broker];
 
-  let release!: () => void;
-  const turn = new Promise<void>(resolve => { release = resolve; });
-  const previous = state.tail;
-  state.tail = previous.then(() => turn);
+  let localRelease!: () => void;
+  const previous = localState.tail;
+  const localTurn = new Promise<void>((resolve) => { localRelease = resolve; });
+  localState.tail = previous.then(() => localTurn);
   await previous;
 
-  if (signal?.aborted) { release(); throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }); }
+  const distributed = getSharedRedis();
+  const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
+  const lockKey = 'tco:broker:gate:' + broker + ':' + identityHash;
+  const owner = crypto.randomUUID();
+  const lockTtl = Math.max(15_000, limit.minIntervalMs + 12_000);
+  let distributedRelease: (() => Promise<void>) | undefined;
 
   try {
+    if (signal?.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
+
+    if (distributedEnabled() && distributed.configured) {
+      while (!(await distributed.acquireLock(lockKey, owner, lockTtl, signal))) {
+        await sleepWithSignal(Math.min(100, limit.minIntervalMs), signal);
+      }
+
+      distributedRelease = async () => {
+        await distributed.releaseLock(lockKey, owner).catch(() => undefined);
+      };
+
+      const now = Date.now();
+      const window = Math.floor(now / 60_000);
+      const countKey = 'tco:broker:minute:' + broker + ':' + identityHash + ':' + window;
+      const count = await distributed.incrementWindow(countKey, 61_000, signal);
+      if (count > limit.maxPerMinute) {
+        await distributedRelease();
+        distributedRelease = undefined;
+        throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429 });
+      }
+
+      const lastKey = 'tco:broker:last:' + broker + ':' + identityHash;
+      const last = Number(await distributed.get<string | number>(lastKey, signal) || 0);
+      const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
+      if (spacing) await sleepWithSignal(spacing, signal);
+      await distributed.set(lastKey, String(Date.now()), { px: 61_000 }, signal);
+    } else if (distributedEnabled() && process.env.NODE_ENV === 'production') {
+      const marker = globalThis as typeof globalThis & { __tradingCoreRedisWarningLogged?: boolean };
+      if (!marker.__tradingCoreRedisWarningLogged) {
+        marker.__tradingCoreRedisWarningLogged = true;
+        console.warn('[TradingCore] Shared Redis coordination is not configured; broker limits are only enforced per function instance.');
+      }
+    }
+
     const now = Date.now();
-    state.timestamps = state.timestamps.filter(ts => now - ts < 60_000);
-    const oldest = state.timestamps[0];
-    const minuteWait = state.timestamps.length >= limit.maxPerMinute && oldest ? 60_000 - (now - oldest) + 25 : 0;
-    const spacingWait = Math.max(0, state.nextAvailableAt - now);
+    localState.timestamps = localState.timestamps.filter((ts) => now - ts < 60_000);
+    const oldest = localState.timestamps[0];
+    const minuteWait = localState.timestamps.length >= limit.maxPerMinute && oldest
+      ? 60_000 - (now - oldest) + 25
+      : 0;
+    const spacingWait = Math.max(0, localState.nextAvailableAt - now);
     await sleep(Math.max(minuteWait, spacingWait), signal);
 
     const startedAt = Date.now();
-    state.timestamps.push(startedAt);
-    state.nextAvailableAt = startedAt + limit.minIntervalMs;
-    try {
-      return await task(signal);
-    } catch (error: any) {
-      const status = Number(error?.status || error?.statusCode || error?.response?.status || 0);
-      const message = String(error?.message || error || '').toLowerCase();
-      const limited = status === 429 || Number(error?.brokerCode) === 429 || /(^|\s)(429|rate[- ]?limit|too many requests|request limit reached)(\s|$)/.test(message);
-      if (limited) {
-        // A broker 429 is a signal to slow the entire token queue, not just
-        // the request that failed. This prevents the next queued chart/order
-        // call from immediately repeating the same rejected request.
-        const retryAfter = Number(error?.retryAfterMs || 0);
-        state.nextAvailableAt = Math.max(state.nextAvailableAt, Date.now() + Math.max(1_500, Math.min(15_000, retryAfter || 2_500)));
-      }
-      throw error;
-    }
+    localState.timestamps.push(startedAt);
+    localState.nextAvailableAt = startedAt + limit.minIntervalMs;
+    return await task(signal);
   } finally {
-    release();
+    try {
+      await distributedRelease?.();
+    } finally {
+      localRelease();
+    }
   }
 }
-
 /** Use for Upstox order placement where the broker documents a 10 req/s combined order limit. */
 export async function withUpstoxOrderGate<T>(identity: string, task: () => Promise<T>): Promise<T> {
   const key = `upstox-order:${identity}`;
