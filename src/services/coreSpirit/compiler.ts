@@ -292,10 +292,17 @@ export class CoreSpiritCompiler {
       const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
       const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
+      const repaintSafety = analyzeCoreSpiritRepaintSafety(ast);
+      const repaintDiagnostics = [
+        ...repaintSafety.warnings.map(message => ({severity:'warning' as const,message,code:'REPAINT_SAFETY'})),
+        ...repaintSafety.errors.map(message => ({severity:'error' as const,message,code:'REPAINT_SAFETY_ASSERTION'})),
+      ];
+      const allDiagnostics = [...stageDiagnostics,...repaintDiagnostics];
+      if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
-      if (!validateCoreSpiritIr(ir)) return { diagnostics:[...stageDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
-      return {ir,diagnostics:stageDiagnostics,artifact:makeExecutableArtifact(ir)};
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
+      return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {
       return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};
     }
