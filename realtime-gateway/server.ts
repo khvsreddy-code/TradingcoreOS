@@ -3,7 +3,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createClient } from 'redis';
+import { RealtimeRedisRest } from './redisRest.js';
 import { BrokerRepository } from '../src/server/storage/BrokerRepository.js';
 import { EncryptionService } from '../src/server/encryption/EncryptionService.js';
 import { FyersMarketDataTransport } from '../src/server/marketData/FyersMarketDataTransport.js';
@@ -12,7 +12,8 @@ import { verifyRealtimeTicket } from '../src/server/realtime/ticket.js';
 
 const PORT = Number(process.env.REALTIME_GATEWAY_PORT || process.env.PORT || 8080);
 const INSTANCE_ID = String(process.env.REALTIME_GATEWAY_INSTANCE_ID || crypto.randomUUID());
-const REDIS_URL = String(process.env.REALTIME_REDIS_URL || process.env.REDIS_URL || '').trim();
+const REDIS_URL = String(process.env.REALTIME_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL || '').trim();
+const REDIS_TOKEN = String(process.env.REALTIME_REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
 const OWNER_TTL_MS = 15_000;
 const OWNER_RENEW_MS = 5_000;
 const SUB_TTL_MS = 35_000;
@@ -46,11 +47,9 @@ if (!process.env.REALTIME_GATEWAY_SHARED_SECRET) {
   throw new Error('REALTIME_GATEWAY_SHARED_SECRET is required for the realtime gateway.');
 }
 
-const redis = createClient({ url: REDIS_URL });
-const subscriber = redis.duplicate();
-
-redis.on('error', (error) => console.error('[TradingCore realtime redis]', error));
-subscriber.on('error', (error) => console.error('[TradingCore realtime subscriber]', error));
+const redis = new RealtimeRedisRest(REDIS_URL, REDIS_TOKEN);
+let redisReady = false;
+const subscriptionControllers: AbortController[] = [];
 
 const localConnections = new Map<string, LocalConnection>();
 const connectionsByUser = new Map<string, Set<string>>();
@@ -392,9 +391,9 @@ async function handleConnection(socket: WebSocket, request: http.IncomingMessage
 
 const server = http.createServer((request, response) => {
   if (request.url === '/healthz') {
-    response.writeHead(redis.isReady ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    response.writeHead(redisReady ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     response.end(JSON.stringify({
-      status: redis.isReady ? 'ok' : 'degraded',
+      status: redisReady ? 'ok' : 'degraded',
       instanceId: INSTANCE_ID,
       localConnections: localConnections.size,
       ownedUsers: ownedUsers.size,
@@ -423,6 +422,7 @@ server.on('upgrade', (request, socket, head) => {
 
 async function shutdown(): Promise<void> {
   for (const userId of [...ownedUsers.keys()]) await stopOwnership(userId);
+  subscriptionControllers.forEach((controller) => controller.abort());
   for (const connection of localConnections.values()) {
     try { connection.socket.close(1001, 'Gateway shutting down'); } catch {}
   }
@@ -432,14 +432,16 @@ async function shutdown(): Promise<void> {
 }
 
 async function start(): Promise<void> {
-  await redis.connect();
-  await subscriber.connect();
-  await subscriber.subscribe(EVENT_CHANNEL, (message) => {
+  redisReady = await redis.ping();
+
+  subscriptionControllers.push(await redis.subscribe(EVENT_CHANNEL, (message) => {
     try { broadcastEvent(JSON.parse(message)); } catch (error) { console.error('[TradingCore realtime event]', error); }
-  });
-  await subscriber.subscribe(CONTROL_CHANNEL, (message) => {
+  }));
+
+  subscriptionControllers.push(await redis.subscribe(CONTROL_CHANNEL, (message) => {
     void handleControl(message).catch((error) => console.error('[TradingCore realtime control]', error));
-  });
+  }));
+
   server.listen(PORT, '0.0.0.0', () => {
     console.log('[TradingCore realtime] gateway listening on :' + PORT + ' instance=' + INSTANCE_ID);
   });
