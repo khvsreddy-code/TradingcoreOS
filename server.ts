@@ -14,6 +14,7 @@ import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 import { newsRoutes } from './src/server/routes/news.routes.js';
+import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
 import { requestContext, type TradingCoreRequest } from './src/server/middleware/requestContext.js';
 import { createRateLimiter } from './src/server/middleware/rateLimit.js';
 import { recordRequest, getRequestMetrics } from './src/server/observability/requestMetrics.js';
@@ -111,6 +112,7 @@ app.use('/api/trading', brokerMarketDataRoutes);
 app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
+app.use('/api/jobs', backgroundJobRoutes);
 app.use('/api', newsRoutes);
 
 app.use('/api', (req, res) => {
