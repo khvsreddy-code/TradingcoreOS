@@ -51,3 +51,34 @@ Think **DATA → LET → WHEN/IF → SHOW** first. MODEL and AUTOMATE are advanc
 ## Performance rule
 
 Keep typed arrays canonical. Ordinary candle objects are compatibility boundaries, not the preferred hot path.
+
+## Runtime architecture
+
+TradingCoreOS separates the short-lived request plane from the realtime plane:
+
+```text
+                         ┌────────────────────┐
+                         │      Vercel CDN    │
+                         │   web application   │
+                         └──────────┬─────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+              request plane                   realtime plane
+                    │                               │
+              Vercel Functions              realtime gateway
+                    │                               │
+             auth / REST / DB                Redis coordination
+                    │                               │
+                broker APIs                     FYERS
+                    │                               │
+             bounded responses              normalized ticks
+                    │                               │
+                    └──────────── canonical data ──┘
+                                     │
+                              CoreSpirit / Vela
+```
+
+Vercel is the control/request boundary. Long-lived broker WebSockets are owned by the dedicated realtime gateway, with Redis used for cross-instance ownership, subscription metadata and event fanout. Supabase remains the durable system of record.
+
+During rollout, the browser can fall back to the bounded legacy HTTP stream when the realtime gateway is not configured.
