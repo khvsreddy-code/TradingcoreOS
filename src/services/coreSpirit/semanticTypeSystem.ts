@@ -161,23 +161,27 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     number: semanticScalar('number'), float: semanticScalar('number'), int: semanticScalar('number'),
     boolean: semanticScalar('boolean'), bool: semanticScalar('boolean'), string: semanticScalar('string'),
     price: semanticScalar('price', { unit: 'price' }), volume: semanticScalar('volume', { unit: 'volume' }),
-    time: semanticScalar('time', { unit: 'timestamp' }), duration: semanticScalar('duration', { unit: 'duration' }), currency: semanticScalar('currency', { unit: 'notional' }),
+    time: semanticScalar('time', { unit: 'timestamp' }), duration: semanticScalar('duration', { unit: 'duration' }),
+    currency: semanticScalar('currency', { unit: 'notional' }),
   };
   if (direct[normalized]) return direct[normalized];
-  const match = normalized.match(/^series<(number|float|int|price|volume|time|duration|currency|boolean|string)>$/);
-  if (!match) return undefined;
-  const atom = match[1] === 'float' || match[1] === 'int' ? 'number' : match[1] as CoreSpiritSemanticAtom;
-  return semanticSeries(atom, { unit: atom === 'price' ? 'price' : atom === 'volume' ? 'volume' : atom === 'time' ? 'timestamp' : atom === 'duration' ? 'duration' : atom === 'currency' ? 'notional' : undefined, symbol: 'current', timeframe: 'chart' });
+
+  const parsed = parseCoreSpiritTemporalType(normalized);
+  if (!parsed) return undefined;
+  const element = parsed.element === 'float' || parsed.element === 'int' ? 'number' : parsed.element as CoreSpiritSemanticAtom;
+  const isSeries = parsed.container === 'series';
+  const phase = parsed.container === 'confirmed' || parsed.container === 'developing' || parsed.container === 'forecast'
+    ? parsed.container
+    : undefined;
+  const metadata = {
+    unit: element === 'price' ? 'price' : element === 'volume' ? 'volume' : element === 'time' ? 'timestamp' : element === 'duration' ? 'duration' : element === 'currency' ? 'notional' : undefined,
+    symbol: isSeries || parsed.container === 'window' ? 'current' : undefined,
+    timeframe: isSeries || parsed.container === 'window' ? 'chart' : undefined,
+    temporalContainer: parsed.container,
+    ...(phase ? { temporalPhase: phase } : {}),
+  };
+  return semanticScalar(element, metadata as any).kind === 'scalar' && isSeries
+    ? semanticSeries(element, metadata as any)
+    : semanticScalar(element, metadata as any);
 }
 
-export function semanticTypeToString(type: CoreSpiritSemanticType): string {
-  const core = type.kind === 'series' ? `series<${type.atom}>` : type.atom;
-  const metadata: string[] = [];
-  if (type.symbol) metadata.push(`symbol=${type.symbol}`);
-  if (type.timeframe) metadata.push(`tf=${type.timeframe}`);
-  if (type.unit) metadata.push(`unit=${type.unit}`);
-  if (type.currency) metadata.push(`currency=${type.currency}`);
-  if (type.precision != null) metadata.push(`precision=${type.precision}`);
-  if (type.scale) metadata.push(`scale=${type.scale}`);
-  return metadata.length ? `${core} [${metadata.join(', ')}]` : core;
-}
