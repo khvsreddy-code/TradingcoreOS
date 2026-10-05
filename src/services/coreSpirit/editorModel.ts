@@ -51,7 +51,7 @@ export class CoreSpiritEditorModel {
   getSource() { return this.source; }
   getVersion() { return this.version; }
   getProfilerSnapshot() { return this.profilerSnapshot; }
-  setProfilerSnapshot(snapshot: CoreSpiritProfilerSnapshot | undefined) { this.profilerSnapshot = snapshot; return this.snapshot; }
+  setProfilerSnapshot(snapshot: CoreSpiritProfilerSnapshot | undefined) { this.profilerSnapshot = snapshot; this.snapshot = { ...this.snapshot, profiler:snapshot }; return this.snapshot; }
 
   updateSource(source: string, completionPrefix = '') {
     if (source === this.source && !completionPrefix) return this.snapshot;
