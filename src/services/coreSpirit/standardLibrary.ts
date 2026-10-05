@@ -71,7 +71,7 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'rising', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
   { name:'falling', minArgs:1, maxArgs:2, returnType:'boolean', pure:true, category:'condition' },
   // Market
-  { name:'vwap', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'market' },
+  { name:'vwap', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'market', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
   { name:'market', minArgs:1, maxArgs:1, returnType:'market:ref', pure:false, category:'market', capability:'market' },
   { name:'timeframe', minArgs:1, maxArgs:1, returnType:'timeframe:ref', pure:false, category:'market', capability:'market' },
   // State
@@ -101,12 +101,12 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'signal' },
   { name:'emit', minArgs:1, maxArgs:1, returnType:'event', pure:false, category:'extension', emitKind:'event' },
 
-  { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension' },
+  { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
   { name:'event', minArgs:1, maxArgs:1, returnType:'boolean', pure:false, category:'extension' },
   { name:'model', minArgs:1, maxArgs:1, returnType:'model:ref', pure:false, category:'extension' },
 
   { name:'variance', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
-  { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension' },
+  { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'} },
   { name:'change', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'elementwise'} },
   { name:'isNa', minArgs:1, maxArgs:1, returnType:'boolean', pure:true, category:'extension' },
   { name:'exp', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'extension' },
