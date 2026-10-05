@@ -24,6 +24,7 @@ export type CoreSpiritDataDependency = Readonly<{
   timeframe:string;
   fields:readonly ('open'|'high'|'low'|'close'|'volume'|'time'|'bid'|'ask'|'depth'|'trade'|'footprint')[];
   batchKey:string;
+  batchable:boolean;
 }>;
 
 export type CoreSpiritEventKind =
@@ -206,6 +207,7 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
       timeframe:value.timeframe,
       fields:Object.freeze([...value.fields].sort()) as CoreSpiritDataDependency['fields'],
       batchKey:`market-batch:${value.symbol}`,
+      batchable:value.domain==='bar-series' || [...value.fields].every((field)=>['open','high','low','close','volume','time'].includes(field)),
     }));
   }
 
@@ -226,7 +228,7 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
     dataDependencies:Object.freeze(deps),
     batches:Object.freeze(
       [...new Map(deps.map((dep)=>[dep.batchKey,dep])).entries()].map(([batchKey])=>{
-        const ids=deps.filter((dep)=>dep.batchKey===batchKey).map((dep)=>dep.id);
+        const ids=deps.filter((dep)=>dep.batchKey===batchKey && dep.batchable).map((dep)=>dep.id);
         return Object.freeze({batchKey,dependencyIds:Object.freeze(ids),requestCount:ids.length});
       }),
     ),
