@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { VelaWorkspace } from './services/core/chart/velaChartFacade';
+import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
+import type { VelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
@@ -44,11 +45,11 @@ export function LiveTradingWorkspace() {
         : tradingCoreRuntime.restoreBrokerConnections().catch(() => undefined);
       const defaultsPromise = loadTcoVelaDefaults();
       await Promise.all([brokerReady, defaultsPromise]);
-      const defaults = await defaultsPromise;
+      const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
       if (cancelled || !host.current) return;
       const initialLayout = defaults.layout && defaults.layout !== '4' ? defaults.layout : '1';
 
-      workspace = new VelaWorkspace(host.current, {
+      workspace = new VelaWorkspaceClass(host.current, {
         layout: initialLayout,
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
