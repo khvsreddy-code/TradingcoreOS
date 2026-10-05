@@ -16,6 +16,8 @@ fyersOrderStreamRoutes.get('/:brokerId/order-stream', async (req: AuthenticatedR
   res.setHeader('Content-Type','application/x-ndjson');
   res.setHeader('Cache-Control','no-cache, no-transform');
   res.setHeader('Connection','keep-alive');
+  res.setHeader('X-TradingCore-Realtime-Plane','legacy-vercel-stream');
+  if (process.env.REALTIME_GATEWAY_URL) res.setHeader('X-TradingCore-Realtime-Migration','/api/realtime/ticket');
   res.setHeader('X-TradingCore-Stream-Lease-Ms', String(API_LATENCY_BUDGET_MS.streamLease));
   res.flushHeaders();
   const write=(event:any)=>{try{res.write(JSON.stringify(event)+'\n')}catch{}};
