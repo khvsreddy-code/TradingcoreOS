@@ -264,7 +264,10 @@ export class CoreSpiritSeriesRegistry {
 
   snapshotNumericObject(): Record<string, number[]> {
     const out: Record<string, number[]> = {};
-    for (const id of this.numeric.keys()) out[this.names[id] ?? String(id)] = Array.from(this.numericSnapshot(id));
+    for (const id of this.numeric.keys()) {
+      if (this.numeric[id] === undefined) continue;
+      out[this.names[id] ?? String(id)] = Array.from(this.numericSnapshot(id));
+    }
     return out;
   }
 
