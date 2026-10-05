@@ -411,6 +411,31 @@ export function buildCoreSpiritSemanticDependencyGraph(
         expression(node.expression,conditionOwner);
         break;
 
+      case 'assignment': {
+        const symbolId = bindings[node.name] ?? addNode({
+          id:'symbol:' + node.name,
+          kind:'symbol',
+          name:node.name,
+          type:semantic.symbols.get(node.name),
+          source:sourceSpan(node),
+        });
+        const valueId = expression(node.expression,conditionOwner);
+        addEdge(valueId,symbolId,'depends-on');
+        break;
+      }
+
+      case 'onEvent': {
+        const eventId = addNode({
+          id:'event:' + node.eventName,
+          kind:'event',
+          name:node.eventName,
+          type:'event',
+          source:sourceSpan(node),
+        });
+        node.body.forEach(child => visit(child,eventId));
+        break;
+      }
+
       case 'typeDeclaration':
         break;
 
