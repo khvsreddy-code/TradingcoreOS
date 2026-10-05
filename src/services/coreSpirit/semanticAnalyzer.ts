@@ -66,8 +66,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       case 'member': {
         if(n.target.type==='identifier' && n.target.name==='chart' && ['price','volume','indicator','custom'].includes(n.member)) return `visual:area`;
         if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
+        if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='trade') return 'trade';
+        if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='orderbook') return 'orderbook';
+        if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='footprint') return 'footprint';
+        if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='volumeProfile') return 'volume-profile';
         if(n.target.type==='identifier' && scope.get(n.target.name)==='timeframe:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
         if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe')) {
+          if(['trade','orderbook','footprint','volumeProfile'].includes(n.member)) return n.member==='trade'?'trade':n.member==='orderbook'?'orderbook':n.member==='footprint'?'footprint':'volume-profile';
           if(!['open','high','low','close','volume','time'].includes(n.member)) {
             report(n,`Market/timeframe references do not expose member '${n.member}'`,'UNKNOWN_DATA_FIELD');
             return 'unknown';
