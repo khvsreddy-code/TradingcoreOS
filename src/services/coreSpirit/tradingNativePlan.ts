@@ -184,8 +184,12 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
   const eventTriggers:CoreSpiritEventTrigger[]=[];
   for(const trigger of events.values()) eventTriggers.push(trigger);
 
-  const multiSymbol=new Set(deps.map((dep)=>dep.symbol).filter((symbol)=>symbol!=='current')).size>1;
-  const multiTimeframe=new Set(deps.map((dep)=>dep.timeframe).filter((timeframe)=>timeframe!=='chart')).size>1;
+  const concreteSymbols=new Set(deps.map((dep)=>dep.symbol).filter((symbol)=>symbol!=='current'));
+  const concreteTimeframes=new Set(deps.map((dep)=>dep.timeframe).filter((timeframe)=>timeframe!=='chart'));
+  const multiSymbol=concreteSymbols.size>1;
+  const multiTimeframe=concreteTimeframes.size>0 && (
+    concreteTimeframes.size>1 || deps.some((dep)=>dep.timeframe==='chart')
+  );
 
   return Object.freeze({
     version:1,
