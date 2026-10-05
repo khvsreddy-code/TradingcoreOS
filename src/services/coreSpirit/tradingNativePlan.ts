@@ -207,7 +207,9 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
       timeframe:value.timeframe,
       fields:Object.freeze([...value.fields].sort()) as CoreSpiritDataDependency['fields'],
       batchKey:`market-batch:${value.symbol}`,
-      batchable:value.domain==='bar-series' || [...value.fields].every((field)=>['open','high','low','close','volume','time'].includes(field)),
+      batchable:(value.symbol!=='current' || value.timeframe!=='chart') &&
+        value.domain==='market' &&
+        [...value.fields].every((field)=>['open','high','low','close','volume','time'].includes(field)),
     }));
   }
 
