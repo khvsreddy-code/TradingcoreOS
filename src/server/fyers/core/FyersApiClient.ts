@@ -55,7 +55,7 @@ export class FyersApiClient {
     return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs);
   }
 
-  private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs = API_LATENCY_BUDGET_MS.quote): Promise<T> {
+private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
     const deadlineSignal = timeoutSignal(timeoutMs, signal);
     const execute = async (gateSignal?: AbortSignal): Promise<T> => {
       const requestSignal = gateSignal || deadlineSignal;
