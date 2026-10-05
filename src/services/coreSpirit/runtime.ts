@@ -413,6 +413,7 @@ export class CoreSpiritRuntime {
   getLoadedIr(): CoreSpiritIrProgram | undefined { return this.compiledIr; }
   getExecutionTier(): Exclude<CoreSpiritExecutionTier, 'auto'> { return this.executionTier; }
   getLastDirtyPlan(): CoreSpiritDirtyExecutionPlan | undefined { return this.lastDirtyPlan; }
+  getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
