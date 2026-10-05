@@ -53,6 +53,10 @@ export class CoreSpiritEventRouter {
   }
 
   scriptEvent(payload: CoreEventMap['script.event']): void { this.emit('script.event', payload); }
+  marketTrade(payload: CoreEventMap['market.trade']): void { this.emit('market.trade', payload); }
+  marketOrderBook(payload: CoreEventMap['market.orderbook']): void { this.emit('market.orderbook', payload); }
+  executionOrder(payload: CoreEventMap['execution.order']): void { this.emit('execution.order', payload); }
+  executionFill(payload: CoreEventMap['execution.fill']): void { this.emit('execution.fill', payload); }
   scriptSignal(payload: CoreEventMap['script.signal']): void { this.emit('script.signal', payload); }
   scriptAlert(payload: CoreEventMap['script.alert']): void { this.emit('script.alert', payload); }
   scriptWebhook(payload: CoreEventMap['script.webhook']): void { this.emit('script.webhook', payload); }
