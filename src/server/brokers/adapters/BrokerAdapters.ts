@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { BaseBroker, TokenExchangeResult } from './BaseBroker.js';
 import { withBrokerRequestGate } from '../BrokerRequestGate.js';
+import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
 import type {
   BrokerHistory,
   BrokerMarketQuotes,
@@ -76,13 +77,12 @@ export class FyersAdapter extends BaseBroker {
   }
 
   private async fyersFetch(path: string, accessToken: string, options: RequestInit = {}): Promise<any> {
-    // FYERS rate limits are account-wide across REST endpoints, not just the
-    // history endpoint. Route every ordinary FYERS REST call through the same
-    // per-token gate so portfolio polling, quotes, options and order activity
-    // cannot consume the history budget behind the chart's back.
-    return withBrokerRequestGate('fyers', accessToken, async () => {
+    const timeoutMs = path.startsWith('/orders') ? API_LATENCY_BUDGET_MS.order : API_LATENCY_BUDGET_MS.account;
+    const signal = options.signal || timeoutSignal(timeoutMs);
+    return withBrokerRequestGate('fyers', accessToken, async (gateSignal) => {
       const response = await fetch(`https://api-t1.fyers.in/api/v3${path}`, {
         ...options,
+        signal: gateSignal || signal,
         headers: {
           Accept: 'application/json',
           Authorization: this.authorization(accessToken),
@@ -190,14 +190,11 @@ export class FyersAdapter extends BaseBroker {
 
   async getMarketQuotes(accessToken: string, instrumentKeys: string[]): Promise<BrokerMarketQuotes> {
     if (!instrumentKeys.length) return {};
-    // Dedicated chart-heartbeat lane. Quote snapshots are sampled every few
-    // seconds and must never wait behind history/options/portfolio traffic.
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2_500);
-    try {
+    const signal = timeoutSignal(API_LATENCY_BUDGET_MS.quote);
+    return withBrokerRequestGate('fyers', accessToken, async (gateSignal) => {
       const query = encodeURIComponent(instrumentKeys.join(','));
       const response = await fetch(`https://api-t1.fyers.in/data/quotes?symbols=${query}`, {
-        signal: controller.signal,
+        signal: gateSignal || signal,
         headers: { Accept: 'application/json', Authorization: this.authorization(accessToken), version: '3' },
       });
       const text = await response.text();
@@ -213,31 +210,21 @@ export class FyersAdapter extends BaseBroker {
         error.brokerRateLimited = response.status === 429 || Number(data?.code) === 429;
         throw error;
       }
-      return Object.fromEntries((data?.d || []).map((q: any) => [
-        q.n || q.v?.symbol,
+      return Object.fromEntries((data?.d || []).map((quote: any) => [
+        quote.n || quote.v?.symbol,
         {
-          ltp: Number(q.v?.lp || 0),
-          chg: String(q.v?.chp ?? q.v?.ch ?? 0),
-          change: Number(q.v?.ch ?? 0),
-          changePercent: Number(q.v?.chp ?? 0),
-          volume: Number(q.v?.volume ?? 0),
-          bid: Number(q.v?.bid ?? 0),
-          ask: Number(q.v?.ask ?? 0),
+          ltp: Number(quote.v?.lp || 0),
+          chg: String(quote.v?.chp ?? quote.v?.ch ?? 0),
+          change: Number(quote.v?.ch ?? 0),
+          changePercent: Number(quote.v?.chp ?? 0),
+          volume: Number(quote.v?.volume ?? 0),
+          bid: Number(quote.v?.bid ?? 0),
+          ask: Number(quote.v?.ask ?? 0),
           timestamp: new Date().toISOString(),
         },
       ]));
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
-        const timeoutError: any = new Error('Fyers quotes request timed out');
-        timeoutError.status = 504;
-        throw timeoutError;
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
+    }, signal);
   }
-
   async getHistoricalData(accessToken: string, instrumentKey: string, interval: string, limit = 10000): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute': '1', '2minute': '2', '3minute': '3', '5minute': '5', '10minute': '10',
@@ -252,7 +239,11 @@ export class FyersAdapter extends BaseBroker {
     const lookbackDays = resolution === 'D' ? Math.min(366, requestedLimit) : Math.min(180, Math.max(7, Math.ceil((requestedLimit * minutesPerCandle) / 375 * 1.15)));
     const from = to - lookbackDays * 86400;
     const params = new URLSearchParams({ symbol: instrumentKey, resolution, date_format: '0', range_from: String(from), range_to: String(to) });
-    const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, { headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) } });
+    const signal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
+    const response = await withBrokerRequestGate('fyers', accessToken, (gateSignal) => fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
+      signal: gateSignal || signal,
+      headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) },
+    }), signal);
     const text = await response.text();
     let data: any;
     try { data = JSON.parse(text); } catch { throw Object.assign(new Error(`Fyers history returned a non-JSON response (${response.status})`), { status: response.status }); }
@@ -262,9 +253,15 @@ export class FyersAdapter extends BaseBroker {
       error.brokerCode = Number(data?.code) || undefined;
       throw error;
     }
-    return (data?.candles || []).map((c: any[]) => ({ timestamp: new Date(Number(c[0]) * 1000).toISOString(), open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5] || 0) })).slice(-requestedLimit);
+    return (data?.candles || []).map((candle: any[]) => ({
+      timestamp: new Date(Number(candle[0]) * 1000).toISOString(),
+      open: Number(candle[1]),
+      high: Number(candle[2]),
+      low: Number(candle[3]),
+      close: Number(candle[4]),
+      volume: Number(candle[5] || 0),
+    })).slice(-requestedLimit);
   }
-
   async getOptionChain(accessToken: string, instrumentKey: string, expiryDate: string): Promise<BrokerOptionChain> {
     // FYERS v3 options-chain endpoint returns CE/PE legs, OI, change-OI and
     // previous-session OI in one snapshot. Keep the request centred on ATM
@@ -272,9 +269,11 @@ export class FyersAdapter extends BaseBroker {
     // 3–7 strike OI support/resistance without downloading the full chain.
     const params = new URLSearchParams({ symbol: instrumentKey, strikecount: '7' });
     if (expiryDate && expiryDate !== 'current_week' && /^\d+$/.test(expiryDate)) params.set('timestamp', expiryDate);
-    const response = await withBrokerRequestGate('fyers', accessToken, () => fetch(`https://api-t1.fyers.in/data/options-chain-v3?${params.toString()}`, {
+    const signal = timeoutSignal(API_LATENCY_BUDGET_MS.depth);
+    const response = await withBrokerRequestGate('fyers', accessToken, (gateSignal) => fetch(`https://api-t1.fyers.in/data/options-chain-v3?${params.toString()}`, {
+      signal: gateSignal || signal,
       headers: { Accept: 'application/json', Authorization: this.authorization(accessToken) },
-    }));
+    }), signal);
     const text = await response.text();
     let payload: any;
     try { payload = JSON.parse(text); } catch {
