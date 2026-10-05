@@ -20,6 +20,7 @@ import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normali
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
 import { CoreSpiritExecutionVM } from './executionVM';
+import type { CoreSpiritExecutionVMHost } from './executionVM';
 import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM';
 import type { CoreSpiritValueStore } from './executionValueStore';
 import type { CoreSpiritExecutionTier } from './executionTier';
@@ -491,7 +492,7 @@ export class CoreSpiritRuntime {
     outputs: CoreSpiritOutputCollector,
     diagnostics: string[],
   ): void {
-    const host = {
+    const host: CoreSpiritExecutionVMHost = {
       maxStepsPerBar: this.options.maxStepsPerBar,
       throwIfAborted: () => this.throwIfAborted(),
       loadSeries: (name, offset) => this.loadSeries(name, offset, bar, bars, barIndex),
