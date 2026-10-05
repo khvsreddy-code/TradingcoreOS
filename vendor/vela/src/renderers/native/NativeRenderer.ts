@@ -61,7 +61,7 @@ import { LabelTooltip } from './chrome/LabelTooltip';
 import { AXIS_MASTER_W, AXIS_MERGED_W } from './chrome/axisLayout';
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
 import { SettingsDialog } from './chrome/SettingsDialog';
-import { UserDrawingController } from './drawings/UserDrawingController';
+import type { UserDrawingController } from './drawings/UserDrawingController';
 import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawingSlices';
 import { createProjector } from './drawings/Projector';
 import type { Projector, SnapMode } from '../../core/drawings';
@@ -182,6 +182,8 @@ export class NativeRenderer implements IChartRenderer {
     private cursorCanvas!: HTMLCanvasElement;
     private overlayRoot!: HTMLDivElement;
     private userDrawings: UserDrawingController | null = null;
+    private lazyUserDrawingPort: IDrawingsRendererPort | null = null;
+    private userDrawingLoad?: Promise<UserDrawingController>;
     private readonly backdropRenderer = new BackdropRenderer();
     private readonly volumeRenderer = new VolumeRenderer();
     /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
@@ -1569,49 +1571,10 @@ export class NativeRenderer implements IChartRenderer {
         });
         this.chrome.setMarkIconReady(() => this.scheduler?.invalidate(InvalidateLevel.Chrome));
 
-        // User-drawings layer (paints L1.5 plus the interleave layers the geometry backend
-        // composites into the series stack, and owns the interaction/settings popup). It
-        // implements the IDrawingsRendererPort the core DrawingController drives.
-        this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsCanvas, {
-            projector: () => this.drawingProjector(),
-            dpr: () => this.coords.dpr,
-            theme: () => this.theme,
-            requestScaleUpdate: () => this.scheduler.invalidate(InvalidateLevel.Light),
-            seriesBoundaries: (paneId) => this.scene.seriesBoundaries(paneId),
-            priceZ: (paneId) => (paneId === PRICE_PANE_ID ? this.scene.candleZ : null),
-            requestDataPaint: () => this.scheduler.invalidate(InvalidateLevel.Light),
-            // The look the price series ACTUALLY paints with: candle colors resolved through
-            // the per-style override, line/area colors through their configured styles — so
-            // series-mirroring content (the magnifier inset) matches the chart exactly.
-            seriesLook: () => {
-                const st = this.scene.style;
-                const paint = effectiveCandlePaint(st.candle, this.scene.candleOverride, this.theme.upColor, this.theme.downColor);
-                const barsUp = st.bars.upColor ?? this.theme.upColor;
-                const barsDown = st.bars.downColor ?? this.theme.downColor;
-                const style = this.scene.priceStyle;
-                return {
-                    style,
-                    upColor: style === 'bars' ? barsUp : paint.up,
-                    downColor: style === 'bars' ? barsDown : paint.down,
-                    lineColor: style === 'area' ? (st.area.lineColor ?? this.theme.upColor) : (st.line.color ?? this.theme.upColor),
-                };
-            },
-            chartBarMs: () => this.coords.barInterval,
-            snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
-            setSnapMode: (mode) => this.setSnapMode(mode),
-            setToolbarGutter: (px) => this.setToolbarGutter(px),
-        });
-        this.userDrawings.historyChords = this.historyChordsEnabled; // may be set before init()
-        // Honor a layout mode pushed before mount (the shell may set it ahead of the chart build).
-        if (this.layoutMode === 'mobile') {
-            this.mountContainer?.setAttribute('data-vela-layout', this.layoutMode);
-            this.userDrawings.setLayoutMode(this.layoutMode);
-            if (this.scrollButton) {
-                this.scrollButton.style.width = `${SCROLL_BTN_SIZE_TOUCH}px`;
-                this.scrollButton.style.height = `${SCROLL_BTN_SIZE_TOUCH}px`;
-            }
-        }
-
+        // User drawings are an optional capability. Keep the renderer core free of the
+        // drawing registry, toolbar, settings UI and dozens of drawing implementations.
+        // The capability is loaded only when the host asks for userDrawingsPort.
+        this.lazyUserDrawingPort = this.createLazyUserDrawingPort();
         this.keyboard = new KeyboardController({
             panByBars: (bars) => this.panByBars(bars),
             zoomByStep: (dir) => this.zoomByStep(dir),
@@ -3702,9 +3665,91 @@ export class NativeRenderer implements IChartRenderer {
         return out;
     }
 
+    private createLazyUserDrawingPort(): IDrawingsRendererPort {
+        const ready = () => this.loadUserDrawingController();
+        const subscriptions = new Map<(intent: any) => void, { active: boolean; unsubscribe?: () => void }>();
+        return new Proxy({} as IDrawingsRendererPort, {
+            get: (_target, prop: string | symbol) => {
+                if (prop === 'onDrawingIntent') {
+                    return (cb: (intent: any) => void) => {
+                        const state = { active: true, unsubscribe: undefined as (() => void) | undefined };
+                        subscriptions.set(cb, state);
+                        void ready().then((impl) => {
+                            const current = subscriptions.get(cb);
+                            if (!current?.active) return;
+                            current.unsubscribe = impl.onDrawingIntent(cb);
+                        });
+                        return () => {
+                            const current = subscriptions.get(cb);
+                            if (!current) return;
+                            current.active = false;
+                            subscriptions.delete(cb);
+                            current.unsubscribe?.();
+                        };
+                    };
+                }
+                if (typeof prop !== 'string') return undefined;
+                return (...args: any[]) => {
+                    void ready().then((impl) => {
+                        const method = (impl as any)[prop];
+                        if (typeof method === 'function') method.apply(impl, args);
+                    });
+                };
+            },
+        });
+    }
+
+    private loadUserDrawingController(): Promise<UserDrawingController> {
+        if (this.userDrawings) return Promise.resolve(this.userDrawings);
+        if (this.userDrawingLoad) return this.userDrawingLoad;
+        this.userDrawingLoad = import('./drawings/UserDrawingController')
+            .then(({ UserDrawingController: Controller }) => {
+                const controller = new Controller(this.wrapper, this.plot, this.drawingsCanvas, {
+                    projector: () => this.drawingProjector(),
+                    dpr: () => this.coords.dpr,
+                    theme: () => this.theme,
+                    requestScaleUpdate: () => this.scheduler.invalidate(InvalidateLevel.Light),
+                    seriesBoundaries: (paneId) => this.scene.seriesBoundaries(paneId),
+                    priceZ: (paneId) => (paneId === PRICE_PANE_ID ? this.scene.candleZ : null),
+                    requestDataPaint: () => this.scheduler.invalidate(InvalidateLevel.Light),
+                    seriesLook: () => {
+                        const st = this.scene.style;
+                        const paint = effectiveCandlePaint(st.candle, this.scene.candleOverride, this.theme.upColor, this.theme.downColor);
+                        const barsUp = st.bars.upColor ?? this.theme.upColor;
+                        const barsDown = st.bars.downColor ?? this.theme.downColor;
+                        const style = this.scene.priceStyle;
+                        return {
+                            style,
+                            upColor: style === 'bars' ? barsUp : paint.up,
+                            downColor: style === 'bars' ? barsDown : paint.down,
+                            lineColor: style === 'area' ? (st.area.lineColor ?? this.theme.upColor) : (st.line.color ?? this.theme.upColor),
+                        };
+                    },
+                    chartBarMs: () => this.coords.barInterval,
+                    snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
+                    setSnapMode: (mode) => this.setSnapMode(mode),
+                    setToolbarGutter: (px) => this.setToolbarGutter(px),
+                });
+                controller.historyChords = this.historyChordsEnabled;
+                if (this.layoutMode === 'mobile') {
+                    this.mountContainer?.setAttribute('data-vela-layout', this.layoutMode);
+                    controller.setLayoutMode(this.layoutMode);
+                    if (this.scrollButton) {
+                        this.scrollButton.style.width = String(SCROLL_BTN_SIZE_TOUCH) + 'px';
+                        this.scrollButton.style.height = String(SCROLL_BTN_SIZE_TOUCH) + 'px';
+                    }
+                }
+                this.userDrawings = controller;
+                return controller;
+            })
+            .finally(() => {
+                if (!this.userDrawings) this.userDrawingLoad = undefined;
+            });
+        return this.userDrawingLoad;
+    }
     /** The interactive user-drawings surface the core DrawingController drives. */
     get userDrawingsPort(): IDrawingsRendererPort | undefined {
-        return this.userDrawings ?? undefined;
+        return this.lazyUserDrawingPort ?? undefined;
     }
 
     /** Focus the data canvas — the element chart/drawing keyboard shortcuts key off
