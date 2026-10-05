@@ -208,13 +208,13 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options
     const component = ins.op === 'call' && ins.componentId
       ? resolveCoreSpiritComponent(options.components ?? coreSpiritComponentRegistry, ins.componentId)
       : undefined;
-    const pure = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'index' ||
+    const pure = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'loadState' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'index' ||
       (ins.op === 'call' && builtinPurity(ins.name, component));
     const kind = classify(ins);
     const name = instructionName(ins);
-    const stateful = ins.op === 'setLocal' || Boolean(component?.stateful) || (ins.op === 'call' && /^(ema|rma|rsi|atr|vwap|highest|lowest|sma|valuewhen|bar_index)$/.test(ins.name));
+    const stateful = ins.op === 'setLocal' || ins.op === 'setState' || Boolean(component?.stateful) || (ins.op === 'call' && /^(ema|rma|rsi|atr|vwap|highest|lowest|sma|valuewhen|bar_index)$/.test(ins.name));
     const deterministic = ins.op === 'call' ? builtinDeterminism(ins.name, component) : ins.op !== 'emit';
-    const effectful = ins.op === 'emit' || ins.op === 'setLocal' || ins.op === 'jump' || (ins.op === 'call' && !deterministic);
+    const effectful = ins.op === 'emit' || ins.op === 'setLocal' || ins.op === 'setState' || ins.op === 'eventGate' || ins.op === 'jump' || (ins.op === 'call' && !deterministic);
     const external = ins.op === 'emit' || (ins.op === 'call' && !deterministic);
     const estimatedCost: CoreSpiritGraphNode['estimatedCost'] = external ? 'external' : ins.op === 'const' || ins.op === 'move' ? 'constant' : ins.op === 'call' ? (/^(model\\.|model$|predict|inference)/.test(ins.name) ? 'high' : 'medium') : 'low';
     const latencyClass: CoreSpiritGraphNode['latencyClass'] = estimatedCost === 'external' ? 'external' : estimatedCost === 'high' ? 'slow' : estimatedCost === 'medium' ? 'normal' : estimatedCost === 'constant' ? 'instant' : 'fast';
