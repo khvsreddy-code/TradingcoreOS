@@ -22,6 +22,12 @@ export type CoreSpiritType =
   | 'series<boolean>'
   | 'series<string>'
   | `array<${string}>`
+  | `matrix<${string}>`
+  | `tensor<${string}>`
+  | 'trade'
+  | 'orderbook'
+  | 'footprint'
+  | 'volume-profile'
   | `udt:${string}`
   | 'ui:root'
   | 'ui:panel'
@@ -99,6 +105,9 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'series<boolean>') return 'series<boolean>';
   if (name === 'series<string>') return 'series<string>';
   if (name.startsWith('array<') && name.endsWith('>')) return name as CoreSpiritType;
+  if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
+  if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
+  if (['trade','orderbook','footprint','volume-profile'].includes(name)) return name as CoreSpiritType;
   return `udt:${name}`;
 }
 
