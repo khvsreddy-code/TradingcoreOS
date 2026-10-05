@@ -18,7 +18,10 @@ export interface ColumnarBars {
     readonly timeUnit?: ColumnarTimeUnit;
 }
 
-/** One forming-bar update. Kept scalar so callers do not need a one-element OHLCV array. */
+/** One forming-bar update. Kept scalar so callers do not need a one-element OHLCV array.
+ * `sequence` is the canonical mutation revision; consumers must treat gaps as a
+ * reconciliation request rather than silently applying out-of-order market state.
+ */
 export interface ColumnarBarUpdate {
     readonly time: number;
     readonly open: number;
@@ -27,6 +30,8 @@ export interface ColumnarBarUpdate {
     readonly close: number;
     readonly volume?: number;
     readonly timeUnit?: ColumnarTimeUnit;
+    readonly sequence?: number;
+    readonly timelineKey?: string;
 }
 
 export interface ColumnarLodIndex {
