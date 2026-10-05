@@ -122,7 +122,18 @@ export class CoreSpiritSeriesRegistry {
         this.numeric.delete(id);
         continue;
       }
-      const slot = this.numeric.get(id);
+      let slot = this.numeric.get(id);
+      if (!slot && entry.originalBuffer) {
+        slot = {
+          id,
+          name: this.names[id] ?? String(id),
+          buffer: entry.originalBuffer,
+          head: entry.originalHead,
+          length: entry.originalLength,
+          capacity: entry.originalCapacity,
+        };
+        this.numeric.set(id, slot);
+      }
       if (!slot) continue;
       for (let i = entry.writes.length - 1; i >= 0; i -= 1) {
         const write = entry.writes[i]!;
@@ -139,7 +150,18 @@ export class CoreSpiritSeriesRegistry {
         this.values.delete(id);
         continue;
       }
-      const slot = this.values.get(id);
+      let slot = this.values.get(id);
+      if (!slot && entry.originalBuffer) {
+        slot = {
+          id,
+          name: this.names[id] ?? String(id),
+          buffer: entry.originalBuffer,
+          head: entry.originalHead,
+          length: entry.originalLength,
+          capacity: entry.originalCapacity,
+        };
+        this.values.set(id, slot);
+      }
       if (!slot) continue;
       for (let i = entry.writes.length - 1; i >= 0; i -= 1) {
         const write = entry.writes[i]!;
