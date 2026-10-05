@@ -1,0 +1,71 @@
+import type { CoreSpiritSeriesFusionGroup, CoreSpiritFusedSeriesInput } from './seriesFusion';
+import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion';
+
+export type CoreSpiritSeriesBackend = 'cpu' | 'wasm' | 'gpu';
+export type CoreSpiritSeriesBackendProfile = Readonly<{
+  backend: CoreSpiritSeriesBackend;
+  available: boolean;
+  deterministic: boolean;
+  vectorized: boolean;
+}>;
+export type CoreSpiritSeriesDispatchContext = Readonly<{
+  realtime: boolean;
+  bars: number;
+  symbols?: number;
+  timeframes?: number;
+  deterministic?: boolean;
+  minWasmWorkUnits?: number;
+  minGpuWorkUnits?: number;
+  backends?: readonly CoreSpiritSeriesBackendProfile[];
+}>;
+export type CoreSpiritSeriesBackendExecutor = (
+  group: CoreSpiritSeriesFusionGroup,
+  input: CoreSpiritFusedSeriesInput,
+  output: Float64Array,
+) => void;
+
+export const CORE_SPIRIT_SERIES_BACKENDS: readonly CoreSpiritSeriesBackendProfile[] = Object.freeze([
+  { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+  { backend: 'wasm', available: false, deterministic: true, vectorized: true },
+  { backend: 'gpu', available: false, deterministic: false, vectorized: true },
+]);
+
+function workUnits(c: CoreSpiritSeriesDispatchContext, g: CoreSpiritSeriesFusionGroup): number {
+  return Math.max(1, c.bars) * Math.max(1, c.symbols ?? 1) * Math.max(1, c.timeframes ?? 1) * Math.max(1, g.operations.length);
+}
+function hasRecurrence(g: CoreSpiritSeriesFusionGroup): boolean {
+  return g.operations.some((x) => ['ema', 'rma', 'change', 'pctchange', 'persistence'].includes(x.name));
+}
+
+export function selectCoreSpiritSeriesBackend(
+  group: CoreSpiritSeriesFusionGroup,
+  context: CoreSpiritSeriesDispatchContext,
+): { requested: CoreSpiritSeriesBackend; workUnits: number; reason: string } {
+  const profiles = context.backends?.length ? context.backends : CORE_SPIRIT_SERIES_BACKENDS;
+  const units = workUnits(context, group);
+  if (context.realtime) return { requested: 'cpu', workUnits: units, reason: 'realtime work stays on fused CPU' };
+  const deterministic = context.deterministic !== false;
+  const gpu = profiles.find((x) => x.backend === 'gpu');
+  if (gpu?.available && gpu.vectorized && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
+    return { requested: 'gpu', workUnits: units, reason: 'large stateless historical workload' };
+  }
+  const wasm = profiles.find((x) => x.backend === 'wasm');
+  if (wasm?.available && wasm.vectorized && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 10_000))) {
+    return { requested: 'wasm', workUnits: units, reason: 'long historical workload' };
+  }
+  return { requested: 'cpu', workUnits: units, reason: hasRecurrence(group) ? 'chronological recurrence stays on fused CPU' : 'CPU threshold/availability fallback' };
+}
+
+export function executeCoreSpiritSeriesFusionGroupDispatched(
+  group: CoreSpiritSeriesFusionGroup,
+  input: CoreSpiritFusedSeriesInput,
+  output: Float64Array,
+  context: CoreSpiritSeriesDispatchContext,
+  executors: Partial<Record<'wasm' | 'gpu', CoreSpiritSeriesBackendExecutor>> = {},
+): CoreSpiritSeriesBackend {
+  const choice = selectCoreSpiritSeriesBackend(group, context);
+  const executor = executors[choice.requested as 'wasm' | 'gpu'];
+  if (choice.requested !== 'cpu' && executor) executor(group, input, output);
+  else executeCoreSpiritSeriesFusionGroupInto(group, input, output);
+  return choice.requested;
+}
