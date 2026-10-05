@@ -30,13 +30,14 @@ import { CoreSpiritEventRouter } from './eventRouter';
 import { CoreSpiritCapabilityHost } from './capabilityHost';
 import { CoreSpiritDebugHost } from './debugHost';
 import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId } from './seriesRegistry';
+import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProfilerSnapshot } from './profiler';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
 export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
   layer?: CoreSpiritProgramLayer; executionTarget?: CoreSpiritExecutionTarget; reactiveExecution?: boolean; executionTier?: CoreSpiritExecutionTier;
-  modelOutputResolver?: CoreSpiritModelOutputResolver; eventResolver?: (eventName:string) => boolean | unknown;
+  modelOutputResolver?: CoreSpiritModelOutputResolver; eventResolver?: (eventName:string) => boolean | unknown;\n  profiler?: CoreSpiritProfilerOptions;
 };
 export type CoreSpiritRuntimeState = {
   barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean; revision:number; symbol:string; timeframe:string; mode:CoreSpiritExecutionMode };
@@ -111,9 +112,11 @@ export class CoreSpiritRuntime {
   private readonly eventRouter: CoreSpiritEventRouter;
   private readonly capabilityHost: CoreSpiritCapabilityHost;
   private readonly debugHost = new CoreSpiritDebugHost();
+  private readonly profiler: CoreSpiritProfiler;
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
+    this.profiler = new CoreSpiritProfiler(options.profiler);
     this.modelOutputResolver = options.modelOutputResolver;
     this.eventResolver = options.eventResolver;
     this.executionTarget = options.executionTarget || 'chart';
@@ -169,7 +172,7 @@ export class CoreSpiritRuntime {
   }
 
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
-    const compiled = this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer:this.layer, surface:program.surface });
+    const compiled = this.profiler.measureCompile(() => this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer:this.layer, surface:program.surface }));
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
@@ -190,6 +193,7 @@ export class CoreSpiritRuntime {
   executeBar(bar: HistoricalCandle): CoreSpiritExecutionResult {
     this.throwIfAborted();
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
+    this.profiler.beginBar('realtime', this.compiledIr.entry.instructions.length);
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
@@ -391,6 +395,7 @@ export class CoreSpiritRuntime {
     this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan);
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
+      this.profiler.beginBar('historical', ir.entry.instructions.length);
       this.plotOrdinal = 0;
       this.indicatorMemo.clear();
       this.outputCollector.beginBar();
@@ -404,10 +409,13 @@ export class CoreSpiritRuntime {
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
       try { this.executeBlock(ir.entry.instructions, bar, this.history, i, this.outputCollector, diagnostics); }
       catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
+      finally { this.profiler.endBar(); }
     }
     return { outputs, state: this.getState(), diagnostics };
   }
 
+  getProfilerSnapshot(): CoreSpiritProfilerSnapshot { return this.profiler.snapshot(); }
+  resetProfiler(): void { this.profiler.reset(); }
   getExecutionContext(): CoreSpiritExecutionContext { return { ...this.executionContext }; }
   getLoadedProgramId(): string | undefined { return this.loadedProgramId; }
   getLoadedIr(): CoreSpiritIrProgram | undefined { return this.compiledIr; }
@@ -550,6 +558,7 @@ export class CoreSpiritRuntime {
       loadIndexedSeriesById: (id, index) => this.seriesRegistry.getValueAt(id, index),
       truthy: (value) => this.truthy(value),
       emit: (instruction, values, output) => this.emitIntent(instruction.kind, instruction.args.slice(1).map((name) => values.get(name)), bar, barIndex, output, diagnostics, instruction.outputId),
+      profileInstruction: this.profiler.hooks(),
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
     else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan });
