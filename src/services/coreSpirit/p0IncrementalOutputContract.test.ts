@@ -20,9 +20,9 @@ if (!secondPlot || secondPlot.length !== 2) throw new Error('P0 dispatcher did n
 if (second.plots !== first.plots) throw new Error('P0 frame recreated the plot map');
 if (secondPlot !== firstPlot) throw new Error('P0 frame recreated the retained plot array');
 
-const third = dispatcher.accept([series(2, 102)]);
+const third = dispatcher.accept([series(3, 102)]);
 const thirdPlot = third.plots.get('p0:test');
-if (!thirdPlot || thirdPlot.length !== 3) throw new Error('dispatcher contract should preserve current append semantics');
+if (!thirdPlot || thirdPlot.length !== 3) throw new Error('dispatcher did not retain the third plot point');
 if (thirdPlot !== firstPlot) throw new Error('plot history identity changed between realtime frames');
 
 console.log('P0_INCREMENTAL_OUTPUT_CONTRACT_OK');
