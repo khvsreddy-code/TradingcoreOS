@@ -223,3 +223,46 @@ CoreSpirit's execution VM is the smallest instruction-dispatch layer. Runtime re
 - Complexity absorber: complexity is absorbed by semantic/compiler/runtime layers rather than language forks.
 - Standard-library namespaces: library discovery is namespaced and deterministic.
 - Progressive authoring: deeper capabilities stay behind DATA / LET / WHEN / SHOW / MODEL / AUTOMATE.
+
+
+## v136 — CoreSpirit as an actual compiler
+
+CoreSpirit now treats compilation as an explicit, serializable pipeline rather than “parse and lower”:
+
+```text
+source
+  ↓
+CST / protected surface normalization
+  ↓
+AST
+  ↓
+semantic analysis + name resolution
+  ↓
+semantic dependency graph
+  ↓
+typed, contract-validated IR
+  ↓
+instruction dependency graph
+  ↓
+time-series optimizer
+  ↓
+execution plan
+  ↓
+CoreSpiritExecutionVM / specialized host
+```
+
+The compiler records this order in `compilerPipeline` metadata on the executable artifact. The VM contract stays at IR v1, so the architecture gains explicit compiler stages without introducing a second execution language or a second VM.
+
+### Semantic graph before execution
+
+`semanticDependencyGraph` captures source intent at the AST layer: data sources, symbols, components, models and model outputs, conditions, events, visuals and order intents. The instruction-level `graphs` bundle then maps the optimized IR into execution, visual and reactive dependency structures.
+
+This distinction matters: source semantics explain *what* the program means; the instruction graph explains *how* the host can execute that meaning.
+
+### Typed IR boundary
+
+Type validation remains a semantic compiler responsibility. The emitted IR is only accepted by the stable `irContract`; source provenance, surface metadata and semantic graph identity travel with the artifact so replay, caching, debugging and future backends do not need to reinterpret source syntax.
+
+### One artifact, one runtime
+
+The compiler produces one `CoreSpiritExecutableArtifact` containing the IR plus its semantic/optimization/execution metadata. Historical, replay and realtime hosts continue to execute the same artifact through the existing execution VM and host contracts.
