@@ -3,12 +3,12 @@ import type { TradingCoreRequest } from './requestContext.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 
 function budgetFor(path: string): number {
+  if (/\/market-stream(?:$|[?\/])|\/order-stream(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.streamLease + 1_000;
   if (/\/quotes(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.quote;
   if (/\/depth(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.depth;
   if (/\/market-status(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.marketStatus;
   if (/\/order(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.order;
   if (/\/historical(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.history;
-  if (/\/market-stream(?:$|[?\/])|\/order-stream(?:$|[?\/])/.test(path)) return API_LATENCY_BUDGET_MS.streamLease + 1_000;
   if (/^\/api\/jobs(?:$|[?\/])/.test(path)) return 4_000;
   if (/^\/api\/health(?:$|[?\/])/.test(path)) return 1_500;
   return 12_000;
