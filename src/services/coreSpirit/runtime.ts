@@ -529,7 +529,10 @@ export class CoreSpiritRuntime {
   private loadSeries(name:string, offset:number, bar:HistoricalCandle, bars:HistoricalCandle[], barIndex:number):number|null {
     if (!Number.isInteger(offset) || offset < 0) throw new Error(`future indexing is not allowed for ${name}[${offset}]`);
     if (offset > barIndex) return null;
-    const source = bars[barIndex-offset]; if (!source) return null;
+    const sourceIndex = barIndex - offset;
+    const columnar = this.columnarHistory.valueAt(name, sourceIndex);
+    if (columnar != null) return columnar;
+    const source = bars[sourceIndex]; if (!source) return null;
     const value = name === 'time' ? this.toEpoch(source.timestamp) : Number((source as any)[name]);
     return Number.isFinite(value) ? value : null;
   }
