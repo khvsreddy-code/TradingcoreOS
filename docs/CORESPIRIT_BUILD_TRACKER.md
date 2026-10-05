@@ -279,3 +279,5 @@ The chart data plane established the zero-copy canonical chart data plane at the
 - [ ] Add DAG critical-path/fan-out scheduling and a richer cost model.
 - [ ] Add representative 5k/50k/500k-bar benchmark evidence.
 - [ ] Prove family-level Vela drawing requests and CoreSpirit optimized runtime speedups in browser traces.
+
+- [x] Keep Vela workspace construction behind `velaWorkspaceLoader` in the live workspace consumer; the build contract now enforces the lazy value boundary.
