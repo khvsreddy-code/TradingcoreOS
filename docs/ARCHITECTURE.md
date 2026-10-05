@@ -272,3 +272,37 @@ source -> semantic graph -> optimized IR
 
 A future native kernel compiler can therefore consume the specialized region directly instead of reparsing the AST or generic VM instructions.
 
+
+
+## Trading-native language direction
+
+CoreSpirit is not positioned as a second spelling of Pine Script. Pine already has a mature compiled sequential execution model, historical time-series buffers, realtime recalculation, strategies and libraries; its cloud runtime also deliberately enforces execution, memory, data-request and compiled-size limits. CoreSpirit's differentiator should therefore be architectural: make trading data domains and execution contexts explicit inputs to the compiler, not compatibility functions layered over a generic scalar language.
+
+The five language-level pillars are:
+
+**Data-native.** Bars remain the base columnar plane, but `trade`, `orderbook`, `footprint`, `volume-profile`, `matrix<T>`, and `tensor<T>` are explicit data domains. Host adapters normalize these structures; the VM does not own sockets or broker connections.
+
+**Multi-timeframe-native.** A market reference carries both symbol and timeframe. Chained handles such as `market("NSE:NIFTY50").timeframe("15m").close` are lowered to one typed data reference rather than a sequence of generic requests. The compiled trading-native plan groups these requests for batch resolution.
+
+**Multi-symbol-native.** A script can keep the chart's current symbol and additional concrete symbols in the same dependency plan. The scheduler sees the actual symbol/timeframe set and can issue one batch data boundary for compatible requests rather than repeatedly entering the host resolver.
+
+**Event-native.** `on bar`, `on tick`, `session.open`, `session.close`, `breakout`, `signal`, `order`, and `fill` are modeled as event kinds with concrete TradingCore event channels. Event routing remains transactional, so speculative realtime executions cannot leak order or notification side effects before confirmation.
+
+**Compute-aware.** The language does not expose backend selection as source syntax. The compiler emits a specialized plan; the execution planner and backend dispatcher choose scalar, fused, worker, WASM/SIMD, or GPU execution according to workload and semantic constraints.
+
+This is the intended strategic boundary:
+
+```text
+Pine-like surface compatibility  -> optional compatibility layer
+CoreSpirit semantic core         -> trading-native systems language
+                                   |
+                                   +-- typed market contexts
+                                   +-- multi-symbol scheduling
+                                   +-- multi-timeframe scheduling
+                                   +-- event graph
+                                   +-- data-domain kernels
+                                   +-- backend-aware execution
+```
+
+The implementation intentionally keeps the market host/network boundary outside the VM. A `market()` handle is data identity plus execution context; resolution, caching, freshness and provider access belong to the host.
+
