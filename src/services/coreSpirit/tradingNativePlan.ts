@@ -22,7 +22,7 @@ export type CoreSpiritDataDependency = Readonly<{
   domain:CoreSpiritDataDomain;
   symbol:string;
   timeframe:string;
-  fields:readonly ('open'|'high'|'low'|'close'|'volume'|'time'|'bid'|'ask'|'depth'|'trade'|'footprint')[];
+  fields:readonly ('open'|'high'|'low'|'close'|'volume'|'time'|'bid'|'ask'|'depth'|'trade'|'orderbook'|'footprint'|'volumeProfile')[];
   batchKey:string;
   batchable:boolean;
 }>;
