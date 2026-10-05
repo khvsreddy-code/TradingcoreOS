@@ -3,6 +3,7 @@ import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketD
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaChartFacade';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
+import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 
 const SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
@@ -212,7 +213,9 @@ export class TcoVelaDataProvider implements DataProvider {
     let fingerprint = '';
     const stop = plane.subscribe((event) => {
       if (event.type !== 'snapshot' && event.type !== 'tick') return;
-      const view = plane.readCanonical();
+      const sequence = event.snapshot.revision;
+      const timelineKey = `${symbol}|${tcoTimeframe}`;
+      const view = marketLatencyTrace.measure(timelineKey, sequence, 'canonical', () => plane.readCanonical());
       if (!view.length) return;
       const i = view.length - 1;
       const time = view.time[i]!;
@@ -221,7 +224,7 @@ export class TcoVelaDataProvider implements DataProvider {
       const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
-      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds' });
+      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
     });
     return stop;
   }
