@@ -41,6 +41,7 @@ export type CoreSpiritEventKind =
 export type CoreSpiritEventTrigger = Readonly<{
   kind:CoreSpiritEventKind;
   source:string;
+  busEvent:string;
   symbol?:string;
   timeframe?:string;
 }>;
@@ -80,6 +81,7 @@ function eventTrigger(value:string):CoreSpiritEventTrigger {
   const aliases:Record<string,CoreSpiritEventKind> = {
     'on.bar':'bar',
     'bar':'bar',
+    'bar.closes':'bar',
     'on.tick':'tick',
     'tick':'tick',
     'on.session.open':'session.open',
@@ -95,7 +97,20 @@ function eventTrigger(value:string):CoreSpiritEventTrigger {
     'on.fill':'fill',
     'fill':'fill',
   };
-  return { kind:aliases[normalized] ?? 'bar', source:value };
+  const kind=aliases[normalized] ?? 'bar';
+  const busEvent:Record<CoreSpiritEventKind,string> = {
+    'bar':'market.bar',
+    'tick':'market.tick',
+    'session.open':'market.session.open',
+    'session.close':'market.session.close',
+    'breakout':'market.breakout',
+    'signal':'script.signal',
+    'order':'execution.order',
+    'fill':'execution.fill',
+    'market.status':'market.status',
+    'replay.step':'replay.step',
+  };
+  return { kind, source:value, busEvent:busEvent[kind] };
 }
 
 function visit(
@@ -106,7 +121,11 @@ function visit(
   switch(node.type){
     case 'program': node.body.forEach((child)=>visit(child,dependencies,events)); return;
     case 'call': {
-      if(node.name==='market'){
+      if(node.name==='event'){
+        const name=literalString(node.args[0]) ?? 'bar';
+        const trigger=eventTrigger(name);
+        events.set(trigger.source,trigger);
+      } else if(node.name==='market'){
         const symbol=literalString(node.args[0]) ?? 'current';
         const timeframe='chart';
         const key=`market:${symbol}:${timeframe}`;
