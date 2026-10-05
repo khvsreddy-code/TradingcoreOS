@@ -598,7 +598,16 @@ export class CoreSpiritRuntime {
     return Number.isFinite(value) ? value : null;
   }
 
-  private eventActive(eventName:string): boolean {\n    const normalized=eventName.trim().toLowerCase();\n    if(normalized==='bar' || normalized==='bar.close' || normalized==='bar.closes') return true;\n    if(normalized==='tick') return this.state.barState.isRealtime;\n    const resolved=this.eventResolver?.(eventName);\n    if(typeof resolved === 'boolean') return resolved;\n    return Boolean(resolved);\n  }\n\n  private call(callKey:string,name:string,args:unknown[],bar:HistoricalCandle,bars:HistoricalCandle[],index:number,seriesArgs:string[]):unknown {
+  private eventActive(eventName:string): boolean {
+    const normalized=eventName.trim().toLowerCase();
+    if(normalized==='bar' || normalized==='bar.close' || normalized==='bar.closes') return true;
+    if(normalized==='tick') return this.state.barState.isRealtime;
+    const resolved=this.eventResolver?.(eventName);
+    if(typeof resolved === 'boolean') return resolved;
+    return Boolean(resolved);
+  }
+
+  private call(callKey:string,name:string,args:unknown[],bar:HistoricalCandle,bars:HistoricalCandle[],index:number,seriesArgs:string[]):unknown {
     const series = seriesArgs[0] || 'close'; const length = Math.max(1,Math.floor(Number(args[1] ?? 14)));
     const memoKey = `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(',')}`;
     if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
@@ -609,7 +618,17 @@ export class CoreSpiritRuntime {
       for(let i=0;i+1<args.length;i+=2) out[String(args[i])]=args[i+1];
       return finish(out);
     }
-    if(name==='event') { const value=String(args[0]??''); return finish(this.eventActive(value)); }\n    if(name==='__bar_phase') {\n      const phase=String(args[0]??'');\n      const barState=this.state.barState;\n      if(phase==='confirmed') return finish(Boolean(barState.isConfirmed));\n      if(phase==='developing') return finish(Boolean(barState.isRealtime && !barState.isConfirmed));\n      if(phase==='realtime') return finish(Boolean(barState.isRealtime));\n      if(phase==='historical') return finish(!barState.isRealtime);\n      if(phase==='forecast') return finish(false);\n      return finish(false);\n    }
+    if(name==='event') { const value=String(args[0]??''); return finish(this.eventActive(value)); }
+    if(name==='__bar_phase') {
+      const phase=String(args[0]??'');
+      const barState=this.state.barState;
+      if(phase==='confirmed') return finish(Boolean(barState.isConfirmed));
+      if(phase==='developing') return finish(Boolean(barState.isRealtime && !barState.isConfirmed));
+      if(phase==='realtime') return finish(Boolean(barState.isRealtime));
+      if(phase==='historical') return finish(!barState.isRealtime);
+      if(phase==='forecast') return finish(false);
+      return finish(false);
+    }
     if(name==='__model_get') {
       const rawRef=args[0]; const field=String(args[1]??'');
       const modelName=rawRef && typeof rawRef==='object' && '__coreSpiritModelRef' in (rawRef as Record<string,unknown>)
