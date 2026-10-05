@@ -35,6 +35,10 @@ export type CoreSpiritGraphNode = {
   executionLane?: CoreSpiritExecutionLane;
   executionClass?: CoreSpiritNodeClass;
   cacheable?: boolean;
+  lookback: number;
+  incremental: boolean;
+  viewportDependent: boolean;
+  realtimeSafe: boolean;
 };
 
 export type CoreSpiritSemanticGraph = {
@@ -149,6 +153,8 @@ function sourceInputs(ins: CoreSpiritIrInstruction): string[] {
     if (ins.name === 'bar_index') names.push('bar_index');
     if (ins.name === 'time') names.push('time');
     if (ins.name === 'request' || ins.name === 'requestBatch' || ins.name === '__member_get') names.push('external-data');
+    if (ins.name === 'vwap') names.push('high','low','close','volume','time');
+    if (ins.name === 'atr') names.push('high','low','close');
     return Array.from(new Set(names));
   }
   return [];
@@ -214,6 +220,10 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options
       deterministic,
       parallelizable,
       ...(() => { const descriptor = deriveCoreSpiritNodeExecutionDescriptor({ nodeId: id, effectful, stateful, latencyClass, kind, parallelizable, deterministic }); return { executionLane: descriptor.lane, executionClass: descriptor.class, cacheable: descriptor.cacheable }; })(),
+      lookback: 0,
+      incremental: deterministic && (pure || stateful),
+      viewportDependent: ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right/.test(ins.name),
+      realtimeSafe: deterministic && !external && !(ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right/.test(ins.name)),
     };
     nodes.push(node);
     instructionByNode[id] = instruction;
