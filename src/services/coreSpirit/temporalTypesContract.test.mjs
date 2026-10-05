@@ -23,7 +23,7 @@ assert(compatible('state<float>', 'state<number>'));
 assert(!compatible('state<float>', 'series<float>'));
 
 const source = [
-  'let trailingStop: state<float> = null;',
+  'let trailingStop: state<float> = 10;',
   'on bar {',
   '  trailingStop := max(trailingStop, close - atr(14) * 2);',
   '}',
@@ -51,3 +51,28 @@ const barPhaseCall = compiled.ir.entry.instructions.find(
 assert(barPhaseCall, 'bar.confirmed did not lower to temporal phase runtime call');
 
 console.log('TCO_CORESPIRIT_BRANCH12_TEMPORAL_TYPE_CONTRACT_OK');
+
+
+const invalidSeriesToScalar = [
+  'let current: float = close;',
+].join('\\n');
+const invalidResult = new CoreSpiritCompiler().compile(
+  new CoreSpiritParser(invalidSeriesToScalar).parse(),
+  'series-scalar-contract',
+);
+assert(invalidResult.diagnostics.some(d => d.code === 'TYPE_DECLARATION_MISMATCH'), 'series<T> must not implicitly collapse into scalar<T>');
+
+const { CoreSpiritStateStore } = await import('./stateStore.ts');
+const stateStore = new CoreSpiritStateStore();
+stateStore.beginRealtimeTransaction();
+stateStore.setState('stop', 100);
+assert.equal(stateStore.getState('stop'), 100);
+stateStore.setState('stop', 110);
+stateStore.rollbackRealtimeTransaction();
+assert.equal(stateStore.getState('stop'), null, 'transaction rollback must restore state<T> before the transaction');
+stateStore.beginRealtimeTransaction();
+stateStore.setState('stop', 125);
+stateStore.commitRealtimeTransaction();
+assert.equal(stateStore.getState('stop'), 125);
+
+console.log('TCO_CORESPIRIT_BRANCH12_TEMPORAL_STATE_ROLLBACK_OK');
