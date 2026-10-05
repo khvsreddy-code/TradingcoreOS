@@ -153,7 +153,6 @@ export class CoreSpiritRuntime {
     this.seriesRegistry.reset();
     this.stateStore.bind(this.crossState);
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
-    this.stateStore.bind(this.state.seriesState, this.state.localSeries, this.crossState);
     this.stateStore.commitRealtimeTransaction();
     this.eventRouter.rollbackTransaction();
     this.realtimeTransactionId = undefined;
@@ -174,12 +173,12 @@ export class CoreSpiritRuntime {
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
-    this.prepareSeriesBindings(compiled.ir);
-    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry);
     this.installSeriesFusion(compiled.ir);
     // State retention must always cover the program's declared lookback plus a safety margin.
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
     this.reset();
+    this.prepareSeriesBindings(compiled.ir);
+    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry);
     return compiled.ir;
   }
 
@@ -439,13 +438,22 @@ export class CoreSpiritRuntime {
       this.seriesRegistry.restoreNumericObject(checkpoint.state.seriesState);
       this.seriesRegistry.restoreValueObject(checkpoint.state.localSeries);
       this.state = { ...checkpoint.state, locals:{...checkpoint.state.locals}, seriesState:this.seriesRegistry.createNumericCompatibilityView(), localSeries:this.seriesRegistry.createValueCompatibilityView() };
-      this.stateStore.bind(this.crossState = cloneCrossMap(checkpoint.crossState));
-      (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
-      this.columnarHistory.replaceRows((this as any).history);
       this.crossState = cloneCrossMap(checkpoint.crossState);
       this.stateStore.bind(this.crossState);
+      (this as any).history = checkpoint.history.map((x:any)=>({ ...x })).slice(-this.maxHistoryBars);
+      this.columnarHistory.replaceRows((this as any).history);
       return true;
     } catch { return false; }
+  }
+
+  private prepareSeriesBindings(ir: CoreSpiritIrProgram): void {
+    const names = new Set<string>();
+    for (const name of ir.locals) names.add(name);
+    for (const instruction of ir.entry.instructions) {
+      if (instruction.op === 'setLocal' && instruction.series !== false) names.add(instruction.name);
+      if (instruction.op === 'index' && instruction.seriesName) names.add(instruction.seriesName);
+    }
+    this.seriesRegistry.prepare([...names]);
   }
 
   private installSeriesFusion(ir: CoreSpiritIrProgram): void {
