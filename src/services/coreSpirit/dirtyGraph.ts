@@ -58,9 +58,11 @@ export function buildCoreSpiritDirtyGraph(graph: CoreSpiritSemanticGraph, reacti
 export class CoreSpiritDirtyGraph {
   readonly nodesById: ReadonlyMap<string, CoreSpiritDirtyNode>;
   readonly sourceDependents: ReadonlyMap<string, readonly string[]>;
+  readonly statefulInstructions: ReadonlySet<number>;
   constructor(nodes: readonly CoreSpiritDirtyNode[], reactive: CoreSpiritReactivePlan) {
     this.nodesById = new Map(nodes.map((node) => [node.id, node] as const));
     this.sourceDependents = new Map(Object.entries(reactive.sourceDependents).map(([key, ids]) => [key, Object.freeze([...ids])] as const));
+    this.statefulInstructions = new Set(nodes.filter((node) => node.stateful).map((node) => node.instruction));
   }
 
   planTail(sources: readonly CoreSpiritDirtySource[], barIndex: number, executionEnd = barIndex): CoreSpiritDirtyExecutionPlan {
@@ -75,7 +77,7 @@ export class CoreSpiritDirtyGraph {
       queue.push(id);
     };
     for(const source of sources) for(const id of this.sourceDependents.get(source) || []) mark(id,barIndex,barIndex);
-    for(const node of this.nodesById.values()) if(node.alwaysRecompute || node.stateful) mark(node.id,barIndex,barIndex);
+    for(const node of this.nodesById.values()) if(node.alwaysRecompute) mark(node.id,barIndex,barIndex);
     while(queue.length){
       const id=queue.shift()!, node=this.nodesById.get(id)!; const range=dirty.get(id)!;
       const nextTo=Number.isFinite(node.lookback) ? Math.min(executionEnd,range.to+node.lookback) : executionEnd;
