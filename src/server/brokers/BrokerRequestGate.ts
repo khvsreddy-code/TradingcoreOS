@@ -71,13 +71,30 @@ async function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> 
 async function waitForPromiseWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
   if (signal.aborted) throw Object.assign(new Error('Broker request aborted'), { name: 'AbortError' });
-  return await Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      const onAbort = () => reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }));
-      signal.addEventListener('abort', onAbort, { once: true });
-    }),
-  ]);
+
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      reject(Object.assign(new Error('Broker request aborted'), { name: 'AbortError' }));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function distributedEnabled(): boolean {
