@@ -4,7 +4,7 @@ import type { CoreSpiritSeriesRegistry, CoreSpiritSeriesId } from './seriesRegis
 
 export type CoreSpiritSpecializedInstruction =
   | { op:'const'; dest:number; value:number|string|boolean|null }
-  | { op:'loadSeries'; dest:number; name:'open'|'high'|'low'|'close'|'volume'|'time'; offset:number }
+  | { op:'loadSeries'; dest:number; name:string; offset:number }
   | { op:'move'; dest:number; source:string }
   | { op:'setLocal'; name:string; source:number; series:boolean; seriesId:CoreSpiritSeriesId }
   | { op:'unary'; dest:number; operator:'!'|'+'|'-'; operand:number }
@@ -72,7 +72,6 @@ export function buildCoreSpiritSpecializedPlan(
     switch(instruction.op){
       case 'const': return {op:'const',dest:slot(instruction.dest),value:instruction.value};
       case 'loadSeries':
-        if (!isLoadableMarketSeries(instruction.name)) throw new Error(`specialized plan received unsupported market series '${instruction.name}'`);
         return {op:'loadSeries',dest:slot(instruction.dest),name:instruction.name,offset:instruction.offset};
       case 'move': return {op:'move',dest:slot(instruction.dest),source:instruction.source};
       case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};
