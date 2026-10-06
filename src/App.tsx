@@ -5,27 +5,18 @@ import { useProfile } from './auth/hooks/useProfile';
 import type { WorkspaceRoute } from './components/workspace/WorkspaceModuleShellTypes';
 import { WORKSPACE_ROUTES, isWorkspaceRoute } from './routing/appRoutes';
 import { LoadingScreen } from './components/common/LoadingScreen';
+import { LandingShell } from './appShells/LandingShell';
+import { TradingWorkspaceShell } from './appShells/TradingWorkspaceShell';
+import { LiveTradingShell } from './appShells/LiveTradingShell';
 import { ThemeProvider } from './theme/ThemeContext';
 import { loadTradingCoreRuntime } from './services/runtime/tradingCoreRuntimeLoader';
 import type { TradingCoreRuntimeApi } from './services/runtime/tradingCoreRuntimeLoader';
 
-const LandingPage = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
-const AuthModalPlaceholder = lazy(() => import('./components/auth/AuthModalPlaceholder').then(m => ({ default: m.AuthModalPlaceholder })));
 const BrokerConnectionRequiredPage = lazy(() => import('./pages/BrokerConnectionRequiredPage').then(m => ({ default: m.BrokerConnectionRequiredPage })));
 const BrokerCallbackPage = lazy(() => import('./pages/BrokerCallbackPage').then(m => ({ default: m.BrokerCallbackPage })));
 const LegalPage = lazy(() => import('./pages/LegalPage').then(m => ({ default: m.LegalPage })));
-const LiveTradingTerminal = lazy(() => import('./LiveTradingTerminal').then(m => ({ default: m.LiveTradingTerminal })));
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const PredictionCenterPage = lazy(() => import('./pages/PredictionCenterPage').then(m => ({ default: m.PredictionCenterPage })));
-const ModelsPage = lazy(() => import('./pages/ModelsPage').then(m => ({ default: m.ModelsPage })));
-const AutomationsPage = lazy(() => import('./pages/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
-const IndicatorsPage = lazy(() => import('./pages/IndicatorsPage').then(m => ({ default: m.IndicatorsPage })));
 const IndicatorExplorePage = lazy(() => import('./pages/IndicatorExplorePage').then(m => ({ default: m.IndicatorExplorePage })));
-const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })));
-const ProfilePage = lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
-const CoreSpiritEditorPage = lazy(() => import('./pages/CoreSpiritEditorPage').then(m => ({ default: m.CoreSpiritEditorPage })));
-const CoreSpiritDocsPage = lazy(() => import('./pages/CoreSpiritDocsPage').then(m => ({ default: m.CoreSpiritDocsPage })));
 
 const workspacePaths = WORKSPACE_ROUTES;
 
@@ -284,18 +275,9 @@ function AppContent() {
         }}
       >
         <Suspense key={workspacePath} fallback={routeFallback()}>
-          {workspacePath === '/dashboard' && <DashboardPage onNavigate={navigateWorkspace} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/models' && <ModelsPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/predictions' && <PredictionCenterPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/automations' && <AutomationsPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/indicators' && <IndicatorsPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/portfolio' && <PortfolioPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/profile' && <ProfilePage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/corespirit/docs' && <CoreSpiritDocsPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/corespirit' && <CoreSpiritEditorPage onNavigate={navigateWorkspace} onBackToLanding={() => navigate('/dashboard')} onBroker={() => navigate('/broker')} />}
-          {workspacePath === '/live' && (
-            hasConnectedBroker
-              ? <LiveTradingTerminal />
+          {workspacePath === '/live'
+            ? hasConnectedBroker
+              ? <LiveTradingShell />
               : <BrokerConnectionRequiredPage
                   onBack={() => navigate('/dashboard')}
                   onBrokerConnected={() => {
@@ -303,32 +285,25 @@ function AppContent() {
                     navigate('/live');
                   }}
                 />
-          )}
+            : <TradingWorkspaceShell
+                route={workspacePath}
+                onNavigate={navigateWorkspace}
+                onBroker={() => navigate('/broker')}
+              />}
         </Suspense>
       </RouteErrorBoundary>
     );
   }
 
   return (
-    <>
-      <Suspense fallback={routeFallback('Loading TradingCore...', 'Preparing the public workspace')}>
-        <LandingPage
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          onLaunchPlatform={handleLaunchPlatform}
-          onNavigate={handleNavigateFromMenu}
-          currentView={currentView}
-        />
-      </Suspense>
-      {isAuthModalOpen && (
-        <Suspense fallback={null}>
-          <AuthModalPlaceholder
-            isOpen={isAuthModalOpen}
-            onClose={() => setIsAuthModalOpen(false)}
-            onLaunchWorkspace={handleLaunchPlatform}
-          />
-        </Suspense>
-      )}
-    </>
+    <LandingShell
+      isAuthModalOpen={isAuthModalOpen}
+      onOpenAuthModal={() => setIsAuthModalOpen(true)}
+      onCloseAuthModal={() => setIsAuthModalOpen(false)}
+      onLaunchPlatform={handleLaunchPlatform}
+      onNavigate={handleNavigateFromMenu}
+      currentView={currentView}
+    />
   );
 }
 
