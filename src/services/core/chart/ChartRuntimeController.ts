@@ -39,9 +39,6 @@ export type ChartRuntimeControllerDeps={
   volume:Ref<ISeriesApi<'Histogram'>|null>;
   candles:Ref<HistoricalCandle[]>;
   latestTick:Ref<NormalizedMarketTick|undefined>;
-  lifecycle:Ref<ChartLifecycle>;
-  chartUpdateScheduler:Ref<ChartUpdateScheduler>;
-  calculationEngine:Ref<RealtimeCalculationEngine>;
   chartId:Ref<string>;
   dataRevisionRef:Ref<number>;
   indicatorRequestSeq:Ref<number>;
@@ -99,6 +96,10 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
     showOI,setDrawingTool,setSelectedDrawingId,setHistoryLoading,setError,setAnalytics,
     setOiAnalytics,onAnalytics,
   }=deps;
+
+  const lifecycle:Ref<ChartLifecycle>={current:new ChartLifecycle()};
+  const chartUpdateScheduler:Ref<ChartUpdateScheduler>={current:new ChartUpdateScheduler()};
+  const calculationEngine:Ref<RealtimeCalculationEngine>={current:new RealtimeCalculationEngine()};
 
   return {
     mount():undefined|(()=>void){
