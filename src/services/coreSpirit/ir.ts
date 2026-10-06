@@ -8,6 +8,7 @@ import type { CoreSpiritIrEmitKind } from './callContract';
 import type { CoreSpiritSpecializedPlan } from './specializedPlan';
 import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 import type { CoreSpiritRepaintSafetyReport } from './repaintSafety';
+import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
 export type CoreSpiritIrValue = { kind:'const'; value:number|string|boolean|null } | { kind:'series'; name:string; offset:number } | { kind:'local'; name:string };
@@ -78,5 +79,6 @@ export type CoreSpiritIrProgram = {
   specializedPlan?:CoreSpiritSpecializedPlan;
   tradingNativePlan?:CoreSpiritTradingNativePlan;
   repaintSafety?:CoreSpiritRepaintSafetyReport;
+  executionPlanVisualization?:CoreSpiritExecutionPlanVisualization;
   compilerPipeline?:CoreSpiritCompilerPipelineTrace;
 };

@@ -21,6 +21,7 @@ import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
 import { isStateType } from './typeSystem';
 import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
+import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 
@@ -323,7 +324,8 @@ export class CoreSpiritCompiler {
       const allDiagnostics = [...stageDiagnostics,...repaintDiagnostics];
       if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir)};
     } catch(error) {

@@ -43,6 +43,7 @@ export function validateCoreSpiritIr(program: unknown): program is CoreSpiritIrP
   if (p.optimizationPlan && p.optimizationPlan.version !== 1) return false;
   if (p.executionPlan && p.executionPlan.version !== 1) return false;
   if (p.repaintSafety && p.repaintSafety.version !== 1) return false;
+  if (p.executionPlanVisualization && p.executionPlanVisualization.version !== 1) return false;
   if (p.compilerPipeline && !validateCoreSpiritCompilerPipelineTrace(p.compilerPipeline)) return false;
   return p.entry.instructions.every(isCoreSpiritIrInstruction);
 }
