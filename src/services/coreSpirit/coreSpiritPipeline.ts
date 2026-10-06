@@ -56,7 +56,7 @@ function componentFingerprint(options: { components?: CoreSpiritComponentRegistr
   return JSON.stringify(components);
 }
 
-function buildCompileCacheIdentity(
+export function buildCoreSpiritArtifactLookupIdentity(
   source:string,
   sourceId:string,
   options:{components?:CoreSpiritComponentRegistryLike; layer?:string},
@@ -86,7 +86,7 @@ export function compileCoreSpirit(
   sourceId = 'coreSpirit',
   options: { components?: CoreSpiritComponentRegistryLike; layer?: any } = {},
 ): CoreSpiritCompileResult {
-  const identity=buildCompileCacheIdentity(source,sourceId,options);
+  const identity=buildCoreSpiritArtifactLookupIdentity(source,sourceId,options);
   const cached=artifactCache.get(identity.key);
   if(cached){
     artifactCache.delete(identity.key);
