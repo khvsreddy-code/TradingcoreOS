@@ -2,7 +2,7 @@ import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 import { Session as SupabaseSession, AuthChangeEvent } from '@supabase/supabase-js';
 import { Session } from '../../auth/types';
 
-const SESSION_TIMEOUT_MS = 15_000;
+const SESSION_TIMEOUT_MS = 10_000;
 
 async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return Promise.race([
@@ -33,11 +33,10 @@ export const sessionService = {
       const supabase = getSupabaseClient();
       const result = await withTimeout(supabase.auth.getSession(), 'Supabase session check timed out');
       if (result.error) return { session: null, error: result.error };
-      if (result.data.session) return { session: result.data.session, error: null };
-
-      const refreshed = await withTimeout(supabase.auth.refreshSession(), 'Supabase session refresh timed out');
-      if (refreshed.error) return { session: null, error: refreshed.error };
-      return { session: refreshed.data.session, error: null };
+      // A missing persisted session is a normal unauthenticated state. Do not
+      // call refreshSession() here: an empty storage state is not a refreshable
+      // session, and forcing a refresh adds an avoidable network/error path.
+      return { session: result.data.session ?? null, error: null };
     } catch (err: any) {
       return { session: null, error: err };
     }
