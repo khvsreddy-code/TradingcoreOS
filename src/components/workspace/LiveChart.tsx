@@ -123,6 +123,15 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   useEffect(()=>{rendererController.setChartType(chartType);},[chartType,rendererController]);
   useEffect(()=>{saveCandleAppearance(brokerId,resolvedInstrumentKey,candleAppearance);rendererController.setCandleAppearance(candleAppearance);if(candles.current.length&&volume.current){volume.current.setData(candles.current.map(x=>({time:Math.floor(Date.parse(x.timestamp)/1000),value:Number(x.volume)||0,color:volumeColor(candleAppearance,Number(x.open),Number(x.close))})));}},[candleAppearance,brokerId,resolvedInstrumentKey,rendererController]);
   useEffect(()=>{if(levelsRequest!=null)setShowLevels(true);},[levelsRequest]);
+  useEffect(()=>{
+    if(showOI){
+      void analyticsControllerRef.current?.refreshOI();
+      const id=window.setInterval(()=>void analyticsControllerRef.current?.refreshOI(),15000);
+      return()=>window.clearInterval(id);
+    }
+    analyticsControllerRef.current?.renderOI(null);
+    return undefined;
+  },[showOI,resolvedInstrumentKey,brokerId]);
   useEffect(()=>{applyViewState();},[timeframe,showLevels,showVolume,showOI,showDepth,brokerId,resolvedInstrumentKey]);
 
   useEffect(()=>{
