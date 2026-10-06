@@ -24,6 +24,7 @@ export type ChartAnalyticsControllerDeps={
   lifecycle:Ref<ChartLifecycle>;
   isOiVisible:()=>boolean;
   onAnalytics?:(analytics:ChartAnalytics)=>void;
+  onOiAnalytics?:(analytics:OIChartAnalytics|null)=>void;
 };
 
 export function createChartAnalyticsController(deps:ChartAnalyticsControllerDeps){
@@ -67,6 +68,7 @@ export function createChartAnalyticsController(deps:ChartAnalyticsControllerDeps
   const renderOI=(oi:OIChartAnalytics|null)=>{
     oiAnalytics=oi;
     deps.chartStore.setOiAnalytics(oi);
+    if(oiUiTimer==null){oiUiTimer=setTimeout(()=>{oiUiTimer=null;deps.onOiAnalytics?.(oi);},250);} else { /* UI notification already queued */ }
     if(oiUiTimer==null){
       oiUiTimer=setTimeout(()=>{oiUiTimer=null;},250);
     }
