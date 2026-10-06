@@ -62,7 +62,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='footprint') return 'footprint';
         if(n.target.type==='identifier' && scope.get(n.target.name)==='market:ref' && n.member==='volumeProfile') return 'volume-profile';
         if(n.target.type==='identifier' && scope.get(n.target.name)==='timeframe:ref' && ['open','high','low','close','volume','time'].includes(n.member)) return 'number';
-        if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe')) {
+        if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe'||n.target.name==='series')) {
           if(['trade','orderbook','footprint','volumeProfile'].includes(n.member)) return n.member==='trade'?'trade':n.member==='orderbook'?'orderbook':n.member==='footprint'?'footprint':'volume-profile';
           if(!['open','high','low','close','volume','time'].includes(n.member)) {
             report(n,`Market/timeframe references do not expose member '${n.member}'`,'UNKNOWN_DATA_FIELD');
@@ -140,6 +140,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           const errors=validateCoreSpiritComponentInvocation(component,argTypes);
           for(const message of errors) report(n,message,'COMPONENT_INVOCATION');
           return componentResultLanguageType(component);
+        }
+
+        if(n.name==='series') {
+          if(n.args.length !== 1 || !compatible('string', argTypes[0])) {
+            report(n,'series expects one string timeframe','TYPE_SERIES_TIMEFRAME');
+          }
+          return 'timeframe:ref';
         }
 
         const builtin=CORE_SPIRIT_BUILTINS.get(n.name);
@@ -241,9 +248,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
       case 'member': {
         if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return semanticScalar('boolean', { temporalPhase:n.member as any });
-        if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe')) {
+        if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe'||n.target.name==='series')) {
           const symbol = n.target.name==='market' && n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'current';
-          const tf = n.target.name==='timeframe' ? (n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'requested') : 'chart';
+          const tf = (n.target.name==='timeframe'||n.target.name==='series') ? (n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'requested') : 'chart';
           return semanticSeriesField(n.member, symbol, tf);
         }
         const target=inferSemantic(n.target,scope);
@@ -277,6 +284,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return semanticSeries('number',{symbol:n.args[0]?.type==='string' ? String(n.args[0].value) : 'current', timeframe:'chart'});
         }
         if(n.name==='timeframe') {
+          return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
+        }
+        if(n.name==='series') {
           return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
         }
         if(n.name==='bar_index') return semanticScalar('number');
