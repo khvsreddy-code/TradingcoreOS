@@ -151,6 +151,7 @@ export function LiveTradingWorkspace() {
         (window as Window & { __TCO_PERF__?: unknown }).__TCO_PERF__ = {
           capturedAt: Date.now(),
           cells: stats,
+          pipeline: chartPerformanceTelemetry.keys().map(key => chartPerformanceTelemetry.snapshot(key)),
         };
       }
     }, 1000);
