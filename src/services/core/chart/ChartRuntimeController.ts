@@ -14,6 +14,7 @@ import { getCurrentTheme, getThemePalette } from '../../../theme/theme';
 import { candleSeriesOptions, type CandleAppearance } from './candleAppearance';
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import type { NormalizedMarketTick } from '../../../types/market';
+import { CHART_TIMEFRAME_INTERVALS, shouldLoadOlderHistory } from '../../marketData/chartDataPlane';
 import type { ChartDataPlane, ChartDataPlaneSnapshot } from '../../marketData/chartDataPlane';
 import type { ChartAnalytics } from '../../marketData/levelEngine';
 import type { OIChartAnalytics } from '../../marketData/oiEngine';
@@ -22,6 +23,9 @@ import type { CoreSpiritChartOutputController } from '../../coreSpirit/chartOutp
 import type { CoreSpiritStore } from '../../coreSpirit/CoreSpiritStore';
 import type { DrawingTool } from '../../../components/workspace/drawingTypes';
 import type { ChartController } from '../../../components/workspace/chartController';
+import { chartMarketKey } from '../../marketData/chartMarketStore';
+import { isIncrementalIndicatorSupported } from '../../marketData/incrementalIndicatorEngine';
+import { coreEventBus } from '../event/eventBus';
 
 type Ref<T>={current:T};
 
