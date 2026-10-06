@@ -25,6 +25,7 @@ export type ChartCoreSpiritControllerDeps={
 
 export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDeps){
   const {chartId,chart,candle,host,candles,coreSpiritOutput,coreSpiritRunId,resolvedInstrumentKey,timeframe,store,publishLifecycle}=deps;
+  let datasetVersion=0;
 
   const ensureOutput=()=>{
     if(!chart.current||!host.current)return null;
@@ -45,7 +46,8 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
         if(!bars.length)throw new Error('Chart has no candles yet; wait for the first history paint.');
         publishLifecycle('updating');
         try{
-          const result=await runCoreSpiritInWorker(source,bars,sourceId);
+          datasetVersion += 1;
+          const result=await runCoreSpiritInWorker(source,bars,sourceId,{contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length}});
           if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
           ensureOutput()?.reset();
           ensureOutput()?.applyObjects(result.outputs);
