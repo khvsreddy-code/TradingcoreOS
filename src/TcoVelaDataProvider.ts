@@ -210,22 +210,53 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
     let fingerprint = '';
-    const stop = plane.subscribe((event) => {
-      if (event.type !== 'snapshot' && event.type !== 'tick') return;
-      const sequence = event.snapshot.revision;
-      const timelineKey = `${symbol}|${tcoTimeframe}`;
-      const view = marketLatencyTrace.measure(timelineKey, sequence, 'canonical', () => plane.readCanonical());
+    let scheduled = false;
+    let dirty = false;
+    let raf = 0;
+
+    const flush = () => {
+      scheduled = false;
+      if (!dirty) return;
+      dirty = false;
+      const view = plane.readCanonical();
       if (!view.length) return;
       const i = view.length - 1;
       const time = view.time[i]!;
       const open = view.open[i]!, high = view.high[i]!, low = view.low[i]!, close = view.close[i]!;
       const volume = Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined;
+      const sequence = plane.canonicalDataPlane().revision;
       const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
-      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
+      const timelineKey = `${symbol}|${tcoTimeframe}`;
+      const bar: ColumnarBarUpdate = { time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey };
+      onBar(bar);
+    };
+
+    const schedule = () => {
+      dirty = true;
+      if (scheduled) return;
+      scheduled = true;
+      raf = typeof globalThis.requestAnimationFrame === 'function'
+        ? globalThis.requestAnimationFrame(flush)
+        : Number(setTimeout(flush, 16));
+    };
+
+    const stop = plane.subscribe((event) => {
+      if (event.type !== 'snapshot' && event.type !== 'tick') return;
+      schedule();
     });
-    return stop;
+
+    return () => {
+      stop();
+      dirty = false;
+      if (raf) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
+        else clearTimeout(raf);
+      }
+      raf = 0;
+      scheduled = false;
+    };
   }
 
   subscribe(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void): () => void {
@@ -233,21 +264,56 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
     let fingerprint = '';
-    const stop = plane.subscribe((event) => {
-      if (event.type !== 'snapshot' && event.type !== 'tick') return;
+    let scheduled = false;
+    let dirty = false;
+    let raf = 0;
+
+    const flush = () => {
+      scheduled = false;
+      if (!dirty) return;
+      dirty = false;
       const view = plane.readCanonical();
       if (!view.length) return;
       const i = view.length - 1;
-      const next: OHLCV = { time: view.time[i]! * 1000, open: view.open[i]!, high: view.high[i]!, low: view.low[i]!, close: view.close[i]!, volume: Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined };
+      const next: OHLCV = {
+        time: view.time[i]! * 1000,
+        open: view.open[i]!,
+        high: view.high[i]!,
+        low: view.low[i]!,
+        close: view.close[i]!,
+        volume: Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined,
+      };
       const nextKey = `${next.time}|${next.open}|${next.high}|${next.low}|${next.close}|${next.volume ?? ''}`;
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
       onBar(next);
+    };
+
+    const schedule = () => {
+      dirty = true;
+      if (scheduled) return;
+      scheduled = true;
+      raf = typeof globalThis.requestAnimationFrame === 'function'
+        ? globalThis.requestAnimationFrame(flush)
+        : Number(setTimeout(flush, 16));
+    };
+
+    const stop = plane.subscribe((event) => {
+      if (event.type !== 'snapshot' && event.type !== 'tick') return;
+      schedule();
     });
 
-    return stop;
-  }
-}
+    return () => {
+      stop();
+      dirty = false;
+      if (raf) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
+        else clearTimeout(raf);
+      }
+      raf = 0;
+      scheduled = false;
+    };
+  }}
 
 export function createTcoVelaDataProvider(): TcoVelaDataProvider {
   return new TcoVelaDataProvider();
