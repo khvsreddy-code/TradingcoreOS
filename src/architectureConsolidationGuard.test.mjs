@@ -34,7 +34,7 @@ for (const file of fs.existsSync(workflowDir) ? fs.readdirSync(workflowDir) : []
 }
 
 const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8');
-if (!app.includes('./LiveTradingTerminal')) throw new Error('App no longer references the canonical LiveTradingTerminal');
+if (!app.includes('./appShells/LiveTradingShell')) throw new Error('App no longer references the canonical LiveTradingShell');
 if (/LiveTradingTerminalV[2-9]/.test(app)) throw new Error('App references a retired terminal generation');
 
 const architecture = fs.readFileSync(path.join(root, 'src/architecture/architectureContract.ts'), 'utf8');
