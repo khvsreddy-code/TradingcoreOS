@@ -338,6 +338,34 @@ Track at minimum:
 - full replacement count
 - live forming-bar update cost
 
+## Persistent worker + SharedArrayBuffer execution
+
+CoreSpirit worker execution now follows an artifact/session protocol rather than a source-per-run protocol:
+
+```text
+Chart A
+  ↓
+worker context A
+  ├─ compiled artifactId
+  ├─ execution state
+  ├─ indicator kernels
+  └─ shared market buffer
+
+market update
+  ↓
+datasetVersion + dirtyFrom/dirtyTo
+  ↓
+worker executes only the current incremental bar when the dirty span is a forming-bar tail
+```
+
+The SAB dataset contains a compact metadata header plus typed `time/open/high/low/close/volume` columns. Under cross-origin isolation, the buffer is shared with the worker and the worker retains the corresponding CoreSpirit bar objects as a compatibility execution cache. The objects are created once for the persistent dataset and only dirty rows are synchronized afterward; source text and the 50k-bar history are no longer resent on every run.
+
+SAB is bounded to 250k bars for this chart-oriented path. Larger research/backtest datasets should use bounded/chunked dataset ownership rather than reserving hundreds of megabytes of shared memory per worker context.
+
+The browser must expose `crossOriginIsolated` plus `SharedArrayBuffer`; the `/live` deployment sends COOP `same-origin` and COEP `require-corp`. Non-isolated environments retain a compatibility path, but the browser performance gate treats shared-memory availability as required by default.
+
+One-shot analytics/history indicator snapshots continue to use transferable typed `ArrayBuffer`s. That is deliberate: transferables already avoid structured-clone copies, and using a shared buffer for a single consumer would introduce lifetime/race management without a comparable benefit. Persistent/shared ownership is reserved for hot reusable datasets and stateful worker contexts.
+
 ## WASM acceptance gate
 
 The CoreSpirit backend benchmark compares **JS VM**, **fused JS**, **WASM scalar** and **WASM SIMD** at **50k, 500k and 5m bars** by default. A missing WASM artifact reports as not-configured; the benchmark infrastructure alone is not evidence that WASM is faster. Production promotion requires measured scalar/SIMD results on the same CoreSpirit workload at all three sizes.
