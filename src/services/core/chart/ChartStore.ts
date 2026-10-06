@@ -19,6 +19,19 @@ export type ChartStoreSnapshot = Readonly<{
 }>;
 
 type Listener = () => void;
+type HotState = {
+  generation: number;
+  revision: number;
+  candles: HistoricalCandle[];
+  latestTick?: NormalizedMarketTick;
+  visibleLogicalRange: { from: number; to: number } | null;
+  historyReady: boolean;
+  historyLoading: boolean;
+  error: string;
+  analytics: ChartAnalytics | null;
+  oiAnalytics: OIChartAnalytics | null;
+  lifecycle: ChartStoreSnapshot['lifecycle'];
+};
 
 const EMPTY: ChartStoreSnapshot = Object.freeze({
   generation: 0,
@@ -34,29 +47,38 @@ const EMPTY: ChartStoreSnapshot = Object.freeze({
   lifecycle: 'idle',
 });
 
-function freezeSnapshot(value: ChartStoreSnapshot): ChartStoreSnapshot {
-  return Object.freeze(value);
-}
-
 /**
  * Per-chart imperative state.
  *
- * High-frequency market state lives here instead of React. Consumers that need
- * every tick subscribe imperatively; UI consumers can use subscribeUi(), which
- * is frame-coalesced and therefore does not turn the market feed into a React
- * event bus.
+ * Tick-hot state is mutable and never freeze-wraps or spreads a snapshot.
+ * React/UI consumers only receive an immutable snapshot once per rAF. The
+ * canonical typed-array data plane remains the numerical source of truth;
+ * candles here are retained solely as an explicit compatibility view.
  */
 export class ChartStore {
   private snapshot: ChartStoreSnapshot = EMPTY;
+  private readonly hot: HotState = {
+    generation: 0,
+    revision: 0,
+    candles: [],
+    latestTick: undefined,
+    visibleLogicalRange: null,
+    historyReady: false,
+    historyLoading: false,
+    error: '',
+    analytics: null,
+    oiAnalytics: null,
+    lifecycle: 'idle',
+  };
   private listeners = new Set<Listener>();
   private uiListeners = new Set<Listener>();
   private uiFrame: number | null = null;
 
   getSnapshot(): ChartStoreSnapshot { return this.snapshot; }
 
-  getCandles(): HistoricalCandle[] { return this.snapshot.candles; }
-  getLatestTick(): NormalizedMarketTick | undefined { return this.snapshot.latestTick; }
-  getRevision(): number { return this.snapshot.revision; }
+  getCandles(): HistoricalCandle[] { return this.hot.candles; }
+  getLatestTick(): NormalizedMarketTick | undefined { return this.hot.latestTick; }
+  getRevision(): number { return this.hot.revision; }
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -70,74 +92,66 @@ export class ChartStore {
 
   publishMarketSnapshot(event: { type: string; snapshot: ChartDataPlaneSnapshot; error?: string }): void {
     const nextLifecycle = event.type === 'tick'
-      ? (this.snapshot.lifecycle === 'ready' ? 'updating' : this.snapshot.lifecycle)
+      ? (this.hot.lifecycle === 'ready' ? 'updating' : this.hot.lifecycle)
       : event.type === 'status' && event.error
         ? 'error'
         : event.type === 'status'
           ? 'ready'
-          : this.snapshot.lifecycle;
+          : this.hot.lifecycle;
 
-    this.snapshot = freezeSnapshot({
-      generation: this.snapshot.generation,
-      revision: event.snapshot.revision,
-      candles: event.snapshot.candles,
-      latestTick: event.snapshot.latestTick,
-      visibleLogicalRange: this.snapshot.visibleLogicalRange,
-      historyReady: event.snapshot.historyReady,
-      historyLoading: event.snapshot.historyLoading || event.snapshot.olderHistoryLoading,
-      error: event.error || (nextLifecycle === 'error' ? this.snapshot.error : ''),
-      analytics: this.snapshot.analytics,
-      oiAnalytics: this.snapshot.oiAnalytics,
-      lifecycle: nextLifecycle as ChartStoreSnapshot['lifecycle'],
-    });
+    this.hot.revision = event.snapshot.revision;
+    this.hot.candles = event.snapshot.candles;
+    this.hot.latestTick = event.snapshot.latestTick;
+    this.hot.historyReady = event.snapshot.historyReady;
+    this.hot.historyLoading = event.snapshot.historyLoading || event.snapshot.olderHistoryLoading;
+    this.hot.error = event.error || (nextLifecycle === 'error' ? this.hot.error : '');
+    this.hot.lifecycle = nextLifecycle as ChartStoreSnapshot['lifecycle'];
 
     this.listeners.forEach(listener => listener());
     this.scheduleUiNotify();
   }
 
   setVisibleRange(range: { from: number; to: number } | null): void {
-    this.snapshot = freezeSnapshot({ ...this.snapshot, visibleLogicalRange: range });
+    this.hot.visibleLogicalRange = range;
     this.scheduleUiNotify();
   }
 
   setAnalytics(analytics: ChartAnalytics | null): void {
-    this.snapshot = freezeSnapshot({ ...this.snapshot, analytics });
+    this.hot.analytics = analytics;
     this.scheduleUiNotify();
   }
 
   setOiAnalytics(oiAnalytics: OIChartAnalytics | null): void {
-    this.snapshot = freezeSnapshot({ ...this.snapshot, oiAnalytics });
+    this.hot.oiAnalytics = oiAnalytics;
     this.scheduleUiNotify();
   }
 
   setError(error: string): void {
-    this.snapshot = freezeSnapshot({
-      ...this.snapshot,
-      error,
-      lifecycle: error ? 'error' : this.snapshot.lifecycle,
-    });
+    this.hot.error = error;
+    if (error) this.hot.lifecycle = 'error';
     this.scheduleUiNotify();
   }
 
   setLifecycle(lifecycle: ChartStoreSnapshot['lifecycle']): void {
-    this.snapshot = freezeSnapshot({ ...this.snapshot, lifecycle });
+    this.hot.lifecycle = lifecycle;
     this.scheduleUiNotify();
   }
 
   beginGeneration(): number {
-    const generation = this.snapshot.generation + 1;
-    this.snapshot = freezeSnapshot({ ...this.snapshot, generation, lifecycle: 'loading', error: '' });
+    this.hot.generation += 1;
+    this.hot.lifecycle = 'loading';
+    this.hot.error = '';
     this.scheduleUiNotify();
-    return generation;
+    return this.hot.generation;
   }
 
   invalidateGeneration(): void {
-    const generation = this.snapshot.generation + 1;
-    this.snapshot = freezeSnapshot({ ...this.snapshot, generation });
+    this.hot.generation += 1;
+    this.scheduleUiNotify();
   }
 
   publishUiSnapshot(snapshot: Partial<ChartStoreSnapshot>): void {
-    this.snapshot = freezeSnapshot({ ...this.snapshot, ...snapshot });
+    Object.assign(this.hot, snapshot);
     this.scheduleUiNotify();
   }
 
@@ -145,6 +159,19 @@ export class ChartStore {
     if (!this.uiListeners.size || this.uiFrame != null) return;
     const flush = () => {
       this.uiFrame = null;
+      this.snapshot = Object.freeze({
+        generation: this.hot.generation,
+        revision: this.hot.revision,
+        candles: this.hot.candles,
+        latestTick: this.hot.latestTick,
+        visibleLogicalRange: this.hot.visibleLogicalRange,
+        historyReady: this.hot.historyReady,
+        historyLoading: this.hot.historyLoading,
+        error: this.hot.error,
+        analytics: this.hot.analytics,
+        oiAnalytics: this.hot.oiAnalytics,
+        lifecycle: this.hot.lifecycle,
+      });
       this.uiListeners.forEach(listener => listener());
     };
     if (typeof globalThis.requestAnimationFrame === 'function') {
@@ -162,6 +189,19 @@ export class ChartStore {
     this.uiFrame = null;
     this.listeners.clear();
     this.uiListeners.clear();
-    this.snapshot = freezeSnapshot({ ...this.snapshot, lifecycle: 'disposed' });
+    this.hot.lifecycle = 'disposed';
+    this.snapshot = Object.freeze({
+      generation: this.hot.generation,
+      revision: this.hot.revision,
+      candles: this.hot.candles,
+      latestTick: this.hot.latestTick,
+      visibleLogicalRange: this.hot.visibleLogicalRange,
+      historyReady: this.hot.historyReady,
+      historyLoading: this.hot.historyLoading,
+      error: this.hot.error,
+      analytics: this.hot.analytics,
+      oiAnalytics: this.hot.oiAnalytics,
+      lifecycle: 'disposed',
+    });
   }
 }
