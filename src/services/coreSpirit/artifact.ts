@@ -74,7 +74,7 @@ export async function makeExecutableArtifactIdentity(
   normalizedSource = source,
   semanticFingerprint = '',
 ): Promise<CoreSpiritArtifactIdentity> {
-  return buildCoreSpiritArtifactIdentity(ir, source, normalizedSource, semanticFingerprint);
+  return Promise.resolve(buildCoreSpiritArtifactIdentity(ir, source, normalizedSource, semanticFingerprint));
 }
 
 
