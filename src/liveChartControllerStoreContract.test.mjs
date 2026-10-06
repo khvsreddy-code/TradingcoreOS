@@ -10,6 +10,7 @@ assert.ok(live.length < 32000, `LiveChart should stay below 32 KB after controll
 for (const symbol of [
   "createChartAnalyticsController",
   "createChartInteractionController",
+  "createChartRuntimeController",
   "createChartDataController",
   "createChartIndicatorController",
   "createChartDrawingController",
@@ -29,11 +30,19 @@ assert.ok(!live.includes("CoreSpiritVelaEngine"), 'LiveChart must not import the
 assert.ok(!live.includes("coreSpiritPipeline"), 'LiveChart must not import the compiler pipeline');
 assert.ok(!live.includes("chartDataPlane.subscribe"), 'LiveChart must not be the market-data subscription bus');
 for (const forbidden of [
+  "createVelaNativeChart(",
+  "new ChartUpdateScheduler(",
   "from '../../services/runtime/TradingCoreRuntime'",
   "from '../../services/marketData/chartComputeCoordinator'",
   "from '../../services/core/drawing/drawingGeometry'",
   "buildOIChartAnalytics",
 ]) assert.ok(!live.includes(forbidden), `LiveChart leaked infrastructure responsibility: ${forbidden}`);
+
+const runtime=read('src/services/core/chart/ChartRuntimeController.ts');
+assert.ok(runtime.includes('createChartRuntimeController'));
+assert.ok(runtime.includes('createChartRealtimeController'));
+assert.ok(runtime.includes('createChartInteractionController'));
+assert.ok(runtime.includes('createChartAnalyticsController'));
 
 const analytics=read('src/services/core/chart/ChartAnalyticsController.ts');
 assert.ok(analytics.includes('createChartAnalyticsController'));
