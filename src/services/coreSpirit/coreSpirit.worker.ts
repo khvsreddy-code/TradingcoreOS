@@ -8,6 +8,7 @@ import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
 import { artifactIdFor } from './artifactAbi';
 import { createSharedSeriesOutput } from './sharedOutputBuffer';
+import { createGraphResolver, type CoreSpiritDataGraphResolver, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 
@@ -18,6 +19,7 @@ type WorkerContext={
   bars:CoreSpiritMarketBar[];
   datasetVersion:number;
   initialized:boolean;
+  graphResolver:CoreSpiritDataGraphResolver;
 };
 
 type LoadArtifactMessage={
@@ -26,6 +28,14 @@ type LoadArtifactMessage={
   contextKey:string;
   sourceId:string;
   artifact:CoreSpiritExecutableArtifact;
+  graphSnapshot?:CoreSpiritGraphSnapshot;
+};
+
+type UpdateGraphMessage={
+  type:'updateGraph';
+  requestId:string;
+  contextKey:string;
+  graphSnapshot:CoreSpiritGraphSnapshot;
 };
 
 type RunMessage={
@@ -41,7 +51,7 @@ type RunMessage={
   bars?:CoreSpiritMarketBar[];
 };
 
-type Message=LoadArtifactMessage|RunMessage;
+type Message=LoadArtifactMessage|UpdateGraphMessage|RunMessage;
 
 const contexts=new Map<string,WorkerContext>();
 
@@ -92,13 +102,22 @@ function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirty
 function installArtifact(message:LoadArtifactMessage):void{
   if(!validateExecutableArtifact(message.artifact))throw new Error('Invalid CoreSpirit executable artifact');
   const current=contexts.get(message.contextKey);
-  if(current && artifactIdFor(current.artifact)===artifactIdFor(message.artifact))return;
+  if(current && artifactIdFor(current.artifact)===artifactIdFor(message.artifact)){
+    if(message.graphSnapshot)current.graphResolver.replaceSnapshot(message.graphSnapshot);
+    return;
+  }
 
+  const graphResolver=createGraphResolver(
+    message.graphSnapshot ?? {version:1,revision:0,nodes:[]},
+    message.sourceId,
+    'chart',
+  );
   const runtime=new CoreSpiritRuntime({
     sourceId:message.sourceId,
     executionMode:'historical',
     executionTarget:'chart',
     executionTier:'optimized',
+    dataResolver:graphResolver,
   });
   runtime.loadIr(message.artifact.ir);
   contexts.set(message.contextKey,{
@@ -108,9 +127,9 @@ function installArtifact(message:LoadArtifactMessage):void{
     bars:[],
     datasetVersion:0,
     initialized:false,
+    graphResolver,
   });
 }
-
 function getContext(message:RunMessage):WorkerContext{
   const context=contexts.get(message.contextKey);
   if(!context)throw new Error('CoreSpirit worker context is not loaded: '+message.contextKey);
@@ -128,6 +147,19 @@ self.onmessage=(event:MessageEvent<Message>)=>{
         requestId:message.requestId,
         contextKey:message.contextKey,
         artifactId:artifactIdFor(message.artifact),
+      });
+      return;
+    }
+
+    if(message.type==='updateGraph'){
+      const context=contexts.get(message.contextKey);
+      if(!context)throw new Error('CoreSpirit worker graph context is not loaded: '+message.contextKey);
+      context.graphResolver.replaceSnapshot(message.graphSnapshot);
+      self.postMessage({
+        type:'updatedGraph',
+        requestId:message.requestId,
+        contextKey:message.contextKey,
+        revision:message.graphSnapshot.revision,
       });
       return;
     }
