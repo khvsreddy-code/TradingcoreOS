@@ -148,7 +148,9 @@ class ChartPerformanceTelemetry {
   }
 
   recordReactCommit(key: string): void {
-    this.entry(key).reactCommitCountDuringTicks += 1;
+    const m=this.entry(key);
+    const at=now();
+    if(m.packets>0 && at-m.lastPacketAt<1000) m.reactCommitCountDuringTicks += 1;
   }
 
   recordFullSeriesRewrite(key: string): void {
