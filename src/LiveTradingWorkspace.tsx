@@ -1,6 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
-import type { VelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
@@ -11,6 +10,8 @@ import { chartPerformanceTelemetry } from './services/marketData/chartPerformanc
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v4-single-default';
+
+type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
 
 function readCoreSpiritManifest() {
   try {
@@ -30,12 +31,12 @@ function readCoreSpiritManifest() {
 
 export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
-  const workspaceRef = useRef<VelaWorkspace | null>(null);
+  const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
   useEffect(() => {
     if (!host.current) return;
 
-    let workspace: VelaWorkspace | null = null;
+    let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
     let cancelled = false;
 
