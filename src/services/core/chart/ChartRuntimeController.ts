@@ -120,7 +120,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
       const chartIndicatorController=createChartIndicatorController({
         chart:deps.chart,oscChart:deps.oscChart,oscHost:deps.oscHost,candle:deps.candle,
         oscSeries:{current:[]},candles:deps.candles,visibleLogicalRangeRef,chartDataPlane:deps.chartDataPlane,
-        chartDatasetKey:deps.chartDatasetKey,dataRevisionRef:deps.dataRevisionRef,indicatorRequestSeq:deps.indicatorRequestSeq,
+        chartDatasetKey:deps.chartDatasetKey,dataRevisionRef:deps.dataRevisionRef,indicatorRequestSeq:deps.indicatorRequestSeq,chartId:deps.chartId,
         lifecycle,chartUpdateScheduler,indicators:deps.indicatorsRef.current,timeframe:deps.timeframe,
       });
       const chartDrawingController=createChartDrawingController({
