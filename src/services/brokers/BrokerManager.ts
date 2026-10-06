@@ -112,7 +112,9 @@ export class BrokerManager {
       const preferredPrimary = localStorage.getItem('tradingcore_primary_broker')?.toLowerCase() || '';
       const response = await tradingApi('/api/auth/broker/sessions');
       const data = await readTradingApiJson<any>(response);
-      if (!response.ok || !data?.success || !Array.isArray(data.sessions)) return;
+      if (!response.ok || !data?.success || !Array.isArray(data.sessions)) {
+        throw new Error(data?.error || `Broker session restore failed (${response.status})`);
+      }
 
       this.connections.clear();
       this.primaryBrokerId = null;
@@ -154,6 +156,7 @@ export class BrokerManager {
       }
     } catch (error) {
       console.warn('Unable to restore server-side broker connections:', error);
+      throw error instanceof Error ? error : new Error('Unable to restore server-side broker connections');
     }
   }
 
