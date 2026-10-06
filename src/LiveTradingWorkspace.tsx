@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Profiler, useEffect, useRef, useState } from 'react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import type { VelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
@@ -162,6 +162,7 @@ export function LiveTradingWorkspace() {
   }, []);
 
   return (
+    <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
     <div
       ref={host}
       className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
@@ -174,6 +175,7 @@ export function LiveTradingWorkspace() {
         />
       )}
     </div>
+    </Profiler>
   );
 }
 
