@@ -62,7 +62,7 @@ function normalizeTimeframe(value:string):string{
   if(lower==='1h'||lower==='60m')return '1H';
   if(lower==='4h')return '4H';
   if(TIMEFRAME_SECONDS[raw])return raw;
-  const match=/^(\\d+)\\s*(m|min|minute|h|hr|hour|d|day)$/i.exec(raw);
+  const match=/^(\d+)\s*(m|min|minute|h|hr|hour|d|day)$/i.exec(raw);
   if(!match)return raw;
   const count=Number(match[1]);
   const unit=match[2].toLowerCase();
@@ -74,7 +74,7 @@ function normalizeTimeframe(value:string):string{
 export function timeframeSeconds(value:string):number{
   const normalized=normalizeTimeframe(value);
   if(TIMEFRAME_SECONDS[normalized])return TIMEFRAME_SECONDS[normalized]!;
-  const match=/^(\\d+)(m|h|d)$/i.exec(normalized);
+  const match=/^(\d+)(m|h|d)$/i.exec(normalized);
   if(!match)return 0;
   const count=Number(match[1]);
   return count*(match[2].toLowerCase()==='m'?60:match[2].toLowerCase()==='h'?3600:86400);
