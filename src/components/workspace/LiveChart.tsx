@@ -8,7 +8,7 @@ import { hitTestDrawings, moveDrawingHandle, snapDataPoint } from '../../service
 import { RealtimeCalculationEngine } from '../../services/core/calculation/realtimeCalculationEngine';
 import { coreEventBus } from '../../services/core/event/eventBus';
 import { CORE_DRAWING_TOOLS, getCoreDrawingTool, validateDrawingPoints } from '../../services/core/drawing/drawingTools';
-import { createChart, createSeriesMarkers, ColorType, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type Time } from '../../services/core/chart/velaChartFacade';
+import { createChart, createSeriesMarkers, ColorType, CandlestickSeries, HistogramSeries, LineSeries, type IChartApi, type ISeriesApi, type Time } from '../../services/core/chart/velaNativeChartKernel';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
 import { NormalizedMarketTick } from '../../types/market';
 import { ChartDepthPanel } from './ChartDepthPanel';
