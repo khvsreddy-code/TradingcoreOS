@@ -37,6 +37,34 @@ function splitMetrics(text:string):string[]{
   return text.split(/[\s,]+/).map(value=>value.trim()).filter(Boolean);
 }
 
+function splitFeatureExpressions(text:string):string[]{
+  const out:string[]=[];
+  let start=0;
+  let depth=0;
+  let quote:'"'|"'"|null=null;
+  let escaped=false;
+  for(let i=0;i<text.length;i+=1){
+    const ch=text[i];
+    if(quote){
+      if(escaped){escaped=false;continue;}
+      if(ch==='\\'){escaped=true;continue;}
+      if(ch===quote)quote=null;
+      continue;
+    }
+    if(ch==='"'||ch==="'"){quote=ch;continue;}
+    if(ch==='('||ch==='[')depth+=1;
+    else if(ch===')'||ch===']')depth=Math.max(0,depth-1);
+    else if(ch===','&&depth===0){
+      const item=text.slice(start,i).trim();
+      if(item)out.push(item);
+      start=i+1;
+    }
+  }
+  const tail=text.slice(start).trim();
+  if(tail)out.push(tail);
+  return out;
+}
+
 export function buildCoreSpiritResearchPlan(
   source:string,
   surface?:CoreSpiritSurfaceMetadata,
@@ -70,7 +98,7 @@ export function buildCoreSpiritResearchPlan(
       } else if(/^features?\s*:\s*(.*)$/i.test(line)){
         const value=line.match(/^features?\s*:\s*(.*)$/i)?.[1]?.trim()??'';
         activeModelSection='features';
-        if(value) activeModel={...activeModel,features:[...activeModel.features,...splitMetrics(value)]};
+        if(value) activeModel={...activeModel,features:[...activeModel.features,...splitFeatureExpressions(value)]};
         modelSpecs[modelSpecs.length-1]=activeModel;
         continue;
       } else if(/^targets?\s*:\s*(.*)$/i.test(line)){
@@ -80,7 +108,7 @@ export function buildCoreSpiritResearchPlan(
         modelSpecs[modelSpecs.length-1]=activeModel;
         continue;
       } else if(activeModelSection==='features'){
-        if(line) activeModel={...activeModel,features:[...activeModel.features,...splitMetrics(line.replace(/,$/,''))]};
+        if(line) activeModel={...activeModel,features:[...activeModel.features,...splitFeatureExpressions(line.replace(/,$/,''))]};
         modelSpecs[modelSpecs.length-1]=activeModel;
         continue;
       } else if(activeModelSection==='target'){
