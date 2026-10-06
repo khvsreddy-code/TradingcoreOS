@@ -10,7 +10,7 @@ type Props = {
   onCloseAuthModal: () => void;
   onLaunchPlatform: () => void;
   onNavigate: (view: string) => void;
-  currentView: 'landing' | 'login' | 'app' | 'broker-connection';
+  currentView: 'landing' | 'app' | 'broker-connection' | 'workspace';
 };
 
 export function LandingShell(props: Props) {
