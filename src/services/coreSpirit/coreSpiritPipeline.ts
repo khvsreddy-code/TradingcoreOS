@@ -12,6 +12,8 @@ import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 
+export type { CoreSpiritCompileResult };
+
 export function normalizeCoreSpirit(source: string) { return normalizeCoreSpiritSource(source); }
 export function parseCoreSpirit(source: string) { return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse(); }
 export function parseCoreSpiritDetailed(source: string) {
