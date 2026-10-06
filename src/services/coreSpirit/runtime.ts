@@ -16,6 +16,7 @@ import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './v
 import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
 import { ATRState, RSIState, VWAPSessionState } from './statefulIndicatorKernel';
+import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './quantKernels';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
@@ -104,6 +105,10 @@ export class CoreSpiritRuntime {
   private readonly rsiKernelSnapshots = new Map<string, RSIState>();
   private readonly atrKernelSnapshots = new Map<string, ATRState>();
   private readonly vwapKernelSnapshots = new Map<string, VWAPSessionState>();
+  private readonly betaKernels = new Map<string, RollingBetaState>();
+  private readonly betaKernelSnapshots = new Map<string, RollingBetaState>();
+  private readonly trendStrengthKernels = new Map<string, RollingCorrelationState>();
+  private readonly trendStrengthKernelSnapshots = new Map<string, RollingCorrelationState>();
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
@@ -174,6 +179,8 @@ export class CoreSpiritRuntime {
     this.realtimeTransactionId = undefined;
     this.rsiKernels.clear(); this.atrKernels.clear(); this.vwapKernels.clear();
     this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
+    this.betaKernels.clear(); this.betaKernelSnapshots.clear();
+    this.trendStrengthKernels.clear(); this.trendStrengthKernelSnapshots.clear();
     this.resetFusedSeriesCursors();
   }
   getState(options: { clone?: boolean } = {}): CoreSpiritRuntimeState {
@@ -253,6 +260,8 @@ export class CoreSpiritRuntime {
       for (const [key, snapshot] of this.rsiKernelSnapshots) this.rsiKernels.get(key)?.copyFrom(snapshot);
       for (const [key, snapshot] of this.atrKernelSnapshots) this.atrKernels.get(key)?.copyFrom(snapshot);
       for (const [key, snapshot] of this.vwapKernelSnapshots) this.vwapKernels.get(key)?.copyFrom(snapshot);
+      for (const [key, snapshot] of this.betaKernelSnapshots) this.betaKernels.get(key)?.copyFrom(snapshot);
+      for (const [key, snapshot] of this.trendStrengthKernelSnapshots) this.trendStrengthKernels.get(key)?.copyFrom(snapshot);
       this.history[this.history.length - 1] = normalized;
       this.columnarHistory.replaceLast(normalized);
     } else {
@@ -283,6 +292,14 @@ export class CoreSpiritRuntime {
       for (const [key, cursor] of this.vwapKernels) {
         const snapshot = this.vwapKernelSnapshots.get(key);
         if (snapshot) snapshot.copyFrom(cursor); else this.vwapKernelSnapshots.set(key, cursor.clone());
+      }
+      for (const [key, kernel] of this.betaKernels) {
+        const snapshot = this.betaKernelSnapshots.get(key);
+        if (snapshot) snapshot.copyFrom(kernel); else this.betaKernelSnapshots.set(key, kernel.clone());
+      }
+      for (const [key, kernel] of this.trendStrengthKernels) {
+        const snapshot = this.trendStrengthKernelSnapshots.get(key);
+        if (snapshot) snapshot.copyFrom(kernel); else this.trendStrengthKernelSnapshots.set(key, kernel.clone());
       }
       this.history.push(normalized);
       this.columnarHistory.append(normalized);
@@ -371,6 +388,7 @@ export class CoreSpiritRuntime {
     this.fusedCursorSnapshots.clear();
     this.directKernelSnapshots.clear();
     this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
+    this.betaKernelSnapshots.clear(); this.trendStrengthKernelSnapshots.clear();
     this.lastBarWasRealtime = false;
   }
 
@@ -395,6 +413,7 @@ export class CoreSpiritRuntime {
     this.fusedCursorSnapshots.clear();
     this.directKernelSnapshots.clear();
     this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
+    this.betaKernelSnapshots.clear(); this.trendStrengthKernelSnapshots.clear();
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
     this.lastDirtyPlan=undefined;
@@ -722,6 +741,52 @@ export class CoreSpiritRuntime {
     if (name==='toNumber'||name==='toPrice'||name==='toVolume'||name==='toTime'||name==='toDuration'||name==='toCurrency') return finish(Number(args[0]));
     if (name==='sqrt') return finish(Math.sqrt(Number(args[0])));
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
+    if(name==='returns'){
+      const ref=args[0];
+      let current=Number.NaN;
+      let previous=Number.NaN;
+      const objectRef=ref && typeof ref==='object' ? ref as Record<string,unknown> : undefined;
+      const symbol=objectRef?.kind==='market' ? String(objectRef.symbol ?? this.executionContext.symbol) : this.executionContext.symbol;
+      const timeframe=objectRef?.kind==='market' ? String(objectRef.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
+      if(objectRef?.kind==='market' && this.dataResolver?.requestAt){
+        const ctx:CoreSpiritDataResolutionContext={
+          asOfTimestamp:this.toEpoch(bar.timestamp),
+          baseSymbol:this.executionContext.symbol,
+          baseTimeframe:this.executionContext.timeframe,
+          executionMode:this.executionContext.mode,
+          revision:this.state.barState.revision,
+          alignment:'last-confirmed',
+        };
+        const now=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:0},ctx) as any;
+        const prior=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:1},ctx) as any;
+        current=Number(now?.value ?? now ?? Number.NaN);
+        previous=Number(prior?.value ?? prior ?? Number.NaN);
+      }else{
+        current=Number(bars[index]?.close ?? Number.NaN);
+        previous=Number(bars[Math.max(0,index-1)]?.close ?? Number.NaN);
+      }
+      if(!Number.isFinite(current)||!Number.isFinite(previous)||previous===0)return finish(null);
+      return finish(current/previous-1);
+    }
+    if(name==='beta'){
+      const x=Number(args[0]), y=Number(args[1]), period=Math.max(2,Math.floor(Number(args[2] ?? 252)));
+      if(!Number.isFinite(x)||!Number.isFinite(y))return finish(null);
+      const key=`beta:${callKey}:${period}`;
+      let kernel=this.betaKernels.get(key);
+      if(!kernel){kernel=new RollingBetaState(period);this.betaKernels.set(key,kernel);}
+      const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
+      return finish(kernel.update(x,y,mode));
+    }
+    if(name==='trendStrength'){
+      const value=Number(args[0]), period=Math.max(2,Math.floor(Number(args[1] ?? 50)));
+      if(!Number.isFinite(value))return finish(null);
+      const key=`trend:${callKey}:${period}`;
+      let kernel=this.trendStrengthKernels.get(key);
+      if(!kernel){kernel=new RollingCorrelationState(period);this.trendStrengthKernels.set(key,kernel);}
+      const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
+      return finish(kernel.update(value,mode));
+    }
+    if(name==='regimeDetect')return finish(detectQuantRegime(Number(args[0]),Number(args[1]),Number(args[2] ?? 0.02)));
     if (name==='crossover'||name==='crossunder') {
       const a=Number(args[0]), b=Number(args[1]);
       const previous=this.crossState[callKey];
