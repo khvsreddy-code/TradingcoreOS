@@ -31,6 +31,7 @@ export type ChartPerformanceSnapshot = {
   tickToRenderP95Ms: number;
   fullSeriesRewriteCount: number;
   formingBarReplaceLastCount: number;
+  indicatorIncrementalUpdateCount: number;
   computeCoalescedTicks: number;
   stageMs: Readonly<{ transport:number; compute:number; patch:number; renderer:number; frame:number }>;
 };
@@ -71,6 +72,7 @@ type MutableMetrics = {
   lastPacketAtForLatency: number;
   fullSeriesRewriteCount: number;
   formingBarReplaceLastCount: number;
+  indicatorIncrementalUpdateCount: number;
   stageMs: { transport:number; compute:number; patch:number; renderer:number; frame:number };
 };
 
@@ -157,6 +159,10 @@ class ChartPerformanceTelemetry {
     this.entry(key).formingBarReplaceLastCount += 1;
   }
 
+  recordIndicatorIncrementalUpdate(key: string): void {
+    this.entry(key).indicatorIncrementalUpdateCount += 1;
+  }
+
   private recordSample(
     samples: Float64Array,
     metrics: MutableMetrics,
@@ -221,7 +227,7 @@ class ChartPerformanceTelemetry {
       firstPacketAt:0, lastPacketAt:0, computeUpdates:0, renderUpdates:0, computeCoalescedTicks:0, packetsAtLastCompute:0,
       tickToComputeSamples:new Float64Array(SAMPLE_CAPACITY), tickToPatchSamples:new Float64Array(SAMPLE_CAPACITY), tickToRenderSamples:new Float64Array(SAMPLE_CAPACITY),
       tickToComputeCount:0, tickToPatchCount:0, tickToRenderCount:0, tickToComputeCursor:0, tickToPatchCursor:0, tickToRenderCursor:0, lastPacketAtForLatency:0,
-      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0},
+      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0},
     };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     const elapsedMs = m.firstPacketAt && m.lastPacketAt ? Math.max(1, m.lastPacketAt - m.firstPacketAt) : 0;
@@ -259,6 +265,7 @@ class ChartPerformanceTelemetry {
       tickToRenderP95Ms: sampleP95(m.tickToRenderSamples, m.tickToRenderCount, m.tickToRenderCursor),
       fullSeriesRewriteCount: m.fullSeriesRewriteCount,
       formingBarReplaceLastCount: m.formingBarReplaceLastCount,
+      indicatorIncrementalUpdateCount: m.indicatorIncrementalUpdateCount,
       computeCoalescedTicks: m.computeCoalescedTicks,
       stageMs: Object.freeze({ ...m.stageMs }),
     };
