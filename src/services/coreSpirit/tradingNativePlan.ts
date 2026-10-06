@@ -58,7 +58,7 @@ export type CoreSpiritComputeClass =
 export type CoreSpiritTradingNativePlan = Readonly<{
   version:1;
   dataDependencies:readonly CoreSpiritDataDependency[];
-  batches:readonly Readonly<{ batchKey:string; dependencyIds:readonly string[]; requestCount:number }>;
+  batches:readonly Readonly<{ batchKey:string; dependencyIds:readonly string[]; requestCount:number }>[];
   eventTriggers:readonly CoreSpiritEventTrigger[];
   computeClasses:readonly CoreSpiritComputeClass[];
   multiSymbol:boolean;
