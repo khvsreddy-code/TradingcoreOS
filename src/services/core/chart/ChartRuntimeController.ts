@@ -86,7 +86,7 @@ export type ChartRuntimeControllerDeps={
 
 export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
   const lifecycle:Ref<ChartLifecycle>={current:new ChartLifecycle()};
-  const chartUpdateScheduler=new ChartUpdateScheduler();
+  const chartUpdateScheduler:Ref<ChartUpdateScheduler>={current:new ChartUpdateScheduler()};
   const calculationEngine=new RealtimeCalculationEngine();
   const visibleLogicalRangeRef:Ref<{from:number;to:number}|null>={current:null};
 
@@ -162,7 +162,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
 
       const realtimeController=createChartRealtimeController({
         chart:deps.chart,candle:deps.candle,candles:deps.candles,latestTick:deps.latestTick,dataRevisionRef:deps.dataRevisionRef,
-        rendererController:deps.rendererController,chartDataPlane:deps.chartDataPlane,chartUpdateScheduler,calculationEngine,
+        rendererController:deps.rendererController,chartDataPlane:deps.chartDataPlane,chartUpdateScheduler:chartUpdateScheduler.current,calculationEngine,
         candleAppearanceRef:deps.appearanceRef,chartStore:deps.chartStore,brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,
         timeframe:deps.timeframe,chartMarketKey:chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey),computeIntervalMs:50,
         onLegacyIndicatorTick:(data,bucketChanged)=>{
