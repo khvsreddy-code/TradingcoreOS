@@ -1,3 +1,8 @@
+/**
+ * Compatibility boundary for the legacy chart-api surface.
+ * New TCO integrations should consume Vela's native ports/models/renderer directly;
+ * this module exists only where an older TradingCore caller still needs the facade shape.
+ */
 import { NativeRenderer } from '../../../../vendor/vela/src/renderers/native/NativeRenderer';
 import type { IndicatorRenderHandle, ClickEvent, CrosshairEvent, VisibleRange } from '../../../../vendor/vela/src/core/ports/IChartRenderer';
 import type { Unsubscribe } from '../../../../vendor/vela/src/core/util/types';
