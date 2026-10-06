@@ -275,7 +275,7 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       break;
   }
 
-  const asserted = annotatedSafety(node.annotations ?? []);
+  const asserted = annotatedSafety(nodeAnnotations(node));
   return {
     causality: asserted.causality === 'causal' ? inferred.causality : asserted.causality,
     lookahead: asserted.lookahead === 'false' ? inferred.lookahead : asserted.lookahead,
@@ -292,7 +292,7 @@ function validateAssertions(
   node: CoreSpiritAstNode,
   inferred: Safety,
 ): { warnings:string[]; errors:string[] } {
-  const annotations=node.annotations ?? [];
+  const annotations=nodeAnnotations(node);
   const warnings:string[]=[];
   const errors:string[]=[];
   const at = node.span ? ` at ${node.span.line}:${node.span.column}` : '';
