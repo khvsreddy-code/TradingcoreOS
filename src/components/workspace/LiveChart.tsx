@@ -297,7 +297,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       if(dead||!lifecycle.current.isCurrent(generation))return;
       const snapshot=event?.snapshot as ChartDataPlaneSnapshot|undefined;if(!snapshot)return;
       latestTick.current=snapshot.latestTick;
-       setHistoryLoading(snapshot.historyLoading||snapshot.olderHistoryLoading);
+      chartStore.publishMarketSnapshot({type:event.type,snapshot,error:event.error});
+      setHistoryLoading(snapshot.historyLoading||snapshot.olderHistoryLoading);
       if(event.type==='status'){
         if(event.status==='loading')publishLifecycle('loading');
         if(event.status==='error'&&!snapshot.candles.length){setError(\`History unavailable for \${resolvedInstrumentKey} · \${CHART_TIMEFRAME_INTERVALS[timeframe]||timeframe} · \${event.error||'Historical candles unavailable'}\`);publishLifecycle('error');}
