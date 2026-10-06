@@ -59,7 +59,7 @@ function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
   const shared = value.sharedSeries as CoreSpiritSharedSeriesDescriptor | undefined;
   const sharedOutputs = shared ? materializeSharedSeriesOutput(shared) : [];
   return {
-    outputs: requireCoreSpiritOutputs([...(value.outputs ?? []), ...sharedOutputs]),
+    outputs: requireCoreSpiritOutputs([...(Array.isArray(value.outputs) ? value.outputs : []), ...sharedOutputs]),
     diagnostics,
     state: value.state,
   };
@@ -120,7 +120,6 @@ export class CoreSpiritWorkerPool {
       const contextKey=options?.contextKey || sourceId;
       this.queue.push({
         artifact:artifact as CoreSpiritExecutableArtifact,
-        source:source || '',
         sourceId,
         contextKey,
         bars,
