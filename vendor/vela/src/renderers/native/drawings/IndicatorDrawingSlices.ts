@@ -185,7 +185,7 @@ export class IndicatorDrawingSlices {
  * (user drawings stay on top of engine output at the same slot).
  */
 export function mergeSlices(
-    indicator: ReadonlyMap<string, DrawingSlice[]>,
+    indicator: ReadonlyMap<string, ReadonlyArray<DrawingSlice>>,
     user: ReadonlyMap<string, ReadonlyArray<DrawingSlice>>,
 ): ReadonlyMap<string, DrawingSlice[]> {
     const out = new Map<string, DrawingSlice[]>();
