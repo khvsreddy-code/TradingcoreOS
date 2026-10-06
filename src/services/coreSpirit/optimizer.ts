@@ -150,7 +150,10 @@ function info(instruction: CoreSpiritIrInstruction) {
   if (instruction.op === 'loadSeries') return { pure:true,deterministic:true,stateful:false,effectful:false,cacheable:true,work:1 };
   if (instruction.op === 'unary') return { pure:true,deterministic:true,stateful:false,effectful:false,cacheable:true,work:0.75 };
   if (instruction.op === 'binary') return { pure:true,deterministic:true,stateful:false,effectful:false,cacheable:true,work:1 };
-  if (instruction.op === 'index') return { pure:true,deterministic:true,stateful:false,effectful:false,cacheable:true,work:1.25 };\n  if (instruction.op === 'loadState') return { pure:false,deterministic:true,stateful:true,effectful:false,cacheable:false,work:0.5 };\n  if (instruction.op === 'setState') return { pure:false,deterministic:true,stateful:true,effectful:true,cacheable:false,work:0.25 };\n  if (instruction.op === 'eventGate') return { pure:false,deterministic:true,stateful:false,effectful:true,cacheable:false,work:0.1 };
+  if (instruction.op === 'index') return { pure:true,deterministic:true,stateful:false,effectful:false,cacheable:true,work:1.25 };
+  if (instruction.op === 'loadState') return { pure:false,deterministic:true,stateful:true,effectful:false,cacheable:false,work:0.5 };
+  if (instruction.op === 'setState') return { pure:false,deterministic:true,stateful:true,effectful:true,cacheable:false,work:0.25 };
+  if (instruction.op === 'eventGate') return { pure:false,deterministic:true,stateful:false,effectful:true,cacheable:false,work:0.1 };
   if (instruction.op === 'setLocal') return { pure:false,deterministic:true,stateful:true,effectful:true,cacheable:false,work:0.25 };
   if (instruction.op === 'jump' || instruction.op === 'jumpIfFalse') return { pure:false,deterministic:true,stateful:false,effectful:true,cacheable:false,work:0.1 };
   if (instruction.op === 'emit') return { pure:false,deterministic:true,stateful:false,effectful:true,cacheable:false,work:0.5 };
