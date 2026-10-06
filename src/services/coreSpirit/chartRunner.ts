@@ -1,6 +1,6 @@
-import { compileCoreSpirit } from './coreSpiritPipeline';
 import type { CoreSpiritMarketBar } from './marketData';
 import { coreSpiritWorkerPool, type CoreSpiritWorkerRunResult } from './coreSpiritWorkerPool';
+import { loadOrCompileCoreSpiritArtifact } from './artifactCache';
 
 export type WorkerResult = CoreSpiritWorkerRunResult;
 
@@ -11,9 +11,10 @@ export type CoreSpiritWorkerRunOptions = {
 };
 
 /**
- * Compile once on the application side, then address the persistent worker
- * context by artifactId + datasetVersion. Market data is placed in a shared
- * typed buffer when the page is cross-origin isolated.
+ * Resolve a backend-neutral executable artifact from the hierarchical cache,
+ * persist it in IndexedDB when available, then address the persistent worker
+ * context using artifactId + datasetVersion. Source parsing/semantic analysis
+ * is therefore removed from the normal reopen path.
  */
 export async function runCoreSpiritInWorker(
   source: string,
@@ -21,12 +22,12 @@ export async function runCoreSpiritInWorker(
   sourceId: string,
   options: CoreSpiritWorkerRunOptions = {},
 ): Promise<WorkerResult> {
-  const compiled = compileCoreSpirit(source, sourceId);
-  const error = compiled.diagnostics?.find(diagnostic => diagnostic.severity === 'error');
-  if (!compiled.artifact || error) throw new Error(error?.message || 'CoreSpirit compilation failed');
+  const artifact = await loadOrCompileCoreSpiritArtifact(source, sourceId, {
+    backend:'worker-vm',
+  });
 
   return coreSpiritWorkerPool.runArtifact(
-    compiled.artifact,
+    artifact,
     undefined,
     bars,
     sourceId,
