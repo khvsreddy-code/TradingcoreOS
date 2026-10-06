@@ -356,11 +356,19 @@ export class CoreSpiritChartOutputController {
       return;
     }
 
-    patchable.patch?.({
-      type: previousEnd >= prefix ? 'replaceRange' : 'append',
-      ...(previousEnd >= prefix ? {from:prefix,to:previousEnd} : {}),
-      values: current.slice(prefix, currentEnd + 1),
-    });
+    if (previousEnd >= prefix) {
+      patchable.patch?.({
+        type:'replaceRange',
+        from:prefix,
+        to:previousEnd,
+        values:current.slice(prefix, currentEnd + 1),
+      });
+    } else {
+      patchable.patch?.({
+        type:'append',
+        values:current.slice(prefix, currentEnd + 1),
+      });
+    }
     if (!patchable.patch) series.setData(current as any);
   }
 
