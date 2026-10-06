@@ -356,6 +356,13 @@ export function normalizeCoreSpiritSource(source: string): string {
       continue;
     }
 
+    const bareWhen = trimmed.match(/^when\s+(.+?)$/i);
+    if (bareWhen && !trimmed.endsWith(':')) {
+      out.push(`if (${whenCondition(bareWhen[1], modelNames)}) {`);
+      whenBlocks.push(indent);
+      continue;
+    }
+
     // SHOW is one semantic concept even when multiple expressions are listed.
     if (/^show\b/i.test(trimmed)) {
       const shown = transformShow(raw, modelNames);
