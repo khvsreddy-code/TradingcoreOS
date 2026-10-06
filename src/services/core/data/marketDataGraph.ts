@@ -202,7 +202,7 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
 
   request=(request:CoreSpiritDataRequest)=>this.valueAt(request);
   requestAt=(request:CoreSpiritDataRequest,ctx:CoreSpiritDataResolutionContext)=>this.valueAt(request,ctx);
-  requestBatch=(requests:CoreSpiritDataRequest[])=>requests.map(request=>this.valueAt(request));
+  requestBatch=(requests:CoreSpiritDataRequest[],ctx?:CoreSpiritDataResolutionContext)=>requests.map(request=>this.valueAt(request,ctx));
   series=(request:CoreSpiritDataRequest,ctx?:CoreSpiritDataResolutionContext)=>{
     const node=this.pickNode(request.symbol,request.timeframe);
     if(!node)return [];
