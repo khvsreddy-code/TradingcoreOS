@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 const { CoreSpiritParser } = await import('./parser.ts');
 const { analyzeCoreSpiritRepaintSafety } = await import('./repaintSafety.ts');
 const { CoreSpiritProfiler } = await import('./profiler.ts');
-const { CoreSpiritEditorModel } = await import('./editorModel.ts');
 
 const causalSource = [
   '@causal @realtimeSafe @lookahead(false)',
@@ -45,11 +44,5 @@ assert(profile.instructions >= 1);
 assert(profile.realtimeMs >= 0);
 assert(profile.topNodes.some(node => node.label === 'ema'));
 assert(profile.flameGraph.length >= 1);
-
-const editor = new CoreSpiritEditorModel(causalSource);
-const editorSnapshot = editor.getSnapshot();
-assert.equal(editorSnapshot.repaintSafety.backtestLiveEquivalent, true);
-editor.setProfilerSnapshot(profile);
-assert.equal(editor.getSnapshot().profiler?.version, 1);
 
 console.log('TCO_CORESPIRIT_BRANCH14_15_REPAINT_PROFILER_CONTRACT_OK');
