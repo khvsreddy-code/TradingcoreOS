@@ -99,6 +99,20 @@ export class OAuthService {
 
       await BrokerRepository.saveSession(session);
 
+      // Never report OAuth success until the durable server-side session can
+      // immediately be read back. This prevents a popup from saying "success"
+      // when the broker token only existed in the current server invocation.
+      const persisted = await BrokerRepository.getSession(adapter.brokerId, userId);
+      if (
+        !persisted ||
+        persisted.userId !== userId ||
+        persisted.brokerId.toLowerCase() !== adapter.brokerId.toLowerCase() ||
+        persisted.status !== 'Connected' ||
+        persisted.accessTokenEncrypted?.ciphertext !== encryptedAccess.ciphertext
+      ) {
+        throw new Error('Broker authorization completed, but the encrypted broker session could not be verified in durable storage.');
+      }
+
       return { success: true, session };
     } catch (err: any) {
       console.error(`OAuthService callback error for ${brokerId}:`, err);
