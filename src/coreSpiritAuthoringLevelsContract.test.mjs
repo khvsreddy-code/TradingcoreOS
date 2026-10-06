@@ -56,7 +56,7 @@ assert.equal(plan.backtests[0].model,'alpha');
 assert.equal(plan.backtests[0].from,'2018-01-01');
 assert.equal(plan.backtests[0].to,'2026-01-01');
 assert.deepEqual(plan.backtests[0].evaluations,['sharpe','sortino','max_drawdown','turnover','hit_rate','profit_factor','exposure']);
-assert.deepEqual(plan.modelSpecs[0].features,['z','beta','regime','zscore(volume, 100)']);
+assert.deepEqual(plan.modelSpecs[0].features,['z','beta','regime','volume.zscore(100)']);
 assert.equal(plan.modelSpecs[0].target,'forward_return(20)');
 
 const result=compileCoreSpirit(source,'authoring-levels-contract');
