@@ -6,7 +6,6 @@ import type { OHLCV } from '../model/ohlcv';
 import type { ColumnarBars, ColumnarBarUpdate, ColumnarTimeUnit } from '../model/columnar-bars';
 import type { IndicatorModel } from '../model/indicator';
 import type { ValuePatch, SeriesValueDelta, DirtyRange, ScenePatch } from '../model/patch';
-import { applyScenePatch } from '../model/scenePatch';
 import { ColumnarHistoryTape } from '../model/ColumnarHistoryTape';
 import { isLineLikeSeries } from '../model/series';
 import type { SeriesPoint, MarkerPoint } from '../model/series';
@@ -2406,7 +2405,6 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     const first = !record.announced;
                     const cause = record.pendingCause ?? 'history';
                     for (const patch of patches) {
-                        applyScenePatch(record.model, patch);
                         this.renderer.updateIndicator(record.renderHandle, patch);
                     }
                     if (record.loading) this.setLoading(record, false);
