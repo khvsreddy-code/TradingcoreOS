@@ -234,10 +234,45 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
   let out = source;
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
-  out = out.replace(/\bregime\.detect\s*\(/g, 'regimeDetect(');
-  out = out.replace(/\bvolatility\s*=\s*/gi, '');
-  out = out.replace(/\btrend\s*=\s*/gi, '');
-  return out;
+
+  const marker=/\bregime\.detect\s*\(/gi;
+  let cursor=0;
+  let rebuilt='';
+  for(;;){
+    const match=marker.exec(out);
+    if(!match){ rebuilt+=out.slice(cursor); break; }
+    const open=out.indexOf('(',match.index);
+    if(open<0){ rebuilt+=out.slice(cursor); break; }
+
+    let depth=0;
+    let quote:'"'|"'"|null=null;
+    let escaped=false;
+    let close=-1;
+    for(let i=open;i<out.length;i+=1){
+      const ch=out[i];
+      if(quote){
+        if(escaped){escaped=false;continue;}
+        if(ch==='\\'){escaped=true;continue;}
+        if(ch===quote)quote=null;
+        continue;
+      }
+      if(ch==='"'||ch==="'"){quote=ch;continue;}
+      if(ch==='(')depth+=1;
+      else if(ch===')'){
+        depth-=1;
+        if(depth===0){close=i;break;}
+      }
+    }
+    if(close<0){rebuilt+=out.slice(cursor);break;}
+
+    const inner=out.slice(open+1,close);
+    const parts=splitTopLevel(inner);
+    const values=parts.map(part=>part.replace(/^\s*(?:volatility|trend)\s*=\s*/i,'').trim());
+    rebuilt+=out.slice(cursor,match.index)+`regimeDetect(${values.join(', ')})`;
+    cursor=close+1;
+    marker.lastIndex=cursor;
+  }
+  return rebuilt;
 }
 
 export function normalizeCoreSpiritSource(source: string): string {
