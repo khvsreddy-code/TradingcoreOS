@@ -106,5 +106,6 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
  };
  const clearDrawings=()=>{const count=drawingStore.clear('user');drawingPoints=[];save();if(count)coreEventBus.emit('drawing.cleared',{timestamp:Date.now(),owner:'user'});renderDrawings();};
  const selectDrawingTool=(tool:DrawingTool)=>{drawingTool=tool;drawingPoints=[];onToolChange?.(tool);};
- return {store:drawingStore,api:drawingApi,points:drawingPoints,getDrawings:drawings,renderDrawings,commitDrawing,clearDrawings,selectDrawingTool,save,getTool:()=>drawingTool};
+ const dispose=()=>{drawingSeries.forEach(series=>{try{chart.current?.removeSeries(series)}catch{}});drawingSeries=[];drawingPoints=[];};
+ return {store:drawingStore,api:drawingApi,points:drawingPoints,getDrawings:drawings,renderDrawings,commitDrawing,clearDrawings,selectDrawingTool,save,getTool:()=>drawingTool,dispose};
 }
