@@ -29,6 +29,7 @@ function epochMs(value: unknown): number {
  * ring without allocating tick objects.
  */
 export class TickRingBuffer {
+  readonly capacity: number;
   private readonly timestamp: Float64Array;
   private readonly price: Float64Array;
   private readonly quantity: Float64Array;
@@ -39,8 +40,9 @@ export class TickRingBuffer {
   private count = 0;
   private sequence = 0;
 
-  constructor(readonly capacity = 8192, private readonly instrumentKey = '') {
+  constructor(capacity = 8192, private readonly instrumentKey = '') {
     const size = Math.max(256, Math.floor(capacity));
+    this.capacity = size;
     this.timestamp = new Float64Array(size);
     this.price = new Float64Array(size);
     this.quantity = new Float64Array(size);
