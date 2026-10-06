@@ -58,15 +58,23 @@ const appClosure = closure([entryKey]);
 const routeRoots = {
   landing: keyFor('src/pages/LandingPage.tsx'),
   login: keyFor('src/pages/LoginPage.tsx'),
-  dashboard: keyFor('src/pages/DashboardPage.tsx'),
+  workspace: keyFor('src/pages/DashboardPage.tsx'),
   live: keyFor('src/LiveTradingTerminal.tsx'),
+  corespiritEditor: keyFor('src/pages/CoreSpiritEditorPage.tsx'),
 };
 
 const budgets = {
   landing: Number(process.env.TCO_MAX_LANDING_GZIP_KB || 320),
   login: Number(process.env.TCO_MAX_LOGIN_GZIP_KB || 260),
-  dashboard: Number(process.env.TCO_MAX_DASHBOARD_GZIP_KB || 400),
+  workspace: Number(process.env.TCO_MAX_WORKSPACE_GZIP_KB || 400),
   live: Number(process.env.TCO_MAX_LIVE_GZIP_KB || 650),
+  corespiritEditor: Number(process.env.TCO_MAX_CORESPIRIT_EDITOR_GZIP_KB || 1200),
+};
+
+const targets = {
+  landing: Number(process.env.TCO_TARGET_LANDING_GZIP_KB || 200),
+  workspace: Number(process.env.TCO_TARGET_WORKSPACE_GZIP_KB || 450),
+  live: Number(process.env.TCO_TARGET_LIVE_GZIP_KB || 650),
 };
 
 console.log('Initial route JavaScript budget report:');
@@ -80,9 +88,26 @@ for (const [route, rootKey] of Object.entries(routeRoots)) {
   const totals = gzipKbFor(keys);
   console.log(`  ${route}: ${totals.gzipKb.toFixed(1)} KB gzip across ${keys.size} chunks`);
   const budget = budgets[route];
+  const target = targets[route];
+  if (target && totals.gzipKb > target) {
+    console.log(`    target: ${target} KB gzip (currently above target; hard budget remains ${budget} KB)`);
+  }
   if (totals.gzipKb > budget) {
     throw new Error(`${route} initial JS is ${totals.gzipKb.toFixed(1)} KB gzip; budget is ${budget} KB.`);
   }
 }
 
 console.log(`Entry shell: ${gzipKbFor(appClosure).gzipKb.toFixed(1)} KB gzip across ${appClosure.size} chunks`);
+
+
+const compilerChunk = entries.find(([, value]) => String(value?.file || '').includes('tco-corespirit-compiler'));
+const landingClosure = routeRoots.landing ? closure([entryKey, routeRoots.landing]) : new Set();
+const workspaceClosure = routeRoots.workspace ? closure([entryKey, routeRoots.workspace]) : new Set();
+if (compilerChunk) {
+  const compilerKey = compilerChunk[0];
+  if (landingClosure.has(compilerKey)) throw new Error('CoreSpirit compiler chunk leaked into landing closure.');
+  if (workspaceClosure.has(compilerKey)) throw new Error('CoreSpirit compiler chunk leaked into dashboard/workspace closure.');
+  console.log('CoreSpirit compiler isolation: OK — not present in landing/workspace initial closures.');
+} else {
+  console.log('CoreSpirit compiler isolation: compiler chunk not emitted in this build.');
+}
