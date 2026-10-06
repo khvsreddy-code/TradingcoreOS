@@ -46,7 +46,7 @@ export type ChartDataPlaneSnapshot = Readonly<{
   olderHistoryLoading: boolean;
 }>;
 
-type DataPlaneEvent =
+export type DataPlaneEvent =
   | { type: 'snapshot'; reason: 'cache' | 'history' | 'older-history'; snapshot: ChartDataPlaneSnapshot; olderAdded?: number; requestedLimit?: number }
   | { type: 'tick'; bucketChanged: boolean; snapshot: ChartDataPlaneSnapshot }
   | { type: 'status'; status: 'loading' | 'ready' | 'error'; error?: string; snapshot: ChartDataPlaneSnapshot };
