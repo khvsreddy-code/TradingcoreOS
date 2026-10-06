@@ -60,7 +60,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const predictionLines=useRef<any[]>([]);
   const coreSpiritOutput=useRef<CoreSpiritChartOutputController|null>(null);
   const coreSpiritRunId=useRef(0);
-  const chartStore=useMemo(()=>acquireChartStore(chartDatasetKey),[chartDatasetKey]);
   const coreSpiritStore=useMemo(()=>new CoreSpiritStore(),[]);
   const coreSpiritState=useSyncExternalStore(
     listener=>coreSpiritStore.subscribe(listener),
@@ -96,6 +95,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
+  const chartStore=useMemo(()=>acquireChartStore(chartDatasetKey),[chartDatasetKey]);
   useEffect(()=>()=>releaseChartStore(chartDatasetKey),[chartDatasetKey]);
 
   const indicatorsRef=useRef(indicators); indicatorsRef.current=indicators;
