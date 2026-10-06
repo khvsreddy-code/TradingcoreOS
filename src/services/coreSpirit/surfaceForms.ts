@@ -234,10 +234,9 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
   let out = source;
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
-  out = out.replace(
-    /regime\.detect\s*\(\s*volatility\s*=\s*([\s\S]*?)\s*,\s*trend\s*=\s*([\s\S]*?)\)\s*\)/i,
-    'regimeDetect($1, $2)',
-  );
+  out = out.replace(/\bregime\.detect\s*\(/g, 'regimeDetect(');
+  out = out.replace(/\bvolatility\s*=\s*/gi, '');
+  out = out.replace(/\btrend\s*=\s*/gi, '');
   return out;
 }
 
@@ -368,10 +367,10 @@ export function normalizeCoreSpiritSource(source: string): string {
     }
 
     if (wrappers.length && wrappers[wrappers.length - 1].kind === 'model') {
-      if (/^(?:features|inputs?|outputs?|target|targets?)\s*:\s*$/i.test(trimmed)) continue;
-      if (/^use\s+(?:(?:python|cpp|rust|wasm|onnx|remote)\s+)?(?:"[^"]+"|'[^']+')\s*$/i.test(trimmed)) continue;
-      if (/^predict\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i.test(trimmed)) continue;
-      if (/^[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*(?:number|string|boolean|series<number>))?\s*(?:,\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*(?:number|string|boolean|series<number>))?)*$/i.test(trimmed)) continue;
+      // MODEL bodies are declarative research metadata. Their feature/target
+      // expressions are captured by languageConcepts/researchSurface and are not
+      // executable indicator statements.
+      continue;
     }
 
     // Dedicated WHEN concept: indentation/colon is only a source convenience.
