@@ -27,6 +27,6 @@ assert(storage.includes("from('workspace_layouts')"));
 assert(options.includes('SCROLL_EASE_DEFAULT_MS = 320'));
 assert(options.includes('AUTOSCALE_EASE_DEFAULT_MS = 260'));
 assert(options.includes('LIVE_BAR_EASE_DEFAULT_MS = 180'));
-assert(vite.includes("id.includes('motion')") && vite.includes("return 'vendor-react'"), 'Motion must share the React vendor chunk to avoid the createContext circular-chunk crash');
+assert(vite.includes("normalized.includes('motion')") && vite.includes("return 'vendor-react'"), 'Motion must share the React vendor chunk to avoid the createContext circular-chunk crash');
 assert(!vite.includes("return 'vendor-motion'"), 'Motion must not be emitted as an independent vendor chunk');
 console.log('TRADINGCORE_V124_FYERS_5K_MOTION_AND_STORAGE_CONTRACT_OK');
