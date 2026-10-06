@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShieldCheck,
@@ -24,7 +24,7 @@ import {
 import { BROKERS_CONFIG, BrokerItem } from '../constants/brokers';
 import { tradingCoreRuntime } from '../services/runtime/TradingCoreRuntime';
 import { BrokerOAuthService } from '../services/oauth/BrokerOAuthService';
-import { PopupManager } from '../services/oauth/PopupManager';
+import { BROKER_OAUTH_CHANNEL, PopupManager } from '../services/oauth/PopupManager';
 import { useAuth } from '../auth/hooks/useAuth';
 
 interface BrokerConnectionRequiredPageProps {
@@ -51,7 +51,50 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
   const [selectedBroker, setSelectedBroker] = useState<BrokerItem | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const oauthPollTimerRef = useRef<number | null>(null);
+  const oauthPollDeadlineRef = useRef(0);
+  const oauthCompletionInFlightRef = useRef(false);
 
+  const stopOAuthPolling = useCallback(() => {
+    if (oauthPollTimerRef.current !== null) {
+      window.clearInterval(oauthPollTimerRef.current);
+      oauthPollTimerRef.current = null;
+    }
+    oauthPollDeadlineRef.current = 0;
+  }, []);
+
+  const processOAuthCompletion = useCallback(async (authBrokerId: string) => {
+    const normalizedBrokerId = String(authBrokerId || '').toLowerCase();
+    if (!normalizedBrokerId || oauthCompletionInFlightRef.current) return;
+
+    oauthCompletionInFlightRef.current = true;
+    setIsConnecting(true);
+    setError(null);
+    PopupManager.closePopup();
+
+    try {
+      await tradingCoreRuntime.restoreBrokerConnections();
+      const connected = tradingCoreRuntime.getAllConnections().some((connection) =>
+        connection.brokerId.toLowerCase() === normalizedBrokerId
+      );
+
+      if (connected) {
+        stopOAuthPolling();
+        setIsConnecting(false);
+        setCurrentStep('verifying');
+        return;
+      }
+
+      // The callback can finish the database write just after the first restore
+      // request. Leave the short polling monitor running instead of trapping
+      // the UI in the "Connecting..." state.
+      oauthPollDeadlineRef.current = Date.now() + 45_000;
+    } catch (err: any) {
+      setError(err?.message || 'Error processing broker authorization.');
+    } finally {
+      oauthCompletionInFlightRef.current = false;
+    }
+  }, [stopOAuthPolling]);
 
   // Verification Sequence State
   const [checks, setChecks] = useState<VerificationCheck[]>([
@@ -89,47 +132,94 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
     return () => clearInterval(interval);
   }, [currentStep]);
 
-  // OAuth Popup Message Listener
+  // OAuth completion listener.
+  //
+  // We keep postMessage as the fast path, but the site intentionally uses
+  // COOP: same-origin for cross-origin isolation. That can sever window.opener
+  // after the popup visits the broker and returns to TradingCore. BroadcastChannel
+  // is the same-origin fallback that does not depend on the opener reference.
   useEffect(() => {
-    const handleOAuthMessage = async (event: MessageEvent) => {
+    const handleOAuthMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (
         event.data &&
         (event.data.type === 'TRADINGCORE_BROKER_CONNECTED' || event.data.type === 'TRADINGCORE_BROKER_OAUTH_SUCCESS')
       ) {
-        const authBrokerId = event.data.broker || event.data.brokerId;
-        setIsConnecting(true);
-        setError(null);
-        // The callback normally closes itself. Close the parent-owned popup
-        // handle as a safety net so the browser can never leave the OAuth
-        // window sitting on a TradingCore route.
-        PopupManager.closePopup();
-        try {
-          // The popup callback already exchanged and encrypted the broker token.
-          // Re-running five broker verification calls here was the main source of
-          // the long post-login pause. Confirm the persisted session with one
-          // authenticated session lookup instead.
-          await tradingCoreRuntime.restoreBrokerConnections();
-          const connected = tradingCoreRuntime.getAllConnections().some((connection) =>
-            connection.brokerId.toLowerCase() === String(authBrokerId || '').toLowerCase()
-          );
-          if (connected) {
-            setIsConnecting(false);
-            setCurrentStep('verifying');
-          } else {
-            setError('Broker authorization completed, but the TradingCore session could not be restored yet.');
-            setIsConnecting(false);
-          }
-        } catch (err: any) {
-          setError(err?.message || 'Error processing broker authorization message.');
-          setIsConnecting(false);
-        }
+        void processOAuthCompletion(event.data.broker || event.data.brokerId);
       }
     };
 
     window.addEventListener('message', handleOAuthMessage);
-    return () => window.removeEventListener('message', handleOAuthMessage);
-  }, []);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(BROKER_OAUTH_CHANNEL);
+      channel.addEventListener('message', (event) => {
+        const data = event.data;
+        if (
+          data &&
+          (data.type === 'TRADINGCORE_BROKER_CONNECTED' || data.type === 'TRADINGCORE_BROKER_OAUTH_SUCCESS')
+        ) {
+          void processOAuthCompletion(data.broker || data.brokerId);
+        }
+      });
+    } catch (channelError) {
+      console.warn('Broker OAuth BroadcastChannel unavailable; session polling remains active.', channelError);
+    }
+
+    return () => {
+      window.removeEventListener('message', handleOAuthMessage);
+      channel?.close();
+    };
+  }, [processOAuthCompletion]);
+
+  // Never leave the UI in an infinite "Connecting..." state. The broker callback
+  // persists the session server-side, so polling the authenticated session list
+  // is the final fallback when popup messaging is unavailable or lost.
+  useEffect(() => {
+    if (!isConnecting || !selectedBroker) {
+      stopOAuthPolling();
+      return;
+    }
+
+    const brokerId = selectedBroker.id.toLowerCase();
+    oauthPollDeadlineRef.current = Date.now() + 45_000;
+
+    const poll = async () => {
+      if (oauthCompletionInFlightRef.current) return;
+
+      try {
+        await tradingCoreRuntime.restoreBrokerConnections();
+        const connected = tradingCoreRuntime.getAllConnections().some((connection) =>
+          connection.brokerId.toLowerCase() === brokerId
+        );
+
+        if (connected) {
+          stopOAuthPolling();
+          setIsConnecting(false);
+          setCurrentStep('verifying');
+          return;
+        }
+      } catch {
+        // Keep polling. A transient session endpoint failure should not make a
+        // successful broker authorization look like a failed OAuth flow.
+      }
+
+      if (Date.now() >= oauthPollDeadlineRef.current) {
+        stopOAuthPolling();
+        setIsConnecting(false);
+        setError(
+          'Fyers authorization did not reach TradingCore within 45 seconds. ' +
+          'If the broker popup already closed successfully, click Connect Fyers again to retry.'
+        );
+      }
+    };
+
+    void poll();
+    oauthPollTimerRef.current = window.setInterval(() => void poll(), 1_000);
+
+    return stopOAuthPolling;
+  }, [isConnecting, selectedBroker, stopOAuthPolling]);
 
   const handleConnectOAuth = async (broker: BrokerItem) => {
     setIsConnecting(true);
@@ -141,6 +231,10 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
       if (!initResult.success) {
         setError(initResult.error || 'Failed to launch broker OAuth window.');
         setIsConnecting(false);
+      } else {
+        // The session monitor is intentionally independent of popup lifetime so
+        // COOP/opener changes cannot strand the parent page in the loading state.
+        setError(null);
       }
     } catch (e: any) {
       setError(e?.message || 'Failed to initiate broker OAuth popup.');
