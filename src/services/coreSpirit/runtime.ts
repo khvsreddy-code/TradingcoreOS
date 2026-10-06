@@ -682,6 +682,7 @@ export class CoreSpiritRuntime {
     if(name==='model') return finish({ __coreSpiritModelRef:true, modelName:String(args[0]??'') });
     if(name==='market') return finish({ kind:'market', symbol:String(args[0]??this.executionContext.symbol), timeframe:this.executionContext.timeframe });
     if(name==='timeframe') return finish({ kind:'timeframe', timeframe:String(args[0]??this.executionContext.timeframe) });
+    if(name==='series') return finish({ kind:'series', timeframe:String(args[0]??this.executionContext.timeframe) });
     if(name==='__market_timeframe') {
       const ref=args[0] as Record<string, unknown> | null | undefined;
       const timeframe=String(args[1] ?? this.executionContext.timeframe);
@@ -767,9 +768,9 @@ export class CoreSpiritRuntime {
       if (ref && typeof ref === 'object') {
         const r=ref as Record<string, unknown>;
         const kind=String(r.kind ?? '');
-        if (kind==='market' || kind==='timeframe') {
+        if (kind==='market' || kind==='timeframe' || kind==='series') {
           const symbol=kind==='market' ? String(r.symbol ?? this.executionContext.symbol) : this.executionContext.symbol;
-          const timeframe=kind==='timeframe' ? String(r.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
+          const timeframe=(kind==='timeframe' || kind==='series') ? String(r.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
           const field=member;
           if(field==='trade') return finish(this.dataResolver?.trade?.(symbol,timeframe) ?? null);
           if(field==='orderbook') return finish(this.dataResolver?.orderbook?.(symbol,timeframe) ?? null);
