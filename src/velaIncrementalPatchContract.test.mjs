@@ -21,8 +21,8 @@ assert(patch.includes('fillStyles?: FillStyleDelta[]'), 'missing fill style patc
 assert(native.includes('MutableColumnarBars'), 'native renderer lost mutable columnar ownership');
 assert(patchApplier.includes('function applyArrayDelta'), 'retained patch applier missing from shared scene patch module');
 assert(native.includes('applyScenePatch(model, patch)'), 'native renderer must route indicator deltas through retained patch applier');
-assert(native.includes("case 'replace-last'"), 'replace-last operation missing');
-assert(native.includes("case 'append'"), 'append operation missing');
+assert(patchApplier.includes("case 'replace-last'"), 'replace-last operation missing from shared retained patch applier');
+assert(patchApplier.includes("case 'append'"), 'append operation missing from shared retained patch applier');
 assert(engine.includes('modelToValuePatch(model, previousModel, record.pendingCause'), 'engine previous-model/cause seam missing');
 assert(engine.includes('incrementalSeriesDelta'), 'engine incremental diff missing');
 assert(engine.includes("op: 'replace-last'"), 'engine forming-bar delta missing');
