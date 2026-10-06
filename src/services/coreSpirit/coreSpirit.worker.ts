@@ -6,6 +6,7 @@ import {
 } from './sharedMarketBuffer';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
+import { artifactIdFor } from './artifactAbi';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 
@@ -90,7 +91,7 @@ function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirty
 function installArtifact(message:LoadArtifactMessage):void{
   if(!validateExecutableArtifact(message.artifact))throw new Error('Invalid CoreSpirit executable artifact');
   const current=contexts.get(message.contextKey);
-  if(current && current.artifact.checksum===message.artifact.checksum)return;
+  if(current && artifactIdFor(current.artifact)===artifactIdFor(message.artifact))return;
 
   const runtime=new CoreSpiritRuntime({
     sourceId:message.sourceId,
@@ -112,7 +113,7 @@ function installArtifact(message:LoadArtifactMessage):void{
 function getContext(message:RunMessage):WorkerContext{
   const context=contexts.get(message.contextKey);
   if(!context)throw new Error('CoreSpirit worker context is not loaded: '+message.contextKey);
-  if(context.artifact.checksum!==message.artifactId)throw new Error('CoreSpirit artifact/context mismatch for '+message.contextKey);
+  if(artifactIdFor(context.artifact)!==message.artifactId)throw new Error('CoreSpirit artifact/context mismatch for '+message.contextKey);
   return context;
 }
 
@@ -125,7 +126,7 @@ self.onmessage=(event:MessageEvent<Message>)=>{
         type:'loaded',
         requestId:message.requestId,
         contextKey:message.contextKey,
-        artifactId:message.artifact.checksum,
+        artifactId:artifactIdFor(message.artifact),
       });
       return;
     }
