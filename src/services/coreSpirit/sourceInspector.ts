@@ -1,5 +1,6 @@
 import { compileCoreSpirit, normalizeCoreSpirit } from './coreSpiritPipeline';
 import type { CoreSpiritGraphNode } from './semanticGraph';
+import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 
 export type CoreSpiritEffectAnnotation=Readonly<{
   sourceNodeId:string;line:number;column:number;end:number;kind:CoreSpiritGraphNode['kind'];name?:string;
@@ -8,7 +9,7 @@ export type CoreSpiritEffectAnnotation=Readonly<{
 }>;
 export type CoreSpiritSourceInspection=Readonly<{
   source:string;normalizedSource:string;diagnostics:ReturnType<typeof compileCoreSpirit>['diagnostics'];
-  effectAnnotations:CoreSpiritEffectAnnotation[];instructionCount:number;maxLookback:number;
+  effectAnnotations:CoreSpiritEffectAnnotation[];instructionCount:number;maxLookback:number;executionPlanVisualization?:CoreSpiritExecutionPlanVisualization;
 }>;
 export function inspectCoreSpiritSource(source:string,sourceId='inspector'):CoreSpiritSourceInspection{
   const original=String(source??''),normalizedSource=normalizeCoreSpirit(original),result=compileCoreSpirit(original,sourceId);
@@ -18,5 +19,5 @@ export function inspectCoreSpiritSource(source:string,sourceId='inspector'):Core
     effectful:n.effectful,estimatedCost:n.estimatedCost,latencyClass:n.latencyClass,
     stateful:n.stateful,deterministic:n.deterministic,parallelizable:n.parallelizable,
   })).sort((a,b)=>a.line-b.line||a.column-b.column||a.sourceNodeId.localeCompare(b.sourceNodeId));
-  return Object.freeze({source:original,normalizedSource,diagnostics:result.diagnostics,effectAnnotations,instructionCount:result.ir?.entry.instructions.length??0,maxLookback:result.ir?.maxLookback??0});
+  return Object.freeze({source:original,normalizedSource,diagnostics:result.diagnostics,effectAnnotations,instructionCount:result.ir?.entry.instructions.length??0,maxLookback:result.ir?.maxLookback??0,executionPlanVisualization:result.ir?.executionPlanVisualization});
 }
