@@ -40,11 +40,7 @@ class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, { error: Err
           <div className="text-[9px] font-mono uppercase tracking-widest text-[#ef4444]">Workspace route error</div>
           <h1 className="mt-2 text-xl font-bold">This module could not be loaded.</h1>
           <p className="mt-2 text-xs leading-5 text-[var(--tco-muted)]">{this.state.error.message || 'Unknown runtime error'}</p>
-          <button
-            type="button"
-            onClick={this.props.onHome}
-            className="mt-5 rounded-lg bg-[#3b82f6] px-4 py-2 text-xs font-bold text-[var(--tco-surface-2)]"
-          >
+          <button type="button" onClick={this.props.onHome} className="mt-5 rounded-lg bg-[#3b82f6] px-4 py-2 text-xs font-bold text-[var(--tco-surface-2)]">
             Back to Command Center
           </button>
         </div>
@@ -66,7 +62,7 @@ function routeFallback(message = 'Loading Workspace...', submessage = 'Preparing
 }
 
 function AppContent() {
-  const { user, loading: authLoading, isAuthenticated, authStep } = useAuth();
+  const { user, loading: authLoading, authStatus, isAuthenticated, authStep } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   void profile;
 
@@ -81,7 +77,10 @@ function AppContent() {
 
   const currentView = viewFromPath(pathname);
   const protectedEntry = currentView === 'app' || currentView === 'broker-connection';
-  const isSystemInitializing = authLoading || (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
+  const isSystemInitializing =
+    authLoading ||
+    authStatus === 'degraded' ||
+    (initialProtectedEntry.current && isAuthenticated && !brokerRestoreReady);
 
   useEffect(() => {
     const pop = () => setPathname(window.location.pathname);
@@ -90,15 +89,11 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || publicIndicatorRoute || !protectedEntry) return;
+    if (!isAuthenticated || publicIndicatorRoute || !protectedEntry || authStatus === 'degraded') return;
 
     let cancelled = false;
     setBrokerRestoreReady(false);
 
-    // Do not mark broker restoration ready merely because the runtime module has
-    // loaded. On a hard refresh the runtime is created before its async server
-    // session restore finishes; publishing "ready" at that point can render
-    // /live with an empty in-memory broker map and send the user to /broker.
     void loadTradingCoreRuntime()
       .then(async (nextRuntime) => {
         if (cancelled) return;
@@ -106,8 +101,8 @@ function AppContent() {
         try {
           await nextRuntime.restoreBrokerConnections();
         } catch {
-          // The UI remains deterministic: no broker is assumed connected when
-          // the server-side restore could not be completed.
+          // Keep broker readiness deterministic: no broker is assumed connected
+          // when durable restoration cannot be confirmed.
         }
         if (!cancelled) {
           setHasConnectedBroker(nextRuntime.hasConnectedBroker());
@@ -122,7 +117,7 @@ function AppContent() {
       });
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, user?.id, publicIndicatorRoute, protectedEntry]);
+  }, [isAuthenticated, user?.id, authStatus, publicIndicatorRoute, protectedEntry]);
 
   useEffect(() => {
     if (!runtime) return;
@@ -136,7 +131,9 @@ function AppContent() {
   useEffect(() => {
     const isBrokerCallbackRoute = pathname.startsWith('/auth/broker-callback');
     if (publicIndicatorRoute || isBrokerCallbackRoute) return;
-    if (authLoading || (initialProtectedEntry.current && !brokerRestoreReady)) return;
+    // A degraded auth state is deliberately non-redirecting. The session may
+    // still be locally persisted and recoverable after a transient outage.
+    if (authLoading || authStatus === 'degraded' || (initialProtectedEntry.current && !brokerRestoreReady)) return;
 
     if (isAuthenticated && user) {
       if (pathname === '/login' || pathname === '/' || pathname === '/landing') {
@@ -154,7 +151,7 @@ function AppContent() {
       window.history.replaceState({}, '', '/login');
       setPathname('/login');
     }
-  }, [isAuthenticated, user, pathname, brokerRestoreReady, authLoading, publicIndicatorRoute]);
+  }, [isAuthenticated, user, pathname, brokerRestoreReady, authLoading, authStatus, publicIndicatorRoute]);
 
   const navigate = (path: '/broker' | '/' | '/landing' | '/login' | WorkspaceRoute) => {
     if (window.location.pathname === path) {
@@ -218,6 +215,7 @@ function AppContent() {
     if (authStep === 'connecting') { loadingMsg = 'Connecting...'; subMsg = 'Establishing secure handshake with Google OAuth'; }
     else if (authStep === 'authenticating') { loadingMsg = 'Authenticating...'; subMsg = 'Verifying identity with Supabase Authentication'; }
     else if (authStep === 'preparing') { loadingMsg = 'Preparing Workspace...'; subMsg = 'Synchronizing kernel configuration and broker channels'; }
+    else if (authStatus === 'degraded') { loadingMsg = 'Restoring Session...'; subMsg = 'Your saved login is being revalidated; we will not sign you out on a transient connection failure'; }
     else if (protectedEntry && !brokerRestoreReady) { loadingMsg = 'Restoring Broker State...'; subMsg = 'Checking your connected broker sessions securely'; }
     else if (profileLoading) { loadingMsg = 'Loading Profile...'; subMsg = 'Fetching user preferences and onboarding state'; }
 
@@ -225,8 +223,8 @@ function AppContent() {
       <LoadingScreen
         message={loadingMsg}
         submessage={subMsg}
-        onRetry={authLoading ? () => window.location.reload() : undefined}
-        onContinue={!isAuthenticated && !profileLoading ? () => navigate('/') : undefined}
+        onRetry={() => window.location.reload()}
+        onContinue={!isAuthenticated && authStatus !== 'degraded' && !profileLoading ? () => navigate('/') : undefined}
       />
     );
   }
@@ -248,10 +246,7 @@ function AppContent() {
 
     return (
       <Suspense fallback={routeFallback('Loading Sign In...', 'Preparing secure authentication')}>
-        <LoginPage
-          onBack={() => navigate('/landing')}
-          onSuccess={() => { void handleLoginSuccess(); }}
-        />
+        <LoginPage onBack={() => navigate('/landing')} onSuccess={() => { void handleLoginSuccess(); }} />
       </Suspense>
     );
   }
@@ -261,12 +256,7 @@ function AppContent() {
       <Suspense fallback={routeFallback('Loading Broker Connection...', 'Preparing secure broker authorization')}>
         <BrokerConnectionRequiredPage
           onBack={() => navigate('/dashboard')}
-          onBrokerConnected={() => {
-            // Completing broker OAuth is intentionally NOT a navigation event.
-            // Stay on /broker so the user can inspect the ready state and
-            // explicitly launch the workspace.
-            setHasConnectedBroker(true);
-          }}
+          onBrokerConnected={() => setHasConnectedBroker(true)}
         />
       </Suspense>
     );
