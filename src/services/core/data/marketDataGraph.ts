@@ -149,19 +149,26 @@ function cloneSnapshotNode(plane:CanonicalDataPlane,descriptor:MarketDataGraphNo
   };
 }
 
-export type CoreSpiritDataGraphResolver=createGraphResolver;
+export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
+  private nodes=new Map<string,CoreSpiritGraphSnapshotNode>();
+  constructor(
+    snapshot:CoreSpiritGraphSnapshot,
+    private readonly baseSymbol='current',
+    private readonly baseTimeframe='chart',
+  ){this.replaceSnapshot(snapshot);}
 
-export function createGraphResolver(snapshot:CoreSpiritGraphSnapshot,baseSymbol='current',baseTimeframe='chart'):CoreSpiritDataResolver{
-  const nodes=new Map<string,CoreSpiritGraphSnapshotNode>();
-  for(const node of snapshot.nodes)nodes.set(graphKey(node.symbol,node.timeframe),node);
+  replaceSnapshot(snapshot:CoreSpiritGraphSnapshot):void{
+    this.nodes.clear();
+    for(const node of snapshot.nodes)this.nodes.set(graphKey(node.symbol,node.timeframe),node);
+  }
 
-  const pickNode=(symbol:string,timeframe:string):CoreSpiritGraphSnapshotNode|undefined=>{
-    const actualSymbol=symbol==='current'?baseSymbol:symbol;
-    const actualTimeframe=timeframe==='chart'?baseTimeframe:timeframe;
-    return nodes.get(graphKey(actualSymbol,actualTimeframe));
-  };
+  private pickNode(symbol:string,timeframe:string):CoreSpiritGraphSnapshotNode|undefined{
+    const actualSymbol=symbol==='current'?this.baseSymbol:symbol;
+    const actualTimeframe=timeframe==='chart'?this.baseTimeframe:timeframe;
+    return this.nodes.get(graphKey(actualSymbol,actualTimeframe));
+  }
 
-  const indexAt=(node:CoreSpiritGraphSnapshotNode,asOf:number,alignment:CoreSpiritDataAlignment):number=>{
+  private indexAt(node:CoreSpiritGraphSnapshotNode,asOf:number,alignment:CoreSpiritDataAlignment):number{
     let lo=0,hi=node.time.length;
     while(lo<hi){
       const mid=(lo+hi)>>1;
@@ -169,53 +176,45 @@ export function createGraphResolver(snapshot:CoreSpiritGraphSnapshot,baseSymbol=
     }
     let index=lo-1;
     if(index<0)return -1;
-    if(alignment==='last-confirmed'&&index>=0){
+    if(alignment==='last-confirmed'){
       const seconds=timeframeSeconds(node.timeframe);
       if(seconds>0&&node.time[index]!+seconds>asOf)index-=1;
     }
     return index;
-  };
+  }
 
-  const valueAt=(request:CoreSpiritDataRequest,ctx?:CoreSpiritDataResolutionContext):CoreSpiritDataSnapshot=>{
-    const node=pickNode(request.symbol,request.timeframe);
+  private valueAt(request:CoreSpiritDataRequest,ctx?:CoreSpiritDataResolutionContext):CoreSpiritDataSnapshot{
+    const node=this.pickNode(request.symbol,request.timeframe);
     if(!node)return {value:null,source:'data-graph:missing',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
     const alignment=ctx?.alignment??'last-confirmed';
     const asOf=ctx?.asOfTimestamp??Number.POSITIVE_INFINITY;
-    let index=alignment==='developing'||alignment==='nearest-confirmed'||alignment==='exact'||Number.isFinite(asOf)
-      ? indexAt(node,asOf,alignment)
-      : node.time.length-1;
+    let index=this.indexAt(node,asOf,alignment);
     index-=Math.max(0,Math.floor(request.offset||0));
     if(index<0||index>=node.time.length)return {value:null,source:'data-graph:empty',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
-    const field=request.field;
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
+    const value=columns[request.field]?.[index];
+    if(value==null||!Number.isFinite(Number(value)))return {value:null,source:'data-graph',symbol:node.symbol,timeframe:node.timeframe,timestamp:Number(node.time[index]),state:'historical'};
     const timestamp=Number(node.time[index]);
-    const isConfirmed=timeframeSeconds(node.timeframe)>0 ? timestamp+timeframeSeconds(node.timeframe)<=asOf : true;
-    return {
-      value:Number(columns[field]?.[index]),
-      source:'data-graph',
-      symbol:node.symbol,
-      timeframe:node.timeframe,
-      timestamp,
-      state:isConfirmed?'confirmed':'developing',
-    };
-  };
+    const seconds=timeframeSeconds(node.timeframe);
+    const confirmed=seconds<=0||timestamp+seconds<=asOf;
+    return {value:Number(value),source:'data-graph',symbol:node.symbol,timeframe:node.timeframe,timestamp,state:confirmed?'confirmed':'developing'};
+  }
 
-  return {
-    request:request=>valueAt(request),
-    requestAt:(request,ctx)=>valueAt(request,ctx),
-    requestBatch:(requests,)=>{
-      const now=Date.now();
-      return requests.map(request=>valueAt(request,{asOfTimestamp:now,baseSymbol,baseTimeframe,executionMode:'realtime',revision:snapshot.revision,alignment:'last-confirmed'}));
-    },
-    series:(request,ctx)=>{
-      const node=pickNode(request.symbol,request.timeframe);
-      if(!node)return [];
-      const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
-      const index=ctx?indexAt(node,ctx.asOfTimestamp,ctx.alignment):node.time.length-1;
-      return Array.from(columns[request.field]?.subarray(0,Math.max(0,index+1))??[]);
-    },
-    cacheKey:request=>`data-graph:${graphKey(request.symbol==='current'?baseSymbol:request.symbol,request.timeframe==='chart'?baseTimeframe:request.timeframe)}:${snapshot.revision}`,
+  request=(request:CoreSpiritDataRequest)=>this.valueAt(request);
+  requestAt=(request:CoreSpiritDataRequest,ctx:CoreSpiritDataResolutionContext)=>this.valueAt(request,ctx);
+  requestBatch=(requests:CoreSpiritDataRequest[])=>requests.map(request=>this.valueAt(request));
+  series=(request:CoreSpiritDataRequest,ctx?:CoreSpiritDataResolutionContext)=>{
+    const node=this.pickNode(request.symbol,request.timeframe);
+    if(!node)return [];
+    const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
+    const index=ctx?this.indexAt(node,ctx.asOfTimestamp,ctx.alignment):node.time.length-1;
+    return Array.from(columns[request.field]?.subarray(0,Math.max(0,index+1))??[]);
   };
+  cacheKey=(request:CoreSpiritDataRequest)=>`data-graph:${graphKey(request.symbol==='current'?this.baseSymbol:request.symbol,request.timeframe==='chart'?this.baseTimeframe:request.timeframe)}`;
+}
+
+export function createGraphResolver(snapshot:CoreSpiritGraphSnapshot,baseSymbol='current',baseTimeframe='chart'):CoreSpiritDataGraphResolver{
+  return new CoreSpiritDataGraphResolver(snapshot,baseSymbol,baseTimeframe);
 }
 
 export function graphSnapshotTransferables(snapshot:CoreSpiritGraphSnapshot):Transferable[]{
