@@ -33,6 +33,7 @@ assert.deepEqual(
   structures.ir?.tradingNativePlan.dataDependencies.map((dep) => ({ id: dep.id, domain: dep.domain, batchable: dep.batchable })),
   [
     { id:'orderbook:NSE:NIFTY50:chart', domain:'orderbook', batchable:false },
+    { id:'market:NSE:NIFTY50:chart', domain:'market', batchable:true },
     { id:'footprint:NSE:NIFTY50:chart', domain:'footprint', batchable:false },
     { id:'volume-profile:NSE:NIFTY50:chart', domain:'volume-profile', batchable:false },
   ],
