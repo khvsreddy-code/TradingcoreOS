@@ -149,11 +149,10 @@ export class Vela {
     }
 
     /**
-     * Add a built-in NATIVE indicator (core-computed, no scripting engine) by registered `type` —
-     * e.g. `'vpvr'` or `'sma'`. It becomes a first-class indicator (legend row, settings, hide,
-     * remove, events). Layer-backed types (`'volume'`, `'vpvr'`) are single-instance — a second
-     * call returns the existing handle; the classic studies allow several instances, so each call
-     * adds one more. Returns a fail-soft handle for an unregistered type. Native renderer only.
+     * Add an already-registered NATIVE indicator (core-computed, no scripting engine) by type.
+     * Built-in layer types such as `'volume'` and `'vpvr'` are registered at composition time.
+     * Lazy classic indicators should use {@link addNativeIndicatorAsync} so their compute family
+     * is not part of the initial chart bundle.
      */
     addNativeIndicator(type: string, options?: { inputs?: Record<string, InputValue> }): IndicatorHandle {
         return this.orchestrator.addNativeIndicator(type, options);
