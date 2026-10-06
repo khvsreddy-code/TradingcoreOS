@@ -14,6 +14,7 @@ type Entry = {
   listeners: Set<Listener>;
   uiListeners: Set<() => void>;
   uiScheduled: boolean;
+  consumers: number;
 };
 
 /**
@@ -46,6 +47,7 @@ class MarketDataStore {
         listeners: new Set(),
         uiListeners: new Set(),
         uiScheduled: false,
+        consumers: 0,
       };
       this.entries.set(key, entry);
       const stop = plane.subscribe((event) => {
@@ -61,6 +63,7 @@ class MarketDataStore {
       // Keep the stop function on the entry without expanding the public store API.
       (entry as Entry & { stop?: () => void }).stop = stop;
     }
+    entry.consumers += 1;
     return () => this.detach(key);
   }
 
@@ -108,6 +111,8 @@ class MarketDataStore {
   detach(key: string): void {
     const entry = this.entries.get(key);
     if (!entry) return;
+    entry.consumers = Math.max(0, entry.consumers - 1);
+    if (entry.consumers > 0) return;
     entry.listeners.clear();
     entry.uiListeners.clear();
     (entry as Entry & { stop?: () => void }).stop?.();
