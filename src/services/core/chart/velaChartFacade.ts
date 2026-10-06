@@ -158,6 +158,7 @@ class VelaTimeScaleFacade {
   unsubscribeVisibleTimeRangeChange(cb: (range: { from: number; to: number } | null) => void): void { this.chart.unsubscribeVisibleTimeRangeChange(cb); }
 }
 
+/** @deprecated Legacy chart-api compatibility surface. Prefer Vela native ports/models or the TCO semantic adapter. */
 export class VelaSeriesFacade<T = string> {
   readonly id: string;
   private readonly kind: SeriesKind;
@@ -342,6 +343,7 @@ export function createSeriesMarkers(candle: ISeriesApi<'Candlestick'> | ISeriesA
   return { setMarkers, detach: () => host.chart.setMarkers([]), id: state.id };
 }
 
+/** @deprecated Legacy chart-api compatibility surface. Prefer Vela native ports/models or the TCO semantic adapter. */
 export class VelaChartFacade {
   readonly renderer = new NativeRenderer();
   readonly pricePaneId = 'price';
@@ -537,4 +539,5 @@ export class VelaChartFacade {
   }
 }
 
+/** @deprecated Use native Vela renderer/workspace/data primitives; keep this only for legacy callers. */
 export function createChart(host: HTMLElement, options?: any): IChartApi { return new VelaChartFacade(host, options); }
