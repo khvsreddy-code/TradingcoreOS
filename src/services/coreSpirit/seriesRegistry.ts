@@ -327,12 +327,12 @@ export class CoreSpiritSeriesRegistry {
         return id < 0 ? undefined : registry.valueSnapshot(id);
       },
       ownKeys() {
-        return registry.names.filter((name) => registry.values[registry.existingId(name)] !== undefined || registry.numeric.has(registry.existingId(name)));
+        return registry.names.filter((name) => registry.values[registry.existingId(name)] !== undefined || registry.numeric[registry.existingId(name)] !== undefined);
       },
       getOwnPropertyDescriptor(_target, property: string | symbol) {
         if (typeof property !== 'string') return undefined;
         const id = registry.existingId(property);
-        return id >= 0 && (registry.values[id] !== undefined || registry.numeric.has(id))
+        return id >= 0 && (registry.values[id] !== undefined || registry.numeric[id] !== undefined)
           ? { enumerable: true, configurable: true, writable: false, value: registry.valueSnapshot(id) }
           : undefined;
       },
