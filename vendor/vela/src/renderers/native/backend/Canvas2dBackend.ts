@@ -99,6 +99,11 @@ export class Canvas2dBackend implements IRenderBackend {
             // or between two indicators. Full-opacity — drawings don't fade with the models.
             const slices = scene.drawingSlices.get(pane.id) ?? [];
             let si = 0;
+            const instances = scene.highCardinalityRectBatches.filter(batch => batch.paneId === pane.id).slice().sort((a, b) => a.beforeZ - b.beforeZ);
+            let ii = 0;
+            const drawInstancesUpTo = (z: number): void => {
+                for (; ii < instances.length && instances[ii]!.beforeZ <= z; ii += 1) this.drawRectInstances(ctx, instances[ii]!);
+            };
             const drawSlicesUpTo = (z: number): void => {
                 for (; si < slices.length && slices[si]!.beforeZ <= z; si += 1) {
                     ctx.globalAlpha = 1;
@@ -118,6 +123,7 @@ export class Canvas2dBackend implements IRenderBackend {
                     candleDrawn = true;
                 }
                 drawSlicesUpTo(scene.zOf(m.id));
+                drawInstancesUpTo(scene.zOf(m.id));
                 ctx.globalAlpha = this.modelAlpha;
                 // Model data is index-aligned from the model's ANCHOR bar (offset 0 = whole-chart).
                 const off = scene.offsetOf(m.id);
@@ -151,6 +157,7 @@ export class Canvas2dBackend implements IRenderBackend {
             // and layers bound to a hidden/removed series — above the forced series too,
             // since drawings always paint over their own plots.
             drawSlicesUpTo(Infinity);
+            drawInstancesUpTo(Infinity);
 
             // On top: price lines.
             ctx.globalAlpha = this.modelAlpha;
@@ -163,6 +170,21 @@ export class Canvas2dBackend implements IRenderBackend {
     destroy(): void {
         this.canvas = null;
         this.ctx = null;
+    }
+
+    private drawRectInstances(ctx: CanvasRenderingContext2D, batch: import('../../../core/model/instances').GpuRectBatch): void {
+        const count = Math.floor(batch.rects.length / 4);
+        if (!count) return;
+        const groups = new Map<string, Path2D>();
+        const colors = new Map<string, string>();
+        for (let i = 0; i < count; i += 1) {
+            const o = i * 4;
+            const color = `rgba(${batch.colors[o]},${batch.colors[o + 1]},${batch.colors[o + 2]},${batch.colors[o + 3] / 255})`;
+            let path = groups.get(color);
+            if (!path) { path = new Path2D(); groups.set(color, path); colors.set(color, color); }
+            path.rect(batch.rects[o]!, batch.rects[o + 1]!, batch.rects[o + 2]! - batch.rects[o]!, batch.rects[o + 3]! - batch.rects[o + 1]!);
+        }
+        for (const [color, path] of groups) { ctx.fillStyle = color; ctx.fill(path); }
     }
 
     // ── base price series (chart type) ──
