@@ -1,7 +1,9 @@
-import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV } from './services/core/chart/velaChartFacade';
+import type { DataProvider, ProviderInfo, SymbolDescriptor } from '../vendor/vela/src/core/ports/DataProvider';
+import type { BarRange } from '../vendor/vela/src/core/ports/MarketDataFeed';
+import type { OHLCV } from '../vendor/vela/src/core/model/ohlcv';
 import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
-import type { ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaChartFacade';
+import type { ColumnarBars, ColumnarBarUpdate } from '../vendor/vela/src/core/model/columnar-bars';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 
