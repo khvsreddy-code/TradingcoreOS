@@ -72,7 +72,8 @@ export class CoreSpiritOptimizedExecutionVM {
       const computational = ins.op === 'const' || ins.op === 'loadSeries' || ins.op === 'loadState' || ins.op === 'move' || ins.op === 'unary' || ins.op === 'binary' || ins.op === 'call' || ins.op === 'index';
       if(dirty && computational && !dirty.has(pc)){ pc += 1; continue; }
       const profiler=host.profileInstruction;
-      profiler?.beforeInstruction(pc,ins);
+      const sourceInstruction=instructions[pc] ?? (ins.op==='call' || ins.op==='index' || ins.op==='emit' ? ins.instruction : null);
+      if (sourceInstruction) profiler?.beforeInstruction(pc,sourceInstruction);
       try {
         switch(ins.op){
           case 'const':
@@ -117,7 +118,7 @@ export class CoreSpiritOptimizedExecutionVM {
             host.emit(ins.instruction,values,output);pc+=1;break;
         }
       } finally {
-        profiler?.afterInstruction(pc,ins.instruction);
+        if (sourceInstruction) profiler?.afterInstruction(pc,sourceInstruction);
       }
     }
   }
