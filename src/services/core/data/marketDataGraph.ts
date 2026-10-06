@@ -1,5 +1,5 @@
 import { getCanonicalDataPlane, type CanonicalDataPlane } from './canonicalDataPlane';
-import type { CoreSpiritDataAlignment, CoreSpiritDataRequest, CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataSnapshot } from '../coreSpirit/types';
+import type { CoreSpiritDataAlignment, CoreSpiritDataRequest, CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataSnapshot } from '../../coreSpirit/types';
 
 export const CORE_SPIRIT_DATA_GRAPH_VERSION = 1 as const;
 
@@ -250,7 +250,7 @@ export class MarketDataGraph{
     if(session?.anchorSecondsUtc!=null)node.anchorSecondsUtc=session.anchorSecondsUtc;
     node.plane.replaceHistoricalCandleRows(candles);
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
-    this.rebuildDependents(node.key);
+    this.rebuildDependents(node.descriptor.key);
     this.revision+=1;
   }
 
@@ -265,7 +265,7 @@ export class MarketDataGraph{
     else if(t>lastTime||!Number.isFinite(lastTime))node.plane.append(row);
     else node.plane.replaceHistoricalCandleRows([candle]);
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
-    this.rebuildDependentTails(node.key);
+    this.rebuildDependentTails(node.descriptor.key);
     this.revision+=1;
   }
 
