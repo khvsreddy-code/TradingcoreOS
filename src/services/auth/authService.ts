@@ -8,7 +8,7 @@ export const authService = {
   async signInWithGoogle(options?: { redirectTo?: string }): Promise<{ error?: string }> {
     if (!isSupabaseConfigured()) {
       return {
-        error: 'Supabase project credentials are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.',
+        error: 'Supabase project credentials are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your environment variables.',
       };
     }
 
