@@ -8,6 +8,7 @@ const app = read('src/App.tsx');
 const vite = read('vite.config.ts');
 const pkg = JSON.parse(read('package.json'));
 const vercel = JSON.parse(read('vercel.json'));
+const landingShell = read('src/appShells/LandingShell.tsx');
 
 const forbiddenStaticRuntimeImport = /import\s+\{[^}]*tradingCoreRuntime[^}]*\}\s+from\s+['"][^'"]*TradingCoreRuntime['"]/;
 if (forbiddenStaticRuntimeImport.test(app)) throw new Error('App.tsx must not statically import TradingCoreRuntime');
@@ -41,7 +42,6 @@ if (!nativeRenderer.includes("import('./drawings/UserDrawingController')")) thro
 console.log('Vela capability-splitting contract: OK');
 
 
-const landingShell = read('src/appShells/LandingShell.tsx');
 const workspaceShell = read('src/appShells/TradingWorkspaceShell.tsx');
 const liveShell = read('src/appShells/LiveTradingShell.tsx');
 const liveWorkspace = read('src/LiveTradingWorkspace.tsx');
