@@ -338,6 +338,12 @@ Track at minimum:
 - full replacement count
 - live forming-bar update cost
 
+## WASM acceptance gate
+
+The CoreSpirit backend benchmark compares **JS VM**, **fused JS**, **WASM scalar** and **WASM SIMD** at **50k, 500k and 5m bars** by default. A missing WASM artifact reports as not-configured; the benchmark infrastructure alone is not evidence that WASM is faster. Production promotion requires measured scalar/SIMD results on the same CoreSpirit workload at all three sizes.
+
+**WebGPU compute is intentionally deferred.** CPU/fused-JS/WASM scalar/SIMD measurements come first; no GPU backend is added merely for architectural completeness.
+
 ## Browser/GPU validation gate
 
 The repository contains `tools/verify-chart-performance.mjs` for browser checks. The following measurements are deliberately **not marked complete** until captured against a running/authenticated environment:
