@@ -31,6 +31,15 @@ export { lowerTimeframeTicks, barsToTicks } from './core/replayTicks';
 // Native indicators (core-computed, no scripting engine) — register a type, then chart.addNativeIndicator(type)
 export { registerNativeIndicator, unregisterNativeIndicator, getNativeIndicator, nativeIndicatorTypes, nativeIndicatorDescriptors } from './core/native-indicators';
 export type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor, NativeIndicatorInfo, NativeIndicatorOutput } from './core/native-indicators';
+export {
+    lazyNativeIndicatorCatalog,
+    isLazyNativeIndicator,
+    isLazyNativeIndicatorLoaded,
+    lazyNativeIndicatorEntry,
+    loadNativeIndicatorFamily,
+    loadNativeIndicatorType,
+} from './core/native-indicators/lazyCatalog';
+export type { LazyNativeIndicatorCatalogEntry, ClassicIndicatorFamily } from './core/native-indicators/lazyCatalog';
 export { DARK_THEME, LIGHT_THEME, resolveTheme } from './core/theme';
 export { TypedEventBus } from './core/events/EventBus';
 
