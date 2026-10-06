@@ -3,18 +3,19 @@ import type { CoreSpiritObject, CoreSpiritPlotStyle } from './types';
 export const CORE_SPIRIT_SHARED_OUTPUT_VERSION = 1 as const;
 const HEADER_BYTES = 32;
 
-export type CoreSpiritSharedSeriesMeta = Readonly<{
+export type CoreSpiritSharedSeriesGroup = Readonly<{
   name?: string;
   seriesId?: string;
   style?: CoreSpiritPlotStyle;
+  offset: number;
+  count: number;
 }>;
 
 export type CoreSpiritSharedSeriesDescriptor = Readonly<{
   version: typeof CORE_SPIRIT_SHARED_OUTPUT_VERSION;
   buffer: SharedArrayBuffer;
-  series: readonly CoreSpiritSharedSeriesMeta[];
-  pointCapacity: number;
-  pointCounts: readonly number[];
+  groups: readonly CoreSpiritSharedSeriesGroup[];
+  pointCount: number;
 }>;
 
 export function createSharedSeriesOutput(outputs: readonly CoreSpiritObject[]): {
@@ -26,42 +27,46 @@ export function createSharedSeriesOutput(outputs: readonly CoreSpiritObject[]): 
     return { descriptor: undefined, passthrough: [...outputs] };
   }
 
-  const seriesCount = series.length;
-  const pointCapacity = series.length ? Math.max(1, Math.max(...series.map(() => 1))) : 1;
-  const actualCapacity = seriesCount;
-  const pointsPerSeries = Math.max(1, Math.max(...series.map((output) => Number.isFinite(output.time) ? 1 : 0)));
-  void pointCapacity;
-  void actualCapacity;
-  void pointsPerSeries;
-
-  const maxPoints = series.length;
-  const bytes = HEADER_BYTES + maxPoints * 2 * Float64Array.BYTES_PER_ELEMENT;
-  const buffer = new SharedArrayBuffer(bytes);
-  const times = new Float64Array(buffer, HEADER_BYTES, maxPoints);
-  const values = new Float64Array(buffer, HEADER_BYTES + maxPoints * Float64Array.BYTES_PER_ELEMENT, maxPoints);
-  const metas: CoreSpiritSharedSeriesMeta[] = [];
-
-  for (let i = 0; i < series.length; i += 1) {
-    const output = series[i]!;
-    times[i] = Number(output.time);
-    values[i] = output.value == null ? Number.NaN : Number(output.value);
-    metas.push({
-      name: output.name,
-      seriesId: output.seriesId,
-      style: output.style,
-    });
+  const grouped = new Map<string, Extract<CoreSpiritObject,{kind:'series'}>[]>();
+  for (const output of series) {
+    const key = String(output.seriesId || output.name || 'series');
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(output);
+    else grouped.set(key,[output]);
   }
 
-  const descriptor: CoreSpiritSharedSeriesDescriptor = Object.freeze({
-    version: CORE_SPIRIT_SHARED_OUTPUT_VERSION,
-    buffer,
-    series: metas,
-    pointCapacity: maxPoints,
-    pointCounts: Object.freeze(series.map(() => 1)),
-  });
+  const totalPoints = series.length;
+  const bytes = HEADER_BYTES + totalPoints * 2 * Float64Array.BYTES_PER_ELEMENT;
+  const buffer = new SharedArrayBuffer(bytes);
+  const times = new Float64Array(buffer, HEADER_BYTES, totalPoints);
+  const values = new Float64Array(buffer, HEADER_BYTES + totalPoints * Float64Array.BYTES_PER_ELEMENT, totalPoints);
+  const groups: CoreSpiritSharedSeriesGroup[] = [];
+  let offset = 0;
+
+  for (const bucket of grouped.values()) {
+    const first = bucket[0]!;
+    for (let i = 0; i < bucket.length; i += 1) {
+      const output = bucket[i]!;
+      times[offset + i] = Number(output.time);
+      values[offset + i] = output.value == null ? Number.NaN : Number(output.value);
+    }
+    groups.push({
+      name: first.name,
+      seriesId: first.seriesId,
+      style: first.style,
+      offset,
+      count: bucket.length,
+    });
+    offset += bucket.length;
+  }
 
   return {
-    descriptor,
+    descriptor: Object.freeze({
+      version: CORE_SPIRIT_SHARED_OUTPUT_VERSION,
+      buffer,
+      groups: Object.freeze(groups),
+      pointCount: totalPoints,
+    }),
     passthrough: outputs.filter((output) => output.kind !== 'series'),
   };
 }
@@ -70,24 +75,27 @@ export function materializeSharedSeriesOutput(
   descriptor: CoreSpiritSharedSeriesDescriptor,
 ): CoreSpiritObject[] {
   if (descriptor.version !== CORE_SPIRIT_SHARED_OUTPUT_VERSION) throw new Error('Unsupported CoreSpirit shared output version');
-  const count = descriptor.series.length;
-  const times = new Float64Array(descriptor.buffer, HEADER_BYTES, descriptor.pointCapacity);
+
+  const times = new Float64Array(descriptor.buffer, HEADER_BYTES, descriptor.pointCount);
   const values = new Float64Array(
     descriptor.buffer,
-    HEADER_BYTES + descriptor.pointCapacity * Float64Array.BYTES_PER_ELEMENT,
-    descriptor.pointCapacity,
+    HEADER_BYTES + descriptor.pointCount * Float64Array.BYTES_PER_ELEMENT,
+    descriptor.pointCount,
   );
   const outputs: CoreSpiritObject[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const meta = descriptor.series[i]!;
-    outputs.push({
-      kind: 'series',
-      time: times[i]!,
-      value: Number.isNaN(values[i]!) ? null : values[i]!,
-      ...(meta.name ? { name: meta.name } : {}),
-      ...(meta.seriesId ? { seriesId: meta.seriesId } : {}),
-      ...(meta.style ? { style: meta.style } : {}),
-    });
+
+  for (const group of descriptor.groups) {
+    for (let i = 0; i < group.count; i += 1) {
+      const index = group.offset + i;
+      outputs.push({
+        kind: 'series',
+        time: times[index]!,
+        value: Number.isNaN(values[index]!) ? null : values[index]!,
+        ...(group.name ? { name: group.name } : {}),
+        ...(group.seriesId ? { seriesId: group.seriesId } : {}),
+        ...(group.style ? { style: group.style } : {}),
+      });
+    }
   }
   return outputs;
 }
