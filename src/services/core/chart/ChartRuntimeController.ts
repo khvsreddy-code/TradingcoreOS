@@ -76,7 +76,6 @@ export type ChartRuntimeControllerDeps={
   interactionControllerRef:Ref<any>;
   drawingToolRef:Ref<DrawingTool>;
   chartIndex?:number;
-  showOI:boolean;
   setDrawingTool:(tool:DrawingTool)=>void;
   setSelectedDrawingId:(id:string|null)=>void;
   setHistoryLoading:(value: boolean | ((previous:boolean)=>boolean))=>void;
