@@ -7,8 +7,16 @@ realtimeTicketRoutes.use(requireUser);
 
 realtimeTicketRoutes.get('/', (req: AuthenticatedRequest, res: Response) => {
   const gatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\/$/, '');
+  // Return an explicit legacy transport instead of a 503 when the dedicated
+  // gateway has not been provisioned. The browser already supports this
+  // fallback, and a successful capability response avoids retry/error noise.
   if (!gatewayUrl) {
-    res.status(503).json({ success: false, error: 'Realtime gateway is not configured.' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      data: { broker: 'fyers', transport: 'legacy' },
+      requestId: req.get('x-request-id') || null,
+    });
     return;
   }
 
