@@ -358,13 +358,13 @@ datasetVersion + dirtyFrom/dirtyTo
 worker executes only the current incremental bar when the dirty span is a forming-bar tail
 ```
 
-The SAB dataset contains a compact metadata header plus typed `time/open/high/low/close/volume` columns. Under cross-origin isolation, the buffer is shared with the worker and the worker retains the corresponding CoreSpirit bar objects as a compatibility execution cache. The objects are created once for the persistent dataset and only dirty rows are synchronized afterward; source text and the 50k-bar history are no longer resent on every run.
+The SAB dataset contains a compact metadata header plus typed `time/open/high/low/close/volume` columns. The final metadata write is published through an atomic sequence counter so the worker has an explicit visibility point for the completed update. Under cross-origin isolation, the buffer is shared with the worker and the worker retains the corresponding CoreSpirit bar objects as a compatibility execution cache. The objects are created once for the persistent dataset and only dirty rows are synchronized afterward; source text and the 50k-bar history are no longer resent on every run.
 
 SAB is bounded to 250k bars for this chart-oriented path. Larger research/backtest datasets should use bounded/chunked dataset ownership rather than reserving hundreds of megabytes of shared memory per worker context.
 
 The browser must expose `crossOriginIsolated` plus `SharedArrayBuffer`; the `/live` deployment sends COOP `same-origin` and COEP `require-corp`. Non-isolated environments retain a compatibility path, but the browser performance gate treats shared-memory availability as required by default.
 
-One-shot analytics/history indicator snapshots continue to use transferable typed `ArrayBuffer`s. That is deliberate: transferables already avoid structured-clone copies, and using a shared buffer for a single consumer would introduce lifetime/race management without a comparable benefit. Persistent/shared ownership is reserved for hot reusable datasets and stateful worker contexts.
+Large numeric CoreSpirit series results now use a shared typed output buffer; semantic/non-numeric visual objects remain ordinary message payloads. One-shot analytics/history indicator snapshots continue to use transferable typed `ArrayBuffer`s. That is deliberate: transferables already avoid structured-clone copies, and using a shared buffer for a single consumer would introduce lifetime/race management without a comparable benefit. Persistent/shared ownership is reserved for hot reusable datasets and stateful worker contexts.
 
 ## WASM acceptance gate
 
