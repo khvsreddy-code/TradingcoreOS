@@ -134,7 +134,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
      if(!preserveWorkerSeries){workerSeriesMap.forEach(group=>group.forEach(s=>{try{chart.current?.removeSeries(s as any)}catch{} try{oscChart.current?.removeSeries(s as any)}catch{}})); workerSeriesMap.clear();}
      const active=indicators.filter(x=>x.enabled); const needsOsc=oscillatorKinds(active); const chartMarkers:any[]=[];
      if(needsOsc&&oscHost.current&&!oscChart.current){const p=getThemePalette(getCurrentTheme());oscChart.current=createVelaNativeChart(oscHost.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:p.surface2},textColor:p.muted,fontFamily:'JetBrains Mono, monospace',fontSize:9},grid:{vertLines:{color:p.grid},horzLines:{color:p.grid}},rightPriceScale:{borderColor:p.axis},timeScale:{visible:false}})};
-     if(!needsOsc&&oscChart.current){try{oscChart.current.remove()}catch{}oscChart.current=undefined;}
+     if(!needsOsc&&oscChart.current){try{oscChart.current.remove()}catch{}oscChart.current=null;}
      for(const cfg of active){
        if(!chart.current)continue;
        if(['EMA','SMA','HMA','ATR','RSI','ADX','CCI','OBV','MFI','VWAP','Bollinger Bands','Keltner Channels','Donchian Channels','Supertrend','Ichimoku Cloud'].includes(cfg.kind))continue;
