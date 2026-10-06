@@ -30,6 +30,7 @@ assert(engine.includes("op: 'append'"), 'engine finalized-bar delta missing');
 assert(kernel.includes("patch(patch: VelaNativeSeriesPatch)"), 'native kernel series.patch API missing');
 assert(kernel.includes("type:'replaceRange'") && kernel.includes("type:'removeRange'"), 'native kernel range patch operations missing');
 assert(outputController.includes("type:'append'") && outputController.includes("type:'replaceLast'") && outputController.includes("type:'replaceRange'"), 'CoreSpirit output controller must use incremental patch types');
+assert(outputController.includes('same cardinality') || outputController.includes("type:'replaceLast'"), 'CoreSpirit forming-bar path must use replace-last');
 assert(!liveChart.includes("from '../../services/core/chart/velaChartFacade'"), 'LiveChart must not depend on the legacy chart facade');
 assert(facade.includes("export {") && facade.includes("velaNativeChartKernel"), 'legacy facade must be a compatibility shim');
 assert(facade.includes("createVelaNativeChart as createChart"), 'legacy createChart must delegate to the native kernel');
