@@ -6,7 +6,7 @@ import { CoreSpiritOutputCollector } from '../src/services/coreSpirit/outputColl
 import { CoreSpiritFusedSeriesCursor } from '../src/services/coreSpirit/seriesVector.ts';
 import { CoreSpiritWasmBackend, type CoreSpiritWasmKernelManifest } from '../src/services/coreSpirit/wasmBackend.ts';
 
-const DEFAULT_SIZES = [5_000, 50_000, 500_000, 5_000_000];
+const DEFAULT_SIZES = [50_000, 500_000, 5_000_000];
 
 function sizes() {
   const raw = process.env.TCO_BENCH_BAR_COUNTS;
