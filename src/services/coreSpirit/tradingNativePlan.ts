@@ -253,7 +253,7 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
   const minimumBySymbol=new Map<string,string>();
   const timeframeRank=(value:string)=>{
     const raw=value.trim().toLowerCase();
-    const match=/^(\\d+)\\s*(m|min|minute|h|hour|d|day)$/.exec(raw);
+    const match=/^(\d+)\s*(m|min|minute|h|hour|d|day)$/.exec(raw);
     if(!match)return Number.POSITIVE_INFINITY;
     const n=Number(match[1]);
     return n*(match[2].startsWith('m')?60:match[2].startsWith('h')?3600:86400);
