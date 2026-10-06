@@ -51,7 +51,7 @@ export type CoreSpiritOptimizationPlan = Readonly<{
 
 const STATEFUL_CALLS = new Set([
   'ema','rma','wilder','rsi','atr','tr','trueRange','vwap','highest','lowest',
-  'sma','wma','vwma','valuewhen','stdev','variance','median','percentile','mad',
+  'sma','wma','vwma','valuewhen','stdev','variance','median','percentile','mad','beta','trendStrength',
 ]);
 
 function pureDeterministicCall(ins: Extract<CoreSpiritIrInstruction, { op:'call' }>): boolean {
