@@ -168,9 +168,9 @@ function visit(
       return;
     }
     case 'member': {
-      if(node.target.type==='call' && (node.target.name==='market'||node.target.name==='timeframe')){
+      if(node.target.type==='call' && (node.target.name==='market'||node.target.name==='timeframe'||node.target.name==='series')){
         const symbol=node.target.name==='market' ? (literalString(node.target.args[0]) ?? 'current') : 'current';
-        const timeframe=node.target.name==='timeframe' || node.target.name==='series' ? (literalString(node.target.args[0]) ?? 'requested') : 'chart';
+        const timeframe=node.target.name==='market' ? 'chart' : (literalString(node.target.args[0]) ?? 'requested');
         const field=fieldName(node);
         const domain=field ? domainForField(field) : 'market';
         const key=`${domain}:${symbol}:${timeframe}`;
