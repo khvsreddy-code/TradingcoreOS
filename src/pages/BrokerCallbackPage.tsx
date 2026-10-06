@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
+import { BROKER_OAUTH_CHANNEL } from '../services/oauth/PopupManager';
 
 export const BrokerCallbackPage: React.FC = () => {
   const [status, setStatus] = useState<'exchanging' | 'success' | 'error'>('exchanging');
@@ -74,6 +75,18 @@ export const BrokerCallbackPage: React.FC = () => {
           window.opener?.postMessage(completionMessage, window.location.origin);
         } catch (messageError) {
           console.warn('Unable to notify TradingCore opener after broker authorization:', messageError);
+        }
+
+        // The app intentionally uses COOP: same-origin for cross-origin isolation.
+        // That policy can sever window.opener when this popup visits the broker and
+        // then returns to TradingCore. BroadcastChannel keeps the completion signal
+        // reliable without weakening the site's isolation headers.
+        try {
+          const channel = new BroadcastChannel(BROKER_OAUTH_CHANNEL);
+          channel.postMessage(completionMessage);
+          window.setTimeout(() => channel.close(), 250);
+        } catch (channelError) {
+          console.warn('Unable to broadcast TradingCore broker authorization:', channelError);
         }
 
         window.setTimeout(() => {
