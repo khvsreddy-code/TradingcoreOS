@@ -175,8 +175,8 @@ export function buildCoreSpiritExecutionPlanVisualization(program: CoreSpiritIrP
 
   const scalarNodes = graphNodes.filter(node =>
     !kernelByInstruction.has(node.instruction) &&
-    (node.kind === 'input' || node.kind === 'compute') &&
-    ['const','loadSeries','loadState','move','unary','binary','call','index'].includes(node.op),
+    node.kind === 'compute' &&
+    ['unary','binary','call','index'].includes(node.op),
   );
   if (scalarNodes.length) {
     kernels.push(Object.freeze({
@@ -229,11 +229,11 @@ export function buildCoreSpiritExecutionPlanVisualization(program: CoreSpiritIrP
     }
   }
   const uniqueEdges = [...new Map(edges.map(edge => [`${edge.from}|${edge.to}|${edge.relation}`, edge])).values()];
-  const roots = nodes.filter(node => node.dependencies.length === 0).map(node => node.id);
+  const roots = nodes.filter(node => node.dependencies.length === 0 && node.op !== 'const').map(node => node.id);
   const outputs = nodes.filter(node => node.kind === 'output' || node.kind === 'effect' || node.kind === 'state').map(node => node.id);
-  const computeOperationCount = nodes.filter(node => node.kind === 'input' || node.kind === 'compute').length;
+  const computeOperationCount = nodes.filter(node => node.kind === 'compute' && node.op !== 'const').length;
   const fusedOperationCount = fusion?.fusedInstructionCount ?? 0;
-  const traversalCount = kernels.reduce((sum, kernel) => sum + kernel.traversals, 0);
+  const traversalCount = program.executionPlan?.chronologicalPasses ?? (kernels.length ? 1 : 0);
   const intermediateArrays = kernels.reduce((sum, kernel) => sum + kernel.intermediateArrays, 0);
 
   const summary = Object.freeze({
