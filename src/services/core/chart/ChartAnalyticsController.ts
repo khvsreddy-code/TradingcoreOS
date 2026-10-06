@@ -3,7 +3,7 @@ import type { ISeriesApi } from './velaNativeChartKernel';
 import type { ChartDataPlane } from '../../marketData/chartDataPlane';
 import { chartComputeCoordinator } from '../../marketData/chartComputeCoordinator';
 import { buildOIChartAnalytics, type OIChartAnalytics, type OIWallState } from '../../marketData/oiEngine';
-import { tradingCoreRuntime } from '../runtime/TradingCoreRuntime';
+import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import type { ChartStore } from './ChartStore';
 import type { ChartLifecycle } from './chartLifecycle';
 import type { NormalizedMarketTick } from '../../../types/market';
