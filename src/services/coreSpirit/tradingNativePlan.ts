@@ -151,12 +151,6 @@ function visit(
       return;
     }
     case 'member': {
-      if(node.target.type==='identifier' && FIELD_SET.has(node.member)){
-        const key='market:current:chart';
-        const dep=dependencies.get(key) ?? {domain:'bar-series',symbol:'current',timeframe:'chart',fields:new Set<string>()};
-        dep.fields.add(node.member);
-        dependencies.set(key,dep);
-      }
       if(node.target.type==='call' && (node.target.name==='market'||node.target.name==='timeframe')){
         const symbol=node.target.name==='market' ? (literalString(node.target.args[0]) ?? 'current') : 'current';
         const timeframe=node.target.name==='timeframe' ? (literalString(node.target.args[0]) ?? 'requested') : 'chart';
@@ -234,9 +228,6 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
         [...value.fields].every((field)=>['open','high','low','close','volume','time'].includes(field)),
     }));
   }
-
-  // Stable ABI order: chart-timeline dependencies first, then explicit alternate timeframes/domains.
-  deps.sort((a,b)=>Number(a.timeframe!=='chart')-Number(b.timeframe!=='chart'));
 
   const eventTriggers:CoreSpiritEventTrigger[]=[];
   for(const trigger of events.values()) eventTriggers.push(trigger);
