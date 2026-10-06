@@ -1,5 +1,3 @@
-import { performance } from 'node:perf_hooks';
-
 export type RealtimeRateSchedulerStats = Readonly<{
   runs: number;
   coalesced: number;
@@ -40,7 +38,7 @@ export class RealtimeRateScheduler<T> {
   }
 
   private arm(): void {
-    const now = performance.now();
+    const now = globalThis.performance?.now?.() ?? Date.now();
     const delay = this.lastRunAt > 0 ? Math.max(0, this.intervalMs - (now - this.lastRunAt)) : 0;
     this.timer = setTimeout(() => {
       this.timer = null;
@@ -52,7 +50,7 @@ export class RealtimeRateScheduler<T> {
     if (this.disposed || !this.pending) return;
     const pending = this.pending;
     this.pending = null;
-    const started = performance.now();
+    const started = globalThis.performance?.now?.() ?? Date.now();
     this.lastRunAt = started;
     this.runs += 1;
     this.run(pending.value, pending.sequence);
