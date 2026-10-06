@@ -228,7 +228,26 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);
-  useEffect(()=>{if(!chart.current||!showLevels||!analyticsRef.current)return;const c=chart.current;const candleSeries=candle.current;if(!candleSeries)return;const lines=[...analyticsRef.current.support.slice(0,6),...analyticsRef.current.resistance.slice(0,6)].map(level=>{const broken=level.state==='BROKEN';const base=level.side==='support'?'#3b82f6':'#ef4444';return candleSeries.createPriceLine({price:level.price,color:broken?'#64748b':base,lineWidth:broken?1:Math.max(1,Math.min(3,Math.round((level.strength||.5)*3))),lineStyle:broken?2:0,axisLabelVisible:true,title:`\${broken?'BROKEN · ':''}\${level.side==='support'?'S':'R'}\${level.strength!=null?` · \${Math.round(level.strength*100)}%`:''}`});});return()=>lines.forEach(line=>{try{candleSeries.removePriceLine(line)}catch{}});},[showLevels,analytics]);
+  useEffect(()=>{
+    if(!chart.current||!showLevels||!analyticsRef.current)return;
+    const c=chart.current;
+    const candleSeries=candle.current;
+    if(!candleSeries)return;
+    const lines=[...analyticsRef.current.support.slice(0,6),...analyticsRef.current.resistance.slice(0,6)].map(level=>{
+      const broken=level.state==='BROKEN';
+      const base=level.side==='support'?'#3b82f6':'#ef4444';
+      const title=`${broken?'BROKEN · ':''}${level.side==='support'?'S':'R'}${level.strength!=null?` · ${Math.round(level.strength*100)}%`:''}`;
+      return candleSeries.createPriceLine({
+        price:level.price,
+        color:broken?'#64748b':base,
+        lineWidth:broken?1:Math.max(1,Math.min(3,Math.round((level.strength||.5)*3))),
+        lineStyle:broken?2:0,
+        axisLabelVisible:true,
+        title,
+      });
+    });
+    return ()=>lines.forEach(line=>{try{candleSeries.removePriceLine(line)}catch{}});
+  },[showLevels,analytics]);
   const indicatorComputeKey=useMemo(()=>indicators.map(x=>buildIndicatorComputationSignature(x as unknown as Record<string,unknown>)).join('|'),[indicators]);
   useEffect(()=>{if(!candles.current.length||!chart.current)return;const controller=indicatorControllerRef.current;if(!controller)return;controller.setInputs({indicators,timeframe});controller.renderStudies(candles.current);controller.requestIndicatorWorker(candles.current);predictionControllerRef.current?.setInputs({predictionModelIds,chartDatasetKey,resolvedInstrumentKey,timeframe});void predictionControllerRef.current?.renderPredictionOverlay(candles.current);},[indicatorComputeKey,predictionModelIds.join('|'),timeframe,resolvedInstrumentKey,chartDatasetKey]);
   const indicatorAppearanceKey=useMemo(()=>indicators.map(x=>JSON.stringify(buildIndicatorAppearanceSnapshot(x as unknown as Record<string,unknown>,{timeframe,visibleBars:candles.current.length}))).join('|'),[indicators,timeframe,candles.current.length]);
