@@ -50,8 +50,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
       void userSettingsService.load(userId)
-        .then(() => {
-          if (generation === hydrationGeneration.current) setSettingsReadyUserId(userId);
+        .then(settings => {
+          // null means the cloud read failed. Do not start the sync writer in
+          // that state or stale local settings could overwrite cloud state.
+          if (settings !== null && generation === hydrationGeneration.current) {
+            setSettingsReadyUserId(userId);
+          }
         })
         .catch(settingsError => {
           console.warn('User settings hydration failed:', settingsError);
