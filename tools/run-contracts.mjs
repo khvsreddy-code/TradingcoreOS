@@ -15,6 +15,7 @@ const contracts = [
   ['dirty-graph', ['src/services/coreSpirit/dirtyGraphContract.test.mjs', true]],
   ['columnar-market-data', ['src/services/coreSpirit/columnarMarketDataContract.test.mjs', true]],
   ['optimized-execution', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
+  ['authoring-levels', ['src/coreSpiritAuthoringLevelsContract.test.mjs', true]],
   ['architecture-consolidation', ['src/architectureConsolidationGuard.test.mjs', false]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],

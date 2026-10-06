@@ -138,6 +138,11 @@ function transformShow(line: string, modelNames: ReadonlySet<string>): string | 
     return wrap(`show("zone", ${zone[1].trim()}, ${zone[2].trim()}, ${area}, "viewport")`);
   }
 
+  const bareSignal = rest.match(/^signal\s+("[^"]*"|'[^']*'|\S+)$/i);
+  if (bareSignal) return wrap(`show("signal", ${bareSignal[1]}, above_bar(0), ${area})`);
+  const signalCall = rest.match(/^signal\s*\((.+)\)$/i);
+  if (signalCall) return wrap(`show("signal", ${signalCall[1]}, above_bar(0), ${area})`);
+
   // `show signal "LONG" above|below bar` is a visual projection, not signal emission.
   const signal = rest.match(/^signal\s+("[^"]*"|'[^']*'|\S+)\s+(above|below)(?:\s+bar)?$/i);
   if (signal) {
@@ -225,18 +230,93 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
   },
 ];
 
+function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
+  let out = source;
+  out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
+  out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
+  out = out.replace(/\bmarket\(([^()]*)\)\.returns\b/g, 'returns(market($1))');
+
+  const marker=/\bregime\.detect\s*\(/gi;
+  let cursor=0;
+  let rebuilt='';
+  for(;;){
+    const match=marker.exec(out);
+    if(!match){ rebuilt+=out.slice(cursor); break; }
+    const open=out.indexOf('(',match.index);
+    if(open<0){ rebuilt+=out.slice(cursor); break; }
+
+    let depth=0;
+    let quote:'"'|"'"|null=null;
+    let escaped=false;
+    let close=-1;
+    for(let i=open;i<out.length;i+=1){
+      const ch=out[i];
+      if(quote){
+        if(escaped){escaped=false;continue;}
+        if(ch==='\\'){escaped=true;continue;}
+        if(ch===quote)quote=null;
+        continue;
+      }
+      if(ch==='"'||ch==="'"){quote=ch;continue;}
+      if(ch==='(')depth+=1;
+      else if(ch===')'){
+        depth-=1;
+        if(depth===0){close=i;break;}
+      }
+    }
+    if(close<0){rebuilt+=out.slice(cursor);break;}
+
+    const inner=out.slice(open+1,close);
+    const parts=splitTopLevel(inner);
+    const values=parts.map(part=>part.replace(/^\s*(?:volatility|trend)\s*=\s*/i,'').trim());
+    rebuilt+=out.slice(cursor,match.index)+`regimeDetect(${values.join(', ')})`;
+    cursor=close+1;
+    marker.lastIndex=cursor;
+  }
+  return rebuilt;
+}
+
 export function normalizeCoreSpiritSource(source: string): string {
+  source = normalizeCoreSpiritQuantSurfaceSyntax(source);
   // Normalize readable crossing syntax structurally before any legacy line transforms.
   // This pass is token-aware, so strings/comments and nested call expressions are not
   // rewritten accidentally.
   source = normalizeReadableOperatorsWithTokens(source);
   source = normalizeCoreSpiritEventSource(source);
   source = normalizeCoreSpiritAutomationSource(source);
-  const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+  const sourceLines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+  const lines: string[] = [];
+  for (let i=0;i<sourceLines.length;i+=1) {
+    const current=sourceLines[i];
+    const match=current.match(/^(\s*)when\s+(.+)$/i);
+    if (match && !current.trim().endsWith(':')) {
+      let merged=current;
+      const baseIndent=indentation(current);
+      let j=i+1;
+      while (j<sourceLines.length) {
+        const candidate=sourceLines[j];
+        const candidateTrim=candidate.trim();
+        if (candidateTrim && indentation(candidate)===baseIndent && /^(?:and|or)\s+/i.test(candidateTrim)) {
+          merged += ' ' + candidateTrim;
+          j+=1;
+          continue;
+        }
+        break;
+      }
+      if (j>i+1) {
+        lines.push(merged);
+        i=j-1;
+        continue;
+      }
+    }
+    lines.push(current);
+  }
   const modelNames = modelSurfaceNames(source);
   const out: string[] = [];
   const whenBlocks: number[] = [];
   const wrappers: Array<{ indent: number; kind: 'indicator' | 'model' | 'automation' }> = [];
+  const modelBraceIndents: number[] = [];
+  let researchSkipIndent: number | null = null;
 
   for (const raw of lines) {
     const trimmed = raw.trim();
@@ -251,11 +331,54 @@ export function normalizeCoreSpiritSource(source: string): string {
       continue;
     }
 
-    // Explicit braces remain authoritative. Generated indentation blocks are
-    // closed when source indentation returns to the block's parent level.
+    if (researchSkipIndent !== null) {
+      if (!trimmed || indent > researchSkipIndent) continue;
+      researchSkipIndent = null;
+      if (trimmed === '}') continue;
+    }
+
+    if (/^backtest\s+/i.test(trimmed)) { researchSkipIndent = indent; continue; }
+    if (/^evaluate\s*\{?\s*$/i.test(trimmed)) {
+      researchSkipIndent = indent;
+      continue;
+    }
+
     while (whenBlocks.length && indent <= whenBlocks[whenBlocks.length - 1]) {
       const blockIndent = whenBlocks.pop()!;
       out.push(`${' '.repeat(blockIndent)}}`);
+    }
+
+    const dataDecl = trimmed.match(/^data\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;?$/i);
+    if (dataDecl) {
+      const value = dataDecl[2].trim();
+      const market = value.match(/^market\s*\((.*)\)$/is);
+      const parts = market ? splitTopLevel(market[1]) : [];
+      if (market && (parts.length === 1 || parts.length === 2)) {
+        const indentText = raw.match(/^[ \t]*/)?.[0] ?? '';
+        const ref = parts.length === 2 ? `market(${parts[0]}).timeframe(${parts[1]})` : `market(${parts[0]})`;
+        out.push(`${indentText}let ${dataDecl[1]} = ${ref};`);
+        continue;
+      }
+      if (/^(?:timeframe|series)\s*\(/i.test(value)) {
+        const indentText = raw.match(/^[ \t]*/)?.[0] ?? '';
+        out.push(`${indentText}let ${dataDecl[1]} = ${value};`);
+        continue;
+      }
+    }
+
+    const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\{\s*$/i);
+    if (braceModel) {
+      wrappers.push({ indent, kind:'model' });
+      modelBraceIndents.push(indent);
+      // Model declarations are compiler metadata; the executable parser stream
+      // receives only the model's feature/target references through researchSurface.
+      continue;
+    }
+
+    if (modelBraceIndents.length && trimmed === '}' && indent <= modelBraceIndents[modelBraceIndents.length - 1]!) {
+      modelBraceIndents.pop();
+      if (wrappers.length && wrappers[wrappers.length - 1]?.kind === 'model') wrappers.pop();
+      continue;
     }
 
     while (wrappers.length && indent <= wrappers[wrappers.length - 1].indent) {
@@ -278,16 +401,23 @@ export function normalizeCoreSpiritSource(source: string): string {
     }
 
     if (wrappers.length && wrappers[wrappers.length - 1].kind === 'model') {
-      if (/^(?:features|inputs?|outputs?)\s*:\s*$/i.test(trimmed)) continue;
-      if (/^use\s+(?:(?:python|cpp|rust|wasm|onnx|remote)\s+)?(?:"[^"]+"|'[^']+')\s*$/i.test(trimmed)) continue;
-      if (/^predict\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i.test(trimmed)) continue;
-      if (/^[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*(?:number|string|boolean|series<number>))?\s*(?:,\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*(?:number|string|boolean|series<number>))?)*$/i.test(trimmed)) continue;
+      // MODEL bodies are declarative research metadata. Their feature/target
+      // expressions are captured by languageConcepts/researchSurface and are not
+      // executable indicator statements.
+      continue;
     }
 
     // Dedicated WHEN concept: indentation/colon is only a source convenience.
     const whenMatch = trimmed.match(/^when\s+(.+?)\s*:\s*$/i);
     if (whenMatch) {
       out.push(`if (${whenCondition(whenMatch[1], modelNames)}) {`);
+      whenBlocks.push(indent);
+      continue;
+    }
+
+    const bareWhen = trimmed.match(/^when\s+(.+?)$/i);
+    if (bareWhen && !trimmed.endsWith(':')) {
+      out.push(`if (${whenCondition(bareWhen[1], modelNames)}) {`);
       whenBlocks.push(indent);
       continue;
     }

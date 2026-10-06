@@ -26,7 +26,8 @@ export type CoreSpiritLibraryGroupId =
   | 'visual'
   | 'events'
   | 'data'
-  | 'state';
+  | 'state'
+  | 'quant';
 
 export type CoreSpiritLibraryGroup = {
   id: CoreSpiritLibraryGroupId;
@@ -57,12 +58,18 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'normalize', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'persistence', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'pctchange', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'elementwise'} },
+  { name:'returns', minArgs:1, maxArgs:1, returnType:'series<float>', pure:true, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'beta', minArgs:3, maxArgs:3, returnType:'series<float>', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'trendStrength', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'regimeDetect', minArgs:2, maxArgs:3, returnType:'string', pure:true, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   // Math
   { name:'abs', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'min', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
   { name:'max', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
   { name:'sqrt', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'pow', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'log', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'exp', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'round', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'math' },
   { name:'sign', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   // Conditions
@@ -200,6 +207,7 @@ export const CORE_SPIRIT_LIBRARY_GROUPS: readonly CoreSpiritLibraryGroup[] = [
   { id:'events', label:'Events', description:'Reactive event emission and event queries.', names:['emit','event','signal','alert','webhook'] },
   { id:'data', label:'Data', description:'Advanced host-provided market-data access.', names:['request','requestBatch','lowerTf','bid','ask','spread','mid','intrabarCount','intrabarSum','intrabarHigh','intrabarLow','intrabarDelta','depthImbalance','footprintDelta','footprintBuy','footprintSell','footprintPoc','footprintVah','footprintVal','footprintRows','footprintRowPrice','footprintRowBuy','footprintRowSell','footprintRowDelta','footprintRowImbalance'] },
   { id:'state', label:'State', description:'Execution-frame and missing-value helpers.', names:['nz','na','isNa','bar_index','time'] },
+  { id:'quant', label:'Quant', description:'Research-oriented return, factor, regime and statistical transforms.', names:['returns','beta','trendStrength','regimeDetect','zscore','variance','stdev'] },
 ];
 
 const CORE_SPIRIT_LIBRARY_GROUP_BY_NAME = new Map<string, CoreSpiritLibraryGroup>(

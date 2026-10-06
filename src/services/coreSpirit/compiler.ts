@@ -22,6 +22,7 @@ import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
 import { isStateType } from './typeSystem';
 import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
+import { buildCoreSpiritResearchPlan } from './researchSurface';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 export type CoreSpiritCompilerOptions = {
@@ -98,7 +99,7 @@ export class CoreSpiritCompiler {
         case 'identifier': {
           const dest = `t${temp++}`;
           const semanticType=semantic.symbols.get(n.name);
-          if (isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
+          if (semanticType && isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
           else if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
           else if (n.name === 'bar_index') emitInstruction(n, { op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') emitInstruction(n, { op:'const', dest, value:null });
@@ -347,7 +348,7 @@ export class CoreSpiritCompiler {
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {
-      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};
+      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error ? `${error.message}\\n${error.stack ?? ''}` : String(error)}]};
     }
   }
   private semanticFingerprint(options: CoreSpiritCompilerOptions): string {
