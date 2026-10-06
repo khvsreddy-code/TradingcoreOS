@@ -1,5 +1,6 @@
 import type { CoreSpiritIrProgram } from './ir';
 import { serializeCoreSpiritIr } from './irContract';
+import { CORE_SPIRIT_RUNTIME_ABI, CORE_SPIRIT_OPTIMIZER_ABI } from './VERSION';
 
 export const CORE_SPIRIT_ARTIFACT_IDENTITY_VERSION = 1 as const;
 
@@ -91,7 +92,7 @@ export function buildCoreSpiritArtifactIdentity(
   const semanticHash=sha256HexSync(`${normalizedHash}\n${semanticFingerprint}`);
   const programHash=sha256HexSync(`${ir.sourceId}\n${semanticHash}`);
   const irHash=sha256HexSync(serializeCoreSpiritIr(ir));
-  const artifactHash=sha256HexSync(`${programHash}\n${irHash}\n5\n3`);
+  const artifactHash=sha256HexSync(`${programHash}\n${irHash}\n${CORE_SPIRIT_RUNTIME_ABI}\n${CORE_SPIRIT_OPTIMIZER_ABI}`);
   return Object.freeze({
     version: CORE_SPIRIT_ARTIFACT_IDENTITY_VERSION,
     algorithm:'SHA-256',
