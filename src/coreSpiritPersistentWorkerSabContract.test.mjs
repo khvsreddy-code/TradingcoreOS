@@ -23,7 +23,7 @@ if(!/crossOriginIsolated/.test(buffer))throw new Error('SAB capability must resp
 if(!/contexts = new Map/.test(worker)||!/artifact\.checksum/.test(worker)||!/executeBar/.test(worker))throw new Error('Worker must retain runtime contexts/artifacts and support incremental execution');
 if(!/readCoreSpiritSharedMarketDescriptor/.test(worker))throw new Error('Worker must read the shared market dataset directly');
 if(!/Cross-Origin-Opener-Policy/.test(vite)||!/Cross-Origin-Embedder-Policy/.test(vite))throw new Error('Vite must expose SAB isolation headers');
-if(!Array.isArray(vercel.headers)||!vercel.headers.some(h=>h.source==='/live'&&h.headers?.some(x=>x.key==='Cross-Origin-Embedder-Policy'&&x.value==='require-corp')))throw new Error('Vercel live route must expose COEP require-corp');
+if(!Array.isArray(vercel.headers)||!vercel.headers.some(h=>h.source==='/(.*)'&&h.headers?.some(x=>x.key==='Cross-Origin-Embedder-Policy'&&x.value==='require-corp')))throw new Error('Vercel live route must expose COEP require-corp');
 if(!/sharedMemory/.test(live)||!/crossOriginIsolated/.test(live))throw new Error('Live telemetry must expose shared-memory capability');
 
 console.log('TRADINGCORE_PERSISTENT_CORESPIRIT_SAB_CONTRACT_OK');
