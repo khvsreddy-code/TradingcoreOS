@@ -348,7 +348,7 @@ export class CoreSpiritCompiler {
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {
-      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};
+      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error ? `${error.message}\\n${error.stack ?? ''}` : String(error)}]};
     }
   }
   private semanticFingerprint(options: CoreSpiritCompilerOptions): string {
