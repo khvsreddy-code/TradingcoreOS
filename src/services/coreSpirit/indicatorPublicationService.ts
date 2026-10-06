@@ -1,6 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../auth/supabaseClient';
 import type { CoreSpiritCompileResult } from './compiler';
-import { compileCoreSpirit } from './coreSpiritPipeline';
+import { compileCoreSpirit } from './coreSpiritCompilerLoader';
 import { CORE_SPIRIT_VERSION } from './VERSION';
 import type { UserProfile } from '../../auth/types';
 import type { IndicatorConfig } from '../marketData/indicatorEngine';
@@ -129,8 +129,8 @@ async function getUserId() {
   return data.user.id;
 }
 
-function compileIndicatorSource(source: string, sourceId: string): CoreSpiritCompileResult {
-  const result = compileCoreSpirit(source, sourceId);
+async function compileIndicatorSource(source: string, sourceId: string): Promise<CoreSpiritCompileResult> {
+  const result = await compileCoreSpirit(source, sourceId);
   const errors = (result.diagnostics || []).filter((diagnostic) => diagnostic.severity === 'error');
   if (errors.length) throw new Error(errors.slice(0, 4).map((diagnostic) => diagnostic.message).join(' · '));
   return result;
@@ -220,7 +220,7 @@ export async function publishUserIndicator(input: PublishIndicatorInput) {
   if (!isSupabaseConfigured()) throw new Error('Supabase is not configured.');
   const compile = input.compile && !(input.compile.diagnostics || []).some((d) => d.severity === 'error')
     ? input.compile
-    : compileIndicatorSource(input.source, `indicator-publication:${slugify(input.title)}`);
+    : await compileIndicatorSource(input.source, `indicator-publication:${slugify(input.title)}`);
   if (!compile.ir) throw new Error('The indicator compiled without an executable IR artifact.');
 
   const saved = await saveUserIndicatorDraft({ ...input, compile });
