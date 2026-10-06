@@ -135,7 +135,8 @@ function AppContent() {
   }, [runtime]);
 
   useEffect(() => {
-    if (publicIndicatorRoute) return;
+    const isBrokerCallbackRoute = pathname.startsWith('/auth/broker-callback');
+    if (publicIndicatorRoute || isBrokerCallbackRoute) return;
     if (authLoading || (initialProtectedEntry.current && !brokerRestoreReady)) return;
 
     if (isAuthenticated && user) {
@@ -262,8 +263,10 @@ function AppContent() {
         <BrokerConnectionRequiredPage
           onBack={() => navigate('/dashboard')}
           onBrokerConnected={() => {
+            // Completing broker OAuth is intentionally NOT a navigation event.
+            // Stay on /broker so the user can inspect the ready state and
+            // explicitly launch the workspace.
             setHasConnectedBroker(true);
-            navigate('/dashboard');
           }}
         />
       </Suspense>
