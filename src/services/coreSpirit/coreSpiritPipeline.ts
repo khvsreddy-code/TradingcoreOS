@@ -7,7 +7,7 @@ import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
 import { describeCoreSpiritSurface } from './surfaceForms';
 import { sha256HexSync } from './artifactIdentity';
-import { CORE_SPIRIT_COMPILER_VERSION } from './VERSION';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_RUNTIME_ABI, CORE_SPIRIT_OPTIMIZER_ABI } from './VERSION';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import type { CoreSpiritExecutableArtifact } from './artifact';
@@ -71,6 +71,8 @@ export function buildCoreSpiritArtifactLookupIdentity(
       components:options.components,
     }),
     componentSet:componentFingerprint(options),
+    runtimeABI:CORE_SPIRIT_RUNTIME_ABI,
+    optimizerABI:CORE_SPIRIT_OPTIMIZER_ABI,
   });
   const semanticHash=sha256HexSync(`${normalizedHash}\n${semanticFingerprint}`);
   return {
