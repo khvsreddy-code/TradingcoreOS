@@ -372,6 +372,7 @@ export class SceneGraph {
      *  the top of the pile until the user restacks it. No-op if the indicator already has one. */
     assignIndicatorZ(id: string): void {
         if (!this.seriesZ.has(id)) this.seriesZ.set(id, this.bottomZ() - 1);
+        this.syncRetainedZ(id);
     }
 
     /** Mount-time default for a LAYER-BACKED native (it paints on a canvas stacked above the
@@ -379,6 +380,7 @@ export class SceneGraph {
      *  the first frame. Keeps an existing key, so a restored stack survives the remount. */
     assignIndicatorZTop(id: string): void {
         if (!this.seriesZ.has(id)) this.seriesZ.set(id, this.topZ() + 1);
+        this.syncRetainedZ(id);
     }
 
     forgetIndicatorZ(id: string): void {
@@ -387,6 +389,7 @@ export class SceneGraph {
 
     setIndicatorZ(id: string, z: number): void {
         this.seriesZ.set(id, z);
+        this.syncRetainedZ(id);
     }
 
     /** Snapshot of the current ordering for a UI/read API: `{ id, z }` sorted by z. */
@@ -406,11 +409,20 @@ export class SceneGraph {
     /** Raise an indicator above every other layer (other indicators AND the candles). */
     bringIndicatorToFront(id: string): void {
         this.seriesZ.set(id, this.topZ() + 1);
+        this.syncRetainedZ(id);
     }
 
     /** Drop an indicator below every other layer (other indicators AND the candles). */
     sendIndicatorToBack(id: string): void {
         this.seriesZ.set(id, this.bottomZ() - 1);
+        this.syncRetainedZ(id);
+    }
+
+    private syncRetainedZ(id: string): void {
+        const node = this.retained.getNode(`indicator:${id}`);
+        if (!node) return;
+        node.zIndex = this.zOf(id);
+        this.retained.markSubtreeDirty(`indicator:${id}`, SceneDirty.Structure);
     }
 
     private topZ(): number {
