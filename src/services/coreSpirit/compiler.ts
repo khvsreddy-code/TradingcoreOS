@@ -99,7 +99,7 @@ export class CoreSpiritCompiler {
         case 'identifier': {
           const dest = `t${temp++}`;
           const semanticType=semantic.symbols.get(n.name);
-          if (isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
+          if (semanticType && isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
           else if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
           else if (n.name === 'bar_index') emitInstruction(n, { op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') emitInstruction(n, { op:'const', dest, value:null });
