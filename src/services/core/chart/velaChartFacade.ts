@@ -1,3 +1,4 @@
+/** Compatibility boundary for the legacy chart-api surface. New TradingCoreOS code should import from velaNativeChartKernel. */
 /**
  * Legacy compatibility shim.
  * New TradingCoreOS code must import from velaNativeChartKernel.
