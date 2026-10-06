@@ -40,10 +40,27 @@ export class TradingCoreRuntime {
   public restoreBrokerConnections(): Promise<void> {
     if (this.brokerRestorePromise) return this.brokerRestorePromise;
     this.brokerRestorePromise = (async () => {
-      await this.brokerMgr.restoreServerConnections();
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          await this.brokerMgr.restoreServerConnections();
+          lastError = undefined;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+          }
+        }
+      }
+      if (lastError) throw lastError;
+
       for (const connection of this.brokerMgr.getAllConnections()) this.engine.registerRestoredBroker(connection.adapter);
       const primary = this.brokerMgr.getPrimaryBrokerInfo();
-      if (primary) { this.engine.switchActiveBroker(primary.brokerId); this.emit('STATUS_CHANGED', { brokerId: primary.brokerId, status: 'Restored' }); }
+      if (primary) {
+        this.engine.switchActiveBroker(primary.brokerId);
+        this.emit('STATUS_CHANGED', { brokerId: primary.brokerId, status: 'Restored' });
+      }
     })().finally(() => { this.brokerRestorePromise = undefined; });
     return this.brokerRestorePromise;
   }
