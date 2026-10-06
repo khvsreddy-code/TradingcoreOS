@@ -47,6 +47,5 @@ export type { DirtyRange, SeriesValueDelta, ValuePatch, SchemaPatch, ScenePatch 
 export { stableSeriesId } from './identity';
 export type { IdentifiableKind } from './identity';
 
-export type { HighCardinalityRectBatch } from './instances';
-export { highCardinalityRectCount } from './instances';
+export type { HighCardinalityRectXLoc, HighCardinalityRectInstance, HighCardinalityRectBatch, HighCardinalityRectDelta, GpuRectBatch } from './instances';
 export { applyScenePatch } from './scenePatch';
