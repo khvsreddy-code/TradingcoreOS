@@ -16,10 +16,10 @@ let htfClose = htf.close;
 assert.equal(result.diagnostics.filter((d) => d.severity === 'error').length, 0);
 assert.ok(result.ir?.tradingNativePlan.multiSymbol);
 assert.ok(result.ir?.tradingNativePlan.multiTimeframe);
-assert.equal(result.ir?.tradingNativePlan.dataDependencies.length, 4);
+assert.equal(result.ir?.tradingNativePlan.dataDependencies.length, 3);
 assert.deepEqual(
   result.ir?.tradingNativePlan.dataDependencies.map((dep) => dep.id),
-  ['market:NSE:NIFTY50:chart','market:NSE:NIFTYBANK:chart','market:current:chart','market:NSE:NIFTY50:15m'],
+  ['market:NSE:NIFTY50:chart','market:NSE:NIFTYBANK:chart','market:NSE:NIFTY50:15m'],
 );
 assert.ok(result.ir?.specializedPlan);
 
