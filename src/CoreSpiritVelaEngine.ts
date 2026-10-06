@@ -75,7 +75,7 @@ export class CoreSpiritVelaEngine {
 
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
     const normalized = normalizeCoreSpirit(source);
-    const compiled = compileCoreSpirit(normalized, instanceId);
+    const compiled = compileCoreSpirit(source, instanceId);
     const error = compiled.diagnostics?.find(diagnostic => diagnostic.severity === 'error');
     if (!compiled.ir || error) throw new Error(error?.message || 'CoreSpirit compilation failed');
 
@@ -293,8 +293,6 @@ export class CoreSpiritVelaEngine {
           return;
         }
 
-        /*
-        */
         if (reason === 'backfill' && dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
           const start = lowerBoundBarTime(currentBars, dirtyRange.from);
           const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirtyRange.to));
