@@ -29,6 +29,8 @@ type LoadArtifactMessage={
   sourceId:string;
   artifact:CoreSpiritExecutableArtifact;
   graphSnapshot?:CoreSpiritGraphSnapshot;
+  graphBaseSymbol?:string;
+  graphBaseTimeframe?:string;
 };
 
 type UpdateGraphMessage={
@@ -36,6 +38,8 @@ type UpdateGraphMessage={
   requestId:string;
   contextKey:string;
   graphSnapshot:CoreSpiritGraphSnapshot;
+  graphBaseSymbol?:string;
+  graphBaseTimeframe?:string;
 };
 
 type RunMessage={
@@ -109,8 +113,8 @@ function installArtifact(message:LoadArtifactMessage):void{
 
   const graphResolver=createGraphResolver(
     message.graphSnapshot ?? {version:1,revision:0,nodes:[]},
-    message.sourceId,
-    'chart',
+    message.graphBaseSymbol ?? message.sourceId,
+    message.graphBaseTimeframe ?? 'chart',
   );
   const runtime=new CoreSpiritRuntime({
     sourceId:message.sourceId,
