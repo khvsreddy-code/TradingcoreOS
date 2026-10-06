@@ -1,8 +1,4 @@
-import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
-import type { DrawingLabel, DrawingLine, DrawingPolyline } from '../../../../vendor/vela/src/core/model/drawings';
-import type { HighCardinalityRectBatch, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
-import type { MarkerPoint, SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
-import type { ScenePatch, ValuePatch } from '../../../../vendor/vela/src/core/model/patch';
+import type { Background, PriceLine, DrawingLabel, DrawingLine, DrawingPolyline, HighCardinalityRectBatch, HighCardinalityRectInstance, MarkerPoint, SeriesPoint, SeriesSpec, ScenePatch, ValuePatch } from './velaNativeChartKernel';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 
 type Identified = { id: string };
