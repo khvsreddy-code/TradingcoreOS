@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const liveChart = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
+const chartRuntime = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartRuntimeController.ts'), 'utf8');
 const dataPlane = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
 const sharedFeed = fs.readFileSync(path.join(root, 'src/services/marketData/sharedChartMarketFeed.ts'), 'utf8');
 const manager = fs.readFileSync(path.join(root, 'src/services/marketData/PersistentMarketSubscriptionManager.ts'), 'utf8');
@@ -20,7 +21,8 @@ if (/new Worker\s*\(/.test(liveChart)) throw new Error('LiveChart still creates 
 if (/useChartRealtimeFeed/.test(liveChart)) throw new Error('LiveChart still owns the legacy per-chart realtime hook');
 if (!/getChartDataPlane\(brokerId,resolvedInstrumentKey,timeframe\)/.test(liveChart)) throw new Error('LiveChart does not consume the shared chart data plane');
 if (!/chartDataPlaneKey\(brokerId,resolvedInstrumentKey,timeframe\)/.test(liveChart)) throw new Error('LiveChart dataset key is not canonical');
-if (!/subscribe\(app?lySnapshot\)/.test(liveChart)) throw new Error('LiveChart is missing data-plane snapshot subscription');
+if (!/subscribe\(applySnapshot\)/.test(chartRuntime)) throw new Error('Chart runtime controller is missing data-plane snapshot subscription');
+if (!/createChartRuntimeController/.test(liveChart)) throw new Error('LiveChart does not delegate data-plane lifecycle to ChartRuntimeController');
 
 if (!/chartDataPlaneKey\(brokerId: string, instrumentKey: string, timeframe: string\)/.test(dataPlane)) throw new Error('Chart data plane key is not broker:symbol:timeframe scoped');
 if (!/registry = new Map<ChartDataPlaneKey, ChartDataPlane>/.test(dataPlane)) throw new Error('Chart data plane registry missing');
