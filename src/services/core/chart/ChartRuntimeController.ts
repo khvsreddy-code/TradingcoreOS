@@ -24,6 +24,7 @@ import type { CoreSpiritStore } from '../../coreSpirit/CoreSpiritStore';
 import type { DrawingTool } from '../../../components/workspace/drawingTypes';
 import type { ChartController } from '../../../components/workspace/chartController';
 import { chartMarketKey } from '../../marketData/chartMarketStore';
+import { chartPerformanceTelemetry } from '../../marketData/chartPerformanceTelemetry';
 import { isIncrementalIndicatorSupported } from '../../marketData/incrementalIndicatorEngine';
 import { coreEventBus } from '../event/eventBus';
 
@@ -167,7 +168,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
           if(deps.indicatorsRef.current.some(x=>x.enabled&&!isIncrementalIndicatorSupported(x.kind)))chartIndicatorController.renderStudies(data,true);
           void bucketChanged;
         },
-        onIndicatorWorker:(data,bucketChanged)=>chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace'),
+        onIndicatorWorker:(data,bucketChanged)=>{chartPerformanceTelemetry.recordIndicatorIncrementalUpdate(chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey));chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace');},
         onDrawingTick:()=>chartDrawingController.renderDrawings(),
         onPredictionTick:(data)=>{chartPredictionController.setInputs({predictionModelIds:deps.predictionIdsRef.current,chartDatasetKey:deps.chartDatasetKey,resolvedInstrumentKey:deps.resolvedInstrumentKey,timeframe:deps.timeframe});void chartPredictionController.renderPredictionOverlay(data);},
         onAnalyticsTick:(data,spot)=>chartAnalyticsController.publishAnalytics(data,spot,true),
