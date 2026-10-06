@@ -63,3 +63,28 @@ heavy chart plugins
 ```
 
 The rule is simple: **metadata is cheap and eagerly available; implementation is loaded only when the user actually activates the capability.**
+
+## Rendering boundary today
+
+The retained graph is now the invalidation authority for expensive overlay work:
+drawings, labels and high-cardinality instance batches. The canonical candle/series surface still uses Vela's existing optimized typed-buffer paint path. That is intentional: converting every line/candle into an independent offscreen surface would add a large compositing cost without improving the hot path.
+
+The next step toward fully object-dirty rendering is a retained surface cache for series groups, where unchanged series stay in GPU/bitmap resources and only dirty groups re-rasterize. The scene graph ABI is designed to support that without changing CoreSpirit or the public chart API.
+
+## Capability policy
+
+The same metadata-first rule should govern future expensive subsystems:
+
+```text
+cheap metadata
+    ↓
+capability catalog
+    ↓
+user activation / persisted workspace need
+    ↓
+dynamic import or worker load
+    ↓
+live instance
+```
+
+That boundary can later host broker adapters, AI model runners, footprint/heatmap compute kernels and advanced analytics without forcing those implementations into the TradingCore OS entry bundle.
