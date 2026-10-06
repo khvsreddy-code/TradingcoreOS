@@ -6,7 +6,7 @@ const expectedCellsList = (process.env.TCO_EXPECTED_CELLS || '1').split(',').map
 const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 25);
 const maxRenderRateHz = Number(process.env.TCO_MAX_RENDER_RATE_HZ || 150);
 const maxComputeRateHz = Number(process.env.TCO_MAX_COMPUTE_RATE_HZ || 60);
-const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount'];
+const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount'];
 
 function run(args) {
   const result = spawnSync('agent-browser', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -71,6 +71,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
       reactCommitCountDuringTicks: sample.reactCommitCountDuringTicks,
       fullSeriesRewriteCount: sample.fullSeriesRewriteCount,
       formingBarReplaceLastCount: sample.formingBarReplaceLastCount,
+      indicatorIncrementalUpdateCount: sample.indicatorIncrementalUpdateCount,
       frameBudgetMissRate: sample.frameBudgetMissRate,
     })),
     backends: perf.cells.map((cell) => ({ cellId: cell.cellId, backend: cell.backend, fps: cell.fps, p95FrameMs: cell.p95FrameMs, budgetMissRate: cell.frameBudgetMissRate })),
