@@ -1,4 +1,4 @@
-import type { AutomationConfig } from '../../marketData/indicatorEngine';
+import type { AutomationConfig } from '../../workspace/workspaceState';
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import { getIndicatorDefaultPatch } from '../../coreSpirit/indicatorSettingsSchema';
 import { normalizeCoreDrawings } from '../drawing/coreDrawing';
