@@ -31,7 +31,7 @@ export type {
 } from '../../../../vendor/vela/src/core/ports/ScriptingEngine';
 export type { InputValue, InputSchema } from '../../../../vendor/vela/src/core/model/inputs';
 export type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
-export type { SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
+export type { SeriesPoint, SeriesSpec, MarkerPoint } from '../../../../vendor/vela/src/core/model/series';
 export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 export type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../../../vendor/vela/src/core/model/columnar-bars';
 export type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
