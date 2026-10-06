@@ -35,7 +35,7 @@ class ChartMarketStore {
         revision: 0,
         marketSequence: 0,
         snapshot: { tick, revision: 0, marketSequence: 0 },
-        tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE),
+        tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE, key),
         reactNotifyScheduled: false,
       };
       this.entries.set(key, entry);
