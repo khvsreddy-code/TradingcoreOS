@@ -102,7 +102,7 @@ export class CoreSpiritWorkerPool {
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string},
   ):Promise<CoreSpiritWorkerRunResult> {
     const { compileCoreSpirit } = await import('./coreSpiritPipeline');
     const compiled = compileCoreSpirit(source, sourceId);
@@ -122,7 +122,7 @@ export class CoreSpiritWorkerPool {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
       if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
-      return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot);
+      return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe);
     }
 
     return new Promise((resolve,reject)=>{
@@ -312,11 +312,13 @@ export class CoreSpiritWorkerPool {
     bars:CoreSpiritMarketBar[],
     sourceId:string,
     graphSnapshot?:CoreSpiritGraphSnapshot,
+    graphBaseSymbol='current',
+    graphBaseTimeframe='chart',
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
     const runtime=new CoreSpiritRuntime({
       sourceId,
-      dataResolver:graphSnapshot?createGraphResolver(graphSnapshot):undefined,
+      dataResolver:graphSnapshot?createGraphResolver(graphSnapshot,graphBaseSymbol,graphBaseTimeframe):undefined,
     });
     runtime.loadIr(artifact.ir);
     const result=runtime.executeIr(artifact.ir,bars);
