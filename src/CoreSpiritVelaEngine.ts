@@ -1,15 +1,7 @@
-import type {
-  EngineCapabilities,
-  ExecutionHandlers,
-  ExecutionRequest,
-  ExecutionSession,
-  InputValue,
-  PreparedScript,
-  IndicatorMeta,
-  IndicatorModel,
-  SeriesPoint,
-  SeriesSpec,
-} from './services/core/chart/velaChartFacade';
+import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from '../vendor/vela/src/core/ports/ScriptingEngine';
+import type { InputValue } from '../vendor/vela/src/core/model/inputs';
+import type { IndicatorMeta, IndicatorModel } from '../vendor/vela/src/core/model/indicator';
+import type { SeriesPoint, SeriesSpec } from '../vendor/vela/src/core/model/series';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
 import type { CoreSpiritObject } from './services/coreSpirit/types';
