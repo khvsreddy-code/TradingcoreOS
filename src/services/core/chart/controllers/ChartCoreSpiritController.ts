@@ -47,7 +47,7 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
         publishLifecycle('updating');
         try{
           datasetVersion += 1;
-          const result=await runCoreSpiritInWorker(source,bars,sourceId,{contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length}});
+          const result=await runCoreSpiritInWorker(source,bars,sourceId,{contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe});
           if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
           ensureOutput()?.reset();
           ensureOutput()?.applyObjects(result.outputs);
