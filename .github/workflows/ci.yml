@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run test:contracts
       - run: npm run build
       - run: npm run typecheck
