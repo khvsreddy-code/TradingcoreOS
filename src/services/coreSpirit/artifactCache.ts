@@ -62,7 +62,7 @@ function canPersist():boolean{
 function openDatabase():Promise<IDBDatabase|null>{
   if(databasePromise) return databasePromise;
   if(!canPersist() || persistenceDisabled) return Promise.resolve(null);
-  databasePromise=new Promise((resolve)=>{
+  databasePromise=new Promise<IDBDatabase|null>((resolve)=>{
     try{
       const request=indexedDB.open(DB_NAME,DB_VERSION);
       request.onupgradeneeded=()=>{
