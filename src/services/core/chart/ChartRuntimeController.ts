@@ -141,7 +141,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
       const chartAnalyticsController=createChartAnalyticsController({
         brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,chartDatasetKey:deps.chartDatasetKey,
         chartDataPlane:deps.chartDataPlane,chartStore:deps.chartStore,dataRevisionRef:deps.dataRevisionRef,
-        candles:deps.candles,latestTick:deps.latestTick,candle:deps.candle,lifecycle:lifecycle.current,
+        candles:deps.candles,latestTick:deps.latestTick,candle:deps.candle,lifecycle,
         isOiVisible:()=>deps.viewStateRef.current.showOI,
         onAnalytics:(value)=>{deps.setAnalytics(value);deps.onAnalytics?.(value);},
         onOiAnalytics:deps.setOiAnalytics,
@@ -265,7 +265,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         deps.predictionControllerRef.current=null;
         deps.coreSpiritControllerRef.current=null;
         deps.analyticsControllerRef.current=null;
-        chartUpdateScheduler.cancel();
+        chartUpdateScheduler.current.cancel();
         publishLifecycle('disposed');
         lifecycle.current.invalidate();
       };
