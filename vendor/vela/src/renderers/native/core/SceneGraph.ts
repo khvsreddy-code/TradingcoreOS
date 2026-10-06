@@ -447,6 +447,7 @@ export class SceneGraph {
                 kind: series.kind === 'markers' ? 'markers' : 'series',
                 zIndex,
                 visibility: series.visible !== false,
+                viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
                 style: 'style' in series ? series.style : undefined,
                 payload: series,
                 dataRange: this.dataRangeForSeries(series),
@@ -470,6 +471,7 @@ export class SceneGraph {
                     linefills: model.linefills,
                     tables: model.tables,
                 },
+                viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
                 dataRange: this.dataRangeForModel(model),
                 dirty,
             });
@@ -485,6 +487,7 @@ export class SceneGraph {
                 zIndex,
                 visibility: true,
                 payload: model.labels,
+                viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
                 dataRange: this.dataRangeForModel(model),
                 dirty,
             });
@@ -501,6 +504,8 @@ export class SceneGraph {
                     zIndex,
                     visibility: true,
                     payload: batch,
+                    viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
+                    dataRange: this.dataRangeForInstances(batch.instances),
                     dirty,
                 });
             }
@@ -526,13 +531,34 @@ export class SceneGraph {
     }
 
     private dataRangeForModel(model: IndicatorModel): SceneDataRange | undefined {
-        const ranges = model.series.map((series) => this.dataRangeForSeries(series)).filter((range): range is SceneDataRange => range != null);
+        const ranges = [
+            ...model.series.map((series) => this.dataRangeForSeries(series)),
+            ...(model.instanceBatches ?? []).map((batch) => this.dataRangeForInstances(batch.instances)),
+        ].filter((range): range is SceneDataRange => range != null);
         if (ranges.length === 0) return undefined;
+        const mins = ranges.map((range) => range.min).filter((value): value is number => Number.isFinite(value));
+        const maxs = ranges.map((range) => range.max).filter((value): value is number => Number.isFinite(value));
         return {
             from: Math.min(...ranges.map((range) => range.from)),
             to: Math.max(...ranges.map((range) => range.to)),
-            min: Math.min(...ranges.map((range) => range.min ?? Number.POSITIVE_INFINITY)),
-            max: Math.max(...ranges.map((range) => range.max ?? Number.NEGATIVE_INFINITY)),
+            ...(mins.length ? { min: Math.min(...mins) } : {}),
+            ...(maxs.length ? { max: Math.max(...maxs) } : {}),
+        };
+    }
+
+    private dataRangeForInstances(instances: readonly { left: number; right: number; top: number; bottom: number }[]): SceneDataRange | undefined {
+        const finite = instances.filter((instance) =>
+            Number.isFinite(instance.left) &&
+            Number.isFinite(instance.right) &&
+            Number.isFinite(instance.top) &&
+            Number.isFinite(instance.bottom)
+        );
+        if (!finite.length) return undefined;
+        return {
+            from: Math.min(...finite.map((instance) => instance.left)),
+            to: Math.max(...finite.map((instance) => instance.right)),
+            min: Math.min(...finite.map((instance) => Math.min(instance.top, instance.bottom))),
+            max: Math.max(...finite.map((instance) => Math.max(instance.top, instance.bottom))),
         };
     }
 
