@@ -1775,11 +1775,27 @@ export class NativeRenderer implements IChartRenderer {
         this.refreshScrollButtonTheme();
         this.userDrawings?.setTheme(this.chromeTheme());
         this.refreshAttributionColor();
+        this.scene.retained.markKindDirty('drawing', SceneDirty.Style);
+        this.scene.retained.markKindDirty('label', SceneDirty.Style);
+        this.scene.retained.markKindDirty('heatmap', SceneDirty.Style);
         this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
     resize(): void {
         this.syncSize();
+        const vr = this.coords.visibleLogicalRange();
+        if (this.coords.barCount > 0 && vr.to >= vr.from) {
+            this.scene.setRenderViewport(
+                this.coords.logicalToTime(Math.max(0, Math.ceil(vr.from))),
+                this.coords.logicalToTime(Math.min(this.coords.barCount - 1, Math.floor(vr.to))),
+                this.coords.width,
+                this.coords.height,
+                this.coords.dpr,
+            );
+        }
+        this.scene.retained.markKindDirty('drawing', SceneDirty.Layout | SceneDirty.Transform);
+        this.scene.retained.markKindDirty('label', SceneDirty.Layout | SceneDirty.Transform);
+        this.scene.retained.markKindDirty('heatmap', SceneDirty.Layout | SceneDirty.Transform);
     }
 
     /** Drive the countdown chip from the host's second pulse (`null` → the renderer's own). */
