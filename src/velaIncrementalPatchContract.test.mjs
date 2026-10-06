@@ -5,6 +5,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 const patch = read('vendor/vela/src/core/model/patch.ts');
 const native = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
+const patchApplier = read('vendor/vela/src/core/model/scenePatch.ts');
 const engine = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
 const facade = read('src/services/core/chart/velaChartFacade.ts');
 const kernel = read('src/services/core/chart/velaNativeChartKernel.ts');
@@ -18,7 +19,8 @@ assert(patch.includes('seriesStyles?: SeriesStyleDelta[]'), 'missing style-only 
 assert(patch.includes('fillDeltas?: FillValueDelta[]'), 'missing fill value patch channel');
 assert(patch.includes('fillStyles?: FillStyleDelta[]'), 'missing fill style patch channel');
 assert(native.includes('MutableColumnarBars'), 'native renderer lost mutable columnar ownership');
-assert(native.includes('function applyArrayDelta'), 'native retained patch applier missing');
+assert(patchApplier.includes('function applyArrayDelta'), 'retained patch applier missing from shared scene patch module');
+assert(native.includes('applyScenePatch(model, patch)'), 'native renderer must route indicator deltas through retained patch applier');
 assert(native.includes("case 'replace-last'"), 'replace-last operation missing');
 assert(native.includes("case 'append'"), 'append operation missing');
 assert(engine.includes('modelToValuePatch(model, previousModel, record.pendingCause'), 'engine previous-model/cause seam missing');
