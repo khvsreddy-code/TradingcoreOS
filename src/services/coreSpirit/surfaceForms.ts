@@ -342,6 +342,11 @@ export function normalizeCoreSpiritSource(source: string): string {
       continue;
     }
 
+    while (whenBlocks.length && indent <= whenBlocks[whenBlocks.length - 1]) {
+      const blockIndent = whenBlocks.pop()!;
+      out.push(`${' '.repeat(blockIndent)}}`);
+    }
+
     const dataDecl = trimmed.match(/^data\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;?$/i);
     if (dataDecl) {
       const value = dataDecl[2].trim();
@@ -373,13 +378,6 @@ export function normalizeCoreSpiritSource(source: string): string {
       modelBraceIndents.pop();
       if (wrappers.length && wrappers[wrappers.length - 1]?.kind === 'model') wrappers.pop();
       continue;
-    }
-
-    // Explicit braces remain authoritative. Generated indentation blocks are
-    // closed when source indentation returns to the block's parent level.
-    while (whenBlocks.length && indent <= whenBlocks[whenBlocks.length - 1]) {
-      const blockIndent = whenBlocks.pop()!;
-      out.push(`${' '.repeat(blockIndent)}}`);
     }
 
     while (wrappers.length && indent <= wrappers[wrappers.length - 1].indent) {
