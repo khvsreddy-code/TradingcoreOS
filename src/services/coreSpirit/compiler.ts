@@ -22,6 +22,7 @@ import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
 import { isStateType } from './typeSystem';
 import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
+import { buildCoreSpiritResearchPlan } from './researchSurface';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 export type CoreSpiritCompilerOptions = {
