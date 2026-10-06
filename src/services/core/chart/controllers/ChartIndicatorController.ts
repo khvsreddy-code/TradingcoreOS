@@ -43,8 +43,8 @@ export type ChartIndicatorControllerDeps = {
   chartDatasetKey: string;
   dataRevisionRef: Ref<number>;
   indicatorRequestSeq: Ref<number>;
-  lifecycle: ChartLifecycle;
-  chartUpdateScheduler: ChartUpdateScheduler;
+  lifecycle: Ref<ChartLifecycle>;
+  chartUpdateScheduler: Ref<ChartUpdateScheduler>;
   indicators: IndicatorConfig[];
   timeframe: string;
   chartId: Ref<string>;
