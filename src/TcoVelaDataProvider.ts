@@ -2,7 +2,6 @@ import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, Col
 import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
-import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 
 const SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
