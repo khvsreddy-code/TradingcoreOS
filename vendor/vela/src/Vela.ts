@@ -26,7 +26,7 @@ import { MultiProviderFeed } from './data/MultiProviderFeed';
 import { registerBuiltinChartTypes } from './chart-types/builtins';
 import { registerVolume } from './core/native-indicators/volume';
 import { registerVpvr } from './core/native-indicators/vpvr';
-import { registerClassicIndicators } from './core/native-indicators/classics';
+
 
 const asError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
@@ -72,7 +72,6 @@ export class Vela {
         registerBuiltinChartTypes(); // built-in chart types through the public SDK registry (idempotent)
         registerVolume(); // register the built-in native indicators (idempotent)
         registerVpvr();
-        registerClassicIndicators();
         const element = resolveElement(container);
         const theme = resolveTheme(options.theme);
         const display = {
@@ -158,6 +157,15 @@ export class Vela {
      */
     addNativeIndicator(type: string, options?: { inputs?: Record<string, InputValue> }): IndicatorHandle {
         return this.orchestrator.addNativeIndicator(type, options);
+    }
+
+    /**
+     * Lazy native-indicator path: the implementation chunk is loaded only when this
+     * type is actually selected. Use this for picker-driven indicators so the initial
+     * chart bundle never contains the classic study compute catalog.
+     */
+    addNativeIndicatorAsync(type: string, options?: { inputs?: Record<string, InputValue> }): Promise<IndicatorHandle> {
+        return this.orchestrator.addNativeIndicatorAsync(type, options);
     }
 
     /**
