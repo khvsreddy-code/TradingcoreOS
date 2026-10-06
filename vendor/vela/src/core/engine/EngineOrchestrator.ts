@@ -29,6 +29,7 @@ import {
     type NativeIndicatorOutput,
 } from '../native-indicators/NativeIndicator';
 import { LiveSession } from './LiveSession';
+import { lazyNativeIndicatorCatalog, loadNativeIndicatorType, isLazyNativeIndicator } from '../native-indicators/lazyCatalog';
 import { IndicatorHandleImpl, type IndicatorController } from './IndicatorHandleImpl';
 import { inspectModels, type SceneInspection } from './inspect';
 import { presetToRange, type VisibleRangePreset } from '../visible-range';
@@ -1969,6 +1970,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         return handle;
     }
 
+    /** Asynchronous native-indicator entry point for lazy catalog types. */
+    async addNativeIndicatorAsync(type: string, options: { inputs?: Record<string, InputValue> } = {}): Promise<IndicatorHandle> {
+        if (isLazyNativeIndicator(type)) await loadNativeIndicatorType(type);
+        return this.addNativeIndicator(type, options);
+    }
+
     /** The native types present on the chart, one entry per INSTANCE in registry order (a
      *  multi-instance type repeats) — SYNC (registry state; no support probe). */
     presentNativeIndicators(): string[] {
@@ -1988,16 +1995,34 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     async availableNativeIndicators(): Promise<NativeIndicatorInfo[]> {
         const symbol = this.qualifiedSymbol();
         const present = new Set(this.presentNativeIndicators());
-        return Promise.all(
-            nativeIndicatorDescriptors().map(async (d) => ({
-                type: d.type,
-                title: d.title,
-                supported: await this.isNativeSupported(d, symbol),
-                present: present.has(d.type),
-                beta: d.beta,
-                ...(d.multiInstance ? { multiInstance: true } : {}),
+        const registered = nativeIndicatorDescriptors();
+        const registeredTypes = new Set(registered.map((descriptor) => descriptor.type));
+
+        const rows = await Promise.all(
+            registered.map(async (descriptor) => ({
+                type: descriptor.type,
+                title: descriptor.title,
+                supported: await this.isNativeSupported(descriptor, symbol),
+                present: present.has(descriptor.type),
+                beta: descriptor.beta,
+                ...(descriptor.multiInstance ? { multiInstance: true } : {}),
             })),
         );
+
+        // Lazy classic indicators expose picker metadata without importing their implementation.
+        for (const entry of lazyNativeIndicatorCatalog()) {
+            if (registeredTypes.has(entry.type)) continue;
+            rows.push({
+                type: entry.type,
+                title: entry.title,
+                supported: true,
+                present: present.has(entry.type),
+                beta: undefined,
+                multiInstance: true,
+            });
+        }
+
+        return rows;
     }
 
     /**
