@@ -108,7 +108,7 @@ class ChartPerformanceTelemetry {
         tickToRenderSamples: new Float64Array(SAMPLE_CAPACITY),
         tickToComputeCount: 0, tickToPatchCount: 0, tickToRenderCount: 0,
         tickToComputeCursor: 0, tickToPatchCursor: 0, tickToRenderCursor: 0,
-        lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0,
+        lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0, indicatorIncrementalUpdateCount: 0,
         stageMs: { transport:0, compute:0, patch:0, renderer:0, frame:0 },
       };
       this.metrics.set(key, value);
