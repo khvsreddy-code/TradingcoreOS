@@ -3,8 +3,9 @@ import type { NormalizedMarketTick } from '../../../types/market';
 import type { ChartDataPlaneSnapshot } from '../../../marketData/chartDataPlane';
 import type { ChartStore } from '../ChartStore';
 import type { ChartUpdateScheduler } from '../chartUpdateScheduler';
-import type { ChartLifecycle } from '../chartLifecycle';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
+import { RealtimeRateScheduler } from '../realtimeRateScheduler';
+import { chartPerformanceTelemetry } from '../../../marketData/chartPerformanceTelemetry';
 
 type Ref<T>={current:T};
 
@@ -24,6 +25,7 @@ export type ChartRealtimeControllerDeps={
   instrumentKey:string;
   timeframe:string;
   chartMarketKey:string;
+  computeIntervalMs?:number;
   onLegacyIndicatorTick:(data:HistoricalCandle[],bucketChanged:boolean)=>void;
   onIndicatorWorker:(data:HistoricalCandle[],bucketChanged:boolean)=>void;
   onDrawingTick:()=>void;
@@ -32,40 +34,84 @@ export type ChartRealtimeControllerDeps={
   onOiTick:(spot:number)=>void;
 };
 
+type PendingCompute = {
+  snapshot: ChartDataPlaneSnapshot;
+  bucketChanged: boolean;
+};
+
 export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
-  const {chart,candles,latestTick,dataRevisionRef,rendererController,chartDataPlane,chartUpdateScheduler,calculationEngine,candleAppearanceRef,chartStore}=deps;
+  const {
+    chart,candles,latestTick,dataRevisionRef,rendererController,chartDataPlane,
+    chartUpdateScheduler,calculationEngine,candleAppearanceRef,chartStore,
+  }=deps;
+
+  let lastComputeSequence = 0;
+  const computeScheduler = new RealtimeRateScheduler<PendingCompute>({
+    intervalMs: deps.computeIntervalMs ?? 50,
+    run: ({snapshot,bucketChanged}, sequence) => {
+      const started = globalThis.performance?.now?.() ?? Date.now();
+      const data = snapshot.candles;
+      const live = data[data.length - 1];
+      if (!snapshot.historyReady || !live) {
+        chartPerformanceTelemetry.recordCompute(deps.chartMarketKey, globalThis.performance?.now?.() ?? Date.now(), sequence);
+        return;
+      }
+
+      calculationEngine.updateTick(live,data.length - 1,bucketChanged);
+      deps.onLegacyIndicatorTick(data,bucketChanged);
+      deps.onIndicatorWorker(data,bucketChanged);
+      deps.onDrawingTick();
+      deps.onAnalyticsTick(data,Number(latestTick.current?.ltp)||Number(live.close)||0);
+      deps.onPredictionTick(data);
+      if(Number.isFinite(Number(latestTick.current?.ltp)))deps.onOiTick(Number(latestTick.current!.ltp));
+
+      chartPerformanceTelemetry.recordCompute(
+        deps.chartMarketKey,
+        Math.max(0,(globalThis.performance?.now?.() ?? Date.now()) - started),
+        sequence,
+      );
+      lastComputeSequence = sequence;
+    },
+  });
+
   const handleTick=(snapshot:ChartDataPlaneSnapshot,bucketChanged:boolean)=>{
     const data=snapshot.candles;
     candles.current=data;
     latestTick.current=snapshot.latestTick;
-    const live=data[data.length-1];
-    if(live&&chart.current){
+    dataRevisionRef.current=snapshot.revision;
+
+    if(data.length&&chart.current){
       chartUpdateScheduler.scheduleLatest('realtime-bar',()=>{
-        const started=performance.now();
-        rendererController.applyRealtimeCanonical(chartDataPlane.readCanonical(),candleAppearanceRef.current);
-        if(deps.chartMarketKey) {
-          // perf accounting is intentionally kept outside React.
-          void started;
-        }
+        const patchStarted=globalThis.performance?.now?.() ?? Date.now();
+        chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'patch',0);
+        const canonical=chartDataPlane.readCanonical();
+        const beforeRender=globalThis.performance?.now?.() ?? Date.now();
+        rendererController.applyRealtimeCanonical(canonical,candleAppearanceRef.current);
+        const afterRender=globalThis.performance?.now?.() ?? Date.now();
+        chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'renderer',Math.max(0,afterRender-beforeRender));
+        chartPerformanceTelemetry.recordRenderUpdate(
+          deps.chartMarketKey,
+          Math.max(0,patchStarted-beforeRender + (beforeRender-patchStarted)),
+          Math.max(0,afterRender-beforeRender),
+          Math.max(0,afterRender-beforeRender),
+        );
       });
-      calculationEngine.updateTick(live,data.length-1,bucketChanged);
     }
-    if(!snapshot.historyReady)return;
-    deps.onLegacyIndicatorTick(data,bucketChanged);
-    deps.onIndicatorWorker(data,bucketChanged);
-    deps.onDrawingTick();
-    deps.onAnalyticsTick(data,Number(latestTick.current?.ltp)||Number(live?.close)||0);
-    deps.onPredictionTick(data);
-    if(Number.isFinite(Number(latestTick.current?.ltp)))deps.onOiTick(Number(latestTick.current!.ltp));
+
+    const marketSequence = Math.max(lastComputeSequence + 1, snapshot.revision);
+    computeScheduler.schedule({snapshot,bucketChanged},marketSequence);
   };
 
   const hydrateHistory=(snapshot:ChartDataPlaneSnapshot)=>{
+    computeScheduler.cancel();
     candles.current=snapshot.candles;
     latestTick.current=snapshot.latestTick;
+    dataRevisionRef.current=snapshot.revision;
     calculationEngine.reset(snapshot.candles,deps.instrumentKey,deps.timeframe);
+    lastComputeSequence = 0;
   };
 
-  const setRevision=(revision:number)=>{dataRevisionRef.current=revision;};
+  const dispose=()=>computeScheduler.dispose();
 
-  return {handleTick,hydrateHistory,setRevision};
+  return {handleTick,hydrateHistory,setRevision:(revision:number)=>{dataRevisionRef.current=revision;},dispose};
 }
