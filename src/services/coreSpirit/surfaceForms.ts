@@ -273,6 +273,7 @@ export function normalizeCoreSpiritSource(source: string): string {
     if (researchSkipIndent !== null) {
       if (!trimmed || indent > researchSkipIndent) continue;
       researchSkipIndent = null;
+      if (trimmed === '}') continue;
     }
 
     if (/^backtest\s+/i.test(trimmed)) continue;
