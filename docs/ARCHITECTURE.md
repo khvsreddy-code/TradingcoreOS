@@ -690,3 +690,167 @@ Reference VM / Optimized VM
 ~~~
 
 The profiler is therefore a language/runtime capability, not a Vela-specific diagnostic layer.
+
+## Branch 16 — execution-plan visualization
+
+CoreSpirit now treats the execution plan as an inspectable artifact, not an opaque compiler detail.
+
+The existing semantic graph, dependency graph, series-fusion plan, specialized plan, backend assignments, and IR are projected into one immutable editor-facing visualization:
+
+~~~text
+close
+ │
+ ├── EMA(20)   [fused]
+ │
+ └── RSI(14)   [fused]
+       │
+       └── signal [barrier]
+~~~
+
+The visualization is derived from the same compiled program that the VM executes. It does not reparse source or invent a parallel dependency model.
+
+Each visual node carries:
+
+~~~
+node id
+IR instruction
+operation label
+dependencies
+source inputs
+estimated cost
+execution lane
+backend
+fusion kernel
+source-map location
+~~~
+
+Each fused kernel carries:
+
+~~~
+CPU / WASM / GPU backend
+operation count
+instruction indices
+single traversal count
+intermediate-series allocation count
+eligible backends
+fusion strategy
+~~~
+
+That lets the editor explain an execution decision in concrete terms:
+
+~~~text
+Execution:
+CPU fused kernel #1
+3 operations
+1 traversal
+0 intermediate arrays
+~~~
+
+The execution-plan visualizer also emits an ASCII representation for CLI and headless tooling. The browser editor consumes the structured graph instead of scraping text.
+
+### Why this is better than a profiler alone
+
+A profiler answers **what was slow**.
+
+The execution plan answers **what the runtime intends to do**.
+
+Together they form a closed optimization loop:
+
+~~~text
+source
+  ↓
+semantic/dependency graph
+  ↓
+execution plan visualization
+  ↓
+fused kernels / barriers / backend choice
+  ↓
+runtime execution
+  ↓
+profiler snapshot
+  ↓
+optimize the source or compiler
+~~~
+
+This is especially important for professional users because “fast” is no longer a single benchmark number. The user can inspect whether work was fused, how many chronological traversals occurred, where state/effect barriers remain, and whether intermediate arrays were avoided.
+
+## Branch 17 — Vela is the rendering/runtime substrate, not a second chart platform
+
+The architectural rule for Vela integration is now explicit:
+
+> TradingCoreOS owns trading semantics; Vela owns charting/rendering/runtime primitives.
+
+The large `velaChartFacade.ts` is therefore a **compatibility boundary**, not the canonical chart API.
+
+New TCO integrations should prefer native Vela ports and models:
+
+~~~text
+CoreSpirit
+   │
+   ├── Vela ScriptingEngine port
+   ├── Vela DataProvider / MarketDataFeed ports
+   ├── Vela columnar data model
+   ├── Vela IndicatorModel / SeriesSpec
+   └── Vela NativeRenderer
+~~~
+
+The compatibility facade remains only where an existing TradingCore surface still expects the older chart-api shape.
+
+The first architectural tightening removes facade coupling from two important seams:
+
+- `CoreSpiritVelaEngine` consumes Vela's native `ScriptingEngine` and model types directly.
+- `TcoVelaDataProvider` consumes Vela's native data, market-feed, OHLCV, and columnar model types directly.
+
+This matters because a second chart abstraction tends to become a second source of truth for:
+
+~~~
+series
+viewport/range
+data updates
+drawing state
+chart lifecycle
+renderer capabilities
+~~~
+
+That is precisely the duplication Vela is designed to eliminate.
+
+### Long-term adapter boundary
+
+The desired layering is:
+
+~~~text
+TradingCore semantic adapter
+        │
+        ├── trading concepts
+        │     symbol / timeframe / series / signal / order intent
+        │
+        └── Vela native primitives
+              renderer / workspace / data feed / columnar tape /
+              indicator models / drawing system / persistence
+~~~
+
+not:
+
+~~~text
+TradingCore
+   ↓
+TCO chart facade
+   ↓
+Vela chart facade
+   ↓
+Vela renderer
+~~~
+
+The compatibility layer can remain large while legacy callers are migrated, but new functionality should not expand it.
+
+### Practical migration rule
+
+When a new feature needs a chart capability, choose the boundary in this order:
+
+~~~text
+1. native Vela port/model
+2. TCO semantic adapter if the feature has trading-specific meaning
+3. compatibility facade only when legacy API compatibility requires it
+~~~
+
+That keeps TradingCore's differentiating logic above Vela while avoiding a second implementation of Vela's renderer/workspace/data architecture.
