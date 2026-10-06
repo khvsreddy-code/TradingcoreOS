@@ -174,3 +174,4 @@ export function validateCoreSpiritArtifactAbi(value: unknown, ir: CoreSpiritIrPr
     rebuilt.requiredData.join('|') === abi.requiredData.join('|') &&
     rebuilt.executionCapabilities.join('|') === abi.executionCapabilities.join('|');
 }\n
+export { CORE_SPIRIT_RUNTIME_ABI, CORE_SPIRIT_OPTIMIZER_ABI };
