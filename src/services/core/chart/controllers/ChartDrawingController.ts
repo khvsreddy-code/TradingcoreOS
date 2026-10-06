@@ -31,8 +31,8 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
  const {chart,candles,brokerId,instrumentKey,timeframe,getSelectedDrawingId,onToolChange}=deps;
  const drawingStore=new CoreDrawingStore(normalizeCoreDrawings(deps.initialDrawings,'user'));
  const drawingApi=new CoreDrawingApi(drawingStore,coreEventBus);
- const drawingPoints:DrawingPoint[]=[];
- const drawingSeries:ISeriesApi<'Line'>[]=[];
+ let drawingPoints:DrawingPoint[]=[];
+ let drawingSeries:ISeriesApi<'Line'>[]=[];
  let drawingTool:DrawingTool='none';
  const drawings=()=>drawingStore.list() as Drawing[];
  const save=()=>{try{localStorage.setItem(`tradingcore:chart-state:${brokerId}:${encodeURIComponent(instrumentKey)}`,JSON.stringify({version:2,timeframe,drawings:drawings(),showLevels:deps.showLevels,showVolume:deps.showVolume,showOI:deps.showOI,showDepth:deps.showDepth}));}catch{}};
@@ -102,12 +102,12 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
      drawingId=drawingApi.createDataDrawing(points,{kind:tool as Exclude<DrawingTool,'none'|'crosshair'>,owner:'user',label});
    } catch { return; }
    const stored=drawingApi.getDrawingById(drawingId); if(!stored)return;
-   drawings()=drawingStore.list() as Drawing[];
+   
    publishDrawing('drawing.created',stored);
-   drawingPoints=[];setDrawingTool('none');drawingTool='none';
+   drawingPoints=[];onToolChange?.('none');drawingTool='none';
    save();renderDrawings();
  };
- const clearDrawings=()=>{const count=drawingStore.clear('user');drawings()=drawingStore.list() as Drawing[];drawingPoints=[];save();if(count)coreEventBus.emit('drawing.cleared',{timestamp:Date.now(),owner:'user'});renderDrawings();};
- const selectDrawingTool=(tool:DrawingTool)=>{setDrawingTool(tool);drawingTool=tool;drawingPoints.current=[];};
+ const clearDrawings=()=>{const count=drawingStore.clear('user');drawingPoints=[];save();if(count)coreEventBus.emit('drawing.cleared',{timestamp:Date.now(),owner:'user'});renderDrawings();};
+ const selectDrawingTool=(tool:DrawingTool)=>{drawingTool=tool;drawingPoints=[];onToolChange?.(tool);};
  return {store:drawingStore,api:drawingApi,points:drawingPoints,getDrawings:drawings,renderDrawings,commitDrawing,clearDrawings,selectDrawingTool,save,getTool:()=>drawingTool};
 }
