@@ -1,6 +1,4 @@
-import type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
-import type { SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
-import type { HighCardinalityRectBatch } from '../../../../vendor/vela/src/core/model/instances';
+import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec, HighCardinalityRectBatch } from './velaNativeChartKernel';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 
 export type CoreSpiritVelaMarker = {
