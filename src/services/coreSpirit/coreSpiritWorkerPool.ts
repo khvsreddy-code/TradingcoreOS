@@ -2,6 +2,7 @@ import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
+import { artifactIdFor } from './artifactAbi';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { materializeSharedSeriesOutput, type CoreSpiritSharedSeriesDescriptor } from './sharedOutputBuffer';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
@@ -198,7 +199,8 @@ export class CoreSpiritWorkerPool {
       return;
     }
 
-    const artifactChanged=this.contextArtifacts.get(job.contextKey)!==job.artifact.checksum;
+    const artifactId=artifactIdFor(job.artifact);
+    const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId;
     const sendArtifact=artifactChanged ? {
       type:'loadArtifact' as const,
       requestId,
@@ -217,7 +219,7 @@ export class CoreSpiritWorkerPool {
       const message=event.data;
       if(!isRecord(message)||message.requestId!==requestId)return;
       try{
-        if(message.type==='result'){if(artifactChanged)this.contextArtifacts.set(job.contextKey,job.artifact.checksum);job.resolve(normalizeResult(message));}
+        if(message.type==='result'){if(artifactChanged)this.contextArtifacts.set(job.contextKey,artifactId);job.resolve(normalizeResult(message));}
         else if(message.type==='error')job.reject(new Error(typeof message.message==='string'?message.message:'CoreSpirit worker failed'));
         else return;
       }catch(error){job.reject(error);}
@@ -244,7 +246,7 @@ export class CoreSpiritWorkerPool {
     const envelope:WorkerRunEnvelope={
       type:'run',
       requestId,
-      artifactId:job.artifact?.checksum || '',
+      artifactId,
       contextKey:job.contextKey,
       datasetVersion:job.datasetVersion,
       dirtyFrom:job.dirtyRange?.from ?? 0,
