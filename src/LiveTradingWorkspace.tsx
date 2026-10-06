@@ -152,6 +152,10 @@ export function LiveTradingWorkspace() {
           capturedAt: Date.now(),
           cells: stats,
           pipeline: chartPerformanceTelemetry.keys().map(key => chartPerformanceTelemetry.snapshot(key)),
+          sharedMemory: {
+            crossOriginIsolated: typeof window !== 'undefined' ? Boolean(window.crossOriginIsolated) : false,
+            sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+          },
         };
       }
     }, 1000);
