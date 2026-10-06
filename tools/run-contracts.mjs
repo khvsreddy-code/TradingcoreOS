@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 
 const contracts = [
+  ['vela-scene-graph', ['src/velaSceneGraphContract.test.mjs', false]],
+  ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['execution-plan', ['src/services/coreSpirit/executionPlanVisualizerContract.test.mjs', true]],
   ['repaint-profiler', ['src/services/coreSpirit/repaintProfilerContract.test.mjs', true]],
   ['temporal-types', ['src/services/coreSpirit/temporalTypesContract.test.mjs', true]],
@@ -29,8 +31,6 @@ const contracts = [
   ['runtime-hot-vm', ['src/coreSpiritRuntimeHotVmContract.test.mjs', false]],
   ['vela-runtime-export', ['src/velaFacadeRuntimeExportContract.test.mjs', false]],
   ['vela-drawing', ['src/velaDrawingCapabilityContract.test.mjs', false]],
-  ['vela-scene-graph', ['src/velaSceneGraphContract.test.mjs', false]],
-  ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['vela-incremental-patch', ['src/velaIncrementalPatchContract.test.mjs', false]],
   ['vela-v108-boundary', ['src/velaV108BoundaryContract.test.mjs', false]],
   ['vela-fyers-motion', ['src/velaFyers5kMotionContract.test.mjs', false]],
