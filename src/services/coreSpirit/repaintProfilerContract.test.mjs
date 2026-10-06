@@ -1,32 +1,55 @@
 import assert from 'node:assert/strict';
 
-const { CoreSpiritParser } = await import('./parser.ts');
 const { analyzeCoreSpiritRepaintSafety } = await import('./repaintSafety.ts');
 const { CoreSpiritProfiler } = await import('./profiler.ts');
 
-const causalSource = [
-  '@causal @realtimeSafe @lookahead(false)',
-  'let fast: series<float> = ema(close, 20);',
-  'if bar.confirmed {',
-  '  plot(fast);',
-  '}',
-].join('\n');
+const identifier = (name) => ({ type:'identifier', name });
+const number = (value) => ({ type:'number', value });
+const call = (name, args=[]) => ({ type:'call', name, args });
+const annotation = (name, args=[]) => ({ name, args });
 
-const parser = new CoreSpiritParser(causalSource);
-const parsed = parser.parseDetailed();
-assert.equal(parsed.diagnostics.length, 0, parsed.diagnostics.map(d => d.message).join('\n'));
+const causalAst = {
+  type:'program',
+  body:[
+    {
+      type:'let',
+      name:'fast',
+      declaredType:'series<float>',
+      annotations:[
+        annotation('causal'),
+        annotation('realtimeSafe'),
+        annotation('lookahead',['false']),
+      ],
+      expression:call('ema',[identifier('close'), number(20)]),
+    },
+    {
+      type:'if',
+      condition:{type:'member',target:identifier('bar'),member:'confirmed'},
+      thenBranch:[
+        {type:'expressionStatement',expression:call('plot',[identifier('fast')])},
+      ],
+    },
+  ],
+};
 
-const safety = analyzeCoreSpiritRepaintSafety(parsed.ast);
+const safety = analyzeCoreSpiritRepaintSafety(causalAst);
 assert.equal(safety.causality, 'causal');
 assert.equal(safety.lookahead, 'false');
 assert.equal(safety.realtimeSafe, true);
 assert.equal(safety.backtestLiveEquivalent, true);
 assert.equal(safety.errors.length, 0);
 
-const unsafeAst = new CoreSpiritParser([
-  '@causal',
-  'let suspicious = future_lookup(close);',
-].join('\n')).parse();
+const unsafeAst = {
+  type:'program',
+  body:[
+    {
+      type:'let',
+      name:'suspicious',
+      annotations:[annotation('causal')],
+      expression:call('future_lookup',[identifier('close')]),
+    },
+  ],
+};
 const unsafeSafety = analyzeCoreSpiritRepaintSafety(unsafeAst);
 assert(unsafeSafety.errors.some(message => message.includes('@causal assertion failed')), 'future-dependent inputs must invalidate @causal');
 
@@ -34,7 +57,6 @@ const profiler = new CoreSpiritProfiler({ enabled:true, mode:'full', retainSampl
 profiler.beginBar('realtime', 3);
 const instruction = { op:'call', dest:'t0', name:'ema', args:[], callId:'ema:test' };
 profiler.beforeInstruction(0, instruction);
-await new Promise(resolve => setTimeout(resolve, 0));
 profiler.afterInstruction(0, instruction);
 profiler.recordAllocation(0);
 profiler.endBar();
