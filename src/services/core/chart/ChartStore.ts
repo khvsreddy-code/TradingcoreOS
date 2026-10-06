@@ -1,7 +1,7 @@
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import type { NormalizedMarketTick } from '../../../types/market';
-import type { ChartAnalytics } from '../../../services/marketData/levelEngine';
-import type { OIChartAnalytics } from '../../../services/marketData/oiEngine';
+import type { ChartAnalytics } from '../../marketData/levelEngine';
+import type { OIChartAnalytics } from '../../marketData/oiEngine';
 import type { ChartDataPlaneSnapshot } from '../../marketData/chartDataPlane';
 
 export type ChartStoreSnapshot = Readonly<{
