@@ -19,8 +19,8 @@ if (!/loadOlderHistory\('visible'/.test(dataPlane) && !/loadOlderHistory\(priori
 if (!/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm page priority missing');
 if (!/maxConcurrent = 2/.test(coordinator)) throw new Error('Global history concurrency bound missing');
 if (!/priority: PRIORITY\[priority\]/.test(coordinator)) throw new Error('History queue priority missing');
-if (!/shouldLoadOlderHistory\(/.test(liveChart)) throw new Error('Visible-range history demand trigger missing');
-if (!/requestWarmHistory\(/.test(liveChart)) throw new Error('Active-chart warm request missing');
+if (!/shouldLoadOlderHistory\(/.test(runtime)) throw new Error('Visible-range history demand trigger missing from chart runtime');
+if (!/requestWarmHistory\(/.test(runtime)) throw new Error('Active-chart warm request missing from chart runtime');
 if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial chart request must provide a bounded limit');
 if (!/getHistoricalData\(symbol, timeframe, signal, requestedLimit\)/.test(runtime)) throw new Error('Runtime must forward the requested history limit');
 if (!/req\.query\.limit/.test(route) || !/Math\.min\(5000/.test(route)) throw new Error('Server history route must validate a bounded limit');
