@@ -5,7 +5,6 @@ import type { DrawingTool } from '../../../components/workspace/drawingTypes';
 import type { IChartApi, ISeriesApi } from './velaNativeChartKernel';
 import type { ChartLifecycle } from './chartLifecycle';
 import type { ChartStore } from './ChartStore';
-import type { ChartDataController } from './controllers/ChartDataController';
 
 type Ref<T>={current:T};
 
