@@ -39,7 +39,7 @@ export class TickRingBuffer {
   private count = 0;
   private sequence = 0;
 
-  constructor(readonly capacity = 8192) {
+  constructor(readonly capacity = 8192, private readonly instrumentKey = '') {
     const size = Math.max(256, Math.floor(capacity));
     this.timestamp = new Float64Array(size);
     this.price = new Float64Array(size);
@@ -110,7 +110,7 @@ export class TickRingBuffer {
       const index = (sequence - 1) % this.capacity;
       const flags = this.flags[index]!;
       const value: NormalizedMarketTick = {
-        instrumentKey: '',
+        instrumentKey: this.instrumentKey,
         ltp: Number.isFinite(this.price[index]!) ? this.price[index]! : undefined,
         volume: Number.isFinite(this.quantity[index]!) ? this.quantity[index]! : undefined,
         lastTradeTimestamp: Number.isFinite(this.timestamp[index]!) ? new Date(this.timestamp[index]!).toISOString() : undefined,
