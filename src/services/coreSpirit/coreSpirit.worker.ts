@@ -156,12 +156,14 @@ self.onmessage=(event:MessageEvent<Message>)=>{
 
     context.datasetVersion=message.datasetVersion;
 
+    const transported=createSharedSeriesOutput(requireCoreSpiritOutputs(result.outputs));
     self.postMessage({
       type:'result',
       requestId:message.requestId,
       contextKey:message.contextKey,
       artifactId:context.artifact.checksum,
-      outputs:requireCoreSpiritOutputs(result.outputs),
+      outputs:transported.passthrough,
+      ...(transported.descriptor ? {sharedSeries:transported.descriptor} : {}),
       state:result.state,
       diagnostics:result.diagnostics,
       dirtyFrom:sync.dirtyFrom,
