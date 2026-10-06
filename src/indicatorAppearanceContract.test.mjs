@@ -10,6 +10,7 @@ const appearance = read('src/services/coreSpirit/indicatorAppearance.ts');
 const schema = read('src/services/coreSpirit/indicatorSettingsSchema.ts');
 const live = read('src/components/workspace/LiveChart.tsx');
 const incremental = read('src/services/marketData/incrementalIndicatorEngine.ts');
+const indicatorController = read('src/services/core/chart/controllers/ChartIndicatorController.ts');
 const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const facade = read('src/services/core/chart/velaChartFacade.ts');
 const renderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
@@ -40,9 +41,9 @@ const computeEffect = live.match(/useEffect\(\(\)=>\{[^\n]*renderStudies\(candle
 assert(computeEffect, 'computation effect is not keyed by indicatorComputeKey');
 assert(!computeEffect[0].includes('indicatorAppearanceKey'), 'appearance key can still invalidate computation effect');
 assert(/useEffect\(\(\)=>.*applyIndicatorAppearanceOnly\(\).*\[indicatorAppearanceKey\]\);/.test(live), 'appearance-only effect missing');
-assert(live.includes('indicatorFillMap') && live.includes('addFillBetweenSeries'), 'channel fill presentation is not wired');
-assert(live.includes('setPaneAppearance'), 'pane presentation is not wired to live chart');
-assert(live.includes('textSize:a.marker.textSize') && live.includes('offset:a.marker.offset'), 'marker text size/offset is not propagated');
+assert(indicatorController.includes('indicatorFillMap') && indicatorController.includes('addFillBetweenSeries'), 'channel fill presentation is not wired');
+assert(indicatorController.includes('setPaneAppearance'), 'pane presentation is not wired to live chart');
+assert(indicatorController.includes('textSize:a.marker.textSize') && indicatorController.includes('offset:a.marker.offset'), 'marker text size/offset is not propagated');
 
 assert(facade.includes('setPaneAppearance') && facade.includes('addFillBetweenSeries'), 'Vela facade presentation bridge missing');
 assert(facade.includes('setIndicatorFills') && facade.includes('setIndicatorSeriesPoints'), 'Vela facade lacks renderer-only fill mutation calls');
