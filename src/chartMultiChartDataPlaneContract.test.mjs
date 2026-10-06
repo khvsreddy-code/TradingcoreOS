@@ -34,7 +34,7 @@ if (!/sharedSymbols = new Map/.test(manager) || !/subscribeSharedSymbol/.test(ma
 if (!/MAX_ANALYTICS_WORKERS = 2/.test(coordinator) || !/MAX_INDICATOR_WORKERS = 2/.test(coordinator)) throw new Error('Shared compute worker budget is not bounded to 2+2');
 if (!/analyticsCache/.test(coordinator) || !/indicatorCache/.test(coordinator)) throw new Error('Shared compute cache missing');
 if (!/runLocal\(/.test(prediction) || !/runProduction\(/.test(prediction)) throw new Error('Dataset-scoped prediction coordination missing');
-if (!/chartPredictionCoordinator/.test(chartRuntime)) throw new Error('Chart runtime controller must own prediction coordination');
+if (!/createChartPredictionController/.test(chartRuntime)) throw new Error('Chart runtime controller must wire the prediction controller');
 if (!/createChartRuntimeController/.test(liveChart)) throw new Error('LiveChart must delegate prediction lifecycle to ChartRuntimeController');
 if (!/consumerId/.test(controller) || !/attachConsumer\(consumerId, 'chart'\)/.test(controller)) throw new Error('Chart controller does not identify canonical consumer ownership');
 if (!/upsertLatest\(/.test(history) || !/mutateExisting = false/.test(history)) throw new Error('O(1) forming-candle/history update path missing');
