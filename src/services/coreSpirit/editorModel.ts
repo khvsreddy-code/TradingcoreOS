@@ -3,6 +3,7 @@ import { CoreSpiritIncrementalAst } from './incrementalAst';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpiritRepaintSafety, type CoreSpiritRepaintSafetyReport } from './repaintSafety';
 import type { CoreSpiritProfilerSnapshot } from './profiler';
+import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { getCoreSpiritEditorSnapshot, getCoreSpiritHover, getCoreSpiritCompletionContext, getCoreSpiritDefinitionAt, getCoreSpiritCodeActions, type CoreSpiritCompletion, type CoreSpiritEditorDiagnostic, type CoreSpiritSemanticToken, type CoreSpiritDefinition, type CoreSpiritCodeAction, type CoreSpiritFoldingRange } from './languageService';
 
 export type CoreSpiritSymbol = {
@@ -24,6 +25,7 @@ export type CoreSpiritEditorModelSnapshot = {
   formatted: string;
   repaintSafety: CoreSpiritRepaintSafetyReport;
   profiler?: CoreSpiritProfilerSnapshot;
+  executionPlanVisualization?: CoreSpiritExecutionPlanVisualization;
 };
 
 export type CoreSpiritEditorEdit = { start: number; end: number; text: string };
@@ -82,8 +84,11 @@ export class CoreSpiritEditorModel {
     if (this.lastCompileSource === this.source && this.lastCompile) return this.lastCompile;
     this.lastCompileSource = this.source;
     this.lastCompile = this.incrementalCompiler.compile(this.source, 'editor');
+    this.snapshot = { ...this.snapshot, executionPlanVisualization: this.lastCompile.ir?.executionPlanVisualization };
     return this.lastCompile;
   }
+
+  getExecutionPlanVisualization() { return this.compile().ir?.executionPlanVisualization; }
 
   hover(name: string) { return getCoreSpiritHover(name); }
 
