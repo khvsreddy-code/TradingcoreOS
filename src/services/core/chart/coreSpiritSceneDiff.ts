@@ -105,8 +105,10 @@ export interface CoreSpiritSceneSnapshot {
 
 export class CoreSpiritSceneDiff {
     private readonly points = new Map<string, SeriesPoint[]>();
+    private readonly seriesMounted = new Set<string>();
     private readonly markers = new Map<string, MarkerPoint>();
     private readonly rectBatches = new Map<string, HighCardinalityRectInstance[]>();
+    private readonly rectBatchMeta = new Map<string, { paneId: string; overlay?: boolean; indexOffset?: number }>();
     private readonly collections: Record<CollectionName, Identified[]> = {
         lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [],
     };
@@ -118,14 +120,18 @@ export class CoreSpiritSceneDiff {
 
     reset(): void {
         this.points.clear();
+        this.seriesMounted.clear();
         this.markers.clear();
         this.rectBatches.clear();
+        this.rectBatchMeta.clear();
         for (const values of Object.values(this.collections)) values.splice(0, values.length);
         this.markerSeriesMounted = false;
     }
 
     seed(outputs: CoreSpiritObject[]): void {
         for (const output of outputs) this.applyOutput(output, false);
+        this.seriesMounted.clear();
+        for (const id of this.points.keys()) this.seriesMounted.add(id);
         this.markerSeriesMounted = this.markers.size > 0;
     }
 
@@ -134,7 +140,13 @@ export class CoreSpiritSceneDiff {
             points: this.points,
             markers: [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time)),
             priceLines: this.collections.priceLines as PriceLine[],
-            rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({ id, paneId: 'price', overlay: true, instances })),
+            rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({
+                id,
+                paneId: this.rectBatchMeta.get(id)?.paneId ?? 'price',
+                overlay: this.rectBatchMeta.get(id)?.overlay,
+                indexOffset: this.rectBatchMeta.get(id)?.indexOffset,
+                instances,
+            })),
         };
     }
 
@@ -183,6 +195,7 @@ export class CoreSpiritSceneDiff {
         const name = String(output.seriesId || output.name || 'series');
         const seriesId = `${this.indicatorId}:series:${name}`;
         const list = this.points.get(name) ?? [];
+        const wasMounted = this.seriesMounted.has(name);
         const time = Number(output.time);
         let lo = 0, hi = list.length;
         while (lo < hi) { const mid = (lo + hi) >>> 1; if (Number(list[mid]!.time) < time) lo = mid + 1; else hi = mid; }
@@ -194,10 +207,20 @@ export class CoreSpiritSceneDiff {
         }
         const point: SeriesPoint = { time, value: output.value == null ? null : Number(output.value) };
         list.splice(lo, exists ? 1 : 0, point); this.points.set(name, list);
-        if (!emit) return null;
-        if (exists && lo === list.length - 1) return { delta: { seriesId, kind: 'points', points: [point], op: 'replace-last' } };
-        if (!exists && lo === list.length - 1) return { delta: { seriesId, kind: 'points', points: [point], op: 'append' } };
-        return { delta: { seriesId, kind: 'points', points: [point], op: 'replace-range', start: lo, remove: exists ? 1 : 0 } };
+        if (!wasMounted) this.seriesMounted.add(name);
+        if (!emit) return wasMounted ? null : { schema: {
+            kind: 'schema', indicatorId: this.indicatorId,
+            added: [{ id: seriesId, title: name, paneId: 'price', kind: 'line', points: [], style: { color: '#9b8aff', width: 2, lineStyle: 'solid' }, visible: true, overlay: true } as SeriesSpec],
+            removed: [], changed: [],
+        } };
+        const schema = !wasMounted ? { schema: {
+            kind: 'schema' as const, indicatorId: this.indicatorId,
+            added: [{ id: seriesId, title: name, paneId: 'price', kind: 'line' as const, points: [], style: { color: '#9b8aff', width: 2, lineStyle: 'solid' as const }, visible: true, overlay: true } as SeriesSpec],
+            removed: [], changed: [],
+        } } : {};
+        if (exists && lo === list.length - 1) return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'replace-last' } };
+        if (!exists && lo === list.length - 1) return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'append' } };
+        return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'replace-range', start: lo, remove: exists ? 1 : 0 } };
     }
 
     private applyMarker(output: Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
@@ -213,14 +236,14 @@ export class CoreSpiritSceneDiff {
         const was = this.markers.has(key);
         this.markers.set(key, value);
         if (!emit) return null;
-        if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'append' } };
         const after = [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time));
         const idx = after.findIndex(candidate => candidate.time === value.time && candidate.shape === value.shape);
+        if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, idx), remove: 0 } };
         return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, idx), remove: 1 } };
     }
 
     private applyRect(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
-        const batchId = `${this.indicatorId}:zones`;
+        const batchId = `${this.indicatorId}:zones:${pane(output)}:${output.visual?.pane === 'price' ? 'overlay' : 'own'}`;
         const target = this.rectBatches.get(batchId) ?? [];
         const value: HighCardinalityRectInstance = {
             id: output.id ?? `${batchId}:${target.length}`,
@@ -237,15 +260,19 @@ export class CoreSpiritSceneDiff {
             if (idx < 0) return null;
             target.splice(idx, 1);
             this.rectBatches.set(batchId, target);
+            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
+            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
             return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [], start: idx, remove: 1 } } : null;
         }
         if (idx < 0) {
             target.push(value);
             this.rectBatches.set(batchId, target);
+            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
             return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'append', values: [value] } } : null;
         }
         target[idx] = value;
         this.rectBatches.set(batchId, target);
+        this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
         return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [value], start: idx, remove: 1 } } : null;
     }
 
