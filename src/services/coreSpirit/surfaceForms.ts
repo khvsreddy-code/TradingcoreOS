@@ -249,7 +249,33 @@ export function normalizeCoreSpiritSource(source: string): string {
   source = normalizeReadableOperatorsWithTokens(source);
   source = normalizeCoreSpiritEventSource(source);
   source = normalizeCoreSpiritAutomationSource(source);
-  const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+  const sourceLines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+  const lines: string[] = [];
+  for (let i=0;i<sourceLines.length;i+=1) {
+    const current=sourceLines[i];
+    const match=current.match(/^(\s*)when\s+(.+)$/i);
+    if (match && !current.trim().endsWith(':')) {
+      let merged=current;
+      const baseIndent=indentation(current);
+      let j=i+1;
+      while (j<sourceLines.length) {
+        const candidate=sourceLines[j];
+        const candidateTrim=candidate.trim();
+        if (candidateTrim && indentation(candidate)===baseIndent && /^(?:and|or)\s+/i.test(candidateTrim)) {
+          merged += ' ' + candidateTrim;
+          j+=1;
+          continue;
+        }
+        break;
+      }
+      if (j>i+1) {
+        lines.push(merged);
+        i=j-1;
+        continue;
+      }
+    }
+    lines.push(current);
+  }
   const modelNames = modelSurfaceNames(source);
   const out: string[] = [];
   const whenBlocks: number[] = [];
@@ -276,7 +302,7 @@ export function normalizeCoreSpiritSource(source: string): string {
       if (trimmed === '}') continue;
     }
 
-    if (/^backtest\s+/i.test(trimmed)) continue;
+    if (/^backtest\s+/i.test(trimmed)) { researchSkipIndent = indent; continue; }
     if (/^evaluate\s*\{?\s*$/i.test(trimmed)) {
       researchSkipIndent = indent;
       continue;
