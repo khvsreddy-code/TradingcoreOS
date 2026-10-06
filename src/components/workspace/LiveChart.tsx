@@ -136,6 +136,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const [candleAppearance,setCandleAppearance]=useState<CandleAppearance>(()=>loadCandleAppearance(brokerId,resolvedInstrumentKey));
   const [oiAnalytics,setOiAnalytics]=useState<OIChartAnalytics|null>(null);
   const [analytics,setAnalytics]=useState<ChartAnalytics|null>(null);
+  const analyticsUiTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const oiUiTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
 
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
@@ -187,7 +189,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     const revision=dataRevisionRef.current;
     const run=()=>{analyticsTimer.current=null;void chartComputeCoordinator.runAnalytics(chartDatasetKey,revision,chartDataPlane.readCanonical(),spot,data).then(result=>{
       if(revision!==dataRevisionRef.current||data!==candles.current||!lifecycle.current.isAlive())return;
-      analyticsRef.current=result;setAnalytics(result);onAnalytics?.(result);window.dispatchEvent(new CustomEvent('tradingcore:chart-analytics',{detail:result}));chartStore.setAnalytics(result);
+      analyticsRef.current=result;chartStore.setAnalytics(result);window.dispatchEvent(new CustomEvent('tradingcore:chart-analytics',{detail:result}));
+      if(analyticsUiTimer.current==null){analyticsUiTimer.current=setTimeout(()=>{analyticsUiTimer.current=null;setAnalytics(result);onAnalytics?.(result);},250);}
     });};
     if(immediate){if(analyticsTimer.current){clearTimeout(analyticsTimer.current);analyticsTimer.current=null;}run();return;}
     if(analyticsTimer.current)return;
@@ -195,7 +198,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   };
 
   const renderOI=(oi:OIChartAnalytics|null)=>{
-    oiAnalyticsRef.current=oi; setOiAnalytics(oi); chartStore.setOiAnalytics(oi);
+    oiAnalyticsRef.current=oi; chartStore.setOiAnalytics(oi);
+    if(oiUiTimer.current==null){oiUiTimer.current=setTimeout(()=>{oiUiTimer.current=null;setOiAnalytics(oi);},250);}
     if(!candle.current)return;
     try{for(const line of ((candle.current as any)._tcoOiLines||[]))candle.current.removePriceLine(line);}catch{}
     if(!showOI||!oi)return;
@@ -298,7 +302,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       const snapshot=event?.snapshot as ChartDataPlaneSnapshot|undefined;if(!snapshot)return;
       latestTick.current=snapshot.latestTick;
       chartStore.publishMarketSnapshot({type:event.type,snapshot,error:event.error});
-      setHistoryLoading(snapshot.historyLoading||snapshot.olderHistoryLoading);
+      const nextHistoryLoading=Boolean(snapshot.historyLoading||snapshot.olderHistoryLoading);setHistoryLoading(prev=>prev===nextHistoryLoading?prev:nextHistoryLoading);
       if(event.type==='status'){
         if(event.status==='loading')publishLifecycle('loading');
         if(event.status==='error'&&!snapshot.candles.length){setError(\`History unavailable for \${resolvedInstrumentKey} · \${CHART_TIMEFRAME_INTERVALS[timeframe]||timeframe} · \${event.error||'Historical candles unavailable'}\`);publishLifecycle('error');}
@@ -392,6 +396,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       stopData();chartDataController.dispose();unregisterCoreSpirit();chartCoreSpiritController.dispose();realtimeControllerRef.current=null;indicatorControllerRef.current=null;drawingControllerRef.current=null;predictionControllerRef.current=null;coreSpiritControllerRef.current=null;
       publishLifecycle('disposed');lifecycle.current.invalidate();
       if(analyticsTimer.current){clearTimeout(analyticsTimer.current);analyticsTimer.current=null;}
+      if(analyticsUiTimer.current){clearTimeout(analyticsUiTimer.current);analyticsUiTimer.current=null;}
+      if(oiUiTimer.current){clearTimeout(oiUiTimer.current);oiUiTimer.current=null;}
       resizeObserver?.disconnect();chartUpdateScheduler.current.cancel();
     };
   },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial]);
