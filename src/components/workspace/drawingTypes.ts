@@ -1,0 +1,1 @@
+export type DrawingTool = 'none'|'crosshair'|'trendline'|'ray'|'extendedLine'|'horizontal'|'horizontalRay'|'vertical'|'parallelChannel'|'rectangle'|'ellipse'|'fib'|'fibExtension'|'pitchfork'|'arrow'|'priceRange'|'dateRange'|'brush'|'highlighter'|'text'|'longPosition'|'shortPosition'|'measure';
