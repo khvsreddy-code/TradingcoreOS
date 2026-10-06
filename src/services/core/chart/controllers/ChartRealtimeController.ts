@@ -39,7 +39,6 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
     candles.current=data;
     latestTick.current=snapshot.latestTick;
     const live=data[data.length-1];
-    chartStore.publishMarketSnapshot({type:'tick',snapshot});
     if(live&&chart.current){
       chartUpdateScheduler.scheduleLatest('realtime-bar',()=>{
         const started=performance.now();
@@ -64,7 +63,6 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
     candles.current=snapshot.candles;
     latestTick.current=snapshot.latestTick;
     calculationEngine.reset(snapshot.candles,deps.instrumentKey,deps.timeframe);
-    chartStore.publishMarketSnapshot({type:'snapshot',snapshot});
   };
 
   const setRevision=(revision:number)=>{dataRevisionRef.current=revision;};
