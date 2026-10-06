@@ -79,6 +79,10 @@ export interface ValuePatch {
     tables?: DrawingTable[];
     trades?: TradeExecution[];
     collections?: CollectionValueDelta[];
+    /** Renderer-ready high-cardinality rectangles updated without rebuilding the series payload. */
+    instanceBatches?: import('./instances').HighCardinalityRectDelta[];
+    /** Per-bar candle recolors keyed by epoch time. */
+    barColors?: Array<{ time: Millis; color: string }>;
 }
 
 export interface SchemaPatch {
