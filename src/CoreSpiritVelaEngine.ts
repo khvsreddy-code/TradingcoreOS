@@ -135,7 +135,7 @@ export class CoreSpiritVelaEngine {
         if (secondaryData.has(key)) return;
         try {
           const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{ to:Number.isFinite(endTime) ? endTime : undefined, limit });
-          if (rows?.length) secondaryData.set(key,rows as CoreSpiritMarketBar[]);
+          if (rows?.length) secondaryData.set(key,rows as unknown as CoreSpiritMarketBar[]);
         } catch {}
       }));
     };
