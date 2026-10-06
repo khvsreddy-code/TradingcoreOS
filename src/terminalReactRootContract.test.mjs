@@ -49,7 +49,10 @@ for (const retired of [
   'src/quickOrderHotfix.ts',
 ]) assert.equal(fs.existsSync(path.join(root, retired)), false, `retired frontend mount/bridge still exists: ${retired}`);
 
-assert.match(app, /workspacePath\s*===\s*['"]\/live['"][\s\S]*?<LiveTradingTerminal\s*\/>/, 'live route must render the canonical terminal directly in the application tree');
+assert.match(app, /workspacePath\s*===\s*['"]\/live['"][\s\S]*?<LiveTradingShell\s*\/>/, 'live route must enter the canonical LiveTradingShell directly in the application tree');
+const liveShell = read('src/appShells/LiveTradingShell.tsx');
+assert.match(liveShell, /lazy\(\(\)\s*=>\s*import\(['"]\.\.\/LiveTradingTerminal['"]\)/, 'LiveTradingShell must lazy-load the canonical terminal');
+assert.match(liveShell, /<LiveTradingTerminal\s*\/>/);
 assert.match(terminal, /<LiveTradingWorkspace\s*\/>/);
 assert.doesNotMatch(terminal, /useEffect\(|history\.|popstate|setTimeout\(/);
 
