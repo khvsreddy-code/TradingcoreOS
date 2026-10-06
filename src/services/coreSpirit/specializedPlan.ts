@@ -4,14 +4,17 @@ import type { CoreSpiritSeriesRegistry, CoreSpiritSeriesId } from './seriesRegis
 
 export type CoreSpiritSpecializedInstruction =
   | { op:'const'; dest:number; value:number|string|boolean|null }
-  | { op:'loadSeries'; dest:number; name:string; offset:number }\n  | { op:'loadState'; dest:number; name:string }
+  | { op:'loadSeries'; dest:number; name:string; offset:number }
+  | { op:'loadState'; dest:number; name:string }
   | { op:'move'; dest:number; source:string }
-  | { op:'setLocal'; name:string; source:number; series:boolean; seriesId:CoreSpiritSeriesId }\n  | { op:'setState'; name:string; source:number }
+  | { op:'setLocal'; name:string; source:number; series:boolean; seriesId:CoreSpiritSeriesId }
+  | { op:'setState'; name:string; source:number }
   | { op:'unary'; dest:number; operator:'!'|'+'|'-'; operand:number }
   | { op:'binary'; dest:number; operator:string; left:number; right:number }
   | { op:'call'; dest:number; name:string; args:number[]; instruction:Extract<CoreSpiritIrInstruction,{op:'call'}> }
   | { op:'index'; dest:number; index:number; target:number; seriesId:CoreSpiritSeriesId; instruction:Extract<CoreSpiritIrInstruction,{op:'index'}> }
-  | { op:'eventGate'; eventName:string; target:number }\n  | { op:'jumpIfFalse'; condition:number; target:number }
+  | { op:'eventGate'; eventName:string; target:number }
+  | { op:'jumpIfFalse'; condition:number; target:number }
   | { op:'jump'; target:number }
   | { op:'emit'; args:number[]; instruction:Extract<CoreSpiritIrInstruction,{op:'emit'}> };
 
@@ -88,12 +91,14 @@ export function buildCoreSpiritSpecializedPlan(
       case 'loadSeries':
         return {op:'loadSeries',dest:slot(instruction.dest),name:instruction.name,offset:instruction.offset};
       case 'move': return {op:'move',dest:slot(instruction.dest),source:instruction.source};
-      case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};\n      case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source)};
+      case 'setLocal': return {op:'setLocal',name:instruction.name,source:slot(instruction.source),series:instruction.series!==false,seriesId:seriesRegistry?.idFor(instruction.name) ?? -1};
+      case 'setState': return {op:'setState',name:instruction.name,source:slot(instruction.source)};
       case 'unary': return {op:'unary',dest:slot(instruction.dest),operator:instruction.operator,operand:slot(instruction.operand)};
       case 'binary': return {op:'binary',dest:slot(instruction.dest),operator:instruction.operator,left:slot(instruction.left),right:slot(instruction.right)};
       case 'call': return {op:'call',dest:slot(instruction.dest),name:instruction.name,args:instruction.args.map(slot),instruction};
       case 'index': return {op:'index',dest:slot(instruction.dest),index:slot(instruction.index),target:slot(instruction.target),seriesId:instruction.seriesName && seriesRegistry ? seriesRegistry.idFor(instruction.seriesName) : -1,instruction};
-      case 'eventGate': return {op:'eventGate',eventName:instruction.eventName,target:instruction.target};\n      case 'jumpIfFalse': return {op:'jumpIfFalse',condition:slot(instruction.condition),target:instruction.target};
+      case 'eventGate': return {op:'eventGate',eventName:instruction.eventName,target:instruction.target};
+      case 'jumpIfFalse': return {op:'jumpIfFalse',condition:slot(instruction.condition),target:instruction.target};
       case 'jump': return {op:'jump',target:instruction.target};
       case 'emit': return {op:'emit',args:instruction.args.slice(1).map(slot),instruction};
     }
