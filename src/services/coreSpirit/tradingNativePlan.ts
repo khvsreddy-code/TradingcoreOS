@@ -235,6 +235,9 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
     }));
   }
 
+  // Stable ABI order: chart-timeline dependencies first, then explicit alternate timeframes/domains.
+  deps.sort((a,b)=>Number(a.timeframe!=='chart')-Number(b.timeframe!=='chart'));
+
   const eventTriggers:CoreSpiritEventTrigger[]=[];
   for(const trigger of events.values()) eventTriggers.push(trigger);
 
