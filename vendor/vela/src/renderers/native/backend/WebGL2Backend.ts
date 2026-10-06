@@ -11,6 +11,7 @@ import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_
 import type { IRenderBackend } from './IRenderBackend';
 import { Batch, type RGBA } from './gl/Batch';
 import { parseColor } from './gl/color';
+import type { GpuRectBatch } from '../../../core/model/instances';
 
 const VERT_SRC = `#version 300 es
 layout(location=0) in vec2 aPos;
@@ -73,6 +74,26 @@ void main() {
     frag = sum;
 }`;
 
+
+const INSTANCE_VERT = `#version 300 es
+layout(location=0) in vec2 aUnit;
+layout(location=1) in vec4 aRect;
+layout(location=2) in vec4 aColor;
+uniform vec2 uRes;
+out vec4 vColor;
+void main() {
+    vec2 pos = mix(aRect.xy, aRect.zw, aUnit);
+    vec2 clip = vec2(pos.x / uRes.x * 2.0 - 1.0, 1.0 - pos.y / uRes.y * 2.0);
+    gl_Position = vec4(clip, 0.0, 1.0);
+    vColor = aColor;
+}`;
+
+const INSTANCE_FRAG = `#version 300 es
+precision mediump float;
+in vec4 vColor;
+out vec4 frag;
+void main() { frag = vColor; }`;
+
 const DASH: Record<string, readonly [number, number] | null> = {
     solid: null,
     dashed: [6, 4],
@@ -119,6 +140,12 @@ export class WebGL2Backend implements IRenderBackend {
     private vbo: WebGLBuffer | null = null;
     private uRes: WebGLUniformLocation | null = null;
     private readonly batch = new Batch();
+    private instanceProgram: WebGLProgram | null = null;
+    private instanceVao: WebGLVertexArrayObject | null = null;
+    private instanceQuadVbo: WebGLBuffer | null = null;
+    private instanceRectVbo: WebGLBuffer | null = null;
+    private instanceColorVbo: WebGLBuffer | null = null;
+    private instanceURes: WebGLUniformLocation | null = null;
     private contextLost = false;
 
     // glow/bloom post-process (lazy; only when glow > 0)
@@ -187,6 +214,53 @@ export class WebGL2Backend implements IRenderBackend {
         this.texA = this.texB = null;
         this.fboW = this.fboH = 0;
         this.sliceTex.clear(); // context-lost handles are invalid; textures re-upload on demand
+        const ivs = compile(gl, gl.VERTEX_SHADER, INSTANCE_VERT);
+        const ifs = compile(gl, gl.FRAGMENT_SHADER, INSTANCE_FRAG);
+        const iprog = gl.createProgram();
+        if (!ivs || !ifs || !iprog) {
+            if (ivs) gl.deleteShader(ivs);
+            if (ifs) gl.deleteShader(ifs);
+            if (iprog) gl.deleteProgram(iprog);
+            return false;
+        }
+        gl.attachShader(iprog, ivs);
+        gl.attachShader(iprog, ifs);
+        gl.linkProgram(iprog);
+        if (!gl.getProgramParameter(iprog, gl.LINK_STATUS)) {
+            gl.deleteProgram(iprog);
+            gl.deleteShader(ivs);
+            gl.deleteShader(ifs);
+            return false;
+        }
+        gl.deleteShader(ivs);
+        gl.deleteShader(ifs);
+        const iVao = gl.createVertexArray();
+        const iQuad = gl.createBuffer();
+        const iRect = gl.createBuffer();
+        const iColor = gl.createBuffer();
+        if (!iVao || !iQuad || !iRect || !iColor) return false;
+        gl.bindVertexArray(iVao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, iQuad);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, iRect);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(1, 1);
+        gl.bindBuffer(gl.ARRAY_BUFFER, iColor);
+        gl.enableVertexAttribArray(2);
+        gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+        gl.vertexAttribDivisor(2, 1);
+        gl.bindVertexArray(null);
+        this.instanceProgram = iprog;
+        this.instanceVao = iVao;
+        this.instanceQuadVbo = iQuad;
+        this.instanceRectVbo = iRect;
+        this.instanceColorVbo = iColor;
+        this.instanceURes = gl.getUniformLocation(iprog, 'uRes');
+
         const vs = compile(gl, gl.VERTEX_SHADER, VERT_SRC);
         const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
         const prog = gl.createProgram();
@@ -366,6 +440,14 @@ export class WebGL2Backend implements IRenderBackend {
                     if (this.drawSliceTexture(gl, slices[si]!.canvas)) liveSlices.add(slices[si]!.canvas);
                 }
             };
+            let ii = 0;
+            const instances = scene.highCardinalityRectBatches.filter(batch => batch.paneId === pane.id).slice().sort((a, c) => a.beforeZ - c.beforeZ);
+            const drawInstancesUpTo = (z: number): void => {
+                for (; ii < instances.length && instances[ii]!.beforeZ <= z; ii += 1) {
+                    flush();
+                    this.drawRectInstances(gl, instances[ii]!, canvas.width / dpr, canvas.height / dpr);
+                }
+            };
             // z-order within the batch (painter's): bg, then the candles + each indicator's
             // fills + series interleaved by `scene.candleZ`/per-indicator z, then hlines.
             // (The grid + session highlights live on the renderer's backdrop canvas below.)
@@ -402,6 +484,7 @@ export class WebGL2Backend implements IRenderBackend {
                         candleDrawn = true;
                     }
                     drawSlicesUpTo(scene.zOf(m.id));
+                    drawInstancesUpTo(scene.zOf(m.id));
                     b.alpha = this.modelAlpha;
                     // Model data is index-aligned from the model's ANCHOR bar (offset 0 = whole-chart).
                     const off = scene.offsetOf(m.id);
@@ -435,6 +518,7 @@ export class WebGL2Backend implements IRenderBackend {
                 // and layers bound to a hidden/removed series — above the forced series too,
                 // since drawings always paint over their own plots.
                 drawSlicesUpTo(Infinity);
+                drawInstancesUpTo(Infinity);
                 for (const m of models) { const mp = effPane(m); for (const pl of m.priceLines) this.emitHline(b, pl, mp, coords, dataW, theme); }
                 b.alpha = 1;
             }
@@ -527,6 +611,21 @@ export class WebGL2Backend implements IRenderBackend {
         gl.bindVertexArray(null);
     }
 
+    private drawRectInstances(gl: WebGL2RenderingContext, batch: GpuRectBatch, width: number, height: number): void {
+        const count = Math.floor(batch.rects.length / 4);
+        if (!count || !this.instanceProgram || !this.instanceVao || !this.instanceRectVbo || !this.instanceColorVbo) return;
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.useProgram(this.instanceProgram);
+        gl.bindVertexArray(this.instanceVao);
+        gl.uniform2f(this.instanceURes, width, height);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceRectVbo);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.rects, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceColorVbo);
+        gl.bufferData(gl.ARRAY_BUFFER, batch.colors, gl.DYNAMIC_DRAW);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+        gl.bindVertexArray(null);
+    }
+
     /** Composite one user-drawing interleave layer: upload its canvas (premultiplied, y-flipped —
      *  the framebuffer holds premultiplied pixels, see mount) and draw it as a fullscreen quad
      *  through the screen pipeline. The pane scissor is already set, so it clips to the pane.
@@ -592,6 +691,11 @@ export class WebGL2Backend implements IRenderBackend {
         if (gl) {
             if (this.program) gl.deleteProgram(this.program);
             if (this.vbo) gl.deleteBuffer(this.vbo);
+            if (this.instanceProgram) gl.deleteProgram(this.instanceProgram);
+            if (this.instanceQuadVbo) gl.deleteBuffer(this.instanceQuadVbo);
+            if (this.instanceRectVbo) gl.deleteBuffer(this.instanceRectVbo);
+            if (this.instanceColorVbo) gl.deleteBuffer(this.instanceColorVbo);
+            if (this.instanceVao) gl.deleteVertexArray(this.instanceVao);
             if (this.vao) gl.deleteVertexArray(this.vao);
             if (this.screenProgram) gl.deleteProgram(this.screenProgram);
             if (this.quadVbo) gl.deleteBuffer(this.quadVbo);
