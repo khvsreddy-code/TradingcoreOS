@@ -9,6 +9,8 @@ const indicatorEngine = read('src/services/marketData/indicatorEngine.ts');
 const worker = read('src/services/marketData/indicator.worker.ts');
 const coordinator = read('src/services/marketData/chartComputeCoordinator.ts');
 const live = read('src/components/workspace/LiveChart.tsx');
+const indicatorController = read('src/services/core/chart/controllers/ChartIndicatorController.ts');
+const overlay = read('src/components/workspace/ChartOverlay.tsx');
 const settings = read('src/components/indicators/IndicatorSettingsPanel.tsx');
 const viewer = read('src/components/indicators/IndicatorCodeViewer.tsx');
 const buildTracker = read('docs/CORESPIRIT_BUILD_TRACKER.md');
@@ -38,10 +40,10 @@ if (!/incrementalMode:'update'/.test(worker) || !/incrementalMode:'reset'/.test(
 if (!/tailKey/.test(coordinator) || !/JSON\.stringify\(\[market\.open\[i\], market\.high\[i\], market\.low\[i\], market\.close\[i\], market\.volume\[i\]\]\)/.test(coordinator)) throw new Error('Same-bar indicator cache identity is not tail-aware');
 if (!/indicatorQueue\.run\(payload, incrementalKey, transfer\)/.test(coordinator)) throw new Error('Incremental snapshot/tick worker affinity is not pinned');
 if (!/if \(result\.resetRequired\)/.test(coordinator) || !/seedOnMiss: true/.test(coordinator)) throw new Error('Incremental reset/resync path missing');
-if (!/requestIndicatorWorker\(data,undefined,'incremental'/.test(live)) throw new Error('Live chart does not request incremental forming-bar updates');
-if (!/seriesApi\.update/.test(live) && !/\.update\(points\[points\.length-1\]/.test(live)) throw new Error('Live chart lacks tail-only series updates');
-if (!/if\(!preserveWorkerSeries\)/.test(live)) throw new Error('Legacy renderer path can still clear incremental series on every tick');
-if (!/IndicatorCodeViewer/.test(live) || !/title="Indicator settings"/.test(live) || !/title="View indicator code"/.test(live)) throw new Error('Live indicator dialogue settings/code actions missing');
+if (!/requestIndicatorWorker\(data,visibleLogicalRangeRef\.current,'incremental'/.test(live+indicatorController)) throw new Error('Live chart does not request incremental forming-bar updates');
+if (!/series\.update|\.update\(points\[points\.length-1\]/.test(indicatorController)) throw new Error('Indicator controller lacks tail-only series updates');
+if (!/if\(!preserveWorkerSeries\)/.test(indicatorController)) throw new Error('Legacy renderer path can still clear incremental series on every tick');
+if (!/IndicatorCodeViewer/.test(overlay) || !/title="Indicator settings"/.test(overlay) || !/title="View code"/.test(overlay)) throw new Error('Live indicator dialogue settings/code actions missing');
 if (!/Settings2/.test(settings) || !/Code2/.test(settings) || !/> Code<\//.test(settings)) throw new Error('Indicator settings panel gear/code affordances missing');
 if (!/getIndicatorSourceTemplate/.test(viewer) || !/navigator\.clipboard/.test(viewer)) throw new Error('Indicator code viewer source/copy path missing');
 for (const token of ['v107 incremental indicator execution','RollingAbsoluteDeviation','series.update','IndicatorCodeViewer']) {
