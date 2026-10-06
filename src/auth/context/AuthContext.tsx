@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { AuthContextType, UserProfile, Session, AuthStep } from '../types';
+import React, { createContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
+import { AuthContextType, UserProfile, Session, AuthStep, AuthStatus } from '../types';
 import { authService } from '../../services/auth/authService';
 import { sessionService } from '../../services/auth/sessionService';
 import { profileService } from '../../services/auth/profileService';
 import { userSettingsService } from '../../services/userSettingsService';
+import { formatAuthError } from '../utils/authErrors';
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -15,75 +16,151 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [authStep, setAuthStep] = useState<AuthStep>('idle');
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
+  const [settingsReadyUserId, setSettingsReadyUserId] = useState<string | null>(null);
+  const hydrationGeneration = useRef(0);
 
   const clearError = useCallback(() => {
     setError(null);
     if (authStep === 'error') setAuthStep('idle');
   }, [authStep]);
 
-  const hydrateUser = useCallback(async (sbUser: any) => {
-    const fallbackProfile = profileService.mapSupabaseUserToProfile(sbUser);
-    setUser(fallbackProfile);
-    void profileService.getOrCreateProfile(sbUser).then(setUser).catch((error) => {
-      console.warn('Background profile hydration failed:', error);
-    });
-    await userSettingsService.load(sbUser.id);
+  const scheduleHydration = useCallback((sbUser: any) => {
+    const generation = ++hydrationGeneration.current;
+    const userId = String(sbUser?.id || '');
+
+    if (!userId) return;
+
+    setSettingsReadyUserId(null);
+    setUser(profileService.mapSupabaseUserToProfile(sbUser));
+
+    // Do not perform additional Supabase calls inside onAuthStateChange.
+    // Supabase documents that asynchronous work triggered directly from that
+    // callback can deadlock auth initialization. Run hydration after the
+    // callback returns instead.
+    window.setTimeout(() => {
+      if (generation !== hydrationGeneration.current) return;
+
+      void profileService.getOrCreateProfile(sbUser)
+        .then(nextProfile => {
+          if (generation === hydrationGeneration.current) setUser(nextProfile);
+        })
+        .catch(profileError => {
+          console.warn('Background profile hydration failed:', profileError);
+        });
+
+      void userSettingsService.load(userId)
+        .then(() => {
+          if (generation === hydrationGeneration.current) setSettingsReadyUserId(userId);
+        })
+        .catch(settingsError => {
+          console.warn('User settings hydration failed:', settingsError);
+        });
+    }, 0);
+  }, []);
+
+  const markSignedOut = useCallback(() => {
+    ++hydrationGeneration.current;
+    setSettingsReadyUserId(null);
+    userSettingsService.clearLocal();
+    setSession(null);
+    setUser(null);
+    setAuthStatus('signed_out');
+    setError(null);
+    setAuthStep('idle');
   }, []);
 
   const initAuth = useCallback(async () => {
     setLoading(true);
+    setAuthStatus('loading');
+
     try {
       const { session: sbSession, error: sessionErr } = await sessionService.getSession();
-      if (sessionErr || !sbSession?.user) {
-        setSession(null);
-        setUser(null);
-      } else {
-        setSession(sessionService.mapSupabaseSession(sbSession));
-        setAuthStep('idle');
-        await hydrateUser(sbSession.user);
+
+      if (sessionErr) {
+        // A timeout/network outage is not proof that the user logged out.
+        // Keep any existing session state and put the app into a recoverable
+        // degraded mode instead of redirecting to /login.
+        setError(formatAuthError(sessionErr));
+        setAuthStatus(current => current === 'authenticated' ? current : 'degraded');
+        return;
       }
+
+      if (!sbSession?.user) {
+        markSignedOut();
+        return;
+      }
+
+      setSession(sessionService.mapSupabaseSession(sbSession));
+      setAuthStatus('authenticated');
+      setError(null);
+      scheduleHydration(sbSession.user);
     } catch (err: any) {
-      console.error('Auth initialization error:', err);
-      setSession(null);
-      setUser(null);
+      setError(formatAuthError(err));
+      setAuthStatus('degraded');
     } finally {
       setLoading(false);
-      setAuthStep('idle');
+      setAuthStep(current => current === 'error' ? current : 'idle');
     }
-  }, [hydrateUser]);
+  }, [markSignedOut, scheduleHydration]);
 
   useEffect(() => {
-    void initAuth();
-    const { unsubscribe } = sessionService.onAuthStateChange(async (event, sbSession) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    // Subscribe before initializing so an OAuth redirect or INITIAL_SESSION
+    // event cannot race the manual bootstrap.
+    const { unsubscribe } = sessionService.onAuthStateChange((event, sbSession) => {
+      if (event === 'SIGNED_OUT') {
+        markSignedOut();
+        setLoading(false);
+        return;
+      }
+
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        if (!sbSession?.user) {
+          markSignedOut();
+          setLoading(false);
+          return;
+        }
+
+        setSession(sessionService.mapSupabaseSession(sbSession));
+        setAuthStatus('authenticated');
+        setError(null);
+        setAuthStep('idle');
+        scheduleHydration(sbSession.user);
+        setLoading(false);
+        return;
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
         if (sbSession?.user) {
           setSession(sessionService.mapSupabaseSession(sbSession));
+          setAuthStatus('authenticated');
           setError(null);
-          setAuthStep('idle');
-          await hydrateUser(sbSession.user);
+        } else {
+          setAuthStatus(current => current === 'authenticated' ? 'degraded' : current);
         }
-      } else if (event === 'SIGNED_OUT') {
-        setSession(null);
-        setUser(null);
-        setAuthStep('idle');
+        setLoading(false);
       }
-      setLoading(false);
     });
+
+    void initAuth();
     return () => unsubscribe();
-  }, [initAuth, hydrateUser]);
+  }, [initAuth, markSignedOut, scheduleHydration]);
 
   useEffect(() => {
-    if (!user?.id || !session) return;
+    if (!user?.id || !session || settingsReadyUserId !== user.id) return;
     return userSettingsService.startSync(user.id, 5000);
-  }, [user?.id, session]);
+  }, [user?.id, session, settingsReadyUserId]);
 
   const login = useCallback(async () => {
     setError(null);
     setAuthStep('connecting');
+    setAuthStatus('loading');
     setAuthStep('authenticating');
+
     const result = await authService.signInWithGoogle();
     if (result.error) {
       setError(result.error);
+      setAuthStatus('degraded');
       setAuthStep('error');
       return { error: result.error };
     }
@@ -92,21 +169,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = useCallback(async () => {
     setLoading(true);
-    await authService.signOut();
-    setUser(null);
-    setSession(null);
-    setAuthStep('idle');
+    const result = await authService.signOut();
+    if (result.error) {
+      setError(result.error);
+      setAuthStep('error');
+      setLoading(false);
+      return;
+    }
+    markSignedOut();
     setLoading(false);
-  }, []);
+  }, [markSignedOut]);
 
   const refreshSession = useCallback(async () => {
     const { session: sbSession, error: refreshErr } = await sessionService.refreshSession();
-    if (refreshErr) { setError(refreshErr.message); return; }
-    if (sbSession?.user) {
-      setSession(sessionService.mapSupabaseSession(sbSession));
-      await hydrateUser(sbSession.user);
+
+    if (refreshErr) {
+      setError(formatAuthError(refreshErr));
+      setAuthStatus(current => current === 'authenticated' ? 'degraded' : current);
+      return;
     }
-  }, [hydrateUser]);
+
+    if (!sbSession?.user) {
+      markSignedOut();
+      return;
+    }
+
+    setSession(sessionService.mapSupabaseSession(sbSession));
+    setAuthStatus('authenticated');
+    setError(null);
+    scheduleHydration(sbSession.user);
+  }, [markSignedOut, scheduleHydration]);
 
   const value: AuthContextType = {
     user,
@@ -114,7 +206,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     error,
     authStep,
-    isAuthenticated: Boolean(user && session),
+    authStatus,
+    isAuthenticated: Boolean(user && session && authStatus !== 'signed_out'),
     login,
     logout,
     refreshSession,
