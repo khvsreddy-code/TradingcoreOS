@@ -13,7 +13,7 @@ const vercel=JSON.parse(read('vercel.json'));
 const vite=read('vite.config.ts');
 const live=read('src/LiveTradingWorkspace.tsx');
 
-if(!/runArtifact\(/.test(runner)||!/compiled\.artifact/.test(runner))throw new Error('Chart runner must address workers with compiled executable artifacts');
+if(!/loadOrCompileCoreSpiritArtifact\(/.test(runner)||!/runArtifact\(\s*artifact/.test(runner))throw new Error('Chart runner must address workers with compiled executable artifacts');
 if(!/contextArtifacts/.test(pool)||!/artifactChanged/.test(pool))throw new Error('Worker pool must retain per-context artifact identity');
 if(!/contextSlots/.test(pool)||!/contextKey/.test(pool))throw new Error('Worker pool must retain per-context worker affinity');
 if(!/sharedBuffers/.test(pool)||!/CoreSpiritSharedMarketBuffer/.test(pool))throw new Error('Worker pool must retain per-context shared market buffers');
