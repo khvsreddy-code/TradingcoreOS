@@ -34,6 +34,10 @@ export type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/
 export type { SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
 export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 export type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex } from '../../../../vendor/vela/src/core/model/columnar-bars';
+export type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
+export type { DrawingLabel, DrawingLine, DrawingPolyline } from '../../../../vendor/vela/src/core/model/drawings';
+export type { HighCardinalityRectBatch, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
+export type { ScenePatch, ValuePatch } from '../../../../vendor/vela/src/core/model/patch';
 export { registerSidePanel, unregisterSidePanel, registerWidgetAction, unregisterWidgetAction } from '../../../../vendor/vela/src/widget/contributions';
 export type { SidePanelDescriptor, SidePanelHandle, SidePanelHeader, WidgetActionDescriptor, WidgetContext } from '../../../../vendor/vela/src/widget/contributions';
 export type { VelaStorage } from '../../../../vendor/vela/src/widget/persist';
