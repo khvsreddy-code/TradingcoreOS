@@ -31,6 +31,18 @@ export type CoreSpiritCompilerOptions = {
   artifactContext?: { source:string; normalizedSource:string; semanticFingerprint?:string };
 };
 
+export function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
+  const componentSource = options.components ?? coreSpiritComponentRegistry;
+  const componentContracts = componentSource && typeof componentSource === 'object' && 'listContracts' in componentSource
+    ? (componentSource as any).listContracts()
+    : componentSource;
+  return JSON.stringify({
+    compilerPipeline: 'semantic-v2',
+    layer: options.layer || 'script',
+    components: componentContracts,
+  });
+}
+
 export class CoreSpiritCompiler {
   compileSource(
     source: string,
@@ -339,13 +351,6 @@ export class CoreSpiritCompiler {
     }
   }
   private semanticFingerprint(options: CoreSpiritCompilerOptions): string {
-    const componentSource = options.components ?? coreSpiritComponentRegistry;
-    const componentContracts = componentSource && typeof componentSource === 'object' && 'listContracts' in componentSource
-      ? (componentSource as any).listContracts()
-      : componentSource;
-    return JSON.stringify({
-      layer: options.layer || 'script',
-      components: componentContracts,
-    });
+    return buildCoreSpiritSemanticFingerprint(options);
   }
 }
