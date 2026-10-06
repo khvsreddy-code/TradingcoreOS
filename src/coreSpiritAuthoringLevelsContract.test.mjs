@@ -25,8 +25,9 @@ and strength > 55
 and relative > relative[20]
     signal("LONG")
 
-let z = zscore(close, 100)
-let beta = beta(returns(close), returns(nifty), 252)
+let returns = log(close / close[1])
+let z = zscore(returns, 100)
+let beta = beta(returns, market("NSE:NIFTY50").returns, 252)
 let regime = regime.detect(
     volatility = stdev(returns(close), 20),
     trend = trendStrength(close, 50)
@@ -59,6 +60,8 @@ evaluate {
 
 const normalized=normalizeCoreSpiritSource(source);
 assert.match(normalized,/let nifty = market\("NSE:NIFTY50"\)\.timeframe\("5m"\)/);
+assert.match(normalized,/let returns = log\(close \/ close\[1\]\)/);
+assert.match(normalized,/beta\(returns,\s*returns\(market\("NSE:NIFTY50"\)\),\s*252\)/);
 assert.match(normalized,/regimeDetect\(/);
 assert.doesNotMatch(normalized,/^\s*data\b/m);
 assert.doesNotMatch(normalized,/^\s*backtest\b/m);
