@@ -10,6 +10,7 @@ import {
   CoreSpiritSharedMarketBuffer,
   type CoreSpiritSharedMarketDescriptor,
 } from './sharedMarketBuffer';
+import { graphSnapshotTransferables, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
 
 export type CoreSpiritWorkerRunResult = {
   outputs: CoreSpiritObject[];
@@ -29,6 +30,7 @@ type WorkerJob = {
   resolve:(value:CoreSpiritWorkerRunResult)=>void;
   reject:(reason:unknown)=>void;
   priority:0|1|2|3|4;
+  graphSnapshot?:CoreSpiritGraphSnapshot;
 };
 
 type WorkerSlot = {
@@ -50,6 +52,7 @@ type WorkerRunEnvelope = {
   mode:'historical'|'incremental';
   sharedMarket?:CoreSpiritSharedMarketDescriptor;
   bars?:CoreSpiritMarketBar[];
+  graphSnapshot?:CoreSpiritGraphSnapshot;
 };
 
 function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
@@ -82,6 +85,7 @@ export class CoreSpiritWorkerPool {
   private readonly contextSlots = new Map<string,WorkerSlot>();
   private readonly sharedBuffers = new Map<string,CoreSpiritSharedMarketBuffer>();
   private readonly contextArtifacts = new Map<string,string>();
+  private readonly contextGraphRevisions = new Map<string,number>();
 
   constructor(maxWorkers?:number) {
     const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
@@ -94,7 +98,7 @@ export class CoreSpiritWorkerPool {
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot},
   ):Promise<CoreSpiritWorkerRunResult> {
     const { compileCoreSpirit } = await import('./coreSpiritPipeline');
     const compiled = compileCoreSpirit(source, sourceId);
@@ -129,6 +133,7 @@ export class CoreSpiritWorkerPool {
         resolve,
         reject,
         priority:sourceId.includes('chart') ? 1 : 3,
+        graphSnapshot:options?.graphSnapshot,
       });
       this.queue.sort((a,b)=>a.priority-b.priority);
       this.dispatch();
@@ -147,6 +152,7 @@ export class CoreSpiritWorkerPool {
     this.contextSlots.clear();
     this.sharedBuffers.clear();
     this.contextArtifacts.clear();
+    this.contextGraphRevisions.clear();
   }
 
   private dispatch():void {
@@ -201,12 +207,20 @@ export class CoreSpiritWorkerPool {
 
     const artifactId=artifactIdFor(job.artifact);
     const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId;
+    const graphChanged=!!job.graphSnapshot && this.contextGraphRevisions.get(job.contextKey)!==job.graphSnapshot.revision;
     const sendArtifact=artifactChanged ? {
       type:'loadArtifact' as const,
       requestId,
       artifact:job.artifact,
       contextKey:job.contextKey,
       sourceId:job.sourceId,
+      graphSnapshot:job.graphSnapshot,
+    } : null;
+    const sendGraph=(!artifactChanged&&graphChanged&&job.graphSnapshot) ? {
+      type:'updateGraph' as const,
+      requestId,
+      contextKey:job.contextKey,
+      graphSnapshot:job.graphSnapshot,
     } : null;
 
     const cleanup=()=>{
@@ -219,7 +233,11 @@ export class CoreSpiritWorkerPool {
       const message=event.data;
       if(!isRecord(message)||message.requestId!==requestId)return;
       try{
-        if(message.type==='result'){if(artifactChanged)this.contextArtifacts.set(job.contextKey,artifactId);job.resolve(normalizeResult(message));}
+        if(message.type==='result'){
+          if(artifactChanged)this.contextArtifacts.set(job.contextKey,artifactId);
+          if(job.graphSnapshot&&graphChanged)this.contextGraphRevisions.set(job.contextKey,job.graphSnapshot.revision);
+          job.resolve(normalizeResult(message));
+        }
         else if(message.type==='error')job.reject(new Error(typeof message.message==='string'?message.message:'CoreSpirit worker failed'));
         else return;
       }catch(error){job.reject(error);}
@@ -231,7 +249,7 @@ export class CoreSpiritWorkerPool {
       try{slot.worker.terminate();}catch{}
       const index=this.slots.indexOf(slot);
       if(index>=0)this.slots.splice(index,1);
-      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.sharedBuffers.delete(key);}}
+      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);this.sharedBuffers.delete(key);}}
       cleanup();
     };
 
@@ -256,7 +274,8 @@ export class CoreSpiritWorkerPool {
     };
 
     try{
-      if(sendArtifact)slot.worker.postMessage(sendArtifact);
+      if(sendArtifact)slot.worker.postMessage(sendArtifact, job.graphSnapshot ? graphSnapshotTransferables(job.graphSnapshot) : []);
+      else if(sendGraph)slot.worker.postMessage(sendGraph, graphSnapshotTransferables(job.graphSnapshot!));
       slot.worker.postMessage(
         envelope,
         sharedMarket && !sharedMarket.shared ? [sharedMarket.buffer] : [],
@@ -284,7 +303,7 @@ export class CoreSpiritWorkerPool {
     sourceId:string,
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
-    const runtime=new CoreSpiritRuntime({sourceId});
+    const runtime=new CoreSpiritRuntime({sourceId,dataResolver:graphSnapshot?createGraphResolver(graphSnapshot):undefined});
     runtime.loadIr(artifact.ir);
     const result=runtime.executeIr(artifact.ir,bars);
     return {outputs:result.outputs,diagnostics:result.diagnostics,state:result.state};
