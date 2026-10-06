@@ -138,6 +138,11 @@ function transformShow(line: string, modelNames: ReadonlySet<string>): string | 
     return wrap(`show("zone", ${zone[1].trim()}, ${zone[2].trim()}, ${area}, "viewport")`);
   }
 
+  const bareSignal = rest.match(/^signal\s+("[^"]*"|'[^']*'|\S+)$/i);
+  if (bareSignal) return wrap(`show("signal", ${bareSignal[1]}, above_bar(0), ${area})`);
+  const signalCall = rest.match(/^signal\s*\((.+)\)$/i);
+  if (signalCall) return wrap(`show("signal", ${signalCall[1]}, above_bar(0), ${area})`);
+
   // `show signal "LONG" above|below bar` is a visual projection, not signal emission.
   const signal = rest.match(/^signal\s+("[^"]*"|'[^']*'|\S+)\s+(above|below)(?:\s+bar)?$/i);
   if (signal) {
@@ -225,7 +230,19 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
   },
 ];
 
+function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
+  let out = source;
+  out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
+  out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
+  out = out.replace(
+    /regime\.detect\s*\(\s*volatility\s*=\s*([^,\n]+)\s*,\s*trend\s*=\s*([^)\n]+)\s*\)/gis,
+    'regimeDetect($1, $2)',
+  );
+  return out;
+}
+
 export function normalizeCoreSpiritSource(source: string): string {
+  source = normalizeCoreSpiritQuantSurfaceSyntax(source);
   // Normalize readable crossing syntax structurally before any legacy line transforms.
   // This pass is token-aware, so strings/comments and nested call expressions are not
   // rewritten accidentally.
@@ -237,6 +254,8 @@ export function normalizeCoreSpiritSource(source: string): string {
   const out: string[] = [];
   const whenBlocks: number[] = [];
   const wrappers: Array<{ indent: number; kind: 'indicator' | 'model' | 'automation' }> = [];
+  const modelBraceIndents: number[] = [];
+  let researchSkipIndent: number | null = null;
 
   for (const raw of lines) {
     const trimmed = raw.trim();
@@ -248,6 +267,50 @@ export function normalizeCoreSpiritSource(source: string): string {
     }
     if (trimmed.startsWith('//')) {
       out.push(raw);
+      continue;
+    }
+
+    if (researchSkipIndent !== null) {
+      if (!trimmed || indent > researchSkipIndent) continue;
+      researchSkipIndent = null;
+    }
+
+    if (/^backtest\s+/i.test(trimmed)) continue;
+    if (/^evaluate\s*\{?\s*$/i.test(trimmed)) {
+      researchSkipIndent = indent;
+      continue;
+    }
+
+    const dataDecl = trimmed.match(/^data\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;?$/i);
+    if (dataDecl) {
+      const value = dataDecl[2].trim();
+      const market = value.match(/^market\s*\((.*)\)$/is);
+      const parts = market ? splitTopLevel(market[1]) : [];
+      if (market && (parts.length === 1 || parts.length === 2)) {
+        const indentText = raw.match(/^[ \t]*/)?.[0] ?? '';
+        const ref = parts.length === 2 ? `market(${parts[0]}).timeframe(${parts[1]})` : `market(${parts[0]})`;
+        out.push(`${indentText}let ${dataDecl[1]} = ${ref};`);
+        continue;
+      }
+      if (/^(?:timeframe|series)\s*\(/i.test(value)) {
+        const indentText = raw.match(/^[ \t]*/)?.[0] ?? '';
+        out.push(`${indentText}let ${dataDecl[1]} = ${value};`);
+        continue;
+      }
+    }
+
+    const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\{\s*$/i);
+    if (braceModel) {
+      const name = braceModel[1] ?? braceModel[2] ?? braceModel[3] ?? 'Model';
+      wrappers.push({ indent, kind:'model' });
+      modelBraceIndents.push(indent);
+      out.push(`${raw.match(/^[ \t]*/)?.[0] ?? ''}model "${name}":`);
+      continue;
+    }
+
+    if (modelBraceIndents.length && trimmed === '}' && indent <= modelBraceIndents[modelBraceIndents.length - 1]!) {
+      modelBraceIndents.pop();
+      if (wrappers.length && wrappers[wrappers.length - 1]?.kind === 'model') wrappers.pop();
       continue;
     }
 
@@ -278,7 +341,7 @@ export function normalizeCoreSpiritSource(source: string): string {
     }
 
     if (wrappers.length && wrappers[wrappers.length - 1].kind === 'model') {
-      if (/^(?:features|inputs?|outputs?)\s*:\s*$/i.test(trimmed)) continue;
+      if (/^(?:features|inputs?|outputs?|target|targets?)\s*:\s*$/i.test(trimmed)) continue;
       if (/^use\s+(?:(?:python|cpp|rust|wasm|onnx|remote)\s+)?(?:"[^"]+"|'[^']+')\s*$/i.test(trimmed)) continue;
       if (/^predict\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i.test(trimmed)) continue;
       if (/^[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*(?:number|string|boolean|series<number>))?\s*(?:,\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*(?:number|string|boolean|series<number>))?)*$/i.test(trimmed)) continue;
