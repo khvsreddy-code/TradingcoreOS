@@ -1,7 +1,7 @@
 import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutableArtifact } from './artifact';
-import { validateExecutableArtifact } from './artifact';
+import { validateExecutableArtifact, type CoreSpiritExecutableArtifact as ExecutableArtifact } from './artifact';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 import {
@@ -77,6 +77,7 @@ export class CoreSpiritWorkerPool {
   private readonly maxWorkers:number;
   private readonly contextSlots = new Map<string,WorkerSlot>();
   private readonly sharedBuffers = new Map<string,CoreSpiritSharedMarketBuffer>();
+  private readonly contextArtifacts = new Map<string,string>();
 
   constructor(maxWorkers?:number) {
     const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
@@ -85,19 +86,18 @@ export class CoreSpiritWorkerPool {
     this.maxWorkers = Math.max(1, Math.min(maxWorkers ?? 2, Math.max(1, hardware - 1)));
   }
 
-  run(
+  async run(
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
     options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange},
   ):Promise<CoreSpiritWorkerRunResult> {
-    return this.runArtifact(
-      undefined,
-      source,
-      bars,
-      sourceId,
-      options,
-    );
+    const { compileCoreSpirit } = await import('./coreSpiritPipeline');
+    const compiled = compileCoreSpirit(source, sourceId);
+    if (!compiled.artifact || compiled.diagnostics.some(d => d.severity === 'error')) {
+      throw new Error(compiled.diagnostics.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
+    }
+    return this.runArtifact(compiled.artifact, source, bars, sourceId, options);
   }
 
   runArtifact(
@@ -139,6 +139,7 @@ export class CoreSpiritWorkerPool {
     this.queueCursor=0;
     this.contextSlots.clear();
     this.sharedBuffers.clear();
+    this.contextArtifacts.clear();
   }
 
   private dispatch():void {
@@ -183,7 +184,14 @@ export class CoreSpiritWorkerPool {
       ? sharedBuffer.writeBars(job.bars,job.datasetVersion,job.dirtyRange?.from ?? 0,job.dirtyRange?.to ?? job.bars.length)
       : undefined;
 
-    const sendArtifact=job.artifact ? {
+    if (!job.artifact || !validateExecutableArtifact(job.artifact)) {
+      job.reject(new Error('CoreSpirit worker job requires a valid executable artifact'));
+      cleanupSlot(slot, this.contextSlots);
+      return;
+    }
+
+    const artifactChanged=this.contextArtifacts.get(job.contextKey)!==job.artifact.checksum;
+    const sendArtifact=artifactChanged ? {
       type:'loadArtifact' as const,
       requestId,
       artifact:job.artifact,
@@ -201,7 +209,7 @@ export class CoreSpiritWorkerPool {
       const message=event.data;
       if(!isRecord(message)||message.requestId!==requestId)return;
       try{
-        if(message.type==='result')job.resolve(normalizeResult(message));
+        if(message.type==='result'){if(artifactChanged)this.contextArtifacts.set(job.contextKey,job.artifact.checksum);job.resolve(normalizeResult(message));}
         else if(message.type==='error')job.reject(new Error(typeof message.message==='string'?message.message:'CoreSpirit worker failed'));
         else return;
       }catch(error){job.reject(error);}
@@ -213,9 +221,7 @@ export class CoreSpiritWorkerPool {
       try{slot.worker.terminate();}catch{}
       const index=this.slots.indexOf(slot);
       if(index>=0)this.slots.splice(index,1);
-      for(const [key,value] of this.contextSlots){
-        if(value===slot)this.contextSlots.delete(key);
-      }
+      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.sharedBuffers.delete(key);}}
       cleanup();
     };
 
@@ -261,6 +267,13 @@ export class CoreSpiritWorkerPool {
     }
     return buffer;
   }
+}
+
+function cleanupSlot(slot:WorkerSlot, contextSlots:Map<string,WorkerSlot>):void {
+  for(const [key,value] of contextSlots){
+    if(value===slot)contextSlots.delete(key);
+  }
+  try{slot.worker.terminate();}catch{}
 }
 
 export const coreSpiritWorkerPool=new CoreSpiritWorkerPool();
