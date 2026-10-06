@@ -741,6 +741,8 @@ export class CoreSpiritRuntime {
     if (name==='toNumber'||name==='toPrice'||name==='toVolume'||name==='toTime'||name==='toDuration'||name==='toCurrency') return finish(Number(args[0]));
     if (name==='sqrt') return finish(Math.sqrt(Number(args[0])));
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
+    if (name==='log') return finish(Math.log(Number(args[0])));
+    if (name==='exp') return finish(Math.exp(Number(args[0])));
     if(name==='returns'){
       const ref=args[0];
       let current=Number.NaN;
