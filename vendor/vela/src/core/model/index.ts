@@ -49,3 +49,5 @@ export type { IdentifiableKind } from './identity';
 
 export type { HighCardinalityRectXLoc, HighCardinalityRectInstance, HighCardinalityRectBatch, HighCardinalityRectDelta, GpuRectBatch } from './instances';
 export { applyScenePatch } from './scenePatch';
+
+export { RetainedSceneGraph, SceneDirty, type SceneNodeKind, type SceneNode, type SceneDataRange, type SceneViewport, type SceneViewportBounds, type SceneDirtyFlags } from './sceneGraph';
