@@ -23,7 +23,7 @@ export function createSharedSeriesOutput(outputs: readonly CoreSpiritObject[]): 
   passthrough: CoreSpiritObject[];
 } {
   const series = outputs.filter((output): output is Extract<CoreSpiritObject,{kind:'series'}> => output.kind === 'series');
-  if (!series.length || typeof SharedArrayBuffer === 'undefined') {
+  if (!series.length || typeof SharedArrayBuffer === 'undefined' || (typeof globalThis.crossOriginIsolated === 'boolean' && !globalThis.crossOriginIsolated)) {
     return { descriptor: undefined, passthrough: [...outputs] };
   }
 
