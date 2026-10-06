@@ -28,6 +28,19 @@ export type CoreSpiritSemanticType = Readonly<{
   scale?: 'linear' | 'log' | 'percent' | 'indexed';
 }>;
 
+export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): string {
+  if (!type) return 'unknown';
+  const base = `${type.kind}<${type.atom}>`;
+  const qualifiers = [
+    type.symbol ? `symbol=${type.symbol}` : '',
+    type.timeframe ? `timeframe=${type.timeframe}` : '',
+    type.unit ? `unit=${type.unit}` : '',
+    type.currency ? `currency=${type.currency}` : '',
+    type.scale ? `scale=${type.scale}` : '',
+  ].filter(Boolean);
+  return qualifiers.length ? `${base}{${qualifiers.join(',')}}` : base;
+}
+
 export const semanticNumber = (kind: CoreSpiritSemanticType['kind'] = 'scalar', metadata: Omit<CoreSpiritSemanticType, 'kind' | 'atom'> = {}): CoreSpiritSemanticType =>
   Object.freeze({ kind, atom: 'number' as const, ...metadata });
 
