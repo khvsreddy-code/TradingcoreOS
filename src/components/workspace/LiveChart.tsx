@@ -18,14 +18,16 @@ import { ChartShell } from './ChartShell';
 import { ChartOverlay } from './ChartOverlay';
 import { ChartToolbar } from './ChartToolbar';
 import type { DrawingTool } from './drawingTypes';
+import type { HistoricalCandle } from '../../services/brokers/BrokerAdapter';
+import type { NormalizedMarketTick } from '../../types/market';
+import { useChartLifecycle } from './hooks/useChartLifecycle';
 import { CHART_TIMEFRAME_INTERVALS, chartDataPlaneKey, getChartDataPlane } from '../../services/marketData/chartDataPlane';
 import type { ChartAnalytics } from '../../services/marketData/levelEngine';
 import { chartMarketKey } from '../../services/marketData/chartMarketStore';
 import { isIncrementalIndicatorSupported } from '../../services/marketData/incrementalIndicatorEngine';
 import { getIndicators, saveIndicators, getAutomations, type AutomationConfig, type IndicatorConfig, INDICATOR_LIBRARY } from '../../services/marketData/indicatorEngine';
 import { buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot, getIndicatorDefaultPatch } from '../../services/coreSpirit/indicatorSettingsSchema';
-import { CandleAppearance, candleSeriesOptions, loadCandleAppearance, saveCandleAppearance, volumeColor } from '../../services/core/chart/candleAppearance';
-import { getCurrentTheme, getThemePalette } from '../../theme/theme';
+import { CandleAppearance, loadCandleAppearance, saveCandleAppearance, volumeColor } from '../../services/core/chart/candleAppearance';
 import { getSavedPredictionModelIds, savePredictionModelIds } from '../../services/predictionEngine';
 import { canonicalInstrumentKey, chartIntervals as intervals, loadChartState, chartStateKey, markerForAutomation } from '../../services/core/chart/chartRuntimeSupport';
 import { createChartAnalyticsController } from '../../services/core/chart/ChartAnalyticsController';
@@ -231,7 +233,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     });
     runtimeControllerRef.current=runtime;
     return runtime.mount();
-  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial,crosshairVisible,chartType,candleAppearance,showOI]);
+  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial]);
 
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);
