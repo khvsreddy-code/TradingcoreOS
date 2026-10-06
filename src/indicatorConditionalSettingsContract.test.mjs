@@ -12,7 +12,8 @@ assert(schema.includes("{ not: IndicatorSettingCondition }"), 'NOT dependency gr
 assert(schema.includes("condition.path === ownerPath"), 'self-dependency guard missing');
 assert(schema.includes('fieldByPath'), 'typed condition target validation missing');
 assert((schema.match(/const allSchemaFields = schema\.sections\.flatMap\(section => section\.fields\);/g) || []).length === 1, 'schema field collection must have exactly one canonical declaration');
-assert((schema.match(/const fieldByPath = new Map<string, IndicatorSettingField>/g) || []).length === 1, 'dependency field index must have exactly one canonical declaration');
+assert((schema.match(/const fieldByPath = buildIndicatorSettingsFieldIndex\(schema\);/g) || []).length === 1, 'dependency field index must have exactly one canonical declaration');
+assert((schema.match(/function buildIndicatorSettingsFieldIndex\(schema: IndicatorSettingsSchema\)/g) || []).length === 1, 'dependency field index helper must have exactly one canonical declaration');
 assert(schema.includes('detectConditionCycles(allSchemaFields)'), 'cycle detection must reuse the canonical field collection');
 assert(schema.includes('numeric dependency'), 'numeric dependency domain validation missing');
 assert(schema.includes("depth > 8"), 'conditional dependency depth bound missing');
