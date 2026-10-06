@@ -264,6 +264,8 @@ class ChartPerformanceTelemetry {
     };
   }
 
+  keys(): readonly string[] { return Object.freeze([...this.metrics.keys()]); }
+
   reset(key?: string): void {
     if (key == null) this.metrics.clear(); else this.metrics.delete(key);
   }
