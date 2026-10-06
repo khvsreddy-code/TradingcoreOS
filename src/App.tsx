@@ -91,30 +91,38 @@ function AppContent() {
 
   useEffect(() => {
     if (!isAuthenticated || publicIndicatorRoute || !protectedEntry) return;
-    if (runtime) {
-      setBrokerRestoreReady(true);
-      return;
-    }
 
     let cancelled = false;
     setBrokerRestoreReady(false);
 
+    // Do not mark broker restoration ready merely because the runtime module has
+    // loaded. On a hard refresh the runtime is created before its async server
+    // session restore finishes; publishing "ready" at that point can render
+    // /live with an empty in-memory broker map and send the user to /broker.
     void loadTradingCoreRuntime()
       .then(async (nextRuntime) => {
         if (cancelled) return;
         setRuntime(nextRuntime);
-        try { await nextRuntime.restoreBrokerConnections(); } catch {}
+        try {
+          await nextRuntime.restoreBrokerConnections();
+        } catch {
+          // The UI remains deterministic: no broker is assumed connected when
+          // the server-side restore could not be completed.
+        }
         if (!cancelled) {
           setHasConnectedBroker(nextRuntime.hasConnectedBroker());
           setBrokerRestoreReady(true);
         }
       })
       .catch(() => {
-        if (!cancelled) setBrokerRestoreReady(true);
+        if (!cancelled) {
+          setHasConnectedBroker(false);
+          setBrokerRestoreReady(true);
+        }
       });
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, user?.id, publicIndicatorRoute, protectedEntry, runtime]);
+  }, [isAuthenticated, user?.id, publicIndicatorRoute, protectedEntry]);
 
   useEffect(() => {
     if (!runtime) return;
