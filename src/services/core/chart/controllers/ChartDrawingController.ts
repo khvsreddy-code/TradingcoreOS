@@ -1,4 +1,4 @@
-import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
+import type { HistoricalCandle } from '../../../brokers/BrokerAdapter';
 import { CoreDrawing, normalizeCoreDrawings } from '../../drawing/coreDrawing';
 import { CoreDrawingStore } from '../../drawing/coreDrawingStore';
 import { CoreDrawingApi } from '../../drawing/drawingApi';
@@ -49,7 +49,7 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
   };
   const publishDrawing=(event:'drawing.created'|'drawing.updated',drawing:CoreDrawing)=>coreEventBus.emit(event,{id:drawing.id,owner:drawing.owner,drawing:drawing as unknown as Record<string,unknown>,timestamp:Date.now()});
   
-  const renderDrawings=const renderDrawings=()=>{
+  const renderDrawings=renderDrawings=()=>{
      if(!chart.current)return;
      drawingSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}}); drawingSeries.current=[];
      const data=candles.current; if(!data.length)return;
@@ -105,7 +105,7 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
        else if(d.kind==='text'&&p.length>=1){add([{time:p[0].time,price:p[0].price},{time:Math.min(last,p[0].time+Math.max(1,(last-first)*.02)),price:p[0].price}],{color:'#e5e7eb',lineWidth:2,lineStyle:0});}
      }
    };;
-  const commitDrawing=const commitDrawing=(tool:DrawingTool,points:DrawingPoint[],label?:string)=>{
+  const commitDrawing=commitDrawing=(tool:DrawingTool,points:DrawingPoint[],label?:string)=>{
      if(tool==='none'||tool==='crosshair'||!points.length)return;
      const definition=getCoreDrawingTool(tool as any);
      if(!definition||!definition.uiReady||!validateDrawingPoints(tool as any,points))return;
@@ -119,8 +119,8 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
      drawingPoints.current=[];setDrawingTool('none');drawingToolRef.current='none';
      saveChartState(brokerId,resolvedInstrumentKey,{version:2,timeframe,drawings:drawings.current,showLevels,showVolume,showOI,showDepth});renderDrawings();
    };;
-  const clearDrawings=const clearDrawings=()=>{const count=drawingStore.current.clear('user');drawings.current=drawingStore.current.list() as Drawing[];drawingPoints.current=[];saveChartState(brokerId,resolvedInstrumentKey,{version:2,timeframe,drawings:drawings.current,showLevels,showVolume,showOI,showDepth});if(count)coreEventBus.emit('drawing.cleared',{timestamp:Date.now(),owner:'user'});renderDrawings();};;
-  const selectDrawingTool=const selectDrawingTool=(tool:DrawingTool)=>{setDrawingTool(tool);drawingToolRef.current=tool;drawingPoints.current=[];setShowDrawingMenu(false);};;
+  const clearDrawings=clearDrawings=()=>{const count=drawingStore.current.clear('user');drawings.current=drawingStore.current.list() as Drawing[];drawingPoints.current=[];saveChartState(brokerId,resolvedInstrumentKey,{version:2,timeframe,drawings:drawings.current,showLevels,showVolume,showOI,showDepth});if(count)coreEventBus.emit('drawing.cleared',{timestamp:Date.now(),owner:'user'});renderDrawings();};;
+  const selectDrawingTool=selectDrawingTool=(tool:DrawingTool)=>{setDrawingTool(tool);drawingToolRef.current=tool;drawingPoints.current=[];setShowDrawingMenu(false);};;
 
   return {
     store:drawingStore,
