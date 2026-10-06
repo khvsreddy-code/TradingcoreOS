@@ -1,5 +1,5 @@
-import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
-import type { IndicatorConfig } from '../../marketData/indicatorEngine';
+import type { HistoricalCandle } from '../../../brokers/BrokerAdapter';
+import type { IndicatorConfig } from '../../../marketData/indicatorEngine';
 import {
   advancedIndicatorModel, anchoredVwap, bosChoch, cpr, classicPivots, developingDayLevels,
   dynamicSupportResistance, equalHighLow, extendedCpr, fairValueGaps, gapLevels, gapZones,
@@ -7,13 +7,13 @@ import {
   openingRange, orderBlocks, periodPivots, pivots, priceActionEvents, previousDayLevels,
   previousPeriodLevels, rsi, series, stochastic, supertrend, tradingCoreVPriceAction,
   vwapDeviationBands,
-} from '../../marketData/indicatorEngine';
-import type { ChartDataPlane } from '../../marketData/chartDataPlane';
-import { chartComputeCoordinator } from '../../marketData/chartComputeCoordinator';
-import { isIncrementalIndicatorSupported } from '../../marketData/incrementalIndicatorEngine';
-import { resolveIndicatorAppearance } from '../../coreSpirit/indicatorAppearance';
+} from '../../../marketData/indicatorEngine';
+import type { ChartDataPlane } from '../../../marketData/chartDataPlane';
+import { chartComputeCoordinator } from '../../../marketData/chartComputeCoordinator';
+import { isIncrementalIndicatorSupported } from '../../../marketData/incrementalIndicatorEngine';
+import { resolveIndicatorAppearance } from '../../../coreSpirit/indicatorAppearance';
 import { getCurrentTheme, getThemePalette } from '../../../../theme/theme';
-import { buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot } from '../../coreSpirit/indicatorSettingsSchema';
+import { buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot } from '../../../coreSpirit/indicatorSettingsSchema';
 import { ColorType, LineSeries, HistogramSeries, createVelaNativeChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type Time } from './velaNativeChartKernel';
 import type { ChartLifecycle } from './chartLifecycle';
 import type { ChartUpdateScheduler } from './chartUpdateScheduler';
@@ -65,7 +65,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
   let markerPlugin:any=null;
   const setChartMarkers=(markers:any[])=>{if(!candle.current)return;try{if(!markerPlugin)markerPlugin=createSeriesMarkers(candle.current,[]);markerPlugin.setMarkers(markers.slice(-100));}catch{}};
 
-  const renderWorkerIndicators=const renderWorkerIndicators=(results:any[])=>{
+  const renderWorkerIndicators=renderWorkerIndicators=(results:any[])=>{
      if(!chart.current)return;
      const active=indicators.filter(x=>x.enabled);
      if(oscillatorKinds(active)&&oscHost.current&&!oscChart.current){const p=getThemePalette(getCurrentTheme());oscChart.current=createVelaNativeChart(oscHost.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:p.surface2},textColor:p.muted,fontFamily:'JetBrains Mono, monospace',fontSize:9},grid:{vertLines:{color:p.grid},horzLines:{color:p.grid}},rightPriceScale:{borderColor:p.axis},timeScale:{visible:false}})};
@@ -97,7 +97,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        const s=getSeries(result.id,target,'line',primary,cfg.lineWidth||2,cfg.lineStyle||0);updateOrSet(s,safeLinePoints(result.data,'value'),incremental);
      }
    };
-  const applyIndicatorAppearanceOnly=const applyIndicatorAppearanceOnly=()=>{
+  const applyIndicatorAppearanceOnly=applyIndicatorAppearanceOnly=()=>{
      if(!chart.current)return;
      const visibleBars=appearanceVisibleBars();
      for(const cfg of indicators){
@@ -127,7 +127,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
      }
      setChartMarkers(markerStyles);
    };
-  const renderStudies=const renderStudies=(data:HistoricalCandle[], preserveWorkerSeries=false)=>{
+  const renderStudies=renderStudies=(data:HistoricalCandle[], preserveWorkerSeries=false)=>{
      clearChartMarkers();
   
      indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];indicatorSeriesMap.current.clear();markerDataByIndicator.current.clear();indicatorFillMap.current.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.current.clear();oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
@@ -227,7 +227,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
      const markerGroups=new Map<string,any[]>(); for(const marker of chartMarkers){const id=String(marker.indicatorId||'');if(!id)continue;const arr=markerGroups.get(id)||[];arr.push(marker);markerGroups.set(id,arr);} markerDataByIndicator.current=markerGroups; setChartMarkers(chartMarkers.map(({indicatorId:_id,...marker})=>marker)); applyIndicatorAppearanceOnly();
    };
 
-  const requestIndicatorWorker=const requestIndicatorWorker=(data:HistoricalCandle[], range=visibleLogicalRangeRef.current, mode:'snapshot'|'incremental'='snapshot', operation:'replace'|'append'='replace')=>{
+  const requestIndicatorWorker=requestIndicatorWorker=(data:HistoricalCandle[], range=visibleLogicalRangeRef.current, mode:'snapshot'|'incremental'='snapshot', operation:'replace'|'append'='replace')=>{
      const requestSeq=++indicatorRequestSeq.current;
      const revision=dataRevisionRef.current;
      const market=chartDataPlane.readCanonical();
