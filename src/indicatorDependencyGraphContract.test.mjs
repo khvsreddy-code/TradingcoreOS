@@ -8,6 +8,7 @@ const coordinator=fs.readFileSync(path.join(root,'src/services/marketData/chartC
 const settings=fs.readFileSync(path.join(root,'src/components/indicators/IndicatorSettingsPanel.tsx'),'utf8');
 const settingsSchema=fs.readFileSync(path.join(root,'src/services/coreSpirit/indicatorSettingsSchema.ts'),'utf8');
 const live=fs.readFileSync(path.join(root,'src/components/workspace/LiveChart.tsx'),'utf8');
+const overlay=fs.readFileSync(path.join(root,'src/components/workspace/ChartOverlay.tsx'),'utf8');
 if(!/GRAPH_SUPPORTED_INDICATORS/.test(graph)||!/buildIndicatorDependencyGraph/.test(graph)) throw new Error('Explicit indicator dependency graph missing');
 for(const token of ['true-range','atr:','ema:','wma:','hma:','donchian:']) if(!graph.includes(token)) throw new Error(`Shared dependency node missing: ${token}`);
 if(!/Keltner Channels/.test(graph)||!/Supertrend/.test(graph)||!/MACD/.test(graph)) throw new Error('Composite indicator dependencies missing');
@@ -15,5 +16,5 @@ if(!/createIndicatorDependencyCache/.test(worker)||!/evaluateIndicatorDependency
 if(!/export function wma/.test(kernel)) throw new Error('Shared WMA primitive missing for HMA');
 if(!/windowKey/.test(coordinator)||!(/datasetKey: windowKey/.test(coordinator)||/datasetKey: `\$\{datasetKey\}\|window:/.test(coordinator))) throw new Error('Indicator compute cache is not window-aware');
 for (const token of ['appearance.line.color','appearance.fill.upperColor','appearance.fill.lowerColor','appearance.line.width','appearance.line.style','appearance.line.opacity']) if(!settingsSchema.includes(token)) throw new Error('Schema-driven indicator appearance controls are incomplete');
-if(!/IndicatorSettingsPanel/.test(live)||!/editingIndicator===x\.id/.test(live)) throw new Error('Live terminal does not expose first-class indicator settings');
+if(!/IndicatorSettingsPanel/.test(overlay)||!/editingIndicator===item\.id/.test(overlay)) throw new Error('Live terminal does not expose first-class indicator settings');
 console.log('TRADINGCORE_V105_INDICATOR_DEPENDENCY_GRAPH_CONTRACT_OK');
