@@ -11,7 +11,7 @@ import { createChartDrawingController } from '../../services/core/chart/controll
 import { createChartIndicatorController } from '../../services/core/chart/controllers/ChartIndicatorController';
 import { createChartPredictionController } from '../../services/core/chart/controllers/ChartPredictionController';
 import { createChartRealtimeController } from '../../services/core/chart/controllers/ChartRealtimeController';
-import { ChartStore } from '../../services/core/chart/ChartStore';
+import { acquireChartStore, releaseChartStore } from '../../services/core/chart/chartStoreRegistry';
 import { coreEventBus } from '../../services/core/event/eventBus';
 import type { NormalizedMarketTick } from '../../types/market';
 import type { HistoricalCandle } from '../../services/brokers/BrokerAdapter';
@@ -60,7 +60,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const predictionLines=useRef<any[]>([]);
   const coreSpiritOutput=useRef<CoreSpiritChartOutputController|null>(null);
   const coreSpiritRunId=useRef(0);
-  const chartStore=useMemo(()=>new ChartStore(),[]);
+  const chartStore=useMemo(()=>acquireChartStore(chartDatasetKey),[chartDatasetKey]);
   const coreSpiritStore=useMemo(()=>new CoreSpiritStore(),[]);
   const coreSpiritState=useSyncExternalStore(
     listener=>coreSpiritStore.subscribe(listener),
@@ -96,6 +96,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
+  useEffect(()=>()=>releaseChartStore(chartDatasetKey),[chartDatasetKey]);
 
   const indicatorsRef=useRef(indicators); indicatorsRef.current=indicators;
   const selectedDrawingIdRef=useRef<string|null>(null); selectedDrawingIdRef.current=selectedDrawingId;
