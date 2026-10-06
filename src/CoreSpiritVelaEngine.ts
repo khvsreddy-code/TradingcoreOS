@@ -1,4 +1,4 @@
-import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from '../vendor/vela/src/core/ports/ScriptingEngine';
+import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel';
 import type { InputValue } from '../vendor/vela/src/core/model/inputs';
 import type { IndicatorMeta } from '../vendor/vela/src/core/model/indicator';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
