@@ -7,6 +7,8 @@ const policy = fs.readFileSync(path.join(root, 'src/services/marketData/chartHis
 const coordinator = fs.readFileSync(path.join(root, 'src/services/marketData/chartHistoryCoordinator.ts'), 'utf8');
 const liveChart = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
 const runtime = fs.readFileSync(path.join(root, 'src/services/runtime/TradingCoreRuntime.ts'), 'utf8');
+const chartRuntime = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartRuntimeController.ts'), 'utf8');
+const interaction = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartInteractionController.ts'), 'utf8');
 const route = fs.readFileSync(path.join(root, 'src/server/routes/trading.routes.ts'), 'utf8');
 const serverAdapters = fs.readFileSync(path.join(root, 'src/server/brokers/adapters/BrokerAdapters.ts'), 'utf8');
 
@@ -19,8 +21,8 @@ if (!/loadOlderHistory\('visible'/.test(dataPlane) && !/loadOlderHistory\(priori
 if (!/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm page priority missing');
 if (!/maxConcurrent = 2/.test(coordinator)) throw new Error('Global history concurrency bound missing');
 if (!/priority: PRIORITY\[priority\]/.test(coordinator)) throw new Error('History queue priority missing');
-if (!/shouldLoadOlderHistory\(/.test(runtime)) throw new Error('Visible-range history demand trigger missing from chart runtime');
-if (!/requestWarmHistory\(/.test(runtime)) throw new Error('Active-chart warm request missing from chart runtime');
+if (!/shouldLoadOlderHistory\(/.test(interaction)) throw new Error('Visible-range history demand trigger missing from chart interaction controller');
+if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Active-chart warm request missing from chart runtime');
 if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial chart request must provide a bounded limit');
 if (!/getHistoricalData\(symbol, timeframe, signal, requestedLimit\)/.test(runtime)) throw new Error('Runtime must forward the requested history limit');
 if (!/req\.query\.limit/.test(route) || !/Math\.min\(5000/.test(route)) throw new Error('Server history route must validate a bounded limit');
