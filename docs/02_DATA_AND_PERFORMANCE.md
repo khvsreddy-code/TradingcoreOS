@@ -475,3 +475,42 @@ This is the beginning of a true time-series query optimizer. It is not yet a glo
 - [ ] Add global DAG scheduling based on critical-path and fan-out cost.
 - [ ] Add state-identity analysis so explicitly shareable stateful kernels can be reused without changing language semantics.
 - [ ] Benchmark optimized plans against the pre-optimizer VM on representative 5k/50k/500k-bar workloads.
+
+## v138 — CoreSpirit artifact cache + formal ABI
+
+CoreSpirit executable artifacts are now the unit of compilation caching.
+
+### Hierarchical identity
+
+source hash -> normalized hash -> semantic hash -> IR hash -> optimized artifact hash -> execution backend
+
+The cache keeps the executable artifact itself in memory. Editor diagnostics remain separate metadata; they are not part of the execution payload.
+
+The semantic identity includes the compiler semantic fingerprint, component contracts, language normalization and explicit runtime/optimizer ABI versions. Formatting-only edits can converge on the same semantic artifact while compiler, component, or ABI changes invalidate it deterministically.
+
+### Persistent browser cache
+
+When IndexedDB is available, artifacts are persisted in tradingcoreos-corespirit-artifacts with separate artifact and alias records. The cache uses a bounded 128-artifact persistent budget plus a bounded in-memory hot cache. Failed IndexedDB access degrades to the in-memory cache without changing execution semantics.
+
+The chart worker path is now: source -> hierarchical artifact lookup -> IndexedDB/memory hit -> artifact -> persistent worker context -> execute.
+
+Previously unseen indicators still compile normally; previously seen indicators can reopen directly from the persisted executable artifact.
+
+### CoreSpirit Artifact ABI
+
+New executable artifacts carry magic CSPIRIT, version 2, runtimeABI 5, optimizerABI 3, programHash, sourceHash, normalizedHash, semanticHash, irHash, artifactHash, requiredKernels, requiredData, maxLookback, executionCapabilities, and debugMap.
+
+The artifact hash is a canonical SHA-256 content address over program/IR identity and ABI versions. The legacy short checksum remains only as a compatibility field for older callers.
+
+The ABI is backend-neutral. The same artifact can be selected by browser VM, persistent worker VM, server VM, backtest VM, or replay VM caches. Backend choice belongs to the cache/execution boundary rather than changing the program representation.
+
+Persistent chart workers now use the formal artifact hash as their context identity. Old schema-2 artifacts without the formal ABI remain executable for compatibility but are not admitted to the persistent artifact cache.
+
+### Acceptance
+
+- Executable artifact is the in-memory cache primitive.
+- Source, normalized, semantic, IR, and artifact identities are explicit.
+- IndexedDB persistence is bounded and best-effort.
+- Formal CSPIRIT artifact ABI is validated before persistent use.
+- Worker context addressing uses the formal artifact hash.
+- Execution backend is represented at cache selection time.
