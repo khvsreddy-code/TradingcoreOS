@@ -7,6 +7,7 @@ import {
 import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
 import { artifactIdFor } from './artifactAbi';
+import { createSharedSeriesOutput } from './sharedOutputBuffer';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 
@@ -162,7 +163,7 @@ self.onmessage=(event:MessageEvent<Message>)=>{
       type:'result',
       requestId:message.requestId,
       contextKey:message.contextKey,
-      artifactId:context.artifact.checksum,
+      artifactId:artifactIdFor(context.artifact),
       outputs:transported.passthrough,
       ...(transported.descriptor ? {sharedSeries:transported.descriptor} : {}),
       state:result.state,
