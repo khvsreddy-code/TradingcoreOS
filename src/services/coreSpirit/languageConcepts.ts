@@ -204,6 +204,12 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       continue;
     }
 
+    finishToIndent(indent, offset);
+    if (trimmed === '}') {
+      offset += raw.length + 1;
+      continue;
+    }
+
     const model = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*(?::|\{)\s*$/i);
     if (model) {
       concepts.add('MODEL');
