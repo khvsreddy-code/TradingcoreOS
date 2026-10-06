@@ -68,6 +68,8 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'max', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
   { name:'sqrt', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'pow', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'math' },
+  { name:'log', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
+  { name:'exp', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   { name:'round', minArgs:1, maxArgs:2, returnType:'number', pure:true, category:'math' },
   { name:'sign', minArgs:1, maxArgs:1, returnType:'number', pure:true, category:'math' },
   // Conditions
