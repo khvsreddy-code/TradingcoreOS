@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, Play, Save, RotateCcw, CheckCircle2, AlertTriangle, BookOpen, Zap, Activity, ShieldCheck, GitBranch, Eye } from 'lucide-react';
 import { WorkspaceModuleShell, ModuleHeader, Panel, WorkspaceRoute } from '../components/workspace/WorkspaceModuleShell';
-import { CoreSpiritEditorModel, mountCoreSpiritMonaco, type CoreSpiritMonacoAdapter, CoreSpiritIdeRuntimeBridge, type CoreSpiritIdeRuntimeSnapshot } from '../services/coreSpirit';
-import { inspectCoreSpiritSource, type CoreSpiritCompileResult, type CoreSpiritSourceInspection } from '../services/coreSpirit';
+import { CoreSpiritEditorModel } from '../services/coreSpirit/editorModel';
+import { mountCoreSpiritMonaco, type CoreSpiritMonacoAdapter } from '../services/coreSpirit/monacoAdapter';
+import { CoreSpiritIdeRuntimeBridge, type CoreSpiritIdeRuntimeSnapshot } from '../services/coreSpirit/ideRuntimeBridge';
+import { inspectCoreSpiritSource, type CoreSpiritSourceInspection } from '../services/coreSpirit/sourceInspector';
+import type { CoreSpiritCompileResult } from '../services/coreSpirit/compiler';
 import { coreSpiritChartRegistry } from '../services/coreSpirit/chartRegistry';
 import { loadEditorScript, saveEditorScript, saveExecutionRun } from '../services/coreSpirit/cloudPersistence';
 import { versionedStorageKey } from '../services/coreSpirit/storageSchema';
