@@ -229,8 +229,10 @@ export function buildCoreSpiritExecutionPlanVisualization(program: CoreSpiritIrP
     }) as CoreSpiritExecutionPlanVisualNode;
   });
 
+  const nodeIds = new Set(nodes.map(node => node.id));
   const byProducer = new Map<string, string>();
   for (const node of nodes) {
+    if (node.id && node.op === 'setLocal') byProducer.set(node.id, node.id);
     const graphNode = graphNodes.find(candidate => candidate.id === node.id);
     if (graphNode?.dest) byProducer.set(graphNode.dest, node.id);
     if (graphNode?.op === 'setLocal' && graphNode.name) byProducer.set(graphNode.name, node.id);
@@ -238,7 +240,7 @@ export function buildCoreSpiritExecutionPlanVisualization(program: CoreSpiritIrP
   const edges: CoreSpiritExecutionPlanVisualEdge[] = [];
   for (const node of nodes) {
     for (const dependency of node.dependencies) {
-      const from = byProducer.get(dependency);
+      const from = nodeIds.has(dependency) ? dependency : byProducer.get(dependency);
       if (from && from !== node.id) edges.push(Object.freeze({ from, to: node.id, relation: 'dependency' }));
     }
   }
