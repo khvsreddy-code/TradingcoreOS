@@ -558,7 +558,11 @@ export class SceneGraph {
         };
     }
 
-    private dataRangeForInstances(instances: readonly { left: number; right: number; top: number; bottom: number }[]): SceneDataRange | undefined {
+    private dataRangeForInstances(instances: readonly { left: number; right: number; top: number; bottom: number; xloc?: string }[]): SceneDataRange | undefined {
+        // bar_index coordinates are not comparable to the chart's epoch-ms viewport until
+        // the renderer resolves the model anchor. Leave them unculled rather than inventing
+        // a time range in the wrong coordinate space.
+        if (instances.some((instance) => instance.xloc === 'bar_index')) return undefined;
         const finite = instances.filter((instance) =>
             Number.isFinite(instance.left) &&
             Number.isFinite(instance.right) &&
