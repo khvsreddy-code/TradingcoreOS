@@ -34,16 +34,18 @@ export class LazyCoreSpiritVelaEngine implements ScriptingEngine {
     props: false,
   };
 
+  private inner: ScriptingEngine | null = null;
+
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
-    const { CoreSpiritVelaEngine } = await loadEngine();
-    return new CoreSpiritVelaEngine().prepare(source, instanceId);
+    if (!this.inner) {
+      const { CoreSpiritVelaEngine } = await loadEngine();
+      this.inner = new CoreSpiritVelaEngine();
+    }
+    return this.inner.prepare(source, instanceId);
   }
 
-  async execute(
-    req: ExecutionRequest,
-    handlers: ExecutionHandlers,
-  ): Promise<ExecutionSession> {
-    const { CoreSpiritVelaEngine } = await loadEngine();
-    return new CoreSpiritVelaEngine().execute(req, handlers);
+  execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
+    if (!this.inner) throw new Error('CoreSpirit engine not prepared');
+    return this.inner.execute(req, handlers);
   }
 }
