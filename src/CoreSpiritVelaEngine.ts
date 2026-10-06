@@ -1,11 +1,12 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from '../vendor/vela/src/core/ports/ScriptingEngine';
 import type { InputValue } from '../vendor/vela/src/core/model/inputs';
-import type { IndicatorMeta, IndicatorModel } from '../vendor/vela/src/core/model/indicator';
-import type { SeriesPoint, SeriesSpec } from '../vendor/vela/src/core/model/series';
+import type { IndicatorMeta } from '../vendor/vela/src/core/model/indicator';
+import type { SeriesPoint } from '../vendor/vela/src/core/model/series';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
 import type { CoreSpiritObject } from './services/coreSpirit/types';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData';
+import { buildCoreSpiritVelaIndicatorModel, coreSpiritSignalToVelaMarker } from './services/core/chart/tcoVelaSemanticAdapter';
 
 type DirtyRange = { from:number; to:number };
 
@@ -62,67 +63,6 @@ function objectToSeries(
     else existing.splice(lo, 0, point);
   }
   points.set(id, existing);
-}
-
-function makeModel(
-  id: string,
-  meta: IndicatorMeta,
-  points: Map<string, SeriesPoint[]>,
-  markers: readonly {
-    time: number;
-    position: 'aboveBar' | 'belowBar' | 'inBar';
-    shape: string;
-    color: string;
-    text?: string;
-  }[],
-  priceLines: Array<{ id: string; paneId: string; price: number; color?: string; lineStyle?: 'solid' | 'dashed' | 'dotted'; width?: number; title?: string }>,
-  anchorTime?: number,
-  dirty?: DirtyRange,
-): IndicatorModel {
-  const series: SeriesSpec[] = [...points.entries()].map(([seriesId, seriesPoints], index) => ({
-    id: `${id}:series:${seriesId}`,
-    title: seriesId.includes(':') ? seriesId.split(':').pop() || 'CoreSpirit' : seriesId,
-    paneId: 'price',
-    kind: 'line',
-    points: seriesPoints,
-    style: {
-      color: index === 0 ? '#9b8aff' : '#c4b5fd',
-      width: 2,
-      lineStyle: 'solid',
-    },
-    visible: true,
-    overlay: true,
-  }));
-
-  const markerList = markers;
-  if (markerList.length) {
-    series.push({
-      id: `${id}:signals`,
-      title: 'Signals',
-      paneId: 'price',
-      kind: 'markers',
-      markers: markerList,
-      visible: true,
-      overlay: true,
-    });
-  }
-
-  return {
-    id,
-    ...(dirty ? { dirty } : {}),
-    title: meta.title,
-    shorttitle: meta.shorttitle,
-    overlay: true,
-    paneHint: 'price',
-    legend: true,
-    anchorTime: anchorTime as IndicatorModel['anchorTime'],
-    series,
-    fills: [],
-    backgrounds: [],
-    priceLines,
-    inputs: [],
-    inputValues: {},
-  };
 }
 
 export class CoreSpiritVelaEngine {
@@ -198,13 +138,7 @@ export class CoreSpiritVelaEngine {
         } else if (output.kind === 'signal') {
           const time = Number(output.time);
           const key = `${output.type}:${time}`;
-          markers.set(key, {
-            time,
-            position: output.metadata?.position === 'below' ? 'belowBar' : 'aboveBar',
-            shape: output.metadata?.shape === 'arrowUp' ? 'arrowUp' : 'circle',
-            color: String(output.metadata?.color || '#9b8aff'),
-            text: String(output.type || 'SIGNAL'),
-          });
+          markers.set(key, coreSpiritSignalToVelaMarker(output));
           markerListCache = null;
         } else if (output.kind === 'hline') {
           const price = Number(output.price);
@@ -259,7 +193,7 @@ export class CoreSpiritVelaEngine {
     const emitModel = (dirty?: DirtyRange) => {
       if (!markerListCache) markerListCache = [...markers.values()].sort((a, b) => a.time - b.time);
       const firstTime = Number.isFinite(firstSeriesTime) ? firstSeriesTime : undefined;
-      handlers.onModel(makeModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markerListCache ?? [], priceLines, firstTime, dirty));
+      handlers.onModel(buildCoreSpiritVelaIndicatorModel(req.prepared.token === token ? token.sourceId : 'corespirit', req.prepared.meta, points, markerListCache ?? [], priceLines, firstTime, dirty));
     };
 
     try {
