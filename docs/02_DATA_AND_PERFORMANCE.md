@@ -13,6 +13,46 @@ Broker / TCO feed
 
 Canonical market data is time/open/high/low/close/volume typed storage. `HistoricalCandle[]` is an edge compatibility representation, not the preferred hot-path transport.
 
+## Strict three-rate realtime model
+
+Realtime is split into three independent clocks:
+
+```text
+market rate       50–500+ updates/sec when the broker provides them
+    ↓
+coalesce into latest market state
+    ↓
+compute rate      indicator/CoreSpirit cadence; default chart cadence is 20 Hz
+    ↓
+dirty state / retained patch
+    ↓
+render rate       requestAnimationFrame (display refresh ceiling)
+    ↓
+Vela renderer
+```
+
+A market tick must never directly trigger a React render or a full chart render. The market plane may ingest every tick; compute consumes the newest pending state; the renderer consumes at most one latest patch per animation frame. `ChartStore` therefore keeps mutable tick-hot state and creates an immutable UI snapshot only at the UI frame boundary.
+
+## Market tick ring buffer
+
+The broker/socket ingress uses a fixed typed ring buffer per broker+instrument stream. The hot representation stores timestamp, price, quantity, bid, ask and flags in typed arrays, with a monotonic sequence number. Compatibility object materialization is reserved for diagnostics/API boundaries.
+
+```text
+socket
+  ↓
+typed TickRingBuffer
+  ↓
+market state
+  ↓
+CoreSpirit / compute scheduler
+  ↓
+canonical columnar bars
+  ↓
+Vela render patch
+```
+
+The ring is bounded (8,192 samples by default), so bursty feeds do not create an unbounded tick-object queue. Compute batches/coalesces pending sequences instead of evaluating the same forming bar once per transport packet.
+
 ## History policy
 
 - Initial chart load: **5,000 candles**.
