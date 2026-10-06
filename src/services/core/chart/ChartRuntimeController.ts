@@ -141,7 +141,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
       const chartAnalyticsController=createChartAnalyticsController({
         brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,chartDatasetKey:deps.chartDatasetKey,
         chartDataPlane:deps.chartDataPlane,chartStore:deps.chartStore,dataRevisionRef:deps.dataRevisionRef,
-        candles:deps.candles,latestTick:deps.latestTick,candle:deps.candle,lifecycle,
+        candles:deps.candles,latestTick:deps.latestTick,candle:deps.candle,lifecycle:lifecycle.current,
         isOiVisible:()=>deps.viewStateRef.current.showOI,
         onAnalytics:(value)=>{deps.setAnalytics(value);deps.onAnalytics?.(value);},
         onOiAnalytics:deps.setOiAnalytics,
