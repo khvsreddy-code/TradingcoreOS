@@ -15,6 +15,7 @@ export type CoreSpiritNameResolution = {
 
 const builtinSeries=new Set(['open','high','low','close','volume','time']);
 const builtinState=new Set(['na','bar_index']);
+const builtinDataReferences=new Set(['market','timeframe','series']);
 const builtinNamespaces=new Set(['ui','visual','app','scan','chart',...CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES]);
 
 export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:CoreSpiritComponentRegistryLike}={}):CoreSpiritNameResolution{
@@ -32,7 +33,7 @@ export function resolveCoreSpiritNames(ast:CoreSpiritAst, options:{components?:C
           report(n,`Unknown identifier '${n.name}'`,'UNKNOWN_IDENTIFIER');
         break;
       case 'call':
-        if(!CORE_SPIRIT_BUILTINS.has(n.name)&&!resolveCoreSpiritComponent(componentSource,n.name))
+        if(!builtinDataReferences.has(n.name)&&!CORE_SPIRIT_BUILTINS.has(n.name)&&!resolveCoreSpiritComponent(componentSource,n.name))
           report(n,`Unknown function '${n.name}'`,'UNKNOWN_FUNCTION');
         n.args.forEach(a=>expression(a,scope));
         break;
