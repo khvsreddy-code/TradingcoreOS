@@ -93,7 +93,7 @@ export function validateExecutableArtifact(artifact: unknown): artifact is CoreS
     a.maxLookback >= 0,
   );
   if (!structural) return false;
-  return a.abi ? validateCoreSpiritArtifactAbi(a.abi, a.ir) : Number(a.schemaVersion) === 1;
+  return a.abi ? validateCoreSpiritArtifactAbi(a.abi, a.ir) : Number(a.schemaVersion) === 1 || Number(a.schemaVersion) === CORE_SPIRIT_ARTIFACT_SCHEMA_VERSION;
 }
 
 export function artifactIdentityFromArtifact(artifact: CoreSpiritExecutableArtifact): CoreSpiritArtifactIdentity | undefined {
