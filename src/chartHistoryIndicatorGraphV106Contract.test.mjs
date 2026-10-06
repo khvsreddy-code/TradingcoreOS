@@ -4,6 +4,8 @@ const root = process.cwd();
 const historyStore = fs.readFileSync(path.join(root, 'src/services/marketData/HistoryStore.ts'), 'utf8');
 const plane = fs.readFileSync(path.join(root, 'src/services/marketData/chartDataPlane.ts'), 'utf8');
 const live = fs.readFileSync(path.join(root, 'src/components/workspace/LiveChart.tsx'), 'utf8');
+const interaction = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartInteractionController.ts'), 'utf8');
+const chartRuntime = fs.readFileSync(path.join(root, 'src/services/core/chart/ChartRuntimeController.ts'), 'utf8');
 const graph = fs.readFileSync(path.join(root, 'src/services/marketData/indicatorDependencyGraph.ts'), 'utf8');
 const kernel = fs.readFileSync(path.join(root, 'src/services/marketData/coreIndicatorKernel.ts'), 'utf8');
 const settings = fs.readFileSync(path.join(root, 'src/components/indicators/IndicatorSettingsPanel.tsx'), 'utf8');
@@ -14,7 +16,8 @@ if (!/maxBuckets = 32/.test(historyStore) || !/trimBuckets/.test(historyStore) |
 if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/archive/legacy/CHARTING_LEGACY_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
 if (!/const previousLength = this\.state\.candles\.length/.test(plane) || !/olderAdded = Math\.max\(0, merged\.length - previousLength\)/.test(plane)) throw new Error('Actual older prepend count missing');
 if (!/requestWarmHistory\(visibleBars\?: number\)/.test(plane) || !/this\.state\.warmHistoryRequested = false/.test(plane)) throw new Error('Warm history viewport/retry contract missing');
-if (!/requestWarmHistory\(Math\.max\(1,Math\.abs/.test(live)) throw new Error('Live chart does not pass visible range demand to warm history');
+if (!/loadOlderHistory\(Math\.min\(deps\.candles\.current\.length,visibleBars\)/.test(interaction)) throw new Error('Chart interaction controller does not pass visible range demand to older history');
+if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Chart runtime warm-history stage missing');
 if (!/order: string\[\]/.test(graph) || !/contains a cycle/.test(graph) || !/source:\$\{source\}.*sma:\$\{source\}:\$\{p\}/s.test(graph)) throw new Error('Transitive/topological indicator graph contract missing');
 if (!/RollingMean|RollingVariance|RollingMinMax|RollingSum/.test(kernel)) throw new Error('Canonical rolling kernel marker missing');
 if (!/while \(highHead < highDeque\.length/.test(graph) || !/sumSquares/.test(graph)) throw new Error('Canonical Donchian/Bollinger rolling kernel markers missing');
