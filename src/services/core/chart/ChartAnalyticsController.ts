@@ -51,7 +51,7 @@ export function createChartAnalyticsController(deps:ChartAnalyticsControllerDeps
         if(analyticsUiTimer==null){
           analyticsUiTimer=setTimeout(()=>{
             analyticsUiTimer=null;
-            deps.onAnalytics?.(result);
+            deps.onAnalytics?.(analytics);
           },250);
         }
       }).catch(()=>undefined);
@@ -68,9 +68,11 @@ export function createChartAnalyticsController(deps:ChartAnalyticsControllerDeps
   const renderOI=(oi:OIChartAnalytics|null)=>{
     oiAnalytics=oi;
     deps.chartStore.setOiAnalytics(oi);
-    if(oiUiTimer==null){oiUiTimer=setTimeout(()=>{oiUiTimer=null;deps.onOiAnalytics?.(oi);},250);} else { /* UI notification already queued */ }
     if(oiUiTimer==null){
-      oiUiTimer=setTimeout(()=>{oiUiTimer=null;},250);
+      oiUiTimer=setTimeout(()=>{
+        oiUiTimer=null;
+        deps.onOiAnalytics?.(oiAnalytics);
+      },250);
     }
     const candle=deps.candle.current;
     if(!candle)return;
