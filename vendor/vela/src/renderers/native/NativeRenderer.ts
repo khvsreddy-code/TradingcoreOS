@@ -26,6 +26,7 @@ import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-lay
 import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
+import type { HighCardinalityRectBatch, GpuRectBatch } from '../../core/model/instances';
 import { applyScenePatch } from '../../core/model/scenePatch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
 import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeName, IntroAnimation, IntroStyle } from '../../core/options';
@@ -200,6 +201,8 @@ export class NativeRenderer implements IChartRenderer {
     private layerOrderSig = '';
     /** Monotonic indicator-drawing content revision; data ticks do not advance it. */
     private drawingRevision = 0;
+    private gpuRectCacheKey = '';
+    private gpuRectCache: GpuRectBatch[] = [];
     // The attribution mark (see chrome/AttributionMark + the NOTICE file): default-on;
     // disabling requires an equivalent visible attribution elsewhere in the host UI.
     private attributionEl: HTMLElement | null = null;
@@ -3572,6 +3575,7 @@ export class NativeRenderer implements IChartRenderer {
             this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas, this.drawingRevision),
             this.userDrawings?.prepareSlices(this.scene.orderedPanes().map((p) => p.id)) ?? new Map(),
         );
+        this.scene.highCardinalityRectBatches = this.prepareGpuRectBatches();
         this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas
         this.backend.render(this.scene, this.coords, this.theme);
         this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
@@ -3581,6 +3585,62 @@ export class NativeRenderer implements IChartRenderer {
         if (easeLive && liveActual) this.bars[li] = liveActual; // restore the true forming bar
         this.paintedData = true; // scales are real from here on — the chrome-only tier may run
         this.recordFramePerformance(perfStart);
+    }
+
+    private prepareGpuRectBatches(): GpuRectBatch[] {
+        const vr = this.coords.visibleLogicalRange();
+        const paneKey = this.scene.orderedPanes().map(pane => [pane.id, pane.bounds.top, pane.bounds.height, pane.scale.min, pane.scale.max, pane.scale.log, pane.scale.invert].join(',')).join(';');
+        const key = [this.drawingRevision, this.coords.width, this.coords.height, this.coords.dpr, vr.from, vr.to, this.coords.getViewport().barSpacing, this.coords.getViewport().rightOffset, paneKey].join('|');
+        if (key === this.gpuRectCacheKey) return this.gpuRectCache;
+        this.gpuRectCacheKey = key;
+        const grouped = new Map<string, GpuRectBatch>();
+
+        for (const model of this.scene.indicators.values()) {
+            for (const batch of model.instanceBatches ?? []) {
+                const basePane = this.scene.panes.get(batch.paneId) ?? this.scene.panes.get('price');
+                if (!basePane || basePane.collapsed) continue;
+                const pane = batch.overlay === true ? (this.scene.panes.get('price') ?? basePane) : basePane;
+                const scale = batch.overlay === true ? pane.scale : this.scene.scaleFor(model, pane);
+                const beforeZ = batch.overlay === true ? Infinity : indicatorBeforeZ(this.scene.zOf(model.id), this.scene.seriesBoundaries(pane.id));
+                const groupKey = `${pane.id}|${beforeZ}`;
+                let target = grouped.get(groupKey);
+                if (!target) {
+                    target = { id: `gpu:rects:${groupKey}`, paneId: pane.id, beforeZ, rects: new Float32Array(0), colors: new Uint8Array(0) };
+                    grouped.set(groupKey, target);
+                }
+
+                const appendRects = target.rects.length / 4;
+                const rects = new Float32Array((appendRects + batch.instances.length) * 4);
+                rects.set(target.rects);
+                const colors = new Uint8Array((appendRects + batch.instances.length) * 4);
+                colors.set(target.colors);
+
+                for (let i = 0; i < batch.instances.length; i += 1) {
+                    const instance = batch.instances[i]!;
+                    const offset = (appendRects + i) * 4;
+                    const leftLogical = instance.xloc === 'bar_index'
+                        ? instance.left + (batch.indexOffset ?? this.scene.offsetOf(model.id))
+                        : this.coords.timeToLogical(instance.left);
+                    const rightLogical = instance.xloc === 'bar_index'
+                        ? instance.right + (batch.indexOffset ?? this.scene.offsetOf(model.id))
+                        : this.coords.timeToLogical(instance.right);
+                    const x1 = this.coords.logicalToX(leftLogical);
+                    const x2 = this.coords.logicalToX(rightLogical);
+                    const y1 = this.coords.priceToY(Math.max(instance.top, instance.bottom), scale, pane.bounds);
+                    const y2 = this.coords.priceToY(Math.min(instance.top, instance.bottom), scale, pane.bounds);
+                    rects[offset] = Math.min(x1, x2);
+                    rects[offset + 1] = Math.min(y1, y2);
+                    rects[offset + 2] = Math.max(x1, x2);
+                    rects[offset + 3] = Math.max(y1, y2);
+                    colors.set(parseGpuCssColor(instance.fill), offset);
+                }
+                target.rects = rects;
+                target.colors = colors;
+            }
+        }
+
+        this.gpuRectCache = [...grouped.values()].filter(batch => batch.rects.length > 0);
+        return this.gpuRectCache;
     }
 
     private recordFramePerformance(perfStart: number): void {
@@ -4698,4 +4758,30 @@ function normalizeBars(bars: OHLCV[]): OHLCV[] {
         else out.push(bar);
     }
     return out;
+}
+
+
+function indicatorBeforeZ(z: number, boundaries: readonly number[]): number {
+    return boundaries.find(boundary => boundary > z) ?? Infinity;
+}
+
+function parseGpuCssColor(value: string): Uint8Array {
+    const fallback = new Uint8Array([155, 138, 255, 41]);
+    const raw = value.trim();
+    if (raw.startsWith('#')) {
+        const hex = raw.slice(1);
+        if (hex.length === 3) return new Uint8Array([
+            parseInt(hex[0]! + hex[0]!, 16), parseInt(hex[1]! + hex[1]!, 16), parseInt(hex[2]! + hex[2]!, 16), 255,
+        ]);
+        if (hex.length === 6 || hex.length === 8) return new Uint8Array([
+            parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), hex.length === 8 ? parseInt(hex.slice(6, 8), 16) : 255,
+        ]);
+    }
+    const rgba = raw.match(/^rgba?\\(([^)]+)\\)$/i);
+    if (rgba) {
+        const parts = rgba[1]!.split(',').map(part => part.trim());
+        const alpha = parts[3] == null ? 255 : Math.round(Math.max(0, Math.min(1, Number(parts[3]))) * 255);
+        return new Uint8Array([Number(parts[0]) || 0, Number(parts[1]) || 0, Number(parts[2]) || 0, alpha]);
+    }
+    return fallback;
 }
