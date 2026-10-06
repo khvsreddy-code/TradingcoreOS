@@ -12,9 +12,9 @@ import type { ChartDataPlane } from '../../marketData/chartDataPlane';
 import { chartComputeCoordinator } from '../../marketData/chartComputeCoordinator';
 import { isIncrementalIndicatorSupported } from '../../marketData/incrementalIndicatorEngine';
 import { resolveIndicatorAppearance } from '../../coreSpirit/indicatorAppearance';
-import { getCurrentTheme, getThemePalette } from '../../../theme/theme';
+import { getCurrentTheme, getThemePalette } from '../../../../../theme/theme';
 import { buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot } from '../../coreSpirit/indicatorSettingsSchema';
-import { ColorType, LineSeries, HistogramSeries, createVelaNativeChart, type IChartApi, type ISeriesApi, type Time } from './velaNativeChartKernel';
+import { ColorType, LineSeries, HistogramSeries, createVelaNativeChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type Time } from './velaNativeChartKernel';
 import type { ChartLifecycle } from './chartLifecycle';
 import type { ChartUpdateScheduler } from './chartUpdateScheduler';
 
