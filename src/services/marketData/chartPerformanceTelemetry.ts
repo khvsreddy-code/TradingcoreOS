@@ -123,6 +123,8 @@ class ChartPerformanceTelemetry {
     m.lastPacketAtForLatency = at;
   }
 
+  getLastPacketAt(key: string): number { return this.entry(key).lastPacketAtForLatency; }
+
   recordCompute(key: string, durationMs = 0, inputSequence?: number): void {
     const m = this.entry(key);
     const at = now();
