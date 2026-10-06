@@ -55,12 +55,29 @@ export type CoreSpiritComputeClass =
   | 'wasm'
   | 'gpu';
 
+export type CoreSpiritDataGraphNode = Readonly<{
+  id:string;
+  symbol:string;
+  timeframe:string;
+  kind:'base'|'derived'|'context';
+  sourceTimeframe?:string;
+  dependencyIds:readonly string[];
+}>;
+
+export type CoreSpiritDataGraphPlan = Readonly<{
+  version:1;
+  nodes:readonly CoreSpiritDataGraphNode[];
+  roots:readonly string[];
+  minimumTimeframes:readonly Readonly<{ symbol:string; timeframe:string }>[];
+}>;
+
 export type CoreSpiritTradingNativePlan = Readonly<{
   version:1;
   dataDependencies:readonly CoreSpiritDataDependency[];
   batches:readonly Readonly<{ batchKey:string; dependencyIds:readonly string[]; requestCount:number }>[];
   eventTriggers:readonly CoreSpiritEventTrigger[];
   computeClasses:readonly CoreSpiritComputeClass[];
+  dataGraph:CoreSpiritDataGraphPlan;
   multiSymbol:boolean;
   multiTimeframe:boolean;
   dataNative:boolean;
@@ -140,7 +157,7 @@ function visit(
         const key=`market:${symbol}:${timeframe}`;
         const dep=dependencies.get(key) ?? {domain:'market',symbol,timeframe,fields:new Set<string>()};
         dependencies.set(key,dep);
-      } else if(node.name==='timeframe'){
+      } else if(node.name==='series' || node.name==='timeframe'){
         const symbol='current';
         const timeframe=literalString(node.args[0]) ?? 'requested';
         const key=`market:${symbol}:${timeframe}`;
@@ -153,7 +170,7 @@ function visit(
     case 'member': {
       if(node.target.type==='call' && (node.target.name==='market'||node.target.name==='timeframe')){
         const symbol=node.target.name==='market' ? (literalString(node.target.args[0]) ?? 'current') : 'current';
-        const timeframe=node.target.name==='timeframe' ? (literalString(node.target.args[0]) ?? 'requested') : 'chart';
+        const timeframe=node.target.name==='timeframe' || node.target.name==='series' ? (literalString(node.target.args[0]) ?? 'requested') : 'chart';
         const field=fieldName(node);
         const domain=field ? domainForField(field) : 'market';
         const key=`${domain}:${symbol}:${timeframe}`;
@@ -165,7 +182,7 @@ function visit(
       return;
     }
     case 'memberCall': {
-      if(node.member==='timeframe' && (node.target.type==='call' && node.target.name==='market')){
+      if((node.member==='timeframe'||node.member==='series') && (node.target.type==='call' && node.target.name==='market')){
         const symbol=literalString(node.target.args[0]) ?? 'current';
         const timeframe=literalString(node.args[0]) ?? 'requested';
         const key=`market:${symbol}:${timeframe}`;
@@ -232,6 +249,54 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
   const eventTriggers:CoreSpiritEventTrigger[]=[];
   for(const trigger of events.values()) eventTriggers.push(trigger);
 
+  const graphNodesByKey=new Map<string,CoreSpiritDataGraphNode>();
+  const minimumBySymbol=new Map<string,string>();
+  const timeframeRank=(value:string)=>{
+    const raw=value.trim().toLowerCase();
+    const match=/^(\\d+)\\s*(m|min|minute|h|hour|d|day)$/.exec(raw);
+    if(!match)return Number.POSITIVE_INFINITY;
+    const n=Number(match[1]);
+    return n*(match[2].startsWith('m')?60:match[2].startsWith('h')?3600:86400);
+  };
+  for(const dep of deps){
+    const symbol=dep.symbol;
+    const timeframe=dep.timeframe;
+    const concreteTimeframe=timeframe==='chart'?'context':timeframe;
+    const key=`${symbol}::${concreteTimeframe}`;
+    const existing=graphNodesByKey.get(key);
+    const dependencyIds=existing ? [...existing.dependencyIds,dep.id] : [dep.id];
+    graphNodesByKey.set(key,Object.freeze({
+      id:`graph:${key}`,
+      symbol,
+      timeframe,
+      kind:timeframe==='chart'?'context':'derived',
+      dependencyIds:Object.freeze(dependencyIds),
+    }));
+    if(timeframe!=='chart'&&timeframe!=='current'){
+      const current=minimumBySymbol.get(symbol);
+      if(!current||timeframeRank(timeframe)<timeframeRank(current)) minimumBySymbol.set(symbol,timeframe);
+    }
+  }
+  const graphNodes=[...graphNodesByKey.values()].map(node=>{
+    if(node.timeframe==='chart')return node;
+    const minimum=minimumBySymbol.get(node.symbol);
+    const rank=timeframeRank(node.timeframe);
+    const minimumRank=minimum?timeframeRank(minimum):Number.POSITIVE_INFINITY;
+    const kind=Number.isFinite(minimumRank)&&rank>minimumRank?'derived':'base';
+    return Object.freeze({
+      ...node,
+      kind:kind as 'base'|'derived'|'context',
+      sourceTimeframe:kind==='derived'?minimum:undefined,
+    });
+  });
+  const graphRoots=graphNodes.filter(node=>node.kind==='base'||node.kind==='context').map(node=>node.id);
+  const dataGraph:CoreSpiritDataGraphPlan=Object.freeze({
+    version:1,
+    nodes:Object.freeze(graphNodes),
+    roots:Object.freeze(graphRoots),
+    minimumTimeframes:Object.freeze([...minimumBySymbol.entries()].map(([symbol,timeframe])=>Object.freeze({symbol,timeframe}))),
+  });
+
   const concreteSymbols=new Set(deps.map((dep)=>dep.symbol).filter((symbol)=>symbol!=='current'));
   const concreteTimeframes=new Set(deps.map((dep)=>dep.timeframe).filter((timeframe)=>timeframe!=='chart'));
   const multiSymbol=concreteSymbols.size>0 && (
@@ -252,6 +317,7 @@ export function buildCoreSpiritTradingNativePlan(ast:CoreSpiritAst, surface?:Cor
     ).filter((batch): batch is NonNullable<typeof batch> => batch !== null),
     eventTriggers:Object.freeze(eventTriggers),
     computeClasses:Object.freeze(['scalar','fused','simd','worker','wasm','gpu'] as const),
+    dataGraph,
     multiSymbol,
     multiTimeframe,
     dataNative:deps.length>0,
