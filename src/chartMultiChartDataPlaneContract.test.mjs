@@ -43,9 +43,9 @@ if (!/'5m': 5000/.test(historyPolicy) || !/historyDemandPageCandles/.test(histor
 if (!/maxConcurrent = 2/.test(historyCoordinator)) throw new Error('Global history request budget missing');
 if (!/chartHistoryCoordinator\.request/.test(dataPlane)) throw new Error('Global history request coordinator is not used');
 if (!/requestWarmHistory\(/.test(dataPlane) || !/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm history stage missing');
-if (!/shouldLoadOlderHistory/.test(liveChart)) throw new Error('Visible-range history trigger policy missing');
-if (/HISTORY_PREFETCH_THRESHOLD/.test(liveChart)) throw new Error('Fixed 1000-bar history threshold remains');
-if (/setVisibleRange\(previousLogicalRange\)/.test(liveChart)) throw new Error('Logical range is restored through time-range API');
+if (!/shouldLoadOlderHistory/.test(chartRuntime)) throw new Error('Visible-range history trigger policy missing from chart runtime');
+if (/HISTORY_PREFETCH_THRESHOLD/.test(liveChart + chartRuntime)) throw new Error('Fixed 1000-bar history threshold remains');
+if (/setVisibleRange\(previousLogicalRange\)/.test(liveChart + chartRuntime)) throw new Error('Logical range is restored through time-range API');
 if (!/getHistoricalData\(this\.instrumentKey, interval, undefined, initialLimit\)/.test(dataPlane)) throw new Error('Initial history request is not explicitly bounded');
 if (!/limit=\$\{safeLimit\}/.test(brokerAdapter)) throw new Error('Client broker history request does not forward limit');
 if (!/req\.query\.limit/.test(tradingRoute)) throw new Error('History route does not accept bounded limit');
