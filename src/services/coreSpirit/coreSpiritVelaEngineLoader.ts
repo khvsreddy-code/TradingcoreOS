@@ -5,7 +5,7 @@ import type {
   ExecutionSession,
   PreparedScript,
   ScriptingEngine,
-} from '../../vendor/vela/src/core/ports/ScriptingEngine';
+} from '../core/chart/velaNativeChartKernel';
 
 type CoreSpiritVelaEngineModule = typeof import('../../CoreSpiritVelaEngine');
 
