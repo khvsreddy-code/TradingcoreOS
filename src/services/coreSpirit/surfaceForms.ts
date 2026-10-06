@@ -367,10 +367,10 @@ export function normalizeCoreSpiritSource(source: string): string {
 
     const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\{\s*$/i);
     if (braceModel) {
-      const name = braceModel[1] ?? braceModel[2] ?? braceModel[3] ?? 'Model';
       wrappers.push({ indent, kind:'model' });
       modelBraceIndents.push(indent);
-      out.push(`${raw.match(/^[ \t]*/)?.[0] ?? ''}model "${name}":`);
+      // Model declarations are compiler metadata; the executable parser stream
+      // receives only the model's feature/target references through researchSurface.
       continue;
     }
 
