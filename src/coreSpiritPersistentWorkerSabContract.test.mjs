@@ -22,7 +22,7 @@ if(!/artifactId/.test(pool)||!/datasetVersion/.test(pool)||!/dirtyFrom/.test(poo
 if(!/SharedArrayBuffer/.test(buffer)||!/Float64Array/.test(buffer)||!/header/.test(buffer)||!/Atomics/.test(buffer))throw new Error('Shared CoreSpirit market buffer must use SAB + typed columns + atomic metadata publication');
 if(!/SharedArrayBuffer/.test(output)||!/materializeSharedSeriesOutput/.test(output)||!/createSharedSeriesOutput/.test(output))throw new Error('Numeric CoreSpirit series output must have a shared typed-buffer boundary');
 if(!/crossOriginIsolated/.test(buffer))throw new Error('SAB capability must respect cross-origin isolation');
-if(!/contexts = new Map/.test(worker)||!/artifact\.checksum/.test(worker)||!/executeBar/.test(worker))throw new Error('Worker must retain runtime contexts/artifacts and support incremental execution');
+if(!/contexts = new Map/.test(worker)||!/artifactIdFor/.test(worker)||!/executeBar/.test(worker))throw new Error('Worker must retain runtime contexts/artifacts and support incremental execution');
 if(!/readCoreSpiritSharedMarketDescriptor/.test(worker)||!/sharedSeries/.test(worker))throw new Error('Worker must read shared market input and emit shared numeric series output');
 if(!/Cross-Origin-Opener-Policy/.test(vite)||!/Cross-Origin-Embedder-Policy/.test(vite))throw new Error('Vite must expose SAB isolation headers');
 if(!Array.isArray(vercel.headers)||!vercel.headers.some(h=>h.source==='/(.*)'&&h.headers?.some(x=>x.key==='Cross-Origin-Embedder-Policy'&&x.value==='require-corp')))throw new Error('Vercel live route must expose COEP require-corp');
