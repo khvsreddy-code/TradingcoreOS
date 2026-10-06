@@ -1,5 +1,6 @@
 import type { Background, PriceLine } from '../../../../vendor/vela/src/core/model/scene';
-import type { DrawingBox, DrawingLabel, DrawingLine, DrawingPolyline } from '../../../../vendor/vela/src/core/model/drawings';
+import type { DrawingLabel, DrawingLine, DrawingPolyline } from '../../../../vendor/vela/src/core/model/drawings';
+import type { HighCardinalityRectBatch, HighCardinalityRectInstance } from '../../../../vendor/vela/src/core/model/instances';
 import type { MarkerPoint, SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
 import type { ScenePatch, ValuePatch } from '../../../../vendor/vela/src/core/model/patch';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
@@ -99,11 +100,13 @@ export interface CoreSpiritSceneSnapshot {
     points: Map<string, SeriesPoint[]>;
     markers: MarkerPoint[];
     priceLines: PriceLine[];
+    rectBatches: HighCardinalityRectBatch[];
 }
 
 export class CoreSpiritSceneDiff {
     private readonly points = new Map<string, SeriesPoint[]>();
     private readonly markers = new Map<string, MarkerPoint>();
+    private readonly rectBatches = new Map<string, HighCardinalityRectInstance[]>();
     private readonly collections: Record<CollectionName, Identified[]> = {
         lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [],
     };
@@ -116,6 +119,7 @@ export class CoreSpiritSceneDiff {
     reset(): void {
         this.points.clear();
         this.markers.clear();
+        this.rectBatches.clear();
         for (const values of Object.values(this.collections)) values.splice(0, values.length);
         this.markerSeriesMounted = false;
     }
@@ -130,12 +134,14 @@ export class CoreSpiritSceneDiff {
             points: this.points,
             markers: [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time)),
             priceLines: this.collections.priceLines as PriceLine[],
+            rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({ id, paneId: 'price', overlay: true, instances })),
         };
     }
 
     apply(outputs: CoreSpiritObject[], dirty: { from: number; to: number }): ScenePatch[] {
         const series: ValuePatch['series'] = [];
         const collections: NonNullable<ValuePatch['collections']> = [];
+        const instanceBatches: NonNullable<ValuePatch['instanceBatches']> = [];
         const out: ScenePatch[] = [];
         let from = dirty.from;
         let to = dirty.to;
@@ -145,6 +151,7 @@ export class CoreSpiritSceneDiff {
             if (result?.schema) out.push(result.schema);
             if (result?.delta) series.push(result.delta);
             if (result?.collection) collections.push(result.collection);
+            if (result?.instanceDelta) instanceBatches.push(result.instanceDelta);
             const time = Number((output as { time?: number }).time);
             if (Number.isFinite(time)) { from = Math.min(from, time); to = Math.max(to, time); }
         }
@@ -164,9 +171,10 @@ export class CoreSpiritSceneDiff {
             for (let i = series.length - 1; i >= 0; i--) if (series[i]!.seriesId === this.markerSeriesId) series.splice(i, 1);
         }
 
-        if (series.length || collections.length) out.push({
+        if (series.length || collections.length || instanceBatches.length) out.push({
             kind: 'value', indicatorId: this.indicatorId, dirty: { from, to }, series,
             ...(collections.length ? { collections } : {}),
+            ...(instanceBatches.length ? { instanceBatches } : {}),
         });
         return out;
     }
@@ -211,6 +219,36 @@ export class CoreSpiritSceneDiff {
         return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, idx), remove: 1 } };
     }
 
+    private applyRect(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
+        const batchId = `${this.indicatorId}:zones`;
+        const target = this.rectBatches.get(batchId) ?? [];
+        const value: HighCardinalityRectInstance = {
+            id: output.id ?? `${batchId}:${target.length}`,
+            xloc: 'bar_time',
+            left: Number(output.left),
+            right: Number(output.right),
+            top: Number(output.top),
+            bottom: Number(output.bottom),
+            fill: color(output.style?.fillColor ?? output.style?.color, 'rgba(155,138,255,0.16)'),
+        };
+        const idx = target.findIndex(item => item.id === value.id);
+        const remove = removed(output);
+        if (remove) {
+            if (idx < 0) return null;
+            target.splice(idx, 1);
+            this.rectBatches.set(batchId, target);
+            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [], start: idx, remove: 1 } } : null;
+        }
+        if (idx < 0) {
+            target.push(value);
+            this.rectBatches.set(batchId, target);
+            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'append', values: [value] } } : null;
+        }
+        target[idx] = value;
+        this.rectBatches.set(batchId, target);
+        return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [value], start: idx, remove: 1 } } : null;
+    }
+
     private applyCollection(name: CollectionName, value: Identified, emit: boolean, remove = false): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
         const target = this.collections[name];
         const idx = idIndex(target, value.id);
@@ -241,7 +279,7 @@ export class CoreSpiritSceneDiff {
             case 'label':
             case 'shape': return this.applyCollection('labels', label(output), emit, removed(output));
             case 'box':
-            case 'zone': return this.applyCollection('boxes', box(output, this.collections.boxes.length), emit, removed(output));
+            case 'zone': return this.applyRect(output, emit);
             case 'polyline': return this.applyCollection('polylines', polyline(output), emit, removed(output));
             case 'background': {
                 const start = Number(output.time);
