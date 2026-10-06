@@ -1,7 +1,7 @@
 import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutableArtifact } from './artifact';
-import { validateExecutableArtifact, type CoreSpiritExecutableArtifact as ExecutableArtifact } from './artifact';
+import { validateExecutableArtifact } from './artifact';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 import {
@@ -108,6 +108,10 @@ export class CoreSpiritWorkerPool {
     options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange},
   ):Promise<CoreSpiritWorkerRunResult> {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
+    if(typeof Worker==='undefined'){
+      if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
+      return this.runFallback(artifact,bars,sourceId);
+    }
 
     return new Promise((resolve,reject)=>{
       const contextKey=options?.contextKey || sourceId;
@@ -186,7 +190,9 @@ export class CoreSpiritWorkerPool {
 
     if (!job.artifact || !validateExecutableArtifact(job.artifact)) {
       job.reject(new Error('CoreSpirit worker job requires a valid executable artifact'));
-      cleanupSlot(slot, this.contextSlots);
+      slot.busy=false;
+      slot.job=undefined;
+      this.dispatch();
       return;
     }
 
@@ -267,13 +273,18 @@ export class CoreSpiritWorkerPool {
     }
     return buffer;
   }
-}
 
-function cleanupSlot(slot:WorkerSlot, contextSlots:Map<string,WorkerSlot>):void {
-  for(const [key,value] of contextSlots){
-    if(value===slot)contextSlots.delete(key);
+  private async runFallback(
+    artifact:CoreSpiritExecutableArtifact,
+    bars:CoreSpiritMarketBar[],
+    sourceId:string,
+  ):Promise<CoreSpiritWorkerRunResult>{
+    const { CoreSpiritRuntime } = await import('./runtime');
+    const runtime=new CoreSpiritRuntime({sourceId});
+    runtime.loadIr(artifact.ir);
+    const result=runtime.executeIr(artifact.ir,bars);
+    return {outputs:result.outputs,diagnostics:result.diagnostics,state:result.state};
   }
-  try{slot.worker.terminate();}catch{}
 }
 
 export const coreSpiritWorkerPool=new CoreSpiritWorkerPool();
