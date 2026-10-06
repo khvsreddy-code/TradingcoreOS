@@ -1,12 +1,26 @@
 import { getSupabaseClient, isSupabaseConfigured } from './auth/supabaseClient';
 
 const BLOCKED_KEY = /(?:supabase|fyers|upstox).*(?:token|secret|credential|password|private|api[_-]?key)|(?:access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|client[_-]?secret|api[_-]?secret|private[_-]?key|password|credential)/i;
-const INTERNAL_KEYS = new Set(['tc_user_settings_sync']);
+const SETTINGS_OWNER_KEY = 'tc_user_settings_owner';
+const INTERNAL_KEYS = new Set(['tc_user_settings_sync', SETTINGS_OWNER_KEY]);
 const MANAGED_KEY = /^(tradingcore:|tradingcore_|tc_)/i;
 
-function isManagedKey(key: string) { return MANAGED_KEY.test(key) && !INTERNAL_KEYS.has(key) && !BLOCKED_KEY.test(key); }
+function isManagedKey(key: string) {
+  return MANAGED_KEY.test(key) && !INTERNAL_KEYS.has(key) && !BLOCKED_KEY.test(key);
+}
 
-function clearManagedLocalSettings() {
+function currentOwnerId(): string | null {
+  try { return localStorage.getItem(SETTINGS_OWNER_KEY); } catch { return null; }
+}
+
+function setOwnerId(userId: string | null): void {
+  try {
+    if (userId) localStorage.setItem(SETTINGS_OWNER_KEY, userId);
+    else localStorage.removeItem(SETTINGS_OWNER_KEY);
+  } catch { /* ignore storage failures */ }
+}
+
+function clearManagedLocalSettings(): void {
   const remove: string[] = [];
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
@@ -37,17 +51,39 @@ export function restoreManagedSettings(settings: Record<string, unknown>) {
 }
 
 export const userSettingsService = {
+  /**
+   * Clear browser-side TradingCore preferences on account sign-out or before
+   * switching accounts. This prevents a transient cloud failure from exposing
+   * another user's workspace state.
+   */
+  clearLocal(): void {
+    clearManagedLocalSettings();
+    setOwnerId(null);
+  },
+
   async load(userId: string): Promise<Record<string, unknown> | null> {
     if (!isSupabaseConfigured()) return null;
+
+    // Account switching is an isolation boundary. Clear the old account's
+    // browser state before making the new account's cloud request.
+    if (currentOwnerId() !== userId) {
+      clearManagedLocalSettings();
+      setOwnerId(userId);
+    }
+
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('user_settings').select('settings').eq('user_id', userId).maybeSingle();
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('settings')
+        .eq('user_id', userId)
+        .maybeSingle();
       if (error) throw error;
-      // Never let a previous signed-in user leak workspace state into another account.
+
+      // The cloud row is authoritative after a successful read.
       clearManagedLocalSettings();
+
       if (!data?.settings) {
-        // Materialize the user's cloud-settings row immediately on first sign-in.
-        // This makes cloud persistence observable even before the first preference change.
         const emptySettings: Record<string, unknown> = {};
         const { error: seedError } = await supabase.from('user_settings').upsert(
           { user_id: userId, settings: emptySettings, updated_at: new Date().toISOString() },
@@ -56,9 +92,12 @@ export const userSettingsService = {
         if (seedError) throw seedError;
         return emptySettings;
       }
+
       restoreManagedSettings(data.settings as Record<string, unknown>);
       return data.settings as Record<string, unknown>;
     } catch (error) {
+      // Do not clear same-user local state on a transient cloud outage; it can
+      // still be persisted later. Cross-account state was already cleared above.
       console.warn('User settings load failed:', error);
       return null;
     }
@@ -66,10 +105,17 @@ export const userSettingsService = {
 
   async save(userId: string): Promise<boolean> {
     if (!isSupabaseConfigured()) return false;
+    if (currentOwnerId() !== userId) return false;
+
     try {
       const supabase = getSupabaseClient();
       const settings = collectManagedSettings();
-      const { error } = await supabase.from('user_settings').upsert({ user_id: userId, settings }, { onConflict: 'user_id' });
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert(
+          { user_id: userId, settings, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' },
+        );
       if (error) throw error;
       return true;
     } catch (error) {
@@ -81,17 +127,23 @@ export const userSettingsService = {
   startSync(userId: string, intervalMs = 5000): () => void {
     let last = '';
     let stopped = false;
+    let syncing = false;
+
     const sync = async () => {
-      if (stopped) return;
+      if (stopped || syncing || currentOwnerId() !== userId) return;
+      syncing = true;
       try {
         const current = JSON.stringify(collectManagedSettings());
         if (current === last) return;
         if (await this.save(userId)) last = current;
       } catch { /* best effort */ }
+      finally { syncing = false; }
     };
+
     void sync();
     const timer = window.setInterval(sync, intervalMs);
     const onPageHide = () => { void this.save(userId); };
+
     window.addEventListener('pagehide', onPageHide);
     return () => {
       stopped = true;
