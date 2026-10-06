@@ -1,7 +1,7 @@
 /**
- * Compatibility boundary for the legacy chart-api surface.
- * New TCO integrations should consume Vela's native ports/models/renderer directly;
- * this module exists only where an older TradingCore caller still needs the facade shape.
+ * Native Vela rendering kernel for TradingCoreOS.
+ * This is the active rendering implementation: all chart pixels, panes, price/time scales,
+ * markers, fills and incremental series patches terminate in Vela's NativeRenderer.
  */
 import { NativeRenderer } from '../../../../vendor/vela/src/renderers/native/NativeRenderer';
 import type { IndicatorRenderHandle, ClickEvent, CrosshairEvent, VisibleRange } from '../../../../vendor/vela/src/core/ports/IChartRenderer';
