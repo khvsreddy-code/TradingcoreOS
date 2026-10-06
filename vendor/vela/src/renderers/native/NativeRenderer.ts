@@ -26,6 +26,7 @@ import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-lay
 import type { Fill,  Pane, PriceLine } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
+import { SceneDirty } from '../../core/model/sceneGraph';
 import type { HighCardinalityRectBatch, GpuRectBatch } from '../../core/model/instances';
 import { applyScenePatch } from '../../core/model/scenePatch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
@@ -1879,6 +1880,7 @@ export class NativeRenderer implements IChartRenderer {
             this.scene.bars = this.bars;
             this.scene.candleColumns = this.columnarBars;
             this.scene.candleLodIndex = undefined;
+            this.scene.retained.markKindDirty('series', SceneDirty.Data | SceneDirty.Transform);
             this.coords.setBars([]);
             this.scheduler.invalidate(InvalidateLevel.Full);
             return;
@@ -1892,9 +1894,13 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.bars = this.bars;
         this.scene.candleColumns = this.columnarBars;
         this.scene.candleLodIndex = undefined;
+        this.scene.retained.markKindDirty('series', SceneDirty.Data | SceneDirty.Transform);
         this.coords.setBarsColumns(this.columnarBars.time, this.columnarBars.length, this.columnarBars.timeUnit ?? 'milliseconds');
         this.coords.setBars(this.bars.map((b) => b.time));
-        for (const model of this.scene.indicators.values()) this.refreshAnchorOffset(model);
+        for (const model of this.scene.indicators.values()) {
+            this.refreshAnchorOffset(model);
+            this.scene.markIndicatorDirty(model.id, SceneDirty.Data | SceneDirty.Transform);
+        }
         if (opts?.preserveView === true && prevHeadTime != null && this.bars.length > 0) {
             const newHeadTime = this.bars[0]!.time;
             if (newHeadTime !== prevHeadTime) {
@@ -2243,6 +2249,7 @@ export class NativeRenderer implements IChartRenderer {
     mountIndicator(model: IndicatorModel): IndicatorRenderHandle {
         this.scene.indicators.set(model.id, model);
         this.refreshAnchorOffset(model);
+        this.scene.syncIndicatorNodes(model, this.scene.zOf(model.id), SceneDirty.All);
         // Default z = mount order (later ⇒ in front) — except a native that paints through
         // an SDK layer: its canvas stacks ABOVE the data canvas by default, so its key must
         // say so or the recorded order (object tree, seriesOrder reads) starts out a lie.
@@ -2358,6 +2365,7 @@ export class NativeRenderer implements IChartRenderer {
             }
         }
         applyScenePatch(model, patch);
+        this.scene.syncIndicatorNodes(model, this.scene.zOf(model.id), patch.kind === 'schema' ? SceneDirty.Structure | SceneDirty.Data : SceneDirty.Data);
         if (patch.kind === 'value' && (
             patch.lines !== undefined || patch.boxes !== undefined || patch.labels !== undefined ||
             patch.polylines !== undefined || patch.linefills !== undefined || patch.tables !== undefined ||
@@ -2383,6 +2391,7 @@ export class NativeRenderer implements IChartRenderer {
             this.scene.vpvrLayer = null;
         }
         this.scene.indicators.delete(handle.id);
+        this.scene.removeIndicatorNodes(handle.id);
         this.dropInstanceLayer(handle.id);
         this.scene.forgetIndicatorZ(handle.id);
         this.scene.forgetAnchorOffset(handle.id);
@@ -2665,6 +2674,16 @@ export class NativeRenderer implements IChartRenderer {
         this.scrollTargetRO = null;
         const clamped = this.clampViewport(vp.barSpacing, vp.rightOffset);
         this.coords.setViewport(clamped);
+        const vr = this.coords.visibleLogicalRange();
+        if (vr.to >= vr.from && this.coords.barCount > 0) {
+            this.scene.setRenderViewport(
+                this.coords.logicalToTime(Math.max(0, Math.ceil(vr.from))),
+                this.coords.logicalToTime(Math.min(this.coords.barCount - 1, Math.floor(vr.to))),
+                this.coords.width,
+                this.coords.height,
+                this.coords.dpr,
+            );
+        }
         this.targetBarSpacing = clamped.barSpacing;
         this.scheduler.invalidate(InvalidateLevel.Full);
         this.emitViewportChange();
