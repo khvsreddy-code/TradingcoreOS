@@ -261,7 +261,6 @@ export class CoreSpiritSceneDiff {
             target.splice(idx, 1);
             this.rectBatches.set(batchId, target);
             this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
-            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
             return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [], start: idx, remove: 1 } } : null;
         }
         if (idx < 0) {
