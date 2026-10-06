@@ -80,11 +80,11 @@ export class CoreSpiritSharedMarketBuffer {
       version: CORE_SPIRIT_SHARED_MARKET_VERSION,
       buffer: this.buffer,
       capacity: this.capacity,
-      length: this.columns.header[1]!,
-      datasetVersion: this.columns.header[2]!,
-      dirtyFrom: this.columns.header[3]!,
-      dirtyTo: this.columns.header[4]!,
-      sequence: this.columns.header[5]!,
+      length: typeof Atomics !== 'undefined' ? Atomics.load(this.columns.header,1) : this.columns.header[1]!,
+      datasetVersion: typeof Atomics !== 'undefined' ? Atomics.load(this.columns.header,2) : this.columns.header[2]!,
+      dirtyFrom: typeof Atomics !== 'undefined' ? Atomics.load(this.columns.header,3) : this.columns.header[3]!,
+      dirtyTo: typeof Atomics !== 'undefined' ? Atomics.load(this.columns.header,4) : this.columns.header[4]!,
+      sequence: typeof Atomics !== 'undefined' ? Atomics.load(this.columns.header,5) : this.columns.header[5]!,
       shared: this.shared,
     });
   }
@@ -119,11 +119,20 @@ export class CoreSpiritSharedMarketBuffer {
       this.columns.volume[i] = Number(bar.volume) || 0;
     }
 
-    this.columns.header[1] = bars.length;
-    this.columns.header[2] = Math.max(0, Math.floor(datasetVersion));
-    this.columns.header[3] = start;
-    this.columns.header[4] = end;
-    this.columns.header[5] = this.columns.header[5]! + 1;
+    const nextSequence=(typeof Atomics !== 'undefined' ? Atomics.load(this.columns.header,5) : this.columns.header[5]!) + 1;
+    if (typeof Atomics !== 'undefined') {
+      Atomics.store(this.columns.header,1,bars.length);
+      Atomics.store(this.columns.header,2,Math.max(0,Math.floor(datasetVersion)));
+      Atomics.store(this.columns.header,3,start);
+      Atomics.store(this.columns.header,4,end);
+      Atomics.store(this.columns.header,5,nextSequence);
+    } else {
+      this.columns.header[1]=bars.length;
+      this.columns.header[2]=Math.max(0,Math.floor(datasetVersion));
+      this.columns.header[3]=start;
+      this.columns.header[4]=end;
+      this.columns.header[5]=nextSequence;
+    }
 
     return this.getDescriptor();
   }
