@@ -275,7 +275,7 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       break;
   }
 
-  const asserted = annotatedSafetynodeAnnotations(node);
+  const asserted = annotatedSafety(node.annotations ?? []);
   return {
     causality: asserted.causality === 'causal' ? inferred.causality : asserted.causality,
     lookahead: asserted.lookahead === 'false' ? inferred.lookahead : asserted.lookahead,
