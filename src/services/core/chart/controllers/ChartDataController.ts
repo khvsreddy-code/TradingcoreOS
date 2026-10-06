@@ -33,7 +33,6 @@ export function createChartDataController(deps:ChartDataControllerDeps){
   const dispose=()=>{
     detachStore?.();
     detachStore=undefined;
-    marketDataStore.detach(key);
     attached=false;
   };
 
