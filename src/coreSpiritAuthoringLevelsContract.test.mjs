@@ -5,21 +5,32 @@ import { buildCoreSpiritResearchPlan } from './services/coreSpirit/researchSurfa
 import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './services/coreSpirit/quantKernels.ts';
 
 const source=`
+data market = market("NSE:NIFTY50", "5m")
+
+let fast = ema(close, 20)
+let slow = ema(close, 50)
+
+when fast > slow
+    show signal("BUY")
+
 data nifty = market("NSE:NIFTY50", "5m")
 data bank = market("NSE:BANKNIFTY", "5m")
 
 let trend = ema(nifty.close, 50)
 let strength = rsi(nifty.close, 14)
 let relative = nifty.close / bank.close
+
+when trend > trend[1]
+and strength > 55
+and relative > relative[20]
+    signal("LONG")
+
 let z = zscore(close, 100)
 let beta = beta(returns(close), returns(nifty), 252)
 let regime = regime.detect(
     volatility = stdev(returns(close), 20),
     trend = trendStrength(close, 50)
 )
-
-when trend > trend[1] and strength > 55 and relative > relative[20]:
-    show signal "BUY"
 
 model alpha {
     features:
@@ -31,7 +42,10 @@ model alpha {
         forward_return(20)
 }
 
-backtest alpha from "2018-01-01" to "2026-01-01"
+backtest alpha
+    from "2018-01-01"
+    to "2026-01-01"
+
 evaluate {
     sharpe
     sortino
