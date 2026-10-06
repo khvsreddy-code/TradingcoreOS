@@ -31,6 +31,8 @@ import { CoreSpiritCapabilityHost } from './capabilityHost';
 import { CoreSpiritDebugHost } from './debugHost';
 import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId } from './seriesRegistry';
 import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProfilerSnapshot } from './profiler';
+import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, type CoreSpiritDirtyExecutionPlan } from './dirtyGraph';
+import { CoreSpiritColumnarHistory } from './columnarMarketData';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
 export type CoreSpiritRuntimeOptions = {
@@ -114,6 +116,13 @@ export class CoreSpiritRuntime {
   private readonly capabilityHost: CoreSpiritCapabilityHost;
   private readonly debugHost = new CoreSpiritDebugHost();
   private readonly profiler: CoreSpiritProfiler;
+  private dirtyGraph?: CoreSpiritDirtyGraph;
+  private lastDirtyPlan?: CoreSpiritDirtyExecutionPlan;
+  private readonly columnarHistory = new CoreSpiritColumnarHistory();
+  private readonly realtimeDirtyInstructions = new Set<number>();
+  private committedSeriesState: Record<string, number[]> = {};
+  private committedLocalSeries: Record<string, CoreSpiritValue[]> = {};
+  private committedCrossState: Record<string, { a:number; b:number }> = {};
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
@@ -153,11 +162,14 @@ export class CoreSpiritRuntime {
     this.reactiveRevision = 0; this.reactiveRecomputed = 0; this.reactiveReused = 0; this.reactiveEffects = 0;
     this.realtimeRevision = 0; this.eventRouter.rollbackTransaction(); this.realtimeEventTransactionId = undefined; this.debugHost.reset(); this.realtimeLifecycle='idle';
     this.state = { barIndex: -1, time: 0, locals: {}, seriesState: this.seriesRegistry.createNumericCompatibilityView(), localSeries: this.seriesRegistry.createValueCompatibilityView(), barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
-    this.history = []; this.crossState = {};
+    this.history = []; this.columnarHistory.clear(); this.crossState = {}; this.lastDirtyPlan=undefined; this.realtimeDirtyInstructions.clear();
     this.seriesRegistry.reset();
     this.stateStore.bind(this.crossState);
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
     this.stateStore.commitRealtimeTransaction();
+    this.committedSeriesState=this.seriesRegistry.snapshotNumericObject();
+    this.committedLocalSeries=this.seriesRegistry.snapshotValueObject();
+    this.committedCrossState=cloneCrossMap(this.crossState);
     this.eventRouter.rollbackTransaction();
     this.realtimeTransactionId = undefined;
     this.rsiKernels.clear(); this.atrKernels.clear(); this.vwapKernels.clear();
@@ -172,6 +184,16 @@ export class CoreSpiritRuntime {
     return { ...this.state, workspaceState:this.workspaceSnapshot(), locals:{...this.state.locals}, seriesState:this.seriesRegistry.snapshotNumericObject(), localSeries:this.seriesRegistry.snapshotValueObject() };
   }
 
+  private installDirtyGraph(ir: CoreSpiritIrProgram): void {
+    const bundle=ir.graphs;
+    this.dirtyGraph = bundle
+      ? new CoreSpiritDirtyGraph(
+          buildCoreSpiritDirtyGraph(bundle.semantic,bundle.reactive,ir.entry.instructions),
+          bundle.reactive,
+        )
+      : undefined;
+  }
+
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
     const compiled = this.profiler.measureCompile(() => this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer:this.layer, surface:program.surface }));
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
@@ -181,6 +203,7 @@ export class CoreSpiritRuntime {
     // State retention must always cover the program's declared lookback plus a safety margin.
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
     this.reset();
+    this.installDirtyGraph(compiled.ir);
     this.prepareSeriesBindings(compiled.ir);
     this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry, compiled.ir.specializedPlan);
     return compiled.ir;
@@ -362,6 +385,7 @@ export class CoreSpiritRuntime {
       this.fusedCursors.set(groupId, snapshot.clone());
     }
     this.history=this.history.slice(0,this.currentBarSnapshot.historyLength);
+    this.columnarHistory.trimTo(this.currentBarSnapshot.historyLength);
     this.state.barIndex=this.history.length-1;
     this.state.time=this.history.length?this.toEpoch(this.history.at(-1)!.timestamp):0;
     this.realtimeRevision=0;
@@ -395,7 +419,7 @@ export class CoreSpiritRuntime {
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
-    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan);
+    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.installDirtyGraph(ir); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan);
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.profiler.beginBar('historical', ir.entry.instructions.length);
@@ -409,7 +433,8 @@ export class CoreSpiritRuntime {
       this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:i,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:i===0,isLast:i===bars.length-1});
       this.executionContext.session=this.executionContext.frame.session;
       this.history.push(bar);
-      if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
+      this.columnarHistory.append(bar);
+      if (this.history.length > this.maxHistoryBars) { const drop=this.history.length-this.maxHistoryBars; this.history.splice(0,drop); this.columnarHistory.trimTo(this.history.length); }
       try { this.executeBlock(ir.entry.instructions, bar, this.history, i, this.outputCollector, diagnostics); }
       catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
       finally { this.profiler.endBar(); }
@@ -428,6 +453,7 @@ export class CoreSpiritRuntime {
   loadIr(ir: CoreSpiritIrProgram): void {
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
+    this.installDirtyGraph(ir);
     this.prepareSeriesBindings(ir);
     this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry);
     this.installSeriesFusion(ir);
@@ -744,13 +770,13 @@ export class CoreSpiritRuntime {
         if (kind==='market' || kind==='timeframe') {
           const symbol=kind==='market' ? String(r.symbol ?? this.executionContext.symbol) : this.executionContext.symbol;
           const timeframe=kind==='timeframe' ? String(r.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
-          const field=member as CoreSpiritDataRequest['field'];
+          const field=member;
           if(field==='trade') return finish(this.dataResolver?.trade?.(symbol,timeframe) ?? null);
           if(field==='orderbook') return finish(this.dataResolver?.orderbook?.(symbol,timeframe) ?? null);
           if(field==='footprint') return finish(this.dataResolver?.footprint?.(symbol,timeframe) ?? null);
           if(field==='volumeProfile') return finish(this.dataResolver?.volumeProfile?.(symbol,timeframe) ?? null);
           if(['open','high','low','close','volume','time'].includes(field)) {
-            const req={symbol,timeframe,field,offset:0};
+            const req={symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0};
             const memoKey=`request:${index}:${symbol}:${timeframe}:${field}:0`;
             if(this.dataMemo.has(memoKey)) return finish(this.dataMemo.get(memoKey));
             const ctx: CoreSpiritDataResolutionContext={asOfTimestamp:this.toEpoch(bar.timestamp),baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment:'last-confirmed'};
