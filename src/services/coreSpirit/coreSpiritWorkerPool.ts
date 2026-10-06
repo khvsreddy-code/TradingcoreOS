@@ -3,6 +3,7 @@ import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
 import { isRecord } from '../boundary/brokerApiValidation';
+import { materializeSharedSeriesOutput, type CoreSpiritSharedSeriesDescriptor } from './sharedOutputBuffer';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
 import {
   CoreSpiritSharedMarketBuffer,
@@ -55,8 +56,10 @@ function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
   const diagnostics = Array.isArray(value.diagnostics) && value.diagnostics.every(item => typeof item === 'string')
     ? value.diagnostics
     : [];
+  const shared = value.sharedSeries as CoreSpiritSharedSeriesDescriptor | undefined;
+  const sharedOutputs = shared ? materializeSharedSeriesOutput(shared) : [];
   return {
-    outputs: requireCoreSpiritOutputs(value.outputs ?? []),
+    outputs: requireCoreSpiritOutputs([...(value.outputs ?? []), ...sharedOutputs]),
     diagnostics,
     state: value.state,
   };
