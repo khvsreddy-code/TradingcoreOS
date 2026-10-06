@@ -32,6 +32,7 @@ assert.equal(volumePlan.nodes.has('i:rsi'),false);
 
 const openPlan=graph.planTail(['open'],500);
 assert.equal(openPlan.nodes.has('i:vwap'),false);
-assert.equal(openPlan.instructions.size,0);
+assert.equal(openPlan.nodes.has('i:plot'),true);
+assert.equal(openPlan.instructions.size,1);
 
 console.log('CORESPIRIT_DIRTY_GRAPH_CONTRACT_OK');
