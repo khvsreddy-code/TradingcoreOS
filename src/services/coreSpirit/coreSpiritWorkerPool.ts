@@ -10,7 +10,7 @@ import {
   CoreSpiritSharedMarketBuffer,
   type CoreSpiritSharedMarketDescriptor,
 } from './sharedMarketBuffer';
-import { graphSnapshotTransferables, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
+import { createGraphResolver, graphSnapshotTransferables, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
 
 export type CoreSpiritWorkerRunResult = {
   outputs: CoreSpiritObject[];
@@ -113,12 +113,12 @@ export class CoreSpiritWorkerPool {
     source:string|undefined,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot},
   ):Promise<CoreSpiritWorkerRunResult> {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
       if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
-      return this.runFallback(artifact,bars,sourceId);
+      return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot);
     }
 
     return new Promise((resolve,reject)=>{
@@ -301,9 +301,13 @@ export class CoreSpiritWorkerPool {
     artifact:CoreSpiritExecutableArtifact,
     bars:CoreSpiritMarketBar[],
     sourceId:string,
+    graphSnapshot?:CoreSpiritGraphSnapshot,
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
-    const runtime=new CoreSpiritRuntime({sourceId,dataResolver:graphSnapshot?createGraphResolver(graphSnapshot):undefined});
+    const runtime=new CoreSpiritRuntime({
+      sourceId,
+      dataResolver:graphSnapshot?createGraphResolver(graphSnapshot):undefined,
+    });
     runtime.loadIr(artifact.ir);
     const result=runtime.executeIr(artifact.ir,bars);
     return {outputs:result.outputs,diagnostics:result.diagnostics,state:result.state};
