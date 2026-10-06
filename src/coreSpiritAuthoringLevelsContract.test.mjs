@@ -73,7 +73,6 @@ assert.deepEqual(plan.modelSpecs[0].features,['z','beta','regime','volume.zscore
 assert.equal(plan.modelSpecs[0].target,'forward_return(20)');
 
 const result=compileCoreSpirit(source,'authoring-levels-contract');
-console.error('DEBUG_RESULT',JSON.stringify(result.diagnostics));
 assert.ok(!result.diagnostics.some(d=>d.severity==='error'), result.diagnostics.map(d=>d.message).join('; '));
 assert.ok(result.ir?.surface?.declarations.some(d=>d.kind==='model' && d.name==='alpha'));
 
