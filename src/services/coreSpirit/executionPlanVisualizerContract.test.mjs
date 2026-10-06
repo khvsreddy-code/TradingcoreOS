@@ -44,7 +44,7 @@ program.executionPlan={
 
 const view=buildCoreSpiritExecutionPlanVisualization(program);
 assert(view.ascii.includes('close'),'plan must expose the close input');
-assert(view.ascii.includes('EMA(20)'),'plan must label EMA period');
+assert(view.ascii.includes('EMA(20)'),`plan must label EMA period; nodes=${JSON.stringify(view.nodes.map(node=>({id:node.id,instruction:node.instruction,label:node.label,op:node.op,fused:node.fusedKernelId})))}, ascii=${JSON.stringify(view.ascii)}`);
 assert(view.ascii.includes('RSI(14)'),'plan must label RSI period');
 assert(view.ascii.includes('signal'),'plan must expose signal output');
 assert(view.summary.fusedOperationCount===2,'plan must expose fused operation count');
