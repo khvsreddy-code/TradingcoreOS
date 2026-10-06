@@ -5,6 +5,7 @@ import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLin
 import type { TradeExecution } from './trades';
 import type { InputSchema, InputValue } from './inputs';
 import type { DirtyRange } from './patch';
+import type { HighCardinalityRectBatch } from './instances';
 
 /** Declaration metadata from the Pine `indicator()` / `strategy()` call. */
 export interface IndicatorMeta {
@@ -115,6 +116,8 @@ export interface IndicatorModel {
     barColors?: Array<{ time: Millis; color: string }>;
     /** Strategy order executions, painted as trade markers on the PRICE pane (optional; absent ≡ none). */
     trades?: TradeExecution[];
+    /** Optional renderer-ready high-cardinality batches. Most models leave this empty. */
+    instanceBatches?: HighCardinalityRectBatch[];
     /** Input schema parsed from the Pine source (drives the renderer's settings dialog). */
     inputs: InputSchema[];
     /** Current input values (defaults merged with any user/add-time overrides). */

@@ -4,7 +4,7 @@ import type { IndicatorMeta, IndicatorModel } from '../model/indicator';
 import type { StrategyState, StrategyTrade } from '../model/strategy';
 import type { SymbolInfo, BarRange } from './MarketDataFeed';
 import type { PriceStyle } from '../options';
-import type { DirtyRange } from '../model/patch';
+import type { DirtyRange, ScenePatch } from '../model/patch';
 
 /**
  * A cache-backed data gateway the engine uses to fetch ANY `(symbol, timeframe)`
@@ -131,7 +131,10 @@ export interface ExecutionRequest {
 
 /** The event sink. `onModel` fires on the first run and on every re-run / live tick. */
 export interface ExecutionHandlers {
+    /** Initial/structural scene materialization. Use onScenePatches for steady-state runtime deltas. */
     onModel(model: IndicatorModel): void;
+    /** Batched retained-scene mutations. Engines may emit these after the first model mount. */
+    onScenePatches?(patches: ScenePatch[]): void;
     onAlert?(alert: EngineAlert): void;
     onWarning?(warning: EngineWarning): void;
     onError?(error: Error): void;

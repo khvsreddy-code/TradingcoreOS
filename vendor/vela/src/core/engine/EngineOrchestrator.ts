@@ -5,7 +5,8 @@ import type { Unsubscribe } from '../util/types';
 import type { OHLCV } from '../model/ohlcv';
 import type { ColumnarBars, ColumnarBarUpdate, ColumnarTimeUnit } from '../model/columnar-bars';
 import type { IndicatorModel } from '../model/indicator';
-import type { ValuePatch, SeriesValueDelta, DirtyRange } from '../model/patch';
+import type { ValuePatch, SeriesValueDelta, DirtyRange, ScenePatch } from '../model/patch';
+import { applyScenePatch } from '../model/scenePatch';
 import { ColumnarHistoryTape } from '../model/ColumnarHistoryTape';
 import { isLineLikeSeries } from '../model/series';
 import type { SeriesPoint, MarkerPoint } from '../model/series';
@@ -2398,6 +2399,19 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     if (!this.applyModel(id, model)) return;
                     record.pendingCause = undefined;
                     this.emitContextChanged(id); // throttled — streamed ticks collapse to ~1/s
+                    this.emitScriptRun(id, cause, first);
+                },
+                onScenePatches: (patches: ScenePatch[]) => {
+                    if (record.hidden || !record.model || !record.renderHandle || record.pendingStructural) return;
+                    const first = !record.announced;
+                    const cause = record.pendingCause ?? 'history';
+                    for (const patch of patches) {
+                        applyScenePatch(record.model, patch);
+                        this.renderer.updateIndicator(record.renderHandle, patch);
+                    }
+                    if (record.loading) this.setLoading(record, false);
+                    record.pendingCause = undefined;
+                    this.emitContextChanged(id);
                     this.emitScriptRun(id, cause, first);
                 },
                 onAlert: (a) => {

@@ -46,3 +46,7 @@ export type { IndicatorMeta, PaneHint, PaneAxis, PaneAxisBand, IndicatorModel } 
 export type { DirtyRange, SeriesValueDelta, ValuePatch, SchemaPatch, ScenePatch } from './patch';
 export { stableSeriesId } from './identity';
 export type { IdentifiableKind } from './identity';
+
+export type { HighCardinalityRectBatch } from './instances';
+export { highCardinalityRectCount } from './instances';
+export { applyScenePatch } from './scenePatch';
