@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Profiler, memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { IChartApi, ISeriesApi } from '../../services/core/chart/velaNativeChartKernel';
 import type { CoreSpiritChartOutputController } from '../../services/coreSpirit/chartOutputController';
 import { CoreSpiritStore } from '../../services/coreSpirit/CoreSpiritStore';
@@ -29,6 +29,7 @@ import { canonicalInstrumentKey, chartIntervals as intervals, loadChartState, ch
 import type { createChartAnalyticsController } from '../../services/core/chart/ChartAnalyticsController';
 import type { createChartInteractionController } from '../../services/core/chart/ChartInteractionController';
 import { createChartRuntimeController } from '../../services/core/chart/ChartRuntimeController';
+import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
 
 type Props={instrumentKey:string;brokerId?:string;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number;chartIndex?:number;showEmbeddedDrawingToolbar?:boolean};
 export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=true}:Props){
@@ -237,7 +238,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   useEffect(()=>()=>releaseChartStore(chartDatasetKey),[chartDatasetKey]);
   const drawingUndo=undoDrawing;
   const drawingClear=clearDrawings;
-  return <ChartShell
+  const chartUi=<ChartShell
     hostRef={host}
     oscillatorHostRef={oscHost}
     error={error}
