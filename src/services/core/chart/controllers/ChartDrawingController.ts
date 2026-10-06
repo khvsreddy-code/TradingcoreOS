@@ -18,10 +18,7 @@ export type ChartDrawingControllerDeps={
   brokerId:string;
   instrumentKey:string;
   timeframe:string;
-  showLevels:boolean;
-  showVolume:boolean;
-  showOI:boolean;
-  showDepth:boolean;
+  getViewState:()=>{showLevels:boolean;showVolume:boolean;showOI:boolean;showDepth:boolean};
   initialDrawings:Drawing[];
   getSelectedDrawingId:()=>string|null;
   onToolChange?:(tool:DrawingTool)=>void;
@@ -35,7 +32,7 @@ export function createChartDrawingController(deps:ChartDrawingControllerDeps){
  let drawingSeries:ISeriesApi<'Line'>[]=[];
  let drawingTool:DrawingTool='none';
  const drawings=()=>drawingStore.list() as Drawing[];
- const save=()=>{try{localStorage.setItem(`tradingcore:chart-state:${brokerId}:${encodeURIComponent(instrumentKey)}`,JSON.stringify({version:2,timeframe,drawings:drawings(),showLevels:deps.showLevels,showVolume:deps.showVolume,showOI:deps.showOI,showDepth:deps.showDepth}));}catch{}};
+ const save=()=>{try{const view=deps.getViewState();localStorage.setItem(`tradingcore:chart-state:${brokerId}:${encodeURIComponent(instrumentKey)}`,JSON.stringify({version:2,timeframe,drawings:drawings(),...view}));}catch{}};
  const publishDrawing=(event:'drawing.created'|'drawing.updated',drawing:CoreDrawing)=>coreEventBus.emit(event,{id:drawing.id,owner:drawing.owner,drawing:drawing as unknown as Record<string,unknown>,timestamp:Date.now()});
  const renderDrawings=()=>{
    if(!chart.current)return;
