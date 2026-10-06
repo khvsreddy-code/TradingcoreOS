@@ -269,6 +269,7 @@ export class ChartDataPlane {
     const merged = normalizeHistory([...rows, ...this.state.candles]);
     if (!merged.length) return this.state.candles;
     this.state.candles = merged;
+    marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
     this.state.revision += 1;
     this.syncCanonical();
     const olderAdded = Math.max(0, merged.length - previousLength);
@@ -281,6 +282,7 @@ export class ChartDataPlane {
     if (!candles.length) return [];
     const retained = candles.slice(-MAX_HISTORY_CANDLES);
     this.state.candles = retained;
+    marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
     this.state.revision += 1;
     this.canonicalPlane.replaceColumns(columns, Math.max(0, columns.time.length - retained.length));
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
