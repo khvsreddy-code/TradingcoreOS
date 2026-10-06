@@ -36,11 +36,11 @@ assert(facade.includes("export {") && facade.includes("velaNativeChartKernel"), 
 assert(facade.includes("createVelaNativeChart as createChart"), 'legacy createChart must delegate to the native kernel');
 assert(facade.includes("VelaNativeChartKernel as VelaChartFacade"), 'legacy VelaChartFacade must alias the native kernel');
 assert(facade.includes("VelaNativeSeriesKernel as VelaSeriesFacade"), 'legacy VelaSeriesFacade must alias the native kernel');
-assert(facade.includes("this.patchSeries('replace-last'"), 'facade forming-bar path missing');
-assert(facade.includes('seriesStyles:'), 'facade style-only path missing');
-assert(facade.includes('markerPatch(existing.markers'), 'marker incremental patch missing');
-assert(facade.includes('syncBandFillsForSeries(seriesId: string, op:'), 'fill anchor incremental path missing');
-assert(!facade.includes("points: series.points }] } as ScenePatch"), 'facade still sends full series.points');
+assert(kernel.includes("this.patchSeries('replace-last'"), 'native kernel forming-bar path missing');
+assert(kernel.includes('seriesStyles:'), 'native kernel style-only path missing');
+assert(kernel.includes('markerPatch(existing.markers'), 'native kernel marker incremental patch missing');
+assert(kernel.includes('syncBandFillsForSeries(seriesId: string, op:'), 'native kernel fill anchor incremental path missing');
+assert(!kernel.includes("points: series.points }] } as ScenePatch"), 'native kernel still sends full series.points');
 assert(coord.includes('Float64Array') && coord.includes('timeCapacity'), 'coordinate time storage not typed');
 assert(workspace.includes('workspaceListenerDisposers'), 'workspace cleanup ownership missing');
 assert(nativeFacade.includes('VelaLegacyBar'), 'Vela legacy compatibility bar type seam missing');
