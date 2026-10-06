@@ -1,5 +1,6 @@
 import { registerDrawingType } from './registry';
 import { DEFAULT_DRAWING_COLOR } from './style';
+import { ACCENT, BEARISH, BULLISH, INFO, MARKER, NEUTRAL } from '../palette';
 import { svg24 } from '../icons';
 import { AnchoredVwap } from './types/AnchoredVwap';
 import { FixedRangeVolumeProfile } from './types/FixedRangeVolumeProfile';
