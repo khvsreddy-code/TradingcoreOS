@@ -12,7 +12,6 @@ import { defaultMarksState, type MarksDisplayState } from '../../shared/marks-st
 import type { MarkGroup, TimelineMark } from '../../../core/marks/types';
 import type { GpuRectBatch } from '../../../core/model/instances';
 import { RetainedSceneGraph, SceneDirty, type SceneDataRange } from '../../../core/model/sceneGraph';
-import type { IndicatorModel } from '../../../core/model/indicator';
 
 /** A user-defined shaded time band spanning the full plot height (all panes) — the
  *  generic primitive behind session highlighting (weekends, pre/regular/post). Unlike
