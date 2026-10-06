@@ -47,6 +47,7 @@ const contracts = [
   ['chart-history-indicator', ['src/chartHistoryIndicatorGraphV106Contract.test.mjs', false]],
   ['indicator-dependency-field-index', ['src/indicatorDependencyFieldIndexContract.test.mjs', false]],
   ['realtime-architecture', ['src/realtimeArchitectureContract.test.mjs', false]],
+  ['realtime-three-rate-ring-buffer', ['src/realtimeThreeRateArchitectureContract.test.mjs', false]],
   ['frontend-performance', ['src/frontendPerformanceContract.test.mjs', false]],
   ['fyers-order-latency', ['src/fyersOrderLatencyContract.test.mjs', false]],
   ['vela-tco-semantic-boundary', ['src/velaTcoSemanticBoundaryContract.test.mjs', false]],
