@@ -25,7 +25,7 @@ export function createChartPredictionController(deps:ChartPredictionControllerDe
   let resolvedInstrumentKey=deps.resolvedInstrumentKey;
   let timeframe=deps.timeframe;
   const seconds=CHART_TIMEFRAME_SECONDS;
-  const renderPredictionOverlay=renderPredictionOverlay=async(data:HistoricalCandle[])=>{
+  const renderPredictionOverlay=async(data:HistoricalCandle[])=>{
      if(!chart.current)return;
      const job=++predictionJob.current;
      // Clear means genuinely clear: never inject default models after the user
