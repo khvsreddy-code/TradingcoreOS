@@ -4,7 +4,7 @@ import {
   advancedIndicatorModel, anchoredVwap, bosChoch, cpr, classicPivots, developingDayLevels,
   dynamicSupportResistance, equalHighLow, extendedCpr, fairValueGaps, gapLevels, gapZones,
   ichimoku, indianKeyLevels, liquidityPools, liquiditySweeps, marketStructure, macd, nr7,
-  openingRange, orderBlocks, periodPivots, pivots, priceActionEvents, previousDayLevels,
+  openingRange, orderBlocks, periodPivots, pivots, priceActionEvents, previousDayLevels, swingLevels,
   previousPeriodLevels, rsi, series, stochastic, supertrend, tradingCoreVPriceAction,
   vwapDeviationBands,
 } from '../../../marketData/indicatorEngine';
@@ -14,15 +14,16 @@ import { isIncrementalIndicatorSupported } from '../../../marketData/incremental
 import { resolveIndicatorAppearance } from '../../../coreSpirit/indicatorAppearance';
 import { getCurrentTheme, getThemePalette } from '../../../../theme/theme';
 import { buildIndicatorComputationSignature, buildIndicatorAppearanceSnapshot } from '../../../coreSpirit/indicatorSettingsSchema';
-import { ColorType, LineSeries, HistogramSeries, createVelaNativeChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type Time } from './velaNativeChartKernel';
-import type { ChartLifecycle } from './chartLifecycle';
-import type { ChartUpdateScheduler } from './chartUpdateScheduler';
+import { ColorType, LineSeries, HistogramSeries, createVelaNativeChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type Time } from '../velaNativeChartKernel';
+import type { ChartLifecycle } from '../chartLifecycle';
+import type { ChartUpdateScheduler } from '../chartUpdateScheduler';
 
 type Ref<T> = { current: T };
 
 const intervals = { '1m':'1minute', '3m':'3minute', '5m':'5minute', '15m':'15minute', '30m':'30minute', '1H':'60minute', '1D':'day' } as const;
 const colors: Record<string,string> = { EMA:'#38bdf8', SMA:'#f59e0b', HMA:'#e879f9', VWAP:'#c084fc', ADX:'#3b82f6', RSI:'#f59e0b', CCI:'#fb7185', OBV:'#60a5fa', MFI:'#a78bfa', ATR:'#3b82f6' };
 const oscillatorKinds=(x:IndicatorConfig[])=>x.some(i=>i.enabled&&['RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Delta Sigma Heatmap','Neural Weight Oscillator','Trend Pressure','Trinity','Volatility Shock Half Life Monitor'].includes(i.kind));
+const finiteNumber=(value:unknown,fallback=0)=>{const n=Number(value);return Number.isFinite(n)?n:fallback;};
 const safeLinePoints=(rows:any[],valueKey='value')=>(Array.isArray(rows)?rows:[]).map((x:any)=>({time:x?.time as Time,value:Number.isFinite(Number(x?.[valueKey]))?Number(x?.[valueKey]):null})).filter((x:any)=>x.time!=null&&x.value!=null);
 const safeNamedPoints=safeLinePoints;
 const colorWithOpacity=(color:string|undefined,opacity:number|undefined,fallback:string)=>{const raw=String(color||fallback).trim();const alpha=Math.max(.15,Math.min(1,Number(opacity??1)));if(!/^#[0-9a-f]{6}$/i.test(raw)||alpha>=.999)return raw;return raw+Math.round(alpha*255).toString(16).padStart(2,'0');};
@@ -46,10 +47,11 @@ export type ChartIndicatorControllerDeps = {
   chartUpdateScheduler: ChartUpdateScheduler;
   indicators: IndicatorConfig[];
   timeframe: string;
+  chartId: Ref<string>;
 };
 
 export function createChartIndicatorController(deps: ChartIndicatorControllerDeps){
-  const { chart, oscChart, oscHost, candles, visibleLogicalRangeRef, chartDataPlane, chartDatasetKey, dataRevisionRef, indicatorRequestSeq, lifecycle, chartUpdateScheduler, candle, oscSeries } = deps;
+  const { chart, oscChart, oscHost, candles, visibleLogicalRangeRef, chartDataPlane, chartDatasetKey, dataRevisionRef, indicatorRequestSeq, lifecycle, chartUpdateScheduler, candle, oscSeries, chartId } = deps;
   let indicators = deps.indicators;
   let timeframe = deps.timeframe;
   const indicatorSeries: Ref<ISeriesApi<'Line'>[]> = {current:[]};
@@ -224,7 +226,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        }
        if(cfg.kind==='Pivot Points'){const pv=classicPivots(data).length?classicPivots(data):pivots(data),start=Math.floor(new Date(data[0].timestamp).getTime()/1000) as Time,end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of pv){const s=chart.current.addSeries(LineSeries,{color:cfg.color||'#f59e0b',lineWidth:cfg.lineWidth||1,lineStyle:cfg.lineStyle??2,priceLineVisible:true,lastValueVisible:true});s.setData([{time:start,value:x.value},{time:end,value:x.value}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
      }
-     const markerGroups=new Map<string,any[]>(); for(const marker of chartMarkers){const id=String(marker.indicatorId||'');if(!id)continue;const arr=markerGroups.get(id)||[];arr.push(marker);markerGroups.set(id,arr);} markerDataByIndicator.current=markerGroups; setChartMarkers(chartMarkers.map(({indicatorId:_id,...marker})=>marker)); applyIndicatorAppearanceOnly();
+     const markerGroups=new Map<string,any[]>(); for(const marker of chartMarkers){const id=String(marker.indicatorId||'');if(!id)continue;const arr=markerGroups.get(id)||[];arr.push(marker);markerGroups.set(id,arr);} markerDataByIndicator.clear(); markerGroups.forEach((value,key)=>markerDataByIndicator.set(key,value)); setChartMarkers(chartMarkers.map(({indicatorId:_id,...marker})=>marker)); applyIndicatorAppearanceOnly();
    };
 
   const requestIndicatorWorker=(data:HistoricalCandle[], range=visibleLogicalRangeRef.current, mode:'snapshot'|'incremental'='snapshot', operation:'replace'|'append'='replace')=>{
