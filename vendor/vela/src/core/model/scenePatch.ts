@@ -52,6 +52,20 @@ export function applyScenePatch(model: IndicatorModel, patch: ScenePatch): void 
     }
 
     if (patch.fills !== undefined) model.fills = patch.fills;
+    if (patch.instanceBatches) {
+        model.instanceBatches ??= [];
+        for (const delta of patch.instanceBatches) {
+            let batch = model.instanceBatches.find(candidate => candidate.id === delta.batchId);
+            if (!batch) {
+                batch = { id: delta.batchId, paneId: delta.paneId ?? model.paneId ?? 'price', overlay: delta.overlay, indexOffset: delta.indexOffset, instances: [] };
+                model.instanceBatches.push(batch);
+            }
+            batch.instances = applyArrayDelta(batch.instances, delta.values, delta.op, delta.start, delta.remove);
+            if (delta.paneId !== undefined) batch.paneId = delta.paneId;
+            if (delta.overlay !== undefined) batch.overlay = delta.overlay;
+            if (delta.indexOffset !== undefined) batch.indexOffset = delta.indexOffset;
+        }
+    }
     if (patch.backgrounds !== undefined) model.backgrounds = patch.backgrounds;
     if (patch.priceLines !== undefined) model.priceLines = patch.priceLines;
     if (patch.lines !== undefined) model.lines = patch.lines;
