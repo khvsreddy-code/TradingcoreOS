@@ -321,7 +321,7 @@ function detectConditionCycles(fields: readonly IndicatorSettingField[]): string
   return [...new Set(errors)];
 }
 
-function validateCondition(condition: IndicatorSettingCondition, knownPaths: Set<string>, ownerPath: string, depth = 0, fieldByPath = new Map<string, IndicatorSettingField>()): string[] {
+function validateCondition(condition: IndicatorSettingCondition, knownPaths: Set<string>, ownerPath: string, depth = 0, fieldByPath: ReadonlyMap<string, IndicatorSettingField>): string[] {
   if (!condition || typeof condition !== 'object') return [`invalid parameter dependency for '${ownerPath}'`];
   if (depth > 8) return [`parameter dependency for '${ownerPath}' is deeper than the maximum nesting depth`];
   if (conditionLeaf(condition)) {
@@ -671,6 +671,16 @@ function nativeSchema(kind: string, item?: Record<string, unknown>): IndicatorSe
   });
 }
 
+function buildIndicatorSettingsFieldIndex(schema: IndicatorSettingsSchema): ReadonlyMap<string, IndicatorSettingField> {
+  const index = new Map<string, IndicatorSettingField>();
+  for (const section of schema.sections) {
+    for (const field of section.fields) {
+      index.set(field.path, field);
+    }
+  }
+  return index;
+}
+
 export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema): string[] {
   const errors: string[] = [];
   if (!schema || typeof schema !== 'object') return ['settings schema must be an object'];
@@ -733,9 +743,7 @@ export function validateIndicatorSettingsSchema(schema: IndicatorSettingsSchema)
   // Build one canonical schema-field index for every dependency validation pass.
   // The same index is reused for target/type validation and cycle detection.
   const allSchemaFields = schema.sections.flatMap(section => section.fields);
-  const fieldByPath = new Map<string, IndicatorSettingField>(
-    allSchemaFields.map(field => [field.path, field]),
-  );
+  const fieldByPath = buildIndicatorSettingsFieldIndex(schema);
 
   for (const section of schema.sections) for (const field of section.fields) {
     if (field.visibleWhen && !paths.has(field.visibleWhen.path)) errors.push(`visibility dependency '${field.visibleWhen.path}' for '${field.path}' is not declared`);
