@@ -3,7 +3,7 @@ import { CheckCircle2, Code2, Cloud, Copy, Eye, ImagePlus, RotateCcw, Save, Uplo
 import type { IndicatorConfig } from '../../services/marketData/indicatorEngine';
 import { getIndicatorSourceTemplate } from '../../services/coreSpirit/indicatorSourceTemplates';
 import { getIndicatorSettingsSchema } from '../../services/coreSpirit/indicatorSettingsSchema';
-import { compileCoreSpirit } from '../../services/coreSpirit/coreSpiritPipeline';
+import { compileCoreSpirit } from '../../services/coreSpirit/coreSpiritCompilerLoader';
 import { publishUserIndicator, saveUserIndicatorDraft, type IndicatorPublication } from '../../services/coreSpirit/indicatorPublicationService';
 import type { UserProfile } from '../../auth/types';
 
@@ -35,7 +35,7 @@ export function IndicatorSourceEditor({ item, user, onClose, onSaved }: Indicato
   const saveDraft = async () => {
     setStatus('saving'); setMessage('');
     try {
-      const compiled = compile();
+      const compiled = await compile();
       const result = await saveUserIndicatorDraft({ scriptId, title, description, source, metadata: { category, tags: tags.split(',').map((x)=>x.trim()).filter(Boolean), nativeKind: item.kind, settings: item, settingsSchema: getIndicatorSettingsSchema(item.kind, item as Record<string, unknown>) }, compile: compiled });
       setScriptId(result.script.id); setStatus('saved'); setMessage(`Saved draft v${result.version.version}.`); onSaved?.({ scriptId: result.script.id, source });
     } catch (error) {
@@ -46,7 +46,7 @@ export function IndicatorSourceEditor({ item, user, onClose, onSaved }: Indicato
   const publish = async () => {
     setStatus('publishing'); setMessage('');
     try {
-      const compiled = compile();
+      const compiled = await compile();
       const result = await publishUserIndicator({
         scriptId, title, description, source, category, tags: tags.split(','), coverImage: cover, license, openSource: true, visibility: 'public', profile: user, settings: item, compile: compiled,
       });
