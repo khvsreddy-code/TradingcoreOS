@@ -13,7 +13,7 @@ graph.syncBase('NIFTY','1m',base);
 const derived=graph.ensureNode('NIFTY','5m');
 if(!derived)throw new Error('5m graph node was not derived from NIFTY 1m');
 const view=derived.plane.market.views();
-if(view.length!==1)throw new Error('5m aggregation must collapse five 1m bars into one bucket');
+if(view.time.length!==1)throw new Error('5m aggregation must collapse five 1m bars into one bucket');
 if(view.open[0]!==100||view.high[0]!==105||view.low[0]!==99||view.close[0]!==104.5||view.volume[0]!==70) {
   throw new Error('5m OHLCV aggregation mismatch');
 }
