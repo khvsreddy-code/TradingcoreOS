@@ -52,6 +52,8 @@ export async function runCoreSpiritInWorker(
       datasetVersion: options.datasetVersion || 1,
       dirtyRange: options.dirtyRange,
       graphSnapshot,
+      graphBaseSymbol:options.baseSymbol,
+      graphBaseTimeframe:options.baseTimeframe,
     },
   );
 }
