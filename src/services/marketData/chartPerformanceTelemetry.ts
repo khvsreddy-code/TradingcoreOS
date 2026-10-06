@@ -4,6 +4,7 @@ export type ChartPerformanceSnapshot = {
   rendererUpdates: number;
   reactNotificationRequests: number;
   reactFrames: number;
+  reactCommitCountDuringTicks: number;
   coalescedReactNotifications: number;
   totalRendererMs: number;
   averageRendererMs: number;
@@ -21,6 +22,16 @@ export type ChartPerformanceSnapshot = {
   frameBudgetMissRate: number;
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
+  marketUpdatesPerSec: number;
+  computeUpdatesPerSec: number;
+  renderUpdatesPerSec: number;
+  computeCoalescingRate: number;
+  tickToComputeP95Ms: number;
+  tickToPatchP95Ms: number;
+  tickToRenderP95Ms: number;
+  fullSeriesRewriteCount: number;
+  formingBarReplaceLastCount: number;
+  computeCoalescedTicks: number;
   stageMs: Readonly<{ transport:number; compute:number; patch:number; renderer:number; frame:number }>;
 };
 
@@ -29,6 +40,7 @@ type MutableMetrics = {
   rendererUpdates: number;
   reactNotificationRequests: number;
   reactFrames: number;
+  reactCommitCountDuringTicks: number;
   totalRendererMs: number;
   worstRendererMs: number;
   frames: number;
@@ -41,8 +53,42 @@ type MutableMetrics = {
   frameBudgetMissRate: number;
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
+  firstPacketAt: number;
+  lastPacketAt: number;
+  computeUpdates: number;
+  renderUpdates: number;
+  computeCoalescedTicks: number;
+  packetsAtLastCompute: number;
+  tickToComputeSamples: Float64Array;
+  tickToPatchSamples: Float64Array;
+  tickToRenderSamples: Float64Array;
+  tickToComputeCount: number;
+  tickToPatchCount: number;
+  tickToRenderCount: number;
+  tickToComputeCursor: number;
+  tickToPatchCursor: number;
+  tickToRenderCursor: number;
+  lastPacketAtForLatency: number;
+  fullSeriesRewriteCount: number;
+  formingBarReplaceLastCount: number;
   stageMs: { transport:number; compute:number; patch:number; renderer:number; frame:number };
 };
+
+const SAMPLE_CAPACITY = 256;
+
+function now(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function sampleP95(samples: Float64Array, count: number, cursor: number): number {
+  const size = Math.min(count, samples.length);
+  if (!size) return 0;
+  const values = new Array<number>(size);
+  const start = count < samples.length ? 0 : cursor;
+  for (let i = 0; i < size; i += 1) values[i] = samples[(start + i) % samples.length]!;
+  values.sort((a, b) => a - b);
+  return values[Math.min(size - 1, Math.max(0, Math.ceil(size * 0.95) - 1))]!;
+}
 
 class ChartPerformanceTelemetry {
   private readonly metrics = new Map<string, MutableMetrics>();
@@ -50,13 +96,78 @@ class ChartPerformanceTelemetry {
   private entry(key: string): MutableMetrics {
     let value = this.metrics.get(key);
     if (!value) {
-      value = { packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0, frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown', stageMs: { transport:0, compute:0, patch:0, renderer:0, frame:0 } };
+      value = {
+        packets: 0, rendererUpdates: 0, reactNotificationRequests: 0, reactFrames: 0, reactCommitCountDuringTicks: 0,
+        totalRendererMs: 0, worstRendererMs: 0, frames: 0, totalFrameMs: 0, worstFrameMs: 0, p95FrameMs: 0, fps: 0,
+        frameBudgetMs: 1000 / 60, frameBudgetMisses: 0, frameBudgetMissRate: 0, longFrames: 0, backend: 'unknown',
+        firstPacketAt: 0, lastPacketAt: 0, computeUpdates: 0, renderUpdates: 0, computeCoalescedTicks: 0, packetsAtLastCompute: 0,
+        tickToComputeSamples: new Float64Array(SAMPLE_CAPACITY),
+        tickToPatchSamples: new Float64Array(SAMPLE_CAPACITY),
+        tickToRenderSamples: new Float64Array(SAMPLE_CAPACITY),
+        tickToComputeCount: 0, tickToPatchCount: 0, tickToRenderCount: 0,
+        tickToComputeCursor: 0, tickToPatchCursor: 0, tickToRenderCursor: 0,
+        lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0,
+        stageMs: { transport:0, compute:0, patch:0, renderer:0, frame:0 },
+      };
       this.metrics.set(key, value);
     }
     return value;
   }
 
-  recordPacket(key: string): void { this.entry(key).packets += 1; }
+  recordPacket(key: string): void {
+    const m = this.entry(key);
+    const at = now();
+    m.packets += 1;
+    if (!m.firstPacketAt) m.firstPacketAt = at;
+    m.lastPacketAt = at;
+    m.lastPacketAtForLatency = at;
+  }
+
+  recordCompute(key: string, durationMs = 0, inputSequence?: number): void {
+    const m = this.entry(key);
+    const at = now();
+    const batchSize = Math.max(1, m.packets - m.packetsAtLastCompute);
+    m.computeCoalescedTicks += Math.max(0, batchSize - 1);
+    m.packetsAtLastCompute = m.packets;
+    m.computeUpdates += 1;
+    this.recordSample(m.tickToComputeSamples, m, 'tickToComputeCount', 'tickToComputeCursor', Math.max(0, at - m.lastPacketAtForLatency));
+    this.recordStage(key, 'compute', durationMs);
+    void inputSequence;
+  }
+
+  recordRenderUpdate(key: string, tickToPatchMs: number, tickToRenderMs: number, rendererDurationMs: number): void {
+    const m = this.entry(key);
+    m.renderUpdates += 1;
+    this.recordSample(m.tickToPatchSamples, m, 'tickToPatchCount', 'tickToPatchCursor', Math.max(0, tickToPatchMs));
+    this.recordSample(m.tickToRenderSamples, m, 'tickToRenderCount', 'tickToRenderCursor', Math.max(0, tickToRenderMs));
+    this.recordRendererUpdate(key, rendererDurationMs);
+  }
+
+  recordReactCommit(key: string): void {
+    this.entry(key).reactCommitCountDuringTicks += 1;
+  }
+
+  recordFullSeriesRewrite(key: string): void {
+    this.entry(key).fullSeriesRewriteCount += 1;
+  }
+
+  recordFormingBarReplaceLast(key: string): void {
+    this.entry(key).formingBarReplaceLastCount += 1;
+  }
+
+  private recordSample(
+    samples: Float64Array,
+    metrics: MutableMetrics,
+    countKey: 'tickToComputeCount'|'tickToPatchCount'|'tickToRenderCount',
+    cursorKey: 'tickToComputeCursor'|'tickToPatchCursor'|'tickToRenderCursor',
+    value: number,
+  ): void {
+    const cursor = metrics[cursorKey];
+    samples[cursor] = value;
+    metrics[cursorKey] = (cursor + 1) % samples.length;
+    metrics[countKey] = Math.min(metrics[countKey] + 1, samples.length);
+  }
+
   recordReactNotificationRequest(key: string): void { this.entry(key).reactNotificationRequests += 1; }
   recordReactFrame(key: string): void { this.entry(key).reactFrames += 1; }
   recordStage(key: string, stage: 'transport'|'compute'|'patch'|'renderer'|'frame', durationMs: number): void {
@@ -101,14 +212,25 @@ class ChartPerformanceTelemetry {
   }
 
   snapshot(key: string): ChartPerformanceSnapshot {
-    const m = this.metrics.get(key) || { packets:0, rendererUpdates:0, reactNotificationRequests:0, reactFrames:0, totalRendererMs:0, worstRendererMs:0, frames:0, totalFrameMs:0, worstFrameMs:0, p95FrameMs:0, fps:0, frameBudgetMs:1000/60, frameBudgetMisses:0, frameBudgetMissRate:0, longFrames:0, backend:'unknown' as const, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0} };
+    const m = this.metrics.get(key) || {
+      packets:0, rendererUpdates:0, reactNotificationRequests:0, reactFrames:0, reactCommitCountDuringTicks:0,
+      totalRendererMs:0, worstRendererMs:0, frames:0, totalFrameMs:0, worstFrameMs:0, p95FrameMs:0, fps:0,
+      frameBudgetMs:1000/60, frameBudgetMisses:0, frameBudgetMissRate:0, longFrames:0, backend:'unknown' as const,
+      firstPacketAt:0, lastPacketAt:0, computeUpdates:0, renderUpdates:0, computeCoalescedTicks:0, packetsAtLastCompute:0,
+      tickToComputeSamples:new Float64Array(SAMPLE_CAPACITY), tickToPatchSamples:new Float64Array(SAMPLE_CAPACITY), tickToRenderSamples:new Float64Array(SAMPLE_CAPACITY),
+      tickToComputeCount:0, tickToPatchCount:0, tickToRenderCount:0, tickToComputeCursor:0, tickToPatchCursor:0, tickToRenderCursor:0, lastPacketAtForLatency:0,
+      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0},
+    };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
+    const elapsedMs = m.firstPacketAt && m.lastPacketAt ? Math.max(1, m.lastPacketAt - m.firstPacketAt) : 0;
+    const elapsedSeconds = elapsedMs / 1000;
     return {
       key,
       packets: m.packets,
       rendererUpdates: m.rendererUpdates,
       reactNotificationRequests: m.reactNotificationRequests,
       reactFrames: m.reactFrames,
+      reactCommitCountDuringTicks: m.reactCommitCountDuringTicks,
       coalescedReactNotifications: coalesced,
       totalRendererMs: m.totalRendererMs,
       averageRendererMs: m.rendererUpdates ? m.totalRendererMs / m.rendererUpdates : 0,
@@ -126,6 +248,16 @@ class ChartPerformanceTelemetry {
       frameBudgetMissRate: m.frameBudgetMissRate,
       longFrames: m.longFrames,
       backend: m.backend,
+      marketUpdatesPerSec: elapsedSeconds > 0 ? m.packets / elapsedSeconds : 0,
+      computeUpdatesPerSec: elapsedSeconds > 0 ? m.computeUpdates / elapsedSeconds : 0,
+      renderUpdatesPerSec: elapsedSeconds > 0 ? m.renderUpdates / elapsedSeconds : 0,
+      computeCoalescingRate: m.packets ? m.computeCoalescedTicks / m.packets : 0,
+      tickToComputeP95Ms: sampleP95(m.tickToComputeSamples, m.tickToComputeCount, m.tickToComputeCursor),
+      tickToPatchP95Ms: sampleP95(m.tickToPatchSamples, m.tickToPatchCount, m.tickToPatchCursor),
+      tickToRenderP95Ms: sampleP95(m.tickToRenderSamples, m.tickToRenderCount, m.tickToRenderCursor),
+      fullSeriesRewriteCount: m.fullSeriesRewriteCount,
+      formingBarReplaceLastCount: m.formingBarReplaceLastCount,
+      computeCoalescedTicks: m.computeCoalescedTicks,
       stageMs: Object.freeze({ ...m.stageMs }),
     };
   }
