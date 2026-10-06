@@ -24,20 +24,26 @@ import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
+export type CoreSpiritCompilerOptions = {
+  layer?: CoreSpiritProgramLayer;
+  surface?: CoreSpiritSurfaceMetadata;
+  components?: CoreSpiritComponentRegistryLike;
+  artifactContext?: { source:string; normalizedSource:string; semanticFingerprint?:string };
+};
 
 export class CoreSpiritCompiler {
   compileSource(
     source: string,
     sourceId = 'coreSpirit',
-    options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata; components?: CoreSpiritComponentRegistryLike } = {},
+    options: CoreSpiritCompilerOptions = {},
   ): CoreSpiritCompileResult {
     const unit = createCoreSpiritCompilationUnit(source, options);
     if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) return { diagnostics: unit.diagnostics };
     const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(source);
-    return this.compile(unit.ast, sourceId, { ...options, surface });
+    return this.compile(unit.ast, sourceId, { ...options, surface, artifactContext:{ source:unit.source, normalizedSource:unit.normalizedSource, semanticFingerprint:this.semanticFingerprint(options) } });
   }
 
-  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: { layer?: CoreSpiritProgramLayer; surface?: CoreSpiritSurfaceMetadata; components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritCompileResult {
+  compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {
     const layer: CoreSpiritProgramLayer = options.layer || 'script';
     const componentSource = options.components ?? coreSpiritComponentRegistry;
     const names = resolveCoreSpiritNames(ast, { components: componentSource });
@@ -327,9 +333,19 @@ export class CoreSpiritCompiler {
       const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
       const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
-      return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir)};
+      return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {
       return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error?error.message:String(error)}]};
     }
+  }
+  private semanticFingerprint(options: CoreSpiritCompilerOptions): string {
+    const componentSource = options.components ?? coreSpiritComponentRegistry;
+    const componentContracts = componentSource && typeof componentSource === 'object' && 'listContracts' in componentSource
+      ? (componentSource as any).listContracts()
+      : componentSource;
+    return JSON.stringify({
+      layer: options.layer || 'script',
+      components: componentContracts,
+    });
   }
 }
