@@ -23,6 +23,15 @@ assert.deepEqual(
 );
 assert.ok(result.ir?.specializedPlan);
 
+const graphSyntax = compiler.compileSource(`
+let htfClose = series("15m").close;
+let daily = series("1D").close;
+`, 'trading-native-graph-syntax');
+assert.equal(graphSyntax.diagnostics.filter((d) => d.severity === 'error').length, 0);
+assert.ok(graphSyntax.ir?.tradingNativePlan.multiTimeframe);
+assert.ok(graphSyntax.ir?.tradingNativePlan.dataGraph.minimumTimeframes.some((item) => item.timeframe === '15m'));
+assert.ok(graphSyntax.ir?.tradingNativePlan.dataGraph.minimumTimeframes.some((item) => item.timeframe === '1D'));
+
 const structures = compiler.compileSource(`
 let ob = market("NSE:NIFTY50").orderbook;
 let fp = market("NSE:NIFTY50").footprint;
