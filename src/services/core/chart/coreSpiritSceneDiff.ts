@@ -306,7 +306,7 @@ export class CoreSpiritSceneDiff {
             case 'background': {
                 const start = Number(output.time);
                 const end = Number(output.metadata?.endTime ?? start + 1);
-                const value: Background = { id: output.id, paneId: pane(output), from: start, to: Math.max(start + 1, end), color: output.color, overlay: output.visual?.pane === 'price' };
+                const value: TcoBackground = { id: output.id, paneId: pane(output), from: start, to: Math.max(start + 1, end), color: output.color, overlay: output.visual?.pane === 'price' };
                 return this.applyCollection('backgrounds', value, emit, removed(output));
             }
             default: return null;
