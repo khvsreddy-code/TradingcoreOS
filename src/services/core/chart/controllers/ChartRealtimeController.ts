@@ -1,5 +1,5 @@
 import type { HistoricalCandle } from '../../../brokers/BrokerAdapter';
-import type { NormalizedMarketTick } from '../../../types/market';
+import type { NormalizedMarketTick } from '../../../../types/market';
 import type { ChartDataPlaneSnapshot } from '../../../marketData/chartDataPlane';
 import type { ChartStore } from '../ChartStore';
 import type { ChartUpdateScheduler } from '../chartUpdateScheduler';
