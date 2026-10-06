@@ -346,3 +346,47 @@ export function coreSpiritArtifactLookupFingerprint(source:string,sourceId:strin
   const lookup=buildCoreSpiritArtifactLookupIdentity(source,sourceId,options);
   return sha256HexSync(`${lookup.sourceHash}\n${lookup.normalizedHash}\n${lookup.semanticHash}\n${lookup.key}`);
 }
+
+
+export type CoreSpiritArtifactCacheKey = Readonly<{
+  compilerVersion:string;
+  irVersion:number;
+  sourceHash:string;
+  semanticsHash:string;
+}>;
+
+function legacyCacheKey(input:CoreSpiritArtifactCacheKey):string{
+  return sha256HexSync(JSON.stringify({
+    compilerVersion:input.compilerVersion,
+    irVersion:input.irVersion,
+    sourceHash:input.sourceHash,
+    semanticsHash:input.semanticsHash,
+  }));
+}
+
+/** Backward-compatible local artifact cache API. */
+export class CoreSpiritArtifactCache {
+  private readonly entries=new Map<string,CoreSpiritExecutableArtifact>();
+  constructor(private readonly maxEntries=256){}
+
+  async get(keyInput:CoreSpiritArtifactCacheKey):Promise<CoreSpiritExecutableArtifact|undefined>{
+    const key=legacyCacheKey(keyInput);
+    const artifact=this.entries.get(key);
+    if(!artifact) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key,artifact);
+    return validateExecutableArtifact(artifact) ? artifact : undefined;
+  }
+
+  async set(keyInput:CoreSpiritArtifactCacheKey,artifact:CoreSpiritExecutableArtifact):Promise<string>{
+    if(!validateExecutableArtifact(artifact)) throw new Error('cannot cache invalid CoreSpirit artifact');
+    const key=legacyCacheKey(keyInput);
+    this.entries.delete(key);
+    this.entries.set(key,artifact);
+    while(this.entries.size>this.maxEntries) this.entries.delete(this.entries.keys().next().value!);
+    return key;
+  }
+
+  clear():void{this.entries.clear();}
+  get size():number{return this.entries.size;}
+}
