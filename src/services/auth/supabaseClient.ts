@@ -2,17 +2,25 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let supabaseInstance: SupabaseClient | null = null;
 
-const DEFAULT_URL = 'https://atoxvshsefhouadmunos.supabase.co';
-const DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_sba0Innnh-Ok2IybSLNGxQ__0xvkPeK';
+function configuredValues(): { url: string; key: string } {
+  const url = String(import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const key = String(
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    '',
+  ).trim();
+  return { url, key };
+}
 
 export function getSupabaseClient(): SupabaseClient {
   if (supabaseInstance) return supabaseInstance;
 
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || DEFAULT_URL).replace(/\/$/, '');
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_PUBLISHABLE_KEY;
-  if (!supabaseUrl || !supabaseKey) throw new Error('Supabase is not configured.');
+  const { url, key } = configuredValues();
+  if (!url || !key) {
+    throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.');
+  }
 
-  supabaseInstance = createClient(supabaseUrl, supabaseKey, {
+  supabaseInstance = createClient(url, key, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -24,7 +32,11 @@ export function getSupabaseClient(): SupabaseClient {
 }
 
 export function isSupabaseConfigured(): boolean {
-  const url = import.meta.env.VITE_SUPABASE_URL || DEFAULT_URL;
-  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_PUBLISHABLE_KEY;
-  return Boolean(url && key && !url.includes('your-supabase-project') && !key.includes('your-supabase-anon-key'));
+  const { url, key } = configuredValues();
+  return Boolean(
+    url &&
+    key &&
+    !url.includes('your-supabase-project') &&
+    !key.includes('your-supabase'),
+  );
 }
