@@ -245,7 +245,10 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
     getIndicatorSeries(){return indicatorSeries.current;},
     getMaps(){return {indicatorSeriesMap,markerDataByIndicator,indicatorFillMap,workerSeriesMap};},
     clear(){
-      indicatorSeries.current=[];indicatorSeriesMap.clear();markerDataByIndicator.clear();indicatorFillMap.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.clear();workerSeriesMap.clear();oscSeries.current=[];
+      indicatorSeries.current.forEach(series=>{try{chart.current?.removeSeries(series)}catch{}});
+      workerSeriesMap.forEach(group=>group.forEach(series=>{try{chart.current?.removeSeries(series as any)}catch{};try{oscChart.current?.removeSeries(series as any)}catch{}}));
+      indicatorFillMap.forEach(handles=>handles.forEach(handle=>{try{handle.remove()}catch{}}));
+      indicatorSeries.current=[];indicatorSeriesMap.clear();markerDataByIndicator.clear();indicatorFillMap.clear();workerSeriesMap.clear();oscSeries.current=[];
       try{markerPlugin?.setMarkers([]);markerPlugin?.detach?.();}catch{} markerPlugin=null;
     },
     requestIndicatorWorker,
