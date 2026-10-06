@@ -437,6 +437,15 @@ export class SceneGraph {
         return min;
     }
 
+    private paneViewportBounds(paneId?: string): { x:number; y:number; width:number; height:number } | undefined {
+        if (!paneId) return undefined;
+        const bounds = this.panes.get(paneId)?.bounds;
+        if (!bounds) return undefined;
+        // PaneBounds is vertical-only; retained-scene culling needs a full viewport rectangle.
+        // Use an effectively unbounded plot width while preserving the exact pane y/height.
+        return { x:0, y:bounds.top, width:Number.MAX_SAFE_INTEGER, height:Math.max(0,bounds.height) };
+    }
+
     syncIndicatorNodes(model: IndicatorModel, zIndex: number, dirty = SceneDirty.Structure | SceneDirty.Data): void {
         const parentId = `indicator:${model.id}`;
         this.retained.upsert({
@@ -459,7 +468,7 @@ export class SceneGraph {
                 kind: series.kind === 'markers' ? 'markers' : 'series',
                 zIndex,
                 visibility: series.visible !== false,
-                viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
+                viewportBounds: this.paneViewportBounds(model.paneId),
                 style: 'style' in series ? series.style : undefined,
                 payload: series,
                 dataRange: this.dataRangeForSeries(series),
@@ -483,7 +492,7 @@ export class SceneGraph {
                     linefills: model.linefills,
                     tables: model.tables,
                 },
-                viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
+                viewportBounds: this.paneViewportBounds(model.paneId),
                 dataRange: this.dataRangeForModel(model),
                 dirty,
             });
@@ -499,7 +508,7 @@ export class SceneGraph {
                 zIndex,
                 visibility: true,
                 payload: model.labels,
-                viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
+                viewportBounds: this.paneViewportBounds(model.paneId),
                 dataRange: this.dataRangeForModel(model),
                 dirty,
             });
@@ -516,7 +525,7 @@ export class SceneGraph {
                     zIndex,
                     visibility: true,
                     payload: batch,
-                    viewportBounds: model.paneId ? this.panes.get(model.paneId)?.bounds : undefined,
+                    viewportBounds: this.paneViewportBounds(model.paneId),
                     dataRange: this.dataRangeForInstances(batch.instances),
                     dirty,
                 });
