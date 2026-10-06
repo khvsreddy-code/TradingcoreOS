@@ -514,3 +514,46 @@ Persistent chart workers now use the formal artifact hash as their context ident
 - Formal CSPIRIT artifact ABI is validated before persistent use.
 - Worker context addressing uses the formal artifact hash.
 - Execution backend is represented at cache selection time.
+## v139 — CoreSpirit shared Data Graph (#34/#35)
+
+CoreSpirit market dependencies no longer need a separate chart/data request for every timeframe. The platform now exposes a shared symbol × timeframe Data Graph.
+
+```text
+symbol/timeframe producers
+        ↓
+   shared Data Graph
+        ↓
+  lower-TF aggregation
+        ↓
+CoreSpirit dependency resolver
+        ↓
+worker execution context
+```
+
+A single base dataset such as `NIFTY 1m` can feed `5m`, `15m`, `1h`, and `1D` derived nodes. Different symbols share the same graph registry, so `NIFTY`, `BANKNIFTY`, `FINNIFTY`, `USDINR`, and `VIX` are independent graph branches rather than separate CoreSpirit data planes.
+
+### Deterministic MTF alignment
+
+CoreSpirit resolves higher-timeframe fields by execution timestamp. `last-confirmed` never exposes a still-forming higher-timeframe bar as confirmed. The resolver also supports developing and exact alignment modes.
+
+### Minimum-data planning
+
+The trading-native plan now contains a `dataGraph` section with graph nodes, roots, and minimum source timeframes. The execution planner carries that graph into the final execution plan, so dependency planning can reason about shared source ownership before runtime execution.
+
+### Realtime aggregation
+
+Historical graph nodes aggregate in one pass. Realtime derived nodes recompute only the current aggregation bucket, not the retained dataset. This keeps 1m → 1D aggregation bounded by the active session bucket instead of turning every tick into an O(history) rebuild.
+
+### Worker ownership
+
+CoreSpirit chart workers receive a graph snapshot once per graph revision and retain a mutable graph resolver inside the persistent worker context. A forming base-bar update therefore does not require resending or rebuilding the whole graph unless a dependency revision actually changes.
+
+### Acceptance
+
+- [x] Shared symbol × timeframe graph registry.
+- [x] Lower-timeframe OHLCV aggregation into higher-timeframe nodes.
+- [x] Deterministic last-confirmed MTF alignment.
+- [x] Multi-symbol graph branches with shared infrastructure.
+- [x] Graph-aware CoreSpirit trading-native and execution plans.
+- [x] Persistent-worker graph snapshots with revision-based updates.
+- [x] Realtime aggregation limited to the current target bucket.
