@@ -36,7 +36,7 @@ assert(incremental.includes("buildIndicatorComputationSignature"), 'incremental 
 assert(coordinator.includes("buildIndicatorComputationSignature"), 'worker coordinator does not use canonical computation signature');
 assert(coordinator.includes('const compute = active.map') && !coordinator.includes('...config,\n    id: `shared-${index}`'), 'worker payload still spreads appearance-heavy IndicatorConfig');
 
-const computeEffect = live.match(/useEffect\(\(\)=>\{[^\n]*renderStudies\(candles\.current\);requestIndicatorWorker\(candles\.current\);[^\n]*\},\[indicatorComputeKey,[^\n]+\]\);/);
+const computeEffect = live.match(/useEffect\(\(\)=>\{[^\n]*renderStudies\(candles\.current\);controller\.requestIndicatorWorker\(candles\.current\);[^\n]*\},\[indicatorComputeKey,[^\n]+\]\);/);
 assert(computeEffect, 'computation effect is not keyed by indicatorComputeKey');
 assert(!computeEffect[0].includes('indicatorAppearanceKey'), 'appearance key can still invalidate computation effect');
 assert(/useEffect\(\(\)=>\{[^\n]*applyIndicatorAppearanceOnly\(\)[^\n]*\},\[indicatorAppearanceKey\]\);/.test(live), 'appearance-only effect missing');
