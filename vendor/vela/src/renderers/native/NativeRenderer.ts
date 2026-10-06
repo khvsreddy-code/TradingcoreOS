@@ -202,6 +202,7 @@ export class NativeRenderer implements IChartRenderer {
     private layerOrderSig = '';
     /** Monotonic indicator-drawing content revision; data ticks do not advance it. */
     private drawingRevision = 0;
+    private indicatorDrawingSlices: ReadonlyMap<string, ReadonlyArray<import('./core/SceneGraph').DrawingSlice>> = new Map();
     private gpuRectCacheKey = '';
     private gpuRectCache: GpuRectBatch[] = [];
     // The attribution mark (see chrome/AttributionMark + the NOTICE file): default-on;
@@ -3590,11 +3591,27 @@ export class NativeRenderer implements IChartRenderer {
         // Interleave layers: each indicator's Pine drawings at that indicator's z slot, plus
         // the user drawings whose z sits inside a pane's series stack — prepainted so the
         // backend can composite them mid-stack (under the candles, between indicators).
+        const retainedVisualDirty = this.scene.retained.queryDirty({
+            kinds: ['drawing', 'heatmap', 'label'],
+        }).length > 0;
+        if (retainedVisualDirty || this.indicatorDrawingSlices.size === 0) {
+            this.indicatorDrawingSlices = this.indicatorSlices.prepare(
+                this.scene,
+                this.coords,
+                this.theme,
+                this.dataCanvas,
+                this.drawingRevision,
+            );
+            this.scene.highCardinalityRectBatches = this.prepareGpuRectBatches();
+            this.scene.retained.clearDirtyNodes(
+                this.scene.retained.queryDirty({ kinds: ['drawing', 'heatmap', 'label'] }),
+                SceneDirty.All,
+            );
+        }
         this.scene.drawingSlices = mergeSlices(
-            this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas, this.drawingRevision),
+            this.indicatorDrawingSlices,
             this.userDrawings?.prepareSlices(this.scene.orderedPanes().map((p) => p.id)) ?? new Map(),
         );
-        this.scene.highCardinalityRectBatches = this.prepareGpuRectBatches();
         this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas
         this.backend.render(this.scene, this.coords, this.theme);
         this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
