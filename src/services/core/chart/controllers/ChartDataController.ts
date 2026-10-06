@@ -22,7 +22,6 @@ export function createChartDataController(deps:ChartDataControllerDeps){
   const subscribe=(listener:(event:any)=>void)=>{
     attach();
     return marketDataStore.subscribe(key,(event)=>{
-      chartStore.publishMarketSnapshot(event);
       listener(event);
     });
   };
