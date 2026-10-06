@@ -3,6 +3,7 @@ import { CORE_SPIRIT_ARTIFACT_SCHEMA_VERSION } from './VERSION';
 import { buildCoreSpiritArtifactIdentity, type CoreSpiritArtifactIdentity } from './artifactIdentity';
 import {
   buildCoreSpiritArtifactAbi,
+  validateCoreSpiritArtifactAbi,
   type CoreSpiritArtifactAbi,
 } from './artifactAbi';
 import { CORE_SPIRIT_IR_FORMAT, CORE_SPIRIT_IR_VERSION, validateCoreSpiritIr, serializeCoreSpiritIr } from './irContract';
