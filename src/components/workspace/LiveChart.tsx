@@ -23,6 +23,7 @@ import type { NormalizedMarketTick } from '../../types/market';
 import { useChartLifecycle } from './hooks/useChartLifecycle';
 import { CHART_TIMEFRAME_INTERVALS, chartDataPlaneKey, getChartDataPlane } from '../../services/marketData/chartDataPlane';
 import type { ChartAnalytics } from '../../services/marketData/levelEngine';
+import type { OIChartAnalytics } from '../../services/marketData/oiEngine';
 import { chartMarketKey } from '../../services/marketData/chartMarketStore';
 import { isIncrementalIndicatorSupported } from '../../services/marketData/incrementalIndicatorEngine';
 import { getIndicators, saveIndicators, getAutomations, type AutomationConfig, type IndicatorConfig, INDICATOR_LIBRARY } from '../../services/marketData/indicatorEngine';
