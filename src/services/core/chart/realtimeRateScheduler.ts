@@ -17,7 +17,8 @@ export type RealtimeRateSchedulerOptions<T> = {
 export class RealtimeRateScheduler<T> {
   private readonly intervalMs: number;
   private readonly run: (value: T, sequence: number) => void;
-  private pending: { value: T; sequence: number } | null = null;
+  private pendingValue: T | null = null;
+  private pendingSequence = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastRunAt = 0;
   private runs = 0;
@@ -31,8 +32,9 @@ export class RealtimeRateScheduler<T> {
 
   schedule(value: T, sequence: number): void {
     if (this.disposed) return;
-    if (this.pending) this.coalesced += 1;
-    this.pending = { value, sequence };
+    if (this.pendingValue !== null) this.coalesced += 1;
+    this.pendingValue = value;
+    this.pendingSequence = sequence;
     if (this.timer != null) return;
     this.arm();
   }
@@ -47,14 +49,15 @@ export class RealtimeRateScheduler<T> {
   }
 
   private flush(): void {
-    if (this.disposed || !this.pending) return;
-    const pending = this.pending;
-    this.pending = null;
+    if (this.disposed || this.pendingValue === null) return;
+    const value = this.pendingValue;
+    const sequence = this.pendingSequence;
+    this.pendingValue = null;
     const started = globalThis.performance?.now?.() ?? Date.now();
     this.lastRunAt = started;
     this.runs += 1;
-    this.run(pending.value, pending.sequence);
-    if (!this.disposed && this.pending && this.timer == null) this.arm();
+    this.run(value, sequence);
+    if (!this.disposed && this.pendingValue !== null && this.timer == null) this.arm();
   }
 
   getStats(): RealtimeRateSchedulerStats {
@@ -64,7 +67,7 @@ export class RealtimeRateScheduler<T> {
   cancel(): void {
     if (this.timer != null) clearTimeout(this.timer);
     this.timer = null;
-    this.pending = null;
+    this.pendingValue = null;
   }
 
   dispose(): void {
