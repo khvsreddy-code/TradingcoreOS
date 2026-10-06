@@ -305,19 +305,21 @@ export class MarketDataGraph{
   }
 
   private rebuildDependents(sourceKey:string):void{
-    let changed=true;
-    while(changed){
-      changed=false;
+    const queue=[sourceKey];
+    const visited=new Set<string>();
+    while(queue.length){
+      const current=queue.shift()!;
+      if(visited.has(current))continue;
+      visited.add(current);
       for(const node of this.nodes.values()){
-        if(node.sourceKey!==sourceKey)continue;
+        if(node.sourceKey!==current)continue;
         const source=this.nodes.get(node.sourceKey);
         if(!source)continue;
         aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc);
         node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
         node.sourceRevision=source.plane.revision;
-        changed=true;
+        queue.push(node.descriptor.key);
       }
-      if(changed)sourceKey='';
     }
   }
 
