@@ -35,20 +35,32 @@ export type ChartRealtimeControllerDeps={
   onOiTick:(spot:number)=>void;
 };
 
-type PendingCompute = {
-  snapshot: ChartDataPlaneSnapshot;
-  bucketChanged: boolean;
-};
-
 export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
   const {
     chart,candles,latestTick,dataRevisionRef,rendererController,chartDataPlane,
     chartUpdateScheduler,calculationEngine,candleAppearanceRef,
   }=deps;
 
-  const computeScheduler = new RealtimeRateScheduler<PendingCompute>({
+  let pendingBucketChanged = false;
+  const renderLatest=()=>{
+    if(!chart.current)return;
+    const patchStarted=globalThis.performance?.now?.() ?? Date.now();
+    const canonical=chartDataPlane.readCanonical();
+    const beforeRender=globalThis.performance?.now?.() ?? Date.now();
+    rendererController.applyRealtimeCanonical(canonical,candleAppearanceRef.current);
+    const afterRender=globalThis.performance?.now?.() ?? Date.now();
+    chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'patch',Math.max(0,beforeRender-patchStarted));
+    chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'renderer',Math.max(0,afterRender-beforeRender));
+    const lastPacketAt=chartPerformanceTelemetry.getLastPacketAt(deps.chartMarketKey);
+    const tickToPatch=lastPacketAt>0?Math.max(0,patchStarted-lastPacketAt):0;
+    const tickToRender=lastPacketAt>0?Math.max(0,afterRender-lastPacketAt):0;
+    chartPerformanceTelemetry.recordRenderUpdate(deps.chartMarketKey,tickToPatch,tickToRender,Math.max(0,afterRender-beforeRender));
+  };
+  const computeScheduler = new RealtimeRateScheduler<ChartDataPlaneSnapshot>({
     intervalMs: deps.computeIntervalMs ?? 50,
-    run: ({snapshot,bucketChanged}, sequence) => {
+    run: (snapshot, sequence) => {
+      const bucketChanged=pendingBucketChanged;
+      pendingBucketChanged=false;
       const started = globalThis.performance?.now?.() ?? Date.now();
       const data = snapshot.candles;
       const live = data[data.length - 1];
@@ -79,28 +91,16 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
     latestTick.current=snapshot.latestTick;
     dataRevisionRef.current=snapshot.revision;
 
-    if(data.length&&chart.current){
-      chartUpdateScheduler.scheduleLatest('realtime-bar',()=>{
-        const patchStarted=globalThis.performance?.now?.() ?? Date.now();
-        const canonical=chartDataPlane.readCanonical();
-        const beforeRender=globalThis.performance?.now?.() ?? Date.now();
-        rendererController.applyRealtimeCanonical(canonical,candleAppearanceRef.current);
-        const afterRender=globalThis.performance?.now?.() ?? Date.now();
-        chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'patch',Math.max(0,beforeRender-patchStarted));
-        chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'renderer',Math.max(0,afterRender-beforeRender));
-        const lastPacketAt=chartPerformanceTelemetry.getLastPacketAt(deps.chartMarketKey);
-        const tickToPatch=lastPacketAt>0?Math.max(0,patchStarted-lastPacketAt):0;
-        const tickToRender=lastPacketAt>0?Math.max(0,afterRender-lastPacketAt):0;
-        chartPerformanceTelemetry.recordRenderUpdate(deps.chartMarketKey,tickToPatch,tickToRender,Math.max(0,afterRender-beforeRender));
-      });
-    }
+    if(data.length) chartUpdateScheduler.scheduleLatest('realtime-bar',renderLatest);
 
+    pendingBucketChanged = pendingBucketChanged || bucketChanged;
     const marketSequence = chartMarketStore.getSequence(deps.chartMarketKey);
-    computeScheduler.schedule({snapshot,bucketChanged},marketSequence);
+    computeScheduler.schedule(snapshot,marketSequence);
   };
 
   const hydrateHistory=(snapshot:ChartDataPlaneSnapshot)=>{
     computeScheduler.cancel();
+    pendingBucketChanged=false;
     candles.current=snapshot.candles;
     latestTick.current=snapshot.latestTick;
     dataRevisionRef.current=snapshot.revision;
