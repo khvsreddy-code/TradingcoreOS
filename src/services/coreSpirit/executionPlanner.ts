@@ -220,6 +220,7 @@ export function planCoreSpiritExecution(
     batches:[],
     eventTriggers:[],
     computeClasses:['scalar','fused','simd','worker','wasm','gpu'] as const,
+    dataGraph:{version:1,nodes:[],roots:[],minimumTimeframes:[]},
     multiSymbol:false,
     multiTimeframe:false,
     dataNative:false,
