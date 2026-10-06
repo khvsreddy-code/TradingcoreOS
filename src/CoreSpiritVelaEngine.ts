@@ -1,6 +1,6 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel';
-import type { InputValue } from '../vendor/vela/src/core/model/inputs';
-import type { IndicatorMeta } from '../vendor/vela/src/core/model/indicator';
+import type { InputValue } from './services/core/chart/velaNativeChartKernel';
+import type { IndicatorMeta } from './services/core/chart/velaNativeChartKernel';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
 import type { CoreSpiritObject } from './services/coreSpirit/types';
