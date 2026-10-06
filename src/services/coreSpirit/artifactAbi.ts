@@ -1,12 +1,10 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { serializeCoreSpiritIr } from './irContract';
 import { sha256HexSync, type CoreSpiritArtifactIdentity } from './artifactIdentity';
+import { CORE_SPIRIT_RUNTIME_ABI, CORE_SPIRIT_OPTIMIZER_ABI } from './VERSION';
 
 export const CORE_SPIRIT_ARTIFACT_MAGIC = 'CSPIRIT' as const;
 export const CORE_SPIRIT_ARTIFACT_ABI_VERSION = 2 as const;
-export const CORE_SPIRIT_RUNTIME_ABI = 5 as const;
-export const CORE_SPIRIT_OPTIMIZER_ABI = 3 as const;
-
 export const CORE_SPIRIT_EXECUTION_BACKENDS = [
   'browser-vm',
   'worker-vm',
