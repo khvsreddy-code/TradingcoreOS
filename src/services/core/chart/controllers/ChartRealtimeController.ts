@@ -6,6 +6,7 @@ import type { ChartUpdateScheduler } from '../chartUpdateScheduler';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { RealtimeRateScheduler } from '../realtimeRateScheduler';
 import { chartPerformanceTelemetry } from '../../../marketData/chartPerformanceTelemetry';
+import { chartMarketStore } from '../../../marketData/chartMarketStore';
 
 type Ref<T>={current:T};
 
@@ -53,7 +54,7 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
       const data = snapshot.candles;
       const live = data[data.length - 1];
       if (!snapshot.historyReady || !live) {
-        chartPerformanceTelemetry.recordCompute(deps.chartMarketKey, globalThis.performance?.now?.() ?? Date.now(), sequence);
+        chartPerformanceTelemetry.recordCompute(deps.chartMarketKey, 0, sequence);
         return;
       }
 
@@ -89,16 +90,14 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
         rendererController.applyRealtimeCanonical(canonical,candleAppearanceRef.current);
         const afterRender=globalThis.performance?.now?.() ?? Date.now();
         chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'renderer',Math.max(0,afterRender-beforeRender));
-        chartPerformanceTelemetry.recordRenderUpdate(
-          deps.chartMarketKey,
-          Math.max(0,patchStarted-beforeRender + (beforeRender-patchStarted)),
-          Math.max(0,afterRender-beforeRender),
-          Math.max(0,afterRender-beforeRender),
-        );
+        const lastPacketAt=chartPerformanceTelemetry.getLastPacketAt(deps.chartMarketKey);
+        const tickToPatch=lastPacketAt>0?Math.max(0,patchStarted-lastPacketAt):0;
+        const tickToRender=lastPacketAt>0?Math.max(0,afterRender-lastPacketAt):0;
+        chartPerformanceTelemetry.recordRenderUpdate(deps.chartMarketKey,tickToPatch,tickToRender,Math.max(0,afterRender-beforeRender));
       });
     }
 
-    const marketSequence = Math.max(lastComputeSequence + 1, snapshot.revision);
+    const marketSequence = chartMarketStore.getSequence(deps.chartMarketKey);
     computeScheduler.schedule({snapshot,bucketChanged},marketSequence);
   };
 
