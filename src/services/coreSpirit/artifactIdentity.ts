@@ -91,7 +91,7 @@ export function buildCoreSpiritArtifactIdentity(
   const semanticHash=sha256HexSync(`${normalizedHash}\n${semanticFingerprint}`);
   const programHash=sha256HexSync(`${ir.sourceId}\n${semanticHash}`);
   const irHash=sha256HexSync(serializeCoreSpiritIr(ir));
-  const artifactHash=sha256HexSync(`${ir.sourceId}\n${programHash}\n${irHash}\n${sourceHash}`);
+  const artifactHash=sha256HexSync(`${programHash}\n${irHash}\n5\n3`);
   return Object.freeze({
     version: CORE_SPIRIT_ARTIFACT_IDENTITY_VERSION,
     algorithm:'SHA-256',
