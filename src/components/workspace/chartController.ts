@@ -4,6 +4,7 @@ import { candleSeriesOptions, type CandleAppearance, volumeColor } from '../../s
 import { type ChartDataPoint } from '../../services/core/chart/chartDataModel';
 import { getCanonicalDataPlane, type CanonicalDataPlane, type CanonicalMarketView } from '../../services/core/data/canonicalDataPlane';
 import { PRODUCTION_CHART_BACKEND } from '../../services/core/chart/chartBackendPolicy';
+import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
 
 export type ChartRendererControllerBindings = {
   chart: IChartApi;
@@ -90,6 +91,7 @@ export class ChartController {
     b.candle.setData(candleRows);
     b.closeLine.setData(closeRows as any);
     b.volume.setData(volumeRows as any);
+    chartPerformanceTelemetry.recordFullSeriesRewrite(this.dataPlane?.timelineKey ?? 'workspace-chart');
   }
 
   /** Canonical forming-bar projection; only the final Vela update object is allocated. */
@@ -106,6 +108,7 @@ export class ChartController {
     this.lastHistory = null;
     this.lastHistoryFingerprint = '';
     b.candle.update({ time, open, high, low, close });
+    chartPerformanceTelemetry.recordFormingBarReplaceLast(this.dataPlane?.timelineKey ?? 'workspace-chart');
     if (Number.isFinite(volume) && volume > 0) b.volume.update({ time, value: volume, color: volumeColor(appearance, open, close) } as any);
   }
 
@@ -133,6 +136,7 @@ export class ChartController {
     b.candle.setData(times.map(x => ({ time: x.time as Time, open: x.open, high: x.high, low: x.low, close: x.close })));
     b.closeLine.setData(times.map(x => ({ time: x.time as Time, value: x.close })) as any);
     b.volume.setData(times.map(x => ({ time: x.time as Time, value: x.volume, color: volumeColor(appearance, x.open, x.close) })) as any);
+    chartPerformanceTelemetry.recordFullSeriesRewrite(this.dataPlane?.timelineKey ?? 'workspace-chart');
   }
 
 
