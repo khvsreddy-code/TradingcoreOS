@@ -70,15 +70,15 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
      const active=indicators.filter(x=>x.enabled);
      if(oscillatorKinds(active)&&oscHost.current&&!oscChart.current){const p=getThemePalette(getCurrentTheme());oscChart.current=createVelaNativeChart(oscHost.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:p.surface2},textColor:p.muted,fontFamily:'JetBrains Mono, monospace',fontSize:9},grid:{vertLines:{color:p.grid},horzLines:{color:p.grid}},rightPriceScale:{borderColor:p.axis},timeScale:{visible:false}})};
      const getSeries=(key:string,target:IChartApi,kind:'line'|'histogram',color:string,width=1,style:0|1|2=0)=>{
-       const existing=workerSeriesMap.current.get(key);
+       const existing=workerSeriesMap.get(key);
        if(existing?.[0]){try{(existing[0] as any).applyOptions({color,lineWidth:width,lineStyle:style});}catch{}return existing[0];}
        const created=kind==='histogram'?target.addSeries(HistogramSeries,{color,priceFormat:{type:'price'},priceScaleId:'right'}):line(target,color,width,style);
-       workerSeriesMap.current.set(key,[created as any]); return created as any;
+       workerSeriesMap.set(key,[created as any]); return created as any;
      };
      const getGroup=(id:string,count:number,target:IChartApi,colorsFor:string[],width=1,style:0|1|2=0)=>{
-       let group=workerSeriesMap.current.get(id);
+       let group=workerSeriesMap.get(id);
        if(group?.length===count){group.forEach((g,i)=>{try{(g as any).applyOptions({color:colorsFor[i],lineWidth:width,lineStyle:style});}catch{}});return group;}
-       group=colorsFor.slice(0,count).map(color=>line(target,color,width,style)); workerSeriesMap.current.set(id,group); return group;
+       group=colorsFor.slice(0,count).map(color=>line(target,color,width,style)); workerSeriesMap.set(id,group); return group;
      };
      const updateOrSet=(seriesApi:any,points:any[],incremental:boolean)=>{if(!seriesApi||!points.length)return; if(incremental)seriesApi.update(points[points.length-1] as any); else seriesApi.setData(points as any);};
      const updateWhitespace=(seriesApi:any,time:any)=>{try{seriesApi.update({time} as any);}catch{}};
@@ -88,11 +88,11 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        const incremental=result.incremental===true&&result.incrementalMode==='update'; const opacity=cfg.display?.opacity; const primary=colorWithOpacity(cfg.color,opacity,colors[result.kind]||'#94a3b8'); const signalColor=colorWithOpacity(cfg.signalColor,opacity,'#c084fc'); const upperColor=colorWithOpacity(cfg.upperColor,opacity,primary); const lowerColor=colorWithOpacity(cfg.lowerColor,opacity,primary);
        const targetOsc=['RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI',...advancedOscillatorKinds].includes(result.kind);
        const target=targetOsc?oscChart.current:chart.current; if(!target)continue;
-       if(result.kind==='MACD'){const [s1,s2,h]=(()=>{const c1=primary||'#38bdf8',c2=signalColor,w=cfg.lineWidth||1,ls=cfg.lineStyle||0;let g=workerSeriesMap.current.get(result.id);if(!g||g.length!==3){g=[line(target,c1,w,ls),line(target,c2,w,ls),target.addSeries(HistogramSeries,{priceFormat:{type:'price'},priceScaleId:'right'}) as any];workerSeriesMap.current.set(result.id,g);}else{try{(g[0] as any).applyOptions({color:c1,lineWidth:w,lineStyle:ls});(g[1] as any).applyOptions({color:c2,lineWidth:w,lineStyle:ls});}catch{}}return g as any[];})();const rows=Array.isArray(result.data)?result.data:[];const macdPts=safeNamedPoints(rows,'macd');const signalPts=safeNamedPoints(rows,'signal');const histPts=rows.map((x:any)=>({time:x?.time as Time,value:finiteNumber(x?.histogram),color:Number(x?.histogram)>=0?colorWithOpacity(cfg.color,Math.min(1,(opacity??1)*.35),'#3b82f6'):colorWithOpacity(cfg.signalColor,Math.min(1,(opacity??1)*.35),'#ef4444')})).filter((x:any)=>x.time!=null&&x.value!=null);updateOrSet(s1,macdPts,incremental);updateOrSet(s2,signalPts,incremental);updateOrSet(h,histPts,incremental);continue;}
+       if(result.kind==='MACD'){const [s1,s2,h]=(()=>{const c1=primary||'#38bdf8',c2=signalColor,w=cfg.lineWidth||1,ls=cfg.lineStyle||0;let g=workerSeriesMap.get(result.id);if(!g||g.length!==3){g=[line(target,c1,w,ls),line(target,c2,w,ls),target.addSeries(HistogramSeries,{priceFormat:{type:'price'},priceScaleId:'right'}) as any];workerSeriesMap.set(result.id,g);}else{try{(g[0] as any).applyOptions({color:c1,lineWidth:w,lineStyle:ls});(g[1] as any).applyOptions({color:c2,lineWidth:w,lineStyle:ls});}catch{}}return g as any[];})();const rows=Array.isArray(result.data)?result.data:[];const macdPts=safeNamedPoints(rows,'macd');const signalPts=safeNamedPoints(rows,'signal');const histPts=rows.map((x:any)=>({time:x?.time as Time,value:finiteNumber(x?.histogram),color:Number(x?.histogram)>=0?colorWithOpacity(cfg.color,Math.min(1,(opacity??1)*.35),'#3b82f6'):colorWithOpacity(cfg.signalColor,Math.min(1,(opacity??1)*.35),'#ef4444')})).filter((x:any)=>x.time!=null&&x.value!=null);updateOrSet(s1,macdPts,incremental);updateOrSet(s2,signalPts,incremental);updateOrSet(h,histPts,incremental);continue;}
        if(result.kind==='Stochastic'){const g=getGroup(result.id,2,target,[primary||'#38bdf8',signalColor||'#f59e0b'],cfg.lineWidth||1,cfg.lineStyle||0);updateOrSet(g[0],safeNamedPoints(result.data,'k'),incremental);updateOrSet(g[1],safeNamedPoints(result.data,'d'),incremental);continue;}
-       if(result.kind==='Bollinger Bands'||result.kind==='Keltner Channels'||result.kind==='Donchian Channels'){const colorsFor=[upperColor,colorWithOpacity(cfg.signalColor,opacity,'#64748b'),lowerColor];const g=getGroup(result.id,3,target,colorsFor,cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<3;i++){const key=['upper','middle','lower'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}try{indicatorFillMap.current.set(cfg.id,[chart.current?.addFillBetweenSeries(g[0] as any,g[2] as any,{id:`indicator-fill:${cfg.id}`,enabled:false})].filter(Boolean));}catch{}continue;}
+       if(result.kind==='Bollinger Bands'||result.kind==='Keltner Channels'||result.kind==='Donchian Channels'){const colorsFor=[upperColor,colorWithOpacity(cfg.signalColor,opacity,'#64748b'),lowerColor];const g=getGroup(result.id,3,target,colorsFor,cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<3;i++){const key=['upper','middle','lower'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}try{indicatorFillMap.set(cfg.id,[chart.current?.addFillBetweenSeries(g[0] as any,g[2] as any,{id:`indicator-fill:${cfg.id}`,enabled:false})].filter(Boolean));}catch{}continue;}
        if(result.kind==='Supertrend'){const g=getGroup(result.id,2,target,[primary||'#3b82f6',signalColor||'#ef4444'],cfg.lineWidth||2,cfg.lineStyle||0);if(incremental){const point=result.data[result.data.length-1];const t=point?.time as Time;if(point?.direction===1){g[0].update({time:t,value:finiteNumber(point.value)} as any);updateWhitespace(g[1],t);}else{updateWhitespace(g[0],t);g[1].update({time:t,value:finiteNumber(point.value)} as any);} }else{g[0].setData(safeLinePoints(result.data,'value').filter((x:any,i:number)=>Array.isArray(result.data)&&result.data[i]?.direction===1) as any);g[1].setData(safeLinePoints(result.data,'value').filter((x:any,i:number)=>Array.isArray(result.data)&&result.data[i]?.direction===-1) as any);}continue;}
-       if(result.kind==='Ichimoku Cloud'){const g=getGroup(result.id,4,target,[primary||'#38bdf8',signalColor||'#f59e0b',upperColor||'#3b82f6',lowerColor||'#ef4444'],cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<4;i++){const key=['tenkan','kijun','spanA','spanB'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}try{indicatorFillMap.current.set(cfg.id,[chart.current?.addFillBetweenSeries(g[2] as any,g[3] as any,{id:`indicator-fill:${cfg.id}`,enabled:false})].filter(Boolean));}catch{}continue;}
+       if(result.kind==='Ichimoku Cloud'){const g=getGroup(result.id,4,target,[primary||'#38bdf8',signalColor||'#f59e0b',upperColor||'#3b82f6',lowerColor||'#ef4444'],cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<4;i++){const key=['tenkan','kijun','spanA','spanB'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}try{indicatorFillMap.set(cfg.id,[chart.current?.addFillBetweenSeries(g[2] as any,g[3] as any,{id:`indicator-fill:${cfg.id}`,enabled:false})].filter(Boolean));}catch{}continue;}
        if(result.kind==='Trend Target Ribbon'){const g=getGroup(result.id,5,target,[primary,'#a78bfa',signalColor,'#3b82f6','#e879f9'],cfg.lineWidth||1,cfg.lineStyle||0);for(let i=0;i<5;i++){const key=['fast','mid','slow','Target+','Target-'][i];updateOrSet(g[i],safeNamedPoints(result.data,key),incremental);}continue;}
        const s=getSeries(result.id,target,'line',primary,cfg.lineWidth||2,cfg.lineStyle||0);updateOrSet(s,safeLinePoints(result.data,'value'),incremental);
      }
@@ -103,22 +103,22 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
      for(const cfg of indicators){
        const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
        const options={color:appearance.line.color,lineWidth:appearance.line.width,lineStyle:appearance.line.style==='solid'?0:appearance.line.style==='dashed'?1:2,opacity:appearance.line.opacity,gradient:appearance.line.gradient,gradientColor:appearance.line.gradientColor,glow:appearance.line.glow,glowStrength:appearance.line.glowStrength,visible:appearance.visible,lastValueVisible:cfg.display?.showValues!==false};
-       const group=indicatorSeriesMap.current.get(cfg.id)||[];
+       const group=indicatorSeriesMap.get(cfg.id)||[];
        const isLevelIndicator=LEVEL_APPEARANCE_KINDS.has(String(cfg.kind));
        for(const series of group){try{(series as any).applyOptions(options); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}}
-       const worker=workerSeriesMap.current.get(cfg.id)||[];
+       const worker=workerSeriesMap.get(cfg.id)||[];
        for(const series of worker){try{(series as any).applyOptions({...options, ...(isLevelIndicator?{visible:appearance.visible&&appearance.levels.enabled}: {})});}catch{}}
      }
      for(const cfg of indicators){
        const appearance=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
        const targetPaneId=appearance.pane.mode==='separate'?`tco-indicator-pane:${cfg.id}`:undefined;
-       const group=indicatorSeriesMap.current.get(cfg.id)||[];
+       const group=indicatorSeriesMap.get(cfg.id)||[];
        for(const series of group){try{(series as any).setPaneAppearance(appearance.pane,targetPaneId);}catch{}}
-       const fills=indicatorFillMap.current.get(cfg.id)||[];
+       const fills=indicatorFillMap.get(cfg.id)||[];
        for(const handle of fills){try{handle.setOptions({enabled:appearance.visible&&appearance.fill.enabled,upperColor:appearance.fill.upperColor,lowerColor:appearance.fill.lowerColor,opacity:appearance.fill.opacity,gradient:appearance.fill.gradient,conditional:appearance.fill.conditional,bullishColor:appearance.fill.bullishColor,bearishColor:appearance.fill.bearishColor});}catch{}}
      }
      const markerStyles:any[]=[];
-     for(const [indicatorId,rawMarkers] of markerDataByIndicator.current){
+     for(const [indicatorId,rawMarkers] of markerDataByIndicator){
        const cfg=indicators.find(x=>x.id===indicatorId); if(!cfg)continue;
        const a=resolveIndicatorAppearance(cfg as Record<string,unknown>,{timeframe,visibleBars});
        if(!a.marker.enabled||!a.visible)continue;
@@ -130,8 +130,8 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
   const renderStudies=(data:HistoricalCandle[], preserveWorkerSeries=false)=>{
      clearChartMarkers();
   
-     indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];indicatorSeriesMap.current.clear();markerDataByIndicator.current.clear();indicatorFillMap.current.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.current.clear();oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
-     if(!preserveWorkerSeries){workerSeriesMap.current.forEach(group=>group.forEach(s=>{try{chart.current?.removeSeries(s as any)}catch{} try{oscChart.current?.removeSeries(s as any)}catch{}})); workerSeriesMap.current.clear();}
+     indicatorSeries.current.forEach(s=>{try{chart.current?.removeSeries(s)}catch{}});indicatorSeries.current=[];indicatorSeriesMap.clear();markerDataByIndicator.clear();indicatorFillMap.forEach(handles=>handles.forEach(h=>{try{h.remove()}catch{}}));indicatorFillMap.clear();oscSeries.current.forEach(s=>{try{oscChart.current?.removeSeries(s as any)}catch{}});oscSeries.current=[];
+     if(!preserveWorkerSeries){workerSeriesMap.forEach(group=>group.forEach(s=>{try{chart.current?.removeSeries(s as any)}catch{} try{oscChart.current?.removeSeries(s as any)}catch{}})); workerSeriesMap.clear();}
      const active=indicators.filter(x=>x.enabled); const needsOsc=oscillatorKinds(active); const chartMarkers:any[]=[];
      if(needsOsc&&oscHost.current&&!oscChart.current){const p=getThemePalette(getCurrentTheme());oscChart.current=createVelaNativeChart(oscHost.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:p.surface2},textColor:p.muted,fontFamily:'JetBrains Mono, monospace',fontSize:9},grid:{vertLines:{color:p.grid},horzLines:{color:p.grid}},rightPriceScale:{borderColor:p.axis},timeScale:{visible:false}})};
      if(!needsOsc&&oscChart.current){try{oscChart.current.remove()}catch{}oscChart.current=undefined;}
