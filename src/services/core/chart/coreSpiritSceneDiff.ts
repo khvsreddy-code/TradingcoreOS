@@ -24,9 +24,14 @@ function color(value: unknown, fallback: string): string {
     return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
 function pane(output: CoreSpiritObject): string {
-    const area = output.visual?.area;
+    const visual = 'visual' in output ? output.visual : undefined;
+    const area = visual?.area;
     return area?.kind === 'chart' && area.area !== 'price' ? 'study' : 'price';
 }
+function isPriceOverlay(output: CoreSpiritObject): boolean {
+    return pane(output) === 'price';
+}
+type SceneDiffEmission = any;
 function removed(output: CoreSpiritObject): boolean {
     return output.metadata?.removed === true;
 }
@@ -66,7 +71,7 @@ function label(output: Extract<CoreSpiritObject, { kind: 'label' | 'shape' }>): 
         style: output.shape === 'triangleUp' ? 'triangleup' : output.shape === 'triangleDown' ? 'triangledown' : output.shape === 'diamond' ? 'diamond' : output.shape === 'square' ? 'square' : 'circle',
         color: color(output.style?.color, '#9b8aff'), textColor: color(output.style?.textColor, '#fff'),
         size: 'small', textAlign: 'center', ...(output.style?.text ? { text: output.style.text } : {}),
-        overlay: output.visual?.pane === 'price',
+        overlay: isPriceOverlay(output),
     };
     return {
         id: output.id, paneId: pane(output), xloc: 'bar_time', x: Number(output.time), y: Number(output.price),
@@ -75,7 +80,7 @@ function label(output: Extract<CoreSpiritObject, { kind: 'label' | 'shape' }>): 
         color: color(output.style?.background, '#9b8aff'), textColor: color(output.style?.color, '#fff'), text: output.text,
         size: 'small', textAlign: output.style?.textAlign === 'left' ? 'left' : output.style?.textAlign === 'right' ? 'right' : 'center',
         bold: output.style?.fontWeight === 'bold', italic: output.style?.fontStyle === 'italic',
-        overlay: output.visual?.pane === 'price',
+        overlay: isPriceOverlay(output),
     };
 }
 function polyline(output: Extract<CoreSpiritObject, { kind: 'polyline' }>): TcoDrawingPolyline {
@@ -84,7 +89,7 @@ function polyline(output: Extract<CoreSpiritObject, { kind: 'polyline' }>): TcoD
         points: output.points.map(point => ({ xloc: 'bar_time', x: Number(point.time), price: Number(point.price) })),
         curved: false, closed: false, lineColor: color(output.style?.color, '#9b8aff'), fillColor: output.style?.fillColor,
         lineWidth: Math.max(1, Number(output.style?.lineWidth ?? 1)), lineStyle: style(output.style?.lineStyle),
-        arrowLeft: false, arrowRight: false, overlay: output.visual?.pane === 'price',
+        arrowLeft: false, arrowRight: false, overlay: isPriceOverlay(output),
     };
 }
 
@@ -187,7 +192,7 @@ export class CoreSpiritSceneDiff {
         return out;
     }
 
-    private applySeries(output: Extract<CoreSpiritObject, { kind: 'series' }>, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
+    private applySeries(output: Extract<CoreSpiritObject, { kind: 'series' }>, emit: boolean): SceneDiffEmission {
         const name = String(output.seriesId || output.name || 'series');
         const seriesId = `${this.indicatorId}:series:${name}`;
         const list = this.points.get(name) ?? [];
@@ -211,7 +216,7 @@ export class CoreSpiritSceneDiff {
         } };
         const schema = !wasMounted ? { schema: {
             kind: 'schema' as const, indicatorId: this.indicatorId,
-            added: [{ id: seriesId, title: name, paneId: 'price', kind: 'line' as const, points: [], style: { color: '#9b8aff', width: 2, lineStyle: 'solid' as const }, visible: true, overlay: true } as SeriesSpec],
+            added: [{ id: seriesId, title: name, paneId: 'price', kind: 'line' as const, points: [], style: { color: '#9b8aff', width: 2, lineStyle: 'solid' as const }, visible: true, overlay: true } as any],
             removed: [], changed: [],
         } } : {};
         if (exists && lo === list.length - 1) return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'replace-last' } };
@@ -219,7 +224,7 @@ export class CoreSpiritSceneDiff {
         return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'replace-range', start: lo, remove: exists ? 1 : 0 } };
     }
 
-    private applyMarker(output: Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
+    private applyMarker(output: Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>, emit: boolean): SceneDiffEmission {
         const key = markerKey(output);
         const before = [...this.markers.entries()].sort((a, b) => Number(a[1].time) - Number(b[1].time));
         if (removed(output)) {
@@ -238,8 +243,8 @@ export class CoreSpiritSceneDiff {
         return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, idx), remove: 1 } };
     }
 
-    private applyRect(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
-        const batchId = `${this.indicatorId}:zones:${pane(output)}:${output.visual?.pane === 'price' ? 'overlay' : 'own'}`;
+    private applyRect(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, emit: boolean): SceneDiffEmission {
+        const batchId = `${this.indicatorId}:zones:${pane(output)}:${isPriceOverlay(output) ? 'overlay' : 'own'}`;
         const target = this.rectBatches.get(batchId) ?? [];
         const value: TcoRectInstance = {
             id: output.id ?? `${batchId}:${target.length}`,
@@ -256,22 +261,22 @@ export class CoreSpiritSceneDiff {
             if (idx < 0) return null;
             target.splice(idx, 1);
             this.rectBatches.set(batchId, target);
-            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
-            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [], start: idx, remove: 1 } } : null;
+            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) });
+            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'replace-range', values: [], start: idx, remove: 1 } } : null;
         }
         if (idx < 0) {
             target.push(value);
             this.rectBatches.set(batchId, target);
-            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
-            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'append', values: [value] } } : null;
+            this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) });
+            return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'append', values: [value] } } : null;
         }
         target[idx] = value;
         this.rectBatches.set(batchId, target);
-        this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: output.visual?.pane === 'price' });
-        return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: output.visual?.pane === 'price', op: 'replace-range', values: [value], start: idx, remove: 1 } } : null;
+        this.rectBatchMeta.set(batchId, { paneId: pane(output), overlay: isPriceOverlay(output) });
+        return emit ? { instanceDelta: { batchId, paneId: pane(output), overlay: isPriceOverlay(output), op: 'replace-range', values: [value], start: idx, remove: 1 } } : null;
     }
 
-    private applyCollection(name: CollectionName, value: Identified, emit: boolean, remove = false): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
+    private applyCollection(name: CollectionName, value: Identified, emit: boolean, remove = false): SceneDiffEmission {
         const target = this.collections[name];
         const idx = idIndex(target, value.id);
         if (remove) {
@@ -284,7 +289,7 @@ export class CoreSpiritSceneDiff {
         return emit ? { collection: { collection: name, values: [value], op: 'replace-range', start: idx, remove: 1 } } : null;
     }
 
-    private applyOutput(output: CoreSpiritObject, emit: boolean): ReturnType<CoreSpiritSceneDiff['applyOutput']> {
+    private applyOutput(output: CoreSpiritObject, emit: boolean): SceneDiffEmission {
         if (output.kind === 'series') return this.applySeries(output, emit);
         if (output.kind === 'marker' || output.kind === 'signal') return this.applyMarker(output, emit);
         if (output.kind === 'hline') {
@@ -306,7 +311,7 @@ export class CoreSpiritSceneDiff {
             case 'background': {
                 const start = Number(output.time);
                 const end = Number(output.metadata?.endTime ?? start + 1);
-                const value: TcoBackground = { id: output.id, paneId: pane(output), from: start, to: Math.max(start + 1, end), color: output.color, overlay: output.visual?.pane === 'price' };
+                const value: TcoBackground = { id: output.id, paneId: pane(output), from: start, to: Math.max(start + 1, end), color: output.color, overlay: isPriceOverlay(output) };
                 return this.applyCollection('backgrounds', value, emit, removed(output));
             }
             default: return null;
