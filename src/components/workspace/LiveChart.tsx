@@ -299,4 +299,5 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       />
     </>}
   />;
+  return <Profiler id={\`tco-chart-\${chartDatasetKey}\`} onRender={() => chartPerformanceTelemetry.recordReactCommit(chartDatasetKey)}>{chartUi}</Profiler>;
 });
