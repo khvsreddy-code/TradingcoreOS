@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { CoreSpiritExecutionVM } from '../src/services/coreSpirit/executionVM.ts';
 import { CoreSpiritOutputCollector } from '../src/services/coreSpirit/outputCollector.ts';
 import { CoreSpiritFusedSeriesCursor } from '../src/services/coreSpirit/seriesVector.ts';
-import { CoreSpiritWasmBackend, type CoreSpiritWasmKernelManifest } from '../src/services/coreSpirit/wasmBackend.ts';
+import { CoreSpiritWasmBackend } from '../src/services/coreSpirit/wasmBackend.ts';
 
 const DEFAULT_SIZES = [50_000, 500_000, 5_000_000];
 
