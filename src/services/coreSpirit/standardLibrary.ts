@@ -10,7 +10,8 @@ export type CoreSpiritBuiltin = {
   capability?: 'alert' | 'webhook' | 'market' | 'ai';
   emitKind?: CoreSpiritIrEmitKind;
   category: 'series' | 'math' | 'condition' | 'market' | 'state' | 'output' | 'extension';
-  seriesExecution?: Readonly<{ vectorizable: boolean; fusible: boolean; strategy: 'elementwise' | 'rolling' | 'stateful' }>;\n  temporalSafety?: Readonly<{ causality:'causal'|'noncausal'|'future-dependent'|'repainting'|'unknown'; lookahead:boolean; realtimeSafe:boolean }>;
+  seriesExecution?: Readonly<{ vectorizable: boolean; fusible: boolean; strategy: 'elementwise' | 'rolling' | 'stateful' }>;
+  temporalSafety?: Readonly<{ causality:'causal'|'noncausal'|'future-dependent'|'repainting'|'unknown'; lookahead:boolean; realtimeSafe:boolean }>;
 };
 
 export type CoreSpiritLibraryGroupId =
