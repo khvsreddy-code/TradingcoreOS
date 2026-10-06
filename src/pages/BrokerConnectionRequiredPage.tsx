@@ -24,6 +24,7 @@ import {
 import { BROKERS_CONFIG, BrokerItem } from '../constants/brokers';
 import { tradingCoreRuntime } from '../services/runtime/TradingCoreRuntime';
 import { BrokerOAuthService } from '../services/oauth/BrokerOAuthService';
+import { PopupManager } from '../services/oauth/PopupManager';
 import { useAuth } from '../auth/hooks/useAuth';
 
 interface BrokerConnectionRequiredPageProps {
@@ -99,6 +100,10 @@ export const BrokerConnectionRequiredPage: React.FC<BrokerConnectionRequiredPage
         const authBrokerId = event.data.broker || event.data.brokerId;
         setIsConnecting(true);
         setError(null);
+        // The callback normally closes itself. Close the parent-owned popup
+        // handle as a safety net so the browser can never leave the OAuth
+        // window sitting on a TradingCore route.
+        PopupManager.closePopup();
         try {
           // The popup callback already exchanged and encrypted the broker token.
           // Re-running five broker verification calls here was the main source of
