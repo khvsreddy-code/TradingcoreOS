@@ -324,6 +324,15 @@ export class CoreSpiritChartOutputController {
 
     const previousEnd = previous.length - suffix - 1;
     const currentEnd = current.length - suffix - 1;
+
+    // The dominant live-chart case is a forming-bar mutation: same cardinality,
+    // same historical prefix, only the last point changed. Keep this on the
+    // O(1) replace-last path instead of sending a range patch or rebuilding the series.
+    if (previous.length === current.length && current.length > 0 && prefix === current.length - 1 && suffix === 0) {
+      patchable.patch?.({type:'replaceLast', values:current.slice(-1)});
+      if (!patchable.patch) series.setData(current as any);
+      return;
+    }
     if (prefix === previous.length && current.length > previous.length) {
       patchable.patch?.({type:'append', values:current.slice(previous.length)});
       if (!patchable.patch) series.setData(current as any);
