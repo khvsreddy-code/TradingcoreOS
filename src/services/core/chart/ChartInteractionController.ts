@@ -16,6 +16,7 @@ export type ChartInteractionControllerDeps={
   candles:Ref<HistoricalCandle[]>;
   chartStore:ChartStore;
   lifecycle:ChartLifecycle;
+  generation:number;
   drawingController:any;
   indicatorController:any;
   dataController:{loadOlderHistory:(visibleBars?:number)=>Promise<unknown>};
@@ -139,7 +140,7 @@ export function createChartInteractionController(deps:ChartInteractionController
 
   const resizeObserver=typeof ResizeObserver!=='undefined'&&deps.host.current
     ? new ResizeObserver(()=>{
-        if(!deps.lifecycle.isCurrent())return;
+        if(!deps.lifecycle.isCurrent(deps.generation))return;
         try{
           const r=deps.host.current!.getBoundingClientRect();
           deps.rendererController.resize(r.width,r.height);
