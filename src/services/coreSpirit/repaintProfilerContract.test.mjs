@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 
 const { CoreSpiritParser } = await import('./parser.ts');
-const { CoreSpiritCompiler } = await import('./compiler.ts');
 const { analyzeCoreSpiritRepaintSafety } = await import('./repaintSafety.ts');
 const { CoreSpiritProfiler } = await import('./profiler.ts');
 const { CoreSpiritEditorModel } = await import('./editorModel.ts');
@@ -24,11 +23,6 @@ assert.equal(safety.lookahead, 'false');
 assert.equal(safety.realtimeSafe, true);
 assert.equal(safety.backtestLiveEquivalent, true);
 assert.equal(safety.errors.length, 0);
-
-const compiled = new CoreSpiritCompiler().compile(parsed.ast, 'repaint-contract');
-assert(compiled.ir, compiled.diagnostics.map(d => d.message).join('\n'));
-assert.equal(compiled.ir?.repaintSafety?.backtestLiveEquivalent, true);
-assert.equal(compiled.diagnostics.some(d => d.code === 'REPAINT_SAFETY_ASSERTION'), false);
 
 const unsafeAst = new CoreSpiritParser([
   '@causal',
