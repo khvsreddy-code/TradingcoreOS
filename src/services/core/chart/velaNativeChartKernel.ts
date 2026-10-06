@@ -214,7 +214,7 @@ export class VelaNativeSeriesKernel<T = string> {
 
   patch(patch: VelaNativeSeriesPatch): void {
     if (this.removed || this.kind === 'candle') return;
-    const values = patch.values.map((p) => ({ time: msFromTime(p.time), value: p.value == null ? null : Number(p.value), ...(p.color ? { color:String(p.color) } : {}) }))
+    const values = (patch.values ?? []).map((p) => ({ time: msFromTime(p.time), value: p.value == null ? null : Number(p.value), ...(p.color ? { color:String(p.color) } : {}) }))
       .filter((p) => Number.isFinite(p.time)) as SeriesPoint[];
     if (patch.type === 'append') {
       this.patchSeries('append', values);
