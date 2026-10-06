@@ -1,108 +1,266 @@
 import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritObject } from './types';
+import type { CoreSpiritExecutableArtifact } from './artifact';
+import { validateExecutableArtifact } from './artifact';
 import { isRecord } from '../boundary/brokerApiValidation';
 import { requireCoreSpiritOutputs } from './boundaryValidation';
+import {
+  CoreSpiritSharedMarketBuffer,
+  type CoreSpiritSharedMarketDescriptor,
+} from './sharedMarketBuffer';
 
-export type CoreSpiritWorkerRunResult = { outputs: CoreSpiritObject[]; diagnostics: string[]; state?: unknown };
-type WorkerJob = { source:string; sourceId:string; bars:CoreSpiritMarketBar[]; resolve:(value:CoreSpiritWorkerRunResult)=>void; reject:(reason:unknown)=>void; priority:0|1|2|3|4; };
+export type CoreSpiritWorkerRunResult = {
+  outputs: CoreSpiritObject[];
+  diagnostics: string[];
+  state?: unknown;
+};
 
-type WorkerSlot = { worker: Worker; busy: boolean; generation:number; job?: WorkerJob };
+type DirtyRange = { from:number; to:number };
+
+type WorkerJob = {
+  artifact:CoreSpiritExecutableArtifact;
+  sourceId:string;
+  contextKey:string;
+  bars:CoreSpiritMarketBar[];
+  datasetVersion:number;
+  dirtyRange?:DirtyRange;
+  resolve:(value:CoreSpiritWorkerRunResult)=>void;
+  reject:(reason:unknown)=>void;
+  priority:0|1|2|3|4;
+};
+
+type WorkerSlot = {
+  worker:Worker;
+  busy:boolean;
+  generation:number;
+  contexts:Set<string>;
+  job?:WorkerJob;
+};
+
+type WorkerRunEnvelope = {
+  type:'run';
+  requestId:string;
+  artifactId:string;
+  contextKey:string;
+  datasetVersion:number;
+  dirtyFrom:number;
+  dirtyTo:number;
+  mode:'historical'|'incremental';
+  sharedMarket?:CoreSpiritSharedMarketDescriptor;
+  bars?:CoreSpiritMarketBar[];
+};
 
 function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
   if (!isRecord(value) || value.type !== 'result') throw new Error('Invalid CoreSpirit worker result envelope');
-  const diagnostics = Array.isArray(value.diagnostics) && value.diagnostics.every(item => typeof item === 'string') ? value.diagnostics : [];
-  return { outputs: requireCoreSpiritOutputs(value.outputs ?? []), diagnostics, state: value.state };
+  const diagnostics = Array.isArray(value.diagnostics) && value.diagnostics.every(item => typeof item === 'string')
+    ? value.diagnostics
+    : [];
+  return {
+    outputs: requireCoreSpiritOutputs(value.outputs ?? []),
+    diagnostics,
+    state: value.state,
+  };
 }
 
-/** Small reusable worker pool. Workers are long-lived so CoreSpirit runs avoid worker creation cost. */
+/**
+ * Persistent CoreSpirit worker pool.
+ *
+ * A worker owns one or more durable execution contexts. The first run installs
+ * the compiled executable artifact; later runs address it by artifactId and
+ * mutate only the shared market dataset + dirty range.
+ */
 export class CoreSpiritWorkerPool {
   private readonly slots: WorkerSlot[] = [];
   private readonly queue: WorkerJob[] = [];
   private queueCursor = 0;
   private disposed = false;
-  private readonly maxWorkers: number;
+  private readonly maxWorkers:number;
+  private readonly contextSlots = new Map<string,WorkerSlot>();
+  private readonly sharedBuffers = new Map<string,CoreSpiritSharedMarketBuffer>();
 
-  constructor(maxWorkers?: number) {
-    const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 2;
+  constructor(maxWorkers?:number) {
+    const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
+      ? navigator.hardwareConcurrency
+      : 2;
     this.maxWorkers = Math.max(1, Math.min(maxWorkers ?? 2, Math.max(1, hardware - 1)));
   }
 
-  run(source: string, bars: CoreSpiritMarketBar[], sourceId = 'coreSpirit'): Promise<CoreSpiritWorkerRunResult> {
-    if (this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
-    if (typeof Worker === 'undefined') return this.runFallback(source, bars, sourceId);
-    return new Promise((resolve, reject) => {
-      this.queue.push({ source, sourceId, bars, resolve, reject, priority: sourceId.includes('chart') ? 1 : 3 });
+  run(
+    source:string,
+    bars:CoreSpiritMarketBar[],
+    sourceId='coreSpirit',
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange},
+  ):Promise<CoreSpiritWorkerRunResult> {
+    return this.runArtifact(
+      undefined,
+      source,
+      bars,
+      sourceId,
+      options,
+    );
+  }
+
+  runArtifact(
+    artifact:CoreSpiritExecutableArtifact|undefined,
+    source:string|undefined,
+    bars:CoreSpiritMarketBar[],
+    sourceId='coreSpirit',
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange},
+  ):Promise<CoreSpiritWorkerRunResult> {
+    if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
+
+    return new Promise((resolve,reject)=>{
+      const contextKey=options?.contextKey || sourceId;
+      this.queue.push({
+        artifact:artifact as CoreSpiritExecutableArtifact,
+        source:source || '',
+        sourceId,
+        contextKey,
+        bars,
+        datasetVersion:Math.max(1,Math.floor(options?.datasetVersion || 1)),
+        dirtyRange:options?.dirtyRange,
+        resolve,
+        reject,
+        priority:sourceId.includes('chart') ? 1 : 3,
+      });
       this.queue.sort((a,b)=>a.priority-b.priority);
       this.dispatch();
     });
   }
 
-  dispose(): void {
-    this.disposed = true;
-    for (const slot of this.slots.splice(0)) {
-      try { slot.job?.reject(new Error('CoreSpirit worker pool disposed')); } catch {}
-      try { slot.worker.terminate(); } catch {}
+  dispose():void {
+    this.disposed=true;
+    for(const slot of this.slots.splice(0)){
+      try{slot.job?.reject(new Error('CoreSpirit worker pool disposed'));}catch{}
+      try{slot.worker.terminate();}catch{}
     }
-    for (let i = this.queueCursor; i < this.queue.length; i++) this.queue[i].reject(new Error('CoreSpirit worker pool disposed'));
-    this.queue.length = 0;
-    this.queueCursor = 0;
+    for(let i=this.queueCursor;i<this.queue.length;i++) this.queue[i].reject(new Error('CoreSpirit worker pool disposed'));
+    this.queue.length=0;
+    this.queueCursor=0;
+    this.contextSlots.clear();
+    this.sharedBuffers.clear();
   }
 
-  private dispatch(): void {
-    if (this.disposed) return;
-    while (this.queueCursor < this.queue.length) {
-      let slot = this.slots.find(candidate => !candidate.busy);
-      if (!slot && this.slots.length < this.maxWorkers) slot = this.createSlot();
-      if (!slot) return;
-      const job = this.queue[this.queueCursor++];
-      this.attachJob(slot, job);
-      if (this.queueCursor === this.queue.length) { this.queue.length = 0; this.queueCursor = 0; }
+  private dispatch():void {
+    if(this.disposed) return;
+
+    while(this.queueCursor<this.queue.length){
+      const job=this.queue[this.queueCursor]!;
+      let slot=this.contextSlots.get(job.contextKey);
+
+      if(slot && slot.busy) return;
+      if(!slot){
+        slot=this.slots.find(candidate=>!candidate.busy);
+        if(!slot && this.slots.length<this.maxWorkers) slot=this.createSlot();
+        if(!slot) return;
+        this.contextSlots.set(job.contextKey,slot);
+        slot.contexts.add(job.contextKey);
+      }
+
+      this.queueCursor+=1;
+      this.attachJob(slot,job);
+      if(this.queueCursor===this.queue.length){
+        this.queue.length=0;
+        this.queueCursor=0;
+      }
     }
   }
 
-  private createSlot(): WorkerSlot {
-    const worker = new Worker(new URL('./coreSpirit.worker.ts', import.meta.url), { type:'module' });
-    const slot: WorkerSlot = { worker, busy:false, generation:0 };
+  private createSlot():WorkerSlot {
+    const worker=new Worker(new URL('./coreSpirit.worker.ts',import.meta.url),{type:'module'});
+    const slot:WorkerSlot={worker,busy:false,generation:0,contexts:new Set()};
     this.slots.push(slot);
     return slot;
   }
 
-  private attachJob(slot: WorkerSlot, job: WorkerJob): void {
-    slot.busy = true;
-    slot.job = job;
-    const requestId = `${Date.now().toString(36)}:${++slot.generation}`;
-    const cleanup = () => {
-      slot.busy = false;
-      slot.job = undefined;
-      slot.worker.onmessage = null;
-      slot.worker.onerror = null;
+  private attachJob(slot:WorkerSlot,job:WorkerJob):void {
+    slot.busy=true;
+    slot.job=job;
+
+    const requestId=Date.now().toString(36)+':'+(++slot.generation);
+    const sharedBuffer=this.getOrCreateSharedBuffer(job.contextKey,job.bars.length);
+    const sharedMarket=sharedBuffer
+      ? sharedBuffer.writeBars(job.bars,job.datasetVersion,job.dirtyRange?.from ?? 0,job.dirtyRange?.to ?? job.bars.length)
+      : undefined;
+
+    const sendArtifact=job.artifact ? {
+      type:'loadArtifact' as const,
+      requestId,
+      artifact:job.artifact,
+      contextKey:job.contextKey,
+      sourceId:job.sourceId,
+    } : null;
+
+    const cleanup=()=>{
+      slot.busy=false;
+      slot.job=undefined;
       this.dispatch();
     };
-    slot.worker.onmessage = (event: MessageEvent<unknown>) => {
-      const message = event.data;
-      if (!isRecord(message) || message.requestId !== requestId) return;
-      try {
-        if (message.type === 'result') job.resolve(normalizeResult(message));
-        else if (message.type === 'error') job.reject(new Error(typeof message.message === 'string' ? message.message : 'CoreSpirit worker failed'));
+
+    slot.worker.onmessage=(event:MessageEvent<unknown>)=>{
+      const message=event.data;
+      if(!isRecord(message)||message.requestId!==requestId)return;
+      try{
+        if(message.type==='result')job.resolve(normalizeResult(message));
+        else if(message.type==='error')job.reject(new Error(typeof message.message==='string'?message.message:'CoreSpirit worker failed'));
         else return;
-      } catch (error) { job.reject(error); }
+      }catch(error){job.reject(error);}
       cleanup();
     };
-    slot.worker.onerror = (event) => {
-      job.reject(new Error(event.message || 'CoreSpirit worker error'));
-      try { slot.worker.terminate(); } catch {}
-      const index = this.slots.indexOf(slot);
-      if (index >= 0) this.slots.splice(index, 1);
+
+    slot.worker.onerror=(event)=>{
+      job.reject(new Error(event.message||'CoreSpirit worker error'));
+      try{slot.worker.terminate();}catch{}
+      const index=this.slots.indexOf(slot);
+      if(index>=0)this.slots.splice(index,1);
+      for(const [key,value] of this.contextSlots){
+        if(value===slot)this.contextSlots.delete(key);
+      }
       cleanup();
     };
-    slot.worker.postMessage({ type:'run', requestId, source:job.source, sourceId:job.sourceId, bars:job.bars });
+
+    const mode:WorkerRunEnvelope['mode'] =
+      job.datasetVersion>1 &&
+      !!job.dirtyRange &&
+      job.dirtyRange.to>=job.bars.length &&
+      job.dirtyRange.from>=Math.max(0,job.bars.length-2)
+        ? 'incremental'
+        : 'historical';
+
+    const envelope:WorkerRunEnvelope={
+      type:'run',
+      requestId,
+      artifactId:job.artifact?.checksum || '',
+      contextKey:job.contextKey,
+      datasetVersion:job.datasetVersion,
+      dirtyFrom:job.dirtyRange?.from ?? 0,
+      dirtyTo:job.dirtyRange?.to ?? job.bars.length,
+      mode,
+      ...(sharedMarket?{sharedMarket}:{bars:job.bars}),
+    };
+
+    try{
+      if(sendArtifact)slot.worker.postMessage(sendArtifact);
+      slot.worker.postMessage(
+        envelope,
+        sharedMarket && !sharedMarket.shared ? [sharedMarket.buffer] : [],
+      );
+    }catch(error){
+      job.reject(error);
+      cleanup();
+    }
   }
 
-  private async runFallback(source: string, bars: CoreSpiritMarketBar[], sourceId: string): Promise<CoreSpiritWorkerRunResult> {
-    const { executeCoreSpirit } = await import('./coreSpiritPipeline');
-    const result = executeCoreSpirit(source, bars, sourceId);
-    return { outputs: result.outputs, diagnostics: result.diagnostics, state: result.state };
+  private getOrCreateSharedBuffer(contextKey:string,length:number):CoreSpiritSharedMarketBuffer|undefined {
+    if(typeof SharedArrayBuffer==='undefined')return undefined;
+    if(typeof globalThis.crossOriginIsolated==='boolean'&&!globalThis.crossOriginIsolated)return undefined;
+    let buffer=this.sharedBuffers.get(contextKey);
+    if(!buffer){
+      buffer=new CoreSpiritSharedMarketBuffer(Math.max(65_536,Math.min(262_144,Math.max(256,length))),true);
+      this.sharedBuffers.set(contextKey,buffer);
+    }
+    return buffer;
   }
 }
 
-export const coreSpiritWorkerPool = new CoreSpiritWorkerPool();
+export const coreSpiritWorkerPool=new CoreSpiritWorkerPool();
