@@ -15,10 +15,10 @@ const source = await readFile(file, 'utf8');
 const commandCode = command === 'normalize'
   ? 'console.log(inspected.normalizedSource);'
   : command === 'graph'
-    ? 'console.log(JSON.stringify(inspected.effectAnnotations, null, 2));'
+    ? 'console.log(inspected.executionPlanVisualization ? formatCoreSpiritExecutionPlanVisualization(inspected.executionPlanVisualization) : JSON.stringify(inspected.effectAnnotations, null, 2));'
     : command === 'inspect'
       ? 'console.log(JSON.stringify(inspected, null, 2));'
       : 'for (const d of inspected.diagnostics) console.log(String(d.severity) + ": " + String(d.message) + (d.line ? " @ " + d.line + ":" + (d.column ?? 1) : "")); process.exitCode = inspected.diagnostics.some(d => d.severity === "error") ? 1 : 0;';
-const script = `import { inspectCoreSpiritSource } from ${JSON.stringify(resolve('src/services/coreSpirit/sourceInspector.ts'))}; const source=${JSON.stringify(source)}; const inspected=inspectCoreSpiritSource(source, ${JSON.stringify(file)}); ${commandCode}`;
+const script = `import { inspectCoreSpiritSource } from ${JSON.stringify(resolve('src/services/coreSpirit/sourceInspector.ts'))}; import { formatCoreSpiritExecutionPlanVisualization } from ${JSON.stringify(resolve('src/services/coreSpirit/executionPlanVisualizer.ts'))}; const source=${JSON.stringify(source)}; const inspected=inspectCoreSpiritSource(source, ${JSON.stringify(file)}); ${commandCode}`;
 const result = spawnSync(process.execPath, ['--import', 'tsx/esm', '--eval', script], { stdio: 'inherit' });
 process.exit(result.status ?? 1);
