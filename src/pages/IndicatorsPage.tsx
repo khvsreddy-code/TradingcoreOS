@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Code2, ExternalLink, Layers3, Plus, SlidersHorizontal, Trash2, Eye, Users, CheckCircle2 } from 'lucide-react';
 import { WorkspaceModuleShell, ModuleHeader, Panel, WorkspaceRoute } from '../components/workspace/WorkspaceModuleShell';
 import { INDICATOR_LIBRARY, IndicatorConfig } from '../services/marketData/indicatorEngine';
@@ -6,7 +6,7 @@ import { defaultIndicators, getIndicators, saveIndicators } from '../services/wo
 import { getOILevelCount, setOILevelCount } from '../services/marketData/oiEngine';
 import { listPublicIndicatorPublications, type IndicatorPublication } from '../services/coreSpirit/indicatorPublicationService';
 import { IndicatorSettingsPanel } from '../components/indicators/IndicatorSettingsPanel';
-import { IndicatorSourceEditor } from '../components/indicators/IndicatorSourceEditor';
+const IndicatorSourceEditor = lazy(() => import('../components/indicators/IndicatorSourceEditor').then((m) => ({ default: m.IndicatorSourceEditor })));
 import { useAuth } from '../auth/hooks/useAuth';
 
 const groups: Record<string, string[]> = {
@@ -110,7 +110,7 @@ export function IndicatorsPage({ onNavigate, onBackToLanding, onBroker }: { onNa
         </Panel>
       </div>
     </main>
-    {sourceEditorItem && user && <IndicatorSourceEditor item={sourceEditorItem} user={user} onClose={() => setSourceEditorId(null)} onSaved={({ scriptId, source }) => { update(sourceEditorItem.id, { scriptId, sourceCode: source, isUserAuthored: true, authorName: user.name || 'Trader', customName: sourceEditorItem.customName || sourceEditorItem.kind }); }} />}
+    {sourceEditorItem && user && <Suspense fallback={null}><IndicatorSourceEditor item={sourceEditorItem} user={user} onClose={() => setSourceEditorId(null)} onSaved={({ scriptId, source }) => { update(sourceEditorItem.id, { scriptId, sourceCode: source, isUserAuthored: true, authorName: user.name || 'Trader', customName: sourceEditorItem.customName || sourceEditorItem.kind }); }} /></Suspense>}
     {!isAuthenticated && <div className="fixed bottom-4 right-4 z-[100] rounded-xl border border-[#3b82f6]/30 bg-[var(--tco-surface)] px-4 py-3 shadow-2xl"><div className="text-[9px] font-mono uppercase tracking-widest text-[#60a5fa]">Public publishing</div><div className="mt-1 text-[10px] text-[var(--tco-muted)]">Sign in to save source versions or publish indicators.</div></div>}
   </WorkspaceModuleShell>;
 }
