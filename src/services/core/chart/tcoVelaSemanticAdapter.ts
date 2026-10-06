@@ -1,5 +1,6 @@
 import type { IndicatorMeta, IndicatorModel } from '../../../../vendor/vela/src/core/model/indicator';
 import type { SeriesPoint, SeriesSpec } from '../../../../vendor/vela/src/core/model/series';
+import type { HighCardinalityRectBatch } from '../../../../vendor/vela/src/core/model/instances';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 
 export type CoreSpiritVelaMarker = {
@@ -36,7 +37,8 @@ export function coreSpiritSignalToVelaMarker(
 
 /**
  * TCO semantic adapter: translates CoreSpirit execution outputs into Vela's
- * native IndicatorModel. It does not recreate Vela's chart/workspace API.
+ * native IndicatorModel. It does not recreate Vela's chart/workspace API. Steady-state
+ * execution is patch-based; this model is only the retained initial/structural snapshot.
  */
 export function buildCoreSpiritVelaIndicatorModel(
   id:string,
@@ -44,6 +46,7 @@ export function buildCoreSpiritVelaIndicatorModel(
   points:Map<string, SeriesPoint[]>,
   markers:readonly CoreSpiritVelaMarker[],
   priceLines:CoreSpiritVelaPriceLine[],
+  rectBatches:readonly HighCardinalityRectBatch[] = [],
   anchorTime?:number,
   dirty?:CoreSpiritVelaDirtyRange,
 ): IndicatorModel {
@@ -86,6 +89,7 @@ export function buildCoreSpiritVelaIndicatorModel(
     series,
     fills:[],
     backgrounds:[],
+    ...(rectBatches.length ? { instanceBatches:[...rectBatches] } : {}),
     priceLines,
     inputs:[],
     inputValues:{},
