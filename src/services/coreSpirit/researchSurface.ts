@@ -27,7 +27,7 @@ export interface CoreSpiritResearchPlan {
 }
 
 function splitMetrics(text:string):string[]{
-  return text.split(/[,s]+/).map(value=>value.trim()).filter(Boolean);
+  return text.split(/[\s,]+/).map(value=>value.trim()).filter(Boolean);
 }
 
 export function buildCoreSpiritResearchPlan(
