@@ -1,7 +1,4 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ChartLifecycle } from '../../services/core/chart/chartLifecycle';
-import { ChartUpdateScheduler } from '../../services/core/chart/chartUpdateScheduler';
-import { RealtimeCalculationEngine } from '../../services/core/calculation/realtimeCalculationEngine';
 import type { IChartApi, ISeriesApi } from '../../services/core/chart/velaNativeChartKernel';
 import { CoreSpiritChartOutputController } from '../../services/coreSpirit/chartOutputController';
 import { CoreSpiritStore } from '../../services/coreSpirit/CoreSpiritStore';
@@ -50,9 +47,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const candles=useRef<HistoricalCandle[]>([]);
   const latestTick=useRef<NormalizedMarketTick|undefined>(undefined);
   const visibleLogicalRangeRef=useRef<{from:number;to:number}|null>(null);
-  const lifecycle=useRef(new ChartLifecycle());
-  const chartUpdateScheduler=useRef(new ChartUpdateScheduler());
-  const calculationEngine=useRef(new RealtimeCalculationEngine());
   const chartId=useRef(\`chart-\${Math.random().toString(36).slice(2,10)}\`);
   const dataRevisionRef=useRef(0);
   const indicatorRequestSeq=useRef(0);
@@ -187,9 +181,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       volume,
       candles,
       latestTick,
-      lifecycle,
-      chartUpdateScheduler,
-      calculationEngine,
       chartId,
       dataRevisionRef,
       indicatorRequestSeq,
