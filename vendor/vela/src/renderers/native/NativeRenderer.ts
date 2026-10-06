@@ -2444,14 +2444,15 @@ export class NativeRenderer implements IChartRenderer {
         if (nativeType === 'volume' || nativeType === 'vpvr') {
             if (nativeType === 'volume') this.volumeHidden = !visible;
             else this.vpvrHidden = !visible;
+            this.scene.retained.setVisibility(`indicator:${handle.id}`, visible);
             this.inputsUI.setVisible(handle.id, visible);
             this.scheduler.invalidate(InvalidateLevel.Full);
             return;
         }
+        this.scene.retained.setVisibility(`indicator:${handle.id}`, visible);
         if (!visible) {
             this.scene.indicators.delete(handle.id); // keep the z key (forgetIndicatorZ NOT called) so show preserves order
         }
-        this.inputsUI.setVisible(handle.id, visible);
         this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
