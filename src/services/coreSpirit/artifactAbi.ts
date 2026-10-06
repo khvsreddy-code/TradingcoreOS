@@ -89,23 +89,13 @@ function collectExecutionCapabilities(ir: CoreSpiritIrProgram): CoreSpiritExecut
 }
 
 function artifactMaterial(abi: Omit<CoreSpiritArtifactAbi, 'artifactHash'>): string {
+  // All semantic/runtime/optimizer inputs are already represented by the
+  // programHash + IR hash. Keep one canonical final content-address formula.
   return [
-    abi.magic,
-    abi.version,
+    abi.programHash,
+    abi.irHash,
     abi.runtimeABI,
     abi.optimizerABI,
-    abi.programHash,
-    abi.sourceHash,
-    abi.normalizedHash,
-    abi.semanticHash,
-    abi.irHash,
-    abi.maxLookback,
-    abi.requiredKernels.join(','),
-    abi.requiredData.join(','),
-    abi.executionCapabilities.join(','),
-    abi.debugMap.version,
-    abi.debugMap.sourceId,
-    abi.debugMap.entries.length,
   ].join('\n');
 }
 
@@ -185,34 +175,4 @@ export function validateCoreSpiritArtifactAbi(value: unknown, ir: CoreSpiritIrPr
     rebuilt.requiredKernels.join('|') === abi.requiredKernels.join('|') &&
     rebuilt.requiredData.join('|') === abi.requiredData.join('|') &&
     rebuilt.executionCapabilities.join('|') === abi.executionCapabilities.join('|');
-}
-
-export function buildCoreSpiritArtifactSourceIdentity(
-  source: string,
-  sourceId: string,
-  normalizedSource: string,
-  semanticFingerprint: string,
-): CoreSpiritArtifactIdentity {
-  const sourceHash = sha256HexSync(source);
-  const normalizedHash = sha256HexSync(normalizedSource);
-  const semanticHash = sha256HexSync([
-    normalizedHash,
-    semanticFingerprint,
-    CORE_SPIRIT_RUNTIME_ABI,
-    CORE_SPIRIT_OPTIMIZER_ABI,
-  ].join('\n'));
-  const programHash = sha256HexSync(`${sourceId}\n${semanticHash}`);
-  const irHash = sha256HexSync('');
-  const artifactHash = sha256HexSync(`${CORE_SPIRIT_ARTIFACT_MAGIC}\n${programHash}\n${irHash}`);
-  return {
-    version: 1,
-    algorithm: 'SHA-256',
-    sourceId,
-    sourceHash,
-    normalizedHash,
-    semanticHash,
-    programHash,
-    irHash,
-    artifactHash,
-  };
-}
+}\n
