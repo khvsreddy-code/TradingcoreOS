@@ -78,10 +78,16 @@ function lastNumericConstant(instructions: readonly CoreSpiritIrInstruction[], r
   return undefined;
 }
 
-function labelFor(program: CoreSpiritIrProgram, instruction: CoreSpiritIrInstruction, fallback: string): string {
+function labelFor(
+  program: CoreSpiritIrProgram,
+  instruction: CoreSpiritIrInstruction,
+  fallback: string,
+  fusedOperation?: { readonly name:string; readonly length:number },
+): string {
   if (instruction.op === 'loadSeries') return instruction.name;
   if (instruction.op === 'loadState') return `state:${instruction.name}`;
   if (instruction.op === 'call') {
+    if (fusedOperation) return `${fusedOperation.name.toUpperCase()}(${fusedOperation.length})`;
     const period = lastNumericConstant(program.entry.instructions, instruction.args[1]);
     return period !== undefined ? `${instruction.name.toUpperCase()}(${period})` : instruction.name;
   }
@@ -195,12 +201,20 @@ export function buildCoreSpiritExecutionPlanVisualization(program: CoreSpiritIrP
     }));
   }
 
+  const fusedOperationByInstruction = new Map<number, { name:string; length:number }>();
+  for (const group of fusion?.groups ?? []) {
+    group.instructions.forEach((instruction, index) => {
+      const operation = group.operations[index];
+      if (operation) fusedOperationByInstruction.set(instruction, { name:operation.name, length:operation.length });
+    });
+  }
+
   const nodes = graphNodes.map(node => {
     const instruction = program.entry.instructions[node.instruction]!;
     const fusedKernelId = kernelByInstruction.get(node.instruction);
     return Object.freeze({
       id: node.id,
-      label: labelFor(program, instruction, node.name ?? node.op),
+      label: labelFor(program, instruction, node.name ?? node.op, fusedOperationByInstruction.get(node.instruction)),
       kind: visualKind(instruction, node.kind),
       status: fusedKernelId ? 'fused' : node.effectful ? 'barrier' : 'scalar',
       instruction: node.instruction,
