@@ -43,10 +43,9 @@ type PendingCompute = {
 export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
   const {
     chart,candles,latestTick,dataRevisionRef,rendererController,chartDataPlane,
-    chartUpdateScheduler,calculationEngine,candleAppearanceRef,chartStore,
+    chartUpdateScheduler,calculationEngine,candleAppearanceRef,
   }=deps;
 
-  let lastComputeSequence = 0;
   const computeScheduler = new RealtimeRateScheduler<PendingCompute>({
     intervalMs: deps.computeIntervalMs ?? 50,
     run: ({snapshot,bucketChanged}, sequence) => {
@@ -71,7 +70,6 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
         Math.max(0,(globalThis.performance?.now?.() ?? Date.now()) - started),
         sequence,
       );
-      lastComputeSequence = sequence;
     },
   });
 
@@ -84,11 +82,11 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
     if(data.length&&chart.current){
       chartUpdateScheduler.scheduleLatest('realtime-bar',()=>{
         const patchStarted=globalThis.performance?.now?.() ?? Date.now();
-        chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'patch',0);
         const canonical=chartDataPlane.readCanonical();
         const beforeRender=globalThis.performance?.now?.() ?? Date.now();
         rendererController.applyRealtimeCanonical(canonical,candleAppearanceRef.current);
         const afterRender=globalThis.performance?.now?.() ?? Date.now();
+        chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'patch',Math.max(0,beforeRender-patchStarted));
         chartPerformanceTelemetry.recordStage(deps.chartMarketKey,'renderer',Math.max(0,afterRender-beforeRender));
         const lastPacketAt=chartPerformanceTelemetry.getLastPacketAt(deps.chartMarketKey);
         const tickToPatch=lastPacketAt>0?Math.max(0,patchStarted-lastPacketAt):0;
@@ -107,7 +105,6 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
     latestTick.current=snapshot.latestTick;
     dataRevisionRef.current=snapshot.revision;
     calculationEngine.reset(snapshot.candles,deps.instrumentKey,deps.timeframe);
-    lastComputeSequence = 0;
   };
 
   const dispose=()=>computeScheduler.dispose();
