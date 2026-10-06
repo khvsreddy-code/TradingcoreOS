@@ -6,8 +6,10 @@ const root=process.cwd();
 const read=(p)=>fs.readFileSync(path.join(root,p),'utf8');
 
 const live=read('src/components/workspace/LiveChart.tsx');
-assert.ok(live.length < 50000, `LiveChart should stay below 50 KB after orchestration split; got ${live.length}`);
+assert.ok(live.length < 32000, `LiveChart should stay below 32 KB after controller split; got ${live.length}`);
 for (const symbol of [
+  "createChartAnalyticsController",
+  "createChartInteractionController",
   "createChartDataController",
   "createChartIndicatorController",
   "createChartDrawingController",
@@ -26,6 +28,20 @@ assert.equal((live.match(/const renderPredictionOverlays*=/g)||[]).length, 0, 'p
 assert.ok(!live.includes("CoreSpiritVelaEngine"), 'LiveChart must not import the concrete CoreSpirit engine');
 assert.ok(!live.includes("coreSpiritPipeline"), 'LiveChart must not import the compiler pipeline');
 assert.ok(!live.includes("chartDataPlane.subscribe"), 'LiveChart must not be the market-data subscription bus');
+for (const forbidden of [
+  "from '../../services/runtime/TradingCoreRuntime'",
+  "from '../../services/marketData/chartComputeCoordinator'",
+  "from '../../services/core/drawing/drawingGeometry'",
+  "buildOIChartAnalytics",
+]) assert.ok(!live.includes(forbidden), `LiveChart leaked infrastructure responsibility: ${forbidden}`);
+
+const analytics=read('src/services/core/chart/ChartAnalyticsController.ts');
+assert.ok(analytics.includes('createChartAnalyticsController'));
+const interactions=read('src/services/core/chart/ChartInteractionController.ts');
+assert.ok(interactions.includes('createChartInteractionController'));
+const storeRegistry=read('src/services/core/chart/chartStoreRegistry.ts');
+assert.ok(storeRegistry.includes('acquireChartStore'));
+assert.ok(storeRegistry.includes('releaseChartStore'));
 
 const market=read('src/services/marketData/MarketDataStore.ts');
 assert.ok(market.includes('class MarketDataStore'));
