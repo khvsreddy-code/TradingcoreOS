@@ -326,9 +326,42 @@ export class MarketDataGraph{
       if(node.sourceKey!==sourceKey)continue;
       const source=this.nodes.get(sourceKey);
       if(!source||!source.plane.market.length)continue;
-      aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc);
+
+      const sourceView=source.plane.market.views();
+      const lastIndex=sourceView.time.length-1;
+      const lastTimestamp=Number(sourceView.time[lastIndex]);
+      const bucket=bucketStart(lastTimestamp,node.intervalSeconds,node.anchorSecondsUtc);
+      let from=lastIndex;
+      while(from>0){
+        const previousTimestamp=Number(sourceView.time[from-1]);
+        if(!Number.isFinite(previousTimestamp)||bucketStart(previousTimestamp,node.intervalSeconds,node.anchorSecondsUtc)!==bucket)break;
+        from-=1;
+      }
+
+      let open=Number.NaN,high=Number.NaN,low=Number.NaN,close=Number.NaN,volume=0;
+      for(let i=from;i<=lastIndex;i+=1){
+        const o=Number(sourceView.open[i]),h=Number(sourceView.high[i]),l=Number(sourceView.low[i]),c=Number(sourceView.close[i]);
+        if(!Number.isFinite(o)||!Number.isFinite(h)||!Number.isFinite(l)||!Number.isFinite(c))continue;
+        if(!Number.isFinite(open))open=o;
+        high=Number.isFinite(high)?Math.max(high,h):h;
+        low=Number.isFinite(low)?Math.min(low,l):l;
+        close=c;
+        volume+=Number(sourceView.volume[i])||0;
+      }
+      if(!Number.isFinite(open)||!Number.isFinite(high)||!Number.isFinite(low)||!Number.isFinite(close))continue;
+
+      const targetLength=node.plane.market.length;
+      const targetLastTime=targetLength?Number(node.plane.market.time[targetLength-1]):Number.NaN;
+      const row={time:bucket,open,high,low,close,volume};
+      if(Number.isFinite(targetLastTime)&&targetLastTime===bucket)node.plane.updateLast(row);
+      else if(!Number.isFinite(targetLastTime)||bucket>targetLastTime)node.plane.append(row);
+      else {
+        // Out-of-order corrections are rare; rebuild once rather than corrupting alignment.
+        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc);
+      }
       node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
       node.sourceRevision=source.plane.revision;
+      this.rebuildDependentTails(node.descriptor.key);
     }
   }
 
