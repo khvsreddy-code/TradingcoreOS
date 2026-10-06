@@ -56,6 +56,10 @@ type Safety = {
   evidence: CoreSpiritRepaintEvidence[];
 };
 
+function nodeAnnotations(node: CoreSpiritAstNode): readonly CoreSpiritAnnotation[] {
+  return 'annotations' in node && Array.isArray(node.annotations) ? node.annotations as readonly CoreSpiritAnnotation[] : [];
+}
+
 const annotationNames = new Set<CoreSpiritRepaintAnnotationName>([
   'causal','noncausal','futureDependent','repainting','realtimeSafe','lookahead',
 ]);
@@ -141,7 +145,7 @@ function builtinSafety(builtin: CoreSpiritBuiltin): Safety {
     return {
       causality: 'causal',
       lookahead: 'false',
-      realtimeSafe: builtin.pure || builtin.category !== 'output',
+      realtimeSafe:true,
       evidence: [],
     };
   }
@@ -174,7 +178,7 @@ function merge(a: Safety, b: Safety, node: CoreSpiritAstNode, reason: string): S
 }
 
 function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreSpiritAnnotation[] = []): Safety {
-  const annotations = [...inheritedAnnotations,...(node.annotations ?? [])];
+  const annotations = [...inheritedAnnotations,...nodeAnnotations(node)];
   const declared = annotatedSafety(annotations);
   let inferred: Safety = { causality:'causal', lookahead:'false', realtimeSafe:true, evidence:[] };
 
@@ -271,7 +275,7 @@ function inferNode(node: CoreSpiritAstNode, inheritedAnnotations: readonly CoreS
       break;
   }
 
-  const asserted = annotatedSafety(node.annotations ?? []);
+  const asserted = annotatedSafetynodeAnnotations(node);
   return {
     causality: asserted.causality === 'causal' ? inferred.causality : asserted.causality,
     lookahead: asserted.lookahead === 'false' ? inferred.lookahead : asserted.lookahead,
@@ -318,7 +322,7 @@ export function analyzeCoreSpiritRepaintSafety(ast: CoreSpiritAst): CoreSpiritRe
   const errors:string[]=[];
 
   const visit=(node:CoreSpiritAstNode, parentAnnotations:readonly CoreSpiritAnnotation[]=[]): Safety => {
-    const effectiveAnnotations=[...parentAnnotations,...(node.annotations ?? [])];
+    const effectiveAnnotations=[...parentAnnotations,...nodeAnnotations(node)];
     const safety=inferNode(node,parentAnnotations);
     const assertionMessages=validateAssertions(node,safety);
     warnings.push(...assertionMessages.warnings);
