@@ -19,7 +19,7 @@ export type ChartPredictionControllerDeps={
 };
 
 export function createChartPredictionController(deps:ChartPredictionControllerDeps){
-  const {chart,candles,predictionLines,predictionJob}=deps;
+  const {chart,candles,predictionLines,predictionJob,dataRevisionRef}=deps;
   let predictionModelIds=deps.predictionModelIds;
   let chartDatasetKey=deps.chartDatasetKey;
   let resolvedInstrumentKey=deps.resolvedInstrumentKey;
