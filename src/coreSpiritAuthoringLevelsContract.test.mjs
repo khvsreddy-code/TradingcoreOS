@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { normalizeCoreSpiritSource } from './services/coreSpirit/syntax.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { buildCoreSpiritResearchPlan } from './services/coreSpirit/researchSurface.ts';
+import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './services/coreSpirit/quantKernels.ts';
 
 const source=`
 data nifty = market("NSE:NIFTY50", "5m")
@@ -63,3 +64,16 @@ assert.ok(!result.diagnostics.some(d=>d.severity==='error'), result.diagnostics.
 assert.ok(result.ir?.surface?.declarations.some(d=>d.kind==='model' && d.name==='alpha'));
 
 console.log('CORESPIRIT_AUTHORING_LEVELS_CONTRACT_OK');
+
+
+const betaKernel=new RollingBetaState(4);
+for(const [x,y] of [[1,2],[2,4],[3,6],[4,8]]) betaKernel.update(x,y);
+assert.ok(Math.abs((betaKernel.update(5,10) ?? 0)-2)<1e-10);
+
+const trendKernel=new RollingCorrelationState(4);
+for(const value of [1,2,3,4,5,6]) trendKernel.update(value);
+assert.ok((trendKernel.update(7) ?? 0)>0.99);
+
+assert.equal(detectQuantRegime(0.01,0.8),'trend-up');
+assert.equal(detectQuantRegime(0.01,-0.8),'trend-down');
+assert.equal(detectQuantRegime(0.03,0.1),'volatile');
