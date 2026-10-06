@@ -93,6 +93,7 @@ export interface CoreSpiritExecutionPlan {
   seriesFusion: CoreSpiritSeriesFusionPlan;
   specializedPlan: CoreSpiritSpecializedPlan;
   tradingNativePlan: CoreSpiritTradingNativePlan;
+  dataGraph: CoreSpiritTradingNativePlan['dataGraph'];
   chronologicalPasses: 1;
   sourceReadReuse: number;
   estimatedSavedWorkUnits: number;
@@ -296,6 +297,7 @@ export function planCoreSpiritExecution(
       multiTimeframe: tradingNativePlan.multiTimeframe,
       dataDependencyCount: tradingNativePlan.dataDependencies.length,
       eventCount: tradingNativePlan.eventTriggers.length,
+      graphNodes: tradingNativePlan.dataGraph.nodes.map(node=>({id:node.id,source:node.sourceTimeframe ?? '',kind:node.kind})),
     },
   });
   explanation.push(`execution lanes: hot=${lanes.hot.length}, warm=${lanes.warm.length}, cold=${lanes.cold.length}`);
@@ -303,6 +305,7 @@ export function planCoreSpiritExecution(
   if (seriesFusion.groups.length) explanation.push(`series fusion: ${seriesFusion.groups.length} group(s), ${seriesFusion.fusedInstructionCount} instruction(s) lowered to single-pass kernels`);
   explanation.push(`specialized plan: ${specializedPlan.strategy}, ${specializedPlan.slotCount} slots, ${specializedPlan.seriesFanouts.length} shared-input fanout group(s)`);
   explanation.push(`trading-native plan: symbols=${tradingNativePlan.multiSymbol ? 'multi' : 'single'}, timeframes=${tradingNativePlan.multiTimeframe ? 'multi' : 'single'}, dataDeps=${tradingNativePlan.dataDependencies.length}, events=${tradingNativePlan.eventTriggers.length}`);
+  explanation.push(`data graph: nodes=${tradingNativePlan.dataGraph.nodes.length}, roots=${tradingNativePlan.dataGraph.roots.length}, minimumSources=${tradingNativePlan.dataGraph.minimumTimeframes.length}`);
   return {
     version: 1,
     strategy,
@@ -318,6 +321,7 @@ export function planCoreSpiritExecution(
     seriesFusion,
     specializedPlan,
     tradingNativePlan,
+    dataGraph:tradingNativePlan.dataGraph,
     chronologicalPasses:1,
     sourceReadReuse: program.optimizationPlan?.cost.sourceReadReuse ?? 0,
     estimatedSavedWorkUnits: workload.estimatedSavedBarWork * workload.symbols * workload.timeframes * workload.bars,
