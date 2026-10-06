@@ -235,7 +235,7 @@ export type CoreSpiritDataResolutionContext = {
 export type CoreSpiritDataResolver = {
   request?: (request: CoreSpiritDataRequest) => CoreSpiritDataSnapshot | Promise<CoreSpiritDataSnapshot>;
   /** Optional batched resolver. Hosts should prefer this for scripts requesting several symbols/TFs. */
-  requestBatch?: (requests: CoreSpiritDataRequest[]) => CoreSpiritDataSnapshot[] | Promise<CoreSpiritDataSnapshot[]>;
+  requestBatch?: (requests: CoreSpiritDataRequest[], context?: CoreSpiritDataResolutionContext) => CoreSpiritDataSnapshot[] | Promise<CoreSpiritDataSnapshot[]>;
   requestAt?: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext) => CoreSpiritDataSnapshot | Promise<CoreSpiritDataSnapshot>;
   series?: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext) => number[] | Promise<number[]>;
   /** Lower-TF data is now structured instead of being reduced to only the last value. */
