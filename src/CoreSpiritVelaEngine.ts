@@ -111,6 +111,7 @@ export class CoreSpiritVelaEngine {
           text: marker.text,
         })),
         snapshot.priceLines,
+        snapshot.rectBatches,
         Number.isFinite(firstSeriesTime) ? firstSeriesTime : undefined,
         dirty,
       ));
