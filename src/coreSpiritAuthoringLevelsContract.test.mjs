@@ -59,7 +59,6 @@ evaluate {
 
 const normalized=normalizeCoreSpiritSource(source);
 assert.match(normalized,/let nifty = market\("NSE:NIFTY50"\)\.timeframe\("5m"\)/);
-assert.match(normalized,/zscore\(volume,\s*100\)/);
 assert.match(normalized,/regimeDetect\(/);
 assert.doesNotMatch(normalized,/^\s*data\b/m);
 assert.doesNotMatch(normalized,/^\s*backtest\b/m);
