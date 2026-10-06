@@ -1,3 +1,5 @@
+export const BROKER_OAUTH_CHANNEL = 'tradingcore-broker-oauth-v1';
+
 export interface PopupOptions {
   width?: number;
   height?: number;
