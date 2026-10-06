@@ -12,12 +12,10 @@ import { createChartIndicatorController } from '../../services/core/chart/contro
 import { createChartPredictionController } from '../../services/core/chart/controllers/ChartPredictionController';
 import { createChartRealtimeController } from '../../services/core/chart/controllers/ChartRealtimeController';
 import { ChartStore } from '../../services/core/chart/ChartStore';
-import type { Drawing } from '../../services/core/drawing/coreDrawing';
 import { hitTestDrawings, moveDrawingHandle, snapDataPoint } from '../../services/core/drawing/drawingGeometry';
 import { coreEventBus } from '../../services/core/event/eventBus';
-import { getCoreDrawingTool, validateDrawingPoints } from '../../services/core/drawing/drawingTools';
 import { tradingCoreRuntime } from '../../services/runtime/TradingCoreRuntime';
-import { NormalizedMarketTick } from '../../types/market';
+import type { NormalizedMarketTick } from '../../types/market';
 import type { HistoricalCandle } from '../../services/brokers/BrokerAdapter';
 import { ChartDepthPanel } from './ChartDepthPanel';
 import { ChartShell } from './ChartShell';
@@ -161,10 +159,10 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
-  const candlesForControllers=useRef(candles.current);
-  candlesForControllers.current=candles.current;
 
   const indicatorsRef=useRef(indicators); indicatorsRef.current=indicators;
+  const selectedDrawingIdRef=useRef<string|null>(null); selectedDrawingIdRef.current=selectedDrawingId;
+  const viewStateRef=useRef({showLevels,showVolume,showOI,showDepth}); viewStateRef.current={showLevels,showVolume,showOI,showDepth};
   const predictionIdsRef=useRef(predictionModelIds); predictionIdsRef.current=predictionModelIds;
   const automationsRef=useRef(automations); automationsRef.current=automations;
   const appearanceRef=useRef(candleAppearance); appearanceRef.current=candleAppearance;
@@ -207,7 +205,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
   const publishAnalytics=(data:HistoricalCandle[],spot:number,immediate=false)=>{
     const revision=dataRevisionRef.current;
-    const run=()=>{analyticsTimer.current=null;void chartComputeCoordinator.runAnalytics(chartDatasetKey,chartDataPlane.readCanonical(),spot,data).then(result=>{
+    const run=()=>{analyticsTimer.current=null;void chartComputeCoordinator.runAnalytics(chartDatasetKey,revision,chartDataPlane.readCanonical(),spot,data).then(result=>{
       if(revision!==dataRevisionRef.current||data!==candles.current||!lifecycle.current.isAlive())return;
       analyticsRef.current=result;setAnalytics(result);onAnalytics?.(result);window.dispatchEvent(new CustomEvent('tradingcore:chart-analytics',{detail:result}));chartStore.setAnalytics(result);
     });};
@@ -273,7 +271,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   },[indicators,timeframe,predictionModelIds,chartDatasetKey,resolvedInstrumentKey]);
 
   const drawingInitial=useMemo(()=>persistedChart.drawings,[persistedChart]);
-  const oscillatorKindsLocal=(items:IndicatorConfig[])=>items.some(i=>i.enabled&&['RSI','MACD','ATR','ADX','Stochastic','CCI','OBV','MFI','Delta Sigma Heatmap','Neural Weight Oscillator','Trend Pressure','Trinity','Volatility Shock Half Life Monitor'].includes(i.kind));
 
   useEffect(()=>{
     if(!host.current)return;
@@ -291,7 +288,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
 
     const chartDataController=createChartDataController({key:chartDatasetKey,plane:chartDataPlane,chartStore});
     const chartIndicatorController=createChartIndicatorController({chart,oscChart,oscHost,candle,oscSeries:{current:[]},candles,visibleLogicalRangeRef,chartDataPlane,chartDatasetKey,dataRevisionRef,indicatorRequestSeq,lifecycle,chartUpdateScheduler,indicators:indicatorsRef.current,timeframe});
-    const chartDrawingController=createChartDrawingController({chart,candles,brokerId,instrumentKey:resolvedInstrumentKey,timeframe,getViewState:()=>({showLevels,showVolume,showOI,showDepth}),initialDrawings:drawingInitial,getSelectedDrawingId:()=>selectedDrawingId,onToolChange:setDrawingTool});
+    const chartDrawingController=createChartDrawingController({chart,candles,brokerId,instrumentKey:resolvedInstrumentKey,timeframe,getViewState:()=>viewStateRef.current,initialDrawings:drawingInitial,getSelectedDrawingId:()=>selectedDrawingIdRef.current,onToolChange:setDrawingTool});
     const chartPredictionController=createChartPredictionController({chart,candles,predictionLines,predictionJob,predictionModelIds:predictionIdsRef.current,chartDatasetKey,dataRevisionRef,resolvedInstrumentKey,timeframe});
     const chartCoreSpiritController=createChartCoreSpiritController({chartId:chartId.current,chart,candle,host,candles,coreSpiritOutput,coreSpiritRunId,resolvedInstrumentKey,timeframe,store:coreSpiritStore,publishLifecycle:(state)=>coreEventBus.emit('chart.lifecycle',{chartId:chartId.current,state,timestamp:Date.now()})});
     indicatorControllerRef.current=chartIndicatorController;
@@ -320,8 +317,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       if(dead||!lifecycle.current.isCurrent(generation))return;
       const snapshot=event?.snapshot as ChartDataPlaneSnapshot|undefined;if(!snapshot)return;
       latestTick.current=snapshot.latestTick;
-      historyLoading;
-      setHistoryLoading(snapshot.historyLoading||snapshot.olderHistoryLoading);
+       setHistoryLoading(snapshot.historyLoading||snapshot.olderHistoryLoading);
       if(event.type==='status'){
         if(event.status==='loading')publishLifecycle('loading');
         if(event.status==='error'&&!snapshot.candles.length){setError(\`History unavailable for \${resolvedInstrumentKey} · \${CHART_TIMEFRAME_INTERVALS[timeframe]||timeframe} · \${event.error||'Historical candles unavailable'}\`);publishLifecycle('error');}
@@ -405,7 +401,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     host.current.addEventListener('pointerdown',onPointerDown);host.current.addEventListener('pointermove',onPointerMove);host.current.addEventListener('pointerup',onPointerUp);host.current.addEventListener('pointercancel',onPointerUp);
     publishLifecycle('loading');
     const stopData=chartDataController.subscribe(applySnapshot);
-    chartDataController.attach();
     void chartDataPlane.ensureReady().catch(()=>{});
     window.addEventListener('tradingcore:theme-change',()=>{});
     return()=>{
@@ -418,7 +413,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       if(analyticsTimer.current){clearTimeout(analyticsTimer.current);analyticsTimer.current=null;}
       resizeObserver?.disconnect();chartUpdateScheduler.current.cancel();
     };
-  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial,showLevels,showVolume,showOI,showDepth]);
+  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial]);
 
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);
