@@ -6,5 +6,6 @@ const rewrites=vercel.rewrites||[];
 if (!rewrites.some((r)=>r.source==='/api/:path*'&&r.destination==='/api/index')) throw new Error('Missing API catch-all rewrite');
 if (!rewrites.some((r)=>r.source==='/(.*)'&&r.destination==='/')) throw new Error('Missing SPA catch-all rewrite');
 const text=fs.readFileSync(path.join(root,'src/App.tsx'),'utf8');
-if (!text.includes("'/corespirit'")) throw new Error('CoreSpirit route is missing from App');
+const workspaceShell=fs.readFileSync(path.join(root,'src/appShells/TradingWorkspaceShell.tsx'),'utf8');
+if (!workspaceShell.includes("route === '/corespirit'")) throw new Error('CoreSpirit route is missing from TradingWorkspaceShell');
 console.log('STAGE89_SPA_ROUTE_CONTRACT_OK');
