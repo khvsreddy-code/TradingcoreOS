@@ -301,7 +301,7 @@ export class CoreSpiritChartOutputController {
         type:'append'|'replaceLast'|'replaceRange'|'removeRange';
         from?:number;
         to?:number;
-        values: readonly { time:number; value?:number|null }[];
+        values?: readonly { time:number; value?:number|null }[];
       }) => void;
     };
     if (!previous.length) {
