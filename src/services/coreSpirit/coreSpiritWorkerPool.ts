@@ -31,6 +31,8 @@ type WorkerJob = {
   reject:(reason:unknown)=>void;
   priority:0|1|2|3|4;
   graphSnapshot?:CoreSpiritGraphSnapshot;
+  graphBaseSymbol?:string;
+  graphBaseTimeframe?:string;
 };
 
 type WorkerSlot = {
@@ -53,6 +55,8 @@ type WorkerRunEnvelope = {
   sharedMarket?:CoreSpiritSharedMarketDescriptor;
   bars?:CoreSpiritMarketBar[];
   graphSnapshot?:CoreSpiritGraphSnapshot;
+  graphBaseSymbol?:string;
+  graphBaseTimeframe?:string;
 };
 
 function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
@@ -134,6 +138,8 @@ export class CoreSpiritWorkerPool {
         reject,
         priority:sourceId.includes('chart') ? 1 : 3,
         graphSnapshot:options?.graphSnapshot,
+        graphBaseSymbol:options?.graphBaseSymbol,
+        graphBaseTimeframe:options?.graphBaseTimeframe,
       });
       this.queue.sort((a,b)=>a.priority-b.priority);
       this.dispatch();
@@ -215,12 +221,16 @@ export class CoreSpiritWorkerPool {
       contextKey:job.contextKey,
       sourceId:job.sourceId,
       graphSnapshot:job.graphSnapshot,
+      graphBaseSymbol:job.graphBaseSymbol,
+      graphBaseTimeframe:job.graphBaseTimeframe,
     } : null;
     const sendGraph=(!artifactChanged&&graphChanged&&job.graphSnapshot) ? {
       type:'updateGraph' as const,
       requestId,
       contextKey:job.contextKey,
       graphSnapshot:job.graphSnapshot,
+      graphBaseSymbol:job.graphBaseSymbol,
+      graphBaseTimeframe:job.graphBaseTimeframe,
     } : null;
 
     const cleanup=()=>{
