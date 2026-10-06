@@ -235,7 +235,7 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
   out = out.replace(
-    /regime\.detect\s*\(\s*volatility\s*=\s*([^,\n]+)\s*,\s*trend\s*=\s*([^)\n]+)\s*\)/gis,
+    /regime\.detect\s*\(\s*volatility\s*=\s*([\s\S]*?)\s*,\s*trend\s*=\s*([\s\S]*?)\)\s*\)/i,
     'regimeDetect($1, $2)',
   );
   return out;
