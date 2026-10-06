@@ -1,54 +1,25 @@
 import type { NormalizedMarketTick } from '../../types/market';
 import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
+import { TickRingBuffer } from './TickRingBuffer';
 
 export type ChartMarketKey = string;
 export type ChartMarketSnapshot = {
   tick?: NormalizedMarketTick;
   revision: number;
+  marketSequence: number;
 };
 
 type Listener = () => void;
 
-const DEFAULT_TICK_RING_SIZE = 2048;
-
-class TickRing {
-  private readonly buffer: Array<NormalizedMarketTick | undefined>;
-  private cursor = 0;
-  private size = 0;
-
-  constructor(private readonly capacity = DEFAULT_TICK_RING_SIZE) {
-    this.buffer = new Array(capacity);
-  }
-
-  push(tick: NormalizedMarketTick): void {
-    this.buffer[this.cursor] = tick;
-    this.cursor = (this.cursor + 1) % this.capacity;
-    this.size = Math.min(this.size + 1, this.capacity);
-  }
-
-  latest(): NormalizedMarketTick | undefined {
-    if (!this.size) return undefined;
-    return this.buffer[(this.cursor - 1 + this.capacity) % this.capacity];
-  }
-
-  toArray(): NormalizedMarketTick[] {
-    const result: NormalizedMarketTick[] = [];
-    const start = (this.cursor - this.size + this.capacity) % this.capacity;
-    for (let i = 0; i < this.size; i += 1) {
-      const value = this.buffer[(start + i) % this.capacity];
-      if (value) result.push(value);
-    }
-    return result;
-  }
-}
-
-const EMPTY_SNAPSHOT: ChartMarketSnapshot = { revision: 0 };
+const DEFAULT_TICK_RING_SIZE = 8192;
 
 type Entry = ChartMarketSnapshot & {
   snapshot: ChartMarketSnapshot;
-  tickRing: TickRing;
+  tickRing: TickRingBuffer;
   reactNotifyScheduled: boolean;
 };
+
+const EMPTY_SNAPSHOT: ChartMarketSnapshot = { revision: 0, marketSequence: 0 };
 
 class ChartMarketStore {
   private entries = new Map<ChartMarketKey, Entry>();
@@ -59,13 +30,20 @@ class ChartMarketStore {
     chartPerformanceTelemetry.recordPacket(key);
     let entry = this.entries.get(key);
     if (!entry) {
-      entry = { tick, revision: 0, snapshot: { tick, revision: 0 }, tickRing: new TickRing(), reactNotifyScheduled: false };
+      entry = {
+        tick,
+        revision: 0,
+        marketSequence: 0,
+        snapshot: { tick, revision: 0, marketSequence: 0 },
+        tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE),
+        reactNotifyScheduled: false,
+      };
       this.entries.set(key, entry);
     }
     entry.tick = tick;
     entry.revision += 1;
-    entry.snapshot = { tick, revision: entry.revision };
-    entry.tickRing.push(tick);
+    entry.marketSequence = entry.tickRing.push(tick);
+    entry.snapshot = { tick, revision: entry.revision, marketSequence: entry.marketSequence };
 
     this.listeners.get(key)?.forEach(listener => listener());
     if (this.reactListeners.get(key)?.size) chartPerformanceTelemetry.recordReactNotificationRequest(key);
@@ -84,6 +62,14 @@ class ChartMarketStore {
 
   getTick(key: ChartMarketKey): NormalizedMarketTick | undefined {
     return this.entries.get(key)?.tick;
+  }
+
+  getSequence(key: ChartMarketKey): number {
+    return this.entries.get(key)?.marketSequence || 0;
+  }
+
+  forEachTickSince(key: ChartMarketKey, sequenceExclusive: number, visitor: Parameters<TickRingBuffer['forEachSince']>[1]): number {
+    return this.entries.get(key)?.tickRing.forEachSince(sequenceExclusive, visitor) || 0;
   }
 
   getRecentTicks(key: ChartMarketKey): NormalizedMarketTick[] {
