@@ -96,7 +96,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const chartDataPlane=useMemo(()=>getChartDataPlane(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartDatasetKey=useMemo(()=>chartDataPlaneKey(brokerId,resolvedInstrumentKey,timeframe),[brokerId,resolvedInstrumentKey,timeframe]);
   const chartStore=useMemo(()=>acquireChartStore(chartDatasetKey),[chartDatasetKey]);
-  useEffect(()=>()=>releaseChartStore(chartDatasetKey),[chartDatasetKey]);
 
   const indicatorsRef=useRef(indicators); indicatorsRef.current=indicators;
   const selectedDrawingIdRef=useRef<string|null>(null); selectedDrawingIdRef.current=selectedDrawingId;
@@ -315,6 +314,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   useEffect(()=>indicatorControllerRef.current?.applyIndicatorAppearanceOnly(),[indicatorAppearanceKey]);
   useEffect(()=>{if(!candle.current)return;const lines:any[]=[];if(!automationsRef.current.length||!candles.current.length)return;for(const item of automationsRef.current){const signal=markerForAutomation(item,candles.current);if(!signal)continue;lines.push(candle.current.createPriceLine({price:candles.current[candles.current.length-1]?.close||0,color:signal.color,lineWidth:2,lineStyle:2,axisLabelVisible:true,title:\`AUTO · \${item.name}\`}));}return()=>lines.forEach(line=>{try{candle.current?.removePriceLine(line)}catch{}});},[automations]);
   const viewingIndicator=indicators.find(item=>item.id===viewingIndicatorCode);
+  useEffect(()=>()=>releaseChartStore(chartDatasetKey),[chartDatasetKey]);
   const drawingUndo=undoDrawing;
   const drawingClear=clearDrawings;
   return <ChartShell
