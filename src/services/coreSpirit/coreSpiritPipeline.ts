@@ -1,45 +1,155 @@
 import { CoreSpiritProgram } from './types';
 import { CoreSpiritParser } from './parser';
-import { CoreSpiritCompiler } from './compiler';
+import { CoreSpiritCompiler, buildCoreSpiritSemanticFingerprint } from './compiler';
 import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
 import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
 import { describeCoreSpiritSurface } from './surfaceForms';
-import { coreSpiritChecksum } from './artifact';
+import { sha256HexSync } from './artifactIdentity';
+import { CORE_SPIRIT_COMPILER_VERSION } from './VERSION';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
+import { coreSpiritComponentRegistry } from './coreSpiritComponents';
+import type { CoreSpiritExecutableArtifact } from './artifact';
 
 export function normalizeCoreSpirit(source: string) { return normalizeCoreSpiritSource(source); }
 export function parseCoreSpirit(source: string) { return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parse(); }
 export function parseCoreSpiritDetailed(source: string) {
-  try { return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed(); }
-  catch (error) { const e=error as any; return { ast:{type:'program',body:[]} as any, diagnostics:[{message:e?.message || String(error),line:e?.position?.line || 1,column:e?.position?.column || 1,start:e?.position?.offset || 0,end:(e?.position?.offset || 0)+1}] }; }
+  try {
+    return new CoreSpiritParser(normalizeCoreSpiritSource(source)).parseDetailed();
+  } catch (error) {
+    const e = error as any;
+    return {
+      ast:{type:'program',body:[]} as any,
+      diagnostics:[{
+        message:e?.message || String(error),
+        line:e?.position?.line || 1,
+        column:e?.position?.column || 1,
+        start:e?.position?.offset || 0,
+        end:(e?.position?.offset || 0)+1,
+      }],
+    };
+  }
 }
-const compileCache = new Map<string, CoreSpiritCompileResult>();
+
+/**
+ * Fast in-memory artifact cache.
+ *
+ * The cached value is the executable artifact itself, not the compilation
+ * result wrapper. Diagnostics are retained separately because warnings are
+ * editor metadata, not executable state.
+ */
+const artifactCache = new Map<string, CoreSpiritExecutableArtifact>();
+const diagnosticsCache = new Map<string, CoreSpiritCompileResult['diagnostics']>();
 const COMPILE_CACHE_MAX = 64;
 
-export function clearCoreSpiritCompileCache(): void { compileCache.clear(); }
+export function clearCoreSpiritCompileCache(): void {
+  artifactCache.clear();
+  diagnosticsCache.clear();
+}
 
-export function compileCoreSpirit(source: string, sourceId = 'coreSpirit', options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritCompileResult {
-  const componentKey = options.components ? coreSpiritChecksum(options.components instanceof Object && 'listContracts' in options.components ? (options.components as any).listContracts() : options.components) : 'default';
-  const cacheKey = `${sourceId}:${coreSpiritChecksum(source)}:${componentKey}`;
-  const cached = compileCache.get(cacheKey);
-  if (cached) {
-    compileCache.delete(cacheKey);
-    compileCache.set(cacheKey, cached);
-    return cached;
+function componentFingerprint(options: { components?: CoreSpiritComponentRegistryLike }): string {
+  const components = options.components ?? coreSpiritComponentRegistry;
+  if (components && typeof components === 'object' && 'listContracts' in components) {
+    return JSON.stringify((components as any).listContracts());
   }
-  const parsed=parseCoreSpiritDetailed(source);
-  if(parsed.diagnostics.length) return { diagnostics: parsed.diagnostics.map(d=>({severity:'error' as const,message:d.message,line:d.line,column:d.column,start:d.start,end:d.end,code:'SYNTAX_ERROR'})) };
-  const result = new CoreSpiritCompiler().compile(parsed.ast, sourceId, { surface: describeCoreSpiritSurface(source, options), components: options.components });
-  compileCache.set(cacheKey, result);
-  while (compileCache.size > COMPILE_CACHE_MAX) compileCache.delete(compileCache.keys().next().value!);
+  return JSON.stringify(components);
+}
+
+function buildCompileCacheIdentity(
+  source:string,
+  sourceId:string,
+  options:{components?:CoreSpiritComponentRegistryLike; layer?:string},
+): { key:string; sourceHash:string; normalizedHash:string; semanticHash:string } {
+  const normalizedSource=normalizeCoreSpiritSource(source);
+  const sourceHash=sha256HexSync(source);
+  const normalizedHash=sha256HexSync(normalizedSource);
+  const semanticFingerprint=JSON.stringify({
+    compiler:CORE_SPIRIT_COMPILER_VERSION,
+    semantic:buildCoreSpiritSemanticFingerprint({
+      layer:options.layer as any,
+      components:options.components,
+    }),
+    componentSet:componentFingerprint(options),
+  });
+  const semanticHash=sha256HexSync(`${normalizedHash}\n${semanticFingerprint}`);
+  return {
+    key:`${sourceId}:${semanticHash}`,
+    sourceHash,
+    normalizedHash,
+    semanticHash,
+  };
+}
+
+export function compileCoreSpirit(
+  source: string,
+  sourceId = 'coreSpirit',
+  options: { components?: CoreSpiritComponentRegistryLike; layer?: any } = {},
+): CoreSpiritCompileResult {
+  const identity=buildCompileCacheIdentity(source,sourceId,options);
+  const cached=artifactCache.get(identity.key);
+  if(cached){
+    artifactCache.delete(identity.key);
+    artifactCache.set(identity.key,cached);
+    return {
+      ir:cached.ir,
+      artifact:cached,
+      diagnostics:diagnosticsCache.get(identity.key) ?? [],
+    };
+  }
+
+  const normalizedSource=normalizeCoreSpiritSource(source);
+  const semanticFingerprint=JSON.stringify({
+    compiler:CORE_SPIRIT_COMPILER_VERSION,
+    semantic:buildCoreSpiritSemanticFingerprint({
+      layer:options.layer,
+      components:options.components,
+    }),
+    componentSet:componentFingerprint(options),
+  });
+
+  const surface=describeCoreSpiritSurface(source,options as any);
+  const result=new CoreSpiritCompiler().compileSource(source,sourceId,{
+    components:options.components,
+    layer:options.layer,
+    surface,
+    artifactContext:{
+      source,
+      normalizedSource,
+      semanticFingerprint,
+    },
+  });
+
+  if(result.artifact){
+    artifactCache.set(identity.key,result.artifact);
+    diagnosticsCache.set(identity.key,result.diagnostics);
+    while(artifactCache.size>COMPILE_CACHE_MAX){
+      const oldest=artifactCache.keys().next().value as string|undefined;
+      if(oldest===undefined) break;
+      artifactCache.delete(oldest);
+      diagnosticsCache.delete(oldest);
+    }
+  }
+
   return result;
 }
+
 export function makeCoreSpiritProgram(source: string, id = 'coreSpirit'): CoreSpiritProgram {
-  return { version:1,id,source:normalizeCoreSpiritSource(source),ast:parseCoreSpirit(source),surface:describeCoreSpiritSurface(source) };
+  return {
+    version:1,
+    id,
+    source:normalizeCoreSpiritSource(source),
+    ast:parseCoreSpirit(source),
+    surface:describeCoreSpiritSurface(source),
+  };
 }
-export function executeCoreSpirit(source: string, bars: CoreSpiritMarketBar[], sourceId='coreSpirit'): CoreSpiritExecutionResult {
-  const program=makeCoreSpiritProgram(source,sourceId); const runtime=new CoreSpiritRuntime({sourceId});
+
+export function executeCoreSpirit(
+  source: string,
+  bars: CoreSpiritMarketBar[],
+  sourceId='coreSpirit',
+): CoreSpiritExecutionResult {
+  const program=makeCoreSpiritProgram(source,sourceId);
+  const runtime=new CoreSpiritRuntime({sourceId});
   return runtime.executeIr(runtime.loadProgram(program),bars);
 }
