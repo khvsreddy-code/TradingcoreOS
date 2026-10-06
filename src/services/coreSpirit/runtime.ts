@@ -560,7 +560,7 @@ export class CoreSpiritRuntime {
     diagnostics: string[],
     executionOptions: { reuseValues?: boolean; dirtyInstructions?: ReadonlySet<number> } = {},
   ): void {
-    this.prefetchTradingNativeData(barIndex);
+    this.prefetchTradingNativeData(barIndex, this.toEpoch(bar.timestamp));
     const host: CoreSpiritExecutionVMHost = {
       maxStepsPerBar: this.options.maxStepsPerBar,
       throwIfAborted: () => this.throwIfAborted(),
@@ -596,7 +596,7 @@ export class CoreSpiritRuntime {
     else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan });
   }
 
-  private prefetchTradingNativeData(barIndex:number): void {
+  private prefetchTradingNativeData(barIndex:number, asOfTimestamp:number): void {
     const plan=this.compiledIr?.tradingNativePlan;
     const batchResolver=this.dataResolver?.requestBatch;
     if(!plan?.dataDependencies.length || !batchResolver) return;
@@ -615,7 +615,7 @@ export class CoreSpiritRuntime {
       }
     }
     if(!requests.length) return;
-    const value=batchResolver(requests);
+    const value=batchResolver(requests,{asOfTimestamp,baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment:'last-confirmed'});
     if(value && typeof (value as any).then==='function') return;
     const snapshots=value as CoreSpiritDataSnapshot[];
     if(snapshots.length!==requests.length) return;
