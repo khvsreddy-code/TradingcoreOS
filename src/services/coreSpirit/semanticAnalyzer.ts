@@ -247,7 +247,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return scope.get(n.name) || semanticSymbols.get(n.name);
       }
       case 'member': {
-        if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return semanticScalar('boolean', { temporalPhase:n.member as any });
+        if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return semanticScalar('boolean');
         if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe'||n.target.name==='series')) {
           const symbol = n.target.name==='market' && n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'current';
           const tf = (n.target.name==='timeframe'||n.target.name==='series') ? (n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'requested') : 'chart';
