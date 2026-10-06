@@ -234,6 +234,7 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
   let out = source;
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
+  out = out.replace(/\bmarket\(([^()]*)\)\.returns\b/g, 'returns(market($1))');
 
   const marker=/\bregime\.detect\s*\(/gi;
   let cursor=0;
