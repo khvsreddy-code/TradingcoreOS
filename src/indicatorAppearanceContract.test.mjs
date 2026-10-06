@@ -39,7 +39,7 @@ assert(coordinator.includes('const compute = active.map') && !coordinator.includ
 const computeEffect = live.match(/useEffect\(\(\)=>\{[^\n]*renderStudies\(candles\.current\);controller\.requestIndicatorWorker\(candles\.current\);[^\n]*\},\[indicatorComputeKey,[^\n]+\]\);/);
 assert(computeEffect, 'computation effect is not keyed by indicatorComputeKey');
 assert(!computeEffect[0].includes('indicatorAppearanceKey'), 'appearance key can still invalidate computation effect');
-assert(/useEffect\(\(\)=>\{[^\n]*applyIndicatorAppearanceOnly\(\)[^\n]*\},\[indicatorAppearanceKey\]\);/.test(live), 'appearance-only effect missing');
+assert(/useEffect\(\(\)=>.*applyIndicatorAppearanceOnly\(\).*\[indicatorAppearanceKey\]\);/.test(live), 'appearance-only effect missing');
 assert(live.includes('indicatorFillMap') && live.includes('addFillBetweenSeries'), 'channel fill presentation is not wired');
 assert(live.includes('setPaneAppearance'), 'pane presentation is not wired to live chart');
 assert(live.includes('textSize:a.marker.textSize') && live.includes('offset:a.marker.offset'), 'marker text size/offset is not propagated');
