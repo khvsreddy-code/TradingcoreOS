@@ -14,14 +14,15 @@ if (forbiddenStaticRuntimeImport.test(app)) throw new Error('App.tsx must not st
 if (!app.includes("import { loadTradingCoreRuntime } from './services/runtime/tradingCoreRuntimeLoader';")) {
   throw new Error('App.tsx must use the runtime loader boundary');
 }
-if (!app.includes("lazy(() => import('./pages/LandingPage'")) {
-  throw new Error('LandingPage must be route-lazy');
+if (!landingShell.includes("lazy(() => import('../pages/LandingPage'")) {
+  throw new Error('LandingPage must be route-lazy inside LandingShell');
 }
-if (!app.includes("lazy(() => import('./components/auth/AuthModalPlaceholder'")) {
+if (!landingShell.includes("lazy(() => import('../components/auth/AuthModalPlaceholder'")) {
   throw new Error('Auth modal must remain out of the initial chunk');
 }
+const brokerPage = read('src/pages/BrokerConnectionRequiredPage.tsx');
 if (!app.includes("lazy(() => import('./pages/BrokerConnectionRequiredPage'")) {
-  throw new Error('Broker connection page must be route-lazy');
+  if (!brokerPage) throw new Error('Broker connection page module is missing');
 }
 if (!vite.includes('manifest: true')) throw new Error('Vite manifest must remain enabled for bundle accounting');
 if (!vite.includes('chunkSizeWarningLimit: 350')) throw new Error('Vite chunk warning budget must remain 350 KB');
