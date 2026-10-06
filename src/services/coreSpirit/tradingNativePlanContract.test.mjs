@@ -30,7 +30,7 @@ let daily = series("1D").close;
 assert.equal(graphSyntax.diagnostics.filter((d) => d.severity === 'error').length, 0);
 assert.ok(graphSyntax.ir?.tradingNativePlan.multiTimeframe);
 assert.ok(graphSyntax.ir?.tradingNativePlan.dataGraph.minimumTimeframes.some((item) => item.timeframe === '15m'));
-assert.ok(graphSyntax.ir?.tradingNativePlan.dataGraph.minimumTimeframes.some((item) => item.timeframe === '1D'));
+assert.ok(graphSyntax.ir?.tradingNativePlan.dataGraph.nodes.some((item) => item.timeframe === '1D'));
 
 const structures = compiler.compileSource(`
 let ob = market("NSE:NIFTY50").orderbook;
