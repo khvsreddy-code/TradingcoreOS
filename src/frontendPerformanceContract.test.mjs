@@ -38,3 +38,33 @@ const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts'
 if (/import\s+\{\s*UserDrawingController\s*\}/.test(nativeRenderer)) throw new Error('NativeRenderer must not eagerly import UserDrawingController');
 if (!nativeRenderer.includes("import('./drawings/UserDrawingController')")) throw new Error('NativeRenderer must lazy-load drawing capability');
 console.log('Vela capability-splitting contract: OK');
+
+
+const landingShell = read('src/appShells/LandingShell.tsx');
+const workspaceShell = read('src/appShells/TradingWorkspaceShell.tsx');
+const liveShell = read('src/appShells/LiveTradingShell.tsx');
+const liveWorkspace = read('src/LiveTradingWorkspace.tsx');
+const indicatorPage = read('src/pages/IndicatorsPage.tsx');
+const editorPage = read('src/pages/CoreSpiritEditorPage.tsx');
+const compilerLoader = read('src/services/coreSpirit/coreSpiritCompilerLoader.ts');
+const liveEngineLoader = read('src/services/coreSpirit/coreSpiritVelaEngineLoader.ts');
+
+if (!app.includes("import { LandingShell } from './appShells/LandingShell';")) throw new Error('App must use the landing application shell');
+if (!app.includes("import { TradingWorkspaceShell } from './appShells/TradingWorkspaceShell';")) throw new Error('App must use the trading workspace application shell');
+if (!app.includes("import { LiveTradingShell } from './appShells/LiveTradingShell';")) throw new Error('App must use the live trading application shell');
+if (!landingShell.includes("lazy(() => import('../pages/LandingPage'")) throw new Error('Landing shell must own the landing route lazy boundary');
+if (!workspaceShell.includes("lazy(() => import('../pages/CoreSpiritEditorPage'")) throw new Error('Trading workspace shell must keep CoreSpirit editor route-lazy');
+if (!liveShell.includes("lazy(() => import('../LiveTradingTerminal'")) throw new Error('Live shell must keep the live terminal route-lazy');
+
+if (/import\s+\{\s*CoreSpiritVelaEngine\s*\}\s+from/.test(liveWorkspace)) throw new Error('LiveTradingWorkspace must not eagerly import CoreSpiritVelaEngine');
+if (!liveWorkspace.includes('LazyCoreSpiritVelaEngine')) throw new Error('LiveTradingWorkspace must use the lazy CoreSpirit engine boundary');
+if (!liveEngineLoader.includes("import('../../CoreSpiritVelaEngine')")) throw new Error('CoreSpirit Vela engine loader must use a dynamic import');
+if (!compilerLoader.includes("import('./coreSpiritPipeline')")) throw new Error('CoreSpirit compiler must sit behind a dynamic import boundary');
+
+if (!indicatorPage.includes("lazy(() => import('../components/indicators/IndicatorSourceEditor'")) throw new Error('IndicatorSourceEditor must be route/interaction lazy');
+if (!editorPage.includes("../services/coreSpirit/editorModel")) throw new Error('CoreSpirit editor must avoid the barrel import');
+if (editorPage.includes("from '../services/coreSpirit';")) throw new Error('CoreSpirit editor must not import the full CoreSpirit barrel');
+
+if (!vite.includes("return 'tco-live-workspace';")) throw new Error('Live workspace chunk boundary missing');
+if (!vite.includes("return 'tco-corespirit-compiler';")) throw new Error('CoreSpirit compiler chunk boundary missing');
+console.log('application shell + CoreSpirit critical-path performance contract: OK');
