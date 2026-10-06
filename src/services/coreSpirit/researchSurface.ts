@@ -130,6 +130,20 @@ export function buildCoreSpiritResearchPlan(
       backtests.push(current);
       continue;
     }
+    if(current){
+      const fromMatch=line.match(/^(?:from|start)\s+(?:"([^"]+)"|'([^']+)')\s*;?$/i);
+      if(fromMatch){
+        current={...current,from:fromMatch[1]??fromMatch[2]};
+        backtests[backtests.length-1]=current;
+        continue;
+      }
+      const toMatch=line.match(/^(?:to|end)\s+(?:"([^"]+)"|'([^']+)')\s*;?$/i);
+      if(toMatch){
+        current={...current,to:toMatch[1]??toMatch[2]};
+        backtests[backtests.length-1]=current;
+        continue;
+      }
+    }
     if(current && /^evaluate\s*\{?\s*$/i.test(line)){
       const evalIndent=lines[i].match(/^[ \t]*/)?.[0].replace(/\t/g,'  ').length??0;
       const metrics:string[]=[];
