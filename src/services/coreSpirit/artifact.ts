@@ -68,14 +68,15 @@ export function makeExecutableArtifact(
   };
 }
 
-export function makeCoreSpiritProgramArtifactIdentity(
+export async function makeExecutableArtifactIdentity(
   ir: CoreSpiritIrProgram,
   source = '',
   normalizedSource = source,
   semanticFingerprint = '',
 ): Promise<CoreSpiritArtifactIdentity> {
-  return buildCoreSpiritArtifactIdentity(ir, source, normalizedSource, semanticFingerprint) as unknown as Promise<CoreSpiritArtifactIdentity>;
+  return buildCoreSpiritArtifactIdentity(ir, source, normalizedSource, semanticFingerprint);
 }
+
 
 export function validateExecutableArtifact(artifact: unknown): artifact is CoreSpiritExecutableArtifact {
   const a = artifact as CoreSpiritExecutableArtifact & { abi?: unknown };
