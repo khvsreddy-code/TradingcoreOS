@@ -69,19 +69,6 @@ function label(output: Extract<CoreSpiritObject, { kind: 'label' | 'shape' }>): 
         overlay: output.visual?.pane === 'price',
     };
 }
-function box(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, index: number): DrawingBox {
-    const s = output.style ?? {};
-    return {
-        id: output.id ?? `zone-${index}`, paneId: pane(output), xloc: 'bar_time',
-        left: Number(output.left), top: Number(output.top), right: Number(output.right), bottom: Number(output.bottom), extend: 'none',
-        bgColor: color(s.fillColor ?? s.color, 'rgba(155,138,255,0.16)'),
-        borderColor: s.borderWidth === 0 ? undefined : color(s.borderColor ?? s.color, '#9b8aff'),
-        borderWidth: Math.max(0, Number(s.borderWidth ?? 1)), borderStyle: style(s.lineStyle),
-        text: typeof s.text === 'string' ? s.text : undefined, textColor: color(s.textColor, '#fff'),
-        textSize: 'small', hAlign: 'center', vAlign: 'center', wrap: false, fontFamily: 'default', bold: false, italic: false,
-        overlay: output.visual?.pane === 'price',
-    };
-}
 function polyline(output: Extract<CoreSpiritObject, { kind: 'polyline' }>): DrawingPolyline {
     return {
         id: output.id, paneId: pane(output),
