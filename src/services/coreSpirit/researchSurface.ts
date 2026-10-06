@@ -12,6 +12,12 @@ export type CoreSpiritResearchEvaluationMetric =
   | 'exposure'
   | string;
 
+export interface CoreSpiritResearchModelSpec {
+  name:string;
+  features:readonly string[];
+  target?:string;
+}
+
 export interface CoreSpiritResearchBacktest {
   id:string;
   model:string;
@@ -24,6 +30,7 @@ export interface CoreSpiritResearchPlan {
   version:typeof CORE_SPIRIT_RESEARCH_SURFACE_VERSION;
   backtests:readonly CoreSpiritResearchBacktest[];
   models:readonly string[];
+  modelSpecs:readonly CoreSpiritResearchModelSpec[];
 }
 
 function splitMetrics(text:string):string[]{
@@ -36,9 +43,53 @@ export function buildCoreSpiritResearchPlan(
 ):CoreSpiritResearchPlan{
   const lines=String(source||'').replace(/\r\n?/g,'\n').split('\n');
   const backtests:CoreSpiritResearchBacktest[]=[];
+  const modelSpecs:CoreSpiritResearchModelSpec[]=[];
   let current:CoreSpiritResearchBacktest|undefined;
+  let activeModel:CoreSpiritResearchModelSpec|undefined;
+  let activeModelIndent:number|undefined;
+  let activeModelSection:'features'|'target'|undefined;
   for(let i=0;i<lines.length;i+=1){
-    const line=lines[i].trim();
+    const raw=lines[i];
+    const line=raw.trim();
+    const indent=raw.match(/^[ \t]*/)?.[0].replace(/\t/g,'  ').length??0;
+
+    const modelMatch=line.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*(?::|\{)\s*$/i);
+    if(modelMatch){
+      activeModel={name:modelMatch[1]??modelMatch[2]??modelMatch[3]??'Model',features:[]};
+      activeModelIndent=indent;
+      activeModelSection=undefined;
+      modelSpecs.push(activeModel);
+      continue;
+    }
+    if(activeModel){
+      if(line==='}' && indent<=activeModelIndent!){
+        activeModel=undefined; activeModelIndent=undefined; activeModelSection=undefined; continue;
+      }
+      if(indent<=activeModelIndent!){
+        activeModel=undefined; activeModelIndent=undefined; activeModelSection=undefined;
+      } else if(/^features?\s*:\s*(.*)$/i.test(line)){
+        const value=line.match(/^features?\s*:\s*(.*)$/i)?.[1]?.trim()??'';
+        activeModelSection='features';
+        if(value) activeModel={...activeModel,features:[...activeModel.features,...splitMetrics(value)]};
+        modelSpecs[modelSpecs.length-1]=activeModel;
+        continue;
+      } else if(/^targets?\s*:\s*(.*)$/i.test(line)){
+        const value=line.match(/^targets?\s*:\s*(.*)$/i)?.[1]?.trim()??'';
+        activeModelSection='target';
+        if(value) activeModel={...activeModel,target:value};
+        modelSpecs[modelSpecs.length-1]=activeModel;
+        continue;
+      } else if(activeModelSection==='features'){
+        if(line) activeModel={...activeModel,features:[...activeModel.features,...splitMetrics(line.replace(/,$/,''))]};
+        modelSpecs[modelSpecs.length-1]=activeModel;
+        continue;
+      } else if(activeModelSection==='target'){
+        if(line) activeModel={...activeModel,target:line.replace(/,$/,'')};
+        modelSpecs[modelSpecs.length-1]=activeModel;
+        continue;
+      }
+    }
+
     const match=line.match(/^backtest\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+from\s+(?:"([^"]+)"|'([^']+)'))?(?:\s+to\s+(?:"([^"]+)"|'([^']+)'))?\s*;?$/i);
     if(match){
       current={
@@ -73,5 +124,6 @@ export function buildCoreSpiritResearchPlan(
     version:CORE_SPIRIT_RESEARCH_SURFACE_VERSION,
     backtests:Object.freeze(frozenBacktests),
     models:Object.freeze([...(surface?.declarations??[]).filter(item=>item.kind==='model').map(item=>item.name)]),
+    modelSpecs:Object.freeze(modelSpecs.map(spec=>Object.freeze({...spec,features:Object.freeze([...spec.features])}))),
   });
 }
