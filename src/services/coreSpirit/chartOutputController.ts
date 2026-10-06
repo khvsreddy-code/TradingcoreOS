@@ -1,4 +1,4 @@
-import { IChartApi, ISeriesApi, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaChartFacade';
+import { IChartApi, ISeriesApi, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaNativeChartKernel';
 import { CoreSpiritOutputFrame } from './outputDispatcher';
 import { CoreSpiritObject, CoreSpiritVisualStyle } from './types';
 
@@ -53,6 +53,7 @@ export class CoreSpiritChartOutputController {
   }
 
   applyFrame(frame: CoreSpiritOutputFrame): void {
+    const previousFrame = this.lastFrame;
     this.lastFrame = frame;
     const seenPlots = new Set<string>();
     for (const [id, points] of frame.plots) {
@@ -72,7 +73,10 @@ export class CoreSpiritChartOutputController {
       } else {
         try { (series as any).applyOptions({ color: style.color || '#38bdf8', lineWidth: Number(style.lineWidth || 2), lineStyle: Number(style.lineStyle || 0), priceLineVisible: style.priceLineVisible ?? false, lastValueVisible: style.lastValueVisible ?? true, title: style.title || undefined }); } catch {}
       }
-      series.setData(points.filter(p => Number.isFinite(p.time) && (p.value == null || Number.isFinite(p.value))).map(p => p.value == null ? ({ time: p.time as Time } as any) : ({ time: p.time as Time, value: p.value })) as any);
+      const nextPoints = points.filter(p => Number.isFinite(p.time) && (p.value == null || Number.isFinite(p.value))).map(p => p.value == null ? ({ time: p.time as Time } as any) : ({ time: p.time as Time, value: p.value })) as any[];
+      const previousPoints = previousFrame?.plots.get(id) ?? [];
+      this.patchSeriesValues(series, previousPoints as any[], nextPoints);
+
     }
     for (const [id, series] of this.plotSeries) if (!seenPlots.has(id)) { this.remove(series); this.plotSeries.delete(id); }
 
@@ -104,7 +108,11 @@ export class CoreSpiritChartOutputController {
         });
         this.lineSeries.set(id, series);
       }
-      series.setData([{ time: drawing.start.time as Time, value: drawing.start.price }, { time: drawing.end.time as Time, value: drawing.end.price }] as any);
+      const nextLine = [{ time: drawing.start.time as Time, value: drawing.start.price }, { time: drawing.end.time as Time, value: drawing.end.price }] as any[];
+      const previousDrawing = (previousFrame?.drawings as any[] | undefined)?.find((candidate) => candidate.id === id);
+      const previousLine = previousDrawing ? [{ time: previousDrawing.start.time as Time, value: previousDrawing.start.price }, { time: previousDrawing.end.time as Time, value: previousDrawing.end.price }] : [];
+      this.patchSeriesValues(series, previousLine, nextLine);
+
     }
     for (const [id, series] of this.lineSeries) if (!seenLines.has(id)) { this.remove(series); this.lineSeries.delete(id); }
 
@@ -283,5 +291,69 @@ export class CoreSpiritChartOutputController {
     if (!this.labelLayer) return; const ts:any=this.chart.timeScale(); const series:any=this.candle||this.plotSeries.values().next().value; if(!series)return;
     for(const label of this.lastLabels){const node=this.labelNodes.get(label.id);if(!node)continue;const x=ts.timeToCoordinate(label.time as Time),y=series.priceToCoordinate(label.price);if(x==null||y==null||!Number.isFinite(Number(x))||!Number.isFinite(Number(y))){node.style.display='none';continue;}node.style.display='block';const offset=label.position==='above'?-18:label.position==='below'?18:0;node.style.left=`${Number(x)}px`;node.style.top=`${Number(y)+offset}px`;}
   }
+  private patchSeriesValues(
+    series: ISeriesApi<'Line'>,
+    previous: readonly { time:number; value?:number|null }[],
+    current: readonly { time:number; value?:number|null }[],
+  ): void {
+    const patchable = series as ISeriesApi<'Line'> & {
+      patch?: (patch: {
+        type:'append'|'replaceLast'|'replaceRange'|'removeRange';
+        from?:number;
+        to?:number;
+        values: readonly { time:number; value?:number|null }[];
+      }) => void;
+    };
+    if (!previous.length) {
+      series.setData(current as any);
+      return;
+    }
+    if (previous.length === current.length && previous.every((point,index) => point.time === current[index]?.time && point.value === current[index]?.value)) return;
+
+    let prefix = 0;
+    while (prefix < previous.length && prefix < current.length &&
+      previous[prefix]?.time === current[prefix]?.time && previous[prefix]?.value === current[prefix]?.value) prefix += 1;
+
+    let suffix = 0;
+    while (
+      suffix < previous.length - prefix &&
+      suffix < current.length - prefix &&
+      previous[previous.length - 1 - suffix]?.time === current[current.length - 1 - suffix]?.time &&
+      previous[previous.length - 1 - suffix]?.value === current[current.length - 1 - suffix]?.value
+    ) suffix += 1;
+
+    const previousEnd = previous.length - suffix - 1;
+    const currentEnd = current.length - suffix - 1;
+    if (prefix === previous.length && current.length > previous.length) {
+      patchable.patch?.({type:'append', values:current.slice(previous.length)});
+      if (!patchable.patch) series.setData(current as any);
+      return;
+    }
+    if (prefix === current.length && previous.length > current.length) {
+      patchable.patch?.({type:'removeRange', from:prefix, to:previous.length - 1});
+      if (!patchable.patch) series.setData(current as any);
+      return;
+    }
+
+    if (prefix === current.length - suffix && previousEnd === prefix - 1) {
+      patchable.patch?.({type:'append', values:current.slice(prefix, currentEnd + 1)});
+      if (!patchable.patch) series.setData(current as any);
+      return;
+    }
+
+    if (prefix === previous.length - suffix && currentEnd === prefix - 1) {
+      patchable.patch?.({type:'removeRange', from:prefix, to:previousEnd});
+      if (!patchable.patch) series.setData(current as any);
+      return;
+    }
+
+    patchable.patch?.({
+      type: previousEnd >= prefix ? 'replaceRange' : 'append',
+      ...(previousEnd >= prefix ? {from:prefix,to:previousEnd} : {}),
+      values: current.slice(prefix, currentEnd + 1),
+    });
+    if (!patchable.patch) series.setData(current as any);
+  }
+
   private remove(series:any){try{this.chart.removeSeries(series);}catch{}}
 }
