@@ -6,6 +6,7 @@ import { chartMarketKey, chartMarketStore } from './chartMarketStore';
 import { historyStore, reconcileRealtimeCandle } from './HistoryStore';
 import { acquireSharedChartMarketFeed } from './sharedChartMarketFeed';
 import { chartHistoryCoordinator, historyPageCandles, historyDemandPageCandles, historyWarmTarget, initialHistoryCandles, shouldLoadOlderHistory } from './chartHistoryCoordinator';
+import { marketDataGraph } from '../core/data/marketDataGraph';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -161,6 +162,8 @@ export class ChartDataPlane {
   private setCandles(rows: HistoricalCandle[], reason: 'cache' | 'history' | 'older-history'): void {
     this.state.candles = normalizeHistory(rows);
     if (this.state.candles.length) {
+      marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
+
       this.state.revision += 1;
       this.syncCanonical();
       this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
@@ -197,6 +200,8 @@ export class ChartDataPlane {
       else if (latestPoint.time === canonicalLastTime) this.canonicalPlane.updateLast(latestPoint);
       else this.syncCanonical();
     }
+    const latestCandle = result.candles[result.candles.length - 1];
+    if (latestCandle) marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, latestCandle);
     if (result.bucketChanged || result.candles.length !== previousLength) {
       this.state.revision += 1;
       historyStore.upsertLatest(this.brokerId, this.instrumentKey, CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, result.candles[result.candles.length - 1]);
