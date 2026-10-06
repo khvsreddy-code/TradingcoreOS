@@ -135,7 +135,7 @@ export class CoreSpiritSceneDiff {
         return {
             points: this.points,
             markers: [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time)),
-            priceLines: this.collections.priceLines [],
+            priceLines: this.collections.priceLines as TcoPriceLine[],
             rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({
                 id,
                 paneId: this.rectBatchMeta.get(id)?.paneId ?? 'price',
