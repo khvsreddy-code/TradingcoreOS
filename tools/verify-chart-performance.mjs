@@ -6,6 +6,7 @@ const expectedCellsList = (process.env.TCO_EXPECTED_CELLS || '1').split(',').map
 const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 25);
 const maxRenderRateHz = Number(process.env.TCO_MAX_RENDER_RATE_HZ || 150);
 const maxComputeRateHz = Number(process.env.TCO_MAX_COMPUTE_RATE_HZ || 60);
+const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
 const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount'];
 
 function run(args) {
@@ -36,6 +37,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const perf = JSON.parse(perfJson || 'null');
   if (!perf || !Array.isArray(perf.cells)) throw new Error(`Browser verification: __TCO_PERF__ missing for ${url}`);
   if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);
+  if (requireSharedMemory && (!perf.sharedMemory?.crossOriginIsolated || !perf.sharedMemory?.sharedArrayBuffer)) throw new Error(`Browser verification: SharedArrayBuffer isolation unavailable for ${url}`);
   for (const sample of perf.pipeline) {
     for (const field of requiredPipelineFields) {
       if (!(field in sample)) throw new Error(`Browser verification: pipeline telemetry field missing: ${field}`);
@@ -58,6 +60,8 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxP95FrameMs,
     maxRenderRateHz,
     maxComputeRateHz,
+    requireSharedMemory,
+    sharedMemory: perf.sharedMemory,
     slowestP95,
     pipeline: perf.pipeline.map((sample) => ({
       key: sample.key,
