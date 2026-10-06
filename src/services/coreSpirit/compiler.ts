@@ -82,7 +82,7 @@ export class CoreSpiritCompiler {
     const componentRefRegisters = new Map<string, string>();
     const dataMemberSources = new Map<CoreSpiritAstNode, { ref: string; field: 'open'|'high'|'low'|'close'|'volume'|'time' }>();
     const isDataRefExpression = (node: CoreSpiritAstNode): boolean =>
-      (node.type === 'call' && (node.name === 'market' || node.name === 'timeframe')) ||
+      (node.type === 'call' && (node.name === 'market' || node.name === 'timeframe' || node.name === 'series')) ||
       (node.type === 'memberCall' && node.member === 'timeframe' && (
         node.target.type === 'call' && node.target.name === 'market' ||
         (node.target.type === 'identifier' && dataRefRegisters.has(node.target.name))
@@ -127,7 +127,7 @@ export class CoreSpiritCompiler {
           if (builtin?.emitKind) {
             emitInstruction(n, {op:'emit',kind:builtin.emitKind,args:[dest,...args],outputId:`${builtin.emitKind}:${n.span?.start ?? temp}`});
           }
-          if (n.name === 'market' || n.name === 'timeframe') dataRefRegisters.set(n.span ? `${n.span.start}:${n.span.end}` : `temp:${dest}`, dest);
+          if (n.name === 'market' || n.name === 'timeframe' || n.name === 'series') dataRefRegisters.set(n.span ? `${n.span.start}:${n.span.end}` : `temp:${dest}`, dest);
           return dest;
         }
         case 'memberCall': {
@@ -252,7 +252,7 @@ export class CoreSpiritCompiler {
           const target = expr(n.target);
           const isDataRef =
             (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name)) ||
-            (n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe')) ||
+            (n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe' || n.target.name === 'series')) ||
             (n.target.type === 'memberCall' && n.target.member === 'timeframe');
           if (!isDataRef) throw new Error(`Member access '${n.member}' is only executable for market()/timeframe() references or chart areas.`);
           const memberDest=`t${temp++}`; const memberName=`t${temp++}`;
