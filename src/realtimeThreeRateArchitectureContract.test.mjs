@@ -29,7 +29,7 @@ if (!/let scheduled = false/.test(provider)) throw new Error('Vela provider rend
 if (!/<Profiler/.test(liveChart) || !/recordReactCommit/.test(liveChart)) throw new Error('LiveChart React commit telemetry missing');
 if ((runtime.match(/onVisibleLogicalRangeChange|onChartClick|onPointerDown|resizeObserver/g) || []).length > 0) throw new Error('ChartRuntimeController must not own raw interaction handlers');
 if (!/createChartInteractionController/.test(runtime)) throw new Error('ChartRuntimeController must delegate interaction lifecycle');
-for (const field of ['tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount']) {
+for (const field of ['tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount']) {
   if (!new RegExp(field).test(perf)) throw new Error(`Missing performance field: ${field}`);
 }
 if (/WebGPU|webgpu/i.test(rates)) throw new Error('Realtime rate scheduler must not introduce WebGPU compute');
