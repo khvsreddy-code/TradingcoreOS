@@ -58,19 +58,31 @@ export const BrokerCallbackPage: React.FC = () => {
 
         setStatus('success');
 
-        if (window.opener) {
-          window.opener.postMessage(
-            {
-              type: 'TRADINGCORE_BROKER_CONNECTED',
-              broker: data.broker || paramBrokerId,
-              brokerId: data.broker || paramBrokerId,
-              state,
-              clientCode: data.clientCode,
-            },
-            window.location.origin
-          );
-          setTimeout(() => window.close(), 900);
+        // The OAuth callback is intentionally a short-lived popup. Notify the
+        // opener first, then close this window regardless of whether the
+        // browser exposes the opener reference. The parent keeps its own popup
+        // handle as an additional safety net.
+        const completionMessage = {
+          type: 'TRADINGCORE_BROKER_CONNECTED',
+          broker: data.broker || paramBrokerId,
+          brokerId: data.broker || paramBrokerId,
+          state,
+          clientCode: data.clientCode,
+        };
+
+        try {
+          window.opener?.postMessage(completionMessage, window.location.origin);
+        } catch (messageError) {
+          console.warn('Unable to notify TradingCore opener after broker authorization:', messageError);
         }
+
+        window.setTimeout(() => {
+          try {
+            window.close();
+          } catch (closeError) {
+            console.warn('Broker OAuth popup could not close itself:', closeError);
+          }
+        }, 250);
       } catch (err: any) {
         setStatus('error');
         setErrorMsg(err?.message || 'Server connection error during broker token exchange.');
