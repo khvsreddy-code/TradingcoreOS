@@ -2,7 +2,8 @@ import { Code2, Eye, Pencil, RotateCcw, Search, Settings2, Trash2, X, Play, Zap 
 import type { CandleAppearance } from '../../services/core/chart/candleAppearance';
 import { DEFAULT_CANDLE_APPEARANCE } from '../../services/core/chart/candleAppearance';
 import type { IndicatorConfig } from '../../services/marketData/indicatorEngine';
-import { INDICATOR_LIBRARY, getIndicatorDefaultPatch } from '../../services/marketData/indicatorEngine';
+import { INDICATOR_LIBRARY } from '../../services/marketData/indicatorEngine';
+import { getIndicatorDefaultPatch } from '../../services/coreSpirit/indicatorSettingsSchema';
 import { IndicatorSettingsPanel } from '../indicators/IndicatorSettingsPanel';
 import { IndicatorCodeViewer } from '../indicators/IndicatorCodeViewer';
 import type { CoreSpiritChartStoreState } from '../../services/coreSpirit/CoreSpiritStore';
