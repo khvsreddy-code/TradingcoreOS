@@ -73,7 +73,7 @@ assert.deepEqual(plan.backtests[0].evaluations,['sharpe','sortino','max_drawdown
 assert.deepEqual(plan.modelSpecs[0].features,['z','beta','regime','volume.zscore(100)']);
 assert.equal(plan.modelSpecs[0].target,'forward_return(20)');
 
-const result=compileCoreSpirit(source,'authoring-levels-contract');
+console.log('DEBUG_NORMALIZED\n'+normalized);\nconst result=compileCoreSpirit(source,'authoring-levels-contract');
 assert.ok(!result.diagnostics.some(d=>d.severity==='error'), result.diagnostics.map(d=>d.message).join('; '));
 assert.ok(result.ir?.surface?.declarations.some(d=>d.kind==='model' && d.name==='alpha'));
 
