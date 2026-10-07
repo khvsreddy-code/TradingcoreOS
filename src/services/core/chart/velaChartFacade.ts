@@ -5,7 +5,29 @@
  */
 export * from './velaNativeChartKernel';
 export {
+  registerLegendAction,
+  unregisterLegendAction,
+  registerLegendCallout,
+  unregisterLegendCallout,
+  registerStatePersistence,
+  unregisterStatePersistence,
+  registerSymbolRanking,
+  symbolRanking,
+} from '../../../../vendor/vela/src/widget/contributions';
+export type {
+  LegendActionDescriptor,
+  LegendCalloutDescriptor,
+  LegendIndicatorInfo,
+  LegendCalloutSpec,
+  StatePersistenceHandler,
+  WidgetContext,
+  SymbolRankingHook,
+  ExternalIndicatorEntry,
+} from '../../../../vendor/vela/src/widget/contributions';
+export {
   VelaNativeChartKernel as VelaChartFacade,
   VelaNativeSeriesKernel as VelaSeriesFacade,
   createVelaNativeChart as createChart,
 } from './velaNativeChartKernel';
+
+// TCO uses Vela's contribution registries directly through this compatibility boundary.
