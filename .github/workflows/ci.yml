@@ -13,12 +13,13 @@ jobs:
     env:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1e60f620b9541dcae3b9d4d6a1f366dba9a5c3f2 # v4.0.3
         with:
           node-version: 24
           cache: npm
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run test:contracts
       - run: npm run build
       - run: npm run typecheck
+      - run: npm run bundle:budget
