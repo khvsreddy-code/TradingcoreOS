@@ -115,6 +115,38 @@ export class ChartController {
     if (Number.isFinite(volume) && volume > 0) b.volume.update({ time, value: volume, color: volumeColor(appearance, open, close) } as any);
   }
 
+  /**
+   * Cold-start safety: a live quote can arrive before the historical request finishes.
+   * Seed exactly one forming candle at the renderer boundary so the chart is never
+   * visually empty while the canonical history path recovers. This is a one-shot
+   * compatibility guard, not the steady-state tick path.
+   */
+  seedLiveCandle(tick: NormalizedMarketTick, appearance: CandleAppearance, syncCanonical = true): HistoricalCandle | null {
+    const b = this.bindings;
+    const ltp = Number(tick.ltp);
+    if (!b || !Number.isFinite(ltp) || ltp <= 0) return null;
+    const raw = tick.lastTradeTimestamp ?? tick.receivedAt ?? Date.now();
+    const numeric = typeof raw === 'number' ? raw : Number(raw);
+    const ms = Number.isFinite(numeric)
+      ? (numeric > 1e12 ? numeric : numeric * 1000)
+      : (() => {
+          const parsed = Date.parse(String(raw));
+          return Number.isFinite(parsed) ? parsed : Date.now();
+        })();
+    const intervalMs = 60_000;
+    const time = Math.floor(ms / intervalMs) * intervalMs;
+    const bar: HistoricalCandle = {
+      timestamp: new Date(time).toISOString(),
+      open: ltp,
+      high: ltp,
+      low: ltp,
+      close: ltp,
+      volume: Number(tick.volume) || 0,
+    };
+    this.applyRealtimeBar(bar, appearance, syncCanonical);
+    return bar;
+  }
+
   setHistory(data: HistoricalCandle[], appearance: CandleAppearance, syncCanonical = true): void {
     const b = this.bindings;
     if (!b) return;
