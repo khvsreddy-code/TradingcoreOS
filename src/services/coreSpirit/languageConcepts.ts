@@ -160,6 +160,33 @@ function lineIndent(raw: string): number {
   return raw.match(/^[ \t]*/)?.[0].replace(/\t/g, '  ').length ?? 0;
 }
 
+function splitModelBindingList(value: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (quote) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '(' || ch === '[' || ch === '{') depth += 1;
+    else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1);
+    else if ((ch === ',' || /\s/.test(ch)) && depth === 0) {
+      const item = value.slice(start, i).trim();
+      if (item) out.push(item);
+      start = i + 1;
+    }
+  }
+  const tail = value.slice(start).trim();
+  if (tail) out.push(tail);
+  return out;
+}
 function parseModelField(value: string): { name: string; type: CoreSpiritModelSurfaceFieldType } | undefined {
   const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>|prediction<number>|forecast<number>|probability|feature<number>))?$/i);
   if (!match) return undefined;
@@ -298,23 +325,25 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           current.declaration.binding = { kind: useExternal[1].toLowerCase() as CoreSpiritModelSurfaceBinding['kind'], locator: useExternal[2] ?? useExternal[3] ?? '' };
           concepts.add('MODEL');
         } else if (inputLine) {
-          const names = inputLine[1].trim() ? inputLine[1].split(/[,\s]+/).filter(Boolean) : [];
+          const names = inputLine[1].trim() ? splitModelBindingList(inputLine[1]) : [];
           for (const entry of names) {
             const field = parseModelField(entry);
-            if (!field) continue;
-            if (!current.declaration.inputs.includes(field.name)) current.declaration.inputs.push(field.name);
-            current.declaration.inputTypes[field.name] = field.type;
-            if (!current.declaration.features.includes(field.name)) current.declaration.features.push(field.name);
+            const fieldName = field?.name ?? entry.trim();
+            if (!fieldName) continue;
+            if (!current.declaration.inputs.includes(fieldName)) current.declaration.inputs.push(fieldName);
+            current.declaration.inputTypes[fieldName] = field?.type ?? 'unknown';
+            if (!current.declaration.features.includes(fieldName)) current.declaration.features.push(fieldName);
           }
           concepts.add('MODEL');
         } else if (outputLine) {
-          const names = outputLine[1].trim() ? outputLine[1].split(/[,\s]+/).filter(Boolean) : [];
+          const names = outputLine[1].trim() ? splitModelBindingList(outputLine[1]) : [];
           for (const entry of names) {
             const field = parseModelField(entry);
-            if (!field) continue;
-            if (!current.declaration.outputs.includes(field.name)) current.declaration.outputs.push(field.name);
-            current.declaration.outputTypes[field.name] = field.type;
-            if (!current.declaration.predictions.includes(field.name)) current.declaration.predictions.push(field.name);
+            const fieldName = field?.name ?? entry.trim();
+            if (!fieldName) continue;
+            if (!current.declaration.outputs.includes(fieldName)) current.declaration.outputs.push(fieldName);
+            current.declaration.outputTypes[fieldName] = field?.type ?? 'unknown';
+            if (!current.declaration.predictions.includes(fieldName)) current.declaration.predictions.push(fieldName);
           }
           concepts.add('MODEL');
         } else if (/^(?:target|predict)\s*:/i.test(trimmed)) {
