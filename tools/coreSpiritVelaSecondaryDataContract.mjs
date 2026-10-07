@@ -23,3 +23,5 @@ assert.match(source, /secondaryDegraded=secondaryFailed\.size>0/);
 assert.match(source, /safeOutputs = \(outputs: CoreSpiritObject\[\]\)/);
 assert.match(source, /output\.kind !== 'signal' && output\.kind !== 'orderIntent'/);
 assert.match(source, /context\.alignment==='nearest-confirmed'/);
+
+assert.match(source, /never look beyond asOfTimestamp/);
