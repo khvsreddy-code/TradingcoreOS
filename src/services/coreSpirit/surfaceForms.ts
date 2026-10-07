@@ -150,6 +150,10 @@ function transformShow(line: string, modelNames: ReadonlySet<string>): string | 
     return wrap(`show("signal", ${signal[1]}, ${relative}, ${area})`);
   }
 
+  // `show line(value)` is a beginner-friendly series projection, not geometry.
+  const lineSeries = rest.match(/^line\s*\((.+)\)$/i);
+  if (lineSeries) return wrap(`show("series", ${normalizeCoreSpiritModelReferences(lineSeries[1], modelNames)}, ${area})`);
+
   // MODEL projections are their own semantic SHOW category; the model ABI stays
   // behind the runtime resolver.
   if (isModelNameExpression(rest, modelNames)) {
