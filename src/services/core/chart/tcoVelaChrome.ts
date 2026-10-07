@@ -31,10 +31,10 @@ let watchlist: WatchlistItem[] = [...DEFAULT_WATCHLIST];
 const watchlistRefreshers = new Set<() => void>();
 
 function normalizeWatchlist(value: unknown): WatchlistItem[] {
-  const raw = Array.isArray(value)
+  const raw: unknown[] = Array.isArray(value)
     ? value
     : value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).items)
-      ? (value as Record<string, unknown>).items
+      ? (value as Record<string, unknown>).items as unknown[]
       : [];
   const result: WatchlistItem[] = [];
   const seen = new Set<string>();
@@ -43,8 +43,8 @@ function normalizeWatchlist(value: unknown): WatchlistItem[] {
     const source = item as Record<string, unknown>;
     const symbol = String(source.symbol ?? '').trim().toUpperCase();
     if (!symbol || seen.has(symbol)) continue;
-    const [prefix, ticker] = symbol.includes(':') ? symbol.split(':', 2) : ['NSE', symbol];
-    const short = String(source.short ?? ticker ?? symbol).trim() || symbol;
+    const ticker = symbol.includes(':') ? symbol.split(':', 2)[1] ?? symbol : symbol;
+    const short = String(source.short ?? ticker).trim() || symbol;
     const label = String(source.label ?? ticker ?? symbol).trim() || symbol;
     result.push({ symbol, label, short });
     seen.add(symbol);
