@@ -61,12 +61,12 @@ export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers')
         });
       } catch {}
     },
-    async remove() {
+    async remove(key) {
       const broker = resolveBroker(brokerScope);
       const id = await currentUserId();
       try {
-        localStorage.removeItem(localKey(broker, 'tco-workspace'));
-        localStorage.removeItem(LOCAL_PREFIX + 'tco-workspace');
+        localStorage.removeItem(localKey(broker, key));
+        localStorage.removeItem(LOCAL_PREFIX + key);
       } catch {}
       if (!id) return;
       try { await getSupabaseClient().from('workspace_layouts').delete().eq('user_id', id).eq('broker', broker); } catch {}
