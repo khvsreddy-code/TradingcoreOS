@@ -172,76 +172,114 @@ const bookmarksPanel: SidePanelDescriptor = {
           changePercent: Number.isFinite(Number(event.tick.changePercent)) ? Number(event.tick.changePercent) : undefined,
           receivedAt: Date.now(),
         });
-        render();
+        updateRows();
       });
     };
 
-    const render = (): void => {
+    type RowRef = {
+      row: HTMLDivElement;
+      button: HTMLButtonElement;
+      value: HTMLSpanElement;
+      change: HTMLSpanElement;
+    };
+    const rowRefs = new Map<string, RowRef>();
+
+    const updateRows = (): void => {
       const current = String(ctx.symbol || '').toUpperCase();
       meta.textContent = `${current} · ${ctx.timeframe} · ${watchlist.length} symbols`;
-      rows.textContent = '';
 
       for (const item of watchlist) {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;gap:4px;width:100%;border:1px solid transparent;border-radius:7px;padding:4px 5px;background:transparent;box-sizing:border-box;';
-
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;border:0;border-radius:5px;padding:7px 6px;background:transparent;color:#e2e8f0;text-align:left;cursor:pointer;';
+        const ref = rowRefs.get(item.symbol);
+        if (!ref) continue;
         const isSelected = item.symbol === current;
-        if (isSelected) {
-          row.style.background = 'rgba(124,92,255,.10)';
-          row.style.borderColor = 'rgba(155,138,255,.22)';
-        }
-
-        const left = document.createElement('span');
-        left.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:2px;';
-        const label = document.createElement('span');
-        label.textContent = item.short;
-        label.style.cssText = 'font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-        const detail = document.createElement('span');
-        detail.textContent = item.label;
-        detail.style.cssText = 'font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-        left.append(label, detail);
-
-        const right = document.createElement('span');
-        right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;';
-        const value = document.createElement('span');
+        ref.row.style.background = isSelected ? 'rgba(124,92,255,.10)' : 'transparent';
+        ref.row.style.borderColor = isSelected ? 'rgba(155,138,255,.22)' : 'transparent';
         const quote = quotes.get(item.symbol);
-        value.textContent = quote ? quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—';
-        value.style.cssText = 'font-size:11px;font-weight:700;color:#cbd5e1;font-variant-numeric:tabular-nums;';
-        const change = document.createElement('span');
         const pct = quote?.changePercent;
-        change.textContent = Number.isFinite(pct) ? `${pct! >= 0 ? '+' : ''}${pct!.toFixed(2)}%` : 'LIVE —';
-        change.style.cssText = `font-size:9px;color:${Number.isFinite(pct) ? (pct! >= 0 ? '#4ade80' : '#fb7185') : '#64748b'};font-variant-numeric:tabular-nums;`;
-        right.append(value, change);
-
-        button.append(left, right);
-        button.addEventListener('mouseenter', () => { if (!isSelected) button.style.background = 'rgba(255,255,255,.04)'; });
-        button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
-        button.addEventListener('click', () => ctx.setSymbol(item.symbol));
-
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.textContent = '×';
-        remove.title = `Remove ${item.short}`;
-        remove.style.cssText = 'width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:#475569;font:14px/1 sans-serif;cursor:pointer;';
-        remove.addEventListener('mouseenter', () => { remove.style.background = 'rgba(239,68,68,.08)'; remove.style.color = '#fb7185'; });
-        remove.addEventListener('mouseleave', () => { remove.style.background = 'transparent'; remove.style.color = '#475569'; });
-        remove.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          applyWatchlist(watchlist.filter((candidate) => candidate.symbol !== item.symbol), ctx);
-          quoteSubscribe();
-        });
-
-        row.append(button, remove);
-        rows.appendChild(row);
+        ref.value.textContent = quote
+          ? quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+          : '—';
+        ref.change.textContent = Number.isFinite(pct)
+          ? `${pct! >= 0 ? '+' : ''}${pct!.toFixed(2)}%`
+          : 'LIVE —';
+        ref.change.style.color = Number.isFinite(pct)
+          ? (pct! >= 0 ? '#4ade80' : '#fb7185')
+          : '#64748b';
       }
     };
 
+    const buildRows = (): void => {
+      const current = String(ctx.symbol || '').toUpperCase();
+      const activeSymbols = new Set(watchlist.map(item => item.symbol));
+      for (const [symbol, ref] of rowRefs) {
+        if (!activeSymbols.has(symbol)) {
+          ref.row.remove();
+          rowRefs.delete(symbol);
+        }
+      }
+
+      for (const item of watchlist) {
+        let ref = rowRefs.get(item.symbol);
+        if (!ref) {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:4px;width:100%;border:1px solid transparent;border-radius:7px;padding:4px 5px;background:transparent;box-sizing:border-box;';
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;border:0;border-radius:5px;padding:7px 6px;background:transparent;color:#e2e8f0;text-align:left;cursor:pointer;';
+
+          const left = document.createElement('span');
+          left.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:2px;';
+          const label = document.createElement('span');
+          label.textContent = item.short;
+          label.style.cssText = 'font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          const detail = document.createElement('span');
+          detail.textContent = item.label;
+          detail.style.cssText = 'font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          left.append(label, detail);
+
+          const right = document.createElement('span');
+          right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;';
+          const value = document.createElement('span');
+          value.style.cssText = 'font-size:11px;font-weight:700;color:#cbd5e1;font-variant-numeric:tabular-nums;';
+          const change = document.createElement('span');
+          change.style.cssText = 'font-size:9px;color:#64748b;font-variant-numeric:tabular-nums;';
+          right.append(value, change);
+          button.append(left, right);
+
+          button.addEventListener('mouseenter', () => {
+            if (button.dataset.selected !== '1') button.style.background = 'rgba(255,255,255,.04)';
+          });
+          button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
+          button.addEventListener('click', () => ctx.setSymbol(item.symbol));
+
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.textContent = '×';
+          remove.title = `Remove ${item.short}`;
+          remove.style.cssText = 'width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:#475569;font:14px/1 sans-serif;cursor:pointer;';
+          remove.addEventListener('mouseenter', () => { remove.style.background = 'rgba(239,68,68,.08)'; remove.style.color = '#fb7185'; });
+          remove.addEventListener('mouseleave', () => { remove.style.background = 'transparent'; remove.style.color = '#475569'; });
+          remove.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            applyWatchlist(watchlist.filter((candidate) => candidate.symbol !== item.symbol), ctx);
+            quoteSubscribe();
+          });
+
+          row.append(button, remove);
+          rows.appendChild(row);
+          ref = { row, button, value, change };
+          rowRefs.set(item.symbol, ref);
+        }
+        ref.button.dataset.selected = item.symbol === current ? '1' : '';
+      }
+
+      updateRows();
+    };
+
     const refresh = (): void => {
-      render();
+      buildRows();
       if (watchlist.length) quoteSubscribe();
     };
 
