@@ -17,7 +17,7 @@ export type ChartRealtimeControllerDeps={
   latestTick:Ref<NormalizedMarketTick|undefined>;
   dataRevisionRef:Ref<number>;
   rendererController:{applyRealtimeCanonical:(canonical:any,appearance:any)=>void};
-  chartDataPlane:{readCanonical:()=>any};
+  chartDataPlane:{readCanonical:()=>any;getCompatibilityCandles:(limitOverride?:number)=>HistoricalCandle[]};
   chartUpdateScheduler:ChartUpdateScheduler;
   calculationEngine:{updateTick:(bar:HistoricalCandle,index:number,bucketChanged:boolean)=>void;reset:(data:HistoricalCandle[],symbol:string,timeframe:string)=>void};
   candleAppearanceRef:Ref<any>;
@@ -61,7 +61,7 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
       const bucketChanged=pendingBucketChanged;
       pendingBucketChanged=false;
       const started = globalThis.performance?.now?.() ?? Date.now();
-      const data = snapshot.candles;
+      const data = snapshot.candles.length ? snapshot.candles : deps.chartDataPlane.getCompatibilityCandles();
       const live = data[data.length - 1];
       if (!snapshot.historyReady || !live) {
         chartPerformanceTelemetry.recordCompute(deps.chartMarketKey, 0, sequence);
@@ -84,7 +84,7 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
   });
 
   const handleTick=(snapshot:ChartDataPlaneSnapshot,bucketChanged:boolean)=>{
-    const data=snapshot.candles;
+    const data=snapshot.candles.length ? snapshot.candles : chartDataPlane.getCompatibilityCandles();
     candles.current=data;
     latestTick.current=snapshot.latestTick;
     dataRevisionRef.current=snapshot.revision;
@@ -99,10 +99,11 @@ export function createChartRealtimeController(deps:ChartRealtimeControllerDeps){
   const hydrateHistory=(snapshot:ChartDataPlaneSnapshot)=>{
     computeScheduler.cancel();
     pendingBucketChanged=false;
-    candles.current=snapshot.candles;
+    const data=snapshot.candles.length?snapshot.candles:chartDataPlane.getCompatibilityCandles();
+    candles.current=data;
     latestTick.current=snapshot.latestTick;
     dataRevisionRef.current=snapshot.revision;
-    calculationEngine.reset(snapshot.candles,deps.instrumentKey,deps.timeframe);
+    calculationEngine.reset(data,deps.instrumentKey,deps.timeframe);
   };
 
   const dispose=()=>computeScheduler.dispose();
