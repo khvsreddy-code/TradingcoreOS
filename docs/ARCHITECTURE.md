@@ -854,3 +854,74 @@ When a new feature needs a chart capability, choose the boundary in this order:
 ~~~
 
 That keeps TradingCore's differentiating logic above Vela while avoiding a second implementation of Vela's renderer/workspace/data architecture.
+
+## CoreSpirit unified language and execution authority
+
+CoreSpirit is the single TradingCoreOS computational language across indicators, strategies, quantitative research, models, predictions, visualization and automation. Progressive authoring is an IDE concern, not a language fork.
+
+```text
+                     CoreSpirit
+                         │
+      ┌────────────┬─────┼─────┬────────────┐
+      │            │     │     │            │
+  Indicators   Strategies Models Research Automation
+      │            │     │     │            │
+      └────────────┴─────┼─────┴────────────┘
+                         │
+                  shared compiler
+                         │
+                   shared data graph
+                         │
+                 shared executable IR
+                         │
+                 shared runtime hosts
+                         │
+             ┌───────────┼───────────┐
+             │           │           │
+          Backtest     Replay       Live
+```
+
+Four authoring depths are explicit in the artifact: `beginner`, `trader`, `quant`, and `system`. The same compiler/runtime contracts serve all four.
+
+### Model and prediction semantics
+
+Model values are distinct semantic objects rather than aliases for price series:
+
+- `model<T>` identifies a model contract.
+- `feature<T>` and `featureSet<T>` identify model inputs.
+- `prediction<T>` identifies model-produced estimates.
+- `probability` carries probability semantics.
+- `forecast<T>` identifies future-oriented values.
+- `dataset<T>`, `trainingData<T>`, `experiment<T>`, and `modelArtifact<T>` identify research lifecycle objects.
+
+These identities travel through semantic analysis, the dependency graph and executable IR. Model execution is host-resolved; the CoreSpirit VM remains broker-free and network-free.
+
+### Automation and execution authority
+
+Automation can emit notifications, route requests and query host risk policy. It cannot call a broker adapter directly.
+
+```text
+CoreSpirit
+   │
+   ├── signal
+   ├── automation event
+   └── order intent
+          │
+          ▼
+TradingCoreOS Execution Authority
+          │
+       risk gate
+          │
+      policy gate
+          │
+      execution adapter
+          │
+          ▼
+        broker
+```
+
+The repository enforces this boundary with a source-level broker scanner and a contract test. CoreSpirit source may not import broker adapters, trading routes, trading HTTP clients, or call broker-side order methods.
+
+### Vela boundary
+
+Vela consumes CoreSpirit visual intent and chart data. It is not an execution authority and never receives direct broker execution responsibility from CoreSpirit.
