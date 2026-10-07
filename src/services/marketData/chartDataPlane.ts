@@ -14,8 +14,15 @@ export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '5m': '5minute',
   '15m': '15minute',
   '30m': '30minute',
+  '60m': '60minute',
+  '120m': '120minute',
+  '240m': '240minute',
   '1H': '60minute',
+  '2H': '120minute',
+  '4H': '240minute',
   '1D': 'day',
+  '1W': 'week',
+  '1M': 'month',
 };
 
 export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
@@ -24,8 +31,15 @@ export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
   '5m': 300,
   '15m': 900,
   '30m': 1800,
+  '60m': 3600,
+  '120m': 7200,
+  '240m': 14400,
   '1H': 3600,
+  '2H': 7200,
+  '4H': 14400,
   '1D': 86400,
+  '1W': 604800,
+  '1M': 2592000,
 };
 
 const MAX_HISTORY_CANDLES = 50_000;
