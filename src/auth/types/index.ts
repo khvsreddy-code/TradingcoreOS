@@ -21,6 +21,7 @@ export interface Session {
 }
 
 export type AuthStep = 'idle' | 'connecting' | 'authenticating' | 'preparing' | 'error';
+export type AuthStatus = 'loading' | 'authenticated' | 'signed_out' | 'degraded';
 
 export interface AuthState {
   user: UserProfile | null;
@@ -28,6 +29,7 @@ export interface AuthState {
   loading: boolean;
   error: string | null;
   authStep: AuthStep;
+  authStatus: AuthStatus;
 }
 
 export interface AuthContextType {
@@ -36,6 +38,7 @@ export interface AuthContextType {
   loading: boolean;
   error: string | null;
   authStep: AuthStep;
+  authStatus: AuthStatus;
   isAuthenticated: boolean;
   login: () => Promise<{ error?: string }>;
   logout: () => Promise<void>;
