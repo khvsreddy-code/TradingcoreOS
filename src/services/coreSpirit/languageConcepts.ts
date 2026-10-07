@@ -284,11 +284,11 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           offset += raw.length + 1;
           continue;
         }
-        if (/^input(?:s)?\s*:\s*$/i.test(trimmed)) { current.modelSection = 'input'; offset += raw.length + 1; continue; }
+        if (/^(?:input(?:s)?|feature(?:s)?)\s*:\s*$/i.test(trimmed)) { current.modelSection = 'input'; offset += raw.length + 1; continue; }
         if (/^output(?:s)?\s*:\s*$/i.test(trimmed)) { current.modelSection = 'output'; offset += raw.length + 1; continue; }
         const useRegistry = trimmed.match(/^use\s+(?:"([^"]+)"|'([^']+)')\s*$/i);
         const useExternal = trimmed.match(/^use\s+(python|cpp|rust|wasm|onnx|remote)\s+(?:"([^"]+)"|'([^']+)')\s*$/i);
-        const inputLine = trimmed.match(/^input(?:s)?\s*:\s*(.*)$/i);
+        const inputLine = trimmed.match(/^(?:input(?:s)?|feature(?:s)?)\s*:\s*(.*)$/i);
         const outputLine = trimmed.match(/^output(?:s)?\s*:\s*(.*)$/i);
         const bareName = trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*$/);
         if (useRegistry) {
@@ -317,22 +317,32 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
             if (!current.declaration.predictions.includes(field.name)) current.declaration.predictions.push(field.name);
           }
           concepts.add('MODEL');
-        } else if (/^predict\s*:/i.test(trimmed)) {
-          const target = trimmed.replace(/^predict\s*:\s*/i, '').trim();
+        } else if (/^(?:target|predict)\s*:/i.test(trimmed)) {
+          const target = trimmed.replace(/^(?:target|predict)\s*:\s*/i, '').trim();
           if (target) current.declaration.target = target;
           if (!current.declaration.outputs.includes('prediction')) current.declaration.outputs.push('prediction');
           current.declaration.outputTypes.prediction = 'prediction<number>';
           if (!current.declaration.predictions.includes('prediction')) current.declaration.predictions.push('prediction');
           concepts.add('MODEL');
-        } else if (/^predict\s+/.test(trimmed)) {
-          const name = trimmed.replace(/^predict\s+/i, '').trim();
+        } else if (/^(?:target|predict)\s+/.test(trimmed)) {
+          const name = trimmed.replace(/^(?:target|predict)\s+/i, '').trim();
           if (name) current.declaration.outputs.push(name), current.declaration.predictions.push(name);
           concepts.add('MODEL');
         } else {
           const feature = trimmed.match(/^(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+          const featureList = trimmed.replace(/,$/, '').split(/[,\s]+/).filter(Boolean).every(value => /^[A-Za-z_][A-Za-z0-9_]*$/.test(value))
+            ? trimmed.replace(/,$/, '').split(/[,\s]+/).filter(Boolean)
+            : [];
           if (feature) {
             current.declaration.features.push(feature[1]);
             if (!current.declaration.inputs.includes(feature[1])) current.declaration.inputs.push(feature[1]);
+            concepts.add('MODEL');
+          } else if (featureList.length && current.modelSection === 'input') {
+            for (const value of featureList) {
+              if (!current.declaration.features.includes(value)) current.declaration.features.push(value);
+              if (!current.declaration.inputs.includes(value)) current.declaration.inputs.push(value);
+              current.declaration.inputTypes[value] = 'unknown';
+            }
             concepts.add('MODEL');
           }
         }
