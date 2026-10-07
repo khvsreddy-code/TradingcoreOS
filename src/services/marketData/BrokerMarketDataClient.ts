@@ -65,8 +65,13 @@ export class BrokerMarketDataClient {
         try {
           const ticketPayload = await readTradingApiJson<any>(ticketResponse);
           const data = ticketPayload?.data;
+          const transport = String(data?.transport || '').toLowerCase();
           const websocketUrl = String(data?.websocketUrl || '').trim();
           const ticket = String(data?.ticket || '').trim();
+          if (transport === 'legacy') {
+            await this.connectLegacy(stream, generation);
+            return;
+          }
           if (websocketUrl && ticket) {
             await this.connectGateway(stream, websocketUrl, ticket, generation);
             return;
@@ -159,7 +164,7 @@ export class BrokerMarketDataClient {
         }
       };
     }).catch(async (error) => {
-      const legacyAllowed = String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
+      const legacyAllowed = import.meta.env.DEV || String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
       if (legacyAllowed) {
         stream.transport = 'legacy';
         await this.connectLegacy(stream, generation);
