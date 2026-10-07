@@ -360,7 +360,7 @@ const coreSpiritStatusCallout: Parameters<typeof registerLegendCallout>[0] = {
   callout(indicator) {
     if (!indicator.source) return null;
     const spec: LegendCalloutSpec = {
-      icon: 'code',
+      icon: 'indicators',
       background: 'rgba(124,92,255,.14)',
       color: '#c4b5fd',
       tooltip: 'CoreSpirit indicator',
