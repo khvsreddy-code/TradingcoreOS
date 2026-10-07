@@ -72,7 +72,7 @@ const TARGET_CAPABILITY_MAP: Readonly<Record<CoreSpiritExecutionTarget, readonly
   scanner: ['series','signals','models','scanner','market-data','compute-cpu','compute-wasm','compute-gpu'],
   alert: ['series','signals','models','webhooks','market-data','compute-cpu'],
   server: ['series','signals','models','webhooks','market-data','compute-cpu','compute-wasm','compute-gpu'],
-  automation: ['signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
+  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
   research: ['series','signals','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
 };
 
@@ -80,7 +80,7 @@ const LAYER_CAPABILITY_MAP: Readonly<Record<CoreSpiritProgramLayer, readonly Cor
   script: ['series','visuals','interactive-ui','signals','market-data','compute-cpu','compute-wasm','compute-gpu'],
   model: ['series','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
   strategy: ['series','visuals','interactive-ui','signals','models','strategy-events','market-data','compute-cpu','compute-wasm','compute-gpu'],
-  automation: ['signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
+  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
 };
 
 export class CoreSpiritCapabilityDeniedError extends Error {
