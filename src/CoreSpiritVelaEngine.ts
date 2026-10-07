@@ -153,6 +153,8 @@ export class CoreSpiritVelaEngine {
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryRefreshPromise: Promise<void>|undefined;
     let secondaryLastRefreshAt=0;
+    let secondaryDegraded=false;
+    const secondaryWarnings:string[]=[];
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
       dataDependencies
@@ -174,11 +176,24 @@ export class CoreSpiritVelaEngine {
           return context.executionMode!=='realtime'||t+duration<=context.asOfTimestamp;
         };
         let target=end;
-        if(context.alignment==='last-confirmed'||context.alignment==='nearest-confirmed'){
+        if(context.alignment==='last-confirmed'){
           let cursor=end;
           while(cursor>=0&&!isConfirmed(rows[cursor]!))cursor-=1;
           if(cursor<0)return null;
           target=cursor-offset;
+        }else if(context.alignment==='nearest-confirmed'){
+          let before=end;
+          while(before>=0&&!isConfirmed(rows[before]!))before-=1;
+          let after=end+1;
+          while(after<rows.length&&!isConfirmed(rows[after]!))after+=1;
+          if(before<0 && after>=rows.length)return null;
+          if(after>=rows.length)target=before-offset;
+          else if(before<0)target=after+offset;
+          else{
+            const beforeDelta=Math.abs(context.asOfTimestamp-barTimeMillis(rows[before]!.timestamp));
+            const afterDelta=Math.abs(barTimeMillis(rows[after]!.timestamp)-context.asOfTimestamp);
+            target=(beforeDelta<=afterDelta ? before : after)+offset;
+          }
         }else{
           target=end-offset;
         }
@@ -186,7 +201,8 @@ export class CoreSpiritVelaEngine {
         if(!row)return null;
         const time=barTimeMillis(row.timestamp);
         const confirmed=isConfirmed(row);
-        const stale=context.maxStalenessMs!=null && context.asOfTimestamp-time>context.maxStalenessMs;
+        const distance=Math.abs(context.asOfTimestamp-time);
+        const stale=context.maxStalenessMs!=null && distance>context.maxStalenessMs;
         if(stale)return null;
         if(context.alignment==='exact'&&time!==context.asOfTimestamp)return null;
         if(context.alignment==='developing'&&time>context.asOfTimestamp)return null;
@@ -214,13 +230,27 @@ export class CoreSpiritVelaEngine {
         const key=dependencyKey(dep.symbol,dep.timeframe);
         try{
           const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{to:Number.isFinite(endTime)?endTime:undefined,limit});
-          if(rows?.length)secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
-          else if(req.mode==='live')handlers.onWarning?.({message:`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`,method:'secondary-data',bar:Math.max(0,latestBars.length-1)});
+          if(rows?.length){
+            secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
+            secondaryDegraded = false;
+          }else{
+            secondaryDegraded = true;
+            if(req.mode==='live'){
+              const warning=`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`;
+              secondaryWarnings.push(warning);
+              handlers.onWarning?.({message:warning,method:'secondary-data',bar:Math.max(0,latestBars.length-1)});
+            }
+          }
         }catch(error){
-          if(req.mode==='live')handlers.onWarning?.({
-            message:`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`,
-            method:'secondary-data',bar:Math.max(0,bars.length-1)
-          });
+          secondaryDegraded = true;
+          if(req.mode==='live'){
+            const warning=`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`;
+            secondaryWarnings.push(warning);
+            handlers.onWarning?.({
+              message:warning,
+              method:'secondary-data',bar:Math.max(0,bars.length-1)
+            });
+          }
         }
       })).then(()=>{secondaryLastRefreshAt=Date.now();}).finally(()=>{secondaryRefreshPromise=undefined;});
       secondaryRefreshPromise=task;
@@ -243,6 +273,11 @@ export class CoreSpiritVelaEngine {
     let liveStarted = false;
     let firstSeriesTime = Number.NaN;
     let lastTime = Number.NaN;
+
+    const safeOutputs = (outputs: CoreSpiritObject[]): CoreSpiritObject[] =>
+      secondaryDegraded
+        ? outputs.filter(output => output.kind !== 'signal' && output.kind !== 'orderIntent')
+        : outputs;
 
     const emitModel = (dirty?: DirtyRange): void => {
       const snapshot = scene.snapshot();
@@ -304,10 +339,10 @@ export class CoreSpiritVelaEngine {
 
       const latest = currentBars.at(-1);
       if (!latest) return;
-      const result = runtime.executeBar(latest);
+      const result = safeOutputs(runtime.executeBar(latest).outputs);
       const latestTime = barTimeMillis(latest.timestamp);
       if (Number.isFinite(latestTime)) {
-        emitScenePatches(result.outputs, { from: latestTime, to: latestTime });
+        emitScenePatches(result, { from: latestTime, to: latestTime });
         lastTime = latestTime;
       }
       liveStarted = true;
@@ -334,7 +369,7 @@ export class CoreSpiritVelaEngine {
           },
           plots: Object.fromEntries([...snapshot.points.entries()].map(([key, values]) => [key, values])),
           variables: state.locals,
-          warnings: [],
+          warnings: secondaryWarnings.slice(-20),
         };
       },
       stop() {
@@ -345,9 +380,9 @@ export class CoreSpiritVelaEngine {
         const runUpdate = (): void => {
           const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
           runtime.loadIr(token.ir);
-          const result = runtime.executeIr(token.ir, currentBars);
+          const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
           scene.reset();
-          scene.seed(result.outputs);
+          scene.seed(result);
           firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
           lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
           emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
@@ -367,9 +402,9 @@ export class CoreSpiritVelaEngine {
         if (reason === 'complete') {
           const runComplete = (): void => {
             runtime.loadIr(token.ir);
-            const result = runtime.executeIr(token.ir, currentBars);
+            const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
             scene.reset();
-            scene.seed(result.outputs);
+            scene.seed(result);
             firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
             lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
             emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
@@ -397,8 +432,8 @@ export class CoreSpiritVelaEngine {
               dataResolver,
             });
             rangeRuntime.loadIr(token.ir);
-            const rangeResult = rangeRuntime.executeIr(token.ir, rangeBars);
-            emitScenePatches(rangeResult.outputs, dirtyRange);
+            const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
+            emitScenePatches(rangeResult, dirtyRange);
             return;
           }
         }
