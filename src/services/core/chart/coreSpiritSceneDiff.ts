@@ -34,20 +34,21 @@ function isPriceOverlay(output: CoreSpiritObject): boolean {
 
 function outputDirtySpan(output: CoreSpiritObject): { from:number; to:number } | null {
     const read=(value:unknown)=>Number(value);
+    const value=output as any;
     if(output.kind==='series'||output.kind==='marker'||output.kind==='signal'||output.kind==='background'){
-        const time=read((output as {time?:unknown}).time);
+        const time=read(value.time);
         if(Number.isFinite(time))return {from:time,to:time};
     }
     if(output.kind==='line'||output.kind==='arrow'){
-        const a=read(output.start?.time),b=read(output.end?.time);
+        const a=read(value.start?.time),b=read(value.end?.time);
         if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
     }
     if(output.kind==='box'||output.kind==='zone'){
-        const a=read((output as any).left),b=read((output as any).right);
+        const a=read(value.left),b=read(value.right);
         if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
     }
     if(output.kind==='polyline'){
-        const times=output.points.map(point=>Number(point.time)).filter(Number.isFinite);
+        const times=(value.points??[]).map((point:any)=>Number(point.time)).filter(Number.isFinite);
         if(times.length)return {from:Math.min(...times),to:Math.max(...times)};
     }
     return null;
