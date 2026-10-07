@@ -100,6 +100,7 @@ export function combineSemanticArithmetic(
   right: CoreSpiritSemanticType,
 ): { type: CoreSpiritSemanticType; error?: string } {
   const resultKind: 'scalar' | 'series' = left.kind === 'series' || right.kind === 'series' ? 'series' : 'scalar';
+  const derived = mergeSemanticMetadata([left, right]);
   const broadcast = (atom: CoreSpiritSemanticAtom, metadata: CoreSpiritSemanticType = left): CoreSpiritSemanticType => Object.freeze({
     kind: resultKind,
     atom,
@@ -109,6 +110,7 @@ export function combineSemanticArithmetic(
     timeframe: metadata.timeframe ?? (resultKind === 'series' ? 'chart' : undefined),
     precision: metadata.precision,
     scale: metadata.scale,
+    ...derived,
   });
   const error = (message: string) => ({ type: semanticScalar('number'), error: message });
 
@@ -135,7 +137,7 @@ export function combineSemanticArithmetic(
     if (leftNumber) return { type: broadcast(right.atom, right) };
     if (rightNumber) return { type: broadcast(left.atom, left) };
     if ((left.atom === 'price' && right.atom === 'volume') || (left.atom === 'volume' && right.atom === 'price')) {
-      return { type: Object.freeze({ kind: resultKind, atom: 'currency', unit: 'notional', symbol: left.symbol ?? right.symbol, timeframe: left.timeframe ?? right.timeframe, currency: left.currency ?? right.currency }) };
+      return { type: Object.freeze({ kind: resultKind, atom: 'currency', unit: 'notional', symbol: left.symbol ?? right.symbol, timeframe: left.timeframe ?? right.timeframe, currency: left.currency ?? right.currency, ...derived }) };
     }
     return error(`semantic domains '${left.atom}' and '${right.atom}' cannot be multiplied without an explicit conversion`);
   }
@@ -211,7 +213,10 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     symbol: isSeries || parsed.container === 'window' ? 'current' : undefined,
     timeframe: isSeries || parsed.container === 'window' ? 'chart' : undefined,
     temporalContainer: parsed.container,
-    ...(phase ? { temporalPhase: phase } : {}),
+    phase: phase ?? 'developing',
+    causal: true,
+    lookahead: false,
+    lookback: 0,
   };
   return semanticScalar(element, metadata as any).kind === 'scalar' && isSeries
     ? semanticSeries(element, metadata as any)
