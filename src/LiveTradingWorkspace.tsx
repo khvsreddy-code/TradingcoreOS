@@ -1,7 +1,6 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
-import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import './services/core/chart/tcoVelaChrome';
@@ -91,9 +90,6 @@ export function LiveTradingWorkspace() {
         defaultLanguage: 'corespirit',
         providers: {
           tco: () => createTcoVelaDataProvider(),
-        },
-        engines: {
-          corespirit: () => new LazyCoreSpiritVelaEngine(),
         },
         indicators: async () => readCoreSpiritManifest(),
         drawings: true,
