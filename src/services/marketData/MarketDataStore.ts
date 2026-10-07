@@ -24,7 +24,7 @@ type Entry = {
  * adds a stable imperative subscription boundary so chart controllers never
  * subscribe directly from React components.
  */
-class MarketDataStore {
+export class MarketDataStore {
   private entries = new Map<string, Entry>();
 
   attach(key: string, plane: ChartDataPlane): () => void {
