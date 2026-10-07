@@ -9,6 +9,7 @@ export type CoreSpiritSemanticDependencyNodeKind =
   | 'data-source'
   | 'symbol'
   | 'model'
+  | 'model-input'
   | 'model-output'
   | 'expression'
   | 'component'
@@ -104,6 +105,36 @@ export function buildCoreSpiritSemanticDependencyGraph(
         name: declaration.name,
         declarationKind: declaration.kind,
       });
+    }
+  }
+
+  // Model declarations are part of the same semantic graph as features and predictions.
+  // This makes MODEL a graph node, not an isolated metadata island.
+  for (const declaration of surface.declarations) {
+    if (declaration.kind !== 'model') continue;
+    const modelId = addNode({
+      id: 'model:' + declaration.name,
+      kind: 'model',
+      name: declaration.name,
+      type: 'model:ref',
+      declarationKind: declaration.kind,
+    });
+    const inputs = [...new Set([...(declaration.inputs ?? []), ...(declaration.features ?? [])])];
+    for (const input of inputs) {
+      const normalized = input.trim();
+      if (!normalized) continue;
+      const inputId = addNode({
+        id: 'model-input:' + declaration.name + ':' + normalized,
+        kind: 'model-input',
+        name: normalized,
+        type: semantic.symbols.get(normalized) ?? 'unknown',
+        declarationKind: declaration.kind,
+      });
+      const sourceId = /^[A-Za-z_][A-Za-z0-9_]*$/.test(normalized)
+        ? resolveIdentifier(normalized)
+        : undefined;
+      if (sourceId) addEdge(sourceId, inputId, 'depends-on');
+      addEdge(inputId, modelId, 'depends-on');
     }
   }
 
