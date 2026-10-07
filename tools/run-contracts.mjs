@@ -20,6 +20,7 @@ const contracts = [
   ['architecture-consolidation', ['src/architectureConsolidationGuard.test.mjs', false]],
   ['corespirit-broker-boundary', ['src/coreSpiritBrokerBoundaryContract.test.mjs', false]],
   ['broker-launch-workspace', ['src/brokerLaunchWorkspaceContract.test.mjs', false]],
+  ['corespirit-language-parity', ['src/coreSpiritLanguageParityContract.test.mjs', false]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
   ['semantic-series-type', ['src/coreSpiritSemanticSeriesTypeContract.test.mjs', false]],
