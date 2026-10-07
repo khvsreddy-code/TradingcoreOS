@@ -29,7 +29,13 @@ export type CoreSpiritLibraryGroupId =
   | 'state'
   | 'quant'
   | 'automation'
-  | 'model';
+  | 'model'
+  | 'strategy'
+  | 'portfolio'
+  | 'orderflow'
+  | 'options'
+  | 'probability'
+  | 'system';
 
 export type CoreSpiritLibraryGroup = {
   id: CoreSpiritLibraryGroupId;
@@ -205,6 +211,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
  */
 export const CORE_SPIRIT_LIBRARY_GROUPS: readonly CoreSpiritLibraryGroup[] = [
   { id:'price', label:'Price', description:'Current-bar market series.', names:['open','high','low','close','volume'] },
+  { id:'core', label:'Core', description:'Deterministic primitives shared by every CoreSpirit authoring level.', names:['abs','min','max','sqrt','pow','round','sign','log','exp'] },
   { id:'math', label:'Math', description:'Deterministic scalar and numerical helpers.', names:['abs','min','max','sqrt','pow','round','sign','exp','log','tanh','clamp','sigmoid'] },
   { id:'trend', label:'Trend', description:'Smoothing and trend-oriented series transforms.', names:['sma','ema','hma','wma','rma'] },
   { id:'momentum', label:'Momentum', description:'Momentum and oscillator transforms already backed by runtime contracts.', names:['rsi','change','probability'] },
@@ -217,6 +224,13 @@ export const CORE_SPIRIT_LIBRARY_GROUPS: readonly CoreSpiritLibraryGroup[] = [
   { id:'data', label:'Data', description:'Advanced host-provided market-data access.', names:['request','requestBatch','lowerTf','bid','ask','spread','mid','intrabarCount','intrabarSum','intrabarHigh','intrabarLow','intrabarDelta','depthImbalance','footprintDelta','footprintBuy','footprintSell','footprintPoc','footprintVah','footprintVal','footprintRows','footprintRowPrice','footprintRowBuy','footprintRowSell','footprintRowDelta','footprintRowImbalance'] },
   { id:'state', label:'State', description:'Execution-frame and missing-value helpers.', names:['nz','na','isNa','bar_index','time'] },
   { id:'quant', label:'Quant', description:'Research-oriented return, factor, regime and statistical transforms.', names:['returns','beta','trendStrength','regimeDetect','zscore','variance','stdev'] },
+  { id:'probability', label:'Probability', description:'Probability and model-confidence semantics.', names:['probability','sigmoid'] },
+  { id:'strategy', label:'Strategy', description:'Signal and broker-neutral order-intent construction.', names:['signal','order','entry','exit'] },
+  { id:'automation', label:'Automation', description:'Host-routed notifications and automation actions.', names:['notify','route'] },
+  { id:'portfolio', label:'Portfolio', description:'Host portfolio state surface; execution remains outside CoreSpirit.', names:['position','exposure','pnl'] },
+  { id:'orderflow', label:'Order Flow', description:'Normalized trade, depth and footprint primitives.', names:['depthImbalance','footprintDelta','footprintBuy','footprintSell'] },
+  { id:'options', label:'Options', description:'Explicit options analytics catalog; runtime kernels are host-provided as they become available.', names:['impliedVolatility','delta','gamma','theta','vega'] },
+  { id:'system', label:'System', description:'Reactive event execution and host-owned authority boundaries.', names:['event','on','risk.allowed'] },
 ];
 
 const CORE_SPIRIT_LIBRARY_GROUP_BY_NAME = new Map<string, CoreSpiritLibraryGroup>(
