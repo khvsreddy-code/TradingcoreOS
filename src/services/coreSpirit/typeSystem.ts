@@ -121,6 +121,9 @@ export const isPredictionType = (type: CoreSpiritType): type is CoreSpiritPredic
 export const isFeatureType = (type: CoreSpiritType): type is CoreSpiritFeatureType => type.startsWith('feature<') && type.endsWith('>');
 export const isFeatureSetType = (type: CoreSpiritType): type is CoreSpiritFeatureSetType => type.startsWith('featureSet<') && type.endsWith('>');
 export const isDistributionType = (type: CoreSpiritType): type is CoreSpiritDistributionType => type.startsWith('distribution<') && type.endsWith('>');
+export const isForecastType = (type: CoreSpiritType): boolean => type.startsWith('forecast<') && type.endsWith('>');
+export const isResearchObjectType = (type: CoreSpiritType): type is CoreSpiritResearchObjectType =>
+  type.startsWith('experiment<') || type.startsWith('trainingData<') || type.startsWith('dataset<') || type.startsWith('modelArtifact<');
 
 export const isBooleanType = (type: CoreSpiritType): boolean => {
   if (type === 'boolean') return true;
@@ -175,7 +178,7 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
-  if (/^(array|matrix|tensor|model|prediction|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/.test(name)) return name as CoreSpiritType;
+  if (/^(array|matrix|tensor|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
   if (['trade','orderbook','footprint'].includes(name)) return name as CoreSpiritType;
@@ -195,6 +198,7 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
   if (expected === 'series<number>') return isSeriesType(actual);
   if (isPredictionType(expected) && isPredictionType(actual)) return expected === actual || expected === 'prediction<number>' || actual === 'prediction<number>';
+  if (isForecastType(expected) && isForecastType(actual)) return expected === actual || expected === 'forecast<number>' || actual === 'forecast<number>'; 
   if (isFeatureType(expected) && isFeatureType(actual)) return expected === actual || expected === 'feature<number>' || actual === 'feature<number>';
   if (isFeatureSetType(expected) && isFeatureSetType(actual)) return expected === actual || expected === 'featureSet<number>' || actual === 'featureSet<number>';
   if (expected === 'series<float>') return isSeriesType(actual);
