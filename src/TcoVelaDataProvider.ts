@@ -25,6 +25,36 @@ function runtimeTimeframe(timeframe: string): string {
   return '5m';
 }
 
+async function activeBrokerId(): Promise<string> {
+  const current=tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
+  if(current)return current;
+  try{await tradingCoreRuntime.restoreBrokerConnections();}catch{}
+  const restored=tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
+  if(!restored)throw new Error('No connected broker is available for Vela market data.');
+  return restored;
+}
+
+function activeBrokerIdSync(): string|null {
+  return tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() ?? null;
+}
+
+function seedColumnsFromBars(rows: readonly OHLCV[]): ColumnarBars {
+  const valid=rows.map((bar)=>({
+    time:epoch((bar as any).time),
+    open:Number(bar.open),high:Number(bar.high),low:Number(bar.low),close:Number(bar.close),volume:Number(bar.volume)||0,
+  })).filter((row)=>Number.isFinite(row.time)&&[row.open,row.high,row.low,row.close].every(Number.isFinite));
+  return {
+    time:Float64Array.from(valid,row=>row.time),
+    open:Float64Array.from(valid,row=>row.open),
+    high:Float64Array.from(valid,row=>row.high),
+    low:Float64Array.from(valid,row=>row.low),
+    close:Float64Array.from(valid,row=>row.close),
+    volume:Float64Array.from(valid,row=>row.volume),
+    length:valid.length,
+    timeUnit:'milliseconds',
+  };
+}
+
 function epoch(value: unknown): number {
   const numeric = typeof value === 'number' ? value : Number(value);
   if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
@@ -115,6 +145,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const brokerId = await activeBrokerId();
     if (range.to != null) {
       const before = Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000;
       const direct = await tradingCoreRuntime.getHistoricalDataColumns(symbol, tcoTimeframe, undefined, requested, before);
@@ -124,7 +155,7 @@ export class TcoVelaDataProvider implements DataProvider {
         close: Float64Array.from(direct.close), volume: Float64Array.from(direct.volume), length: Math.min(direct.time.length, direct.open.length, direct.high.length, direct.low.length, direct.close.length, direct.volume.length), timeUnit: 'seconds',
       };
     }
-    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     await plane.ensureReadyColumns(requested);
     const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
     const current = plane.readCanonical();
@@ -132,7 +163,9 @@ export class TcoVelaDataProvider implements DataProvider {
     if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
       await plane.loadOlderHistory('visible', { visibleBars: requested });
     }
-    return marketViewToColumns(plane.readCanonical(), range, requested);
+    const canonical=plane.readCanonical();
+    if(canonical.length)return marketViewToColumns(canonical, range, requested);
+    return seedColumnsFromBars(await this.getBars(ticker,timeframe,range));
   }
 
   /**
@@ -144,7 +177,8 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(2, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
-    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    const brokerId = await activeBrokerId();
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     await plane.ensureReady(5000);
     const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
     const current = plane.readCanonical();
@@ -159,7 +193,8 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
-    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    const brokerId = await activeBrokerId();
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let lastError: unknown = null;
     try {
       await plane.ensureReady(requested);
@@ -207,7 +242,9 @@ export class TcoVelaDataProvider implements DataProvider {
   subscribeColumns(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void): () => void {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    const brokerId = activeBrokerIdSync();
+    if(!brokerId)return ()=>{};
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
     let scheduled = false;
     let dirty = false;
@@ -261,7 +298,9 @@ export class TcoVelaDataProvider implements DataProvider {
   subscribe(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void): () => void {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const plane = getChartDataPlane('fyers', symbol, tcoTimeframe);
+    const brokerId = activeBrokerIdSync();
+    if(!brokerId)return ()=>{};
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
     let scheduled = false;
     let dirty = false;
