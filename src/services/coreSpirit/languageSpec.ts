@@ -8,6 +8,12 @@
 export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   userConcepts: Object.freeze(['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE'] as const),
   statements: Object.freeze(['let', 'if', 'else', 'type', 'on', ':='] as const),
+  authoringLevels: Object.freeze(['beginner', 'trader', 'quant', 'system'] as const),
+  namespaces: Object.freeze([
+    'core', 'ta', 'stats', 'math', 'probability', 'market', 'orderflow', 'options',
+    'strategy', 'portfolio', 'risk', 'model', 'ml', 'prediction', 'automation', 'events',
+    'visual', 'chart', 'state', 'data',
+  ] as const),
   scalarTypes: Object.freeze(['int', 'float', 'number', 'boolean', 'string', 'null', 'price', 'volume', 'time', 'duration', 'currency'] as const),
   temporalTypes: Object.freeze(['scalar<float>', 'scalar<number>', 'scalar<int>', 'series<T>', 'window<T>', 'state<T>', 'event<T>', 'snapshot<T>', 'stream<T>', 'confirmed<T>', 'developing<T>', 'forecast<T>'] as const),
   temporalPhases: Object.freeze(['historical', 'confirmed', 'developing', 'realtime', 'forecast'] as const),
@@ -39,11 +45,18 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
     'nz', 'na', 'bar_index', 'time', 'cross', 'crossover', 'crossunder', 'rising', 'falling', 'max', 'min', 'abs', 'sqrt', 'pow', 'round', 'sign', 'isNa', 'exp', 'log', 'tanh',
     'clamp', 'sigmoid', 'probability', 'toNumber', 'toPrice', 'toVolume', 'toTime', 'toDuration', 'toCurrency',
   ] as const),
+  firstClassValueKinds: Object.freeze([
+    'series<float>', 'prediction<float>', 'probability', 'distribution<float>',
+    'feature<float>', 'featureSet<float>', 'model<float>', 'forecast<float>',
+    'dataset<float>', 'trainingData<float>', 'experiment<float>', 'modelArtifact<float>',
+  ] as const),
   surfaceRules: Object.freeze([
     'WHEN blocks are indentation/colon sugar for if blocks',
     'EVENT is a shared immutable runtime value; emit produces it and when consumes it; EVENT is cross-cutting, not a seventh top-level block concept',
     'SHOW is the universal visual projection; plot() and other visual calls are compatibility/advanced APIs',
-    'MODEL and AUTOMATE declarations are artifact metadata plus existing executable calls',
+    'MODEL declarations describe graph inputs/outputs and execution bindings; their bodies are declarative metadata lowered into the same executable IR',
+    'AUTOMATE/event declarations lower into event gates and host-routed events; they cannot submit a broker order directly',
+    'namespace-qualified calls resolve through the same builtin/component contract registry as unqualified calls',
     'DATA is the read-only market/context concept; it is not a broker API',
     'series<T> is typed historical/vector data; window<T> is a bounded view; state<T> is persistent mutable program memory; event<T>/stream<T> are event-fed domains',
     'confirmed<T>, developing<T>, and forecast<T> make temporal certainty explicit instead of hiding it inside historical-series behavior',
@@ -51,6 +64,12 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
     'repaint-safety annotations are compiler assertions; an assertion that contradicts inferred causality fails compilation rather than merely suppressing a warning',
     '@lookahead(false) forbids proven future-dependent inputs; unresolved provenance remains visible as unknown rather than being silently treated as safe',
   ] as const),
+  authoringDepths: Object.freeze({
+    beginner: 'single-symbol indicators and visual signals',
+    trader: 'multi-symbol/timeframe data graphs and strategy signals',
+    quant: 'typed features, statistical factors, models, predictions and backtests',
+    system: 'reactive events, automation and host-owned execution intents',
+  } as const),
   nonGoals: Object.freeze([
     'arbitrary host/network access from the VM',
     'DOM/chart ownership inside the VM',
