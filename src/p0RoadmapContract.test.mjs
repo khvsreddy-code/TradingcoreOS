@@ -23,6 +23,7 @@ const watchlist=read('src/services/core/chart/tcoVelaChrome.ts');
 const facade=read('src/services/core/chart/velaChartFacade.ts');
 const workspace=read('src/LiveTradingWorkspace.tsx');
 const storage=read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
+const nativeExtensions=read('src/services/core/chart/tcoVelaNativeExtensions.ts');
 
 assert.match(chartState,/velaDrawings:velaDocument\.drawings/);
 assert.doesNotMatch(liveChart,/createChartDrawingController|drawingControllerRef|drawingInitial/);
@@ -49,7 +50,8 @@ assert.match(chartRuntime,/getCompatibilityCandles/);
 assert.match(realtime,/getCompatibilityCandles/);
 
 assert.match(scene,/function outputDirtySpan/);
-for(const token of ['line','arrow','box','zone','polyline'])assert.match(scene,new RegExp(token));
+for(const token of ['series','marker','signal','label','shape','line','arrow','box','zone','band','polyline','polygon','background','barcolor','table','footprint','customVisual','event','scanCandidate','orderIntent'])assert.match(scene,new RegExp(token));
+assert.match(scene,/export function outputDirtySpan/);
 
 assert.match(gateway,/claim_realtime_gateway_owner/);
 assert.match(gateway,/tco:realtime:coordination/);
@@ -60,7 +62,8 @@ assert.match(ticket,/\/api\/realtime/);
 assert.match(marketClient,/import\.meta\.env\.DEV/);
 assert.match(marketClient,/VITE_REALTIME_LEGACY_FALLBACK/);
 assert.equal(vercel.services?.realtime?.runtime,'container');
-assert.equal(vercel.services?.realtime?.entrypoint,'Dockerfile.realtime.vercel');
+assert.equal(vercel.services?.realtime?.entrypoint,'Dockerfile');
+assert.match(read('Dockerfile'),/npm run realtime:gateway/);
 
 assert.doesNotMatch(authClient,/DEFAULT_URL|DEFAULT_PUBLISHABLE_KEY/);
 assert.match(authClient,/VITE_SUPABASE_URL/);
@@ -71,14 +74,16 @@ assert.match(authContext,/Preserve any existing/);
 assert.match(watchlist,/registerSidePanel/);
 assert.match(watchlist,/registerStatePersistence/);
 assert.match(watchlist,/registerSymbolRanking/);
-assert.match(watchlist,/registerDefaultEngine/);
-assert.match(watchlist,/registerWidgetAttachment/);
+assert.match(watchlist,/registerStatePersistence/);
 assert.match(watchlist,/subscribeMarketData/);
 assert.match(watchlist,/\+ Add current/);
 assert.match(facade,/registerLegendAction/);
 assert.match(facade,/registerLegendCallout/);
 assert.match(workspace,/\['tco\.watchlist'.*'alerts'.*'panels'/s);
 assert.match(storage,/resolveBroker/);
+assert.match(nativeExtensions,/registerNativeIndicator/);
+assert.match(nativeExtensions,/registerRendererLayer/);
+assert.match(nativeExtensions,/tco-regime-ribbon/);
 assert.match(workspace,/createTcoVelaSupabaseStorage\(\(\) => tradingCoreRuntime\.getPrimaryBrokerId\(\)/);
 
 console.log('TCO_P0_ROADMAP_CONTRACT_OK');
