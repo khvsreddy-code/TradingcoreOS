@@ -57,3 +57,9 @@ assert.match(velaExtensions, /registerNativeIndicator/);
 assert.match(velaChrome, /registerWidgetAttachment/);
 
 console.log('TCO_P0_ROADMAP_CONTRACT_OK');
+
+const tickStart = chartDataPlane.indexOf('private onTick = (tick: NormalizedMarketTick): void => {');
+const tickEnd = chartDataPlane.indexOf('  private start(): void {', tickStart);
+assert.ok(tickStart >= 0 && tickEnd > tickStart);
+assert.match(chartDataPlane.slice(tickStart, tickEnd), /if \(!this\.state\.historyReady\) return;/);
+assert.match(chartDataPlane, /const pendingTick = this\.state\.latestTick;/);
