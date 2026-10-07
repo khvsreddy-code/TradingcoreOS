@@ -168,10 +168,8 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     brush:'freehand',highlighter:'highlighter',text:'text',longPosition:'position',shortPosition:'position',
   };
   const selectDrawingTool=(tool:DrawingTool)=>{
-    const velaType=velaDrawingAliases[tool]
-      ?? (CORE_SPIRIT_DRAWING_TOOL_CATALOG as readonly string[]).includes(String(tool))
-        ? String(tool)
-        : undefined;
+    const velaType = velaDrawingAliases[tool]
+      ?? ((CORE_SPIRIT_DRAWING_TOOL_CATALOG as readonly string[]).includes(String(tool)) ? String(tool) : undefined);
     if(velaType && chart.current?.drawings?.supported) chart.current.drawings.setTool(velaType as any);
     else drawingControllerRef.current?.selectDrawingTool(tool);
     setDrawingTool(tool);
