@@ -193,7 +193,9 @@ export class TcoVelaDataProvider implements DataProvider {
     if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
       await plane.loadOlderHistory('visible', { visibleBars: requested });
     }
-    return marketViewToBars(plane.readCanonical(), range, requested);
+    const canonical = plane.readCanonical();
+    if (canonical.length) return marketViewToBars(canonical, range, requested);
+    return this.getBars(ticker, timeframe, range);
   }
 
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
@@ -211,7 +213,9 @@ export class TcoVelaDataProvider implements DataProvider {
       if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(currentNewestMs) && requestedTo < currentNewestMs - 1) {
         await plane.loadOlderHistory('visible');
       }
-      return marketViewToBars(plane.readCanonical(), range, requested);
+      const canonical = plane.readCanonical();
+      if (!canonical.length) throw new Error('Vela canonical market-data plane returned no history bars.');
+      return marketViewToBars(canonical, range, requested);
     } catch (error) {
       lastError = error;
     }
