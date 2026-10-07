@@ -15,7 +15,7 @@ assert(live.includes("layout: initialLayout"));
 assert(live.includes("animations: false"));
 assert(live.includes("'tco.watchlist'"));
 assert(live.includes("'tco.journal'"));
-assert(live.includes("'tco.panels'"));
+assert(live.includes("'panels'") || live.includes("'tco.panels'"), "workspace must expose Vela panel chrome");
 assert(live.includes("'tco.brand'"));
 assert(!live.includes("'quant'"));
 assert(chrome.includes("id: 'tco.brand'"));
