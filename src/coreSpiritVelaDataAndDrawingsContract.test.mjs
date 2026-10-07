@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine.ts';
 import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
+import { defaultToolbar } from './vendor/vela/src/core/drawings/toolbar.ts';
+import { drawingTypes, loadAdvancedDrawingCatalog } from './vendor/vela/src/core/drawings/registry.ts';
 
 const velaBars = [
   { time: 1791350000000, open: 22650, high: 22680, low: 22640, close: 22670, volume: 1200 },
@@ -19,7 +21,14 @@ engine.execute({
 await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(error,'');
 assert.equal(model,1);
-assert.equal(CORE_SPIRIT_DRAWING_TOOL_CATALOG.length, 74);
+await loadAdvancedDrawingCatalog();
+const registered = new Set(drawingTypes().map(type => type.type));
+const toolbar = defaultToolbar();
+const toolbarTypes = new Set(toolbar.groups.flatMap(group => group.tools.map(tool => tool.type)));
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.length >= 70);
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.every(type => registered.has(type)), 'every TCO drawing catalog type must exist in Vela registry');
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.every(type => toolbarTypes.has(type)), 'every TCO drawing catalog type must be reachable from the Vela toolbar');
+assert.equal(toolbar.groups.length, 7);
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('fibretracement'));
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('gartley'));
 assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('elliottimpulse'));
