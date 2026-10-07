@@ -59,6 +59,10 @@ export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): 
     type.currency ? `currency=${type.currency}` : '',
     type.scale ? `scale=${type.scale}` : '',
     type.valueKind ? `kind=${type.valueKind}` : '',
+    type.phase ? `phase=${type.phase}` : '',
+    type.causal !== undefined ? `causal=${type.causal}` : '',
+    type.lookahead !== undefined ? `lookahead=${type.lookahead}` : '',
+    type.lookback !== undefined ? `lookback=${type.lookback}` : '',
   ].filter(Boolean);
   return qualifiers.length ? `${base}{${qualifiers.join(',')}}` : base;
 }

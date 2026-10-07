@@ -29,3 +29,23 @@ export function validateCoreSpiritEnvironment(name: CoreSpiritEnvironmentName, r
   const env = CORE_SPIRIT_EXECUTION_ENVIRONMENTS[name];
   return requested.filter((item) => !env.capabilities.includes(item)).map((item) => `environment '${name}' does not allow capability '${item}'`);
 }
+
+
+export type CoreSpiritOrderExecutionAuthorization = Readonly<{
+  environment: 'paper' | 'live';
+  hostApproved: boolean;
+  riskApproved: boolean;
+  policyApproved: boolean;
+  requestedCapability: 'simulated-orders' | 'real-orders';
+}>;
+
+/** Host-only gate. This authorizes an intent; it never submits an order. */
+export function canAuthorizeCoreSpiritOrderExecution(
+  authorization: CoreSpiritOrderExecutionAuthorization,
+): boolean {
+  const requiredCapability = authorization.environment === 'live' ? 'real-orders' : 'simulated-orders';
+  return authorization.requestedCapability === requiredCapability &&
+    authorization.hostApproved &&
+    authorization.riskApproved &&
+    authorization.policyApproved;
+}

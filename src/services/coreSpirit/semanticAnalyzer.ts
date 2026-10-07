@@ -145,6 +145,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return componentResultLanguageType(component);
         }
 
+        if(n.name==='place_order' || n.name==='placeOrder' || n.name==='submit_order') {
+          report(n,'Direct order submission is host-only. CoreSpirit may emit an order-intent; live execution requires explicit host authorization, risk and policy checks.','CAPABILITY_LIVE_ORDER_HOST_ONLY');
+          return 'unknown';
+        }
+
         if(n.name==='series') {
           if(n.args.length !== 1 || !compatible('string', argTypes[0])) {
             report(n,'series expects one string timeframe','TYPE_SERIES_TIMEFRAME');
@@ -189,6 +194,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
 
       case 'memberCall': {
+        if (n.target.type==='identifier' && ['broker','execution'].includes(n.target.name) && ['placeOrder','place_order','submitOrder','submit_order'].includes(n.member)) {
+          report(n,'Direct broker/execution submission is not a CoreSpirit capability. Emit order-intent and let the host execution authority perform an explicitly authorized action.','CAPABILITY_LIVE_ORDER_HOST_ONLY');
+          return 'unknown';
+        }
         if (n.member === 'timeframe' || n.member === 'tf') {
           if ((n.target.type === 'call' && n.target.name === 'market') || (n.target.type === 'identifier' && scope.get(n.target.name) === 'market:ref')) {
             if (n.args.length !== 1 || !compatible('string', infer(n.args[0]!, scope))) report(n, 'market(...).timeframe(...) expects one string timeframe', 'TYPE_MARKET_TIMEFRAME');
@@ -316,8 +325,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
         }
         if(n.name==='model') return semanticScalar('model',{valueKind:'model',phase:'developing',causal:true,lookahead:false,lookback:0});
+        if(n.name==='market') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:n.args[0]?.type==='string'?String(n.args[0].value):'current',timeframe:'chart'});
+        if(n.name==='timeframe' || n.name==='series') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:'current',timeframe:n.args[0]?.type==='string'?String(n.args[0].value):'requested'});
         if(n.name==='bar_index') return semanticScalar('number',{phase:'developing',causal:true,lookahead:false,lookback:0});
-        if(n.name==='signal') return semanticScalar('number',{valueKind:'signalIntent',phase:'developing',causal:true,lookahead:false,lookback:0});
+        if(n.name==='signal') return semanticScalar('signalIntent',{valueKind:'signalIntent',phase:'developing',causal:true,lookahead:false,lookback:0});
         const component=resolveCoreSpiritComponent(componentSource,n.name);
         if(component){
           const result=componentResultLanguageType(component);
@@ -355,7 +366,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
             const argTypes=n.args.map(x=>inferSemantic(x,scope));
             if (resolved.builtin.returnType === 'prediction<number>') return semanticScalar('number',{valueKind:'prediction',phase:'developing',causal:true,lookahead:false,lookback:0});
             if (resolved.builtin.returnType === 'probability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability',phase:'developing',causal:true,lookahead:false,lookback:0});
-            if (resolved.builtin.returnType === 'signal-intent') return semanticScalar('number',{valueKind:'signalIntent',phase:'developing',causal:true,lookahead:false,lookback:0});
+            if (resolved.builtin.returnType === 'signal-intent') return semanticScalar('signalIntent',{valueKind:'signalIntent',phase:'developing',causal:true,lookahead:false,lookback:0});
             if (typeof resolved.builtin.returnType === 'string' && resolved.builtin.returnType.startsWith('series<')) {
               const source=argTypes[0];
               return source?.kind==='series' ? source : semanticSeries('number');
