@@ -262,7 +262,7 @@ export class Canvas2dBackend implements IRenderBackend {
         for (let i = i0; i <= i1; i += 1) {
             if (i < 0 || i >= columns.length) continue;
             const o = columns.open[i]!, h = columns.high[i]!, l = columns.low[i]!, c = columns.close[i]!;
-            if (h <= l) continue;
+            if (h < l) continue;
             const tRaw = columns.time[i]!;
             const tMs = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? tRaw * 1000 : tRaw;
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
@@ -526,7 +526,7 @@ export class Canvas2dBackend implements IRenderBackend {
         const fading = this.candleStructureAlpha > this.candleBodyAlpha + 0.001;
         for (let i = i0; i <= i1; i += 1) {
             const b = bars[i];
-            if (!b || b.high <= b.low) continue; // skip zero-range candles (e.g. the intro reveal's un-started state)
+            if (!b || b.high < b.low) continue; // keep valid zero-range candles visible (doji/quote seed)
             // Wick + body snapped to the device grid as one unit, so the wick is always
             // dead-center in the body and the gap between candles stays uniform.
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
