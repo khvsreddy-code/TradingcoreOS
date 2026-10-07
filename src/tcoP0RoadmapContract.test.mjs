@@ -17,6 +17,7 @@ const dataPlane = read('./services/marketData/chartDataPlane.ts');
 const chartController = read('./components/workspace/chartController.ts');
 const runtimeController = read('./services/core/chart/ChartRuntimeController.ts');
 const velaChrome = read('./services/core/chart/tcoVelaChrome.ts');
+const velaExtensions = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 
 assert.match(drawingState, /velaDrawings:velaDocument\.drawings,/, 'Vela drawing restore must pass serialized drawings[]');
 assert.doesNotMatch(liveChart, /LegacyDrawing|legacyDrawing|DrawingController\b/, 'TCO chart UI must not keep a second drawing authority');
@@ -47,7 +48,8 @@ assert.match(runtimeController, /setHistoryFromCanonical/);
 assert.match(velaChrome, /registerSidePanel\(bookmarksPanel\)/);
 assert.match(velaChrome, /registerStatePersistence\(watchlistStatePersistence\)/);
 assert.match(velaChrome, /registerSymbolRanking\(watchlistSymbolRanking\)/);
-assert.match(velaChrome, /registerRendererLayer|registerNativeIndicator/, 'TCO Vela native extension module must be imported/available');
+assert.match(velaExtensions, /registerRendererLayer/);
+assert.match(velaExtensions, /registerNativeIndicator/);
 assert.match(velaChrome, /registerWidgetAttachment/);
 
 console.log('TCO_P0_ROADMAP_CONTRACT_OK');
