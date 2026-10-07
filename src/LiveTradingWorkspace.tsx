@@ -55,7 +55,7 @@ export function LiveTradingWorkspace() {
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
         bars: 5000,
-        timeframes: ['1', '3', '5', '10', '15'],
+        timeframes: ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
         live: true,
         theme: {
           background: '#07080c',
