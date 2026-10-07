@@ -33,11 +33,10 @@ export const sessionService = {
       const supabase = getSupabaseClient();
       const result = await withTimeout(supabase.auth.getSession(), 'Supabase session check timed out');
       if (result.error) return { session: null, error: result.error };
-      if (result.data.session) return { session: result.data.session, error: null };
-
-      const refreshed = await withTimeout(supabase.auth.refreshSession(), 'Supabase session refresh timed out');
-      if (refreshed.error) return { session: null, error: refreshed.error };
-      return { session: refreshed.data.session, error: null };
+      // supabase.auth.getSession() already owns persisted-session refresh semantics.
+      // A clean null means the user is unauthenticated; do not convert that state
+      // into an extra network refresh that can manufacture a transient auth error.
+      return { session: result.data.session ?? null, error: null };
     } catch (err: any) {
       return { session: null, error: err };
     }
