@@ -1,7 +1,31 @@
 /** CoreSpirit execution model: small surface, rich internal composition. */
 
-export const CORE_SPIRIT_AUTHORING_LEVELS = Object.freeze(['simple', 'advanced', 'professional'] as const);
+export const CORE_SPIRIT_AUTHORING_LEVELS = Object.freeze(['beginner', 'trader', 'quant', 'system'] as const);
 export type CoreSpiritAuthoringLevel = typeof CORE_SPIRIT_AUTHORING_LEVELS[number];
+
+export const CORE_SPIRIT_AUTHORING_LEVEL_ALIASES = Object.freeze({
+  simple:'beginner', advanced:'trader', professional:'quant',
+} as const);
+
+export function normalizeCoreSpiritAuthoringLevel(level: string): CoreSpiritAuthoringLevel {
+  const value=level.trim().toLowerCase();
+  if ((CORE_SPIRIT_AUTHORING_LEVELS as readonly string[]).includes(value)) return value as CoreSpiritAuthoringLevel;
+  return CORE_SPIRIT_AUTHORING_LEVEL_ALIASES[value as keyof typeof CORE_SPIRIT_AUTHORING_LEVEL_ALIASES] ?? 'beginner';
+}
+
+export function inferCoreSpiritAuthoringLevel(input: {
+  model?: boolean;
+  multiSymbol?: boolean;
+  research?: boolean;
+  strategy?: boolean;
+  automation?: boolean;
+  orderIntent?: boolean;
+}): CoreSpiritAuthoringLevel {
+  if (input.automation || input.orderIntent) return 'system';
+  if (input.model || input.research || input.multiSymbol) return 'quant';
+  if (input.strategy) return 'trader';
+  return 'beginner';
+}
 
 export const CORE_SPIRIT_EXECUTION_CONTEXTS = Object.freeze([
   'live', 'paper', 'backtest', 'replay', 'scan', 'research', 'optimization',
