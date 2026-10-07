@@ -40,6 +40,24 @@ export function LiveTradingWorkspace() {
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
     let cancelled = false;
+    const browserErrors: Array<{ type: 'error' | 'unhandledrejection'; message: string; time: number }> = [];
+    const pushBrowserError = (type: 'error' | 'unhandledrejection', message: string) => {
+      browserErrors.push({ type, message: String(message).slice(0, 500), time: Date.now() });
+      if (browserErrors.length > 50) browserErrors.shift();
+      if (typeof window !== 'undefined') {
+        (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [...browserErrors];
+      }
+    };
+    const onWindowError = (event: ErrorEvent) => {
+      pushBrowserError('error', event.error?.message || event.message || 'Window error');
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unhandled rejection');
+      pushBrowserError('unhandledrejection', reason);
+    };
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [];
 
     const mount = async () => {
       const brokerReady = tradingCoreRuntime.hasConnectedBroker()
@@ -131,9 +149,12 @@ export function LiveTradingWorkspace() {
       for (const dispose of workspaceListenerDisposers) dispose();
       workspaceListenerDisposers.length = 0;
       workspace?.destroy();
+      window.removeEventListener('error', onWindowError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
       if (typeof window !== 'undefined') {
         const exposed = (window as Window & { __TCO_VELA__?: { workspace?: unknown } }).__TCO_VELA__;
         if (exposed?.workspace === workspace) delete (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__;
+        delete (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__;
       }
     };
   }, []);
