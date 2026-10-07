@@ -125,6 +125,71 @@ The runtime should optimize the user's source without expanding CoreSpirit into 
 - The existing numerical kernel tests continue to serve as parity guards.
 - Fused kernel deduplication is complete; the remaining deep phases are Vela's final columnar ABI, universal dirty-span propagation and authenticated browser/GPU verification.
 
+
+## Unified language architecture
+
+CoreSpirit is one language with progressive authoring depth, not separate beginner/trader/quant/system languages.
+
+```text
+Beginner → Trader → Quant → System
+     \         |         |        /
+      \        |         |       /
+       └──── shared lexer/parser ─────┘
+                    ↓
+              semantic graph
+                    ↓
+             shared executable IR
+                    ↓
+             shared runtime / VM
+                    ↓
+        backtest · replay · live
+```
+
+### Authoring levels
+
+- **Beginner:** `DATA`, `LET`, `WHEN`, and `SHOW` for single-symbol indicator work.
+- **Trader:** multi-symbol/timeframe market handles, explicit dependency graphs, strategy signals, and broker-neutral order intents.
+- **Quant:** statistical factors, first-class `feature<T>`, `featureSet<T>`, `model<T>`, `prediction<T>`, `probability`, `distribution<T>`, research plans, and backtest evaluation metadata.
+- **System:** reactive `on` blocks plus host-routed automation and risk queries. System scripts can request intents/events but cannot acquire broker credentials or call broker APIs.
+
+### One semantic graph
+
+Models are graph participants rather than a separate Python island. Declared model inputs become `model-input` nodes, model inference becomes `model-output` nodes, and the same market/feature dependencies feed indicators, predictions, signals, visualization, and automation. The runtime may use host adapters for Python/ONNX/WASM/native inference, but the semantic contract remains CoreSpirit.
+
+Namespace-qualified APIs such as `ta.ema`, `stats.beta`, `math.log`, `orderflow.depthImbalance`, `strategy.signal`, `model.predict`, `automation.notify`, and `events.signal` resolve through the same callable registry as unqualified builtins. Catalog-only domains are explicit and cannot be executed until their deterministic runtime contract is registered.
+
+### Temporal/model type discipline
+
+```text
+series<T>        observed historical/vector data
+confirmed<T>     finalized value
+developing<T>    forming/realtime value
+prediction<T>    model-produced estimate
+forecast<T>      explicitly future-oriented value
+probability      bounded confidence/probability semantic
+feature<T>       model input value
+featureSet<T>    grouped model inputs
+distribution<T>  statistical distribution
+```
+
+These are not aliases for `series<float>`. The semantic analyzer preserves their value kind so model outputs cannot silently become observed market history.
+
+### Automation authority
+
+```text
+CoreSpirit
+   ↓
+signal / automation event / order intent
+   ↓
+TradingCoreOS execution authority
+   ↓
+risk → policy → execution
+   ↓
+broker adapter
+```
+
+CoreSpirit can ask the host to notify, route, query risk, or construct an order intent. It does not submit, modify, cancel, or square off broker orders.
+
 ## Authority boundary
 
 Indicator and model computation cannot directly authorize broker execution. Risk and execution authority remain outside the numeric VM.
