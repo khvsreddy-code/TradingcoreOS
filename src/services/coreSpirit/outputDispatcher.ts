@@ -4,7 +4,17 @@ import { CoreDrawingDispatcher } from '../core/drawing/drawingDispatcher';
 import { CoreSpiritObject } from './types';
 
 export type CoreSpiritPlotPoint = { time: number; value: number | null };
-export type CoreSpiritOutputFrame = { plots: Map<string, CoreSpiritPlotPoint[]>; plotStyles: Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>; drawingCount: number; signals: CoreSpiritObject[]; drawings: CoreSpiritObject[]; visuals: CoreSpiritObject[]; labels: Extract<CoreSpiritObject,{kind:'label'}>[]; tables: Extract<CoreSpiritObject,{kind:'table'}>[] };
+export type CoreSpiritOutputFrame = {
+  /** Plot arrays are dispatcher-owned and retained across frames. Consumers must treat them as read-only. */
+  plots: Map<string, CoreSpiritPlotPoint[]>;
+  plotStyles: Map<string, NonNullable<Extract<CoreSpiritObject,{kind:'series'}>['style']>>;
+  drawingCount: number;
+  signals: CoreSpiritObject[];
+  drawings: CoreSpiritObject[];
+  visuals: CoreSpiritObject[];
+  labels: Extract<CoreSpiritObject,{kind:'label'}>[];
+  tables: Extract<CoreSpiritObject,{kind:'table'}>[];
+};
 
 /** Main-thread boundary: turns CoreSpirit's declarative outputs into chart-owned data. */
 export class CoreSpiritOutputDispatcher {
@@ -72,7 +82,19 @@ export class CoreSpiritOutputDispatcher {
   }
 
   frame(): CoreSpiritOutputFrame {
-    return { plots: new Map([...this.plots].map(([k,v]) => [k, v.slice()])), plotStyles: new Map(this.plotStyles), drawingCount: this.drawings.list().length, signals: this.signals.slice(), drawings: this.outputDrawings.slice(), visuals: this.visuals.slice(), labels: this.labels.slice(), tables: this.tables.slice() };
+    // Keep the hot-path object graph stable. The chart projection reads the retained
+    // arrays directly and performs targeted Vela patches instead of cloning O(history)
+    // data on every tick.
+    return {
+      plots: this.plots,
+      plotStyles: this.plotStyles,
+      drawingCount: this.drawings.list().length,
+      signals: this.signals,
+      drawings: this.outputDrawings,
+      visuals: this.visuals,
+      labels: this.labels,
+      tables: this.tables,
+    };
   }
 }
 
