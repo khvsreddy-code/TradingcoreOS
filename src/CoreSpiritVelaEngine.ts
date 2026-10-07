@@ -154,6 +154,7 @@ export class CoreSpiritVelaEngine {
     let secondaryRefreshPromise: Promise<void>|undefined;
     let secondaryLastRefreshAt=0;
     let secondaryDegraded=false;
+    const secondaryFailed = new Set<string>();
     const secondaryWarnings:string[]=[];
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
@@ -232,8 +233,9 @@ export class CoreSpiritVelaEngine {
           const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{to:Number.isFinite(endTime)?endTime:undefined,limit});
           if(rows?.length){
             secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
-            secondaryDegraded = false;
+            secondaryFailed.delete(key);
           }else{
+            secondaryFailed.add(key);
             secondaryDegraded = true;
             if(req.mode==='live'){
               const warning=`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`;
@@ -242,7 +244,7 @@ export class CoreSpiritVelaEngine {
             }
           }
         }catch(error){
-          secondaryDegraded = true;
+          secondaryFailed.add(key);
           if(req.mode==='live'){
             const warning=`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`;
             secondaryWarnings.push(warning);
@@ -252,7 +254,10 @@ export class CoreSpiritVelaEngine {
             });
           }
         }
-      })).then(()=>{secondaryLastRefreshAt=Date.now();}).finally(()=>{secondaryRefreshPromise=undefined;});
+      })).then(()=>{
+        secondaryLastRefreshAt=Date.now();
+        secondaryDegraded=secondaryFailed.size>0;
+      }).finally(()=>{secondaryRefreshPromise=undefined;});
       secondaryRefreshPromise=task;
       return task;
     };
@@ -307,8 +312,8 @@ export class CoreSpiritVelaEngine {
     const initialRun = (): void => {
       if (stopped) return;
       try {
-        const initial = runtime.executeIr(token.ir, bars);
-        scene.seed(initial.outputs);
+        const initial = safeOutputs(runtime.executeIr(token.ir, bars).outputs);
+        scene.seed(initial);
         firstSeriesTime = bars.length ? barTimeMillis(bars[0]?.timestamp) : Number.NaN;
         lastTime = bars.length ? barTimeMillis(bars.at(-1)?.timestamp) : Number.NaN;
         emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
@@ -333,8 +338,8 @@ export class CoreSpiritVelaEngine {
       const historical = currentBars.slice(0, -1);
       scene.reset();
       if (historical.length) {
-        const warm = runtime.executeIr(token.ir, historical);
-        scene.seed(warm.outputs);
+        const warm = safeOutputs(runtime.executeIr(token.ir, historical).outputs);
+        scene.seed(warm);
       }
 
       const latest = currentBars.at(-1);
@@ -443,9 +448,9 @@ export class CoreSpiritVelaEngine {
         const latest = currentBars.at(-1);
         if (!latest) return;
         const latestTime = barTimeMillis(latest.timestamp);
-        const result = runtime.executeBar(latest);
+        const result = safeOutputs(runtime.executeBar(latest).outputs);
         if (Number.isFinite(latestTime)) {
-          emitScenePatches(result.outputs, { from: latestTime, to: latestTime });
+          emitScenePatches(result, { from: latestTime, to: latestTime });
           lastTime = latestTime;
         }
       },
