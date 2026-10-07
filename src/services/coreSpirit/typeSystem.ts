@@ -194,6 +194,8 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'number') return 'number';
   if (name === 'string') return 'string';
   if (name === 'probability') return 'probability';
+  if (name === 'signalIntent' || name === 'SignalIntent') return 'signal-intent';
+  if (name === 'orderIntent' || name === 'OrderIntent') return 'order-intent';
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
