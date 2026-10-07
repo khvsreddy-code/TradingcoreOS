@@ -32,7 +32,7 @@ assert.match(liveChart,/chart\.current\.drawings/);
 
 assert.match(runtime,/loadSecondaryData\s*=\s*async\s*\(force=false\)/);
 assert.match(runtime,/context\.maxStalenessMs/);
-assert.match(runtime,/context\.alignment==='exact'/);
+assert.match(runtime,/context\.alignment\s*===\s*['"]exact['"]/);
 assert.match(runtime,/state:confirmed\?'confirmed':'developing'/);
 assert.match(runtime,/Secondary market data refresh failed/);
 
@@ -69,7 +69,7 @@ assert.doesNotMatch(authClient,/DEFAULT_URL|DEFAULT_PUBLISHABLE_KEY/);
 assert.match(authClient,/VITE_SUPABASE_URL/);
 assert.match(authSession,/queueMicrotask/);
 assert.match(authContext,/sessionErr\)/);
-assert.match(authContext,/Preserve any existing/);
+assert.match(authContext,/Keep any existing session state/);
 
 assert.match(watchlist,/registerSidePanel/);
 assert.match(watchlist,/registerStatePersistence/);
