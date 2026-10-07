@@ -717,6 +717,138 @@ const optionsPanel: SidePanelDescriptor = {
   },
 };
 
+const tradeMarksAttachment: WidgetAttachment = {
+  id: 'tco.trade-marks',
+  mount(ctx) {
+    const chart = ctx.chart;
+    chart.marks.defineGroup({ id: 'trades', label: 'Trades', visible: true });
+
+    const refresh = async (): Promise<void> => {
+      try {
+        const symbol = String(ctx.symbol || '').trim().toUpperCase();
+        const trades = await tradingCoreRuntime.getTradeHistory();
+        const marks = trades
+          .filter((trade) => String(trade.symbol || '').trim().toUpperCase() === symbol)
+          .slice(-250)
+          .map((trade) => {
+            const timeValue = Number(trade.timestamp);
+            const parsed = Number.isFinite(timeValue)
+              ? (timeValue > 1e12 ? timeValue : timeValue * 1000)
+              : Date.parse(String(trade.timestamp || ''));
+            if (!Number.isFinite(parsed)) return null;
+            const buy = trade.side === 'Buy';
+            const pnl = Number(trade.pnl);
+            return {
+              id: `tco.trade.${trade.tradeId}`,
+              time: parsed,
+              title: `${buy ? 'BUY' : 'SELL'} ${trade.symbol}`,
+              glyph: {
+                shape: 'circle' as const,
+                color: buy ? '#22c55e' : '#ef4444',
+                letter: buy ? 'B' : 'S',
+              },
+              tooltip: `${buy ? 'BUY' : 'SELL'} · ${Number(trade.quantity).toLocaleString('en-IN')} @ ${Number(trade.price).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`,
+              group: 'trades',
+              content: {
+                panel: {
+                  items: [
+                    { type: 'field' as const, label: 'Side', value: trade.side },
+                    { type: 'field' as const, label: 'Quantity', value: String(trade.quantity) },
+                    { type: 'field' as const, label: 'Price', value: Number(trade.price).toLocaleString('en-IN', { maximumFractionDigits: 2 }) },
+                    { type: 'field' as const, label: 'Order', value: trade.orderId },
+                    { type: 'field' as const, label: 'Product', value: trade.product },
+                    ...(Number.isFinite(pnl) ? [{ type: 'field' as const, label: 'P&L', value: pnl.toLocaleString('en-IN', { maximumFractionDigits: 2 }) }] : []),
+                  ],
+                },
+              },
+            };
+          })
+          .filter((mark): mark is NonNullable<typeof mark> => Boolean(mark));
+
+        chart.marks.set(marks);
+      } catch {
+        chart.marks.clear();
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 10_000);
+    const marketOff = chart.on('market:changed', () => void refresh());
+
+    return () => {
+      window.clearInterval(timer);
+      marketOff();
+      chart.marks.clear();
+    };
+  },
+};
+
+const dataWindowPanel: SidePanelDescriptor = {
+  id: 'tco.data-window',
+  title: 'Data Window',
+  icon: 'table',
+  order: 35,
+  width: 360,
+  resizable: true,
+  minWidth: 300,
+  maxWidth: 520,
+  mount(ctx, body, header) {
+    header.setTitle('Vela Data Window');
+    const root = panelRoot(body);
+    const context = document.createElement('div');
+    context.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;';
+    root.appendChild(context);
+    const rows = document.createElement('div');
+    rows.style.cssText = 'display:flex;flex-direction:column;gap:4px;overflow:auto;min-height:0;';
+    root.appendChild(rows);
+
+    const field = (label: string, value: string, tone = '#cbd5e1') => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:10px;padding:6px 8px;border:1px solid rgba(255,255,255,.06);border-radius:6px;background:rgba(255,255,255,.025);font:10px ui-monospace;';
+      const key = document.createElement('span'); key.textContent = label; key.style.color = '#64748b';
+      const val = document.createElement('span'); val.textContent = value; val.style.color = tone; val.style.fontVariantNumeric = 'tabular-nums';
+      row.append(key, val); rows.appendChild(row);
+    };
+
+    const render = () => {
+      rows.textContent = '';
+      context.textContent = `${ctx.symbol} · ${ctx.timeframe}`;
+      const readout = ctx.chart.renderer.getDataWindowReadout?.();
+      if (!readout) {
+        field('Status', 'Unavailable on current renderer', '#facc15');
+        return;
+      }
+      if (!readout.ohlc) {
+        field('Status', 'Waiting for bars', '#64748b');
+        return;
+      }
+      field('Date', readout.date);
+      field('Time', readout.time);
+      field('Open', readout.ohlc.o, readout.ohlc.up ? '#4ade80' : '#fb7185');
+      field('High', readout.ohlc.h);
+      field('Low', readout.ohlc.l);
+      field('Close', readout.ohlc.c, readout.ohlc.up ? '#4ade80' : '#fb7185');
+      if (readout.ohlc.vol) field('Volume', readout.ohlc.vol);
+
+      for (const group of readout.groups) {
+        const title = document.createElement('div');
+        title.textContent = group.name;
+        title.style.cssText = 'margin-top:7px;font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.10em;';
+        rows.appendChild(title);
+        for (const item of group.rows) field(item.label, item.value, item.color);
+      }
+    };
+
+    render();
+    const timer = window.setInterval(render, 250);
+    return {
+      onOpen: render,
+      onChart: render,
+      destroy: () => window.clearInterval(timer),
+    };
+  },
+};
+
 const journalPanel: SidePanelDescriptor = {
   id: 'tco.journal', title: 'Journal', icon: 'calendar', order: 20, width: 340, resizable: true, minWidth: 280, maxWidth: 520,
   mount(ctx, body, header) {
@@ -883,6 +1015,37 @@ const optionsAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.options'); },
 };
 
+const dataWindowAction: WidgetActionDescriptor = {
+  id: 'tco.data-window',
+  target: 'topbar',
+  label: 'Data Window',
+  icon: 'table',
+  iconOnly: true,
+  align: 'right',
+  order: 8,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.data-window'); },
+};
+
+const vpvrAction: WidgetActionDescriptor = {
+  id: 'tco.vpvr',
+  target: 'topbar',
+  label: 'VPVR',
+  icon: 'layers',
+  iconOnly: true,
+  align: 'right',
+  order: 9,
+  mobile: 'menu',
+  run(ctx) {
+    try {
+      ctx.addNativeIndicator('vpvr');
+      ctx.toast('VPVR added via Vela native indicator', 'success');
+    } catch (error) {
+      ctx.toast(error instanceof Error ? error.message : 'Unable to add VPVR', 'error');
+    }
+  },
+};
+
 const watchlistAction: WidgetActionDescriptor = {
   id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: false, align: 'right', order: 0, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
@@ -910,6 +1073,7 @@ const brokerAction: WidgetActionDescriptor = {
 
 registerSidePanel(bookmarksPanel);
 registerSidePanel(journalPanel);
+registerSidePanel(dataWindowPanel);
 registerSidePanel(healthPanel);
 registerSidePanel(replayPanel);
 registerSidePanel(positionsPanel);
@@ -970,11 +1134,14 @@ const healthAttachment: WidgetAttachment = {
 
 registerWidgetAction(marketHealthAction);
 registerWidgetAttachment(healthAttachment);
+registerWidgetAttachment(tradeMarksAttachment);
 registerWidgetAction(replayAction);
 registerWidgetAction(positionsAction);
 registerWidgetAction(riskAction);
 registerWidgetAction(orderBookAction);
 registerWidgetAction(optionsAction);
+registerWidgetAction(dataWindowAction);
+registerWidgetAction(vpvrAction);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(journalAction);
 registerWidgetAction(panelsAction);
