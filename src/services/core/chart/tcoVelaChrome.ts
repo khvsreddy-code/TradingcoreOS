@@ -4,6 +4,7 @@ import {
   registerSidePanel,
   registerStatePersistence,
   registerSymbolRanking,
+  registerDefaultEngine,
   registerWidgetAction,
   registerWidgetAttachment,
   type LegendCalloutSpec,
@@ -14,6 +15,7 @@ import {
   type SymbolRankingHook,
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
+import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
 
 type WatchlistItem = { symbol: string; label: string; short: string };
@@ -113,6 +115,10 @@ const watchlistSymbolRanking: SymbolRankingHook = (pool) => {
 
 registerStatePersistence(watchlistStatePersistence);
 registerSymbolRanking(watchlistSymbolRanking);
+
+// Make CoreSpirit Vela's default scripting language for TCO-owned Vela charts. Workspace-level
+// engines may still override this factory, so the contribution remains composable.
+registerDefaultEngine('corespirit', () => new LazyCoreSpiritVelaEngine());
 
 
 const JOURNAL_KEY = 'tradingcore:vela:journal:v1';
