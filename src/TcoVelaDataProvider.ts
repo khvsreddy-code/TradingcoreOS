@@ -1,6 +1,7 @@
 import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaNativeChartKernel';
 import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
+import type { HistoricalCandle } from './services/marketData/chartDataPlane';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
@@ -33,6 +34,17 @@ async function activeBrokerId(): Promise<string> {
   const restored = tradingCoreRuntime.getPrimaryBrokerId();
   if (!restored) throw new Error('No connected broker is available for Vela market data.');
   return restored;
+}
+
+function historicalToVelaBars(bars: readonly HistoricalCandle[]): OHLCV[] {
+  return bars.map((bar) => ({
+    time: epoch(bar.timestamp),
+    open: Number(bar.open),
+    high: Number(bar.high),
+    low: Number(bar.low),
+    close: Number(bar.close),
+    volume: Number.isFinite(Number(bar.volume)) ? Number(bar.volume) : undefined,
+  }));
 }
 
 function seedColumnsFromBars(bars: readonly OHLCV[]): ColumnarBars {
@@ -208,7 +220,7 @@ export class TcoVelaDataProvider implements DataProvider {
 
     // History and quote are independent. Race them for time-to-first-visible-price,
     // but always keep the history promise alive so real candles replace the seed.
-    const historyPromise = plane.ensureReadyHistory(firstPaintBars).catch(() => []);
+    const historyPromise: Promise<OHLCV[]> = plane.ensureReadyHistory(firstPaintBars).then(historicalToVelaBars).catch(() => []);
     const quotePromise = tradingCoreRuntime.getMarketQuotes([symbol]).catch(() => ({}));
 
     type FirstPaintResult =
@@ -267,7 +279,7 @@ export class TcoVelaDataProvider implements DataProvider {
     let currentLength = history.length || first.length;
     while (!abort() && currentLength > 0 && currentLength < requested) {
       const beforeLength = currentLength;
-      const older = await plane.loadOlderHistory('warm', { visibleBars: Math.min(1200, requested - currentLength) });
+      const older = historicalToVelaBars(await plane.loadOlderHistory('warm', { visibleBars: Math.min(1200, requested - currentLength) }));
       if (abort()) return older;
       currentLength = older.length;
       if (currentLength <= beforeLength) break;
