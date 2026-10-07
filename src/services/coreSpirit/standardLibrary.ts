@@ -115,6 +115,8 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'event', minArgs:1, maxArgs:1, returnType:'boolean', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'model', minArgs:1, maxArgs:1, returnType:'model:ref', pure:false, category:'extension' },
+  { name:'model.predict', minArgs:1, maxArgs:undefined, returnType:'prediction<number>', pure:false, category:'extension', capability:'ai' },
+  { name:'model.probability', minArgs:1, maxArgs:undefined, returnType:'probability', pure:false, category:'extension', capability:'ai' },
 
   { name:'variance', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'atr', minArgs:0, maxArgs:1, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
