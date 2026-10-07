@@ -72,9 +72,9 @@ function healthChecks() {
     database: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     encryption: Boolean(process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.length >= 32),
     fyers: Boolean(process.env.FYERS_CLIENT_ID && process.env.FYERS_CLIENT_SECRET && process.env.FYERS_REDIRECT_URI),
-    coordination: sharedRedisConfigured(),
+    coordination: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     coordinationRequired,
-    realtimeGateway: Boolean(process.env.REALTIME_GATEWAY_URL && process.env.REALTIME_GATEWAY_SHARED_SECRET),
+    realtimeGateway: Boolean(process.env.REALTIME_GATEWAY_SHARED_SECRET && (process.env.REALTIME_GATEWAY_URL || process.env.VERCEL === '1')),
   };
 }
 
