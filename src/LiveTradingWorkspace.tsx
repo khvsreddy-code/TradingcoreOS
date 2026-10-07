@@ -92,6 +92,9 @@ export function LiveTradingWorkspace() {
         providers: {
           tco: () => createTcoVelaDataProvider(),
         },
+        engines: {
+          corespirit: () => new LazyCoreSpiritVelaEngine(),
+        },
         indicators: async () => readCoreSpiritManifest(),
         drawings: true,
         drawingToolbar: true,
