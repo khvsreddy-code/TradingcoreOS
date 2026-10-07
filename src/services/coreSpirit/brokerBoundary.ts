@@ -19,10 +19,16 @@ export const CORE_SPIRIT_BROKER_BOUNDARY = Object.freeze({
   forbiddenImportFragments: Object.freeze([
     '/services/brokers/',
     '/server/brokers/',
+    '../brokers/',
+    '../../server/brokers/',
     '/services/engine/',
+    '../engine/',
     '/services/http/tradingApi',
+    '../http/tradingApi',
     '/server/routes/trading',
     '/server/routes/broker',
+    '../../server/routes/trading',
+    '../../server/routes/broker',
   ]),
   forbiddenEndpointFragments: Object.freeze([
     '/api/trading',
