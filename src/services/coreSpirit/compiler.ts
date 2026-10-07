@@ -44,7 +44,7 @@ export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
   if (!declaration || declaration.type !== 'let') throw new Error(`Invalid model feature expression: ${source}`);
   return declaration.expression;
 }
-function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
+export function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
   const componentSource = options.components ?? coreSpiritComponentRegistry;
   const componentContracts = componentSource && typeof componentSource === 'object' && 'listContracts' in componentSource
     ? (componentSource as any).listContracts()
