@@ -136,7 +136,7 @@ export class TcoVelaDataProvider implements DataProvider {
     return {
       name: 'tco',
       displayName: 'TradingCoreOS',
-      supportedTimeframes: ['1', '3', '5', '10', '15'],
+      supportedTimeframes: ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
       capabilities: { enumerate: true, stream: true, symbolInfo: true },
     };
   }
