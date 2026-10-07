@@ -29,7 +29,7 @@ assert.doesNotMatch(liveChart,/createChartDrawingController|drawingControllerRef
 assert.doesNotMatch(interactions,/hitTestDrawings|moveDrawingHandle|CoreDrawingStore/);
 assert.match(liveChart,/chart\.current\.drawings/);
 
-assert.match(runtime,/loadSecondaryData\(force=false\)/);
+assert.match(runtime,/loadSecondaryData\s*=\s*async\s*\(force=false\)/);
 assert.match(runtime,/context\.maxStalenessMs/);
 assert.match(runtime,/context\.alignment==='exact'/);
 assert.match(runtime,/state:confirmed\?'confirmed':'developing'/);
@@ -71,6 +71,8 @@ assert.match(authContext,/Preserve any existing/);
 assert.match(watchlist,/registerSidePanel/);
 assert.match(watchlist,/registerStatePersistence/);
 assert.match(watchlist,/registerSymbolRanking/);
+assert.match(watchlist,/registerDefaultEngine/);
+assert.match(watchlist,/registerWidgetAttachment/);
 assert.match(watchlist,/subscribeMarketData/);
 assert.match(watchlist,/\+ Add current/);
 assert.match(facade,/registerLegendAction/);
