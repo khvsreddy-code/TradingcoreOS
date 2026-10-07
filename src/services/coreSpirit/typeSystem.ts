@@ -23,6 +23,15 @@ export type CoreSpiritType =
   | `array<${string}>`
   | `matrix<${string}>`
   | `tensor<${string}>`
+  | `model<${string}>`
+  | `prediction<${string}>`
+  | `distribution<${string}>`
+  | `feature<${string}>`
+  | `featureSet<${string}>`
+  | `experiment<${string}>`
+  | `trainingData<${string}>`
+  | `dataset<${string}>`
+  | `modelArtifact<${string}>`
   | 'trade'
   | 'orderbook'
   | 'footprint'
@@ -58,6 +67,17 @@ export type CoreSpiritTemporalValueType =
   | `developing<${string}>`
   | `forecast<${string}>`;
 
+export type CoreSpiritModelType = `model<${string}>`;
+export type CoreSpiritPredictionType = `prediction<${string}>`;
+export type CoreSpiritFeatureType = `feature<${string}>`;
+export type CoreSpiritFeatureSetType = `featureSet<${string}>`;
+export type CoreSpiritDistributionType = `distribution<${string}>`;
+export type CoreSpiritResearchObjectType =
+  | `experiment<${string}>`
+  | `trainingData<${string}>`
+  | `dataset<${string}>`
+  | `modelArtifact<${string}>`;
+
 export const isNumericScalarType = (type: CoreSpiritType): type is CoreSpiritNumericScalar =>
   type === 'int' || type === 'float' || type === 'number' || type === 'scalar<float>' || type === 'scalar<int>' || type === 'scalar<number>';
 
@@ -84,12 +104,18 @@ export const isSnapshotType = (type: CoreSpiritType): boolean =>
 
 export const isNumericType = (type: CoreSpiritType): boolean => {
   if (isNumericScalarType(type)) return true;
-  if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type)) {
+  if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type) || isPredictionType(type) || isFeatureType(type) || isFeatureSetType(type)) {
     const parsed = parseCoreSpiritTemporalType(type);
     return parsed ? ['int', 'float', 'number', 'price', 'volume', 'currency', 'duration', 'time'].includes(parsed.element) : false;
   }
   return false;
 };
+
+export const isModelType = (type: CoreSpiritType): type is CoreSpiritModelType => type.startsWith('model<') && type.endsWith('>');
+export const isPredictionType = (type: CoreSpiritType): type is CoreSpiritPredictionType => type.startsWith('prediction<') && type.endsWith('>');
+export const isFeatureType = (type: CoreSpiritType): type is CoreSpiritFeatureType => type.startsWith('feature<') && type.endsWith('>');
+export const isFeatureSetType = (type: CoreSpiritType): type is CoreSpiritFeatureSetType => type.startsWith('featureSet<') && type.endsWith('>');
+export const isDistributionType = (type: CoreSpiritType): type is CoreSpiritDistributionType => type.startsWith('distribution<') && type.endsWith('>');
 
 export const isBooleanType = (type: CoreSpiritType): boolean => {
   if (type === 'boolean') return true;
@@ -143,7 +169,7 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
-  if (name.startsWith('array<') && name.endsWith('>')) return name as CoreSpiritType;
+  if (/^(array|matrix|tensor|model|prediction|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/.test(name)) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
   if (['trade','orderbook','footprint'].includes(name)) return name as CoreSpiritType;
@@ -159,6 +185,9 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'number') return isNumericType(actual);
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
   if (expected === 'series<number>') return isSeriesType(actual);
+  if (isPredictionType(expected) && isPredictionType(actual)) return expected === actual || expected === 'prediction<number>' || actual === 'prediction<number>';
+  if (isFeatureType(expected) && isFeatureType(actual)) return expected === actual || expected === 'feature<number>' || actual === 'feature<number>';
+  if (isFeatureSetType(expected) && isFeatureSetType(actual)) return expected === actual || expected === 'featureSet<number>' || actual === 'featureSet<number>';
   if (expected === 'series<float>') return isSeriesType(actual);
   if (expected === 'boolean') return actual === 'series<boolean>' || actual === 'boolean';
   if (expected === 'string') return actual === 'series<string>' || actual === 'string';
