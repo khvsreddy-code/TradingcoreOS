@@ -253,6 +253,15 @@ export class TcoVelaDataProvider implements DataProvider {
     if (history.length > 0 && (firstResult.kind !== 'history' || history.length !== first.length)) {
       first = history;
       onBatch(history.slice(-requested));
+    } else if (history.length === 0 && first.length === 0) {
+      // History can legally return an empty page during a broker/session race. Re-use
+      // the already-started quote request so Vela never leaves a blank canvas while
+      // the live price path is healthy.
+      const fallback = await quoteBars();
+      if (!abort() && fallback.length) {
+        first = fallback;
+        onBatch(fallback);
+      }
     }
 
     let currentLength = history.length || first.length;
