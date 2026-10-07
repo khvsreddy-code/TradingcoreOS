@@ -22,8 +22,8 @@ export function inferCoreSpiritAuthoringLevel(input: {
   orderIntent?: boolean;
 }): CoreSpiritAuthoringLevel {
   if (input.automation || input.orderIntent) return 'system';
-  if (input.model || input.research || input.multiSymbol) return 'quant';
-  if (input.strategy) return 'trader';
+  if (input.model || input.research) return 'quant';
+  if (input.strategy || input.multiSymbol) return 'trader';
   return 'beginner';
 }
 
