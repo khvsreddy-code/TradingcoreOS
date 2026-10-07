@@ -1,10 +1,12 @@
 import {
+  registerDefaultEngine,
   registerLegendAction,
   registerLegendCallout,
   registerSidePanel,
   registerStatePersistence,
   registerSymbolRanking,
   registerWidgetAction,
+  registerWidgetAttachment,
   type LegendCalloutSpec,
   type SidePanelDescriptor,
   type StatePersistenceHandler,
@@ -12,6 +14,7 @@ import {
   type WidgetActionDescriptor,
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
+import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
 
 type WatchlistItem = { symbol: string; label: string; short: string };
@@ -72,6 +75,37 @@ const watchlistSymbolRanking: SymbolRankingHook=(pool)=>{
 };
 registerStatePersistence(watchlistStatePersistence);
 registerSymbolRanking(watchlistSymbolRanking);
+
+/** Let Vela create the per-chart CoreSpirit engine through its own application-level registry. */
+registerDefaultEngine('corespirit', () => new LazyCoreSpiritVelaEngine());
+
+const dataHealthAttachment = {
+  id: 'tco.data-health',
+  mount(ctx) {
+    const strip = document.createElement('div');
+    strip.setAttribute('data-tco-vela-data-health', 'true');
+    strip.style.cssText = 'height:24px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 10px;border-top:1px solid rgba(255,255,255,.06);background:#080b12;color:#94a3b8;font:9px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.06em;box-sizing:border-box;';
+    const left = document.createElement('span');
+    const right = document.createElement('span');
+    right.style.cssText = 'font-variant-numeric:tabular-nums;';
+    strip.append(left, right);
+    const render = () => {
+      const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
+      const name = broker?.brokerId ? broker.brokerId.toUpperCase() : 'NO BROKER';
+      const status = String(broker?.status || 'Offline');
+      const live = status.toLowerCase() === 'connected';
+      left.textContent = `DATA · ${name} · ${status.toUpperCase()} · ${ctx.symbol} · ${ctx.timeframe}`;
+      right.textContent = live ? 'LIVE FEED' : 'CHECK CONNECTION';
+      right.style.color = live ? '#4ade80' : '#fbbf24';
+    };
+    render();
+    const timer = window.setInterval(render, 1000);
+    const undock = ctx.dockStrip(strip);
+    return () => { window.clearInterval(timer); undock(); };
+  },
+};
+
+registerWidgetAttachment(dataHealthAttachment);
 
 const JOURNAL_KEY='tradingcore:vela:journal:v1';
 function panelRoot(body:HTMLElement){body.textContent='';const root=document.createElement('div');root.style.cssText='height:100%;display:flex;flex-direction:column;gap:8px;padding:10px;box-sizing:border-box;background:var(--vela-bg,#080b12);color:var(--vela-fg,#e5e7eb);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';body.appendChild(root);return root;}
