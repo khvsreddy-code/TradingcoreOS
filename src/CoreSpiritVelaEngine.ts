@@ -1,13 +1,13 @@
-import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel';
-import type { InputValue } from './services/core/chart/velaNativeChartKernel';
-import type { IndicatorMeta } from './services/core/chart/velaNativeChartKernel';
-import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline';
-import { CoreSpiritRuntime } from './services/coreSpirit/runtime';
-import type { CoreSpiritObject } from './services/coreSpirit/types';
-import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData';
-import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types';
-import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff';
-import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter';
+import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel.ts';
+import type { InputValue } from './services/core/chart/velaNativeChartKernel.ts';
+import type { IndicatorMeta } from './services/core/chart/velaNativeChartKernel.ts';
+import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
+import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
+import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
+import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
+import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types.ts';
+import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
+import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 
 type DirtyRange = { from: number; to: number };
 
