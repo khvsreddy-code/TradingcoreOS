@@ -25,7 +25,7 @@ assert.doesNotMatch(liveChart, /LegacyDrawing|legacyDrawing|DrawingController\b/
 assert.match(coreSpirit, /const loadSecondaryData = async \(force\s*=\s*false\)/);
 assert.match(coreSpirit, /context\.alignment/);
 assert.match(coreSpirit, /context\.maxStalenessMs/);
-assert.match(coreSpirit, /state:confirmed \? 'confirmed' : 'developing'/);
+assert.match(coreSpirit, /state:\s*confirmed\s*\?\s*['"]confirmed['"]\s*:\s*['"]developing['"]/);
 assert.match(coreSpirit, /Secondary market data refresh failed/);
 assert.match(coreSpirit, /void loadSecondaryData\(\)/);
 assert.doesNotMatch(provider, /getChartDataPlane\(['"]fyers['"]/);
