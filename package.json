@@ -25,7 +25,8 @@
     "bundle:report": "TCO_MAX_LANDING_GZIP_KB=100000 TCO_MAX_WORKSPACE_GZIP_KB=100000 TCO_MAX_LIVE_GZIP_KB=100000 TCO_MAX_CORESPIRIT_EDITOR_GZIP_KB=100000 node tools/check-bundle-budget.mjs",
     "verify:browser:auth": "node tools/verify-authenticated-chart-performance.mjs",
     "verify:browser:matrix": "node tools/verify-chart-matrix.mjs",
-    "verify:browser:smoke": "node tools/verify-vela-browser-smoke.mjs"
+    "verify:browser:smoke": "node tools/verify-vela-browser-smoke.mjs",
+    "vendor:vela:sync": "node tools/sync-vela-vendor.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
