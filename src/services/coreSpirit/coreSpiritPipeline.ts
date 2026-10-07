@@ -1,5 +1,6 @@
 import { CoreSpiritProgram } from './types';
 import { CoreSpiritParser } from './parser';
+import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { CoreSpiritCompiler, buildCoreSpiritSemanticFingerprint } from './compiler';
 import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
@@ -156,4 +157,23 @@ export function executeCoreSpirit(
   const program=makeCoreSpiritProgram(source,sourceId);
   const runtime=new CoreSpiritRuntime({sourceId});
   return runtime.executeIr(runtime.loadProgram(program),bars);
+}
+
+
+export function inspectCoreSpiritSemantics(
+  source: string,
+  options: { layer?: any; components?: CoreSpiritComponentRegistryLike } = {},
+) {
+  const normalized = normalizeCoreSpiritSource(source);
+  const ast = new CoreSpiritParser(normalized).parse();
+  const surface = describeCoreSpiritSurface(source, options as any);
+  const semantic = analyzeCoreSpirit(ast, { layer: options.layer, surface, components: options.components });
+  return Object.freeze({
+    diagnostics: semantic.diagnostics,
+    maxLookback: semantic.maxLookback,
+    symbols: Object.freeze(Object.fromEntries([...semantic.symbols.entries()])),
+    semanticEnvironment: Object.freeze(Object.fromEntries(
+      [...semantic.semanticSymbols.entries()].map(([name, type]) => [name, Object.freeze({ ...type })]),
+    )),
+  });
 }

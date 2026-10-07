@@ -116,7 +116,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'below_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
   { name:'at_bar', minArgs:0, maxArgs:1, returnType:'visual:position', pure:true, category:'extension' },
   { name:'meta', minArgs:2, maxArgs:undefined, returnType:'unknown', pure:true, category:'extension' },
-  { name:'signal', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'signal' },
+  { name:'signal', minArgs:1, maxArgs:2, returnType:'signal-intent', pure:false, category:'extension', emitKind:'signal' },
   { name:'emit', minArgs:1, maxArgs:1, returnType:'event', pure:false, category:'extension', emitKind:'event' },
 
   { name:'rsi', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', seriesExecution:{vectorizable:true,fusible:false,strategy:'stateful'}, temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },

@@ -372,6 +372,7 @@ export class CoreSpiritCompiler {
         entry:{instructions},
         locals,
         maxLookback:semantic.maxLookback,
+        semanticEnvironment:Object.freeze(Object.fromEntries([...semantic.semanticSymbols.entries()].map(([name,type]) => [name,Object.freeze({...type})]))),
         diagnostics:[],
         sourceMap:coreSpiritSourceMapFromInstructions(sourceId,instructions),
         surface,
