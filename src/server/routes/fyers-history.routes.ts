@@ -25,7 +25,12 @@ const resolutionMap: Record<string, string> = {
   '15minute': '15',
   '30minute': '30',
   '60minute': '60',
+  '120minute': '120',
+  '240minute': '240',
   day: 'D',
+  '1day': 'D',
+  week: '1W',
+  month: '1M',
 };
 
 
