@@ -5,6 +5,28 @@
  */
 export * from './velaNativeChartKernel';
 export {
+  registerNativeIndicator,
+  unregisterNativeIndicator,
+} from '../../../../vendor/vela/src/core/native-indicators';
+export type {
+  NativeIndicator,
+  NativeIndicatorContext,
+  NativeIndicatorDescriptor,
+  NativeIndicatorInfo,
+  NativeIndicatorOutput,
+} from '../../../../vendor/vela/src/core/native-indicators';
+export {
+  registerRendererLayer,
+  unregisterRendererLayer,
+  rendererLayers,
+} from '../../../../vendor/vela/src/renderers/native/layers';
+export type {
+  RendererLayerDefinition,
+  RendererLayerArgs,
+  RendererLayerInstance,
+  BasePaintingModulation,
+} from '../../../../vendor/vela/src/renderers/native/layers';
+export {
   registerLegendAction,
   unregisterLegendAction,
   registerLegendCallout,
