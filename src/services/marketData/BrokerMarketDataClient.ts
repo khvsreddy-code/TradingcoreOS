@@ -83,7 +83,8 @@ export class BrokerMarketDataClient {
         throw new Error('Realtime gateway ticket unavailable; legacy realtime fallback is disabled.');
       }
     } catch (error: any) {
-      if (!stream.stopped && generation === stream.generation && stream.transport === 'gateway') {
+      const legacyAllowed = import.meta.env.DEV || String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
+      if (!stream.stopped && generation === stream.generation && stream.transport === 'gateway' && legacyAllowed) {
         await this.connectLegacy(stream, generation).catch(() => undefined);
         return;
       }
