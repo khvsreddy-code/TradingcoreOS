@@ -73,9 +73,7 @@ export class CoreSpiritChartOutputController {
       } else {
         try { (series as any).applyOptions({ color: style.color || '#38bdf8', lineWidth: Number(style.lineWidth || 2), lineStyle: Number(style.lineStyle || 0), priceLineVisible: style.priceLineVisible ?? false, lastValueVisible: style.lastValueVisible ?? true, title: style.title || undefined }); } catch {}
       }
-      const nextPoints = points.filter(p => Number.isFinite(p.time) && (p.value == null || Number.isFinite(p.value))).map(p => p.value == null ? ({ time: p.time as Time } as any) : ({ time: p.time as Time, value: p.value })) as any[];
-      const previousPoints = previousFrame?.plots.get(id) ?? [];
-      this.patchSeriesValues(series, previousPoints as any[], nextPoints);
+      this.applyPlotPoints(series, points);
 
     }
     for (const [id, series] of this.plotSeries) if (!seenPlots.has(id)) { this.remove(series); this.plotSeries.delete(id); }
@@ -120,6 +118,53 @@ export class CoreSpiritChartOutputController {
     this.renderLabels();
     this.renderTables(frame.tables || []);
     this.refreshOverlay();
+  }
+
+  /**
+   * Keep the realtime chart path incremental. Initial history is materialized once;
+   * subsequent frames append/replace only the changed tail. Full replacement remains
+   * the correctness fallback for genuine historical rewrites.
+   */
+  private applyPlotPoints(series: ISeriesApi<'Line'>, points: readonly { time: number; value: number | null }[]): void {
+    if (!points.length) return;
+    const valid = (point: { time: number; value: number | null }): boolean =>
+      Number.isFinite(point.time) && (point.value == null || Number.isFinite(point.value));
+
+    const current = (series as VelaSeriesFacade).snapshotPoints();
+    if (!current.length) {
+      const initial = points.filter(valid).map((p) =>
+        p.value == null
+          ? ({ time: p.time as Time } as any)
+          : ({ time: p.time as Time, value: p.value } as any),
+      );
+      if (initial.length) series.setData(initial as any);
+      return;
+    }
+
+    const last = points[points.length - 1]!;
+    const currentLast = current[current.length - 1]!;
+    if (!valid(last)) return;
+
+    if (points.length === current.length && last.time === currentLast.time) {
+      series.update(last.value == null ? ({ time: last.time as Time } as any) : ({ time: last.time as Time, value: last.value } as any));
+      return;
+    }
+
+    if (points.length > current.length && points[current.length - 1]?.time === currentLast.time) {
+      for (let i = current.length; i < points.length; i += 1) {
+        const point = points[i]!;
+        if (!valid(point)) continue;
+        series.update(point.value == null ? ({ time: point.time as Time } as any) : ({ time: point.time as Time, value: point.value } as any));
+      }
+      return;
+    }
+
+    const replacement = points.filter(valid).map((p) =>
+      p.value == null
+        ? ({ time: p.time as Time } as any)
+        : ({ time: p.time as Time, value: p.value } as any),
+    );
+    series.setData(replacement as any);
   }
 
   applyObjects(objects: CoreSpiritObject[]): void {
