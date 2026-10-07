@@ -109,6 +109,12 @@ export function buildCoreSpiritSemanticDependencyGraph(
 
   const resolveIdentifier = (name: string): string => {
     if (bindings[name]) return bindings[name];
+    const declaredModel = modelDecls.get(name);
+    if (declaredModel) {
+      const modelId = 'model:' + name;
+      bindings[name] = modelId;
+      return addNode({ id:modelId, kind:'model', name, type:'model:ref', declarationKind:'model' });
+    }
     if (SERIES_NAMES.has(name)) {
       return addNode({ id:'data:' + name, kind:'data-source', name, type:'series<number>' });
     }
