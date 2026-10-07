@@ -35,7 +35,6 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const componentSource=options.components;
   const modelDeclarations = ((options.surface as CoreSpiritSurfaceMetadata | undefined)?.declarations ?? []).filter(item => item.kind === 'model');
   const modelDeclarationMap = new Map(modelDeclarations.map(item => [item.name, item] as const));
-  for (const declaration of modelDeclarations) symbols.set(declaration.name, `model<${declaration.name}>` as CoreSpiritType);
   let maxLookback=0;
   let eventScopeDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
@@ -55,7 +54,6 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='na') return 'null';
         if(n.name==='bar_index') return 'number';
         if(n.name==='bar') return 'udt:bar:context';
-        if(modelDeclarationMap.has(n.name)) return `model<${n.name}>` as CoreSpiritType;
         return scope.get(n.name) || 'unknown';
 
       case 'member': {
