@@ -9,7 +9,7 @@ assert.match(source, /context\.alignment==='last-confirmed'/);
 assert.match(source, /context\.alignment==='nearest-confirmed'/);
 assert.match(source, /context\.alignment==='developing'/);
 assert.match(source, /state:confirmed\?'confirmed':'developing'/);
-assert.match(source, /const latestBars=req\.getBars\?/);
+assert.match(source, /const\s+latestBars\s*=\s*req\.getBars\s*\?/);
 assert.match(source, /latestBars\[latestBars\.length-1\]/);
 assert.match(source, /loadSecondaryData = async \(force=false\)/);
 assert.match(source, /secondaryRefreshPromise/);
