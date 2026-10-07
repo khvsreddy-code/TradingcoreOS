@@ -86,4 +86,16 @@ assert.match(nativeExtensions,/registerRendererLayer/);
 assert.match(nativeExtensions,/tco-regime-ribbon/);
 assert.match(workspace,/createTcoVelaSupabaseStorage\(\(\) => tradingCoreRuntime\.getPrimaryBrokerId\(\)/);
 
+assert.match(marketClient,/data\?\.transport/);
+
+assert.match(marketClient,/transport === ['"]legacy['"]/);
+
+assert.match(watchlist,/rowRefs/);
+
+assert.match(watchlist,/registerWidgetAttachment/);
+
+assert.match(watchlist,/tco\.market-health/);
+
+assert.match(workspace,/timeframes: \['1'.*'M'\]/s);
+
 console.log('TCO_P0_ROADMAP_CONTRACT_OK');
