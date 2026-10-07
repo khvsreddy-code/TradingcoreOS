@@ -137,6 +137,27 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
+        case 'memberCall': {
+          const targetSemanticType = n.target.type === 'identifier' ? semantic.symbols.get(n.target.name) : undefined;
+          const isModelTarget = targetSemanticType === 'model:ref' || targetSemanticType?.startsWith('model<') || (n.target.type === 'call' && n.target.name === 'model');
+          if (isModelTarget && ['predict','prediction','probability','confidence'].includes(n.member)) {
+            const target = expr(n.target);
+            const modelName = targetSemanticType?.startsWith('model<') ? targetSemanticType.slice(6,-1) : undefined;
+            const declaration = modelName ? options.surface?.declarations.find(item => item.kind === 'model' && item.name === modelName) : undefined;
+            const featureArgs = n.args.length ? n.args.map(expr) : (declaration?.kind === 'model' ? declaration.inputs.flatMap(name => {
+              const nameDest=`t${temp++}`;
+              emitInstruction(n,{op:'const',dest:nameDest,value:name});
+              return [nameDest,expr({type:'identifier',name} as any)];
+            }) : []);
+            const dest=`t${temp++}`;
+            emitInstruction(n,{op:'call',dest,name:n.member === 'probability' || n.member === 'confidence' ? '__model_probability' : '__model_predict',args:[target,...featureArgs],callId:`model.${n.member}:${n.span?.start ?? temp}`});
+            return dest;
+          }
+          if (n.member === 'tf' && n.target.type === 'call' && n.target.name === 'market') {
+            const target=expr(n.target); const timeframe=expr(n.args[0]!); const dest=`t${temp++}`;
+            emitInstruction(n,{op:'call',dest,name:'__market_timeframe',args:[target,timeframe],callId:`market.tf:${n.span?.start ?? temp}`});
+            return dest;
+          }
           if (n.member === 'timeframe' && (
             (n.target.type === 'call' && n.target.name === 'market') ||
             (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name))
