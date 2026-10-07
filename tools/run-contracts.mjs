@@ -65,6 +65,7 @@ const contracts = [
   ['frontend-performance', ['src/frontendPerformanceContract.test.mjs', false]],
   ['fyers-order-latency', ['src/fyersOrderLatencyContract.test.mjs', false]],
   ['vela-tco-semantic-boundary', ['src/velaTcoSemanticBoundaryContract.test.mjs', false]],
+  ['tco-p0-roadmap', ['src/tcoP0RoadmapContract.test.mjs', false]],
   ['p0-roadmap', ['src/p0RoadmapContract.test.mjs', false]],
   ['p0-latency-trace', ['src/p0LatencyTraceContract.test.mjs', false]],
   ['corespirit-vela-secondary-data-p0', ['tools/coreSpiritVelaSecondaryDataContract.mjs', false]],
