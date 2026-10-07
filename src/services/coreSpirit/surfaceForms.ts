@@ -372,8 +372,11 @@ export function normalizeCoreSpiritSource(source: string): string {
     if (braceModel) {
       wrappers.push({ indent, kind:'model' });
       modelBraceIndents.push(indent);
-      // Model declarations are compiler metadata; the executable parser stream
-      // receives only the model's feature/target references through researchSurface.
+      // Model declarations are metadata plus a canonical executable model reference.
+      // The body remains declarative research metadata and never becomes VM code.
+      const indentText=raw.match(/^[ \t]*/)?.[0] ?? '';
+      const modelName=braceModel[1] ?? braceModel[2] ?? braceModel[3] ?? 'Model';
+      out.push(`${indentText}let ${modelName} = model(${JSON.stringify(modelName)});`);
       continue;
     }
 
