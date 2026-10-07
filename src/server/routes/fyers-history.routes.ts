@@ -158,6 +158,24 @@ async function fallbackQuoteCandle(accessToken: string, symbol: string, signal: 
 const cache = new Map<string, { expiresAt: number; data: any }>();
 const inflight = new Map<string, Promise<any>>();
 
+function historyErrorStatus(error: any): number {
+  if (error?.name === 'AbortError') return 504;
+  const status = Number(error?.status);
+  if (status === 401 || status === 403 || status === 429 || status === 504) return status;
+  return 502;
+}
+
+function sendHistoryError(res: Response, error: any): void {
+  const status = historyErrorStatus(error);
+  if (status === 429) res.setHeader('Retry-After', '1');
+  res.status(status).json({
+    success: false,
+    error: error?.message || 'Unable to load Fyers historical candles',
+    brokerCode: error?.brokerCode,
+    requestId: res.getHeader('X-Request-Id') || null,
+  });
+}
+
 fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
 
@@ -204,7 +222,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       res.setHeader('Cache-Control', 'private, max-age=20');
       res.json({ success: true, data, requested: limit, returned: columnar ? data.time.length : data.length, cached: true, before: beforeDate?.toISOString() || null });
     } catch (error: any) {
-      res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
+      sendHistoryError(res, error);
     }
     return;
   }
@@ -262,7 +280,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     const newestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
     res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !isColumnarData(data) && data.length === 1 && data[0]?.liveSeed === true });
   } catch (error: any) {
-    res.status(502).json({ success: false, error: error?.message || 'Unable to load Fyers historical candles' });
+    sendHistoryError(res, error);
   } finally {
     inflight.delete(key);
   }
