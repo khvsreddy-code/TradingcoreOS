@@ -323,35 +323,22 @@ export function buildCoreSpiritSemanticDependencyGraph(
       }
 
       case 'memberCall': {
-        if(node.member==='timeframe' && node.target.type==='call' && node.target.name==='market'){
-          const symbol=literalString(node.target.args[0]) ?? '?';
-          const timeframe=literalString(node.args[0]) ?? '?';
-          return addNode({
-            id:'data:market:'+symbol+':'+timeframe,
-            kind:'data-source',
-            name:'market("'+symbol+'").timeframe("'+timeframe+'")',
-            type:'market:ref',
-            source:sourceSpan(node),
-          });
+        const directTargetId=expression(node.target,conditionOwner);
+        const directTargetNode=nodes.get(directTargetId);
+        if(directTargetNode?.kind==='model' && ['predict','prediction','probability','confidence'].includes(node.member)){
+          const outputId=addNode({id:'model-output:'+directTargetNode.name+':'+node.member,kind:'model-output',name:directTargetNode.name+'.'+node.member,source:sourceSpan(node)});
+          addEdge(directTargetId,outputId,'depends-on');
+          for(const arg of node.args) addEdge(expression(arg,conditionOwner),outputId,'depends-on');
+          return outputId;
         }
         const target = NAMESPACE_NAMES.has(node.target.type === 'identifier' ? node.target.name : '')
-          ? addNode({
-              id:'namespace:' + (node.target.type === 'identifier' ? node.target.name : 'unknown'),
-              kind:'expression',
-              name:node.target.type === 'identifier' ? node.target.name : 'namespace',
-            })
-          : expression(node.target,conditionOwner);
-        const id = addNode({
-          id:'expr:' + (node.span?.start ?? nodes.size),
-          kind:'expression',
-          name:node.member,
-          source:sourceSpan(node),
-        });
+          ? addNode({id:'namespace:'+(node.target.type === 'identifier' ? node.target.name : 'unknown'),kind:'expression',name:node.target.type === 'identifier' ? node.target.name : 'namespace'})
+          : directTargetId;
+        const id=addNode({id:'expr:'+(node.span?.start ?? nodes.size),kind:'expression',name:node.member,source:sourceSpan(node)});
         addEdge(target,id,'depends-on');
-        for (const arg of node.args) addEdge(expression(arg,conditionOwner),id,'depends-on');
+        for(const arg of node.args) addEdge(expression(arg,conditionOwner),id,'depends-on');
         return id;
       }
-
       default:
         return addNode({
           id:'expr:' + (node.span?.start ?? nodes.size),
