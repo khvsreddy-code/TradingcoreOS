@@ -1,4 +1,3 @@
-import type { CoreDrawingStore } from '../drawing/coreDrawingStore';
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import type { DrawingTool } from '../../../components/workspace/drawingTypes';
 import type { IChartApi, ISeriesApi } from './velaNativeChartKernel';
@@ -46,6 +45,16 @@ export function createChartInteractionController(deps:ChartInteractionController
     if(deps.chartStore.getSnapshot().historyReady&&movingBackward&&deps.shouldLoadOlderHistory(normalized,deps.candles.current.length,deps.timeframe)){
       void deps.dataController.loadOlderHistory(Math.min(deps.candles.current.length,visibleBars));
     }
+  };
+
+  const onChartClick=(param:any)=>{
+    if(deps.drawingToolRef.current!=='none')return;
+    if(!param?.point||!deps.candle.current)return;
+    const timeScale=deps.chart.current?.timeScale() as any;
+    const rawTime=timeScale?.coordinateToTime?.(param.point.x);
+    const rawPrice=(deps.candle.current as any)?.coordinateToPrice?.(param.point.y);
+    if(rawTime==null||rawPrice==null||!Number.isFinite(Number(rawPrice)))return;
+    deps.onDebugBar?.({chartIndex:deps.chartIndex,symbol:deps.resolvedInstrumentKey,timeframe:deps.timeframe,barIndex:-1,time:Number(rawTime),price:Number(rawPrice)});
   };
 
   const resizeObserver=typeof ResizeObserver!=='undefined'&&deps.host.current
