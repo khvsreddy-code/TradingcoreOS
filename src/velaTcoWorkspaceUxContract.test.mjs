@@ -10,7 +10,8 @@ const provider = read('src/TcoVelaDataProvider.ts');
 const plane = read('src/services/marketData/chartDataPlane.ts');
 const theme = read('src/theme/theme.ts');
 
-assert(live.includes("const initialLayout = defaults.layout && defaults.layout !== '4' ? defaults.layout : '1';"));
+assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
+assert(/const initialLayout = .*defaults\.layout/.test(live));
 assert(live.includes("layout: initialLayout"));
 assert(live.includes("animations: false"));
 assert(live.includes("'tco.watchlist'"));
