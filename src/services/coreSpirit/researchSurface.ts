@@ -96,13 +96,13 @@ export function buildCoreSpiritResearchPlan(
       if(indent<=activeModelIndent!){
         activeModel=undefined; activeModelIndent=undefined; activeModelSection=undefined;
       } else if(/^(?:features?|inputs?)\s*:\s*(.*)$/i.test(line)){
-        const value=line.match(/^features?\s*:\s*(.*)$/i)?.[1]?.trim()??'';
+        const value=line.match(/^(?:features?|inputs?)\s*:\s*(.*)$/i)?.[1]?.trim()??'';
         activeModelSection='features';
         if(value) activeModel={...activeModel,features:[...activeModel.features,...splitFeatureExpressions(value)]};
         modelSpecs[modelSpecs.length-1]=activeModel;
         continue;
       } else if(/^(?:targets?|predict)\s*:\s*(.*)$/i.test(line)){
-        const value=line.match(/^targets?\s*:\s*(.*)$/i)?.[1]?.trim()??'';
+        const value=line.match(/^(?:targets?|predict)\s*:\s*(.*)$/i)?.[1]?.trim()??'';
         activeModelSection='target';
         if(value) activeModel={...activeModel,target:value};
         modelSpecs[modelSpecs.length-1]=activeModel;
