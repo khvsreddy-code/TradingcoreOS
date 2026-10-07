@@ -22,6 +22,7 @@ const contracts = [
   ['broker-launch-workspace', ['src/brokerLaunchWorkspaceContract.test.mjs', false]],
   ['corespirit-vela-data-and-drawings', ['tools/coreSpiritVelaDataAndDrawingsContract.mjs', true]],
   ['corespirit-language-parity', ['src/coreSpiritLanguageParityContract.test.mjs', true]],
+  ['corespirit-safe-complexity-types', ['tools/coreSpiritSafeComplexityTypesContract.mjs', true]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
   ['semantic-series-type', ['src/coreSpiritSemanticSeriesTypeContract.test.mjs', false]],
