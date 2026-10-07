@@ -91,11 +91,11 @@ assert.match(nativeExtensions,/registerNativeIndicator/);
 assert.match(nativeExtensions,/registerRendererLayer/);
 assert.match(nativeExtensions,/tco-regime-ribbon/);
 assert.match(facade,/registerDefaultEngine/);
-assert.match(chrome,/registerDefaultEngine\('corespirit'/);
-assert.match(chrome,/registerSidePanel\(positionsPanel\)/);
-assert.match(chrome,/registerSidePanel\(orderBookPanel\)/);
-assert.match(chrome,/registerSidePanel\(optionsPanel\)/);
-assert.match(chrome,/registerSidePanel\(riskPanel\)/);
+assert.match(watchlist,/registerDefaultEngine\('corespirit'/);
+assert.match(watchlist,/registerSidePanel\(positionsPanel\)/);
+assert.match(watchlist,/registerSidePanel\(orderBookPanel\)/);
+assert.match(watchlist,/registerSidePanel\(optionsPanel\)/);
+assert.match(watchlist,/registerSidePanel\(riskPanel\)/);
 assert.match(workspace,/'tco\.replay'.*'tco\.positions'.*'tco\.risk'.*'tco\.orderbook'.*'tco\.options'/s);
 assert.match(workspace,/createTcoVelaSupabaseStorage\(\(\) => tradingCoreRuntime\.getPrimaryBrokerId\(\)/);
 
