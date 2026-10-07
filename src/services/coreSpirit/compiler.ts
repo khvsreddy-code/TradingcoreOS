@@ -31,6 +31,8 @@ export type CoreSpiritCompilerOptions = {
   surface?: CoreSpiritSurfaceMetadata;
   components?: CoreSpiritComponentRegistryLike;
   artifactContext?: { source:string; normalizedSource:string; semanticFingerprint?:string };
+  /** Original authoring source used for declarative research/model metadata. */
+  researchSource?: string;
 };
 
 export function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
@@ -54,7 +56,7 @@ export class CoreSpiritCompiler {
     const unit = createCoreSpiritCompilationUnit(source, options);
     if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) return { diagnostics: unit.diagnostics };
     const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(source);
-    return this.compile(unit.ast, sourceId, { ...options, surface, artifactContext:{ source:unit.source, normalizedSource:unit.normalizedSource, semanticFingerprint:this.semanticFingerprint(options) } });
+    return this.compile(unit.ast, sourceId, { ...options, surface, researchSource:source, artifactContext:{ source:unit.source, normalizedSource:unit.normalizedSource, semanticFingerprint:this.semanticFingerprint(options) } });
   }
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {
@@ -361,7 +363,7 @@ export class CoreSpiritCompiler {
       const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
       const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
-      const researchPlan = buildCoreSpiritResearchPlan(options.artifactContext?.source ?? '', surface);
+      const researchPlan = buildCoreSpiritResearchPlan(options.researchSource ?? options.artifactContext?.source ?? '', surface);
       const authoringLevel = inferCoreSpiritAuthoringLevel({
         model: researchPlan.models.length > 0 || semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output'),
         multiSymbol: tradingNativePlan.multiSymbol,
