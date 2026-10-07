@@ -440,7 +440,7 @@ const replayPanel: SidePanelDescriptor = {
   maxWidth: 460,
   mount(ctx, body, header) {
     header.setTitle('Vela Replay');
-    const replay = (ctx as typeof ctx & { replay?: {
+    const replay: {
       state: { active: boolean; playing: boolean; cursorTime: number | null };
       start(opts: { from: number; cell?: string }): Promise<void>;
       step(): boolean;
@@ -448,7 +448,7 @@ const replayPanel: SidePanelDescriptor = {
       pause(): unknown;
       stop(): unknown;
       on?: (event: string, handler: () => void) => () => void;
-    } }).replay ?? ctx.chart.replay;
+    } = ctx.replay as any ?? ctx.chart.replay as any;
     const replayOn = (event: string, handler: () => void): (() => void) =>
       typeof replay.on === 'function' ? replay.on(event, handler) : () => undefined;
     const root = panelRoot(body);
@@ -827,7 +827,7 @@ const dataWindowPanel: SidePanelDescriptor = {
     const render = () => {
       rows.textContent = '';
       context.textContent = `${ctx.symbol} · ${ctx.timeframe}`;
-      const readout = ctx.chart.renderer.getDataWindowReadout?.();
+      const readout = ctx.chart.renderer.dataWindowReadout?.();
       if (!readout) {
         field('Status', 'Unavailable on current renderer', '#facc15');
         return;
