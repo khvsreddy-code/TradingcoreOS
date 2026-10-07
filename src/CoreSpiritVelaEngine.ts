@@ -183,18 +183,13 @@ export class CoreSpiritVelaEngine {
           if(cursor<0)return null;
           target=cursor-offset;
         }else if(context.alignment==='nearest-confirmed'){
-          let before=end;
-          while(before>=0&&!isConfirmed(rows[before]!))before-=1;
-          let after=end+1;
-          while(after<rows.length&&!isConfirmed(rows[after]!))after+=1;
-          if(before<0 && after>=rows.length)return null;
-          if(after>=rows.length)target=before-offset;
-          else if(before<0)target=after+offset;
-          else{
-            const beforeDelta=Math.abs(context.asOfTimestamp-barTimeMillis(rows[before]!.timestamp));
-            const afterDelta=Math.abs(barTimeMillis(rows[after]!.timestamp)-context.asOfTimestamp);
-            target=(beforeDelta<=afterDelta ? before : after)+offset;
-          }
+          // "Nearest confirmed" is still causal: never look beyond asOfTimestamp.
+          // In live/replay this naturally means the latest confirmed bar at or
+          // before asOf; in historical mode it uses the same no-lookahead rule.
+          let cursor=end;
+          while(cursor>=0&&!isConfirmed(rows[cursor]!))cursor-=1;
+          if(cursor<0)return null;
+          target=cursor-offset;
         }else{
           target=end-offset;
         }
@@ -240,6 +235,7 @@ export class CoreSpiritVelaEngine {
             if(req.mode==='live'){
               const warning=`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`;
               secondaryWarnings.push(warning);
+              if(secondaryWarnings.length>100)secondaryWarnings.splice(0,secondaryWarnings.length-100);
               handlers.onWarning?.({message:warning,method:'secondary-data',bar:Math.max(0,latestBars.length-1)});
             }
           }
@@ -248,6 +244,7 @@ export class CoreSpiritVelaEngine {
           if(req.mode==='live'){
             const warning=`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`;
             secondaryWarnings.push(warning);
+            if(secondaryWarnings.length>100)secondaryWarnings.splice(0,secondaryWarnings.length-100);
             handlers.onWarning?.({
               message:warning,
               method:'secondary-data',bar:Math.max(0,bars.length-1)
