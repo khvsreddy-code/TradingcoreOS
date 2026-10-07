@@ -19,7 +19,7 @@ assert.equal(returnsMeta.timeframe, 'chart');
 const typedTradingObjects = compileCoreSpirit(`
 let x: series<float> = close
 let book: orderbook<float> = market("NSE:NIFTY50").orderbook
-let signalIntent: signal-intent = signal("BUY")
+let signalIntent: signalIntent = signal("BUY")
 `, 'safe-complexity-types');
 assert.ok(!typedTradingObjects.diagnostics.some(d => d.severity === 'error'), typedTradingObjects.diagnostics.map(d => d.message).join('; '));
 assert.equal(typedTradingObjects.ir?.semanticEnvironment?.signalIntent?.valueKind, 'signalIntent');
