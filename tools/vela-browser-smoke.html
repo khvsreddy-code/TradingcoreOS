@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TradingCore Vela Browser Smoke</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #070a10; }
+    body { padding: 16px; box-sizing: border-box; color: #f3f4f6; font: 12px system-ui, sans-serif; }
+    #chart { height: 680px; width: 100%; border: 1px solid #252b3a; border-radius: 12px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 style="position:absolute;left:-10000px">TradingCore Vela Browser Smoke</h1>
+    <div id="chart" data-tco-vela-smoke="boot" aria-label="TradingCoreOS Vela browser smoke chart"></div>
+  </main>
+  <script type="module">
+    import { Vela } from '/src/services/core/chart/velaChartFacade.ts';
+
+    const host = document.querySelector('#chart');
+    const initial = {
+      phase: 'boot',
+      bars: 0,
+      canvasCount: 0,
+      historyComplete: false,
+      nativeIndicator: null,
+      error: null,
+    };
+
+    function publish(patch) {
+      const previous = window.__TCO_VELA_SMOKE__ || initial;
+      const state = { ...previous, ...patch };
+      window.__TCO_VELA_SMOKE__ = state;
+      host.dataset.tcoVelaSmoke = state.phase;
+      host.dataset.tcoVelaSmokeBars = String(state.bars);
+      host.dataset.tcoVelaSmokeCanvasCount = String(state.canvasCount);
+      host.dataset.tcoVelaSmokeHistoryComplete = String(state.historyComplete);
+      host.dataset.tcoVelaSmokeIndicator = state.nativeIndicator || '';
+      if (state.error) host.dataset.tcoVelaSmokeError = state.error;
+      else delete host.dataset.tcoVelaSmokeError;
+    }
+
+    function makeBars(count = 360) {
+      const start = Date.UTC(2026, 0, 2, 9, 15);
+      const step = 5 * 60 * 1000;
+      const bars = [];
+      let close = 24800;
+      for (let i = 0; i < count; i += 1) {
+        const wave = Math.sin(i / 17) * 22;
+        const drift = (i / count) * 180;
+        const open = close;
+        close = open + Math.sin(i / 7) * 18 + wave * 0.35 + drift * 0.01;
+        const high = Math.max(open, close) + 8 + Math.abs(Math.sin(i / 5)) * 7;
+        const low = Math.min(open, close) - 8 - Math.abs(Math.cos(i / 6)) * 7;
+        bars.push({
+          time: start + i * step,
+          open,
+          high,
+          low,
+          close,
+          volume: 1000 + ((i * 37) % 700),
+        });
+      }
+      return bars;
+    }
+
+    try {
+      const bars = makeBars();
+      const chart = new Vela(host, {
+        data: bars,
+        timeframe: '5',
+        live: false,
+        theme: 'dark',
+        volume: true,
+        drawings: false,
+        currentPriceLine: true,
+        nativeBackend: 'canvas2d',
+        animations: false,
+      });
+
+      const refresh = () => publish({
+        bars: bars.length,
+        canvasCount: host.querySelectorAll('canvas').length,
+      });
+
+      chart.on('ready', refresh);
+      chart.on('history:complete', () => {
+        publish({ historyComplete: true });
+        refresh();
+      });
+      chart.on('indicator:error', ({ error }) => {
+        publish({ phase: 'failed', error: error?.message || String(error) });
+      });
+
+      await chart.ready();
+      refresh();
+
+      const handle = chart.addNativeIndicator('sma', { inputs: { length: 20 } });
+      publish({ nativeIndicator: handle.id });
+      await new Promise((resolve, reject) => {
+        let done = false;
+        let offReady = () => {};
+        let offError = () => {};
+        const finish = (error) => {
+          if (done) return;
+          done = true;
+          offReady();
+          offError();
+          error ? reject(error) : resolve();
+        };
+        offReady = handle.on('ready', () => finish());
+        offError = handle.on('error', ({ error }) => finish(error));
+      });
+      await chart.historyComplete();
+      refresh();
+      publish({ phase: 'indicator-ready', historyComplete: true });
+      window.__TCO_VELA_SMOKE_CHART__ = chart;
+    } catch (error) {
+      publish({
+        phase: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  </script>
+</body>
+</html>

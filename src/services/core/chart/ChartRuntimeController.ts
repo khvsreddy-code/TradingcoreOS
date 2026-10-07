@@ -193,24 +193,12 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         if(canonical.length)deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
         const data=snapshot.candles.length?snapshot.candles:deps.chartDataPlane.getCompatibilityCandles();
         if(!data.length){
-          // A healthy live tick is enough to keep the chart visually alive while
-          // historical recovery is still in flight. Seed one forming candle at
-          // the Vela boundary; subsequent ticks return to the normal canonical
-          // columnar path once history is available.
+          // P0 history invariant: a realtime quote is NOT historical data. Never
+          // seed deps.candles or indicator input from an LTP/quote while history
+          // is unavailable. The live controller is resumed by the next canonical
+          // history snapshot, which owns the chart's bar timeline.
           if(event.type==='tick' && snapshot.latestTick){
-            const seeded=deps.rendererController.seedLiveCandle?.(
-              snapshot.latestTick,
-              deps.appearanceRef.current,
-              deps.timeframe,
-              true,
-            );
-            if(seeded){
-              deps.candles.current=[seeded];
-              deps.setError('');
-              realtimeController.handleTick({...snapshot,candles:[seeded]},Boolean(event.bucketChanged));
-            } else {
-              realtimeController.handleTick(snapshot,Boolean(event.bucketChanged));
-            }
+            deps.setError('');
           }
           return;
         }

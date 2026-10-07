@@ -40,6 +40,10 @@ app.use((req: TradingCoreRequest, res, next) => {
 });
 
 app.use(express.json({ limit: '32kb' }));
+app.get('/__smoke/vela', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'tools', 'vela-browser-smoke.html'));
+});
+
 app.use(createRateLimiter({ windowMs: 60_000, max: 180, name: 'api', key: (req) => req.ip || 'unknown' }));
 
 app.use((req, res, next) => {

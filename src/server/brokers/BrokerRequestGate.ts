@@ -17,6 +17,9 @@ const LIMITS: Record<string, BrokerLimit> = {
   // 10 req/s and 600 req/min on Prime. Use the Standard ceiling globally so
   // TradingCore remains safe regardless of the user's subscription.
   fyers: { minIntervalMs: 300, maxPerMinute: 190 },
+  // FYERS Data APIs currently allow 5 req/s and 50 req/min on Standard.
+  // Keep a safety margin because History/Quotes/Depth/Option Chain share quota.
+  'fyers-data': { minIntervalMs: 250, maxPerMinute: 45 },
   // Upstox documents 50 req/s and 500 req/min for standard APIs and
   // 10 req/s for the combined order APIs. The shared REST gate uses the
   // conservative 450/min standard-api budget; order endpoints have an
@@ -102,7 +105,7 @@ function distributedEnabled(): boolean {
 }
 
 export async function withBrokerRequestGate<T>(
-  broker: 'fyers' | 'upstox',
+  broker: 'fyers' | 'fyers-data' | 'upstox',
   identity: string,
   task: (signal?: AbortSignal) => Promise<T>,
   signal?: AbortSignal,

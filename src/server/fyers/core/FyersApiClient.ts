@@ -102,6 +102,6 @@ private async request<T>(base: string, path: string, params: Record<string, stri
     // Every FYERS REST call shares the authenticated-user scheduler. This keeps
     // history, quotes, option chain, depth and account calls from independently
     // consuming the same broker quota.
-    return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal);
+    return withBrokerRequestGate(base === DATA_BASE ? 'fyers-data' : 'fyers', this.accessToken, execute, deadlineSignal);
   }
 }

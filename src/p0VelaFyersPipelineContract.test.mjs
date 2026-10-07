@@ -1,0 +1,38 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+
+const read = (path) => fs.readFileSync(path, 'utf8');
+
+const provider = read('src/TcoVelaDataProvider.ts');
+const dataPlane = read('src/services/marketData/chartDataPlane.ts');
+assert.equal(provider.includes('Promise.race'), false);
+assert.equal(provider.includes('getMarketQuotes'), false);
+const progressiveStart = provider.indexOf('async getBarsProgressive(');
+const progressiveEnd = provider.indexOf('async loadRange(', progressiveStart);
+assert.ok(progressiveStart >= 0, 'Vela provider must implement progressive history');
+assert.ok(progressiveEnd > progressiveStart, 'progressive history must remain a discrete provider method');
+const progressive = provider.slice(progressiveStart, progressiveEnd);
+assert.match(progressive, /ensureReadyHistory/);
+assert.match(progressive, /createProgressiveHistoryEmitter/);
+assert.doesNotMatch(progressive, /getMarketQuotes/);
+const onTickStart = dataPlane.indexOf('private onTick = (tick: NormalizedMarketTick): void => {');
+const onTickEnd = dataPlane.indexOf('  private start(): void {', onTickStart);
+assert.ok(onTickStart >= 0 && onTickEnd > onTickStart, 'chart data plane must have an isolated tick handler');
+const onTick = dataPlane.slice(onTickStart, onTickEnd);
+assert.match(onTick, /if \(!this\.state\.historyReady\) return;/, 'realtime ticks must be quarantined before history is ready');
+assert.match(dataPlane, /const pendingTick = this\.state\.latestTick;/, 'quarantined ticks must be replayed only after history commit');
+
+
+const historyRoute = read('src/server/routes/fyers-history.routes.ts');
+assert.equal(historyRoute.includes('https://api-t1.fyers.in/data/history?'), false);
+assert.match(historyRoute, /new FyersApiClient\(accessToken\)/);
+assert.equal(historyRoute.includes('fallbackQuoteCandle'), false);
+assert.equal(historyRoute.includes('withBrokerRequestGate'), false);
+
+const gate = read('src/server/brokers/BrokerRequestGate.ts');
+assert.match(gate, /'fyers-data': \{ minIntervalMs: 250, maxPerMinute: 45 \}/);
+assert.equal(read('src/services/core/chart/ChartRuntimeController.ts').includes('seedLiveCandle?.('), false);
+const client = read('src/server/fyers/core/FyersApiClient.ts');
+assert.match(client, /base === DATA_BASE \? 'fyers-data' : 'fyers'/);
+
+console.log('[p0-vela-fyers] PASS');

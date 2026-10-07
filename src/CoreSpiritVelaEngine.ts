@@ -307,7 +307,7 @@ export class CoreSpiritVelaEngine {
     };
 
     const initialRun = (): void => {
-      if (stopped) return;
+      if (stopped || req.historyState === 'backfill') return;
       try {
         const initial = safeOutputs(runtime.executeIr(token.ir, bars).outputs);
         scene.seed(initial);
@@ -350,7 +350,7 @@ export class CoreSpiritVelaEngine {
       liveStarted = true;
     };
 
-    if (req.mode === 'live') {
+    if (req.mode === 'live' && req.historyState !== 'backfill') {
       if (secondaryDependencies.length) void secondaryReady.then(() => { if (!liveStarted) rehydrateForLive(); });
       else rehydrateForLive();
     }

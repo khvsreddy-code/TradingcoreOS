@@ -117,12 +117,12 @@ export class ChartController {
   }
 
   /**
-   * Cold-start safety: a live quote can arrive before the historical request finishes.
-   * Seed exactly one forming candle at the renderer boundary so the chart is never
-   * visually empty while the canonical history path recovers. This is a one-shot
-   * compatibility guard, not the steady-state tick path.
+   * Cold-start visual preview only. A live quote may arrive before history, but this
+   * helper is explicitly forbidden from mutating the canonical market plane. Vela's
+   * historical/progressive provider owns that timeline; realtime reconciliation happens
+   * only after canonical history is established.
    */
-  seedLiveCandle(tick: NormalizedMarketTick, appearance: CandleAppearance, timeframe = '5m', syncCanonical = true): HistoricalCandle | null {
+  seedLiveCandle(tick: NormalizedMarketTick, appearance: CandleAppearance, timeframe = '5m'): HistoricalCandle | null {
     const b = this.bindings;
     const ltp = Number(tick.ltp);
     if (!b || !Number.isFinite(ltp) || ltp <= 0) return null;
@@ -147,7 +147,7 @@ export class ChartController {
       close: ltp,
       volume: Number(tick.volume) || 0,
     };
-    this.applyRealtimeBar(bar, appearance, syncCanonical);
+    this.applyRealtimeBar(bar, appearance, false);
     return bar;
   }
 
