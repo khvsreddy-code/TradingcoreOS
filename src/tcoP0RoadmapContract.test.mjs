@@ -19,7 +19,8 @@ const runtimeController = read('./services/core/chart/ChartRuntimeController.ts'
 const velaChrome = read('./services/core/chart/tcoVelaChrome.ts');
 const velaExtensions = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 
-assert.match(drawingState, /velaDrawings\s*:\s*velaDrawings\b/, 'Vela persisted state must contain the migrated serialized drawing array');
+assert.match(drawingState, /const velaDrawings\s*=\s*migrateVelaDrawings\(/, 'Vela drawing restore must migrate the persisted drawing payload');
+assert.match(drawingState, /\n\s*velaDrawings,/, 'Vela persisted state must contain the migrated serialized drawing array');
 assert.doesNotMatch(liveChart, /LegacyDrawing|legacyDrawing|DrawingController\b/, 'TCO chart UI must not keep a second drawing authority');
 assert.match(coreSpirit, /loadSecondaryData = async \(force = false\)/);
 assert.match(coreSpirit, /request\.alignment/);
