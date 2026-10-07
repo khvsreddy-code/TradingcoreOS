@@ -14,7 +14,8 @@ export type CoreSpiritSemanticAtom =
   | 'duration'
   | 'boolean'
   | 'string'
-  | 'currency';
+  | 'currency'
+  | 'model';
 
 export type CoreSpiritSemanticValueKind = 'observed'|'prediction'|'forecast'|'probability'|'distribution'|'feature'|'featureSet'|'model'|'modelArtifact'|'dataset'|'trainingData'|'experiment';
 
@@ -187,7 +188,7 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
   if (direct[normalized]) return direct[normalized];
   const generic = normalized.match(/^(model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|dataset|modelartifact)<(.+)>$/i);
   if (generic) {
-    const atom = ['float','int','number'].includes(generic[2].toLowerCase()) ? 'number' : generic[2] as CoreSpiritSemanticAtom;
+    const atom = generic[1].toLowerCase() === 'model' ? 'model' : (['float','int','number'].includes(generic[2].toLowerCase()) ? 'number' : generic[2] as CoreSpiritSemanticAtom);
     const valueKindMap: Record<string, CoreSpiritSemanticValueKind> = { model:'model', prediction:'prediction', forecast:'forecast', feature:'feature', featureset:'featureSet', distribution:'distribution', experiment:'experiment', trainingdata:'trainingData', dataset:'dataset', modelartifact:'modelArtifact' };
     return semanticScalar(atom, { valueKind:valueKindMap[generic[1].toLowerCase()] ?? 'observed' });
   }
