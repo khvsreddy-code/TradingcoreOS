@@ -20,45 +20,38 @@ function runtimeSymbol(ticker: string): string {
 function runtimeTimeframe(timeframe: string): string {
   const value = String(timeframe || '5').trim();
   if (/^\d+$/.test(value)) return `${value}m`;
-  const upper=value.toUpperCase();
-  if (upper==='D') return '1D';
-  if (upper==='W') return '1W';
-  if (upper==='M') return '1M';
-  if (upper==='H') return '1H';
-  if (upper==='2H') return '2H';
-  if (upper==='4H') return '4H';
   if (CHART_TIMEFRAME_INTERVALS[value]) return value;
   if (/^\d+[mhd]$/i.test(value)) return value.toLowerCase();
   return '5m';
 }
 
 async function activeBrokerId(): Promise<string> {
-  const current=tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
-  if(current)return current;
-  try{await tradingCoreRuntime.restoreBrokerConnections();}catch{}
-  const restored=tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase();
-  if(!restored)throw new Error('No connected broker is available for Vela market data.');
+  const existing = tradingCoreRuntime.getPrimaryBrokerId();
+  if (existing) return existing;
+  try { await tradingCoreRuntime.restoreBrokerConnections(); } catch {}
+  const restored = tradingCoreRuntime.getPrimaryBrokerId();
+  if (!restored) throw new Error('No connected broker is available for Vela market data.');
   return restored;
 }
 
-function activeBrokerIdSync(): string|null {
-  return tradingCoreRuntime.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() ?? null;
-}
-
-function seedColumnsFromBars(rows: readonly OHLCV[]): ColumnarBars {
-  const valid=rows.map((bar)=>({
-    time:epoch((bar as any).time),
-    open:Number(bar.open),high:Number(bar.high),low:Number(bar.low),close:Number(bar.close),volume:Number(bar.volume)||0,
-  })).filter((row)=>Number.isFinite(row.time)&&[row.open,row.high,row.low,row.close].every(Number.isFinite));
+function barsToColumns(bars: readonly OHLCV[]): ColumnarBars {
+  const normalized = bars.map((bar) => ({
+    time: epoch((bar as any).time),
+    open: Number(bar.open),
+    high: Number(bar.high),
+    low: Number(bar.low),
+    close: Number(bar.close),
+    volume: Number(bar.volume) || 0,
+  })).filter((bar) => Number.isFinite(bar.time) && [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite));
   return {
-    time:Float64Array.from(valid,row=>row.time),
-    open:Float64Array.from(valid,row=>row.open),
-    high:Float64Array.from(valid,row=>row.high),
-    low:Float64Array.from(valid,row=>row.low),
-    close:Float64Array.from(valid,row=>row.close),
-    volume:Float64Array.from(valid,row=>row.volume),
-    length:valid.length,
-    timeUnit:'milliseconds',
+    time: Float64Array.from(normalized, (bar) => bar.time),
+    open: Float64Array.from(normalized, (bar) => bar.open),
+    high: Float64Array.from(normalized, (bar) => bar.high),
+    low: Float64Array.from(normalized, (bar) => bar.low),
+    close: Float64Array.from(normalized, (bar) => bar.close),
+    volume: Float64Array.from(normalized, (bar) => bar.volume),
+    length: normalized.length,
+    timeUnit: 'milliseconds',
   };
 }
 
@@ -134,6 +127,10 @@ function timeframeMs(timeframe: string): number {
   }
 }
 
+function activeBrokerIdSync(): string | null {
+  return tradingCoreRuntime.getPrimaryBrokerId();
+}
+
 export class TcoVelaDataProvider implements DataProvider {
   info(): ProviderInfo {
     return {
@@ -170,9 +167,13 @@ export class TcoVelaDataProvider implements DataProvider {
     if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
       await plane.loadOlderHistory('visible', { visibleBars: requested });
     }
-    const canonical=plane.readCanonical();
-    if(canonical.length)return marketViewToColumns(canonical, range, requested);
-    return seedColumnsFromBars(await this.getBars(ticker,timeframe,range));
+    const canonical = plane.readCanonical();
+    if (canonical.length) return marketViewToColumns(canonical, range, requested);
+
+    // Last-resort seed: if the broker's history endpoint is temporarily unavailable
+    // but the quote stream is healthy, show a real current-price candle instead of a blank chart.
+    const seed = await this.getBars(ticker, timeframe, range);
+    return barsToColumns(seed);
   }
 
   /**
@@ -193,8 +194,10 @@ export class TcoVelaDataProvider implements DataProvider {
     if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
       await plane.loadOlderHistory('visible', { visibleBars: requested });
     }
-    const canonical = plane.readCanonical();
-    if (canonical.length) return marketViewToBars(canonical, range, requested);
+    const loaded = plane.readCanonical();
+    if (loaded.length) return marketViewToBars(loaded, range, requested);
+    // A zero-row canonical plane is not a successful history response.
+    // Reuse the same broker/quote fallback as normal chart bootstrap.
     return this.getBars(ticker, timeframe, range);
   }
 
@@ -214,8 +217,8 @@ export class TcoVelaDataProvider implements DataProvider {
         await plane.loadOlderHistory('visible');
       }
       const canonical = plane.readCanonical();
-      if (!canonical.length) throw new Error('Vela canonical market-data plane returned no history bars.');
-      return marketViewToBars(canonical, range, requested);
+      if (canonical.length) return marketViewToBars(canonical, range, requested);
+      lastError = new Error('Vela canonical market-data plane returned no history bars.');
     } catch (error) {
       lastError = error;
     }
@@ -254,7 +257,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const brokerId = activeBrokerIdSync();
-    if(!brokerId)return ()=>{};
+    if (!brokerId) return () => {};
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
     let scheduled = false;
@@ -310,7 +313,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const brokerId = activeBrokerIdSync();
-    if(!brokerId)return ()=>{};
+    if (!brokerId) return () => {};
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
     let scheduled = false;
