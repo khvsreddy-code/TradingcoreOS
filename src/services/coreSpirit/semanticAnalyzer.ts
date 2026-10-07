@@ -263,6 +263,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='bar_index') return semanticScalar('number');
         if(n.name==='bar') return semanticScalar('number');
         if(n.name==='na') return undefined;
+        if(modelDeclarationMap.has(n.name)) return semanticScalar('number',{valueKind:'model'});
         return scope.get(n.name) || semanticSymbols.get(n.name);
       }
       case 'member': {
@@ -335,6 +336,25 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return undefined;
       }
       case 'memberCall': {
+        const targetType = inferSemantic(n.target, scope);
+        if (targetType && (targetType as any).valueKind === 'model') {
+          if (n.member === 'predict' || n.member === 'prediction') return semanticScalar('number',{valueKind:'prediction'});
+          if (n.member === 'probability' || n.member === 'confidence') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability'});
+        }
+        if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+          const resolved=resolveCoreSpiritLibraryCall(n.target.name,n.member,componentSource);
+          if (resolved?.builtin) {
+            const argTypes=n.args.map(x=>inferSemantic(x,scope));
+            if (resolved.builtin.returnType === 'prediction<number>') return semanticScalar('number',{valueKind:'prediction'});
+            if (resolved.builtin.returnType === 'probability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability'});
+            if (typeof resolved.builtin.returnType === 'string' && resolved.builtin.returnType.startsWith('series<')) {
+              const source=argTypes[0];
+              return source?.kind==='series' ? source : semanticSeries('number');
+            }
+            if (resolved.builtin.returnType === 'boolean') return semanticScalar('boolean');
+            void argTypes;
+          }
+        }
         if (n.member === 'timeframe') {
           const target = inferSemantic(n.target, scope);
           if (target?.kind === 'series' || (target as any)?.atom === 'market:ref') {
