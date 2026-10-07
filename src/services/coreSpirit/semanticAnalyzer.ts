@@ -307,6 +307,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='series') {
           return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
         }
+        if(n.name==='model') return semanticScalar('model',{valueKind:'model'});
         if(n.name==='bar_index') return semanticScalar('number');
         const component=resolveCoreSpiritComponent(componentSource,n.name);
         if(component){
