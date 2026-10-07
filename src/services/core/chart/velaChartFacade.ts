@@ -35,6 +35,8 @@ export {
   unregisterStatePersistence,
   registerSymbolRanking,
   symbolRanking,
+  registerDefaultEngine,
+  unregisterDefaultEngine,
   registerWidgetAttachment,
   unregisterWidgetAttachment,
 } from '../../../../vendor/vela/src/widget/contributions';
