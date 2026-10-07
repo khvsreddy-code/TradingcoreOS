@@ -32,24 +32,51 @@ function isPriceOverlay(output: CoreSpiritObject): boolean {
     return pane(output) === 'price';
 }
 
-function outputDirtySpan(output: CoreSpiritObject): { from:number; to:number } | null {
-    const read=(value:unknown)=>Number(value);
-    const value=output as any;
-    if(output.kind==='series'||output.kind==='marker'||output.kind==='signal'||output.kind==='background'){
-        const time=read(value.time);
-        if(Number.isFinite(time))return {from:time,to:time};
-    }
-    if(output.kind==='line'||output.kind==='arrow'){
-        const a=read(value.start?.time),b=read(value.end?.time);
+export function outputDirtySpan(output: CoreSpiritObject): { from:number; to:number } | null {
+    const n=(value:unknown)=>Number(value);
+    const pointTimes=(points:unknown): number[] => Array.isArray(points)
+        ? points.map((point:any)=>n(point?.time ?? point?.x)).filter(Number.isFinite)
+        : [];
+    const span=(from:unknown,to:unknown): {from:number;to:number}|null => {
+        const a=n(from),b=n(to);
         if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
+        if(Number.isFinite(a))return {from:a,to:a};
+        if(Number.isFinite(b))return {from:b,to:b};
+        return null;
+    };
+    const value=output as any;
+
+    // Every time-bearing visual primitive gets an exact bar-time span.
+    if(Number.isFinite(n(value.time))){
+        const base=n(value.time);
+        const end=n(value.metadata?.endTime ?? value.metadata?.toTime);
+        return Number.isFinite(end) ? span(base,end) : {from:base,to:base};
+    }
+
+    if(output.kind==='line'||output.kind==='arrow'){
+        return span(value.start?.time,value.end?.time);
     }
     if(output.kind==='box'||output.kind==='zone'){
-        const a=read(value.left),b=read(value.right);
-        if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
+        return span(value.left,value.right);
     }
-    if(output.kind==='polyline'){
-        const times=(value.points??[]).map((point:any)=>Number(point.time)).filter(Number.isFinite);
+    if(output.kind==='polyline'||output.kind==='polygon'){
+        const times=pointTimes(value.points);
+        return times.length ? {from:Math.min(...times),to:Math.max(...times)} : null;
+    }
+    if(output.kind==='band'){
+        const end=n(value.metadata?.endTime ?? value.metadata?.toTime);
+        return Number.isFinite(end) ? span(value.time,end) : null;
+    }
+    if(output.kind==='background'){
+        return span(value.time,value.metadata?.endTime ?? value.metadata?.toTime ?? value.time);
+    }
+    if(output.kind==='table'){
+        return span(value.metadata?.fromTime ?? value.metadata?.time, value.metadata?.toTime ?? value.metadata?.endTime);
+    }
+    if(output.kind==='footprint'||output.kind==='customVisual'||output.kind==='event'||output.kind==='scanCandidate'||output.kind==='orderIntent'||output.kind==='barcolor'||output.kind==='marker'||output.kind==='signal'){
+        const times=pointTimes(value.points ?? value.geometry?.points);
         if(times.length)return {from:Math.min(...times),to:Math.max(...times)};
+        if(Number.isFinite(n(value.time)))return {from:n(value.time),to:n(value.time)};
     }
     return null;
 }
