@@ -20,6 +20,7 @@ const authSession=read('src/services/auth/sessionService.ts');
 const authContext=read('src/auth/context/AuthContext.tsx');
 const scene=read('src/services/core/chart/coreSpiritSceneDiff.ts');
 const watchlist=read('src/services/core/chart/tcoVelaChrome.ts');
+const chrome=watchlist;
 const facade=read('src/services/core/chart/velaChartFacade.ts');
 const workspace=read('src/LiveTradingWorkspace.tsx');
 const storage=read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
