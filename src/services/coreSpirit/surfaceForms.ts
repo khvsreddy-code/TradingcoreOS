@@ -238,7 +238,7 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
   let out = source;
   // `.tf(...)` is a concise market reference spelling; the canonical IR uses `timeframe(...)`.
   out = out.replace(/(market\([^()]*\))\.tf\s*\(/gi, '$1.timeframe(');
-  out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
+  out = out.replace(/\b(?!stats\.|ta\.)([A-Za-z_][A-Za-z0-9_]*)\.zscore\s*\(([^()]+)\)/g, 'zscore($1, $2)');
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.returns\b/g, 'returns($1)');
   out = out.replace(/\bmarket\(([^()]*)\)\.returns\b/g, 'returns(market($1))');
 
