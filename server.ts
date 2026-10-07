@@ -69,7 +69,7 @@ app.use((req, res, next) => {
 function healthChecks() {
   const coordinationRequired = process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true';
   const realtimeGatewayRequired = process.env.REALTIME_GATEWAY_REQUIRED === 'true';
-  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\\/$/, '');
+  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\/$/, '');
   const realtimeGatewayConfigured = Boolean(
     process.env.REALTIME_GATEWAY_SHARED_SECRET &&
     (configuredGatewayUrl || process.env.VERCEL === '1'),
@@ -95,7 +95,7 @@ function requestOrigin(req: express.Request): string {
 async function realtimeGatewayReady(req: express.Request): Promise<boolean> {
   if (process.env.REALTIME_GATEWAY_REQUIRED !== 'true') return true;
   if (!healthChecks().realtimeGatewayConfigured) return false;
-  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\\/$/, '');
+  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\/$/, '');
   const healthUrl = configuredGatewayUrl
     ? `${configuredGatewayUrl}/healthz`
     : `${requestOrigin(req)}/api/realtime/healthz`;
