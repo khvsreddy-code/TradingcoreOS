@@ -6,7 +6,8 @@ export type CoreSpiritScalarType =
   | 'number'
   | 'boolean'
   | 'string'
-  | 'null';
+  | 'null'
+  | 'probability';
 
 export type CoreSpiritType =
   | CoreSpiritScalarType
