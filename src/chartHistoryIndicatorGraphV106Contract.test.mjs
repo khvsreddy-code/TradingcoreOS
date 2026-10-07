@@ -12,7 +12,7 @@ const settings = fs.readFileSync(path.join(root, 'src/components/indicators/Indi
 const settingsSchema = fs.readFileSync(path.join(root, 'src/services/coreSpirit/indicatorSettingsSchema.ts'), 'utf8');
 const tracker = fs.readFileSync(path.join(root, 'docs/CORESPIRIT_BUILD_TRACKER.md'), 'utf8');
 
-if (!/maxBuckets = 32/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore LRU residency guard missing');
+if (!/maxBuckets = (?:32|96)/.test(historyStore) || !/ttlMs = 600_000/.test(historyStore) || !/trimBuckets/.test(historyStore) || !/touch\(key/.test(historyStore)) throw new Error('HistoryStore bounded stale-while-revalidate residency guard missing');
 if (!/actual net number of newly prepended/.test(fs.readFileSync(path.join(root, 'docs/archive/legacy/CHARTING_LEGACY_ARCHITECTURE.md'), 'utf8'))) throw new Error('History demand documentation depth marker missing');
 if (!/const previousLength = this\.state\.candles\.length/.test(plane) || !/olderAdded = Math\.max\(0, merged\.length - previousLength\)/.test(plane)) throw new Error('Actual older prepend count missing');
 if (!/requestWarmHistory\(visibleBars\?: number\)/.test(plane) || !/this\.state\.warmHistoryRequested = false/.test(plane)) throw new Error('Warm history viewport/retry contract missing');
