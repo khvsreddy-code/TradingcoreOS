@@ -1,6 +1,6 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
-import { createTcoVelaDataProvider } from './TcoVelaDataProvider';
+import { createTcoVelaDataProvider, prewarmTcoVelaHistory } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
@@ -127,6 +127,15 @@ export function LiveTradingWorkspace() {
         },
       });
       workspaceRef.current = workspace;
+
+      // Background warm-up for common Indian index symbols. This runs only after the
+      // workspace is mounted and never blocks first paint or live LTP subscription.
+      prewarmTcoVelaHistory(
+        ['NSE:NIFTY50-INDEX', 'NSE:NIFTYBANK-INDEX', 'BSE:SENSEX-INDEX', 'NSE:FINNIFTY-INDEX', 'NSE:MIDCPNIFTY-INDEX'],
+        defaults.timeframe || '5',
+        1200,
+      );
+
       if (typeof window !== 'undefined') {
         (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__ = {
           workspace,

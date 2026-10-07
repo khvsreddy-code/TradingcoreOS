@@ -151,28 +151,47 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
     const brokerId = await activeBrokerId();
-    if (range.to != null) {
-      const before = Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000;
-      const direct = await tradingCoreRuntime.getHistoricalDataColumns(symbol, tcoTimeframe, undefined, requested, before);
-      if (direct && direct.time.length > 0) return {
-        time: Float64Array.from(direct.time, (value) => Number(value) / 1000),
-        open: Float64Array.from(direct.open), high: Float64Array.from(direct.high), low: Float64Array.from(direct.low),
-        close: Float64Array.from(direct.close), volume: Float64Array.from(direct.volume), length: Math.min(direct.time.length, direct.open.length, direct.high.length, direct.low.length, direct.close.length, direct.volume.length), timeUnit: 'seconds',
-      };
-    }
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
-    await plane.ensureReadyColumns(requested);
-    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+
+    // Fast path: if another Vela cell (or this symbol's previous visit) already hydrated
+    // the shared plane, hand its canonical typed arrays to Vela immediately. No REST call.
+    const cached = plane.readCanonical();
+    if (cached.length > 0) {
+      const requestedTo = range.to == null
+        ? null
+        : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+      const newestMs = cached.time[cached.length - 1]! * 1000;
+      if (requestedTo == null || requestedTo >= newestMs - 1) {
+        return marketViewToColumns(cached, range, requested);
+      }
+    }
+
+    // Cold path intentionally goes through ChartDataPlane's mature history path. This is
+    // the same path used by the older production build that painted candles quickly:
+    // HistoryStore -> broker history -> canonical plane -> Vela columnar projection.
+    // The newer direct compact-history endpoint is NOT used here because a compact response
+    // must never bypass the shared cache and leave Vela with a disconnected data source.
+    try {
+      await plane.ensureReady(requested);
+    } catch {
+      // Do not strand Vela on a rejected history promise. The quote path below can still
+      // provide a seed while the next tick/refresh re-enters the canonical plane.
+    }
+
     const current = plane.readCanonical();
+    const requestedTo = range.to == null
+      ? null
+      : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
     const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
     if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
       await plane.loadOlderHistory('visible', { visibleBars: requested });
     }
+
     const canonical = plane.readCanonical();
     if (canonical.length) return marketViewToColumns(canonical, range, requested);
 
-    // Last-resort seed: if the broker's history endpoint is temporarily unavailable
-    // but the quote stream is healthy, show a real current-price candle instead of a blank chart.
+    // Last-resort seed: never show an empty chart when a live quote exists. This is only
+    // a seed; the canonical history path remains authoritative for subsequent candles.
     const seed = await this.getBars(ticker, timeframe, range);
     return seedColumnsFromBars(seed);
   }
@@ -372,4 +391,31 @@ export class TcoVelaDataProvider implements DataProvider {
 
 export function createTcoVelaDataProvider(): TcoVelaDataProvider {
   return new TcoVelaDataProvider();
+}
+
+
+/** Prewarm the common index set without blocking chart construction or first paint. */
+export function prewarmTcoVelaHistory(
+  symbols: readonly string[],
+  timeframe = '5m',
+  limit = 1200,
+): void {
+  const unique = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 8);
+  if (!unique.length) return;
+
+  const run = () => {
+    const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
+    if (!brokerId) return;
+    const requested = Math.max(200, Math.min(2000, Math.floor(Number(limit) || 1200)));
+    for (const raw of unique) {
+      const plane = getChartDataPlane(brokerId, runtimeSymbol(raw), runtimeTimeframe(timeframe));
+      void plane.ensureReady(requested).catch(() => {});
+    }
+  };
+
+  if (typeof globalThis.requestIdleCallback === 'function') {
+    globalThis.requestIdleCallback(run, { timeout: 1500 });
+  } else {
+    globalThis.setTimeout(run, 150);
+  }
 }
