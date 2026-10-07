@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
-assert.equal(vercel.functions['api/index.ts'].maxDuration, 15);
+assert.equal(vercel.services?.web?.functions?.['api/index.ts']?.maxDuration, 15);
+assert.equal(vercel.services?.realtime?.runtime, 'container');
+assert.equal(vercel.services?.realtime?.entrypoint, 'Dockerfile');
 assert.deepEqual(vercel.regions, ['bom1'], 'India-first Vercel functions must remain in Mumbai (bom1)');
-assert.ok(vercel.functions['api/queue.ts'], 'queue worker must remain separate from api/index');
+assert.ok(vercel.services?.web?.functions?.['api/queue.ts'], 'queue worker must remain separate from api/index');
 
 const server = fs.readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
 assert.match(server, /requestDeadline/);
@@ -38,5 +40,6 @@ const marketClient = fs.readFileSync(new URL('./services/marketData/BrokerMarket
 assert.match(marketClient, /\/api\/realtime\/ticket/);
 assert.match(marketClient, /new WebSocket/);
 assert.match(marketClient, /connectLegacy/);
+assert.match(marketClient, /VITE_REALTIME_LEGACY_FALLBACK/);
 
 console.log('TRADINGCORE_REALTIME_REQUEST_PLANE_CONTRACT_OK');
