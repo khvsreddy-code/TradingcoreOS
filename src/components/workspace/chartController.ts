@@ -1,5 +1,6 @@
 import type { IChartApi, ISeriesApi, Time } from '../../services/core/chart/velaChartFacade';
 import type { HistoricalCandle } from '../../services/brokers/BrokerAdapter';
+import type { NormalizedMarketTick } from '../../types/market';
 import { candleSeriesOptions, type CandleAppearance, volumeColor } from '../../services/core/chart/candleAppearance';
 import { type ChartDataPoint } from '../../services/core/chart/chartDataModel';
 import { getCanonicalDataPlane, type CanonicalDataPlane, type CanonicalMarketView } from '../../services/core/data/canonicalDataPlane';
