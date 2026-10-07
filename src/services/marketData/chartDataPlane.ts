@@ -194,8 +194,11 @@ export class ChartDataPlane {
       marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
 
       this.state.revision += 1;
+      this.state.historyReady = true;
       this.syncCanonical();
+      const pendingTick = this.state.latestTick;
       this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
+      if (pendingTick) this.onTick(pendingTick);
     }
   }
 
