@@ -20,7 +20,7 @@ assert.deepEqual(migratedAfterChartState.drawings, migratedOnLoad.drawings);
 
 const invalidPayload = migrate({
   version: 1,
-  drawings: [{ id: 'bad', type: 'does-not-exist', paneId: 'price', anchors: [], style: {} }],
+  drawings: [{ id: 'bad', type: 'hline', paneId: 'price', anchors: [{ time: 'not-a-number', price: 25000 }], style: {} }],
 });
 assert.equal(invalidPayload.drawings.length, 0);
 
