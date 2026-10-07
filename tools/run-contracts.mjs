@@ -26,6 +26,7 @@ const contracts = [
   ['corespirit-safe-complexity-types', ['tools/coreSpiritSafeComplexityTypesContract.mjs', true]],
   ['vela-candle-time-normalization', ['tools/velaCandleTimeNormalizationContract.mjs', true]],
   ['vela-columnar-live-renderer', ['tools/velaColumnarLiveRendererContract.mjs', true]],
+  ['chart-history-and-drawing-coverage', ['tools/chartHistoryAndDrawingCoverageContract.mjs', false]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
   ['semantic-series-type', ['src/coreSpiritSemanticSeriesTypeContract.test.mjs', false]],
