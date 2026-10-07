@@ -30,7 +30,7 @@ assert.match(coreSpirit, /Secondary market data refresh failed/);
 assert.match(coreSpirit, /void loadSecondaryData\(\)/);
 assert.doesNotMatch(provider, /getChartDataPlane\(['"]fyers['"]/);
 assert.match(provider, /activeBrokerIdSync/);
-assert.match(provider, /Last-resort seed/);
+assert.match(provider, /tradingCoreRuntime\.getMarketQuotes\(\[symbol\]\)/, 'Vela history must retain an independent quote fallback');
 assert.match(runtime, /getPrimaryBrokerId\(\)/);
 assert.match(runtime, /columns && columns\.time\.length > 0/);
 assert.match(runtime, /getHistoricalData\(/);
