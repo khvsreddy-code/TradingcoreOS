@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine.ts';
-import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
+import { CoreSpiritVelaEngine } from '../src/CoreSpiritVelaEngine.ts';
+import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from '../src/services/core/chart/velaDrawingCatalog.ts';
 import { defaultToolbar } from '../vendor/vela/src/core/drawings/toolbar.ts';
 import { drawingTypes, loadAdvancedDrawingCatalog } from '../vendor/vela/src/core/drawings/registry.ts';
 
