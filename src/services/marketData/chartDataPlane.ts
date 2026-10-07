@@ -1,4 +1,5 @@
 import type { HistoricalCandle } from '../brokers/BrokerAdapter';
+export type { HistoricalCandle } from '../brokers/BrokerAdapter';
 import type { NormalizedMarketTick } from '../../types/market';
 import { tradingCoreRuntime } from '../runtime/TradingCoreRuntime';
 import { getCanonicalDataPlane, type CanonicalDataPlane } from '../core/data/canonicalDataPlane';
