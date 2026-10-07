@@ -60,6 +60,7 @@ export type ChartRuntimeControllerDeps={
   chartType:'candlestick'|'line';
   candleAppearance:CandleAppearance;
   drawingInitial:any[];
+  velaDrawingsInitial?:unknown[];
   indicatorsRef:Ref<any[]>;
   selectedDrawingIdRef:Ref<string|null>;
   viewStateRef:Ref<{showLevels:boolean;showVolume:boolean;showOI:boolean;showDepth:boolean}>;

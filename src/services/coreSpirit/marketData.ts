@@ -7,8 +7,8 @@
 export const CORE_SPIRIT_MARKET_DATA_VERSION = 1 as const;
 
 export interface CoreSpiritMarketBar {
-  /** Canonical CoreSpirit bar time. Host adapters may provide epoch ms. */
-  timestamp: string | number;
+  /** Canonical CoreSpirit bar time. Vela/host adapters normalize epoch input before entering CoreSpirit. */
+  timestamp: string;
   open: number;
   high: number;
   low: number;

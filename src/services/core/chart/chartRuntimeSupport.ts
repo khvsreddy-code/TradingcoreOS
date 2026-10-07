@@ -4,6 +4,8 @@ import { getIndicatorDefaultPatch } from '../../coreSpirit/indicatorSettingsSche
 import { normalizeCoreDrawings } from '../drawing/coreDrawing';
 import type { CoreDrawing } from '../drawing/coreDrawing';
 import { series, vwap, rsi, donchian, supertrend, indianKeyLevels, cpr, bollinger } from '../../marketData/indicatorEngine';
+import type { SerializedDrawing } from './velaNativeChartKernel';
+import { migrateVelaDrawings } from './velaNativeChartKernel';
 
 export const chartIntervals = {
   '1m':'1minute', '3m':'3minute', '5m':'5minute', '15m':'15minute',
