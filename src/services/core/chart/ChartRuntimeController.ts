@@ -189,20 +189,23 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
           }
         }
 
-        const data=snapshot.candles;
-        if(!data.length)return;
+        const canonical = deps.chartDataPlane.readCanonical();
+        if(canonical.length)deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
+        const data=snapshot.candles.length?snapshot.candles:deps.chartDataPlane.getCompatibilityCandles();
+        if(!data.length){
+          if(event.type==='tick')realtimeController.handleTick(snapshot,Boolean(event.bucketChanged));
+          return;
+        }
         deps.candles.current=data;
         deps.setError('');
 
         if(event.type==='tick'){
-          realtimeController.handleTick(snapshot,Boolean(event.bucketChanged));
+          realtimeController.handleTick({...snapshot,candles:data},Boolean(event.bucketChanged));
           return;
         }
 
-        realtimeController.hydrateHistory(snapshot);
-        const canonical = deps.chartDataPlane.readCanonical();
-        if (canonical.length) deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
-        else deps.rendererController.setHistory(data,deps.appearanceRef.current,false);
+        realtimeController.hydrateHistory({...snapshot,candles:data});
+        if(!canonical.length)deps.rendererController.setHistory(data,deps.appearanceRef.current,false);
         chartIndicatorController.setInputs({indicators:deps.indicatorsRef.current,timeframe:deps.timeframe});
         try{
           chartIndicatorController.renderStudies(data);
