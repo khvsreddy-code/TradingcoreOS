@@ -341,7 +341,7 @@ const accountPanel: SidePanelDescriptor = {
 
 const coreSpiritOpenAction: Parameters<typeof registerLegendAction>[0] = {
   id: 'tco.corespirit.open',
-  icon: 'code',
+  icon: 'indicators',
   tooltip: 'Open CoreSpirit source',
   order: 10,
   when: (indicator) => Boolean(indicator.source),
