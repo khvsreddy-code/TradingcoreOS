@@ -1,4 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
+import { CoreSpiritParser } from './parser';
+import { normalizeCoreSpiritSource } from './syntax';
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram, coreSpiritSourceMapFromInstructions } from './ir';
 import { analyzeCoreSpirit, CoreSpiritDiagnostic } from './semanticAnalyzer';
 import { CoreSpiritExecutableArtifact, makeExecutableArtifact } from './artifact';
@@ -35,7 +37,14 @@ export type CoreSpiritCompilerOptions = {
   researchSource?: string;
 };
 
-export function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
+export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
+  const wrapper = 'let __model_feature = ' + source;
+  const parsed = new CoreSpiritParser(normalizeCoreSpiritSource(wrapper)).parse();
+  const declaration = parsed.body[0];
+  if (!declaration || declaration.type !== 'let') throw new Error(`Invalid model feature expression: ${source}`);
+  return declaration.expression;
+}
+function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
   const componentSource = options.components ?? coreSpiritComponentRegistry;
   const componentContracts = componentSource && typeof componentSource === 'object' && 'listContracts' in componentSource
     ? (componentSource as any).listContracts()
@@ -149,7 +158,11 @@ export class CoreSpiritCompiler {
             const featureArgs = n.args.length ? n.args.map(expr) : (declaration?.kind === 'model' ? declaration.inputs.flatMap(name => {
               const nameDest=`t${temp++}`;
               emitInstruction(n,{op:'const',dest:nameDest,value:name});
-              return [nameDest,expr({type:'identifier',name} as any)];
+              const normalizedName=name.trim();
+              const featureExpression=/^[A-Za-z_][A-Za-z0-9_]*$/.test(normalizedName)
+                ? ({type:'identifier',name:normalizedName} as CoreSpiritAstNode)
+                : parseModelFeatureExpression(normalizedName);
+              return [nameDest,expr(featureExpression)];
             }) : []);
             const dest=`t${temp++}`;
             emitInstruction(n,{op:'call',dest,name:n.member === 'probability' || n.member === 'confidence' ? '__model_probability' : '__model_predict',args:[target,...featureArgs],callId:`model.${n.member}:${n.span?.start ?? temp}`});
