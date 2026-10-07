@@ -153,7 +153,14 @@ export class CoreSpiritCompiler {
           const isModelTarget = targetSemanticType === 'model:ref' || targetSemanticType?.startsWith('model<') || (n.target.type === 'call' && n.target.name === 'model');
           if (isModelTarget && ['predict','prediction','probability','confidence'].includes(n.member)) {
             const target = expr(n.target);
-            const modelName = targetSemanticType?.startsWith('model<') ? targetSemanticType.slice(6,-1) : undefined;
+            const directModelName = n.target.type === 'call' && n.target.name === 'model' && n.target.args[0]?.type === 'string'
+              ? String(n.target.args[0].value)
+              : undefined;
+            const modelName = targetSemanticType?.startsWith('model<')
+              ? targetSemanticType.slice(6,-1)
+              : n.target.type === 'identifier'
+                ? n.target.name
+                : directModelName;
             const declaration = modelName ? options.surface?.declarations.find(item => item.kind === 'model' && item.name === modelName) : undefined;
             const featureArgs = n.args.length ? n.args.map(expr) : (declaration?.kind === 'model' ? declaration.inputs.flatMap(name => {
               const nameDest=`t${temp++}`;
