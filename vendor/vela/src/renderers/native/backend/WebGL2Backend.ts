@@ -826,7 +826,7 @@ export class WebGL2Backend implements IRenderBackend {
         for (let i = i0; i <= i1; i += 1) {
             if (i < 0 || i >= columns.length) continue;
             const o = columns.open[i]!, h = columns.high[i]!, l = columns.low[i]!, c = columns.close[i]!;
-            if (h <= l) continue;
+            if (h < l) continue;
             const raw = columns.time[i]!; const tMs = (columns.timeUnit ?? 'milliseconds') === 'seconds' ? raw * 1000 : raw;
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
             const up = c >= o; const dir = up ? paint.up : paint.down; const bc = barColors.get(tMs); const bodyColor = bc ?? dir;
@@ -1026,7 +1026,7 @@ export class WebGL2Backend implements IRenderBackend {
         const fading = this.candleStructureAlpha > this.candleBodyAlpha + 0.001;
         for (let i = i0; i <= i1; i += 1) {
             const bar = bars[i];
-            if (!bar || bar.high <= bar.low) continue; // skip zero-range candles (e.g. the intro reveal's un-started state)
+            if (!bar || bar.high < bar.low) continue; // keep valid zero-range candles visible (doji/quote seed)
             // Wick + body snapped to the device grid as one unit, so the wick is always
             // dead-center in the body and the gap between candles stays uniform.
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
