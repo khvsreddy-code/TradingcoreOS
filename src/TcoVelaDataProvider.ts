@@ -1,6 +1,7 @@
 import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaNativeChartKernel';
 import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
+import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 
 const SYMBOLS: readonly SymbolDescriptor[] = [
@@ -34,7 +35,7 @@ async function activeBrokerId(): Promise<string> {
   return restored;
 }
 
-function barsToColumns(bars: readonly OHLCV[]): ColumnarBars {
+function seedColumnsFromBars(bars: readonly OHLCV[]): ColumnarBars {
   const normalized = bars.map((bar) => ({
     time: epoch((bar as any).time),
     open: Number(bar.open),
@@ -173,7 +174,7 @@ export class TcoVelaDataProvider implements DataProvider {
     // Last-resort seed: if the broker's history endpoint is temporarily unavailable
     // but the quote stream is healthy, show a real current-price candle instead of a blank chart.
     const seed = await this.getBars(ticker, timeframe, range);
-    return barsToColumns(seed);
+    return seedColumnsFromBars(seed);
   }
 
   /**
@@ -294,7 +295,9 @@ export class TcoVelaDataProvider implements DataProvider {
 
     const stop = plane.subscribe((event) => {
       if (event.type !== 'snapshot' && event.type !== 'tick') return;
-      schedule();
+      const sequence = event.snapshot.revision;
+      const timelineKey = `${symbol}|${tcoTimeframe}`;
+      marketLatencyTrace.measure(timelineKey, sequence, 'canonical', () => schedule());
     });
 
     return () => {
