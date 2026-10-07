@@ -184,6 +184,7 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     price: semanticScalar('price', { unit: 'price' }), volume: semanticScalar('volume', { unit: 'volume' }),
     time: semanticScalar('time', { unit: 'timestamp' }), duration: semanticScalar('duration', { unit: 'duration' }),
     currency: semanticScalar('currency', { unit: 'notional' }),
+    probability: semanticScalar('number', { unit: 'probability', scale: 'percent', valueKind: 'probability' }),
   };
   if (direct[normalized]) return direct[normalized];
   const generic = normalized.match(/^(model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|dataset|modelartifact)<(.+)>$/i);
