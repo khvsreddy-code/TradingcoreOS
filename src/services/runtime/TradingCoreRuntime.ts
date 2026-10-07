@@ -35,6 +35,8 @@ export class TradingCoreRuntime {
   public hasConnectedBroker(): boolean { return this.brokerMgr.getAllConnections().length > 0; }
   public getPrimaryBroker(): BrokerAdapter | null { return this.brokerMgr.getPrimaryBroker(); }
   public getPrimaryBrokerInfo(): BrokerConnectionInfo | null { return this.brokerMgr.getPrimaryBrokerInfo(); }
+  /** Single canonical broker identity shared by chart, watchlist and realtime consumers. */
+  public getPrimaryBrokerId(): string | null { return this.brokerMgr.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() ?? null; }
   public getAllConnections(): BrokerConnectionInfo[] { return this.brokerMgr.getAllConnections(); }
 
   public restoreBrokerConnections(): Promise<void> {
@@ -256,8 +258,49 @@ export class TradingCoreRuntime {
     }
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
-    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER' || !broker.getHistoricalDataColumns) return null;
-    return broker.getHistoricalDataColumns(symbol, timeframe, signal, Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000))), beforeTimestamp);
+    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return null;
+    const requestedLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+
+    if (broker.getHistoricalDataColumns) {
+      try {
+        const columns = await broker.getHistoricalDataColumns(symbol, timeframe, signal, requestedLimit, beforeTimestamp);
+        if (columns?.time?.length) return columns;
+      } catch {
+        // Fall through: the object history API is the correctness fallback.
+      }
+    }
+
+    try {
+      const rows = await broker.getHistoricalData(symbol, timeframe, signal, requestedLimit);
+      const beforeMs = beforeTimestamp == null ? Number.POSITIVE_INFINITY : (() => {
+        const numeric = Number(beforeTimestamp);
+        if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
+        const parsed = Date.parse(String(beforeTimestamp));
+        return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+      })();
+      const ordered = [...(rows || [])]
+        .map((row) => ({ row, time: (() => {
+          const raw = (row as any)?.timestamp;
+          const n = typeof raw === 'number' ? raw : Number(raw);
+          if (Number.isFinite(n)) return n > 1e12 ? n : n * 1000;
+          return Date.parse(String(raw));
+        })() }))
+        .filter(({time}) => Number.isFinite(time) && time > 0 && time < beforeMs)
+        .sort((a,b)=>a.time-b.time)
+        .slice(-requestedLimit);
+      if (!ordered.length) return null;
+      return {
+        time: ordered.map(x=>x.time),
+        open: ordered.map(x=>Number(x.row.open)),
+        high: ordered.map(x=>Number(x.row.high)),
+        low: ordered.map(x=>Number(x.row.low)),
+        close: ordered.map(x=>Number(x.row.close)),
+        volume: ordered.map(x=>Number(x.row.volume)||0),
+        timeUnit: 'milliseconds',
+      };
+    } catch {
+      return null;
+    }
   }
 
   public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
