@@ -11,6 +11,9 @@ export {
 } from './velaNativeChartKernel';
 
 export {
+  registerNativeIndicator, unregisterNativeIndicator,
+  registerRendererLayer, unregisterRendererLayer,
+  registerChartType, unregisterChartType,
   registerDefaultEngine, unregisterDefaultEngine,
   registerSidePanel, unregisterSidePanel,
   registerWidgetAction, unregisterWidgetAction,
