@@ -366,6 +366,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           }
           concepts.add('MODEL');
         } else if (/^(?:target|predict)\s*:/i.test(trimmed)) {
+          current.modelSection = undefined;
           const target = trimmed.replace(/^(?:target|predict)\s*:\s*/i, '').trim();
           if (target) current.declaration.target = target;
           if (!current.declaration.outputs.includes('prediction')) current.declaration.outputs.push('prediction');
@@ -373,6 +374,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           if (!current.declaration.predictions.includes('prediction')) current.declaration.predictions.push('prediction');
           concepts.add('MODEL');
         } else if (/^(?:target|predict)\s+/.test(trimmed)) {
+          current.modelSection = undefined;
           const name = trimmed.replace(/^(?:target|predict)\s+/i, '').trim();
           if (name) current.declaration.outputs.push(name), current.declaration.predictions.push(name);
           concepts.add('MODEL');
