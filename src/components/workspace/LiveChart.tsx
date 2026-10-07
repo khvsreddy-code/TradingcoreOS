@@ -31,6 +31,7 @@ import type { createChartAnalyticsController } from '../../services/core/chart/C
 import type { createChartInteractionController } from '../../services/core/chart/ChartInteractionController';
 import { createChartRuntimeController } from '../../services/core/chart/ChartRuntimeController';
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
+import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from '../../services/core/chart/velaDrawingCatalog';
 
 type Props={instrumentKey:string;brokerId?:string;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number;chartIndex?:number;showEmbeddedDrawingToolbar?:boolean};
 export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=false}:Props){
@@ -167,7 +168,10 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     brush:'freehand',highlighter:'highlighter',text:'text',longPosition:'position',shortPosition:'position',
   };
   const selectDrawingTool=(tool:DrawingTool)=>{
-    const velaType=velaDrawingAliases[tool];
+    const velaType=velaDrawingAliases[tool]
+      ?? (CORE_SPIRIT_DRAWING_TOOL_CATALOG as readonly string[]).includes(String(tool))
+        ? String(tool)
+        : undefined;
     if(velaType && chart.current?.drawings?.supported) chart.current.drawings.setTool(velaType as any);
     else drawingControllerRef.current?.selectDrawingTool(tool);
     setDrawingTool(tool);
