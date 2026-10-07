@@ -10,6 +10,8 @@ type SharedSymbolEntry = {
   listeners: Set<MarketListener>;
   unsubscribe?: () => void;
   depthInstrumentKey?: string;
+  idleTimer?: ReturnType<typeof setTimeout>;
+  lastReleasedAt?: number;
 };
 
 /**
@@ -22,6 +24,8 @@ type SharedSymbolEntry = {
 export class PersistentMarketSubscriptionManager {
   private consumers = new Map<string, { brokerId: string; symbols: Set<string>; listener: MarketListener; unsubscribe?: () => void }>();
   private sharedSymbols = new Map<string, SharedSymbolEntry>();
+  private readonly sharedIdleMs = 15_000;
+  private readonly sharedMaxWarmSymbols = 12;
 
   constructor(private readonly client: MarketSubscriptionClient) {}
 
@@ -69,8 +73,12 @@ export class PersistentMarketSubscriptionManager {
         depthInstrumentKey,
       );
       this.sharedSymbols.set(key, entry);
+    } else if (entry.idleTimer) {
+      clearTimeout(entry.idleTimer);
+      entry.idleTimer = undefined;
     }
     entry.listeners.add(listener);
+    entry.lastReleasedAt = undefined;
 
     let stopped = false;
     return () => {
@@ -80,9 +88,29 @@ export class PersistentMarketSubscriptionManager {
       if (!current) return;
       current.listeners.delete(listener);
       if (current.listeners.size > 0) return;
-      current.unsubscribe?.();
-      this.sharedSymbols.delete(key);
+      current.lastReleasedAt = Date.now();
+      if (current.idleTimer) clearTimeout(current.idleTimer);
+      current.idleTimer = setTimeout(() => {
+        const latest = this.sharedSymbols.get(key);
+        if (!latest || latest.listeners.size > 0 || latest.lastReleasedAt !== current.lastReleasedAt) return;
+        latest.unsubscribe?.();
+        latest.idleTimer = undefined;
+        this.sharedSymbols.delete(key);
+      }, this.sharedIdleMs);
+      this.trimWarmSharedSymbols();
     };
+  }
+
+  private trimWarmSharedSymbols(): void {
+    const idle = [...this.sharedSymbols.entries()]
+      .filter(([, entry]) => entry.listeners.size === 0)
+      .sort((a, b) => Number(a[1].lastReleasedAt || 0) - Number(b[1].lastReleasedAt || 0));
+    while (this.sharedSymbols.size > this.sharedMaxWarmSymbols && idle.length) {
+      const [key, entry] = idle.shift()!;
+      if (entry.idleTimer) clearTimeout(entry.idleTimer);
+      entry.unsubscribe?.();
+      this.sharedSymbols.delete(key);
+    }
   }
 
   update(id: string, brokerId: string, symbols: string[]) {
@@ -98,7 +126,10 @@ export class PersistentMarketSubscriptionManager {
 
   clear() {
     for (const c of this.consumers.values()) c.unsubscribe?.();
-    for (const entry of this.sharedSymbols.values()) entry.unsubscribe?.();
+    for (const entry of this.sharedSymbols.values()) {
+      if (entry.idleTimer) clearTimeout(entry.idleTimer);
+      entry.unsubscribe?.();
+    }
     this.consumers.clear();
     this.sharedSymbols.clear();
   }

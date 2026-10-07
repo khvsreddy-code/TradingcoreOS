@@ -6,7 +6,7 @@ type Bucket = { data: HistoricalCandle[]; updatedAt: number; oldestAt: number; n
  * deliberately independent from React/chart lifecycle. */
 export class HistoryStore {
   private buckets = new Map<string, Bucket>();
-  constructor(private readonly maxCandles = 50_000, private readonly ttlMs = 120_000, private readonly maxBuckets = 32) {}
+  constructor(private readonly maxCandles = 50_000, private readonly ttlMs = 600_000, private readonly maxBuckets = 96) {}
   private touch(key: string, bucket: Bucket): Bucket { this.buckets.delete(key); this.buckets.set(key, bucket); return bucket; }
   private trimBuckets(): void { while (this.buckets.size > Math.max(1, this.maxBuckets)) { const oldest = this.buckets.keys().next().value; if (oldest == null) break; this.buckets.delete(oldest); } }
   key(broker: string, symbol: string, timeframe: string) { return `${broker.toLowerCase()}:${symbol}:${timeframe}`; }

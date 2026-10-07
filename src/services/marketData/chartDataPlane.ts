@@ -29,7 +29,7 @@ export const CHART_TIMEFRAME_SECONDS: Record<string, number> = {
 };
 
 const MAX_HISTORY_CANDLES = 50_000;
-const IDLE_HOLD_MS = 10_000;
+const IDLE_HOLD_MS = 30_000;
 const CANONICAL_MAX = 50_000;
 
 export type ChartDataPlaneKey = string;
@@ -225,7 +225,7 @@ export class ChartDataPlane {
         if (tick) this.onTick(tick);
       });
       this.state.feedStop = acquireSharedChartMarketFeed(this.brokerId, this.instrumentKey);
-      const cachedTick = chartMarketStore.getTick(marketKey);
+      const cachedTick = chartMarketStore.getTick(marketKey) ?? tradingCoreRuntime.getMarketSnapshot(this.instrumentKey);
       if (cachedTick) this.onTick(cachedTick);
     }
     void this.ensureHistory();
@@ -311,6 +311,12 @@ export class ChartDataPlane {
       const active = this.activeWindow(fresh, requestedLimit);
       this.state.historyReady = true; this.state.olderHistoryExhausted = false; this.setCandles(active, 'cache');
       return active;
+    }
+    const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
+    if (stale?.length) {
+      const active = this.activeWindow(stale, requestedLimit);
+      this.state.historyReady = true; this.state.olderHistoryExhausted = false; this.setCandles(active, 'cache');
+      // SWR: stale candles paint immediately; network refresh proceeds in the same single-flight.
     }
     this.state.historyLoading = true;
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
