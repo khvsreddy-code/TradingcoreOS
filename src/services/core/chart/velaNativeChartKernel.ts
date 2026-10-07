@@ -20,7 +20,7 @@ import { TypedEventBus } from '../../../../vendor/vela/src/core/events/EventBus'
 import type { VelaEventMap } from '../../../../vendor/vela/src/core/events/types';
 import type { DrawingsOption } from '../../../../vendor/vela/src/core/drawings/toolbar';
 import type { SerializedDrawing } from '../../../../vendor/vela/src/core/drawings/Drawing';
-import { migrate as migrateVelaDrawingDocument } from '../../../../vendor/vela/src/core/drawings/document';
+import { migrateVelaDrawingDocument } from './velaDrawingPersistence';
 
 export type Time = number;
 export type LineStyleValue = 0 | 1 | 2;
@@ -52,7 +52,7 @@ export type { SidePanelDescriptor, SidePanelHandle, SidePanelHeader, WidgetActio
 export type { VelaStorage } from '../../../../vendor/vela/src/widget/persist';
 
 export function migrateVelaDrawings(value: unknown): SerializedDrawing[] {
-  return migrateVelaDrawingDocument(value).drawings;
+  return migrateVelaDrawingDocument(value);
 }
 
 export type IChartApi = VelaNativeChartKernel;
