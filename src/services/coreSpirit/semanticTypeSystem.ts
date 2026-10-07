@@ -170,6 +170,8 @@ export function semanticTypeCompatible(expected: CoreSpiritSemanticType, actual:
   if (expected.atom !== actual.atom && expected.atom !== 'number' && actual.atom !== 'number') return false;
   if (expected.symbol && actual.symbol && expected.symbol !== actual.symbol) return false;
   if (expected.timeframe && actual.timeframe && expected.timeframe !== actual.timeframe) return false;
+  if (expected.valueKind && actual.valueKind && expected.valueKind !== actual.valueKind) return false;
+  if (expected.valueKind && !actual.valueKind) return false;
   return true;
 }
 
