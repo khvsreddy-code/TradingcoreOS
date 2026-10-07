@@ -4,6 +4,7 @@ import type { CanonicalMarketView } from './services/core/data/canonicalDataPlan
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
+import { createProgressiveHistoryEmitter } from './services/core/chart/velaProgressiveHistory';
 
 const SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
@@ -209,7 +210,8 @@ export class TcoVelaDataProvider implements DataProvider {
     // An LTP quote is live data, not history, and must never be emitted here.
     const history = await plane.ensureReadyHistory(firstPaintBars).then(historicalToVelaBars).catch(() => []);
     if (abort()) return history;
-    if (history.length) onBatch(history.slice(-requested));
+    const emitProgressive = createProgressiveHistoryEmitter(onBatch);
+    if (history.length) emitProgressive(history.slice(-requested));
     let currentLength = history.length;
     while (!abort() && currentLength > 0 && currentLength < requested) {
       const beforeLength = currentLength;
@@ -217,7 +219,7 @@ export class TcoVelaDataProvider implements DataProvider {
       if (abort()) return older;
       currentLength = older.length;
       if (currentLength <= beforeLength) break;
-      onBatch(older.slice(-requested));
+      emitProgressive(older.slice(-requested));
     }
 
     return !abort() ? (plane.readCanonical().length ? marketViewToBars(plane.readCanonical(), range, requested) : history) : history;
