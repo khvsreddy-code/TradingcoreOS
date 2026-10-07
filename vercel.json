@@ -6,6 +6,12 @@
   ],
   "rewrites": [
     {
+      "source": "/api/realtime/ws",
+      "destination": {
+        "service": "realtime"
+      }
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index"
     },
@@ -46,5 +52,13 @@
         }
       ]
     }
-  ]
+  ],
+  "fluid": true,
+  "services": {
+    "realtime": {
+      "root": ".",
+      "entrypoint": "Dockerfile.realtime.vercel",
+      "runtime": "container"
+    }
+  }
 }
