@@ -213,16 +213,18 @@ export class TcoVelaDataProvider implements DataProvider {
     const emitProgressive = createProgressiveHistoryEmitter(onBatch);
     if (history.length) emitProgressive(history.slice(-requested));
     let currentLength = history.length;
+    let lastPublished = history.slice(-requested);
     while (!abort() && currentLength > 0 && currentLength < requested) {
       const beforeLength = currentLength;
       const older = historicalToVelaBars(await plane.loadOlderHistory('warm', { visibleBars: Math.min(1200, requested - currentLength) }));
-      if (abort()) return older;
+      if (abort()) return lastPublished;
       currentLength = older.length;
       if (currentLength <= beforeLength) break;
-      emitProgressive(older.slice(-requested));
+      lastPublished = older.slice(-requested);
+      emitProgressive(lastPublished);
     }
 
-    return !abort() ? (plane.readCanonical().length ? marketViewToBars(plane.readCanonical(), range, requested) : history) : history;
+    return !abort() ? (plane.readCanonical().length ? marketViewToBars(plane.readCanonical(), range, requested) : lastPublished) : lastPublished;
   }
 
   /**
