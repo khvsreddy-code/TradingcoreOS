@@ -5,7 +5,7 @@ import type { CoreSpiritComponentContract } from './coreSpiritExecutionModel';
 export type CoreSpiritLibraryNamespace =
   | 'market' | 'series' | 'math' | 'stats' | 'time' | 'structure'
   | 'volatility' | 'liquidity' | 'probability' | 'model' | 'visual'
-  | 'automation' | 'data' | 'state';
+  | 'automation' | 'risk' | 'background' | 'ta' | 'data' | 'state';
 
 export type CoreSpiritLibraryEntryStatus = 'builtin' | 'component' | 'catalog';
 export type CoreSpiritLibraryNamespaceEntry = Readonly<{
@@ -24,7 +24,7 @@ const k=(namespace:CoreSpiritLibraryNamespace,member:string,description:string):
 
 export const CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES:readonly CoreSpiritLibraryNamespace[]=Object.freeze([
   'market','series','math','stats','time','structure','volatility','liquidity',
-  'probability','model','visual','automation','data','state',
+  'probability','model','visual','automation','risk','background','ta','data','state',
 ]);
 
 export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNamespaceEntry[]=Object.freeze([
@@ -42,6 +42,16 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('series','zscore','zscore','Rolling z-score.'),
   b('series','normalize','normalize','Rolling normalization.'),
   b('series','persistence','persistence','Rolling persistence.'),
+  b('ta','sma','sma','Technical-analysis simple moving average.'),
+  b('ta','ema','ema','Technical-analysis exponential moving average.'),
+  b('ta','hma','hma','Technical-analysis Hull moving average.'),
+  b('ta','rma','rma','Technical-analysis Wilder moving average.'),
+  b('ta','rsi','rsi','Technical-analysis RSI.'),
+  b('ta','atr','atr','Technical-analysis ATR.'),
+  b('ta','stdev','stdev','Technical-analysis standard deviation.'),
+  b('ta','variance','variance','Technical-analysis variance.'),
+  b('ta','zscore','zscore','Technical-analysis z-score.'),
+  b('ta','roc','roc','Technical-analysis rate of change.'),
   b('math','abs','abs','Absolute value.'), b('math','min','min','Minimum.'), b('math','max','max','Maximum.'),
   b('math','sqrt','sqrt','Square root.'), b('math','pow','pow','Power.'), b('math','round','round','Round.'), b('math','sign','sign','Sign.'),
   b('math','toNumber','toNumber','Explicit semantic conversion to unitless number.'), b('math','toPrice','toPrice','Explicit semantic conversion to price.'), b('math','toVolume','toVolume','Explicit semantic conversion to volume.'),
@@ -57,10 +67,16 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   c('volatility','expansion','volatility.expansion:v1','Volatility expansion component surface.'),
   c('volatility','compression','volatility.compression:v1','Volatility compression component surface.'),
   k('liquidity','sweep','Liquidity sweep component surface.'), k('liquidity','imbalance','Liquidity imbalance component surface.'), k('liquidity','participation','Liquidity participation component surface.'),
-  b('probability','probability','probability','Probability primitive.'), b('probability','sigmoid','sigmoid','Sigmoid transform.'), k('probability','calibrate','Probability calibration surface.'), k('probability','entropy','Entropy surface.'),
+  b('probability','probability','probability','Probability primitive.'),
+  b('stats','beta','beta','Rolling regression beta.'),
+  b('stats','roc','roc','Rate of change.'), b('probability','sigmoid','sigmoid','Sigmoid transform.'), k('probability','calibrate','Probability calibration surface.'), k('probability','entropy','Entropy surface.'),
   b('model','predict','predict','Model prediction.'), b('model','score','score','Model score.'), b('model','ref','model','Model reference.'), k('model','run','MODEL ABI invocation surface.'),
   b('visual','show','show','Universal SHOW projection.'), b('visual','plot','plot','Plot projection.'),
   b('automation','signal','signal','Signal emission.'), b('automation','emit','emit','Event emission.'), b('automation','order','order','Order intent.'),
+  b('automation','notify','automation.notify','Host-routed automation notification event.'),
+  b('automation','route','automation.route','Host-routed automation execution event.'),
+  b('risk','allowed','risk.allowed','Host risk-policy query; never grants broker authority.'),
+  b('background','when','background.when','Conditional chart background projection.')
   b('data','request','request','Market-data request.'), b('data','requestBatch','requestBatch','Batched request.'), b('data','bid','bid','Bid.'), b('data','ask','ask','Ask.'), b('data','spread','spread','Spread.'), b('data','mid','mid','Mid.'),
   b('state','nz','nz','Missing-value fallback.'), b('state','na','na','Missing-value marker.'), b('state','isNa','isNa','Missing-value predicate.'),
 ]);
