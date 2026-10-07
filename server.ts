@@ -68,23 +68,61 @@ app.use((req, res, next) => {
 
 function healthChecks() {
   const coordinationRequired = process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true';
+  const realtimeGatewayRequired = process.env.REALTIME_GATEWAY_REQUIRED === 'true';
+  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\\/$/, '');
+  const realtimeGatewayConfigured = Boolean(
+    process.env.REALTIME_GATEWAY_SHARED_SECRET &&
+    (configuredGatewayUrl || process.env.VERCEL === '1'),
+  );
   return {
     database: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     encryption: Boolean(process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.length >= 32),
     fyers: Boolean(process.env.FYERS_CLIENT_ID && process.env.FYERS_CLIENT_SECRET && process.env.FYERS_REDIRECT_URI),
     coordination: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     coordinationRequired,
-    realtimeGateway: Boolean(process.env.REALTIME_GATEWAY_SHARED_SECRET && (process.env.REALTIME_GATEWAY_URL || process.env.VERCEL === '1')),
+    realtimeGatewayRequired,
+    realtimeGatewayConfigured,
+    realtimeGateway: realtimeGatewayConfigured,
   };
+}
+
+function requestOrigin(req: express.Request): string {
+  const proto = String(req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  const host = String(req.get('host') || '').trim();
+  return host ? `${proto}://${host}` : '';
+}
+
+async function realtimeGatewayReady(req: express.Request): Promise<boolean> {
+  if (process.env.REALTIME_GATEWAY_REQUIRED !== 'true') return true;
+  if (!healthChecks().realtimeGatewayConfigured) return false;
+  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\\/$/, '');
+  const healthUrl = configuredGatewayUrl
+    ? `${configuredGatewayUrl}/healthz`
+    : `${requestOrigin(req)}/api/realtime/healthz`;
+  try {
+    const response = await fetch(healthUrl, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(1_000),
+      headers: { accept: 'application/json' },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 app.get('/api/health/live', (_req, res) => {
   res.status(200).json({ status: 'ok', system: 'TradingCore OS', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/health/ready', (_req, res) => {
+app.get('/api/health/ready', async (req, res) => {
   const checks = healthChecks();
-  const ready = checks.database && checks.encryption && checks.fyers && (!checks.coordinationRequired || checks.coordination);
+  checks.realtimeGateway = await realtimeGatewayReady(req);
+  const ready = checks.database &&
+    checks.encryption &&
+    checks.fyers &&
+    (!checks.coordinationRequired || checks.coordination) &&
+    (!checks.realtimeGatewayRequired || checks.realtimeGateway);
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', checks, timestamp: new Date().toISOString() });
 });
 
@@ -93,9 +131,12 @@ app.get('/api/health/diagnostics', (_req, res) => {
   res.status(200).json({ system: 'TradingCore OS', version: '0.5.0', checks, metrics: getRequestMetrics(), timestamp: new Date().toISOString() });
 });
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (req, res) => {
   const checks = healthChecks();
-  const ready = checks.database && checks.encryption && checks.fyers && (!checks.coordinationRequired || checks.coordination);
+  const ready = checks.database &&
+    checks.encryption &&
+    checks.fyers &&
+    (!checks.coordinationRequired || checks.coordination);
   res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'degraded', system: 'TradingCore OS', version: '0.5.0', checks, timestamp: new Date().toISOString() });
 });
 
