@@ -1,4 +1,4 @@
-import type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
+import type { OHLCV } from './velaChartFacade';
 
 function sameBar(a: OHLCV, b: OHLCV): boolean {
   return a.time === b.time &&
