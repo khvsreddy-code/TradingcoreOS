@@ -19,6 +19,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const [settingsReadyUserId, setSettingsReadyUserId] = useState<string | null>(null);
   const hydrationGeneration = useRef(0);
+  const authBootstrapGeneration = useRef(0);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -65,6 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const markSignedOut = useCallback(() => {
     ++hydrationGeneration.current;
+    ++authBootstrapGeneration.current;
     setSettingsReadyUserId(null);
     userSettingsService.clearLocal();
     setSession(null);
@@ -75,11 +77,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const initAuth = useCallback(async () => {
+    const generation = ++authBootstrapGeneration.current;
     setLoading(true);
     setAuthStatus('loading');
 
     try {
       const { session: sbSession, error: sessionErr } = await sessionService.getSession();
+
+      // An auth event may have arrived while the initial getSession() request
+      // was in flight. Never let that stale bootstrap result overwrite the
+      // newer auth state.
+      if (generation !== authBootstrapGeneration.current) return;
 
       if (sessionErr) {
         // A timeout/network outage is not proof that the user logged out.
@@ -112,6 +120,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Subscribe before initializing so an OAuth redirect or INITIAL_SESSION
     // event cannot race the manual bootstrap.
     const { unsubscribe } = sessionService.onAuthStateChange((event, sbSession) => {
+      ++authBootstrapGeneration.current;
       if (event === 'SIGNED_OUT') {
         markSignedOut();
         setLoading(false);
