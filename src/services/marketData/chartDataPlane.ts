@@ -478,7 +478,15 @@ export class ChartDataPlane {
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
     if (this.state.historyReady && (this.state.candles.length || this.state.columns?.time.length)) {
-      return this.state.candles.length ? this.activeWindow(this.state.candles, limitOverride) : [];
+      if (this.state.candles.length) return this.activeWindow(this.state.candles, limitOverride);
+      if (this.state.columns?.time.length) {
+        // Keep Vela on the typed representation; only materialize the compatibility
+        // view when a legacy consumer explicitly asks for candles.
+        return this.getCompatibilityCandles(limitOverride);
+      }
+      // historyReady without candles/columns is an invalid terminal state.
+      // Fall through and rehydrate instead of short-circuiting with [].
+      this.state.historyReady = false;
     }
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
