@@ -22,7 +22,7 @@
     },
     "realtime": {
       "root": ".",
-      "entrypoint": "Dockerfile.realtime.vercel",
+      "entrypoint": "Dockerfile",
       "runtime": "container"
     }
   },
