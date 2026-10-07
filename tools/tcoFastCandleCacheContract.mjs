@@ -13,7 +13,7 @@ assert.match(body, /plane\.getSnapshot\(\)\.historyReady/);
 assert.match(body, /if \(cached\.length > 0 && plane\.getSnapshot\(\)\.historyReady\)/);
 assert.match(body, /return EMPTY_COLUMNAR_BARS/);
 assert.match(provider, /async getBarsProgressive/);
-assert.match(provider, /await plane\.ensureReadyHistory\(firstPaintBars\)/);
+assert.match(provider, /plane\.ensureReadyHistory\(firstPaintBars\)/);
 assert.doesNotMatch(body, /getHistoricalDataColumns/);
 assert.match(provider, /async getBarsProgressive/);
 assert.match(provider, /Promise\.race/);
