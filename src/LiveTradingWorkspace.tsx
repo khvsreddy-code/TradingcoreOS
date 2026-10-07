@@ -135,6 +135,9 @@ export function LiveTradingWorkspace() {
         defaults.timeframe || '5',
         1200,
       );
+      prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '1', 600);
+      prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '15', 600);
+      prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '60', 600);
 
       if (typeof window !== 'undefined') {
         (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__ = {

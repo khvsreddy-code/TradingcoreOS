@@ -10,9 +10,12 @@ const body = provider.slice(start, end);
 
 assert.match(body, /const cached = plane\.readCanonical\(\)/);
 assert.match(body, /if \(cached\.length > 0\)/);
-assert.match(body, /await plane\.ensureReady\(requested\)/);
+assert.match(body, /return EMPTY_COLUMNAR_BARS/);
+assert.match(provider, /async getBarsProgressive/);
+assert.match(provider, /await plane\.ensureReadyHistory\(firstPaintBars\)/);
 assert.doesNotMatch(body, /getHistoricalDataColumns/);
 assert.match(provider, /export function prewarmTcoVelaHistory/);
+assert.match(provider, /ensureReadyHistory\(requested\)/);
 assert.match(provider, /requestIdleCallback/);
 assert.match(workspace, /prewarmTcoVelaHistory\(/);
 assert.match(workspace, /NSE:NIFTYBANK-INDEX/);

@@ -474,6 +474,11 @@ export class ChartDataPlane {
     return this.activeWindow(materialized, limitOverride);
   }
 
+  /** Explicit mature object-history path used by TCO's fast progressive adapter. */
+  ensureReadyHistory(limitOverride?: number): Promise<HistoricalCandle[]> {
+    return this.ensureHistory(limitOverride);
+  }
+
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
