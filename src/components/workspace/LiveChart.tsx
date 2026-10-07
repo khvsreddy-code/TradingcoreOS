@@ -61,7 +61,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   );
 
   const persistedChart=useMemo(()=>loadChartState(brokerId,resolvedInstrumentKey),[brokerId,resolvedInstrumentKey]);
-  const [selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null);
   const [timeframe,setTimeframe]=useState(persistedChart.timeframe);
   const [drawingTool,setDrawingTool]=useState<DrawingTool>('none');
   const [crosshairVisible,setCrosshairVisible]=useState(true);
@@ -91,12 +90,10 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const chartStore=useMemo(()=>acquireChartStore(chartDatasetKey),[chartDatasetKey]);
 
   const indicatorsRef=useRef(indicators); indicatorsRef.current=indicators;
-  const selectedDrawingIdRef=useRef<string|null>(null); selectedDrawingIdRef.current=selectedDrawingId;
   const viewStateRef=useRef({showLevels,showVolume,showOI,showDepth}); viewStateRef.current={showLevels,showVolume,showOI,showDepth};
   const predictionIdsRef=useRef(predictionModelIds); predictionIdsRef.current=predictionModelIds;
   const automationsRef=useRef(automations); automationsRef.current=automations;
   const appearanceRef=useRef(candleAppearance); appearanceRef.current=candleAppearance;
-  const drawingControllerRef=useRef<ReturnType<typeof createChartDrawingController>|null>(null);
   const dataControllerRef=useRef<ReturnType<typeof createChartDataController>|null>(null);
   const indicatorControllerRef=useRef<ReturnType<typeof createChartIndicatorController>|null>(null);
   const predictionControllerRef=useRef<ReturnType<typeof createChartPredictionController>|null>(null);
@@ -110,7 +107,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const runtimeControllerRef=useRef<ReturnType<typeof createChartRuntimeController>|null>(null);
 
   const applyViewState=()=>{
-    try{localStorage.setItem(chartStateKey(brokerId,resolvedInstrumentKey),JSON.stringify({version:2,timeframe,drawings:drawingControllerRef.current?.getDrawings?.()||persistedChart.drawings,
+    try{localStorage.setItem(chartStateKey(brokerId,resolvedInstrumentKey),JSON.stringify({version:2,timeframe,
         velaDrawings:chart.current?.drawings?.all?.() ?? persistedChart.velaDrawings ?? [],
         showLevels,showVolume,showOI,showDepth}));}catch{}
   };
@@ -172,25 +169,14 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     setShowDrawingMenu(false);
   };
   const clearDrawings=()=>{
-    if(chart.current?.drawings?.supported){
-      chart.current.drawings.all().forEach(d=>chart.current!.drawings.remove(d.id));
-      setSelectedDrawingId(null);
-      applyViewState();
+    if(!chart.current?.drawings?.supported)return;
+    chart.current.drawings.all().forEach(d=>chart.current!.drawings.remove(d.id));
+    applyViewState();
   };
   const undoDrawing=()=>{
-    if(chart.current?.drawings?.supported){
-      chart.current.drawings.undo();
-      setSelectedDrawingId(null);
-      applyViewState();
-      return;
-    }
-    const controller=drawingControllerRef.current;if(!controller)return;
-    const before=controller.getDrawings();
-    if(controller.store.undo()){
-      const removed=before[before.length-1];
-      if(removed)coreEventBus.emit('drawing.deleted',{id:removed.id,owner:removed.owner,timestamp:Date.now()});
-      controller.save();controller.renderDrawings();setSelectedDrawingId(null);
-    }
+    if(!chart.current?.drawings?.supported)return;
+    chart.current.drawings.undo();
+    applyViewState();
   };
   const openCoreSpirit=()=>{coreSpiritStore.setOpen(true);coreSpiritControllerRef.current?.open();};
   const closeCoreSpirit=()=>coreSpiritStore.setOpen(false);
@@ -234,7 +220,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       chartType,
       candleAppearance,
       indicatorsRef,
-      selectedDrawingIdRef,
       viewStateRef,
       predictionIdsRef,
       appearanceRef,
