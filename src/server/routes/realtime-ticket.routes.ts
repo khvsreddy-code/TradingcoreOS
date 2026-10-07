@@ -10,8 +10,13 @@ realtimeTicketRoutes.get('/', (req: AuthenticatedRequest, res: Response) => {
   const forwardedProto = String(req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
   const host = String(req.get('host') || '').trim();
   const gatewayUrl = configuredGatewayUrl || (host ? `${forwardedProto}://${host}/api/realtime` : '');
-  if (!gatewayUrl || !process.env.REALTIME_GATEWAY_SHARED_SECRET) {
-    res.status(503).json({ success: false, error: 'Realtime gateway is not configured.' });
+  if (!gatewayUrl || !process.env.REALTIME_GATEWAY_SHARED_SECRET || !configuredGatewayUrl) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      data: { broker: 'fyers', transport: 'legacy' },
+      requestId: req.get('x-request-id') || null,
+    });
     return;
   }
 
