@@ -27,7 +27,9 @@ export type CoreSpiritLibraryGroupId =
   | 'events'
   | 'data'
   | 'state'
-  | 'quant';
+  | 'quant'
+  | 'automation'
+  | 'model';
 
 export type CoreSpiritLibraryGroup = {
   id: CoreSpiritLibraryGroupId;
@@ -59,6 +61,7 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'persistence', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'rolling'} },
   { name:'pctchange', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', seriesExecution:{vectorizable:true,fusible:true,strategy:'elementwise'} },
   { name:'returns', minArgs:1, maxArgs:1, returnType:'series<float>', pure:true, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
+  { name:'roc', minArgs:1, maxArgs:2, returnType:'series<float>', pure:true, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'beta', minArgs:3, maxArgs:3, returnType:'series<float>', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'trendStrength', minArgs:1, maxArgs:2, returnType:'series<float>', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'regimeDetect', minArgs:2, maxArgs:3, returnType:'string', pure:true, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
@@ -184,6 +187,10 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'order', minArgs:2, maxArgs:6, returnType:'event', pure:false, category:'extension', emitKind:'orderIntent' },
   { name:'alert', minArgs:0, returnType:'event', pure:false, category:'extension', capability:'alert', emitKind:'alert' },
   { name:'webhook', minArgs:1, returnType:'event', pure:false, category:'extension', capability:'webhook', emitKind:'webhook' },
+  { name:'automation.notify', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension' },
+  { name:'automation.route', minArgs:1, maxArgs:2, returnType:'event', pure:false, category:'extension' },
+  { name:'risk.allowed', minArgs:0, maxArgs:1, returnType:'boolean', pure:false, category:'extension' },
+  { name:'background.when', minArgs:2, maxArgs:2, returnType:'event', pure:false, category:'extension', emitKind:'bg' },
 ];
 
 /**
