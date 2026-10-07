@@ -358,6 +358,18 @@ export function buildCoreSpiritSemanticDependencyGraph(
       case 'memberCall': {
         const directTargetId=expression(node.target,conditionOwner);
         const directTargetNode=nodes.get(directTargetId);
+        if (node.target.type === 'identifier' && node.target.name === 'automation') {
+          const automationId = addNode({
+            id:'automation-call:' + (node.span?.start ?? nodes.size),
+            kind:'automation',
+            name:'automation.' + node.member,
+            type:'event',
+            source:sourceSpan(node),
+          });
+          for (const arg of node.args) addEdge(expression(arg,conditionOwner),automationId,'depends-on');
+          if (conditionOwner) addEdge(conditionOwner,automationId,'triggers');
+          return automationId;
+        }
         if(directTargetNode?.kind==='model' && ['predict','prediction','probability','confidence'].includes(node.member)){
           const outputId=addNode({id:'model-output:'+directTargetNode.name+':'+node.member,kind:'model-output',name:directTargetNode.name+'.'+node.member,source:sourceSpan(node)});
           addEdge(directTargetId,outputId,'depends-on');
