@@ -34,13 +34,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     try {
       const { session: sbSession, error: sessionErr } = await sessionService.getSession();
-      if (sessionErr || !sbSession?.user) {
+      if (sessionErr) {
+        // A timeout/network error is not proof of logout. Preserve any existing
+        // session and let the next auth event/session refresh converge the state.
+        setError(sessionErr.message);
+      } else if (!sbSession?.user) {
         setSession(null);
         setUser(null);
       } else {
         setSession(sessionService.mapSupabaseSession(sbSession));
         setAuthStep('idle');
-        await hydrateUser(sbSession.user);
+        void hydrateUser(sbSession.user);
       }
     } catch (err: any) {
       console.error('Auth initialization error:', err);
@@ -54,13 +58,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     void initAuth();
-    const { unsubscribe } = sessionService.onAuthStateChange(async (event, sbSession) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    const { unsubscribe } = sessionService.onAuthStateChange((event, sbSession) => {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
         if (sbSession?.user) {
           setSession(sessionService.mapSupabaseSession(sbSession));
           setError(null);
           setAuthStep('idle');
-          await hydrateUser(sbSession.user);
+          void hydrateUser(sbSession.user);
+        } else if (event === 'INITIAL_SESSION') {
+          setSession(null);
+          setUser(null);
+        }
+      } else if (event === 'TOKEN_REFRESHED') {
+        if (sbSession?.user) {
+          setSession(sessionService.mapSupabaseSession(sbSession));
+          setError(null);
         }
       } else if (event === 'SIGNED_OUT') {
         setSession(null);
