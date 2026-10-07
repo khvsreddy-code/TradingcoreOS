@@ -192,7 +192,7 @@ export function buildCoreSpiritSemanticDependencyGraph(
           addNode({id:resolvedModelId,kind:'model',name:directModelDeclaration?.name ?? modelName,type:'model:ref'});
 
           const outputId = addNode({
-            id:'model-output:' + modelName + ':' + node.member,
+            id:'model-output:' + modelName + ':' + (node.member === 'predict' ? 'prediction' : node.member === 'confidence' ? 'probability' : node.member),
             kind:'model-output',
             name:modelName + '.' + (node.member === 'predict' ? 'prediction' : node.member === 'confidence' ? 'probability' : node.member),
             source:sourceSpan(node),
