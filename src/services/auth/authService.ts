@@ -3,12 +3,12 @@ import { formatAuthError } from '../../auth/utils/authErrors';
 
 export const authService = {
   /**
-   * Initiate Google OAuth sign in flow
+   * Initiate Google OAuth sign in flow.
    */
   async signInWithGoogle(options?: { redirectTo?: string }): Promise<{ error?: string }> {
     if (!isSupabaseConfigured()) {
       return {
-        error: 'Supabase project credentials are missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.',
+        error: 'Supabase project credentials are missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in the deployment environment.',
       };
     }
 
@@ -28,19 +28,12 @@ export const authService = {
         },
       });
 
-      if (error) {
-        return { error: formatAuthError(error) };
-      }
-
-      return {};
+      return error ? { error: formatAuthError(error) } : {};
     } catch (err: any) {
       return { error: formatAuthError(err) };
     }
   },
 
-  /**
-   * Sign out the user securely
-   */
   async signOut(): Promise<{ error?: string }> {
     if (!isSupabaseConfigured()) {
       return {};
@@ -49,10 +42,7 @@ export const authService = {
     try {
       const supabase = getSupabaseClient();
       const { error } = await supabase.auth.signOut();
-      if (error) {
-        return { error: formatAuthError(error) };
-      }
-      return {};
+      return error ? { error: formatAuthError(error) } : {};
     } catch (err: any) {
       return { error: formatAuthError(err) };
     }
