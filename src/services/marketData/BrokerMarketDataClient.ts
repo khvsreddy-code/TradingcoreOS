@@ -76,7 +76,12 @@ export class BrokerMarketDataClient {
         }
       }
 
-      await this.connectLegacy(stream, generation);
+      const legacyAllowed = String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
+      if (legacyAllowed) {
+        await this.connectLegacy(stream, generation);
+      } else {
+        throw new Error('Realtime gateway ticket unavailable; legacy realtime fallback is disabled.');
+      }
     } catch (error: any) {
       if (!stream.stopped && generation === stream.generation && stream.transport === 'gateway') {
         await this.connectLegacy(stream, generation).catch(() => undefined);
@@ -153,9 +158,8 @@ export class BrokerMarketDataClient {
         }
       };
     }).catch(async (error) => {
-      // Gateway failure should not take down the terminal. Fall back immediately
-      // to the existing bounded HTTP bridge while preserving the same listener set.
-      if (!stream.stopped && generation === stream.generation) {
+      const legacyAllowed = String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
+      if (legacyAllowed) {
         stream.transport = 'legacy';
         await this.connectLegacy(stream, generation);
         return;
