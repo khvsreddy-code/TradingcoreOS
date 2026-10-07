@@ -9,7 +9,7 @@ assert.doesNotThrow(() => assertCumulativeProgressiveHistory([], head));
 assert.doesNotThrow(() => assertCumulativeProgressiveHistory(head, expanded));
 assert.throws(() => assertCumulativeProgressiveHistory(head, head.slice(1)), /Non-cumulative/);
 assert.throws(() => assertCumulativeProgressiveHistory(head, [bar(-1000, 9), bar(1000, 10), bar(2000, 999), bar(3000, 12)]), /Non-cumulative/);
-assert.throws(() => assertCumulativeProgressiveHistory(head, [bar(1000, 10), bar(3000, 12), bar(2000, 11)]), /ordering/);
+assert.throws(() => assertCumulativeProgressiveHistory(head, [bar(1000, 10), bar(3000, 12), bar(2000, 11)]), /Non-cumulative/);
 
 const emissions = [];
 const emit = createProgressiveHistoryEmitter((bars) => emissions.push(bars));
