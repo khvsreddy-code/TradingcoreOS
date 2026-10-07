@@ -168,7 +168,7 @@ export class TcoVelaDataProvider implements DataProvider {
     // HOT path: a recently viewed symbol already lives in the shared canonical plane.
     // Return its typed arrays immediately — no REST, no object materialization.
     const cached = plane.readCanonical();
-    if (cached.length > 0) {
+    if (cached.length > 0 && plane.getSnapshot().historyReady) {
       const requestedTo = range.to == null
         ? null
         : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
@@ -206,41 +206,56 @@ export class TcoVelaDataProvider implements DataProvider {
     const abort = () => Boolean(opts?.signal?.aborted);
     if (abort()) return [];
 
-    let first = await plane.ensureReadyHistory(firstPaintBars);
-    if (abort()) return first;
-    if (first.length > 0) {
+    // History and quote are independent. Race them for time-to-first-visible-price,
+    // but always keep the history promise alive so real candles replace the seed.
+    const historyPromise = plane.ensureReadyHistory(firstPaintBars).catch(() => []);
+    const quotePromise = tradingCoreRuntime.getMarketQuotes([symbol]).catch(() => ({}));
+
+    type FirstPaintResult =
+      | { kind: 'history'; bars: OHLCV[] }
+      | { kind: 'quote'; bars: OHLCV[] };
+
+    const quoteBars = async (): Promise<OHLCV[]> => {
+      if (abort()) return [];
+      const quote = await quotePromise;
+      if (abort()) return [];
+      const row = quote[symbol];
+      const ltp = Number(row?.ltp);
+      if (!Number.isFinite(ltp) || ltp <= 0) return [];
+      const now = Date.now();
+      const interval = timeframeMs(tcoTimeframe);
+      return [{
+        time: Math.floor(now / interval) * interval,
+        open: ltp,
+        high: ltp,
+        low: ltp,
+        close: ltp,
+        volume: Number.isFinite(Number(row?.volume)) ? Number(row?.volume) : undefined,
+      }];
+    };
+
+    let first: OHLCV[] = [];
+    const firstResult: FirstPaintResult = await Promise.race([
+      historyPromise.then((bars): FirstPaintResult => ({ kind: 'history', bars })),
+      quoteBars().then((bars): FirstPaintResult => ({ kind: 'quote', bars })),
+    ]);
+
+    if (abort()) return firstResult.bars;
+    if (firstResult.bars.length > 0) {
+      first = firstResult.bars;
       onBatch(first.slice(-requested));
     }
 
-    // A live quote is a better first-frame fallback than an empty canvas. This path is
-    // only reached when history is temporarily unavailable; the quote is NOT the history
-    // authority and is replaced as soon as canonical history arrives.
-    if (first.length === 0) {
-      try {
-        const quote = await tradingCoreRuntime.getMarketQuotes([symbol]);
-        if (!abort()) {
-          const row = quote[symbol];
-          const ltp = Number(row?.ltp);
-          if (Number.isFinite(ltp) && ltp > 0) {
-            const now = Date.now();
-            const interval = timeframeMs(tcoTimeframe);
-            first = [{
-              time: Math.floor(now / interval) * interval,
-              open: ltp,
-              high: ltp,
-              low: ltp,
-              close: ltp,
-              volume: Number.isFinite(Number(row?.volume)) ? Number(row?.volume) : undefined,
-            }];
-            onBatch(first);
-          }
-        }
-      } catch {
-        // Keep the load fault-tolerant; the plane can recover on the next history/tick path.
-      }
+    // Always let real history supersede the quote seed when it arrives. The quote seed
+    // exists only to make the first frame non-empty; it is never written into historyStore.
+    const history = await historyPromise;
+    if (abort()) return history.length ? history : first;
+    if (history.length > 0 && (firstResult.kind !== 'history' || history.length !== first.length)) {
+      first = history;
+      onBatch(history.slice(-requested));
     }
 
-    let currentLength = first.length;
+    let currentLength = history.length || first.length;
     while (!abort() && currentLength > 0 && currentLength < requested) {
       const beforeLength = currentLength;
       const older = await plane.loadOlderHistory('warm', { visibleBars: Math.min(1200, requested - currentLength) });
@@ -264,7 +279,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const requested = Math.max(2, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
-    await plane.ensureReady(5000);
+    await plane.ensureReadyHistory(5000);
     const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
     const current = plane.readCanonical();
     const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;

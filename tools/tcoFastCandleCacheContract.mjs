@@ -9,11 +9,15 @@ const end = provider.indexOf('/**', start + 32);
 const body = provider.slice(start, end);
 
 assert.match(body, /const cached = plane\.readCanonical\(\)/);
+assert.match(body, /plane\.getSnapshot\(\)\.historyReady/);
 assert.match(body, /if \(cached\.length > 0\)/);
 assert.match(body, /return EMPTY_COLUMNAR_BARS/);
 assert.match(provider, /async getBarsProgressive/);
 assert.match(provider, /await plane\.ensureReadyHistory\(firstPaintBars\)/);
 assert.doesNotMatch(body, /getHistoricalDataColumns/);
+assert.match(provider, /async getBarsProgressive/);
+assert.match(provider, /Promise\.race/);
+assert.match(provider, /await plane\.ensureReadyHistory\(requested\)/);
 assert.match(provider, /export function prewarmTcoVelaHistory/);
 assert.match(provider, /ensureReadyHistory\(requested\)/);
 assert.match(provider, /requestIdleCallback/);
