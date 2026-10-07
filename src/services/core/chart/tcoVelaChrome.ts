@@ -440,6 +440,15 @@ const replayPanel: SidePanelDescriptor = {
   maxWidth: 460,
   mount(ctx, body, header) {
     header.setTitle('Vela Replay');
+    const replay = (ctx as typeof ctx & { replay?: {
+      state: { active: boolean; playing: boolean; cursorTime: number | null };
+      start(opts: { from: number; cell?: string }): Promise<void>;
+      step(): boolean;
+      play(intervalMs?: number): unknown;
+      pause(): unknown;
+      stop(): unknown;
+      on(event: string, handler: () => void): () => void;
+    } }).replay ?? ctx.chart.replay;
     const root = panelRoot(body);
     const status = document.createElement('div');
     status.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:8px;';
@@ -467,28 +476,28 @@ const replayPanel: SidePanelDescriptor = {
 
     makeButton('Start', () => {
       const raw = input.value ? new Date(input.value).getTime() : Date.now() - 60 * 60 * 1000;
-      void ctx.replay.start({ from: Number.isFinite(raw) ? raw : Date.now() - 60 * 60 * 1000 }).catch(error => {
+      void replay.start({ from: Number.isFinite(raw) ? raw : Date.now() - 60 * 60 * 1000 }).catch(error => {
         ctx.toast(error instanceof Error ? error.message : String(error), 'error');
       });
     });
-    makeButton('Step', () => { if (!ctx.replay.step()) ctx.toast('Replay has reached the end.', 'info'); });
-    makeButton('Play', () => { ctx.replay.play(250); });
-    makeButton('Pause', () => { ctx.replay.pause(); });
-    makeButton('Stop', () => { ctx.replay.stop(); });
+    makeButton('Step', () => { if (!replay.step()) ctx.toast('Replay has reached the end.', 'info'); });
+    makeButton('Play', () => { replay.play(250); });
+    makeButton('Pause', () => { replay.pause(); });
+    makeButton('Stop', () => { replay.stop(); });
 
     const refresh = () => {
-      const state = ctx.replay.state;
+      const state = replay.state;
       status.textContent = state.active
         ? `ACTIVE · ${state.playing ? 'PLAYING' : 'PAUSED'} · ${state.cursorTime ? new Date(state.cursorTime).toLocaleString('en-IN') : '—'}`
         : 'READY · multi-chart replay follows one Vela clock';
     };
     refresh();
     const timer = window.setInterval(refresh, 250);
-    const offStart = ctx.replay.on('replay:start', refresh);
-    const offStep = ctx.replay.on('replay:step', refresh);
-    const offPlay = ctx.replay.on('replay:play', refresh);
-    const offPause = ctx.replay.on('replay:pause', refresh);
-    const offEnd = ctx.replay.on('replay:end', refresh);
+    const offStart = replay.on('replay:start', refresh);
+    const offStep = replay.on('replay:step', refresh);
+    const offPlay = replay.on('replay:play', refresh);
+    const offPause = replay.on('replay:pause', refresh);
+    const offEnd = replay.on('replay:end', refresh);
     return {
       onOpen: refresh,
       onChart: refresh,
