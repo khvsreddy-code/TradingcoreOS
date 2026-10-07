@@ -81,7 +81,7 @@ export function LiveTradingWorkspace() {
         indicatorPicker: true,
         topbar: {
           left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
-          right: ['tco.watchlist', 'tco.journal', 'tco.panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
+          right: ['tco.watchlist', 'tco.journal', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
         },
         sync: { symbol: false, timeframe: false, crosshair: true, style: false, drawings: false },
         volume: true,
