@@ -133,6 +133,22 @@ export function LiveTradingWorkspace() {
           getPerformanceStats: () => workspace?.getPerformanceStats?.() ?? [],
           setLayout: (layout: string) => workspace?.setLayout(layout),
           saveNow: () => workspace?.saveNow(),
+          getCellHealth: async () => {
+            const cells = workspace?.cells?.() ?? [];
+            await Promise.all(cells.map(cell => cell.chart.ready().catch(() => undefined)));
+            return cells.map(cell => {
+              const market = cell.chart.market;
+              const scene = cell.chart.inspect();
+              return {
+                id: cell.id,
+                symbol: market.symbol,
+                timeframe: market.timeframe,
+                totals: scene.totals,
+                indicators: scene.indicators.length,
+                replay: cell.chart.replay.state,
+              };
+            });
+          },
         };
       }
       const bindActiveChart = () => undefined;
