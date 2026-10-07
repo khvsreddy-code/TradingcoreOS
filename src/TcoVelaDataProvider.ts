@@ -342,13 +342,6 @@ export class TcoVelaDataProvider implements DataProvider {
     return [];
   }
 
-  async getBarsProgressive(ticker: string, timeframe: string, range: BarRange, onBatch: (bars: OHLCV[]) => void, opts?: { signal?: AbortSignal }): Promise<OHLCV[]> {
-    if (opts?.signal?.aborted) return [];
-    const bars = await this.getBars(ticker, timeframe, range);
-    if (!opts?.signal?.aborted && bars.length) onBatch(bars);
-    return bars;
-  }
-
   getSymbolInfo(ticker: string) {
     const symbol = runtimeSymbol(ticker);
     return Promise.resolve({ ticker: symbol, exchange: symbol.startsWith('BSE:') ? 'BSE' : 'NSE', type: 'index' });
