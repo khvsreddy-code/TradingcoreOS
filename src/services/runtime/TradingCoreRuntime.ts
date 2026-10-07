@@ -35,7 +35,7 @@ export class TradingCoreRuntime {
   public hasConnectedBroker(): boolean { return this.brokerMgr.getAllConnections().length > 0; }
   public getPrimaryBroker(): BrokerAdapter | null { return this.brokerMgr.getPrimaryBroker(); }
   public getPrimaryBrokerInfo(): BrokerConnectionInfo | null { return this.brokerMgr.getPrimaryBrokerInfo(); }
-  /** Single canonical broker identity shared by chart, watchlist and realtime consumers. */
+  /** Canonical broker identity for every market-data consumer. Never let a chart/provider invent a broker key. */
   public getPrimaryBrokerId(): string | null { return this.brokerMgr.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() ?? null; }
   public getAllConnections(): BrokerConnectionInfo[] { return this.brokerMgr.getAllConnections(); }
 
@@ -261,41 +261,41 @@ export class TradingCoreRuntime {
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return null;
     const requestedLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
 
+    // Prefer the compact broker-native path, but never let an empty/unsupported
+    // column response strand Vela with a blank chart when the ordinary history API
+    // can return usable candles. The conversion happens once at this boundary.
     if (broker.getHistoricalDataColumns) {
       try {
         const columns = await broker.getHistoricalDataColumns(symbol, timeframe, signal, requestedLimit, beforeTimestamp);
-        if (columns?.time?.length) return columns;
+        if (columns && columns.time.length > 0) return columns;
       } catch {
-        // Fall through: the object history API is the correctness fallback.
+        // Fall through to the ordinary history path below.
       }
     }
 
     try {
       const rows = await broker.getHistoricalData(symbol, timeframe, signal, requestedLimit);
-      const beforeMs = beforeTimestamp == null ? Number.POSITIVE_INFINITY : (() => {
-        const numeric = Number(beforeTimestamp);
-        if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
-        const parsed = Date.parse(String(beforeTimestamp));
-        return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
-      })();
-      const ordered = [...(rows || [])]
-        .map((row) => ({ row, time: (() => {
-          const raw = (row as any)?.timestamp;
-          const n = typeof raw === 'number' ? raw : Number(raw);
-          if (Number.isFinite(n)) return n > 1e12 ? n : n * 1000;
-          return Date.parse(String(raw));
-        })() }))
-        .filter(({time}) => Number.isFinite(time) && time > 0 && time < beforeMs)
-        .sort((a,b)=>a.time-b.time)
+      if (!rows.length) return null;
+      const beforeMs = beforeTimestamp == null
+        ? Number.POSITIVE_INFINITY
+        : (() => {
+            const numeric = Number(beforeTimestamp);
+            if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
+            const parsed = Date.parse(String(beforeTimestamp));
+            return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+          })();
+      const ordered = [...rows]
+        .sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp)))
+        .filter((row) => Date.parse(String(row.timestamp)) < beforeMs)
         .slice(-requestedLimit);
       if (!ordered.length) return null;
       return {
-        time: ordered.map(x=>x.time),
-        open: ordered.map(x=>Number(x.row.open)),
-        high: ordered.map(x=>Number(x.row.high)),
-        low: ordered.map(x=>Number(x.row.low)),
-        close: ordered.map(x=>Number(x.row.close)),
-        volume: ordered.map(x=>Number(x.row.volume)||0),
+        time: ordered.map(row => Date.parse(String(row.timestamp))),
+        open: ordered.map(row => Number(row.open)),
+        high: ordered.map(row => Number(row.high)),
+        low: ordered.map(row => Number(row.low)),
+        close: ordered.map(row => Number(row.close)),
+        volume: ordered.map(row => Number(row.volume) || 0),
         timeUnit: 'milliseconds',
       };
     } catch {
