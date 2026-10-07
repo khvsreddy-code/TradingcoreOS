@@ -16,7 +16,7 @@ const contracts = [
   ['columnar-market-data', ['src/services/coreSpirit/columnarMarketDataContract.test.mjs', true]],
   ['optimized-execution', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
   ['authoring-levels', ['src/coreSpiritAuthoringLevelsContract.test.mjs', true]],
-  ['unified-language', ['src/coreSpiritUnifiedLanguageContract.test.mjs', false]],
+  ['unified-language', ['src/coreSpiritUnifiedLanguageContract.test.mjs', true]],
   ['architecture-consolidation', ['src/architectureConsolidationGuard.test.mjs', false]],
   ['corespirit-broker-boundary', ['src/coreSpiritBrokerBoundaryContract.test.mjs', false]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
