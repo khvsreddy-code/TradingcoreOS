@@ -2,7 +2,6 @@ export function formatAuthError(error: unknown): string {
   if (!error) return 'An unknown authentication error occurred.';
 
   const message = typeof error === 'string' ? error : (error as any)?.message || String(error);
-
   const lower = message.toLowerCase();
 
   if (lower.includes('popup') || lower.includes('blocked') || lower.includes('window.open')) {
@@ -13,20 +12,25 @@ export function formatAuthError(error: unknown): string {
     return 'Sign-in request was cancelled. Click "Sign in with Google" to try again.';
   }
 
-  if (lower.includes('network') || lower.includes('fetch') || lower.includes('failed to fetch')) {
-    return 'Network connection failed. Please check your internet connection and try again.';
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('failed to fetch') || lower.includes('timeout')) {
+    return 'TradingCore could not reach the authentication service. Your saved session was not cleared. Check your connection and retry.';
   }
 
-  if (lower.includes('placeholder') || lower.includes('invalid_api_key') || lower.includes('not configured')) {
-    return 'Supabase project credentials are not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
+  if (
+    lower.includes('placeholder') ||
+    lower.includes('invalid_api_key') ||
+    lower.includes('not configured') ||
+    lower.includes('supabase is not configured')
+  ) {
+    return 'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.';
   }
 
   if (lower.includes('jwt expired') || lower.includes('session expired') || lower.includes('invalid_grant')) {
-    return 'Your session has expired. Please sign in again with Google.';
+    return 'Your authentication session has expired or been revoked. Please sign in again with Google.';
   }
 
   if (lower.includes('provider') || lower.includes('disabled')) {
-    return 'Google OAuth provider is disabled in your Supabase project settings.';
+    return 'Google OAuth is disabled or unavailable in the Supabase project configuration.';
   }
 
   return message || 'Authentication failed. Please try again.';
