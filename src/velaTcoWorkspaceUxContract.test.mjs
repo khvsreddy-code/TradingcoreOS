@@ -29,7 +29,8 @@ assert(topbar.includes("b.dataset.actionId = action.id"));
 assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
 assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
-assert(provider.includes("await plane.ensureReady(requested)"), "cold Vela history must use ChartDataPlane");
+assert(provider.includes("return EMPTY_COLUMNAR_BARS"), "cold Vela column load must yield to progressive history");
+assert(provider.includes("plane.ensureReadyHistory(firstPaintBars)"), "cold Vela history must use the shared ChartDataPlane history path");
 assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela provider must not bypass the shared history cache");
 
 assert(plane.includes("columns.time.length === 0"));
