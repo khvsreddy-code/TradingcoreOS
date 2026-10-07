@@ -4,7 +4,6 @@ import { RealtimeCalculationEngine } from '../calculation/realtimeCalculationEng
 import { ChartLifecycle } from './chartLifecycle';
 import { createChartDataController } from './controllers/ChartDataController';
 import { createChartIndicatorController } from './controllers/ChartIndicatorController';
-import { createChartDrawingController } from './controllers/ChartDrawingController';
 import { createChartPredictionController } from './controllers/ChartPredictionController';
 import { createChartRealtimeController } from './controllers/ChartRealtimeController';
 import { createChartCoreSpiritController } from './controllers/ChartCoreSpiritController';
@@ -62,11 +61,10 @@ export type ChartRuntimeControllerDeps={
   drawingInitial:any[];
   velaDrawingsInitial?:unknown[];
   indicatorsRef:Ref<any[]>;
-  selectedDrawingIdRef:Ref<string|null>;
+  selectedDrawingIdRef?:Ref<string|null>;
   viewStateRef:Ref<{showLevels:boolean;showVolume:boolean;showOI:boolean;showDepth:boolean}>;
   predictionIdsRef:Ref<string[]>;
   appearanceRef:Ref<CandleAppearance>;
-  drawingControllerRef:Ref<any>;
   dataControllerRef:Ref<any>;
   indicatorControllerRef:Ref<any>;
   predictionControllerRef:Ref<any>;
@@ -77,7 +75,6 @@ export type ChartRuntimeControllerDeps={
   drawingToolRef:Ref<DrawingTool>;
   chartIndex?:number;
   setDrawingTool:(tool:DrawingTool)=>void;
-  setSelectedDrawingId:(id:string|null)=>void;
   setHistoryLoading:(value:boolean|((previous:boolean)=>boolean))=>void;
   setError:(value:string)=>void;
   setAnalytics:(value:ChartAnalytics|null)=>void;
@@ -126,10 +123,6 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         chartDatasetKey:deps.chartDatasetKey,dataRevisionRef:deps.dataRevisionRef,indicatorRequestSeq:deps.indicatorRequestSeq,chartId:deps.chartId,
         lifecycle,chartUpdateScheduler,indicators:deps.indicatorsRef.current,timeframe:deps.timeframe,
       });
-      const chartDrawingController=createChartDrawingController({
-        chart:deps.chart,candles:deps.candles,brokerId:deps.brokerId,instrumentKey:deps.resolvedInstrumentKey,timeframe:deps.timeframe,
-        getViewState:()=>deps.viewStateRef.current,initialDrawings:deps.drawingInitial,getSelectedDrawingId:()=>deps.selectedDrawingIdRef.current,onToolChange:deps.setDrawingTool,
-      });
       const chartPredictionController=createChartPredictionController({
         chart:deps.chart,candles:deps.candles,predictionLines:deps.predictionLines,predictionJob:deps.predictionJob,
         predictionModelIds:deps.predictionIdsRef.current,chartDatasetKey:deps.chartDatasetKey,dataRevisionRef:deps.dataRevisionRef,
@@ -151,7 +144,6 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
       });
 
       deps.indicatorControllerRef.current=chartIndicatorController;
-      deps.drawingControllerRef.current=chartDrawingController;
       deps.predictionControllerRef.current=chartPredictionController;
       deps.coreSpiritControllerRef.current=chartCoreSpiritController;
       deps.analyticsControllerRef.current=chartAnalyticsController;
@@ -173,7 +165,6 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
           void bucketChanged;
         },
         onIndicatorWorker:(data,bucketChanged)=>{chartPerformanceTelemetry.recordIndicatorIncrementalUpdate(chartMarketKey(deps.brokerId,deps.resolvedInstrumentKey));chartIndicatorController.requestIndicatorWorker(data,visibleLogicalRangeRef.current,'incremental',bucketChanged?'append':'replace');},
-        onDrawingTick:()=>chartDrawingController.renderDrawings(),
         onPredictionTick:(data)=>{chartPredictionController.setInputs({predictionModelIds:deps.predictionIdsRef.current,chartDatasetKey:deps.chartDatasetKey,resolvedInstrumentKey:deps.resolvedInstrumentKey,timeframe:deps.timeframe});void chartPredictionController.renderPredictionOverlay(data);},
         onAnalyticsTick:(data,spot)=>chartAnalyticsController.publishAnalytics(data,spot,true),
         onOiTick:(spot)=>chartAnalyticsController.updateOiSpot(spot),
@@ -221,7 +212,6 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         }catch(indicatorError){
           console.warn('[TradingCore] indicator render skipped',indicatorError);
         }
-        chartDrawingController.renderDrawings();
         chartAnalyticsController.publishAnalytics(data,Number(snapshot.latestTick?.ltp)||Number(data[data.length-1]?.close)||0,true);
         chartPredictionController.setInputs({predictionModelIds:deps.predictionIdsRef.current,chartDatasetKey:deps.chartDatasetKey,resolvedInstrumentKey:deps.resolvedInstrumentKey,timeframe:deps.timeframe});
         void chartPredictionController.renderPredictionOverlay(data);
@@ -242,7 +232,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
 
       const interactionController=createChartInteractionController({
         chart:deps.chart,candle:deps.candle,host:deps.host,candles:deps.candles,chartStore:deps.chartStore,lifecycle:lifecycle.current,generation,
-        drawingController:chartDrawingController,indicatorController:chartIndicatorController,dataController:chartDataController,timeframe:deps.timeframe,
+indicatorController:chartIndicatorController,dataController:chartDataController,timeframe:deps.timeframe,
         chartIndex:deps.chartIndex,resolvedInstrumentKey:deps.resolvedInstrumentKey,previousLogicalRange:{current:null},
         drawingToolRef:deps.drawingToolRef,selectedDrawingIdRef:deps.selectedDrawingIdRef,setSelectedDrawingId:deps.setSelectedDrawingId,
         rendererController:deps.rendererController,crosshairVisible:deps.crosshairVisible,shouldLoadOlderHistory,
@@ -268,7 +258,6 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         deps.interactionControllerRef.current=null;
         deps.realtimeControllerRef.current=null;
         deps.indicatorControllerRef.current=null;
-        deps.drawingControllerRef.current=null;
         deps.predictionControllerRef.current=null;
         deps.coreSpiritControllerRef.current=null;
         deps.analyticsControllerRef.current=null;
