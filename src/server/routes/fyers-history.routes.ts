@@ -231,7 +231,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
     })();
-    inflight.set(key, task);    const data = await task;
+    inflight.set(key, task);
+    const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
     const returned = isColumnarData(data) ? data.time.length : data.length;
     const oldestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
