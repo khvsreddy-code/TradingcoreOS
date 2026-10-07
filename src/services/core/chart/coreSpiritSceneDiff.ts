@@ -31,6 +31,27 @@ function pane(output: CoreSpiritObject): string {
 function isPriceOverlay(output: CoreSpiritObject): boolean {
     return pane(output) === 'price';
 }
+
+function outputDirtySpan(output: CoreSpiritObject): { from:number; to:number } | null {
+    const read=(value:unknown)=>Number(value);
+    if(output.kind==='series'||output.kind==='marker'||output.kind==='signal'||output.kind==='background'){
+        const time=read((output as {time?:unknown}).time);
+        if(Number.isFinite(time))return {from:time,to:time};
+    }
+    if(output.kind==='line'||output.kind==='arrow'){
+        const a=read(output.start?.time),b=read(output.end?.time);
+        if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
+    }
+    if(output.kind==='box'||output.kind==='zone'){
+        const a=read((output as any).left),b=read((output as any).right);
+        if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
+    }
+    if(output.kind==='polyline'){
+        const times=output.points.map(point=>Number(point.time)).filter(Number.isFinite);
+        if(times.length)return {from:Math.min(...times),to:Math.max(...times)};
+    }
+    return null;
+}
 type SceneDiffEmission = any;
 function removed(output: CoreSpiritObject): boolean {
     return output.metadata?.removed === true;
@@ -165,8 +186,8 @@ export class CoreSpiritSceneDiff {
             if (result?.delta) series.push(result.delta);
             if (result?.collection) collections.push(result.collection);
             if (result?.instanceDelta) instanceBatches.push(result.instanceDelta);
-            const time = Number((output as { time?: number }).time);
-            if (Number.isFinite(time)) { from = Math.min(from, time); to = Math.max(to, time); }
+            const span = outputDirtySpan(output);
+            if (span) { from=Math.min(from,span.from); to=Math.max(to,span.to); }
         }
 
         if (!this.markerSeriesMounted && this.markers.size > 0) {
