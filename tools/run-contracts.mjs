@@ -70,6 +70,7 @@ const contracts = [
   ['tco-p0-roadmap', ['src/tcoP0RoadmapContract.test.mjs', false]],
   ['p0-roadmap', ['src/p0RoadmapContract.test.mjs', false]],
   ['p0-latency-trace', ['src/p0LatencyTraceContract.test.mjs', false]],
+  ['p0-vela-fyers-pipeline', ['src/p0VelaFyersPipelineContract.test.mjs', false]],
   ['corespirit-vela-secondary-data-p0', ['tools/coreSpiritVelaSecondaryDataContract.mjs', false]],
 ];
 
