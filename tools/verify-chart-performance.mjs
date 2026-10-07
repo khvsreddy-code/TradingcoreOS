@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 
 const urls = (process.env.TCO_BROWSER_URLS || process.env.TCO_BROWSER_URL || 'http://localhost:5173/live').split(',').map((value) => value.trim()).filter(Boolean);
 const expectedCellsList = (process.env.TCO_EXPECTED_CELLS || '1').split(',').map((value) => Math.max(1, Number(value) || 1));
+const requireAuth = process.env.TCO_REQUIRE_AUTH === 'true';
+const authMarker = String(process.env.TCO_AUTH_MARKER || 'TradingCoreOS').trim();
 const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 25);
 const maxRenderRateHz = Number(process.env.TCO_MAX_RENDER_RATE_HZ || 150);
 const maxComputeRateHz = Number(process.env.TCO_MAX_COMPUTE_RATE_HZ || 60);
@@ -26,6 +28,13 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
 
   const content = run(['eval', 'document.body.innerText.trim().length > 0 ? "HAS_CONTENT" : "BLANK"']);
   if (content !== 'HAS_CONTENT') throw new Error(`Browser verification: blank page for ${url}`);
+  if (requireAuth) {
+    const authJson = run(['eval', `(() => { const body=document.body.innerText||''; const supaKeys=Object.keys(localStorage||{}).filter(k=>/supabase|auth/i.test(k)); const loginVisible=/sign\\s*in|log\\s*in|authentication required/i.test(body); return JSON.stringify({loginVisible,supaKeys,marker:body.includes(${JSON.stringify(authMarker)})}); })()`]);
+    const authState = JSON.parse(authJson);
+    if (authState.loginVisible || !authState.supaKeys.length) {
+      throw new Error(`Browser verification: authenticated session not detected for ${url}; provide a logged-in browser context (auth marker: ${authMarker}).`);
+    }
+  }
 
   const overlay = run(['eval', 'document.querySelector("[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay") ? "ERROR_OVERLAY" : "OK"']);
   if (overlay !== 'OK') throw new Error(`Browser verification: framework error overlay detected for ${url}`);
@@ -61,6 +70,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxRenderRateHz,
     maxComputeRateHz,
     requireSharedMemory,
+    requireAuth,
     sharedMemory: perf.sharedMemory,
     slowestP95,
     pipeline: perf.pipeline.map((sample) => ({
