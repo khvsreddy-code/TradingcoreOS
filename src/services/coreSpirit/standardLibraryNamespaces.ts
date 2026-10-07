@@ -76,7 +76,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('automation','notify','automation.notify','Host-routed automation notification event.'),
   b('automation','route','automation.route','Host-routed automation execution event.'),
   b('risk','allowed','risk.allowed','Host risk-policy query; never grants broker authority.'),
-  b('background','when','background.when','Conditional chart background projection.')
+  b('background','when','background.when','Conditional chart background projection.'),
   b('data','request','request','Market-data request.'), b('data','requestBatch','requestBatch','Batched request.'), b('data','bid','bid','Bid.'), b('data','ask','ask','Ask.'), b('data','spread','spread','Spread.'), b('data','mid','mid','Mid.'),
   b('state','nz','nz','Missing-value fallback.'), b('state','na','na','Missing-value marker.'), b('state','isNa','isNa','Missing-value predicate.'),
 ]);
