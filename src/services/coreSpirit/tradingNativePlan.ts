@@ -45,6 +45,7 @@ export type CoreSpiritEventTrigger = Readonly<{
   busEvent:string;
   symbol?:string;
   timeframe?:string;
+  filter?: Readonly<{ kind:'signal'|'event'; value:string }>;
 }>;
 
 export type CoreSpiritComputeClass =
@@ -103,40 +104,30 @@ function domainForField(field:string):CoreSpiritDataDomain {
 }
 
 function eventTrigger(value:string):CoreSpiritEventTrigger {
-  const normalized=value.trim().toLowerCase().replace(/\s+/g,'.');
+  const source=value.trim();
+  const normalized=source.toLowerCase().replace(/\s+/g,'.');
+  const signalMatch=source.match(/^signal\s*\(\s*(?:"([^"]*)"|'([^']*)')\s*\)$/i);
+  const eventMatch=source.match(/^event\s*\(\s*(?:"([^"]*)"|'([^']*)')\s*\)$/i);
   const aliases:Record<string,CoreSpiritEventKind> = {
-    'on.bar':'bar',
-    'bar':'bar',
-    'bar.closes':'bar',
-    'on.tick':'tick',
-    'tick':'tick',
-    'on.session.open':'session.open',
-    'session.open':'session.open',
-    'on.session.close':'session.close',
-    'session.close':'session.close',
-    'on.breakout':'breakout',
-    'breakout':'breakout',
-    'on.signal':'signal',
-    'signal':'signal',
-    'on.order':'order',
-    'order':'order',
-    'on.fill':'fill',
-    'fill':'fill',
+    'on.bar':'bar', 'bar':'bar', 'bar.close':'bar', 'bar.closes':'bar',
+    'on.tick':'tick', 'tick':'tick',
+    'on.session.open':'session.open', 'session.open':'session.open',
+    'on.session.close':'session.close', 'session.close':'session.close',
+    'on.breakout':'breakout', 'breakout':'breakout',
+    'on.signal':'signal', 'signal':'signal',
+    'on.order':'order', 'order':'order',
+    'on.fill':'fill', 'fill':'fill',
+    'on.market.status':'market.status', 'market.status':'market.status',
+    'on.replay.step':'replay.step', 'replay.step':'replay.step',
   };
-  const kind=aliases[normalized] ?? 'bar';
+  const kind:CoreSpiritEventKind = signalMatch ? 'signal' : eventMatch ? 'signal' : aliases[normalized] ?? 'bar';
   const busEvent:Record<CoreSpiritEventKind,string> = {
-    'bar':'market.bar',
-    'tick':'market.tick',
-    'session.open':'market.session.open',
-    'session.close':'market.session.close',
-    'breakout':'market.breakout',
-    'signal':'script.signal',
-    'order':'execution.order',
-    'fill':'execution.fill',
-    'market.status':'market.status',
-    'replay.step':'replay.step',
+    'bar':'market.bar', 'tick':'market.tick', 'session.open':'market.session.open', 'session.close':'market.session.close',
+    'breakout':'market.breakout', 'signal':'script.signal', 'order':'execution.order', 'fill':'execution.fill',
+    'market.status':'market.status', 'replay.step':'replay.step',
   };
-  return { kind, source:value, busEvent:busEvent[kind] };
+  const filterValue=signalMatch?.[1] ?? signalMatch?.[2] ?? eventMatch?.[1] ?? eventMatch?.[2];
+  return Object.freeze({ kind, source:value, busEvent:busEvent[kind], ...(filterValue ? { filter:{kind:'signal' as const,value:filterValue} } : {}) });
 }
 
 function visit(
