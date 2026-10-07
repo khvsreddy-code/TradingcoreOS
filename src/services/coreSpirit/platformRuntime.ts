@@ -33,7 +33,7 @@ export class CoreSpiritPlatformRuntime {
   private readonly scanner = new CoreSpiritScanner();
 
   compile(source: string, sourceId = 'coreSpirit', layer: CoreSpiritProgramLayer = 'script'): CoreSpiritPlatformCompile {
-    const result = this.compiler.compile(parseCoreSpirit(source), sourceId, { layer });
+    const result = this.compiler.compileSource(source, sourceId, { layer });
     if (!result.ir || !result.artifact) return { result };
     return { result, artifact: makeExecutableArtifact(result.ir) };
   }
