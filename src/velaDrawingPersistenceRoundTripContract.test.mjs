@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { migrateVelaDrawings } from './services/core/chart/velaNativeChartKernel.ts';
+import { migrateVelaDrawingDocument } from './services/core/chart/velaDrawingPersistence.ts';
 
 const drawing = {
   id: 'roundtrip-hline',
@@ -10,15 +10,15 @@ const drawing = {
 };
 
 const storedDocument = { version: 1, drawings: [drawing] };
-const migratedOnLoad = migrateVelaDrawings(storedDocument);
+const migratedOnLoad = migrateVelaDrawingDocument(storedDocument);
 assert.equal(migratedOnLoad.length, 1);
 assert.equal(migratedOnLoad[0]?.id, drawing.id);
 
 const chartStatePayload = { version: 1, drawings: migratedOnLoad };
-const migratedAfterChartState = migrateVelaDrawings(chartStatePayload);
+const migratedAfterChartState = migrateVelaDrawingDocument(chartStatePayload);
 assert.deepEqual(migratedAfterChartState, migratedOnLoad);
 
-const invalidPayload = migrateVelaDrawings({
+const invalidPayload = migrateVelaDrawingDocument({
   version: 1,
   drawings: [{ id: 'bad', type: 'hline', paneId: 'price', anchors: [{ time: 'not-a-number', price: 25000 }], style: {} }],
 });
