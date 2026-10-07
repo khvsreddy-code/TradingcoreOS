@@ -31,6 +31,7 @@ const allowed = new Set([
   path.join(root, 'src/services/core/chart/velaNativeChartRenderer.ts'),
   path.join(root, 'src/services/core/chart/velaWorkspaceLoader.ts'),
   path.join(root, 'src/services/core/chart/velaNativeChartKernel.ts'),
+  path.join(root, 'src/services/core/chart/velaDrawingPersistence.ts'),
 ]);
 for (const file of directVendorImports) if (!allowed.has(file)) throw new Error(`Vela import crossed facade boundary: ${path.relative(root, file)}`);
 
