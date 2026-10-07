@@ -5,11 +5,12 @@ import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEn
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import './services/core/chart/tcoVelaChrome';
+import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
-const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v4-single-default';
+const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
 
@@ -39,6 +40,24 @@ export function LiveTradingWorkspace() {
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
     let cancelled = false;
+    const browserErrors: Array<{ type: 'error' | 'unhandledrejection'; message: string; time: number }> = [];
+    const pushBrowserError = (type: 'error' | 'unhandledrejection', message: string) => {
+      browserErrors.push({ type, message: String(message).slice(0, 500), time: Date.now() });
+      if (browserErrors.length > 50) browserErrors.shift();
+      if (typeof window !== 'undefined') {
+        (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [...browserErrors];
+      }
+    };
+    const onWindowError = (event: ErrorEvent) => {
+      pushBrowserError('error', event.error?.message || event.message || 'Window error');
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unhandled rejection');
+      pushBrowserError('unhandledrejection', reason);
+    };
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [];
 
     const mount = async () => {
       const brokerReady = tradingCoreRuntime.hasConnectedBroker()
@@ -48,7 +67,8 @@ export function LiveTradingWorkspace() {
       await Promise.all([brokerReady, defaultsPromise]);
       const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
       if (cancelled || !host.current) return;
-      const initialLayout = defaults.layout && defaults.layout !== '4' ? defaults.layout : '1';
+      const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
+      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '4');
 
       workspace = new VelaWorkspaceClass(host.current, {
         layout: initialLayout,
@@ -83,7 +103,9 @@ export function LiveTradingWorkspace() {
           left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
           right: ['tco.watchlist', 'tco.journal', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
         },
-        sync: { symbol: false, timeframe: false, crosshair: true, style: false, drawings: false },
+        // Vela owns workspace synchronization. Keep symbols/timeframes independent for
+        // focused multi-chart analysis, but synchronize cursor and visual style across cells.
+        sync: { symbol: false, timeframe: false, crosshair: true, style: true, drawings: false },
         volume: true,
         watermark: true,
         statusline: true,
@@ -92,14 +114,27 @@ export function LiveTradingWorkspace() {
         persist: VELA_STATE_KEY,
         storage: createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
         maxWebglCells: 8,
+        alertCap: 100,
         cells: {
           primary: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
           bank: { symbol: 'NSE:NIFTYBANK-INDEX', timeframe: '5' },
           sensex: { symbol: 'BSE:SENSEX-INDEX', timeframe: '5' },
           finnifty: { symbol: 'NSE:FINNIFTY-INDEX', timeframe: '5' },
+          midcap: { symbol: 'NSE:MIDCPNIFTY-INDEX', timeframe: '5' },
+          nifty1m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '1' },
+          nifty15m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '15' },
+          nifty60m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '60' },
         },
       });
       workspaceRef.current = workspace;
+      if (typeof window !== 'undefined') {
+        (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__ = {
+          workspace,
+          getPerformanceStats: () => workspace?.getPerformanceStats?.() ?? [],
+          setLayout: (layout: string) => workspace?.setLayout(layout),
+          saveNow: () => workspace?.saveNow(),
+        };
+      }
       const bindActiveChart = () => undefined;
       workspaceListenerDisposers.push(
         workspace.on('cell:active', bindActiveChart),
@@ -117,6 +152,13 @@ export function LiveTradingWorkspace() {
       for (const dispose of workspaceListenerDisposers) dispose();
       workspaceListenerDisposers.length = 0;
       workspace?.destroy();
+      window.removeEventListener('error', onWindowError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      if (typeof window !== 'undefined') {
+        const exposed = (window as Window & { __TCO_VELA__?: { workspace?: unknown } }).__TCO_VELA__;
+        if (exposed?.workspace === workspace) delete (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__;
+        delete (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__;
+      }
     };
   }, []);
 
