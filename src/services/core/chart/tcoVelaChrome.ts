@@ -402,6 +402,304 @@ const healthPanel: SidePanelDescriptor = {
   },
 };
 
+
+function panelSectionTitle(text: string): HTMLDivElement {
+  const el = document.createElement('div');
+  el.textContent = text;
+  el.style.cssText = 'font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin:4px 0 2px;';
+  return el;
+}
+
+function panelValueRow(parent: HTMLElement, label: string, value: string, tone = '#cbd5e1'): void {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);';
+  const left = document.createElement('span');
+  left.textContent = label;
+  left.style.cssText = 'font-size:10px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  const right = document.createElement('span');
+  right.textContent = value;
+  right.style.cssText = `font-size:10px;color:${tone};font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;`;
+  row.append(left, right);
+  parent.appendChild(row);
+}
+
+const replayPanel: SidePanelDescriptor = {
+  id: 'tco.replay',
+  title: 'Replay',
+  icon: 'play',
+  order: 15,
+  width: 320,
+  resizable: true,
+  minWidth: 280,
+  maxWidth: 460,
+  mount(ctx, body, header) {
+    header.setTitle('Vela Replay');
+    const root = panelRoot(body);
+    const status = document.createElement('div');
+    status.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:8px;';
+    root.appendChild(status);
+
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;';
+    root.appendChild(controls);
+
+    const input = document.createElement('input');
+    input.type = 'datetime-local';
+    input.title = 'Replay start';
+    input.style.cssText = 'grid-column:1/-1;border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:7px 8px;background:#0c111a;color:#cbd5e1;font:10px ui-monospace;box-sizing:border-box;';
+    root.insertBefore(input, controls);
+
+    const makeButton = (label: string, handler: () => void): HTMLButtonElement => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.style.cssText = 'border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:7px 6px;background:#0c111a;color:#cbd5e1;font:10px ui-monospace;cursor:pointer;';
+      button.addEventListener('click', handler);
+      controls.appendChild(button);
+      return button;
+    };
+
+    makeButton('Start', () => {
+      const raw = input.value ? new Date(input.value).getTime() : Date.now() - 60 * 60 * 1000;
+      void ctx.replay.start({ from: Number.isFinite(raw) ? raw : Date.now() - 60 * 60 * 1000 }).catch(error => {
+        ctx.toast(error instanceof Error ? error.message : String(error), 'error');
+      });
+    });
+    makeButton('Step', () => { if (!ctx.replay.step()) ctx.toast('Replay has reached the end.', 'info'); });
+    makeButton('Play', () => { ctx.replay.play(250); });
+    makeButton('Pause', () => { ctx.replay.pause(); });
+    makeButton('Stop', () => { ctx.replay.stop(); });
+
+    const refresh = () => {
+      const state = ctx.replay.state;
+      status.textContent = state.active
+        ? `ACTIVE · ${state.playing ? 'PLAYING' : 'PAUSED'} · ${state.cursorTime ? new Date(state.cursorTime).toLocaleString('en-IN') : '—'}`
+        : 'READY · multi-chart replay follows one Vela clock';
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 250);
+    const offStart = ctx.replay.on('replay:start', refresh);
+    const offStep = ctx.replay.on('replay:step', refresh);
+    const offPlay = ctx.replay.on('replay:play', refresh);
+    const offPause = ctx.replay.on('replay:pause', refresh);
+    const offEnd = ctx.replay.on('replay:end', refresh);
+    return {
+      onOpen: refresh,
+      onChart: refresh,
+      destroy() {
+        window.clearInterval(timer);
+        offStart(); offStep(); offPlay(); offPause(); offEnd();
+      },
+    };
+  },
+};
+
+const positionsPanel: SidePanelDescriptor = {
+  id: 'tco.positions',
+  title: 'Positions',
+  icon: 'briefcase',
+  order: 40,
+  width: 360,
+  resizable: true,
+  minWidth: 300,
+  maxWidth: 560,
+  mount(ctx, body, header) {
+    header.setTitle('Positions');
+    const root = panelRoot(body);
+    const summary = document.createElement('div');
+    summary.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:6px;';
+    root.appendChild(summary);
+    const rows = document.createElement('div');
+    rows.style.cssText = 'min-height:0;overflow:auto;';
+    root.appendChild(rows);
+
+    const render = async () => {
+      rows.textContent = '';
+      try {
+        const positions = await tradingCoreRuntime.getPositions();
+        summary.textContent = `${positions.length} open positions · ${ctx.symbol}`;
+        if (!positions.length) {
+          rows.appendChild(panelSectionTitle('No open positions'));
+          return;
+        }
+        for (const position of positions) {
+          const card = document.createElement('div');
+          card.style.cssText = 'padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06);';
+          panelValueRow(card, position.symbol, String(position.quantity), position.quantity >= 0 ? '#cbd5e1' : '#fda4af');
+          panelValueRow(card, 'Avg', Number(position.avgPrice).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
+          panelValueRow(card, 'LTP', Number(position.ltp).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
+          panelValueRow(card, 'P&L', Number(position.pnl).toLocaleString('en-IN', { maximumFractionDigits: 2 }), Number(position.pnl) >= 0 ? '#4ade80' : '#fb7185');
+          rows.appendChild(card);
+        }
+      } catch (error) {
+        summary.textContent = 'Position service unavailable';
+        const msg = document.createElement('div');
+        msg.textContent = error instanceof Error ? error.message : String(error);
+        msg.style.cssText = 'font-size:10px;color:#fb7185;padding:10px 0;';
+        rows.appendChild(msg);
+      }
+    };
+
+    void render();
+    const timer = window.setInterval(() => void render(), 3000);
+    return { onOpen: () => void render(), onChart: () => void render(), destroy: () => window.clearInterval(timer) };
+  },
+};
+
+const riskPanel: SidePanelDescriptor = {
+  id: 'tco.risk',
+  title: 'Risk',
+  icon: 'shield',
+  order: 45,
+  width: 340,
+  resizable: true,
+  minWidth: 280,
+  maxWidth: 500,
+  mount(_ctx, body, header) {
+    header.setTitle('Risk');
+    const root = panelRoot(body);
+    const rows = document.createElement('div');
+    root.appendChild(rows);
+
+    const render = async () => {
+      rows.textContent = '';
+      try {
+        const [funds, positions] = await Promise.all([
+          tradingCoreRuntime.getFunds(),
+          tradingCoreRuntime.getPositions(),
+        ]);
+        panelValueRow(rows, 'Available margin', funds ? Number(funds.availableMargin).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+        panelValueRow(rows, 'Used margin', funds ? Number(funds.usedMargin).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+        panelValueRow(rows, 'Collateral', funds ? Number(funds.collateralMargin).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+        panelValueRow(rows, 'Open positions', String(positions.length));
+        const gross = positions.reduce((sum, p) => sum + Math.abs(Number(p.quantity) * Number(p.ltp)), 0);
+        const pnl = positions.reduce((sum, p) => sum + Number(p.pnl || 0), 0);
+        panelValueRow(rows, 'Gross exposure', gross.toLocaleString('en-IN', { maximumFractionDigits: 2 }));
+        panelValueRow(rows, 'Open P&L', pnl.toLocaleString('en-IN', { maximumFractionDigits: 2 }), pnl >= 0 ? '#4ade80' : '#fb7185');
+      } catch (error) {
+        const msg = document.createElement('div');
+        msg.textContent = error instanceof Error ? error.message : String(error);
+        msg.style.cssText = 'font-size:10px;color:#fb7185;padding:10px 0;';
+        rows.appendChild(msg);
+      }
+    };
+    void render();
+    const timer = window.setInterval(() => void render(), 3000);
+    return { onOpen: () => void render(), onChart: () => void render(), destroy: () => window.clearInterval(timer) };
+  },
+};
+
+const orderBookPanel: SidePanelDescriptor = {
+  id: 'tco.orderbook',
+  title: 'Order Book',
+  icon: 'list',
+  order: 50,
+  width: 320,
+  resizable: true,
+  minWidth: 260,
+  maxWidth: 460,
+  mount(ctx, body, header) {
+    header.setTitle('Order Book');
+    const root = panelRoot(body);
+    const meta = document.createElement('div');
+    meta.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:7px;';
+    root.appendChild(meta);
+    const ladder = document.createElement('div');
+    ladder.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+    root.appendChild(ladder);
+
+    const render = () => {
+      ladder.textContent = '';
+      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol);
+      meta.textContent = `${ctx.symbol} · ${ctx.timeframe} · live`;
+      const asks = Array.isArray((tick as any)?.ask) ? (tick as any).ask : [];
+      const bids = Array.isArray((tick as any)?.bid) ? (tick as any).bid : [];
+      const row = (side: 'ASK'|'BID', level: any, index: number) => {
+        const price = Number(level?.price);
+        if (!Number.isFinite(price)) return;
+        const el = document.createElement('div');
+        el.style.cssText = 'display:grid;grid-template-columns:42px 1fr 1fr;gap:8px;padding:5px 6px;border-radius:5px;background:rgba(255,255,255,.025);font:10px ui-monospace;';
+        const s = document.createElement('span'); s.textContent = `${side} ${index + 1}`; s.style.color = side === 'BID' ? '#4ade80' : '#fb7185';
+        const p = document.createElement('span'); p.textContent = price.toLocaleString('en-IN', { maximumFractionDigits: 2 }); p.style.color = '#e2e8f0';
+        const q = document.createElement('span'); q.textContent = String(Number(level?.quantity || 0)); q.style.color = '#94a3b8';
+        el.append(s,p,q); ladder.appendChild(el);
+      };
+      asks.slice().reverse().forEach((level: any, index: number) => row('ASK', level, index));
+      const mid = document.createElement('div');
+      mid.style.cssText = 'height:1px;background:rgba(255,255,255,.10);margin:4px 0;';
+      ladder.appendChild(mid);
+      bids.forEach((level: any, index: number) => row('BID', level, index));
+      if (!asks.length && !bids.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'Depth data unavailable for this symbol.';
+        empty.style.cssText = 'font-size:10px;color:#64748b;padding:12px 0;';
+        ladder.appendChild(empty);
+      }
+    };
+    render();
+    const timer = window.setInterval(render, 500);
+    return { onOpen: render, onChart: render, destroy: () => window.clearInterval(timer) };
+  },
+};
+
+const optionsPanel: SidePanelDescriptor = {
+  id: 'tco.options',
+  title: 'Options',
+  icon: 'layers',
+  order: 55,
+  width: 440,
+  resizable: true,
+  minWidth: 340,
+  maxWidth: 620,
+  mount(ctx, body, header) {
+    header.setTitle('Options Chain');
+    const root = panelRoot(body);
+    const meta = document.createElement('div');
+    meta.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:7px;';
+    root.appendChild(meta);
+    const table = document.createElement('div');
+    table.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;';
+    root.appendChild(table);
+
+    let requestKey = '';
+    const render = async () => {
+      const symbol = String(ctx.symbol || '').trim();
+      if (!symbol) return;
+      if (requestKey === symbol) return;
+      requestKey = symbol;
+      try {
+        const chain = await tradingCoreRuntime.getOptionChain(symbol);
+        table.textContent = '';
+        meta.textContent = `${symbol} · ${chain.expiry} · Spot ${Number(chain.spot || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+        const head = document.createElement('div');
+        head.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:4px 6px;color:#64748b;font:9px ui-monospace;text-transform:uppercase;';
+        head.innerHTML = '<span>Call</span><span>Strike</span><span>Put</span>';
+        table.appendChild(head);
+        const contracts = Array.isArray(chain.contracts) ? chain.contracts : [];
+        for (const contract of contracts.slice(0, 40)) {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:5px 6px;border-radius:5px;background:rgba(255,255,255,.025);font:10px ui-monospace;';
+          const call = document.createElement('span'); call.textContent = contract.call?.ltp != null ? Number(contract.call.ltp).toFixed(2) : '—'; call.style.color = '#4ade80';
+          const strike = document.createElement('span'); strike.textContent = Number(contract.strike).toLocaleString('en-IN', { maximumFractionDigits: 2 }); strike.style.color = '#e2e8f0'; strike.style.textAlign = 'center';
+          const put = document.createElement('span'); put.textContent = contract.put?.ltp != null ? Number(contract.put.ltp).toFixed(2) : '—'; put.style.color = '#fb7185'; put.style.textAlign = 'right';
+          row.append(call,strike,put); table.appendChild(row);
+        }
+      } catch (error) {
+        table.textContent = '';
+        const msg = document.createElement('div');
+        msg.textContent = error instanceof Error ? error.message : String(error);
+        msg.style.cssText = 'font-size:10px;color:#fb7185;padding:10px 0;';
+        table.appendChild(msg);
+      } finally {
+        requestKey = '';
+      }
+    };
+    void render();
+    const timer = window.setInterval(() => void render(), 5000);
+    return { onOpen: () => void render(), onChart: () => void render(), destroy: () => window.clearInterval(timer) };
+  },
+};
+
 const journalPanel: SidePanelDescriptor = {
   id: 'tco.journal', title: 'Journal', icon: 'calendar', order: 20, width: 340, resizable: true, minWidth: 280, maxWidth: 520,
   mount(ctx, body, header) {
@@ -508,6 +806,66 @@ const brandAction: WidgetActionDescriptor = {
   run() {},
 };
 
+const replayAction: WidgetActionDescriptor = {
+  id: 'tco.replay',
+  target: 'topbar',
+  label: 'Replay',
+  icon: 'play',
+  iconOnly: false,
+  align: 'right',
+  order: 3,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.replay'); },
+};
+
+const positionsAction: WidgetActionDescriptor = {
+  id: 'tco.positions',
+  target: 'topbar',
+  label: 'Positions',
+  icon: 'briefcase',
+  iconOnly: false,
+  align: 'right',
+  order: 4,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.positions'); },
+};
+
+const riskAction: WidgetActionDescriptor = {
+  id: 'tco.risk',
+  target: 'topbar',
+  label: 'Risk',
+  icon: 'shield',
+  iconOnly: true,
+  align: 'right',
+  order: 5,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.risk'); },
+};
+
+const orderBookAction: WidgetActionDescriptor = {
+  id: 'tco.orderbook',
+  target: 'topbar',
+  label: 'Order Book',
+  icon: 'list',
+  iconOnly: true,
+  align: 'right',
+  order: 6,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.orderbook'); },
+};
+
+const optionsAction: WidgetActionDescriptor = {
+  id: 'tco.options',
+  target: 'topbar',
+  label: 'Options',
+  icon: 'layers',
+  iconOnly: true,
+  align: 'right',
+  order: 7,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.options'); },
+};
+
 const watchlistAction: WidgetActionDescriptor = {
   id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: false, align: 'right', order: 0, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
@@ -536,6 +894,11 @@ const brokerAction: WidgetActionDescriptor = {
 registerSidePanel(bookmarksPanel);
 registerSidePanel(journalPanel);
 registerSidePanel(healthPanel);
+registerSidePanel(replayPanel);
+registerSidePanel(positionsPanel);
+registerSidePanel(riskPanel);
+registerSidePanel(orderBookPanel);
+registerSidePanel(optionsPanel);
 registerWidgetAction(brandAction);
 const marketHealthAction: WidgetActionDescriptor = {
   id: 'tco.market-health',
@@ -590,6 +953,11 @@ const healthAttachment: WidgetAttachment = {
 
 registerWidgetAction(marketHealthAction);
 registerWidgetAttachment(healthAttachment);
+registerWidgetAction(replayAction);
+registerWidgetAction(positionsAction);
+registerWidgetAction(riskAction);
+registerWidgetAction(orderBookAction);
+registerWidgetAction(optionsAction);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(journalAction);
 registerWidgetAction(panelsAction);
