@@ -35,7 +35,9 @@ import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProf
 import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, type CoreSpiritDirtyExecutionPlan } from './dirtyGraph';
 import { CoreSpiritColumnarHistory } from './columnarMarketData';
 
-export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string } }) => unknown;
+export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
+export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
+export type CoreSpiritRiskResolver = (input: { action:string; symbol:string; quantity?:number; sourceId:string; timestamp:number }) => boolean;
 export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
@@ -83,6 +85,8 @@ export class CoreSpiritRuntime {
   private reactiveEffects = 0;
   private realtimeLifecycle: 'idle'|'evaluating'|'committed' = 'idle';
   private readonly modelOutputResolver?: CoreSpiritModelOutputResolver;
+  private readonly modelPredictionResolver?: CoreSpiritModelPredictionResolver;
+  private readonly riskResolver?: CoreSpiritRiskResolver;
   private readonly eventResolver?: (eventName:string)=>boolean|unknown;
   private readonly executionTarget: CoreSpiritExecutionTarget = 'chart';
   private readonly layer: CoreSpiritProgramLayer = 'script';
@@ -133,6 +137,8 @@ export class CoreSpiritRuntime {
     this.dataResolver = options.dataResolver;
     this.profiler = new CoreSpiritProfiler(options.profiler);
     this.modelOutputResolver = options.modelOutputResolver;
+    this.modelPredictionResolver = options.modelPredictionResolver;
+    this.riskResolver = options.riskResolver;
     this.eventResolver = options.eventResolver;
     this.executionTarget = options.executionTarget || 'chart';
     this.executionTier = options.executionTier === 'reference' ? 'reference' : 'optimized';
@@ -698,6 +704,38 @@ export class CoreSpiritRuntime {
       const binding=declaration?.kind==='model' ? declaration.binding : undefined;
       return finish(this.capabilityHost.resolveModel({modelName,field,binding}));
     }
+    if(name==='__model_predict' || name==='__model_probability') {
+      const rawRef=args[0];
+      const modelName=rawRef && typeof rawRef==='object' ? String((rawRef as Record<string,unknown>).modelName ?? '') : String(rawRef ?? '');
+      const inputs:Record<string,unknown>={};
+      for(let i=1;i+1<args.length;i+=2) inputs[String(args[i])]=args[i+1];
+      const field=name==='__model_probability' ? 'probability' : 'prediction';
+      const resolved=this.modelPredictionResolver?.({modelName,field,inputs})
+        ?? this.modelOutputResolver?.({modelName,field,binding:(()=>{const d=this.loadedSurface?.declarations.find((item): item is Extract<CoreSpiritSurfaceDeclaration,{kind:'model'}> => item.kind==='model'&&item.name===modelName);return d?.binding;})(),inputs})
+        ?? null;
+      return finish(typeof resolved === 'number' || typeof resolved === 'boolean' || typeof resolved === 'string' ? resolved : (resolved == null ? null : (resolved as any).value ?? resolved));
+    }
+    if(name==='model.predict' || name==='model.probability') {
+      const modelName=String(args[0]??'');
+      const inputs:Record<string,unknown>={};
+      for(let i=1;i+1<args.length;i+=2) inputs[String(args[i])]=args[i+1];
+      const field=name==='model.probability' ? 'probability' : 'prediction';
+      return finish(this.modelPredictionResolver?.({modelName,field,inputs}) ?? this.modelOutputResolver?.({modelName,field,inputs}) ?? null);
+    }
+    if(name==='risk.allowed') {
+      const quantity=Number(args[0]);
+      return finish(this.riskResolver?.({action:'evaluate',symbol:this.executionContext.symbol,quantity:Number.isFinite(quantity)?quantity:undefined,sourceId:this.options.sourceId,timestamp:this.state.barState.time}) ?? false);
+    }
+    if(name==='automation.notify' || name==='automation.route') {
+      const action=name==='automation.notify' ? 'automation.notify' : 'automation.route';
+      const message=String(args[0]??'');
+      const target=args[1]==null ? undefined : String(args[1]);
+      this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time:this.toEpoch(bar.timestamp),name:action,metadata:{message,target,barIndex:index,action}});
+      return finish({__coreSpiritAutomationEvent:true,action,message,target});
+    }
+    if(name==='background.when') {
+      return finish(this.truthy(args[0]) ? String(args[1]??'') : null);
+    }
     if(name==='model') return finish({ __coreSpiritModelRef:true, modelName:String(args[0]??'') });
     if(name==='market') return finish({ kind:'market', symbol:String(args[0]??this.executionContext.symbol), timeframe:this.executionContext.timeframe });
     if(name==='timeframe') return finish({ kind:'timeframe', timeframe:String(args[0]??this.executionContext.timeframe) });
@@ -742,6 +780,13 @@ export class CoreSpiritRuntime {
     if (name==='sqrt') return finish(Math.sqrt(Number(args[0])));
     if (name==='pow') return finish(Math.pow(Number(args[0]), Number(args[1])));
     if (name==='log') return finish(Math.log(Number(args[0])));
+    if (name==='roc') {
+      const period=Math.max(1,Math.floor(Number(args[1] ?? 1)));
+      const current=Number(args[0]);
+      const seriesName=seriesArgs[0] || 'close';
+      const previous=this.loadSeries(seriesName,period,bar,bars,index);
+      return finish(Number.isFinite(current) && previous !== null && Number.isFinite(Number(previous)) && Number(previous)!==0 ? (current/Number(previous)-1)*100 : null);
+    }
     if (name==='exp') return finish(Math.exp(Number(args[0])));
     if(name==='returns'){
       const ref=args[0];
@@ -1018,6 +1063,7 @@ export class CoreSpiritRuntime {
         const price=num(args[0]); if(Number.isFinite(price)) outputs.push({kind:'hline',id:`${this.options.sourceId}:hline:${outputId||'hline'}:${barIndex}`,price,style:{color:color(args[1],'#64748b'),lineWidth:Number.isFinite(num(args[2]))?Math.max(1,Math.min(6,num(args[2]))):1,lineStyle:Number.isFinite(num(args[3]))?num(args[3]):0}});
       }
       else if(kind==='bg' || kind==='barcolor'){
+        if(kind==='bg' && args.length>=3 && args[0]==null) return;
         const c=color(args[0],'#2563eb'), opacity=Number.isFinite(num(args[1]))?Math.max(0,Math.min(1,num(args[1]))):0.12;
         outputs.push({kind:kind==='bg'?'background':'barcolor',id:`${this.options.sourceId}:${kind}:${barIndex}`,time,color:c,opacity,metadata:{barIndex,source:this.options.sourceId}} as any);
       }
