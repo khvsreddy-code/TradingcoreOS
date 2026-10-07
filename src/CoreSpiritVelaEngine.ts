@@ -207,14 +207,15 @@ export class CoreSpiritVelaEngine {
       const now=Date.now();
       if (!force && secondaryRefreshPromise) return secondaryRefreshPromise;
       if (!force && now-secondaryLastRefreshAt<1500) return;
-      const endTime=bars.length?barTimeMillis(bars[bars.length-1]?.timestamp):undefined;
-      const limit=Math.min(50000,Math.max(5000,bars.length+token.ir.maxLookback+64));
+      const latestBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+      const endTime=latestBars.length?barTimeMillis(latestBars[latestBars.length-1]?.timestamp):undefined;
+      const limit=Math.min(50000,Math.max(5000,latestBars.length+token.ir.maxLookback+64));
       const task=Promise.all(secondaryDependencies.map(async dep=>{
         const key=dependencyKey(dep.symbol,dep.timeframe);
         try{
           const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{to:Number.isFinite(endTime)?endTime:undefined,limit});
           if(rows?.length)secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
-          else if(req.mode==='live')handlers.onWarning?.({message:`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`,method:'secondary-data',bar:Math.max(0,bars.length-1)});
+          else if(req.mode==='live')handlers.onWarning?.({message:`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`,method:'secondary-data',bar:Math.max(0,latestBars.length-1)});
         }catch(error){
           if(req.mode==='live')handlers.onWarning?.({
             message:`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`,
