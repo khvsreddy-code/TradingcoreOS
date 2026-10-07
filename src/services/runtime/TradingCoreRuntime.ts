@@ -219,10 +219,14 @@ export class TradingCoreRuntime {
         }
 
         const byTime = new Map<number, HistoricalCandle>();
+        const epochMs = (raw: unknown): number => {
+          const numeric = typeof raw === 'number' ? raw : Number(raw);
+          if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
+          const parsed = Date.parse(String(raw ?? ''));
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
         for (const row of rows || []) {
-          const raw = (row as any)?.timestamp;
-          const parsed = typeof raw === 'number' ? raw : Date.parse(String(raw));
-          const time = Number.isFinite(parsed) ? (parsed > 1e12 ? parsed : parsed * 1000) : 0;
+          const time = epochMs((row as any)?.timestamp);
           if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
           byTime.set(time, row);
         }
@@ -290,7 +294,7 @@ export class TradingCoreRuntime {
         .slice(-requestedLimit);
       if (!ordered.length) return null;
       return {
-        time: ordered.map(row => Date.parse(String(row.timestamp))),
+        time: ordered.map(row => epochMs((row as any)?.timestamp)),
         open: ordered.map(row => Number(row.open)),
         high: ordered.map(row => Number(row.high)),
         low: ordered.map(row => Number(row.low)),
