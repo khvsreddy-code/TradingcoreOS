@@ -2,7 +2,7 @@ import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
 import { CoreSpiritType, compatible, isBooleanType, isNumericType, isStateType, joinTypes, normalizeDeclaredType, elementType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
-import { combineSemanticArithmetic, compareSemanticTypes, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
+import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
 import { canUseCapability, type CoreSpiritProgramLayer } from './layeredPlatformContract';
@@ -279,7 +279,12 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return undefined;
       }
       case 'index': {
-        const target=inferSemantic(n.target,scope); return target?.kind==='series' ? scalarize(target) : target;
+        const target=inferSemantic(n.target,scope);
+        if(!target) return undefined;
+        const inherited=mergeSemanticMetadata([target]);
+        const constantIndex=constantNumber(n.index);
+        const lookback=constantIndex!==undefined && constantIndex>=0 ? Math.max(inherited.lookback,constantIndex) : inherited.lookback;
+        return target.kind==='series' ? scalarize({ ...target, ...inherited, lookback }) : target;
       }
       case 'unary': {
         const operand=inferSemantic(n.operand,scope); return n.operator==='!' ? semanticScalar('boolean') : operand;
@@ -310,8 +315,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='series') {
           return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
         }
-        if(n.name==='model') return semanticScalar('model',{valueKind:'model'});
-        if(n.name==='bar_index') return semanticScalar('number');
+        if(n.name==='model') return semanticScalar('model',{valueKind:'model',phase:'developing',causal:true,lookahead:false,lookback:0});
+        if(n.name==='bar_index') return semanticScalar('number',{phase:'developing',causal:true,lookahead:false,lookback:0});
+        if(n.name==='signal') return semanticScalar('number',{valueKind:'signalIntent',phase:'developing',causal:true,lookahead:false,lookback:0});
         const component=resolveCoreSpiritComponent(componentSource,n.name);
         if(component){
           const result=componentResultLanguageType(component);
@@ -328,10 +334,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='time') return semanticSeries('time',{unit:'timestamp'});
         if(semanticBuiltinSeries.has(n.name)) {
           const source=args[0];
-          if(n.name==='rsi' || n.name==='mfi' || n.name==='cci' || n.name==='roc' || n.name==='stoch') return semanticSeries('number',{unit:'percent'});
-          if(n.name==='atr' || n.name==='trueRange' || n.name==='tr') return semanticSeries('price',{unit:'price'});
-          if(n.name==='vwap') return semanticSeries('price',{unit:'price'});
-          if(source) return source.kind==='series' ? source : semanticSeries('number');
+          if(n.name==='rsi' || n.name==='mfi' || n.name==='cci' || n.name==='roc' || n.name==='stoch') return semanticSeries('number',{unit:'percent',...mergeSemanticMetadata(args)});
+          if(n.name==='atr' || n.name==='trueRange' || n.name==='tr') return semanticSeries('price',{unit:'price',...mergeSemanticMetadata(args)});
+          if(n.name==='vwap') return semanticSeries('price',{unit:'price',...mergeSemanticMetadata(args)});
+          if(source) return source.kind==='series' ? { ...source, ...mergeSemanticMetadata(args) } : semanticSeries('number',{...mergeSemanticMetadata(args)});
           return semanticSeries('number');
         }
         if(semanticNumericFunctions.has(n.name)) return args[0];
@@ -347,8 +353,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           const resolved=resolveCoreSpiritLibraryCall(n.target.name,n.member,componentSource);
           if (resolved?.builtin) {
             const argTypes=n.args.map(x=>inferSemantic(x,scope));
-            if (resolved.builtin.returnType === 'prediction<number>') return semanticScalar('number',{valueKind:'prediction'});
-            if (resolved.builtin.returnType === 'probability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability'});
+            if (resolved.builtin.returnType === 'prediction<number>') return semanticScalar('number',{valueKind:'prediction',phase:'developing',causal:true,lookahead:false,lookback:0});
+            if (resolved.builtin.returnType === 'probability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability',phase:'developing',causal:true,lookahead:false,lookback:0});
+            if (resolved.builtin.returnType === 'signal-intent') return semanticScalar('number',{valueKind:'signalIntent',phase:'developing',causal:true,lookahead:false,lookback:0});
             if (typeof resolved.builtin.returnType === 'string' && resolved.builtin.returnType.startsWith('series<')) {
               const source=argTypes[0];
               return source?.kind==='series' ? source : semanticSeries('number');
