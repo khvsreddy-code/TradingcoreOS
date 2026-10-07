@@ -140,7 +140,7 @@ const graph = unifiedResult.ir?.semanticDependencyGraph;
 assert.ok(graph?.nodes.some(node => node.kind === 'model' && node.name === 'trendModel'));
 assert.ok(graph?.nodes.some(node => node.kind === 'model-input' && node.name === 'trend'));
 assert.ok(graph?.nodes.some(node => node.kind === 'model-input' && node.name === 'volatility'));
-assert.ok(graph?.nodes.some(node => node.kind === 'model-output' && node.name === 'trendModel.prediction'));
+assert.ok(graph?.nodes.some(node => node.kind === 'model-output' && node.name === 'trendModel.predict'));
 assert.ok(graph?.nodes.some(node => node.kind === 'automation' && node.name === 'automation.notify'));
 assert.ok(graph?.edges.some(edge => edge.to === 'model:trendModel' && edge.relation === 'depends-on'));
 const predictInstruction = unifiedResult.ir?.entry.instructions.find(instruction => instruction.op === 'call' && instruction.name === '__model_predict');
