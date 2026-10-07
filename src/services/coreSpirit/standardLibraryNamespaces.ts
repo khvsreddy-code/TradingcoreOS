@@ -70,7 +70,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('probability','probability','probability','Probability primitive.'),
   b('stats','beta','beta','Rolling regression beta.'),
   b('stats','roc','roc','Rate of change.'), b('probability','sigmoid','sigmoid','Sigmoid transform.'), k('probability','calibrate','Probability calibration surface.'), k('probability','entropy','Entropy surface.'),
-  b('model','predict','predict','Model prediction.'), b('model','score','score','Model score.'), b('model','ref','model','Model reference.'), k('model','run','MODEL ABI invocation surface.'),
+  b('model','predict','model.predict','Typed model prediction.'), b('model','probability','model.probability','Typed model probability.'), b('model','score','score','Model score.'), b('model','ref','model','Model reference.'), k('model','run','MODEL ABI invocation surface.'),
   b('visual','show','show','Universal SHOW projection.'), b('visual','plot','plot','Plot projection.'),
   b('automation','signal','signal','Signal emission.'), b('automation','emit','emit','Event emission.'), b('automation','order','order','Order intent.'),
   b('automation','notify','automation.notify','Host-routed automation notification event.'),
