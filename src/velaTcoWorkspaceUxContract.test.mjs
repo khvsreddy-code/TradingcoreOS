@@ -28,7 +28,10 @@ assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlis
 assert(topbar.includes("b.dataset.actionId = action.id"));
 assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
-assert(provider.includes("direct && direct.time.length > 0"));
+assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
+assert(provider.includes("await plane.ensureReady(requested)"), "cold Vela history must use ChartDataPlane");
+assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela provider must not bypass the shared history cache");
+
 assert(plane.includes("columns.time.length === 0"));
 
 console.log('TRADINGCORE_V132_VELA_WORKSPACE_UX_AND_CANDLE_FALLBACK_CONTRACT_OK');
