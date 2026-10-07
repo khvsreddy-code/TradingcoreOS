@@ -42,7 +42,10 @@ export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
   layer?: CoreSpiritProgramLayer; executionTarget?: CoreSpiritExecutionTarget; reactiveExecution?: boolean; executionTier?: CoreSpiritExecutionTier;
-  modelOutputResolver?: CoreSpiritModelOutputResolver; eventResolver?: (eventName:string) => boolean | unknown;
+  modelOutputResolver?: CoreSpiritModelOutputResolver;
+  modelPredictionResolver?: CoreSpiritModelPredictionResolver;
+  riskResolver?: CoreSpiritRiskResolver;
+  eventResolver?: (eventName:string) => boolean | unknown;
   profiler?: CoreSpiritProfilerOptions;
 };
 export type CoreSpiritRuntimeState = {
