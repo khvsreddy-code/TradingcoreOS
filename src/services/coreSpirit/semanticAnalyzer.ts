@@ -281,6 +281,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.target.type==='call' && (n.target.name==='market'||n.target.name==='timeframe'||n.target.name==='series')) {
           const symbol = n.target.name==='market' && n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'current';
           const tf = (n.target.name==='timeframe'||n.target.name==='series') ? (n.target.args[0]?.type==='string' ? String(n.target.args[0].value) : 'requested') : 'chart';
+          if(n.target.name==='market' && n.member==='orderbook') return semanticScalar('orderbook',{valueKind:'observed',symbol,timeframe:tf,phase:'developing',causal:true,lookahead:false,lookback:0});
+          if(n.target.name==='market' && n.member==='footprint') return semanticScalar('footprint',{valueKind:'observed',symbol,timeframe:tf,phase:'developing',causal:true,lookahead:false,lookback:0});
+          if(n.target.name==='market' && n.member==='volumeProfile') return semanticScalar('number',{valueKind:'observed',symbol,timeframe:tf,unit:'volume-profile',phase:'developing',causal:true,lookahead:false,lookback:0});
+          if(n.target.name==='market' && n.member==='trade') return semanticScalar('tick',{valueKind:'observed',symbol,timeframe:tf,phase:'developing',causal:true,lookahead:false,lookback:0});
           return semanticSeriesField(n.member, symbol, tf);
         }
         const target=inferSemantic(n.target,scope);
