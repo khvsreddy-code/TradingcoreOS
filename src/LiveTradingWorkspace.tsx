@@ -82,7 +82,9 @@ export function LiveTradingWorkspace() {
           left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
           right: ['tco.watchlist', 'tco.journal', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
         },
-        sync: { symbol: false, timeframe: false, crosshair: true, style: false, drawings: false },
+        // Vela owns workspace synchronization. Keep symbols/timeframes independent for
+        // focused multi-chart analysis, but synchronize cursor and visual style across cells.
+        sync: { symbol: false, timeframe: false, crosshair: true, style: true, drawings: false },
         volume: true,
         watermark: true,
         statusline: true,
@@ -91,6 +93,7 @@ export function LiveTradingWorkspace() {
         persist: VELA_STATE_KEY,
         storage: createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
         maxWebglCells: 8,
+        alertCap: 100,
         cells: {
           primary: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
           bank: { symbol: 'NSE:NIFTYBANK-INDEX', timeframe: '5' },
