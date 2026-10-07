@@ -13,6 +13,8 @@ export {
   unregisterStatePersistence,
   registerSymbolRanking,
   symbolRanking,
+  registerWidgetAttachment,
+  unregisterWidgetAttachment,
 } from '../../../../vendor/vela/src/widget/contributions';
 export type {
   LegendActionDescriptor,
@@ -23,6 +25,7 @@ export type {
   WidgetContext,
   SymbolRankingHook,
   ExternalIndicatorEntry,
+  WidgetAttachment,
 } from '../../../../vendor/vela/src/widget/contributions';
 export {
   VelaNativeChartKernel as VelaChartFacade,
