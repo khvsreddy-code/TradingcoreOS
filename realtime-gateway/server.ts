@@ -55,7 +55,7 @@ const ownedUsers=new Map<string,OwnedUser>();
 
 function userHasLocalConnections(userId:string):boolean{return(connectionsByUser.get(userId)?.size||0)>0;}
 function ownerValue(userId:string):string{return `${INSTANCE_ID}:${userId}`;}
-function subscriptionKey(record:ConnectionRecord):string{return `tco:realtime:sub:${record.userId}:${record.instanceId ?? INSTANCE_ID}:${record.connectionId}`;}
+function subscriptionKey(record:ConnectionRecord):string{return `tco:realtime:sub:${record.userId}:${INSTANCE_ID}:${record.connectionId}`;}
 function parseKind(value:string):RealtimeKind{const kind=value.toLowerCase();return kind==='orders'||kind==='both'?kind:'market';}
 function parseSymbols(value:string):string[]{return[...new Set(String(value||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,100))];}
 
@@ -180,6 +180,16 @@ function broadcastEvent(payload:any):void{
   }
 }
 
+function serializableConnection(connection:LocalConnection|ConnectionRecord):ConnectionRecord{
+  return {
+    userId:connection.userId,
+    connectionId:connection.connectionId,
+    kind:connection.kind,
+    symbols:[...connection.symbols],
+    updatedAt:connection.updatedAt,
+  };
+}
+
 async function handleControl(payload:any):Promise<void>{
   const userId=String(payload?.userId||'');if(!userId||!ownedUsers.has(userId))return;
   await syncOwnedUser(userId);
@@ -228,7 +238,7 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
     if((nextKind==='market'||nextKind==='both')&&!nextSymbols.length){socket.send(JSON.stringify({type:'error',error:'At least one market symbol is required.'}));return;}
     local.kind=nextKind;local.symbols=nextSymbols;local.updatedAt=Date.now();
     await writeSubscription(local);
-    await broadcast('control',local);
+    await broadcast('control',serializableConnection(local));
     await ensureOwnership(local.userId);
   });
 
@@ -238,7 +248,7 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
     const current=connectionsByUser.get(local.userId);current?.delete(connectionId);
     if(current&&!current.size)connectionsByUser.delete(local.userId);
     await removeSubscription(local);
-    await broadcast('control',local).catch(()=>undefined);
+    await broadcast('control',serializableConnection(local)).catch(()=>undefined);
     if(!userHasLocalConnections(local.userId)&&ownedUsers.has(local.userId)){
       const desired=await loadDesiredConnections(local.userId).catch(()=>[]);
       if(!desired.length)await stopOwnership(local.userId);
@@ -264,7 +274,7 @@ const server=http.createServer((request,response)=>{
 const wss=new WebSocketServer({noServer:true});
 server.on('upgrade',(request,socket,head)=>{
   const requestUrl=new URL(request.url||'/', 'http://localhost');
-  if(requestUrl.pathname!=='/ws'){socket.destroy();return;}
+  if(requestUrl.pathname!=='/ws' && requestUrl.pathname!=='/api/realtime/ws'){socket.destroy();return;}
   if(!coordinationReady){socket.destroy();return;}
   wss.handleUpgrade(request,socket,head,ws=>{void handleConnection(ws,request).catch(error=>{console.error('[TradingCore realtime connection]',error);try{ws.close(1011,'Realtime gateway error');}catch{}});});
 });
