@@ -18,8 +18,14 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run test:contracts
       - run: npm run build
       - run: npm run typecheck
       - run: npm run bundle:budget
+      - name: Browser smoke
+        run: |
+          npm install --no-save --no-audit --no-fund agent-browser
+          npm run dev > /tmp/tradingcoreos.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://localhost:5173/live >/dev/null && break; sleep 1; done
+          TCO_BROWSER_URLS=http://localhost:5173/live TCO_EXPECTED_CELLS=1 TCO_REQUIRE_AUTH=false TCO_REQUIRE_SHARED_MEMORY=false npm run verify:browser
