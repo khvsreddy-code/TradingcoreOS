@@ -6,6 +6,8 @@ assert.equal(validateTradingCoreOSDependency('coreSpirit', 'marketData'), true);
 assert.equal(validateTradingCoreOSDependency('coreSpirit', 'compute'), true);
 assert.equal(validateTradingCoreOSDependency('vela', 'coreSpirit'), true);
 assert.equal(validateTradingCoreOSDependency('trading', 'coreSpirit'), true);
+assert.equal(validateTradingCoreOSDependency('coreSpirit', 'trading'), false);
+assert.equal(validateTradingCoreOSDependency('vela', 'trading'), false);
 assert.equal(validateTradingCoreOSDependency('marketData', 'vela'), false);
 assert.equal(validateTradingCoreOSDependency('compute', 'vela'), false);
 console.log('TRADINGCOREOS_ARCHITECTURE_CONTRACT_OK');
