@@ -58,7 +58,12 @@ export const sessionService = {
   onAuthStateChange(callback: (event: AuthChangeEvent, session: SupabaseSession | null) => void): { unsubscribe: () => void } {
     if (!isSupabaseConfigured()) return { unsubscribe: () => {} };
     const supabase = getSupabaseClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
+    // Supabase auth callbacks run inside the auth lock. Defer all application
+    // async work until the callback returns so profile/settings/network calls
+    // cannot deadlock the auth state machine.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      queueMicrotask(() => callback(event, session));
+    });
     return { unsubscribe: () => subscription.unsubscribe() };
   },
 };
