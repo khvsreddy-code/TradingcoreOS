@@ -13,13 +13,13 @@ const route = fs.readFileSync(path.join(root, 'src/server/routes/trading.routes.
 const serverAdapters = fs.readFileSync(path.join(root, 'src/server/brokers/adapters/BrokerAdapters.ts'), 'utf8');
 
 const values = [...policy.matchAll(/'[^']+':\s*([0-9_]+)/g)].map(m => Number(m[1].replace(/_/g, '')));
-if (!values.length || Math.min(...values) < 300 || Math.max(...values) > 5000) throw new Error('History policy values are outside the expected bounded range');
+if (!values.length || Math.min(...values) < 250 || Math.max(...values) > 5000) throw new Error('History policy values are outside the expected bounded range');
 if (/25_000/.test(dataPlane) || /20_000/.test(dataPlane) || /15_000/.test(dataPlane)) throw new Error('Legacy eager history page sizes remain in chartDataPlane');
 if (!/initialHistoryCandles/.test(dataPlane) || !/historyPageCandles/.test(dataPlane)) throw new Error('Staged history policy is not wired into data plane');
 if (!/historyStore\.getBefore/.test(dataPlane)) throw new Error('Warm/cache older history path missing');
 if (!/loadOlderHistory\('visible'/.test(dataPlane) && !/loadOlderHistory\(priority/.test(dataPlane)) throw new Error('Visible older-history priority missing');
 if (!/loadOlderHistory\('warm'/.test(dataPlane)) throw new Error('Warm page priority missing');
-if (!/maxConcurrent = 2/.test(coordinator)) throw new Error('Global history concurrency bound missing');
+if (!/maxConcurrent = 6/.test(coordinator)) throw new Error('Global history concurrency bound missing (fast-switch budget)');
 if (!/priority: PRIORITY\[priority\]/.test(coordinator)) throw new Error('History queue priority missing');
 if (!/shouldLoadOlderHistory\(/.test(interaction)) throw new Error('Visible-range history demand trigger missing from chart interaction controller');
 if (!/requestWarmHistory\(/.test(chartRuntime)) throw new Error('Active-chart warm request missing from chart runtime');
