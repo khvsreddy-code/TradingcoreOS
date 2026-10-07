@@ -103,7 +103,7 @@ export const isSnapshotType = (type: CoreSpiritType): boolean =>
   type.startsWith('snapshot<');
 
 export const isNumericType = (type: CoreSpiritType): boolean => {
-  if (isNumericScalarType(type)) return true;
+  if (isNumericScalarType(type) || type === 'probability') return true;
   if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type)) {
     const parsed = parseCoreSpiritTemporalType(type);
     return parsed ? ['int', 'float', 'number', 'price', 'volume', 'currency', 'duration', 'time'].includes(parsed.element) : false;
@@ -170,6 +170,7 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'int') return 'int';
   if (name === 'number') return 'number';
   if (name === 'string') return 'string';
+  if (name === 'probability') return 'probability';
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
@@ -189,6 +190,7 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (isModelType(expected) && actual === 'model:ref') return true;
   if (expected === 'model:ref' && isModelType(actual)) return true;
   if (expected === 'number') return isNumericType(actual);
+  if (expected === 'probability') return actual === 'probability' || actual === 'number';
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
   if (expected === 'series<number>') return isSeriesType(actual);
   if (isPredictionType(expected) && isPredictionType(actual)) return expected === actual || expected === 'prediction<number>' || actual === 'prediction<number>';
