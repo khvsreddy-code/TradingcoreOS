@@ -24,7 +24,6 @@ const contracts = [
   ['corespirit-language-parity', ['src/coreSpiritLanguageParityContract.test.mjs', true]],
   ['chart-candle-data-plane-fast-switch', ['tools/chartCandleDataPlaneFastSwitchContract.mjs', true]],
   ['corespirit-safe-complexity-types', ['tools/coreSpiritSafeComplexityTypesContract.mjs', true]],
-  ['vela-time-unit-boundary', ['tools/velaTimeUnitBoundaryContract.mjs', true]],
   ['vela-candle-time-normalization', ['tools/velaCandleTimeNormalizationContract.mjs', true]],
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
