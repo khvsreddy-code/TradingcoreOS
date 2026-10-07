@@ -103,5 +103,8 @@ assert.match(watchlist,/registerWidgetAttachment/);
 assert.match(watchlist,/tco\.market-health/);
 
 assert.match(workspace,/timeframes: \['1'.*'M'\]/s);
+assert.match(workspace,/getCellHealth: async/);
+assert.match(read('tools/verify-authenticated-chart-matrix.mjs'),/getCellHealth/);
+assert.match(read('tools/verify-authenticated-chart-matrix.mjs'),/chartHealth/);
 
 console.log('TCO_P0_ROADMAP_CONTRACT_OK');
