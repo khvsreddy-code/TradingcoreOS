@@ -1,6 +1,31 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
+  "fluid": true,
+  "services": {
+    "web": {
+      "root": ".",
+      "framework": "vite",
+      "functions": {
+        "api/index.ts": {
+          "maxDuration": 15
+        },
+        "api/queue.ts": {
+          "maxDuration": 240,
+          "experimentalTriggers": [
+            {
+              "type": "queue/v2beta",
+              "topic": "tradingcore-background"
+            }
+          ]
+        }
+      }
+    },
+    "realtime": {
+      "root": ".",
+      "entrypoint": "Dockerfile.realtime.vercel",
+      "runtime": "container"
+    }
+  },
   "regions": [
     "bom1"
   ],
@@ -20,20 +45,6 @@
       "destination": "/"
     }
   ],
-  "functions": {
-    "api/index.ts": {
-      "maxDuration": 15
-    },
-    "api/queue.ts": {
-      "maxDuration": 240,
-      "experimentalTriggers": [
-        {
-          "type": "queue/v2beta",
-          "topic": "tradingcore-background"
-        }
-      ]
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
@@ -52,13 +63,5 @@
         }
       ]
     }
-  ],
-  "fluid": true,
-  "services": {
-    "realtime": {
-      "root": ".",
-      "entrypoint": "Dockerfile.realtime.vercel",
-      "runtime": "container"
-    }
-  }
+  ]
 }
