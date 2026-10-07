@@ -4,6 +4,9 @@
  * New TradingCoreOS code must import from velaNativeChartKernel.
  */
 export * from './velaNativeChartKernel';
+/** Public TCO chart boundary for the vendored Vela composition root and neutral OHLCV model. */
+export { Vela } from '../../../../vendor/vela/src/Vela';
+export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
 export {
   registerNativeIndicator,
   unregisterNativeIndicator,
