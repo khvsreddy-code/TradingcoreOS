@@ -4,7 +4,7 @@ import type { CoreSpiritComponentContract } from './coreSpiritExecutionModel';
 
 export type CoreSpiritLibraryNamespace =
   | 'core' | 'market' | 'series' | 'math' | 'stats' | 'time' | 'structure'
-  | 'volatility' | 'liquidity' | 'probability' | 'model' | 'ml' | 'prediction'
+  | 'volatility' | 'liquidity' | 'probability' | 'regime' | 'model' | 'ml' | 'prediction'
   | 'visual' | 'chart' | 'automation' | 'events' | 'strategy' | 'portfolio' | 'risk'
   | 'background' | 'ta' | 'data' | 'orderflow' | 'options' | 'state';
 
@@ -25,7 +25,7 @@ const k=(namespace:CoreSpiritLibraryNamespace,member:string,description:string):
 
 export const CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES:readonly CoreSpiritLibraryNamespace[]=Object.freeze([
   'market','series','math','stats','time','structure','volatility','liquidity',
-  'core','probability','model','ml','prediction','visual','chart','automation','events','strategy','portfolio','risk','background','ta','data','orderflow','options','state',
+  'core','probability','regime','model','ml','prediction','visual','chart','automation','events','strategy','portfolio','risk','background','ta','data','orderflow','options','state',
 ]);
 
 export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNamespaceEntry[]=Object.freeze([
@@ -72,6 +72,7 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   c('volatility','compression','volatility.compression:v1','Volatility compression component surface.'),
   k('liquidity','sweep','Liquidity sweep component surface.'), k('liquidity','imbalance','Liquidity imbalance component surface.'), k('liquidity','participation','Liquidity participation component surface.'),
   b('probability','probability','probability','Probability primitive.'),
+  b('regime','detect','regimeDetect','Quant regime detector; combines volatility and trend state.'),
   b('stats','beta','beta','Rolling regression beta.'),
   b('stats','roc','roc','Rate of change.'), b('probability','sigmoid','sigmoid','Sigmoid transform.'), k('probability','calibrate','Probability calibration surface.'), k('probability','entropy','Entropy surface.'),
   b('model','predict','model.predict','Typed model prediction.'), b('model','probability','model.probability','Typed model probability.'), b('model','score','score','Model score.'), b('model','ref','model','Model reference.'), k('model','run','MODEL ABI invocation surface.'),

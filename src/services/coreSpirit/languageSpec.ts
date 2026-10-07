@@ -10,7 +10,7 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   statements: Object.freeze(['let', 'if', 'else', 'type', 'on', ':='] as const),
   authoringLevels: Object.freeze(['beginner', 'trader', 'quant', 'system'] as const),
   namespaces: Object.freeze([
-    'core', 'ta', 'stats', 'math', 'probability', 'market', 'orderflow', 'options',
+    'core', 'ta', 'stats', 'math', 'probability', 'regime', 'market', 'orderflow',
     'strategy', 'portfolio', 'risk', 'model', 'ml', 'prediction', 'automation', 'events',
     'visual', 'chart', 'state', 'data',
   ] as const),

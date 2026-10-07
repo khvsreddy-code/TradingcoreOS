@@ -262,10 +262,11 @@ function AppContent() {
         <BrokerConnectionRequiredPage
           onBack={() => navigate('/dashboard')}
           onBrokerConnected={() => {
-            // Completing broker OAuth is intentionally NOT a navigation event.
-            // Stay on /broker so the user can inspect the ready state and
-            // explicitly launch the workspace.
+            // The broker setup screen is a real route. Once OAuth verification
+            // completes, the Launch Workspace action must advance the app shell
+            // to the command center rather than leaving the user on /broker.
             setHasConnectedBroker(true);
+            navigate('/dashboard');
           }}
         />
       </Suspense>
