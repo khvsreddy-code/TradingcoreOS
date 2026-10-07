@@ -12,6 +12,9 @@ function symbolOf(key: string): string {
     return key.split('|')[1] ?? '';
 }
 
+/** Bounded recent-symbol hot cache. Visible workspace symbols are protected separately. */
+const HOT_SYMBOL_CAP = 12;
+
 /**
  * In-memory cache of CLOSED bars, keyed by `(provider, symbol, timeframe)`. Each
  * series holds a single time-sorted, de-duplicated array. Scoped to the current
@@ -29,6 +32,9 @@ export class BarStore {
     /** Earliest bar-open time fetched for a series — what the cache actually covers. */
     private readonly coveredFrom = new Map<string, number>();
     private currentSymbol?: string;
+    /** Recently used symbols retained for rapid single-chart switching. Map insertion order
+     *  is the LRU order: oldest is evicted first once the bounded hot-set is full. */
+    private readonly hotSymbols = new Map<string, true>();
     /** Symbols protected from the current-symbol purge (multi-chart cells) — the UNION
      *  of every owner's declaration. Empty = legacy single-chart behavior. */
     private retained: ReadonlySet<string> = new Set();
@@ -74,9 +80,16 @@ export class BarStore {
      * Symbols declared via {@link retain} are never purged.
      */
     retainSymbol(symbol: string): void {
-        if (this.currentSymbol === symbol) return;
-        this.currentSymbol = symbol;
-        this.purgeOutside(symbol);
+        const normalized = symbol.trim();
+        if (!normalized) return;
+        this.currentSymbol = normalized;
+        this.hotSymbols.delete(normalized);
+        this.hotSymbols.set(normalized, true);
+        while (this.hotSymbols.size > HOT_SYMBOL_CAP) {
+            const oldest = this.hotSymbols.keys().next().value;
+            if (oldest != null) this.hotSymbols.delete(oldest);
+        }
+        this.purgeOutside(normalized);
     }
 
     /**
@@ -105,7 +118,7 @@ export class BarStore {
     private purgeOutside(current: string | undefined): void {
         for (const key of [...this.series.keys()]) {
             const sym = symbolOf(key);
-            if (sym !== current && !this.retained.has(sym)) {
+            if (sym !== current && !this.retained.has(sym) && !this.hotSymbols.has(sym)) {
                 this.series.delete(key);
                 this.coveredFrom.delete(key);
             }
@@ -115,6 +128,7 @@ export class BarStore {
     clear(): void {
         this.series.clear();
         this.coveredFrom.clear();
+        this.hotSymbols.clear();
     }
 }
 
