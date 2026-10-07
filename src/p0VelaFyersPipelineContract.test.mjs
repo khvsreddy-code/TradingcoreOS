@@ -13,9 +13,11 @@ const historyRoute = read('src/server/routes/fyers-history.routes.ts');
 assert.equal(historyRoute.includes('https://api-t1.fyers.in/data/history?'), false);
 assert.match(historyRoute, /new FyersApiClient\\(accessToken\\)/);
 assert.equal(historyRoute.includes('fallbackQuoteCandle'), false);
+assert.equal(historyRoute.includes('withBrokerRequestGate'), false);
 
 const gate = read('src/server/brokers/BrokerRequestGate.ts');
 assert.match(gate, /'fyers-data': \\{ minIntervalMs: 250, maxPerMinute: 45 \\}/);
+assert.equal(rr.result.content.includes('seedLiveCandle?.('), false);
 const client = read('src/server/fyers/core/FyersApiClient.ts');
 assert.match(client, /base === DATA_BASE \\? 'fyers-data' : 'fyers'/);
 
