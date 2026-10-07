@@ -90,7 +90,7 @@ export function LiveTradingWorkspace() {
         bottombar: true,
         autofocus: false,
         persist: VELA_STATE_KEY,
-        storage: createTcoVelaSupabaseStorage(tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
+        storage: createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
         maxWebglCells: 8,
         cells: {
           primary: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
