@@ -20,6 +20,13 @@ function runtimeSymbol(ticker: string): string {
 function runtimeTimeframe(timeframe: string): string {
   const value = String(timeframe || '5').trim();
   if (/^\d+$/.test(value)) return `${value}m`;
+  const upper=value.toUpperCase();
+  if (upper==='D') return '1D';
+  if (upper==='W') return '1W';
+  if (upper==='M') return '1M';
+  if (upper==='H') return '1H';
+  if (upper==='2H') return '2H';
+  if (upper==='4H') return '4H';
   if (CHART_TIMEFRAME_INTERVALS[value]) return value;
   if (/^\d+[mhd]$/i.test(value)) return value.toLowerCase();
   return '5m';
