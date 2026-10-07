@@ -448,7 +448,7 @@ const replayPanel: SidePanelDescriptor = {
       pause(): unknown;
       stop(): unknown;
       on?: (event: string, handler: () => void) => () => void;
-    } = ctx.replay as any ?? ctx.chart.replay as any;
+    } = ctx.chart.replay as any;
     const replayOn = (event: string, handler: () => void): (() => void) =>
       typeof replay.on === 'function' ? replay.on(event, handler) : () => undefined;
     const root = panelRoot(body);
