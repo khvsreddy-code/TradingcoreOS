@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const read = (path) => fs.readFileSync(path, 'utf8');
 
 const provider = read('src/TcoVelaDataProvider.ts');
+const dataPlane = read('src/services/marketData/chartDataPlane.ts');
 assert.equal(provider.includes('Promise.race'), false);
 assert.equal(provider.includes('getMarketQuotes'), false);
 const progressiveStart = provider.indexOf('async getBarsProgressive(');
@@ -14,6 +15,12 @@ const progressive = provider.slice(progressiveStart, progressiveEnd);
 assert.match(progressive, /ensureReadyHistory/);
 assert.match(progressive, /createProgressiveHistoryEmitter/);
 assert.doesNotMatch(progressive, /getMarketQuotes/);
+const onTickStart = dataPlane.indexOf('private onTick = (tick: NormalizedMarketTick): void => {');
+const onTickEnd = dataPlane.indexOf('  private start(): void {', onTickStart);
+assert.ok(onTickStart >= 0 && onTickEnd > onTickStart, 'chart data plane must have an isolated tick handler');
+const onTick = dataPlane.slice(onTickStart, onTickEnd);
+assert.match(onTick, /if \(!this\.state\.historyReady\) return;/, 'realtime ticks must be quarantined before history is ready');
+assert.match(dataPlane, /const pendingTick = this\.state\.latestTick;/, 'quarantined ticks must be replayed only after history commit');
 
 
 const historyRoute = read('src/server/routes/fyers-history.routes.ts');
