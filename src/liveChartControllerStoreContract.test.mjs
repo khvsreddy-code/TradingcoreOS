@@ -13,7 +13,7 @@ for (const symbol of [
   "createChartRuntimeController",
   "createChartDataController",
   "createChartIndicatorController",
-  "createChartDrawingController",
+  "Vela-native drawing facade",
   "createChartRealtimeController",
   "createChartPredictionController",
   "createChartCoreSpiritController",
@@ -21,7 +21,11 @@ for (const symbol of [
   "CoreSpiritStore",
   "ChartShell",
   "ChartOverlay",
-]) assert.ok(live.includes(symbol), `LiveChart missing architecture boundary: ${symbol}`);
+]) {
+  if(symbol==="Vela-native drawing facade") assert.ok(live.includes("chart.current?.drawings") || live.includes("chart.current.drawings"), "LiveChart must use Vela native drawings");
+  else assert.ok(live.includes(symbol), `LiveChart missing architecture boundary: ${symbol}`);
+}
+assert.ok(!live.includes("createChartDrawingController"), "Legacy drawing controller must not be wired into LiveChart");
 
 assert.equal((live.match(/const renderStudiess*=/g)||[]).length, 0, 'indicator rendering must live in ChartIndicatorController');
 assert.equal((live.match(/const renderWorkerIndicatorss*=/g)||[]).length, 0, 'worker indicator rendering must live in ChartIndicatorController');
