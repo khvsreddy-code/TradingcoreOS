@@ -64,6 +64,13 @@ const quantIr=compile(quant,'language-quant','strategy');
 const automationIr=compile(automation,'language-automation','automation');
 
 assert.equal(beginnerIr?.semanticDependencyGraph?.version,1);
+assert.equal(beginnerIr?.authoringLevel,'beginner');
+assert.equal(traderIr?.authoringLevel,'trader');
+assert.equal(quantIr?.authoringLevel,'quant');
+assert.equal(automationIr?.authoringLevel,'system');
+assert.ok(beginnerIr?.languageCapabilities?.includes('core'));
+assert.ok(quantIr?.languageCapabilities?.includes('models'));
+assert.ok(automationIr?.languageCapabilities?.includes('automation'));
 assert.ok(traderIr?.tradingNativePlan?.dataDependencies.some(dep=>String(dep.symbol).toUpperCase().includes('BANKNIFTY')));
 assert.ok(quantIr?.semanticDependencyGraph?.nodes.some(node=>node.kind==='model' && node.name==='alpha'));
 assert.ok(quantIr?.semanticDependencyGraph?.nodes.some(node=>node.kind==='model-output' && node.name==='alpha.predict'));
