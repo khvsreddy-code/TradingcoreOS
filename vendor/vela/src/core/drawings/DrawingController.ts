@@ -5,7 +5,7 @@ import type { VelaEventMap } from '../events/types';
 import type { IDrawingsRendererPort, DrawingIntent, DrawingMode } from './port';
 import type { DrawingSeriesGateway } from './series';
 import type { DrawingsOption } from './toolbar';
-import { getDrawingType } from './registry';
+import { getDrawingType, loadAdvancedDrawingCatalog } from './registry';
 import { buildToolbar } from './toolbar';
 import { DrawingStore } from './DrawingStore';
 import { DrawingHistory } from './DrawingHistory';
@@ -70,6 +70,9 @@ export class DrawingController {
             if (seriesGateway) this.port.setSeriesGateway?.(seriesGateway);
             this.subs.push(this.port.onDrawingIntent((i) => this.onIntent(i)));
             this.subs.push(this.store.onChange(() => this.sync()));
+            void loadAdvancedDrawingCatalog().then(() => {
+                if (this.port) this.port.setToolbar(buildToolbar(option).definition);
+            });
         }
     }
 

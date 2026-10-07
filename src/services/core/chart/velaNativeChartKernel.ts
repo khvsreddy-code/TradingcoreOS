@@ -13,6 +13,13 @@ import type { IndicatorModel } from '../../../../vendor/vela/src/core/model/indi
 import type { SeriesPoint, SeriesSpec, LineLikeSeries, LineStyle as VelaLineStyle, MarkerPoint } from '../../../../vendor/vela/src/core/model/series';
 import type { PriceLine, Pane, Fill } from '../../../../vendor/vela/src/core/model/scene';
 import type { ScenePatch, SeriesPatchOperation } from '../../../../vendor/vela/src/core/model/patch';
+import { DrawingsControl } from '../../../../vendor/vela/src/core/DrawingsControl';
+import { DrawingController } from '../../../../vendor/vela/src/core/drawings/DrawingController';
+import { loadAdvancedDrawingCatalog } from '../../../../vendor/vela/src/core/drawings/registry';
+import { TypedEventBus } from '../../../../vendor/vela/src/core/events/EventBus';
+import type { VelaEventMap } from '../../../../vendor/vela/src/core/events/types';
+import type { DrawingsOption } from '../../../../vendor/vela/src/core/drawings/toolbar';
+import type { SerializedDrawing } from '../../../../vendor/vela/src/core/drawings/Drawing';
 
 export type Time = number;
 export type LineStyleValue = 0 | 1 | 2;
@@ -399,10 +406,29 @@ export class VelaNativeChartKernel {
   private onClickHandlers = new Set<(param: any) => void>();
   private logicalRangeSubscriptions = new Map<(range: { from: number; to: number } | null) => void, Unsubscribe>();
   private timeRangeSubscriptions = new Map<(range: { from: number; to: number } | null) => void, Unsubscribe>();
+  private readonly drawingEvents = new TypedEventBus<VelaEventMap>();
+  private readonly drawingController: DrawingController;
+  readonly drawings: DrawingsControl;
+  private readonly drawingChangeHandlers = new Set<() => void>();
 
   constructor(private readonly host: HTMLElement, options: any = {}) {
     this.renderer.mount(host, velaThemeFromOptions(options));
+    this.drawingController = new DrawingController(
+      this.renderer,
+      this.drawingEvents,
+      (options?.drawings === undefined ? true : options.drawings) as DrawingsOption,
+    );
+    this.drawings = new DrawingsControl(this.drawingController);
     this.mounted = true;
+    for (const eventName of ['drawing:created','drawing:edited','drawing:removed','drawing:favorites','drawing:selected'] as const) {
+      this.drawingEvents.on(eventName, () => {
+        for (const handler of this.drawingChangeHandlers) handler();
+      });
+    }
+    if (Array.isArray(options?.velaDrawings)) {
+      const initial = options.velaDrawings as SerializedDrawing[];
+      void loadAdvancedDrawingCatalog().then(() => this.drawings.fromJSON({version:1,drawings:initial}));
+    }
     this.renderer.onClick((event: ClickEvent) => {
       for (const cb of this.onClickHandlers) cb({ point: event.time == null ? undefined : { x: this.timeToCoordinate(event.time) ?? 0, y: event.price == null ? 0 : this.priceToCoordinate(event.price) ?? 0 }, time: event.time ?? undefined, seriesData: new Map() });
     });
@@ -419,7 +445,19 @@ export class VelaNativeChartKernel {
   removeSeries(series: VelaNativeSeriesKernel): void { series.remove(); }
   timeScale(): VelaTimeScaleFacade { return this.timeScaleFacade; }
   resize(width: number, height: number): void { if (this.mounted) this.renderer.resize(); if (this.host.style.width === '' && width) this.host.style.width = `${Math.max(1, width)}px`; if (this.host.style.height === '' && height) this.host.style.height = `${Math.max(1, height)}px`; }
-  remove(): void { if (!this.mounted) return; this.series.forEach(s => s.remove()); this.series.clear(); this.renderer.destroy(); this.mounted = false; }
+  onDrawingChange(cb: () => void): () => void {
+    this.drawingChangeHandlers.add(cb);
+    return () => this.drawingChangeHandlers.delete(cb);
+  }
+  remove(): void {
+    if (!this.mounted) return;
+    this.drawingController.destroy();
+    this.drawingChangeHandlers.clear();
+    this.series.forEach(s => s.remove());
+    this.series.clear();
+    this.renderer.destroy();
+    this.mounted = false;
+  }
   applyOptions(options: any): void { this.renderer.setTheme(velaThemeFromOptions(options)); if (options?.crosshair) this.renderer.applyFeature('crosshair.visible', Number(options.crosshair.mode) !== 2); }
   subscribeClick(cb: (param: any) => void): void { this.onClickHandlers.add(cb); }
   unsubscribeClick(cb: (param: any) => void): void { this.onClickHandlers.delete(cb); }

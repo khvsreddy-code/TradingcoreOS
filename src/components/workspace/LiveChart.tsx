@@ -33,7 +33,7 @@ import { createChartRuntimeController } from '../../services/core/chart/ChartRun
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
 
 type Props={instrumentKey:string;brokerId?:string;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number;chartIndex?:number;showEmbeddedDrawingToolbar?:boolean};
-export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=true}:Props){
+export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=false}:Props){
   const resolvedInstrumentKey=canonicalInstrumentKey(brokerId,instrumentKey);
   const rendererController=useChartLifecycle();
 
@@ -111,7 +111,9 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const runtimeControllerRef=useRef<ReturnType<typeof createChartRuntimeController>|null>(null);
 
   const applyViewState=()=>{
-    try{localStorage.setItem(chartStateKey(brokerId,resolvedInstrumentKey),JSON.stringify({version:2,timeframe,drawings:drawingControllerRef.current?.getDrawings?.()||persistedChart.drawings,showLevels,showVolume,showOI,showDepth}));}catch{}
+    try{localStorage.setItem(chartStateKey(brokerId,resolvedInstrumentKey),JSON.stringify({version:2,timeframe,drawings:drawingControllerRef.current?.getDrawings?.()||persistedChart.drawings,
+        velaDrawings:chart.current?.drawings?.all?.() ?? persistedChart.velaDrawings ?? [],
+        showLevels,showVolume,showOI,showDepth}));}catch{}
   };
 
   useEffect(()=>{drawingToolRef.current=drawingTool;},[drawingTool]);
@@ -128,6 +130,10 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     return undefined;
   },[showOI,resolvedInstrumentKey,brokerId]);
   useEffect(()=>{applyViewState();},[timeframe,showLevels,showVolume,showOI,showDepth,brokerId,resolvedInstrumentKey]);
+  useEffect(()=>{
+    const off=chart.current?.onDrawingChange?.(()=>applyViewState());
+    return off;
+  },[resolvedInstrumentKey]);
 
   useEffect(()=>{
     const onCrosshair=(e:Event)=>{const d=(e as CustomEvent).detail||{};if(d.chartIndex!=null&&d.chartIndex!==chartIndex)return;setCrosshairVisible(Boolean(d.visible));try{chart.current?.applyOptions({crosshair:{mode:d.visible?0:2}} as any);}catch{}};
@@ -154,9 +160,41 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const patchIndicator=(id:string,patch:Partial<IndicatorConfig>)=>{const next=indicatorsRef.current.map(x=>x.id===id?{...x,...patch}:x);setIndicators(next);saveIndicators(next);};
   const removeIndicator=(id:string)=>{const next=indicatorsRef.current.filter(x=>x.id!==id);setIndicators(next);saveIndicators(next);if(editingIndicator===id)setEditingIndicator(null);};
 
-  const selectDrawingTool=(tool:DrawingTool)=>{drawingControllerRef.current?.selectDrawingTool(tool);setDrawingTool(tool);setShowDrawingMenu(false);};
-  const clearDrawings=()=>drawingControllerRef.current?.clearDrawings();
-  const undoDrawing=()=>{const controller=drawingControllerRef.current;if(!controller)return;const before=controller.getDrawings();if(controller.store.undo()){const removed=before[before.length-1];if(removed)coreEventBus.emit('drawing.deleted',{id:removed.id,owner:removed.owner,timestamp:Date.now()});controller.save();controller.renderDrawings();setSelectedDrawingId(null);}};
+  const velaDrawingAliases:Record<string,string> = {
+    horizontal:'hline',horizontalRay:'hray',vertical:'vline',parallelChannel:'parallelchannel',
+    rectangle:'box',ellipse:'ellipse',fib:'fibretracement',fibExtension:'fibextension',
+    pitchfork:'pitchfork',arrow:'arrow',priceRange:'datepricerange',dateRange:'datepricerange',
+    brush:'freehand',highlighter:'highlighter',text:'text',longPosition:'position',shortPosition:'position',
+  };
+  const selectDrawingTool=(tool:DrawingTool)=>{
+    const velaType=velaDrawingAliases[tool];
+    if(velaType && chart.current?.drawings?.supported) chart.current.drawings.setTool(velaType as any);
+    else drawingControllerRef.current?.selectDrawingTool(tool);
+    setDrawingTool(tool);
+    setShowDrawingMenu(false);
+  };
+  const clearDrawings=()=>{
+    if(chart.current?.drawings?.supported){
+      chart.current.drawings.all().forEach(d=>chart.current!.drawings.remove(d.id));
+      setSelectedDrawingId(null);
+      applyViewState();
+    } else drawingControllerRef.current?.clearDrawings();
+  };
+  const undoDrawing=()=>{
+    if(chart.current?.drawings?.supported){
+      chart.current.drawings.undo();
+      setSelectedDrawingId(null);
+      applyViewState();
+      return;
+    }
+    const controller=drawingControllerRef.current;if(!controller)return;
+    const before=controller.getDrawings();
+    if(controller.store.undo()){
+      const removed=before[before.length-1];
+      if(removed)coreEventBus.emit('drawing.deleted',{id:removed.id,owner:removed.owner,timestamp:Date.now()});
+      controller.save();controller.renderDrawings();setSelectedDrawingId(null);
+    }
+  };
   const openCoreSpirit=()=>{coreSpiritStore.setOpen(true);coreSpiritControllerRef.current?.open();};
   const closeCoreSpirit=()=>coreSpiritStore.setOpen(false);
   const setCoreSpiritSource=(source:string)=>coreSpiritStore.setSource(source);
@@ -217,6 +255,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       chartIndex,
       setDrawingTool,
       setSelectedDrawingId,
+      velaDrawingsInitial:persistedChart.velaDrawings ?? [],
       setHistoryLoading,
       setError,
       setAnalytics,
@@ -225,7 +264,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     });
     runtimeControllerRef.current=runtime;
     return runtime.mount();
-  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial]);
+  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial,persistedChart.velaDrawings]);
 
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);

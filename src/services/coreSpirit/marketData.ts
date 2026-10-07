@@ -7,7 +7,8 @@
 export const CORE_SPIRIT_MARKET_DATA_VERSION = 1 as const;
 
 export interface CoreSpiritMarketBar {
-  timestamp: string;
+  /** Canonical CoreSpirit bar time. Host adapters may provide epoch ms. */
+  timestamp: string | number;
   open: number;
   high: number;
   low: number;

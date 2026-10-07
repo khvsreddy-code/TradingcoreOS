@@ -17,10 +17,51 @@ type PreparedToken = {
   ir: NonNullable<ReturnType<typeof compileCoreSpirit>['ir']>;
 };
 
+type VelaOhlcv = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+  timestamp?: string | number;
+};
+
 function barTimeMillis(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value > 2e12 ? value : value * 1000;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric >= 1e11 ? numeric : numeric * 1000;
   const parsed = Date.parse(String(value ?? ''));
   return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function normalizeVelaBar(raw: VelaOhlcv, index: number): CoreSpiritMarketBar {
+  const time = barTimeMillis(raw.time ?? raw.timestamp);
+  const open = Number(raw.open);
+  const high = Number(raw.high);
+  const low = Number(raw.low);
+  const close = Number(raw.close);
+  const volume = raw.volume == null ? 0 : Number(raw.volume);
+  if (!Number.isFinite(time) || time <= 0) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: invalid epoch timestamp.`);
+  for (const [name, value] of Object.entries({open,high,low,close,volume})) {
+    if (!Number.isFinite(value)) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: ${name} is not finite.`);
+  }
+  if (high < Math.max(open, close, low)) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: high is below OHLC range.`);
+  if (low > Math.min(open, close, high)) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: low is above OHLC range.`);
+  if (volume < 0) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: volume is negative.`);
+  return {timestamp:new Date(time).toISOString(),open,high,low,close,volume};
+}
+
+function normalizeVelaBars(rows: readonly VelaOhlcv[]): CoreSpiritMarketBar[] {
+  const out=new Array<CoreSpiritMarketBar>(rows.length);
+  let previous=0;
+  for(let i=0;i<rows.length;i+=1){
+    const row=normalizeVelaBar(rows[i]!,i);
+    const time=barTimeMillis(row.timestamp);
+    if(i>0&&time<previous) throw new Error(`CoreSpirit Vela data adapter rejected non-chronological bar sequence at index ${i}.`);
+    previous=time;
+    out[i]=row;
+  }
+  return out;
 }
 
 function lowerBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: number): number {
@@ -95,7 +136,7 @@ export class CoreSpiritVelaEngine {
 
   execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
     const token = req.prepared.token as PreparedToken;
-    const bars = req.bars as unknown as CoreSpiritMarketBar[];
+    const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
@@ -135,7 +176,7 @@ export class CoreSpiritVelaEngine {
         if (secondaryData.has(key)) return;
         try {
           const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{ to:Number.isFinite(endTime) ? endTime : undefined, limit });
-          if (rows?.length) secondaryData.set(key,rows as unknown as CoreSpiritMarketBar[]);
+          if (rows?.length) secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
         } catch {}
       }));
     };
@@ -204,7 +245,7 @@ export class CoreSpiritVelaEngine {
     else void secondaryReady.then(() => initialRun());
 
     const rehydrateForLive = (): void => {
-      const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
+      const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
       if (!currentBars.length || liveStarted) return;
 
       runtime.loadIr(token.ir);
@@ -256,7 +297,7 @@ export class CoreSpiritVelaEngine {
       update(_inputs: Record<string, InputValue>, _props?: Record<string, InputValue>) {
         if (stopped) return;
         const runUpdate = (): void => {
-          const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
+          const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
           runtime.loadIr(token.ir);
           const result = runtime.executeIr(token.ir, currentBars);
           scene.reset();
@@ -274,7 +315,7 @@ export class CoreSpiritVelaEngine {
       },
       notifyBars(reason, dirtyRange) {
         if (stopped) return;
-        const currentBars = (req.getBars?.() || bars) as CoreSpiritMarketBar[];
+        const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
         if (!currentBars.length) return;
 
         if (reason === 'complete') {

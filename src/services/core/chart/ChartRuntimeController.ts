@@ -105,6 +105,8 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         rightPriceScale:{borderColor:palette.axis,scaleMargins:{top:.08,bottom:.2}},
         timeScale:{borderColor:palette.axis,timeVisible:true,secondsVisible:false,rightOffset:8,barSpacing:8,minBarSpacing:3},
         watermark:{visible:true,fontSize:28,horzAlign:'center',vertAlign:'center',color:palette.text+'12',text:'TRADINGCORE'},
+        drawings:true,
+        velaDrawings:deps.velaDrawingsInitial ?? [],
       });
       deps.chart.current=c;
 

@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine.ts';
+import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
+
+const velaBars = [
+  { time: 1791350000000, open: 22650, high: 22680, low: 22640, close: 22670, volume: 1200 },
+  { time: 1791350300000, open: 22670, high: 22690, low: 22660, close: 22680, volume: 1300 },
+];
+const engine = new CoreSpiritVelaEngine();
+const prepared = await engine.prepare(`show line(close)`, 'vela-data-boundary');
+let model = 0;
+let error = '';
+engine.execute({
+  prepared,
+  market:{symbol:'NSE:NIFTY50-INDEX',timeframe:'5m'},
+  bars:velaBars,
+  mode:'static'
+},{onModel:()=>{model+=1},onDone:()=>{},onError:(e)=>{error=e.message;}});
+await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(error,'');
+assert.equal(model,1);
+assert.equal(CORE_SPIRIT_DRAWING_TOOL_CATALOG.length, 74);
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('fibretracement'));
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('gartley'));
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('elliottimpulse'));
+assert.ok(CORE_SPIRIT_DRAWING_TOOL_CATALOG.includes('fixedrangevp'));
+console.log('CORESPIRIT_VELA_DATA_AND_DRAWINGS_CONTRACT_OK');
