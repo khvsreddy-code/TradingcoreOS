@@ -47,9 +47,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         void hydrateUser(sbSession.user);
       }
     } catch (err: any) {
+      // Initialization failures (network, storage, Supabase outage) are not
+      // authentication facts. Preserve any session already established by the
+      // auth event stream; only SIGNED_OUT is allowed to clear auth state.
       console.error('Auth initialization error:', err);
-      setSession(null);
-      setUser(null);
+      setError(err?.message || 'Unable to initialize authentication');
     } finally {
       setLoading(false);
       setAuthStep('idle');
