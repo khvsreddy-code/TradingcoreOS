@@ -71,6 +71,7 @@ const contracts = [
   ['p0-roadmap', ['src/p0RoadmapContract.test.mjs', false]],
   ['p0-latency-trace', ['src/p0LatencyTraceContract.test.mjs', false]],
   ['p0-vela-fyers-pipeline', ['src/p0VelaFyersPipelineContract.test.mjs', false]],
+  ['vela-progressive-history', ['src/velaProgressiveHistoryContract.test.ts', true]],
   ['corespirit-vela-secondary-data-p0', ['tools/coreSpiritVelaSecondaryDataContract.mjs', false]],
 ];
 
