@@ -308,6 +308,11 @@ export class ChartDataPlane {
     const price = Number(tick.ltp);
     if (!Number.isFinite(price)) return;
 
+    // P0 history invariant: realtime quotes are held separately until a canonical
+    // historical snapshot exists. This prevents a cached/LTP tick from becoming a
+    // synthetic first bar and poisoning Vela progressive history.
+    if (!this.state.historyReady) return;
+
     // Preserve the columnar render path after live updates. The previous implementation
     // reconciled against the entire compatibility candle array and then replaced the
     // typed state with OHLCV[]; that was the remaining zero-object hot-path leak and could
@@ -458,7 +463,9 @@ export class ChartDataPlane {
     this.state.lastHistoryLoadAt = Date.now();
     this.state.olderHistoryExhausted = false;
     this.state.historyReady = true;
+    const pendingTick = this.state.latestTick;
     this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
+    if (pendingTick) this.onTick(pendingTick);
     return retainedForCache;
   }
 
