@@ -3,12 +3,16 @@
  *
  * Dependency direction is deliberate:
  *
- *   broker/research/feed adapters -> neutral CoreSpirit host contracts
- *   language -> compiler -> IR -> VM
- *   VM -> signal -> automation -> risk -> policy -> execution adapter -> broker
+ *   market/feed adapters -> neutral CoreSpirit host contracts
+ *   language -> compiler -> IR -> VM -> signal -> automation
+ *   tradingcoreos-host strategy/risk/order -> order intent -> execution authority
+ *   -> execution adapter -> broker
  *
- * Nothing below the VM should introduce a second language runtime.
+ * CoreSpirit never owns broker access. Vela is a projection/renderer consumer,
+ * never the execution authority.
  */
+import { CORE_SPIRIT_BROKER_BOUNDARY, validateCoreSpiritBrokerBoundarySource } from './brokerBoundary';
+
 export const CORE_SPIRIT_ARCHITECTURE_VERSION = 1 as const;
 
 export type CoreSpiritArchitecturePlane =
@@ -23,6 +27,7 @@ export type CoreSpiritArchitecturePlane =
   | 'automation'
   | 'risk'
   | 'order-intent'
+  | 'execution-authority'
   | 'execution'
   | 'broker'
   | 'research';
@@ -45,7 +50,8 @@ export const CORE_SPIRIT_ARCHITECTURE_NODES: readonly CoreSpiritArchitectureNode
   { id: 'automation', owner: 'tradingcoreos-host', responsibilities: ['lifecycle', 'event orchestration', 'order intent creation'] },
   { id: 'risk', owner: 'tradingcoreos-host', responsibilities: ['exposure', 'quantity', 'portfolio risk', 'hard rejection'] },
   { id: 'order-intent', owner: 'tradingcoreos-host', responsibilities: ['approved tradable intent', 'idempotency', 'audit identity'] },
-  { id: 'execution', owner: 'tradingcoreos-host', responsibilities: ['policy gate', 'adapter selection', 'submit/receipt'] },
+  { id: 'execution-authority', owner: 'tradingcoreos-host', responsibilities: ['single order-intent ingress', 'risk/policy gate', 'idempotent execution authorization', 'audit trail'] },
+  { id: 'execution', owner: 'tradingcoreos-host', responsibilities: ['adapter selection', 'submit/receipt', 'reconciliation'] },
   { id: 'broker', owner: 'adapter', responsibilities: ['credentials', 'venue protocol', 'broker order IDs', 'transport'] },
   { id: 'research', owner: 'tradingcoreos-host', responsibilities: ['datasets', 'replay analysis', 'metrics', 'training orchestration'] },
 ];
@@ -59,6 +65,8 @@ export const CORE_SPIRIT_FORBIDDEN_DEPENDENCIES: readonly [CoreSpiritArchitectur
   ['signal', 'broker'],
   ['automation', 'broker'],
   ['risk', 'broker'],
+  ['order-intent', 'broker'],
+  ['execution-authority', 'broker'],
 ];
 
 export function validateCoreSpiritArchitectureEdges(edges: readonly [CoreSpiritArchitecturePlane, CoreSpiritArchitecturePlane][]): string[] {
@@ -70,6 +78,8 @@ export function validateCoreSpiritArchitectureEdges(edges: readonly [CoreSpiritA
   }
   return errors;
 }
+
+export { CORE_SPIRIT_BROKER_BOUNDARY, validateCoreSpiritBrokerBoundarySource };
 
 export const CORE_SPIRIT_EXECUTION_GRAPH = Object.freeze([
   'data-host',
@@ -83,10 +93,10 @@ export const CORE_SPIRIT_EXECUTION_GRAPH = Object.freeze([
   'automation',
   'risk',
   'order-intent',
+  'execution-authority',
   'execution',
   'broker',
 ] as const);
-
 
 export const CORE_SPIRIT_PLATFORM_PHILOSOPHY = Object.freeze({
   productCenter: 'trading-system',
@@ -94,4 +104,6 @@ export const CORE_SPIRIT_PLATFORM_PHILOSOPHY = Object.freeze({
   canonicalModel: 'CoreSpiritTradingSnapshot',
   compatibilityRule: 'legacy-chart-outputs-adapt-into-scene-graph',
   executionRule: 'all-live-side-effects-remain-host-owned',
+  brokerRule: 'CoreSpirit emits broker-neutral order intents; TradingCoreOS execution authority alone may reach broker adapters',
+  velaRule: 'Vela visualizes CoreSpirit output and never authorizes broker execution',
 } as const);
