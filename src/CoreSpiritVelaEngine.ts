@@ -371,7 +371,7 @@ export class CoreSpiritVelaEngine {
           },
           plots: Object.fromEntries([...snapshot.points.entries()].map(([key, values]) => [key, values])),
           variables: state.locals,
-          warnings: secondaryWarnings.slice(-20),
+          warnings: secondaryWarnings.slice(-20).map(message => ({ message, method: 'secondary-data', bar: Math.max(0, bars.length - 1) })),
         };
       },
       stop() {
