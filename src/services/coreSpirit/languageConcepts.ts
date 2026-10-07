@@ -297,22 +297,40 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       const current = active[active.length - 1];
       if (current.kind === 'model') {
         const field = current.modelSection ? parseModelField(trimmed) : undefined;
-        if (field) {
-          if (current.modelSection === 'input') {
-            if (!current.declaration.inputs.includes(field.name)) current.declaration.inputs.push(field.name);
-            current.declaration.inputTypes[field.name] = field.type;
-            if (!current.declaration.features.includes(field.name)) current.declaration.features.push(field.name);
-          } else {
-            if (!current.declaration.outputs.includes(field.name)) current.declaration.outputs.push(field.name);
-            current.declaration.outputTypes[field.name] = field.type;
-            if (!current.declaration.predictions.includes(field.name)) current.declaration.predictions.push(field.name);
-          }
+        if (/^(?:input(?:s)?|feature(?:s)?)\s*:\s*$/i.test(trimmed)) { current.modelSection = 'input'; offset += raw.length + 1; continue; }
+        if (/^output(?:s)?\s*:\s*$/i.test(trimmed)) { current.modelSection = 'output'; offset += raw.length + 1; continue; }
+
+        const addModelInput = (entry: string): void => {
+          const value = entry.trim().replace(/,$/, '').trim();
+          if (!value) return;
+          const field = parseModelField(value);
+          const fieldName = field?.name ?? value;
+          if (!current.declaration.inputs.includes(fieldName)) current.declaration.inputs.push(fieldName);
+          current.declaration.inputTypes[fieldName] = field?.type ?? 'unknown';
+          if (!current.declaration.features.includes(fieldName)) current.declaration.features.push(fieldName);
+        };
+        const addModelOutput = (entry: string): void => {
+          const value = entry.trim().replace(/,$/, '').trim();
+          if (!value) return;
+          const field = parseModelField(value);
+          const fieldName = field?.name ?? value;
+          if (!current.declaration.outputs.includes(fieldName)) current.declaration.outputs.push(fieldName);
+          current.declaration.outputTypes[fieldName] = field?.type ?? 'unknown';
+          if (!current.declaration.predictions.includes(fieldName)) current.declaration.predictions.push(fieldName);
+        };
+
+        if (current.modelSection === 'input') {
+          for (const entry of splitModelBindingList(trimmed)) addModelInput(entry);
           concepts.add('MODEL');
           offset += raw.length + 1;
           continue;
         }
-        if (/^(?:input(?:s)?|feature(?:s)?)\s*:\s*$/i.test(trimmed)) { current.modelSection = 'input'; offset += raw.length + 1; continue; }
-        if (/^output(?:s)?\s*:\s*$/i.test(trimmed)) { current.modelSection = 'output'; offset += raw.length + 1; continue; }
+        if (current.modelSection === 'output') {
+          for (const entry of splitModelBindingList(trimmed)) addModelOutput(entry);
+          concepts.add('MODEL');
+          offset += raw.length + 1;
+          continue;
+        }
         const useRegistry = trimmed.match(/^use\s+(?:"([^"]+)"|'([^']+)')\s*$/i);
         const useExternal = trimmed.match(/^use\s+(python|cpp|rust|wasm|onnx|remote)\s+(?:"([^"]+)"|'([^']+)')\s*$/i);
         const inputLine = trimmed.match(/^(?:input(?:s)?|feature(?:s)?)\s*:\s*(\S.*)$/i);
