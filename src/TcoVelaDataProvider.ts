@@ -261,6 +261,8 @@ export class TcoVelaDataProvider implements DataProvider {
     if (!brokerId) return () => {};
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
+    let pendingSequence = 0;
+    const timelineKey = `${symbol}|${tcoTimeframe}`;
     let scheduled = false;
     let dirty = false;
     let raf = 0;
@@ -269,7 +271,7 @@ export class TcoVelaDataProvider implements DataProvider {
       scheduled = false;
       if (!dirty) return;
       dirty = false;
-      const view = plane.readCanonical();
+      const view = marketLatencyTrace.measure(timelineKey, pendingSequence, 'canonical', () => plane.readCanonical());
       if (!view.length) return;
       const i = view.length - 1;
       const time = view.time[i]!;
@@ -295,9 +297,8 @@ export class TcoVelaDataProvider implements DataProvider {
 
     const stop = plane.subscribe((event) => {
       if (event.type !== 'snapshot' && event.type !== 'tick') return;
-      const sequence = event.snapshot.revision;
-      const timelineKey = `${symbol}|${tcoTimeframe}`;
-      marketLatencyTrace.measure(timelineKey, sequence, 'canonical', () => schedule());
+      pendingSequence = event.snapshot.revision;
+      schedule();
     });
 
     return () => {
