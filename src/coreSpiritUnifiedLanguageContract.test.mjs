@@ -40,6 +40,7 @@ let confidence: probability = alpha.probability()
 show line(prediction)
 when confidence > 0.70
     signal("LONG")
+signal("LONG")
 `;
 
 const automation=`
@@ -83,6 +84,7 @@ const parser = new CoreSpiritParser('on signal("LONG") { automation.notify("ok")
 assert.deepEqual(parser.diagnostics,[]);
 assert.equal(parser.ast.body[0]?.type,'onEvent');
 
+let modelCalls=0;
 const runtime = new CoreSpiritRuntime({
   sourceId:'language-runtime',
   symbol:'NSE:NIFTY50',
@@ -91,7 +93,7 @@ const runtime = new CoreSpiritRuntime({
   executionTarget:'automation',
   layer:'automation',
   riskResolver:()=>true,
-  modelPredictionResolver:({field})=>field==='probability'?0.81:123.45,
+  modelPredictionResolver:({field})=>{ modelCalls+=1; return field==='probability'?0.81:123.45; },
 });
 runtime.loadIr(quantIr);
 const bars=[
@@ -99,6 +101,7 @@ const bars=[
   {timestamp:'2026-01-01T09:20:00Z',open:100,high:103,low:99,close:102,volume:1200},
 ];
 const result=runtime.executeIr(quantIr,bars);
+assert.ok(modelCalls>0);
 assert.ok(result.outputs.some(output=>output.kind==='signal' && output.type==='LONG'));
 
 const platform=new CoreSpiritPlatformRuntime();
