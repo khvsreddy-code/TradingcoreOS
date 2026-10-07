@@ -315,8 +315,8 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
         if (/^output(?:s)?\s*:\s*$/i.test(trimmed)) { current.modelSection = 'output'; offset += raw.length + 1; continue; }
         const useRegistry = trimmed.match(/^use\s+(?:"([^"]+)"|'([^']+)')\s*$/i);
         const useExternal = trimmed.match(/^use\s+(python|cpp|rust|wasm|onnx|remote)\s+(?:"([^"]+)"|'([^']+)')\s*$/i);
-        const inputLine = trimmed.match(/^(?:input(?:s)?|feature(?:s)?)\s*:\s*(.*)$/i);
-        const outputLine = trimmed.match(/^output(?:s)?\s*:\s*(.*)$/i);
+        const inputLine = trimmed.match(/^(?:input(?:s)?|feature(?:s)?)\s*:\s*(\S.*)$/i);
+        const outputLine = trimmed.match(/^output(?:s)?\s*:\s*(\S.*)$/i);
         const bareName = trimmed.match(/^[A-Za-z_][A-Za-z0-9_]*$/);
         if (useRegistry) {
           current.declaration.binding = { kind: 'registry', locator: useRegistry[1] ?? useRegistry[2] ?? '' };
