@@ -17,7 +17,8 @@ export type CoreSpiritSemanticAtom =
   | 'currency'
   | 'model';
 
-export type CoreSpiritSemanticValueKind = 'observed'|'prediction'|'forecast'|'probability'|'distribution'|'feature'|'featureSet'|'model'|'modelArtifact'|'dataset'|'trainingData'|'experiment';
+export type CoreSpiritSemanticValueKind = 'observed'|'prediction'|'forecast'|'probability'|'distribution'|'feature'|'featureSet'|'model'|'modelArtifact'|'dataset'|'trainingData'|'experiment'|'signalIntent'|'orderIntent';
+export type CoreSpiritSemanticPhase = 'historical'|'confirmed'|'developing'|'realtime'|'forecast';
 
 export const CORE_SPIRIT_SEMANTIC_SERIES_TYPES = Object.freeze(['series<number>', 'series<price>', 'series<volume>', 'series<time>', 'series<duration>', 'series<currency>', 'series<boolean>', 'series<string>'] as const);
 
@@ -31,6 +32,10 @@ export type CoreSpiritSemanticType = Readonly<{
   precision?: number;
   scale?: 'linear' | 'log' | 'percent' | 'indexed';
   valueKind?: CoreSpiritSemanticValueKind;
+  phase?: CoreSpiritSemanticPhase;
+  causal?: boolean;
+  lookahead?: boolean;
+  lookback?: number;
 }>;
 
 export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): string {
@@ -213,3 +218,57 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     : semanticScalar(element, metadata as any);
 }
 
+
+
+const PHASE_RANK: Readonly<Record<CoreSpiritSemanticPhase, number>> = Object.freeze({
+  historical: 0,
+  confirmed: 1,
+  developing: 2,
+  realtime: 3,
+  forecast: 4,
+});
+
+export function mergeSemanticMetadata(
+  types: readonly (CoreSpiritSemanticType | undefined)[],
+): Pick<CoreSpiritSemanticType, 'phase' | 'causal' | 'lookahead' | 'lookback'> {
+  const present = types.filter(Boolean) as CoreSpiritSemanticType[];
+  if (!present.length) return { phase: 'developing', causal: true, lookahead: false, lookback: 0 };
+  let phase: CoreSpiritSemanticPhase = 'historical';
+  let causal = true;
+  let lookahead = false;
+  let lookback = 0;
+  for (const type of present) {
+    const next = type.phase ?? 'developing';
+    if (PHASE_RANK[next] > PHASE_RANK[phase]) phase = next;
+    causal = causal && type.causal !== false;
+    lookahead = lookahead || type.lookahead === true;
+    lookback = Math.max(lookback, type.lookback ?? 0);
+  }
+  return { phase, causal, lookahead, lookback };
+}
+
+export type CoreSpiritSemanticInspection = Readonly<CoreSpiritSemanticMetadata>;
+
+export type CoreSpiritSemanticMetadata = Readonly<{
+  phase: CoreSpiritSemanticPhase;
+  causal: boolean;
+  lookahead: boolean;
+  lookback: number;
+  symbol?: string;
+  timeframe?: string;
+  unit?: string;
+  currency?: string;
+  valueKind?: CoreSpiritSemanticValueKind;
+}>;
+
+export function inspectSemanticType(type: CoreSpiritSemanticType | undefined): CoreSpiritSemanticMetadata | undefined {
+  if (!type) return undefined;
+  return Object.freeze({
+    ...mergeSemanticMetadata([type]),
+    ...(type.symbol ? { symbol: type.symbol } : {}),
+    ...(type.timeframe ? { timeframe: type.timeframe } : {}),
+    ...(type.unit ? { unit: type.unit } : {}),
+    ...(type.currency ? { currency: type.currency } : {}),
+    ...(type.valueKind ? { valueKind: type.valueKind } : {}),
+  });
+}
