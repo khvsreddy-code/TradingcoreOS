@@ -7,23 +7,44 @@ async function currentUserId(): Promise<string | null> {
   try { return (await getSupabaseClient().auth.getUser()).data.user?.id ?? null; } catch { return null; }
 }
 
-function localGet(key: string): string | null { try { return localStorage.getItem(LOCAL_PREFIX + key); } catch { return null; } }
-function localSet(key: string, value: string): void { try { localStorage.setItem(LOCAL_PREFIX + key, value); } catch {} }
+type BrokerScope = string | (() => string | null | undefined);
 
-export function createTcoVelaSupabaseStorage(broker = 'fyers'): VelaStorage {
+function resolveBroker(scope: BrokerScope): string {
+  const value = typeof scope === 'function' ? scope() : scope;
+  return String(value || 'fyers').trim().toLowerCase();
+}
+
+function localKey(broker: string, key: string): string {
+  return `${LOCAL_PREFIX}${broker}:${key}`;
+}
+
+function localGet(broker: string, key: string): string | null {
+  try {
+    return localStorage.getItem(localKey(broker, key)) ?? localStorage.getItem(LOCAL_PREFIX + key);
+  } catch { return null; }
+}
+
+function localSet(broker: string, key: string, value: string): void {
+  try { localStorage.setItem(localKey(broker, key), value); } catch {}
+}
+
+export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers'): VelaStorage {
   return {
     async get(key) {
+      const broker = resolveBroker(brokerScope);
       const id = await currentUserId();
-      if (!id) return localGet(key);
+      if (!id) return localGet(broker, key);
       try {
         const { data, error } = await getSupabaseClient().from('workspace_layouts')
           .select('snapshot').eq('user_id', id).eq('broker', broker).maybeSingle();
-        if (error || !data?.snapshot) return localGet(key);
+        if (error || !data?.snapshot) return localGet(broker, key);
         return JSON.stringify(data.snapshot);
-      } catch { return localGet(key); }
+        return JSON.stringify(data.snapshot);
+      } catch { return localGet(broker, key); }
     },
     async set(key, value) {
-      localSet(key, value);
+      const broker = resolveBroker(brokerScope);
+      localSet(broker, key, value);
       const id = await currentUserId();
       if (!id) return;
       try {
@@ -35,7 +56,11 @@ export function createTcoVelaSupabaseStorage(broker = 'fyers'): VelaStorage {
       } catch {}
     },
     async remove(key) {
-      try { localStorage.removeItem(LOCAL_PREFIX + key); } catch {}
+      const broker = resolveBroker(brokerScope);
+      try {
+        localStorage.removeItem(localKey(broker, key));
+        localStorage.removeItem(LOCAL_PREFIX + key);
+      } catch {}
       const id = await currentUserId();
       if (!id) return;
       try { await getSupabaseClient().from('workspace_layouts').delete().eq('user_id', id).eq('broker', broker); } catch {}
