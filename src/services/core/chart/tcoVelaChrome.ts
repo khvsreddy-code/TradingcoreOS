@@ -32,7 +32,11 @@ let watchlist: WatchlistItem[] = [...DEFAULT_WATCHLIST];
 const watchlistRefreshers = new Set<()=>void>();
 
 function normalizeWatchlist(value: unknown): WatchlistItem[] {
-  const raw=Array.isArray(value)?value:value&&typeof value==='object'&&Array.isArray((value as Record<string,unknown>).items)?(value as Record<string,unknown>).items:[];
+  const raw: unknown[]=Array.isArray(value)
+    ? value
+    : value&&typeof value==='object'&&Array.isArray((value as Record<string,unknown>).items)
+      ? ((value as Record<string,unknown>).items as unknown[])
+      : [];
   const result: WatchlistItem[]=[]; const seen=new Set<string>();
   for(const item of raw){
     if(!item||typeof item!=='object')continue;
