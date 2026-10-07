@@ -75,10 +75,20 @@ try {
     if (errorState.velaErrors?.length) throw new Error(`Vela runtime errors in layout ${layout}: ${JSON.stringify(errorState.velaErrors)}`);
 
     const perf = evalJson('JSON.stringify({capturedAt: Date.now(), cells: globalThis.__TCO_VELA__?.getPerformanceStats?.() || [], pipeline: globalThis.__TCO_PERF__?.pipeline || [], sharedMemory: globalThis.__TCO_PERF__?.sharedMemory || null})');
+    const health = evalJson('globalThis.__TCO_VELA__?.getCellHealth ? JSON.stringify(await globalThis.__TCO_VELA__.getCellHealth()) : "[]"');
 
     const expectedCells = layout === '8' ? 8 : layout === '4' ? 4 : 1;
     if (!Array.isArray(perf.cells) || perf.cells.length < expectedCells) {
       throw new Error(`Layout ${layout}: expected at least ${expectedCells} Vela telemetry cells, observed ${perf.cells?.length || 0}`);
+    }
+    if (!Array.isArray(health) || health.length < expectedCells) {
+      throw new Error(`Layout ${layout}: expected at least ${expectedCells} Vela chart-health cells, observed ${health?.length || 0}`);
+    }
+    for (const cell of health) {
+      if (!cell?.symbol || !cell?.timeframe) throw new Error(`Layout ${layout}: cell identity is missing.`);
+      if (Number(cell?.totals?.series || 0) < 1 && Number(cell?.totals?.indicators || 0) < 1) {
+        throw new Error(`Layout ${layout}: ${cell.id} has no rendered scene series/indicators.`);
+      }
     }
     if (perf.sharedMemory && (!perf.sharedMemory.crossOriginIsolated || !perf.sharedMemory.sharedArrayBuffer)) {
       throw new Error(`Layout ${layout}: SharedArrayBuffer isolation is unavailable.`);
@@ -101,6 +111,7 @@ try {
         frameBudgetMissRate: cell.frameBudgetMissRate,
       })),
       pipeline: perf.pipeline,
+      chartHealth: health,
       screenshot: screenshotPath,
     });
   }
