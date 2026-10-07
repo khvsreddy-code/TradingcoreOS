@@ -127,7 +127,7 @@ on signal("LONG") {
 }
 `;
 
-const unifiedResult = compileCoreSpirit(unifiedSource, 'unified-language-contract');
+const unifiedResult = compileCoreSpirit(unifiedSource, 'unified-language-contract', { layer: 'automation' });
 assert.ok(!unifiedResult.diagnostics.some(d => d.severity === 'error'), unifiedResult.diagnostics.map(d => d.message).join('; '));
 assert.equal(unifiedResult.ir?.authoringLevel, 'system');
 assert.ok(unifiedResult.ir?.languageCapabilities?.includes('models'));
