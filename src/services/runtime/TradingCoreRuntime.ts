@@ -276,7 +276,19 @@ export class TradingCoreRuntime {
     try {
       const rows = await broker.getHistoricalData(symbol, timeframe, signal, requestedLimit);
       if (!rows.length) return null;
-      const ordered = [...rows].sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp))).slice(-requestedLimit);
+      const beforeMs = beforeTimestamp == null
+        ? Number.POSITIVE_INFINITY
+        : (() => {
+            const numeric = Number(beforeTimestamp);
+            if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
+            const parsed = Date.parse(String(beforeTimestamp));
+            return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+          })();
+      const ordered = [...rows]
+        .sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp)))
+        .filter((row) => Date.parse(String(row.timestamp)) < beforeMs)
+        .slice(-requestedLimit);
+      if (!ordered.length) return null;
       return {
         time: ordered.map(row => Date.parse(String(row.timestamp))),
         open: ordered.map(row => Number(row.open)),
