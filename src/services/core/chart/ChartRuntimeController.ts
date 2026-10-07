@@ -211,7 +211,9 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         }
 
         realtimeController.hydrateHistory(snapshot);
-        deps.rendererController.setHistoryFromCanonical(deps.chartDataPlane.readCanonical(),deps.appearanceRef.current);
+        const canonical = deps.chartDataPlane.readCanonical();
+        if (canonical.length) deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
+        else deps.rendererController.setHistory(data,deps.appearanceRef.current,false);
         chartIndicatorController.setInputs({indicators:deps.indicatorsRef.current,timeframe:deps.timeframe});
         try{
           chartIndicatorController.renderStudies(data);
@@ -250,7 +252,9 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
       const stopInteraction=interactionController.attach();
 
       const stopData=chartDataController.subscribe(applySnapshot);
-      void deps.chartDataPlane.ensureReady().catch(()=>{});
+      void deps.chartDataPlane.ensureReady().catch((error)=>{
+        if (!dead) console.warn('[TradingCore] history fast path unavailable', error);
+      });
 
       return()=>{
         dead=true;

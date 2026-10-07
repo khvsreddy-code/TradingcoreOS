@@ -62,6 +62,11 @@ class MarketDataStore {
       });
       // Keep the stop function on the entry without expanding the public store API.
       (entry as Entry & { stop?: () => void }).stop = stop;
+      // plane.subscribe() may synchronously populate a cached snapshot before a
+      // UI listener exists. Refresh the imperative registry from the plane so
+      // the next subscriber receives the real candle state rather than an empty
+      // placeholder snapshot.
+      entry.snapshot = plane.getSnapshot();
     }
     entry.consumers += 1;
     return () => this.detach(key);
@@ -80,6 +85,9 @@ class MarketDataStore {
     const entry = this.entries.get(key);
     if (!entry) return () => undefined;
     entry.listeners.add(listener);
+    // Replay the current snapshot immediately. This is essential for cached
+    // history, which may already be loaded before the UI subscribes.
+    listener({ type:'snapshot', snapshot:entry.snapshot });
     return () => entry.listeners.delete(listener);
   }
 

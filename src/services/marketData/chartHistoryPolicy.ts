@@ -1,5 +1,14 @@
 export const INITIAL_HISTORY_CANDLES: Record<string, number> = {
-  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000, '15m': 5000, '30m': 5000, '1H': 5000, '1D': 5000,
+  // First paint is deliberately viewport-friendly. Deeper history is warmed
+  // after the chart is visible instead of blocking candle visibility.
+  '1m': 1200,
+  '3m': 1000,
+  '5m': 900,
+  '10m': 900,
+  '15m': 750,
+  '30m': 600,
+  '1H': 480,
+  '1D': 240,
 };
 
 export const HISTORY_PAGE_CANDLES: Record<string, number> = {
@@ -27,8 +36,10 @@ export function historyPageCandles(timeframe: string): number {
  * Small viewports should not pull a full page when only a few hundred bars are
  * needed; larger viewports are capped by the normal timeframe page budget.
  */
-export function historyDemandPageCandles(_timeframe: string, _visibleBars: number): number {
-  return 5000;
+export function historyDemandPageCandles(timeframe: string, visibleBars: number): number {
+  const base = initialHistoryCandles(timeframe);
+  const bars = Math.max(1, Math.ceil(Number(visibleBars) || 1));
+  return Math.max(250, Math.min(5000, Math.max(base, bars * 4)));
 }
 
 export function historyDemandLeadBars(timeframe: string, visibleBars: number): number {

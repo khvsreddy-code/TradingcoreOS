@@ -10,7 +10,7 @@ type QueueItem<T> = {
   reject: (reason: unknown) => void;
 };
 
-const PRIORITY: Record<HistoryRequestPriority, number> = { initial: 0, visible: 1, warm: 5 };
+const PRIORITY: Record<HistoryRequestPriority, number> = { initial: -10, visible: 0, warm: 10 };
 
 /**
  * Global history request gate. A chart dataset owns its lifecycle, but the
@@ -19,7 +19,7 @@ const PRIORITY: Record<HistoryRequestPriority, number> = { initial: 0, visible: 
  * REST burst while preserving per-dataset single-flight in ChartDataPlane.
  */
 export class ChartHistoryCoordinator {
-  readonly maxConcurrent = 2;
+  readonly maxConcurrent = 6;
   private active = 0;
   private sequence = 0;
   private queue: Array<QueueItem<any>> = [];
@@ -31,7 +31,14 @@ export class ChartHistoryCoordinator {
 
     const promise = new Promise<T>((resolve, reject) => {
       this.queue.push({ key, priority: PRIORITY[priority], sequence: ++this.sequence, run, resolve, reject });
-      this.queue.sort((a, b) => a.priority - b.priority || a.sequence - b.sequence);
+      this.queue.sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        // Latest cold-start request wins over older queued cold-starts. Rapid
+        // symbol/timeframe switching should paint the user's newest choice
+        // rather than waiting behind abandoned chart selections.
+        if (a.priority === PRIORITY.initial) return b.sequence - a.sequence;
+        return a.sequence - b.sequence;
+      });
       this.pump();
     });
     this.inflight.set(key, promise);

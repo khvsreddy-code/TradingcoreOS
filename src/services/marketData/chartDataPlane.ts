@@ -146,6 +146,11 @@ export class ChartDataPlane {
     });
   }
 
+  /** Return the latest immutable snapshot so late subscribers can replay cached history. */
+  getSnapshot(): ChartDataPlaneSnapshot {
+    return this.snapshot();
+  }
+
   private emit(event: DataPlaneEvent): void {
     const snapshot = event.snapshot || this.snapshot();
     const normalized = { ...event, snapshot } as DataPlaneEvent;
@@ -389,9 +394,9 @@ export class ChartDataPlane {
     return promise;
   }
 
-  /** Wait for canonical history to become ready. Vela and other adapters use this instead of reopening broker history. */
+  /** Cold-start contract: use the compact columnar path first, then fall back to object history. */
   ensureReady(limit?: number): Promise<HistoricalCandle[]> {
-    return this.ensureHistory(limit);
+    return this.ensureReadyColumns(limit).catch(() => this.ensureHistory(limit));
   }
 
   /** Borrow the shared typed-array market view. No candle objects are created. */
