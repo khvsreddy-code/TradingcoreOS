@@ -104,9 +104,13 @@ export const isSnapshotType = (type: CoreSpiritType): boolean =>
 
 export const isNumericType = (type: CoreSpiritType): boolean => {
   if (isNumericScalarType(type)) return true;
-  if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type) || isPredictionType(type) || isFeatureType(type) || isFeatureSetType(type)) {
+  if (isSeriesType(type) || isWindowType(type) || isStateType(type) || isTemporalValueType(type)) {
     const parsed = parseCoreSpiritTemporalType(type);
     return parsed ? ['int', 'float', 'number', 'price', 'volume', 'currency', 'duration', 'time'].includes(parsed.element) : false;
+  }
+  if (isPredictionType(type) || isFeatureType(type)) {
+    const element = type.slice(type.indexOf('<') + 1, -1).toLowerCase();
+    return ['int','float','number','price','volume','currency','duration','time'].includes(element);
   }
   return false;
 };
