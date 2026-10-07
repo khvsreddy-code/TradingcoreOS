@@ -27,6 +27,13 @@ function localGet(broker: string, key: string): string | null {
 function localSet(broker: string, key: string, value: string): void {
   try { localStorage.setItem(localKey(broker, key), value); } catch {}
 }
+function journalLocalGet(): string | null {
+  try { return localStorage.getItem(LOCAL_PREFIX + 'journal') ?? null; } catch { return null; }
+}
+
+function journalLocalSet(value: string): void {
+  try { localStorage.setItem(LOCAL_PREFIX + 'journal', value); } catch {}
+}
 
 export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers'): VelaStorage {
   return {
@@ -38,7 +45,6 @@ export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers')
         const { data, error } = await getSupabaseClient().from('workspace_layouts')
           .select('snapshot').eq('user_id', id).eq('broker', broker).maybeSingle();
         if (error || !data?.snapshot) return localGet(broker, key);
-        return JSON.stringify(data.snapshot);
         return JSON.stringify(data.snapshot);
       } catch { return localGet(broker, key); }
     },
@@ -84,17 +90,17 @@ export async function loadTcoVelaDefaults(): Promise<{ layout?: string; timefram
 
 export async function loadTcoVelaJournal(): Promise<string | null> {
   const id = await currentUserId();
-  if (!id) return localGet('journal');
+  if (!id) return journalLocalGet();
   try {
     const { data, error } = await getSupabaseClient().from('user_settings').select('settings').eq('user_id', id).maybeSingle();
-    if (error || !data?.settings || typeof data.settings !== 'object') return localGet('journal');
+    if (error || !data?.settings || typeof data.settings !== 'object') return journalLocalGet();
     const value = (data.settings as Record<string, unknown>).journal;
-    return typeof value === 'string' ? value : localGet('journal');
-  } catch { return localGet('journal'); }
+    return typeof value === 'string' ? value : journalLocalGet();
+  } catch { return journalLocalGet(); }
 }
 
 export async function saveTcoVelaJournal(note: string): Promise<void> {
-  localSet('journal', note);
+  journalLocalSet(note);
   const id = await currentUserId();
   if (!id) return;
   try {
