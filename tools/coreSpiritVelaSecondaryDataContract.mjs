@@ -17,3 +17,9 @@ assert.match(source, /Secondary market data unavailable/);
 assert.match(source, /Secondary market data refresh failed/);
 
 console.log('CORESPIRIT_VELA_SECONDARY_DATA_P0_OK');
+
+assert.match(source, /secondaryFailed = new Set/);
+assert.match(source, /secondaryDegraded=secondaryFailed\.size>0/);
+assert.match(source, /safeOutputs = \(outputs: CoreSpiritObject\[\]\)/);
+assert.match(source, /output\.kind !== 'signal' && output\.kind !== 'orderIntent'/);
+assert.match(source, /context\.alignment==='nearest-confirmed'/);
