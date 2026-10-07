@@ -102,7 +102,7 @@ const bars=[
 ];
 const result=runtime.executeIr(quantIr,bars);
 assert.ok(modelCalls>0);
-assert.ok(result.outputs.some(output=>output.kind==='signal' && output.type==='LONG'));
+assert.ok(result.outputs.some(output=>output.kind==='signal' && output.type==='LONG'), JSON.stringify({diagnostics:result.diagnostics, signalOutputs:result.outputs.filter(output=>output.kind==='signal'), emitInstructions:quantIr?.entry.instructions.filter(instruction=>instruction.op==='emit').map(instruction=>({kind:instruction.kind,args:instruction.args,outputId:instruction.outputId}))}));
 
 const platform=new CoreSpiritPlatformRuntime();
 const platformCompile=platform.compile(quant,'platform-quant','strategy');
