@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Vela } from '../../vendor/vela/src';
+import { Vela } from '../services/core/chart/velaChartFacade';
 
 type SmokeState = {
   phase: 'boot' | 'ready' | 'indicator-ready' | 'failed';
