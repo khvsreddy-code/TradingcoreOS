@@ -55,7 +55,7 @@ export function loadChartState(brokerId:string,instrumentKey:string):PersistedCh
         version:2,
         timeframe:typeof x.timeframe==='string'&&chartIntervals[x.timeframe as keyof typeof chartIntervals]?x.timeframe:'5m',
         drawings,
-        velaDrawings:velaDocument,
+        velaDrawings:velaDocument.drawings,
         showLevels:Boolean(x.showLevels),
         showVolume:Boolean(x.showVolume),
         showOI:Boolean(x.showOI),
