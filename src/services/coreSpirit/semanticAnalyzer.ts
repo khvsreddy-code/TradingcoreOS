@@ -352,6 +352,10 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
               return source?.kind==='series' ? source : semanticSeries('number');
             }
             if (resolved.builtin.returnType === 'boolean') return semanticScalar('boolean');
+            if (resolved.builtin.returnType === 'number') {
+              const source=argTypes[0];
+              return source?.kind==='series' ? source : semanticScalar('number');
+            }
             void argTypes;
           }
         }
