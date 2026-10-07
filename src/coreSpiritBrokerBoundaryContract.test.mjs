@@ -9,6 +9,7 @@ import {
   validateCoreSpiritArchitectureEdges,
   validateCoreSpiritBrokerBoundarySource,
 } from './services/coreSpirit/architectureContract.ts';
+import { validateTradingCoreOSDependency } from './architecture/architectureContract.ts';
 
 const root = process.cwd();
 
@@ -19,8 +20,8 @@ assert.equal(CORE_SPIRIT_BROKER_BOUNDARY.brokerAccess, 'adapter-only');
 
 assert.ok(CORE_SPIRIT_ARCHITECTURE_NODES.some(node => node.id === 'execution-authority' && node.owner === 'tradingcoreos-host'));
 assert.deepEqual([...CORE_SPIRIT_EXECUTION_GRAPH].slice(-5), ['risk', 'order-intent', 'execution-authority', 'execution', 'broker']);
-assert.ok(CORE_SPIRIT_FORBIDDEN_DEPENDENCIES.includes(['vm', 'broker']));
-assert.ok(CORE_SPIRIT_FORBIDDEN_DEPENDENCIES.includes(['execution-authority', 'broker']));
+assert.ok(CORE_SPIRIT_FORBIDDEN_DEPENDENCIES.some(([from, to]) => from === 'vm' && to === 'broker'));
+assert.ok(CORE_SPIRIT_FORBIDDEN_DEPENDENCIES.some(([from, to]) => from === 'execution-authority' && to === 'broker'));
 assert.deepEqual(validateCoreSpiritArchitectureEdges([['vm', 'broker'], ['execution-authority', 'broker']]), [
   'forbidden direct dependency: vm -> broker',
   'forbidden direct dependency: execution-authority -> broker',
@@ -63,8 +64,8 @@ for (const file of files) {
 
 assert.deepEqual(violations, [], violations.join('\n'));
 
-const architecture = fs.readFileSync(path.join(root, 'src/architecture/architectureContract.ts'), 'utf8');
-assert.match(architecture, /coreSpirit.*mayDependOn/);
-assert.doesNotMatch(architecture, /{ id: 'coreSpirit',[^\n]*mayDependOn:\s*\[[^\]]*'trading'/);
+assert.equal(validateTradingCoreOSDependency('trading', 'coreSpirit'), true);
+assert.equal(validateTradingCoreOSDependency('coreSpirit', 'trading'), false);
+assert.equal(validateTradingCoreOSDependency('vela', 'trading'), false);
 
 console.log('CORESPIRIT_BROKER_BOUNDARY_CONTRACT_OK');
