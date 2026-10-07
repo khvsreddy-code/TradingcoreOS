@@ -37,10 +37,6 @@ export {
   symbolRanking,
   registerWidgetAttachment,
   unregisterWidgetAttachment,
-  registerNativeIndicator,
-  unregisterNativeIndicator,
-  registerRendererLayer,
-  unregisterRendererLayer,
 } from '../../../../vendor/vela/src/widget/contributions';
 export type {
   LegendActionDescriptor,
@@ -52,9 +48,6 @@ export type {
   SymbolRankingHook,
   ExternalIndicatorEntry,
   WidgetAttachment,
-  NativeIndicator,
-  NativeIndicatorContext,
-  RendererLayerDescriptor,
 } from '../../../../vendor/vela/src/widget/contributions';
 export {
   VelaNativeChartKernel as VelaChartFacade,
