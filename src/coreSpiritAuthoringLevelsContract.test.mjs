@@ -150,3 +150,19 @@ assert.equal(signalTrigger?.filter?.kind, 'signal');
 assert.equal(signalTrigger?.filter?.value, 'LONG');
 
 console.log('CORESPIRIT_UNIFIED_LANGUAGE_CONTRACT_OK');
+
+
+const metadataProbe = `
+model factorModel {
+    features:
+        returns,
+        stats.zscore(returns, 100),
+        volume.zscore(50)
+    target:
+        forward_return(20)
+}
+`;
+const metadataSurface = (await import('./services/coreSpirit/languageConcepts.ts')).extractCoreSpiritSurfaceMetadata(metadataProbe);
+const factorModel = metadataSurface.declarations.find(item => item.kind === 'model' && item.name === 'factorModel');
+assert.ok(factorModel);
+assert.deepEqual(factorModel?.inputs, ['returns', 'stats.zscore(returns,', '100)', 'volume.zscore(50)']);
