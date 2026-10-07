@@ -14,10 +14,11 @@ const source = fs.readFileSync(
   'utf8',
 );
 
-assert.match(
-  source,
-  /if \(!this\.columnarBars\) \{\s*\/\/ LiveSession may select the compact columnar transport[\s\S]*?this\.updateBar\(\{/,
-  'columnar live updates must fall back to scalar bar updates when history used the scalar renderer path',
+assert.ok(
+  source.includes('if (!this.columnarBars)') &&
+  source.includes('this.updateBar({') &&
+  source.includes('columnarTimeToMillis(update.time, unit)'),
+  'columnar live updates must have an explicit scalar fallback path when no mutable columnar store exists',
 );
 assert.match(
   source,
