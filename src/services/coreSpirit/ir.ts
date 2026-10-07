@@ -10,6 +10,7 @@ import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 import type { CoreSpiritRepaintSafetyReport } from './repaintSafety';
 import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import type { CoreSpiritResearchPlan } from './researchSurface';
+import type { CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
 export type CoreSpiritIrValue = { kind:'const'; value:number|string|boolean|null } | { kind:'series'; name:string; offset:number } | { kind:'local'; name:string };
@@ -82,5 +83,7 @@ export type CoreSpiritIrProgram = {
   repaintSafety?:CoreSpiritRepaintSafetyReport;
   executionPlanVisualization?:CoreSpiritExecutionPlanVisualization;
   researchPlan?:CoreSpiritResearchPlan;
+  authoringLevel?:CoreSpiritAuthoringLevel;
+  languageCapabilities?: readonly string[];
   compilerPipeline?:CoreSpiritCompilerPipelineTrace;
 };
