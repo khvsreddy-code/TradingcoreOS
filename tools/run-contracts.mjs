@@ -22,6 +22,7 @@ const contracts = [
   ['broker-launch-workspace', ['src/brokerLaunchWorkspaceContract.test.mjs', false]],
   ['corespirit-vela-data-and-drawings', ['tools/coreSpiritVelaDataAndDrawingsContract.mjs', true]],
   ['tco-vela-data-watchlist', ['src/tcoVelaDataWatchlistContract.test.mjs', false]],
+  ['vela-drawing-persistence', ['src/velaDrawingPersistenceContract.test.mjs', false]],
   ['corespirit-vela-secondary-data', ['tools/coreSpiritVelaSecondaryDataContract.mjs', false]],
   ['corespirit-language-parity', ['src/coreSpiritLanguageParityContract.test.mjs', true]],
   ['chart-candle-data-plane-fast-switch', ['tools/chartCandleDataPlaneFastSwitchContract.mjs', true]],
