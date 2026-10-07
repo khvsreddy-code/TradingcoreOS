@@ -1,4 +1,4 @@
-import { IChartApi, ISeriesApi, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaNativeChartKernel';
+import { IChartApi, ISeriesApi, VelaNativeSeriesKernel, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaNativeChartKernel';
 import { CoreSpiritOutputFrame } from './outputDispatcher';
 import { CoreSpiritObject, CoreSpiritVisualStyle } from './types';
 
@@ -130,7 +130,7 @@ export class CoreSpiritChartOutputController {
     const valid = (point: { time: number; value: number | null }): boolean =>
       Number.isFinite(point.time) && (point.value == null || Number.isFinite(point.value));
 
-    const current = (series as VelaSeriesFacade).snapshotPoints();
+    const current = series instanceof VelaNativeSeriesKernel ? series.snapshotPoints() : [];
     if (!current.length) {
       const initial = points.filter(valid).map((p) =>
         p.value == null
