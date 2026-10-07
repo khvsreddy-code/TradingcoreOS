@@ -34,12 +34,17 @@ const CANONICAL_MAX = 50_000;
 
 export type ChartDataPlaneKey = string;
 
+type ChartColumnarSnapshot = Readonly<{
+  time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds';
+}>;
 export type ChartDataPlaneSnapshot = Readonly<{
   key: ChartDataPlaneKey;
   brokerId: string;
   instrumentKey: string;
   timeframe: string;
   candles: HistoricalCandle[];
+  /** Native Vela render data; compatibility candle objects are lazy. */
+  columns?: ChartColumnarSnapshot;
   latestTick?: NormalizedMarketTick;
   revision: number;
   historyReady: boolean;
@@ -56,6 +61,9 @@ type Subscriber = (event: DataPlaneEvent) => void;
 
 type PlaneState = {
   candles: HistoricalCandle[];
+  columns?: ChartColumnarSnapshot;
+  compatibilityCandles: HistoricalCandle[];
+  compatibilityRevision: number;
   latestTick?: NormalizedMarketTick;
   revision: number;
   historyReady: boolean;
@@ -118,7 +126,7 @@ export class ChartDataPlane {
   readonly key: ChartDataPlaneKey;
   private readonly canonicalPlane: CanonicalDataPlane;
   private readonly state: PlaneState = {
-    candles: [], revision: 0, historyReady: false, historyLoading: false,
+    candles: [], columns: undefined, compatibilityCandles: [], compatibilityRevision: -1, revision: 0, historyReady: false, historyLoading: false,
     olderHistoryLoading: false, subscribers: new Set(), consumers: 0, lastHistoryLoadAt: 0, olderHistoryExhausted: false, warmHistoryRequested: false, olderRequestCooldownUntil: 0,
   };
 
@@ -138,6 +146,7 @@ export class ChartDataPlane {
       instrumentKey: this.instrumentKey,
       timeframe: this.timeframe,
       candles: this.state.candles,
+      ...(this.state.columns ? { columns: this.state.columns } : {}),
       latestTick: this.state.latestTick,
       revision: this.state.revision,
       historyReady: this.state.historyReady,
@@ -180,8 +189,9 @@ export class ChartDataPlane {
     this.state.latestTick = tick;
     const price = Number(tick.ltp);
     if (!Number.isFinite(price)) return;
+    const compatibility = this.state.candles.length ? this.state.candles : this.getCompatibilityCandles();
     const result = reconcileRealtimeCandle(
-      this.state.candles,
+      compatibility,
       {
         price,
         timestamp: tick.lastTradeTimestamp ?? tick.receivedAt ?? Date.now(),
@@ -194,6 +204,9 @@ export class ChartDataPlane {
     const previousLength = this.state.candles.length;
     const previousClose = this.state.candles[previousLength - 1]?.close;
     this.state.candles = result.candles;
+    this.state.columns = undefined;
+    this.state.compatibilityCandles = result.candles;
+    this.state.compatibilityRevision = -1;
     const latest = result.candles[result.candles.length - 1];
     const latestPoint = latest ? { time: Math.floor(Date.parse(latest.timestamp) / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 } : null;
     if (latestPoint) {
@@ -207,7 +220,7 @@ export class ChartDataPlane {
     }
     const latestCandle = result.candles[result.candles.length - 1];
     if (latestCandle) marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, latestCandle);
-    if (result.bucketChanged || result.candles.length !== previousLength) {
+    if (result.bucketChanged || result.candles.length !== previousLength || Number(previousClose) !== Number(result.candles[result.candles.length - 1]?.close)) {
       this.state.revision += 1;
       historyStore.upsertLatest(this.brokerId, this.instrumentKey, CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, result.candles[result.candles.length - 1]);
     }
@@ -274,6 +287,9 @@ export class ChartDataPlane {
     const merged = normalizeHistory([...rows, ...this.state.candles]);
     if (!merged.length) return this.state.candles;
     this.state.candles = merged;
+    this.state.columns = undefined;
+    this.state.compatibilityCandles = merged;
+    this.state.compatibilityRevision = -1;
     marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
     this.state.revision += 1;
     this.syncCanonical();
@@ -283,26 +299,47 @@ export class ChartDataPlane {
   }
 
   private setColumnarHistory(columns: { time: ArrayLike<number>; open: ArrayLike<number>; high: ArrayLike<number>; low: ArrayLike<number>; close: ArrayLike<number>; volume: ArrayLike<number>; timeUnit?: 'milliseconds' | 'seconds' }, requestedLimit: number, reason: 'cache' | 'history'): HistoricalCandle[] {
-    const candles = columnarHistoryToCandles(columns, Math.min(5000, requestedLimit));
-    if (!candles.length) return [];
-    const retained = candles.slice(-MAX_HISTORY_CANDLES);
-    this.state.candles = retained;
-    marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
+    const candlesForCache = columnarHistoryToCandles(columns, Math.min(5000, requestedLimit));
+    if (!candlesForCache.length) return [];
+    const retainedForCache = candlesForCache.slice(-MAX_HISTORY_CANDLES);
+
+    // Critical render path: keep Vela on the typed columnar representation. The
+    // OHLCV object array is retained only as a cold compatibility cache.
+    this.state.columns = columns;
+    this.state.candles = [];
+    this.state.compatibilityCandles = retainedForCache;
+    this.state.compatibilityRevision = this.state.revision + 1;
     this.state.revision += 1;
-    this.canonicalPlane.replaceColumns(columns, Math.max(0, columns.time.length - retained.length));
+    this.canonicalPlane.replaceColumns(columns, Math.max(0, columns.time.length - retainedForCache.length));
+
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
-    historyStore.set(this.brokerId, this.instrumentKey, interval, retained, Math.min(MAX_HISTORY_CANDLES, Math.max(requestedLimit, retained.length)));
+    historyStore.set(this.brokerId, this.instrumentKey, interval, retainedForCache, Math.min(MAX_HISTORY_CANDLES, Math.max(requestedLimit, retainedForCache.length)));
     this.state.lastHistoryLoadAt = Date.now();
     this.state.olderHistoryExhausted = false;
     this.state.historyReady = true;
     this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
-    return retained;
+    return retainedForCache;
+  }
+
+  /** Materialize the compatibility object view once per columnar revision. Vela rendering never needs this. */
+  getCompatibilityCandles(limitOverride?: number): HistoricalCandle[] {
+    if (this.state.candles.length) return this.activeWindow(this.state.candles, limitOverride);
+    if (this.state.compatibilityCandles.length && this.state.compatibilityRevision === this.state.revision) {
+      return this.activeWindow(this.state.compatibilityCandles, limitOverride);
+    }
+    if (!this.state.columns) return [];
+    const materialized=columnarHistoryToCandles(this.state.columns, Math.min(MAX_HISTORY_CANDLES, Number(limitOverride)||MAX_HISTORY_CANDLES));
+    this.state.compatibilityCandles=materialized;
+    this.state.compatibilityRevision=this.state.revision;
+    return this.activeWindow(materialized, limitOverride);
   }
 
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
-    if (this.state.historyReady && this.state.candles.length) return this.activeWindow(this.state.candles, limitOverride);
+    if (this.state.historyReady && (this.state.candles.length || this.state.columns?.time.length)) {
+      return this.state.candles.length ? this.activeWindow(this.state.candles, limitOverride) : [];
+    }
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride)) ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride)))) : baseLimit;
@@ -416,6 +453,7 @@ export class ChartDataPlane {
   }
 
   async loadOlderHistory(priority: 'visible' | 'warm' = 'visible', demand?: { visibleBars?: number }): Promise<HistoricalCandle[]> {
+    if (this.state.historyReady && !this.state.candles.length && this.state.columns) this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
     if (this.state.olderHistoryPromise || !this.state.historyReady || this.state.olderHistoryExhausted || this.state.candles.length >= MAX_HISTORY_CANDLES) {
       return this.state.olderHistoryPromise || this.state.candles;
     }
