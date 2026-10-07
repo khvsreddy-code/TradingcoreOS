@@ -5,9 +5,11 @@ import {
   registerStatePersistence,
   registerSymbolRanking,
   registerWidgetAction,
+  registerWidgetAttachment,
   type LegendCalloutSpec,
   type SidePanelDescriptor,
   type WidgetActionDescriptor,
+  type WidgetAttachment,
   type StatePersistenceHandler,
   type SymbolRankingHook,
 } from './velaChartFacade';
@@ -278,6 +280,73 @@ const bookmarksPanel: SidePanelDescriptor = {
 };
 
 
+const healthPanel: SidePanelDescriptor = {
+  id: 'tco.market-health',
+  title: 'Market Health',
+  icon: 'activity',
+  order: 30,
+  width: 340,
+  resizable: true,
+  minWidth: 280,
+  maxWidth: 520,
+  mount(ctx, body, header) {
+    header.setTitle('Market Health');
+    const root = panelRoot(body);
+    const status = document.createElement('div');
+    const rows = document.createElement('div');
+    rows.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+    root.append(status, rows);
+
+    const setValue = (label: string, value: string, tone = '#cbd5e1') => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;gap:14px;border:1px solid rgba(255,255,255,.06);border-radius:7px;padding:7px 8px;background:rgba(255,255,255,.025);';
+      const key = document.createElement('span');
+      key.textContent = label;
+      key.style.cssText = 'font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;';
+      const valueEl = document.createElement('span');
+      valueEl.textContent = value;
+      valueEl.style.cssText = `font-size:10px;color:${tone};font-variant-numeric:tabular-nums;text-align:right;`;
+      row.append(key, valueEl);
+      rows.appendChild(row);
+    };
+
+    const render = () => {
+      rows.textContent = '';
+      const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
+      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol);
+      const now = Date.now();
+      const age = tick?.receivedAt ? Math.max(0, now - Date.parse(String(tick.receivedAt))) : Number.POSITIVE_INFINITY;
+      const ageText = Number.isFinite(age) ? `${Math.round(age)} ms` : 'no tick';
+      const ageTone = age < 1200 ? '#4ade80' : age < 4000 ? '#facc15' : '#fb7185';
+      status.textContent = `${ctx.symbol} · ${ctx.timeframe}`;
+      status.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:2px;';
+      setValue('Broker', broker?.brokerId || 'none', broker?.status === 'Connected' ? '#4ade80' : '#facc15');
+      setValue('Connection', broker?.status || 'Unavailable', broker?.status === 'Connected' ? '#4ade80' : '#facc15');
+      setValue('LTP', tick && Number.isFinite(Number(tick.ltp)) ? Number(tick.ltp).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+      setValue('Tick age', ageText, ageTone);
+      setValue('Transport', 'Vela → TCO canonical feed', '#c4b5fd');
+
+      const perf = (window as Window & { __TCO_PERF__?: { cells?: Array<{ cellId?: string; fps?: number; p95FrameMs?: number; backend?: string }> } }).__TCO_PERF__;
+      const cell = perf?.cells?.find(item => item.cellId && String(item.cellId).length > 0);
+      if (cell) {
+        setValue('Renderer', cell.backend || 'auto', '#c4b5fd');
+        setValue('FPS', Number.isFinite(Number(cell.fps)) ? Number(cell.fps).toFixed(1) : '—');
+        setValue('P95 frame', Number.isFinite(Number(cell.p95FrameMs)) ? `${Number(cell.p95FrameMs).toFixed(2)} ms` : '—');
+      }
+      const isolated = typeof window !== 'undefined' && Boolean(window.crossOriginIsolated) && typeof SharedArrayBuffer !== 'undefined';
+      setValue('Shared memory', isolated ? 'available' : 'unavailable', isolated ? '#4ade80' : '#facc15');
+    };
+
+    render();
+    const timer = window.setInterval(render, 1000);
+    return {
+      onOpen: render,
+      onChart: render,
+      destroy: () => window.clearInterval(timer),
+    };
+  },
+};
+
 const journalPanel: SidePanelDescriptor = {
   id: 'tco.journal', title: 'Journal', icon: 'calendar', order: 20, width: 340, resizable: true, minWidth: 280, maxWidth: 520,
   mount(ctx, body, header) {
@@ -411,7 +480,33 @@ const brokerAction: WidgetActionDescriptor = {
 
 registerSidePanel(bookmarksPanel);
 registerSidePanel(journalPanel);
+registerSidePanel(healthPanel);
 registerWidgetAction(brandAction);
+const marketHealthAction: WidgetActionDescriptor = {
+  id: 'tco.market-health',
+  target: 'topbar',
+  label: 'Market Health',
+  icon: 'activity',
+  iconOnly: true,
+  align: 'right',
+  order: 3,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.market-health'); },
+};
+
+const healthAttachment: WidgetAttachment = {
+  id: 'tco.market-health-attachment',
+  mount(ctx) {
+    const listener = () => {
+      try { ctx.stateChanged(); } catch {}
+    };
+    window.addEventListener('visibilitychange', listener);
+    return () => window.removeEventListener('visibilitychange', listener);
+  },
+};
+
+registerWidgetAction(marketHealthAction);
+registerWidgetAttachment(healthAttachment);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(journalAction);
 registerWidgetAction(panelsAction);
