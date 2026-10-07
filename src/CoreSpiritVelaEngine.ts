@@ -104,6 +104,19 @@ function upperBoundMarketTime(bars:readonly CoreSpiritMarketBar[], targetMs:numb
   return lo;
 }
 
+function timeframeDurationMs(timeframe: string): number {
+  const match = String(timeframe || '').trim().match(/^(\\d+)([smhdw]?)$/i);
+  if (!match) return 5 * 60_000;
+  const count = Math.max(1, Number(match[1]));
+  switch (String(match[2] || 'm').toLowerCase()) {
+    case 's': return count * 1_000;
+    case 'h': return count * 60 * 60_000;
+    case 'd': return count * 24 * 60 * 60_000;
+    case 'w': return count * 7 * 24 * 60 * 60_000;
+    default: return count * 60_000;
+  }
+}
+
 export class CoreSpiritVelaEngine {
   readonly language = 'corespirit';
 
@@ -138,6 +151,8 @@ export class CoreSpiritVelaEngine {
     const token = req.prepared.token as PreparedToken;
     const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
+    let secondaryRefreshPromise: Promise<void> | undefined;
+    let secondaryLastRefreshAt = 0;
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
       dataDependencies
@@ -155,30 +170,56 @@ export class CoreSpiritVelaEngine {
         const row=rows[target];
         if(!row)return null;
         const time=barTimeMillis(row.timestamp);
+        const duration = timeframeDurationMs(request.timeframe);
+        const confirmed = context.executionMode !== 'realtime' || time + duration <= context.asOfTimestamp;
         return {
           value:Number((row as any)[request.field]),
           source:`vela.fetchSeries:${request.symbol}:${request.timeframe}`,
           symbol:request.symbol,
           timeframe:request.timeframe,
           timestamp:time,
-          state:time===context.asOfTimestamp?'confirmed':'confirmed',
+          state:confirmed ? 'confirmed' : 'developing',
           revision:context.revision,
         };
       },
     };
 
-    const loadSecondaryData = async (): Promise<void> => {
+    const loadSecondaryData = async (force = false): Promise<void> => {
       if (!req.fetchSeries || !secondaryDependencies.length) return;
-      const endTime = bars.length ? barTimeMillis(bars[bars.length-1]?.timestamp) : undefined;
+      const now = Date.now();
+      if (!force && secondaryRefreshPromise) return secondaryRefreshPromise;
+      if (!force && now - secondaryLastRefreshAt < 1500) return;
+      const endTime = bars.length ? barTimeMillis(bars[bars.length - 1]?.timestamp) : undefined;
       const limit = Math.min(50000, Math.max(5000, bars.length + token.ir.maxLookback + 64));
-      await Promise.all(secondaryDependencies.map(async dep => {
-        const key=dependencyKey(dep.symbol,dep.timeframe);
-        if (secondaryData.has(key)) return;
+
+      const task = Promise.all(secondaryDependencies.map(async dep => {
+        const key = dependencyKey(dep.symbol, dep.timeframe);
         try {
-          const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{ to:Number.isFinite(endTime) ? endTime : undefined, limit });
-          if (rows?.length) secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
-        } catch {}
-      }));
+          const rows = await req.fetchSeries!(dep.symbol, dep.timeframe, {
+            to: Number.isFinite(endTime) ? endTime : undefined,
+            limit,
+          });
+          if (rows?.length) secondaryData.set(key, normalizeVelaBars(rows as unknown as VelaOhlcv[]));
+        } catch (error) {
+          // Secondary dependencies are first-class data. A failed refresh must
+          // not silently masquerade as a missing value; retain the previous
+          // snapshot and let the next refresh retry.
+          if (req.mode === 'live') {
+            handlers.onWarning?.({
+              message: `Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error ? error.message : String(error)}`,
+              method: 'secondary-data',
+              bar: Math.max(0, bars.length - 1),
+            });
+          }
+        }
+      })).then(() => {
+        secondaryLastRefreshAt = Date.now();
+      }).finally(() => {
+        secondaryRefreshPromise = undefined;
+      });
+
+      secondaryRefreshPromise = task;
+      return task;
     };
 
     const runtime = new CoreSpiritRuntime({
@@ -238,7 +279,7 @@ export class CoreSpiritVelaEngine {
     };
 
     let secondaryReady = secondaryDependencies.length
-      ? loadSecondaryData().then(() => true)
+      ? loadSecondaryData(true).then(() => true)
       : Promise.resolve(true);
 
     if (!secondaryDependencies.length) initialRun();
@@ -307,8 +348,11 @@ export class CoreSpiritVelaEngine {
           emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
           liveStarted = req.mode === 'live';
         };
-        if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) void loadSecondaryData().then(runUpdate);
-        else runUpdate();
+        if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) void loadSecondaryData(true).then(runUpdate);
+        else {
+          if (secondaryDependencies.length) void loadSecondaryData();
+          runUpdate();
+        }
       },
       setVisibleRange() {
         // CoreSpirit execution remains renderer-neutral and range-insensitive.
@@ -329,7 +373,7 @@ export class CoreSpiritVelaEngine {
             emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
             liveStarted = req.mode === 'live';
           };
-          if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) { void loadSecondaryData().then(runComplete); return; }
+          if (secondaryDependencies.length) { void loadSecondaryData(true).then(runComplete); return; }
           runComplete();
           return;
         }
@@ -358,6 +402,7 @@ export class CoreSpiritVelaEngine {
         }
 
         if (!liveStarted) rehydrateForLive();
+        if (req.mode === 'live' && secondaryDependencies.length) void loadSecondaryData();
         const latest = currentBars.at(-1);
         if (!latest) return;
         const latestTime = barTimeMillis(latest.timestamp);
