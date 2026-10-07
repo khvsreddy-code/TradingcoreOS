@@ -165,4 +165,4 @@ model factorModel {
 const metadataSurface = (await import('./services/coreSpirit/languageConcepts.ts')).extractCoreSpiritSurfaceMetadata(metadataProbe);
 const factorModel = metadataSurface.declarations.find(item => item.kind === 'model' && item.name === 'factorModel');
 assert.ok(factorModel);
-assert.deepEqual(factorModel?.inputs, ['returns', 'stats.zscore(returns,', '100)', 'volume.zscore(50)']);
+assert.deepEqual(factorModel?.inputs, ['returns', 'stats.zscore(returns, 100)', 'volume.zscore(50)']);
