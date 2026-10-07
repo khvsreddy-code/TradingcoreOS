@@ -16,6 +16,8 @@ export type CoreSpiritSemanticAtom =
   | 'string'
   | 'currency';
 
+export type CoreSpiritSemanticValueKind = 'observed'|'prediction'|'forecast'|'probability'|'distribution'|'feature'|'featureSet'|'model'|'modelArtifact'|'dataset'|'trainingData'|'experiment';
+
 export const CORE_SPIRIT_SEMANTIC_SERIES_TYPES = Object.freeze(['series<number>', 'series<price>', 'series<volume>', 'series<time>', 'series<duration>', 'series<currency>', 'series<boolean>', 'series<string>'] as const);
 
 export type CoreSpiritSemanticType = Readonly<{
@@ -27,6 +29,7 @@ export type CoreSpiritSemanticType = Readonly<{
   timeframe?: string;
   precision?: number;
   scale?: 'linear' | 'log' | 'percent' | 'indexed';
+  valueKind?: CoreSpiritSemanticValueKind;
 }>;
 
 export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): string {
@@ -38,6 +41,7 @@ export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): 
     type.unit ? `unit=${type.unit}` : '',
     type.currency ? `currency=${type.currency}` : '',
     type.scale ? `scale=${type.scale}` : '',
+    type.valueKind ? `kind=${type.valueKind}` : '',
   ].filter(Boolean);
   return qualifiers.length ? `${base}{${qualifiers.join(',')}}` : base;
 }
@@ -179,6 +183,12 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     currency: semanticScalar('currency', { unit: 'notional' }),
   };
   if (direct[normalized]) return direct[normalized];
+  const generic = normalized.match(/^(model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|dataset|modelartifact)<(.+)>$/i);
+  if (generic) {
+    const atom = ['float','int','number'].includes(generic[2].toLowerCase()) ? 'number' : generic[2] as CoreSpiritSemanticAtom;
+    const valueKindMap: Record<string, CoreSpiritSemanticValueKind> = { model:'model', prediction:'prediction', forecast:'forecast', feature:'feature', featureset:'featureSet', distribution:'distribution', experiment:'experiment', trainingdata:'trainingData', dataset:'dataset', modelartifact:'modelArtifact' };
+    return semanticScalar(atom, { valueKind:valueKindMap[generic[1].toLowerCase()] ?? 'observed' });
+  }
 
   const parsed = parseCoreSpiritTemporalType(normalized);
   if (!parsed) return undefined;
