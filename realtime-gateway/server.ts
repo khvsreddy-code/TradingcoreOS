@@ -114,7 +114,11 @@ async function stopOwnership(userId:string):Promise<void>{
   ownedUsers.delete(userId);
   FyersMarketDataTransport.disconnect(userId);
   FyersOrderStreamTransport.disconnect(userId);
-  await supabase.rpc('release_realtime_gateway_owner',{p_user_id:userId,p_owner_value:owned.ownerValue}).catch(()=>undefined);
+  try {
+    await supabase.rpc('release_realtime_gateway_owner',{p_user_id:userId,p_owner_value:owned.ownerValue});
+  } catch {
+    // Ownership is already fenced locally; release is best-effort during shutdown.
+  }
 }
 
 async function loadDesiredConnections(userId:string):Promise<ConnectionRecord[]>{
