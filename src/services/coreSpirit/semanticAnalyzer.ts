@@ -4,6 +4,7 @@ import { CoreSpiritType, compatible, isBooleanType, isNumericType, isStateType, 
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
+import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
 import { canUseCapability, type CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
@@ -32,6 +33,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const componentBindings=new Map<string,string>();
   const semanticSymbols=new Map<string,CoreSpiritSemanticType>();
   const componentSource=options.components;
+  const modelDeclarations = ((options.surface as CoreSpiritSurfaceMetadata | undefined)?.declarations ?? []).filter(item => item.kind === 'model');
+  const modelDeclarationMap = new Map(modelDeclarations.map(item => [item.name, item] as const));
+  for (const declaration of modelDeclarations) symbols.set(declaration.name, `model<${declaration.name}>` as CoreSpiritType);
   let maxLookback=0;
   let eventScopeDepth=0;
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
@@ -51,6 +55,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='na') return 'null';
         if(n.name==='bar_index') return 'number';
         if(n.name==='bar') return 'udt:bar:context';
+        if(modelDeclarationMap.has(n.name)) return `model<${n.name}>` as CoreSpiritType;
         return scope.get(n.name) || 'unknown';
 
       case 'member': {
@@ -186,32 +191,46 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
 
       case 'memberCall': {
-        if (n.member === 'timeframe' && (
-          (n.target.type === 'call' && n.target.name === 'market') ||
-          (n.target.type === 'identifier' && scope.get(n.target.name) === 'market:ref')
-        )) {
-          if (n.args.length !== 1 || !compatible('string', infer(n.args[0]!, scope))) {
-            report(n, 'market(...).timeframe(...) expects one string timeframe', 'TYPE_MARKET_TIMEFRAME');
+        if (n.member === 'timeframe' || n.member === 'tf') {
+          if ((n.target.type === 'call' && n.target.name === 'market') || (n.target.type === 'identifier' && scope.get(n.target.name) === 'market:ref')) {
+            if (n.args.length !== 1 || !compatible('string', infer(n.args[0]!, scope))) report(n, 'market(...).timeframe(...) expects one string timeframe', 'TYPE_MARKET_TIMEFRAME');
+            return 'market:ref';
           }
-          return 'market:ref';
+        }
+        const targetType = infer(n.target, scope);
+        if (targetType === 'model:ref' || targetType.startsWith('model<')) {
+          if (n.member === 'predict' || n.member === 'prediction') {
+            n.args.forEach(arg => { if (!isNumericType(infer(arg,scope))) report(n,'model.predict feature arguments must be numeric','TYPE_MODEL_FEATURE'); });
+            return 'prediction<number>' as CoreSpiritType;
+          }
+          if (n.member === 'probability' || n.member === 'confidence') return 'probability';
+          const modelName = targetType.startsWith('model<') ? targetType.slice(6,-1) : undefined;
+          const declaration = modelName ? modelDeclarationMap.get(modelName) : undefined;
+          if (declaration && declaration.outputs.includes(n.member)) return 'prediction<number>' as CoreSpiritType;
+          report(n, `Model '${modelName ?? 'runtime'}' does not expose member '${n.member}'`, 'UNKNOWN_MODEL_MEMBER');
+          return 'unknown';
+        }
+        if (n.target.type === 'identifier' && isCoreSpiritLibraryNamespace(n.target.name)) {
+          const resolved = resolveCoreSpiritLibraryCall(n.target.name, n.member, componentSource);
+          if (!resolved || resolved.entry.status === 'catalog') {
+            report(n, `Unknown or non-executable library member '${n.target.name}.${n.member}'`, 'UNKNOWN_LIBRARY_MEMBER');
+            return 'unknown';
+          }
+          const builtin = resolved.builtin;
+          n.args.forEach(arg => infer(arg,scope));
+          if (builtin && (n.args.length < builtin.minArgs || (builtin.maxArgs !== undefined && n.args.length > builtin.maxArgs))) report(n, `Invalid argument count for ${n.target.name}.${n.member}`, 'ARG_COUNT');
+          if (builtin) return builtin.returnType as CoreSpiritType;
         }
         let contract;
-        if(n.target.type==='identifier') {
-          contract=getCoreSpiritMemberContract(n.target.name==='panel' ? 'panel' : n.target.name,n.member);
-        } else if(n.target.type==='member') {
-          contract=getCoreSpiritMemberContract(n.target.member==='panel' ? 'ui' : 'panel',n.member);
-        }
+        if(n.target.type==='identifier') contract=getCoreSpiritMemberContract(n.target.name==='panel' ? 'panel' : n.target.name,n.member);
+        else if(n.target.type==='member') contract=getCoreSpiritMemberContract(n.target.member==='panel' ? 'ui' : 'panel',n.member);
         if(contract) {
-          n.args.forEach((x,index)=>{
-            if(contract?.actionArgIndices?.includes(index) && x.type==='identifier' && !scope.has(x.name)) return;
-            infer(x,scope);
-          });
+          n.args.forEach((x,index)=>{ if(contract?.actionArgIndices?.includes(index) && x.type==='identifier' && !scope.has(x.name)) return; infer(x,scope); });
           return contract.returnType as CoreSpiritType;
         }
         n.args.forEach(x=>infer(x,scope));
         return 'unknown';
       }
-
       default:
         return 'unknown';
     }
