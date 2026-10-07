@@ -33,13 +33,13 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
   builtInSeries: Object.freeze(['open', 'high', 'low', 'close', 'volume', 'time'] as const),
   standardLibrary: Object.freeze([
     'sma','ema','hma','highest','lowest','sum','mean','stdev','wma','rma','median',
-    'abs','min','max','sqrt','pow','round','sign',
+    'abs','min','max','sqrt','pow','round','sign','log','exp',
     'cross','crossover','crossunder','rising','falling',
-    'vwap','nz','na','bar_index','time','event','emit','show','plot','signal',
+    'vwap','returns','beta','trendStrength','regimeDetect','zscore','roc','nz','na','bar_index','time','event','emit','show','plot','signal','order',
   ] as const),
-  executionOutputs: Object.freeze(['show', 'plot', 'signal', 'event'] as const),
+  executionOutputs: Object.freeze(['show', 'plot', 'signal', 'event', 'orderIntent', 'automationEvent'] as const),
   mathIndicators: Object.freeze([
-    'sma', 'ema', 'hma', 'rsi', 'atr', 'vwap', 'highest', 'lowest', 'sum', 'mean', 'stdev', 'wma', 'rma', 'median', 'variance', 'change',
+    'sma', 'ema', 'hma', 'rsi', 'atr', 'vwap', 'highest', 'lowest', 'sum', 'mean', 'stdev', 'wma', 'rma', 'median', 'variance', 'change', 'roc', 'zscore', 'beta', 'trendStrength',
   ] as const),
   coreMath: Object.freeze([
     'nz', 'na', 'bar_index', 'time', 'cross', 'crossover', 'crossunder', 'rising', 'falling', 'max', 'min', 'abs', 'sqrt', 'pow', 'round', 'sign', 'isNa', 'exp', 'log', 'tanh',
