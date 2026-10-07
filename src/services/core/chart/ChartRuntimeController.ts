@@ -58,10 +58,8 @@ export type ChartRuntimeControllerDeps={
   crosshairVisible:boolean;
   chartType:'candlestick'|'line';
   candleAppearance:CandleAppearance;
-  drawingInitial:any[];
   velaDrawingsInitial?:unknown[];
   indicatorsRef:Ref<any[]>;
-  selectedDrawingIdRef?:Ref<string|null>;
   viewStateRef:Ref<{showLevels:boolean;showVolume:boolean;showOI:boolean;showDepth:boolean}>;
   predictionIdsRef:Ref<string[]>;
   appearanceRef:Ref<CandleAppearance>;
@@ -234,7 +232,7 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         chart:deps.chart,candle:deps.candle,host:deps.host,candles:deps.candles,chartStore:deps.chartStore,lifecycle:lifecycle.current,generation,
 indicatorController:chartIndicatorController,dataController:chartDataController,timeframe:deps.timeframe,
         chartIndex:deps.chartIndex,resolvedInstrumentKey:deps.resolvedInstrumentKey,previousLogicalRange:{current:null},
-        drawingToolRef:deps.drawingToolRef,selectedDrawingIdRef:deps.selectedDrawingIdRef,setSelectedDrawingId:deps.setSelectedDrawingId,
+        drawingToolRef:deps.drawingToolRef,
         rendererController:deps.rendererController,crosshairVisible:deps.crosshairVisible,shouldLoadOlderHistory,
         onDebugBar:(detail)=>window.dispatchEvent(new CustomEvent('TRADINGCORE_CORESPIRIT_DEBUG_BAR',{detail})),
       });
