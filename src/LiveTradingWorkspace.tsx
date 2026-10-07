@@ -5,11 +5,12 @@ import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEn
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import './services/core/chart/tcoVelaChrome';
+import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
-const VELA_STATE_KEY = 'tradingcore-live-vela-fyers-v4-single-default';
+const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
 
@@ -95,9 +96,21 @@ export function LiveTradingWorkspace() {
           bank: { symbol: 'NSE:NIFTYBANK-INDEX', timeframe: '5' },
           sensex: { symbol: 'BSE:SENSEX-INDEX', timeframe: '5' },
           finnifty: { symbol: 'NSE:FINNIFTY-INDEX', timeframe: '5' },
+          midcap: { symbol: 'NSE:MIDCPNIFTY-INDEX', timeframe: '5' },
+          nifty1m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '1' },
+          nifty15m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '15' },
+          nifty60m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '60' },
         },
       });
       workspaceRef.current = workspace;
+      if (typeof window !== 'undefined') {
+        (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__ = {
+          workspace,
+          getPerformanceStats: () => workspace?.getPerformanceStats?.() ?? [],
+          setLayout: (layout: string) => workspace?.setLayout(layout),
+          saveNow: () => workspace?.saveNow(),
+        };
+      }
       const bindActiveChart = () => undefined;
       workspaceListenerDisposers.push(
         workspace.on('cell:active', bindActiveChart),
@@ -115,6 +128,10 @@ export function LiveTradingWorkspace() {
       for (const dispose of workspaceListenerDisposers) dispose();
       workspaceListenerDisposers.length = 0;
       workspace?.destroy();
+      if (typeof window !== 'undefined') {
+        const exposed = (window as Window & { __TCO_VELA__?: { workspace?: unknown } }).__TCO_VELA__;
+        if (exposed?.workspace === workspace) delete (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__;
+      }
     };
   }, []);
 
