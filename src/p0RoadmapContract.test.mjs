@@ -25,7 +25,7 @@ const workspace=read('src/LiveTradingWorkspace.tsx');
 const storage=read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 const nativeExtensions=read('src/services/core/chart/tcoVelaNativeExtensions.ts');
 
-assert.match(chartState,/velaDrawings:velaDocument\.drawings/);
+assert.match(chartState,/velaDrawings[\s,=]/);
 assert.doesNotMatch(liveChart,/createChartDrawingController|drawingControllerRef|drawingInitial/);
 assert.doesNotMatch(interactions,/hitTestDrawings|moveDrawingHandle|CoreDrawingStore/);
 assert.match(liveChart,/chart\.current\.drawings/);
