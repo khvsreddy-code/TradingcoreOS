@@ -15,7 +15,18 @@ export type CoreSpiritSemanticAtom =
   | 'boolean'
   | 'string'
   | 'currency'
-  | 'model';
+  | 'model'
+  | 'market'
+  | 'bar'
+  | 'tick'
+  | 'orderbook'
+  | 'footprint'
+  | 'portfolio'
+  | 'position'
+  | 'order'
+  | 'fill'
+  | 'signalIntent'
+  | 'orderIntent';
 
 export type CoreSpiritSemanticValueKind = 'observed'|'prediction'|'forecast'|'probability'|'distribution'|'feature'|'featureSet'|'model'|'modelArtifact'|'dataset'|'trainingData'|'experiment'|'signalIntent'|'orderIntent';
 export type CoreSpiritSemanticPhase = 'historical'|'confirmed'|'developing'|'realtime'|'forecast';
@@ -196,7 +207,12 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
   if (direct[normalized]) return direct[normalized];
   const generic = normalized.match(/^(model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|dataset|modelartifact)<(.+)>$/i);
   if (generic) {
-    const atom = generic[1].toLowerCase() === 'model' ? 'model' : (['float','int','number'].includes(generic[2].toLowerCase()) ? 'number' : generic[2] as CoreSpiritSemanticAtom);
+    const genericName = generic[1].toLowerCase();
+    const atom = genericName === 'model' ? 'model'
+      : ['float','int','number'].includes(generic[2].toLowerCase()) ? 'number'
+      : (genericName in {
+        market:1, bar:1, tick:1, orderbook:1, footprint:1, portfolio:1, position:1, order:1, fill:1,
+      } ? genericName as CoreSpiritSemanticAtom : generic[2] as CoreSpiritSemanticAtom);
     const valueKindMap: Record<string, CoreSpiritSemanticValueKind> = { model:'model', prediction:'prediction', forecast:'forecast', feature:'feature', featureset:'featureSet', distribution:'distribution', experiment:'experiment', trainingdata:'trainingData', dataset:'dataset', modelartifact:'modelArtifact' };
     return semanticScalar(atom, { valueKind:valueKindMap[generic[1].toLowerCase()] ?? 'observed' });
   }
