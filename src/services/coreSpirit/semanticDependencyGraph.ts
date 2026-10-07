@@ -192,9 +192,9 @@ export function buildCoreSpiritSemanticDependencyGraph(
           addNode({id:resolvedModelId,kind:'model',name:directModelDeclaration?.name ?? modelName,type:'model:ref'});
 
           const outputId = addNode({
-            id:'model-output:' + modelName + ':' + (node.member === 'predict' ? 'prediction' : node.member === 'confidence' ? 'probability' : node.member),
+            id:'model-output:' + modelName + ':' + node.member,
             kind:'model-output',
-            name:modelName + '.' + (node.member === 'predict' ? 'prediction' : node.member === 'confidence' ? 'probability' : node.member),
+            name:modelName + '.' + node.member,
             source:sourceSpan(node),
           });
           addEdge(resolvedModelId, outputId, 'depends-on');
@@ -371,8 +371,7 @@ export function buildCoreSpiritSemanticDependencyGraph(
           return automationId;
         }
         if(directTargetNode?.kind==='model' && ['predict','prediction','probability','confidence'].includes(node.member)){
-          const canonicalOutput = node.member === 'predict' ? 'prediction' : node.member === 'confidence' ? 'probability' : node.member;
-          const outputId=addNode({id:'model-output:'+directTargetNode.name+':'+canonicalOutput,kind:'model-output',name:directTargetNode.name+'.'+canonicalOutput,source:sourceSpan(node)});
+          const outputId=addNode({id:'model-output:'+directTargetNode.name+':'+node.member,kind:'model-output',name:directTargetNode.name+'.'+node.member,source:sourceSpan(node)});
           addEdge(directTargetId,outputId,'depends-on');
           for(const arg of node.args) addEdge(expression(arg,conditionOwner),outputId,'depends-on');
           return outputId;
