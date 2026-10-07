@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+import { FyersApiClient, FyersApiError } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 
 /**
@@ -207,48 +207,52 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const requestSignal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
-    const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
+    const fyers = new FyersApiClient(accessToken);
+    const task = (async (signal: AbortSignal) => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
       const minuteResolution = Number(resolution);
       const barsPerDay = Number.isFinite(minuteResolution) && minuteResolution > 0 ? (6.25 * 60) / minuteResolution : 1;
       const estimatedCalendarDays = Number.isFinite(minuteResolution)
         ? Math.ceil((limit / Math.max(1, barsPerDay)) * 1.65)
         : 3650;
+      // FYERS caps minute history at 100 calendar days per request. Never let
+      // the chart manufacture an over-sized range and turn a valid history load
+      // into a broker-side 4xx/5xx which the route then exposes as a 502.
+      const maxDaysForResolution = Number.isFinite(minuteResolution) ? 100 : 366;
       const lookbackDays = resolution === 'D'
-        ? Math.max(3650, limit)
-        : Math.min(3650, Math.max(7, estimatedCalendarDays));
+        ? Math.min(maxDaysForResolution, Math.max(7, Math.ceil(Math.min(limit, 366))))
+        : Math.min(maxDaysForResolution, Math.max(7, estimatedCalendarDays));
       const from = new Date(end.getTime() - lookbackDays * 86_400_000);
-      const params = new URLSearchParams({
+      const continuousFutures = /FUT$/i.test(instrumentKey);
+      const params: Record<string, string | number | undefined> = {
         symbol: instrumentKey,
         resolution,
-        // Use epoch timestamps for paged history so `before` maps to an exact
-        // candle boundary instead of being truncated to an India calendar date.
         date_format: '0',
         range_from: String(Math.floor(from.getTime() / 1000)),
         range_to: String(Math.floor(end.getTime() / 1000)),
-        cont_flag: '1',
-      });
-      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-        headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-        signal,
-      });
-      const text = await response.text();
-      let payload: any;
-      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-      if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
-        throw new Error(payload?.message || `Fyers history failed (${response.status})`);
+        cont_flag: continuousFutures ? 1 : undefined,
+      };
+      try {
+        const payload = await fyers.dataGet<any>('/history', params, signal, API_LATENCY_BUDGET_MS.history);
+        let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
+        const dataLength = isColumnarData(data) ? data.time.length : data.length;
+        if (!beforeDate && dataLength < 2) {
+          const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
+          if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
+        }
+        const finalLength = isColumnarData(data) ? data.time.length : data.length;
+        if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
+        cache.set(key, { data, expiresAt: Date.now() + 120_000 });
+        return data;
+      } catch (error) {
+        if (error instanceof FyersApiError) {
+          console.warn('[FYERS history] upstream failure', JSON.stringify({ symbol: instrumentKey, resolution, status: error.status, brokerCode: error.brokerCode, message: error.message }));
+        } else {
+          console.warn('[FYERS history] upstream failure', JSON.stringify({ symbol: instrumentKey, resolution, message: error instanceof Error ? error.message : String(error) }));
+        }
+        throw error;
       }
-      let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
-      const dataLength = isColumnarData(data) ? data.time.length : data.length;
-      if (!beforeDate && dataLength < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
-        if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
-      }
-      const finalLength = isColumnarData(data) ? data.time.length : data.length;
-      if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
-      cache.set(key, { data, expiresAt: Date.now() + 120_000 });
-      return data;
-    }, requestSignal);
+    })(requestSignal);
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
