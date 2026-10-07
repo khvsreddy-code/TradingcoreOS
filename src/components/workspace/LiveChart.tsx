@@ -4,7 +4,6 @@ import type { CoreSpiritChartOutputController } from '../../services/coreSpirit/
 import { CoreSpiritStore } from '../../services/coreSpirit/CoreSpiritStore';
 import type { createChartCoreSpiritController } from '../../services/core/chart/controllers/ChartCoreSpiritController';
 import type { createChartDataController } from '../../services/core/chart/controllers/ChartDataController';
-import type { createChartDrawingController } from '../../services/core/chart/controllers/ChartDrawingController';
 import type { createChartIndicatorController } from '../../services/core/chart/controllers/ChartIndicatorController';
 import type { createChartPredictionController } from '../../services/core/chart/controllers/ChartPredictionController';
 import type { createChartRealtimeController } from '../../services/core/chart/controllers/ChartRealtimeController';
@@ -169,7 +168,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
   const selectDrawingTool=(tool:DrawingTool)=>{
     const velaType=velaDrawingAliases[tool];
     if(velaType && chart.current?.drawings?.supported) chart.current.drawings.setTool(velaType as any);
-    else drawingControllerRef.current?.selectDrawingTool(tool);
     setDrawingTool(tool);
     setShowDrawingMenu(false);
   };
@@ -178,7 +176,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       chart.current.drawings.all().forEach(d=>chart.current!.drawings.remove(d.id));
       setSelectedDrawingId(null);
       applyViewState();
-    } else drawingControllerRef.current?.clearDrawings();
   };
   const undoDrawing=()=>{
     if(chart.current?.drawings?.supported){
@@ -206,7 +203,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     predictionControllerRef.current?.setInputs({predictionModelIds,chartDatasetKey,resolvedInstrumentKey,timeframe});
   },[indicators,timeframe,predictionModelIds,chartDatasetKey,resolvedInstrumentKey]);
 
-  const drawingInitial=useMemo(()=>persistedChart.drawings,[persistedChart]);
 
   useEffect(()=>{
     const runtime=createChartRuntimeController({
@@ -237,13 +233,11 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       crosshairVisible,
       chartType,
       candleAppearance,
-      drawingInitial,
       indicatorsRef,
       selectedDrawingIdRef,
       viewStateRef,
       predictionIdsRef,
       appearanceRef,
-      drawingControllerRef,
       dataControllerRef,
       indicatorControllerRef,
       predictionControllerRef,
@@ -254,7 +248,6 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       drawingToolRef,
       chartIndex,
       setDrawingTool,
-      setSelectedDrawingId,
       velaDrawingsInitial:persistedChart.velaDrawings ?? [],
       setHistoryLoading,
       setError,
@@ -264,7 +257,7 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
     });
     runtimeControllerRef.current=runtime;
     return runtime.mount();
-  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,drawingInitial,persistedChart.velaDrawings]);
+  },[resolvedInstrumentKey,timeframe,brokerId,chartDataPlane,chartDatasetKey,persistedChart.velaDrawings]);
 
   useEffect(()=>{if(candles.current.length&&chart.current)indicatorControllerRef.current?.applyIndicatorAppearanceOnly();},[indicators,timeframe]);
   useEffect(()=>{rendererController.setVolumeVisible(showVolume);},[showVolume,rendererController]);
