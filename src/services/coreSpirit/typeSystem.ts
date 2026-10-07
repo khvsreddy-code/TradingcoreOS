@@ -186,6 +186,8 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === actual) return true;
   if (actual === 'null') return true;
   if (temporalAssignmentCompatible(expected, actual)) return true;
+  if (isModelType(expected) && actual === 'model:ref') return true;
+  if (expected === 'model:ref' && isModelType(actual)) return true;
   if (expected === 'number') return isNumericType(actual);
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
   if (expected === 'series<number>') return isSeriesType(actual);
