@@ -31,6 +31,12 @@
   ],
   "rewrites": [
     {
+      "source": "/api/realtime/healthz",
+      "destination": {
+        "service": "realtime"
+      }
+    },
+    {
       "source": "/api/realtime/ws",
       "destination": {
         "service": "realtime"
