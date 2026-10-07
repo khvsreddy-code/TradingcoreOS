@@ -165,13 +165,27 @@ export class CoreSpiritVelaEngine {
         const key=dependencyKey(request.symbol,request.timeframe);
         const rows=secondaryData.get(key);
         if(!rows?.length)return null;
+        const offset=Math.max(0,Math.floor(request.offset??0));
         const end=upperBoundMarketTime(rows,context.asOfTimestamp)-1;
-        const target=end-Math.max(0,Math.floor(request.offset??0));
+        if(end<0)return null;
+        const duration=timeframeDurationMs(request.timeframe);
+        const isConfirmed=(candidate:CoreSpiritMarketBar)=>{
+          const t=barTimeMillis(candidate.timestamp);
+          return context.executionMode!=='realtime'||t+duration<=context.asOfTimestamp;
+        };
+        let target=end;
+        if(context.alignment==='last-confirmed'||context.alignment==='nearest-confirmed'){
+          let cursor=end;
+          while(cursor>=0&&!isConfirmed(rows[cursor]!))cursor-=1;
+          if(cursor<0)return null;
+          target=cursor-offset;
+        }else{
+          target=end-offset;
+        }
         const row=rows[target];
         if(!row)return null;
         const time=barTimeMillis(row.timestamp);
-        const duration=timeframeDurationMs(request.timeframe);
-        const confirmed=context.executionMode!=='realtime'||time+duration<=context.asOfTimestamp;
+        const confirmed=isConfirmed(row);
         const stale=context.maxStalenessMs!=null && context.asOfTimestamp-time>context.maxStalenessMs;
         if(stale)return null;
         if(context.alignment==='exact'&&time!==context.asOfTimestamp)return null;
