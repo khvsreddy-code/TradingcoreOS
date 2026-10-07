@@ -193,7 +193,25 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
         if(canonical.length)deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
         const data=snapshot.candles.length?snapshot.candles:deps.chartDataPlane.getCompatibilityCandles();
         if(!data.length){
-          if(event.type==='tick')realtimeController.handleTick(snapshot,Boolean(event.bucketChanged));
+          // A healthy live tick is enough to keep the chart visually alive while
+          // historical recovery is still in flight. Seed one forming candle at
+          // the Vela boundary; subsequent ticks return to the normal canonical
+          // columnar path once history is available.
+          if(event.type==='tick' && snapshot.latestTick){
+            const seeded=deps.rendererController.seedLiveCandle?.(
+              snapshot.latestTick,
+              deps.appearanceRef.current,
+              deps.timeframe,
+              true,
+            );
+            if(seeded){
+              deps.candles.current=[seeded];
+              deps.setError('');
+              realtimeController.handleTick({...snapshot,candles:[seeded]},Boolean(event.bucketChanged));
+            } else {
+              realtimeController.handleTick(snapshot,Boolean(event.bucketChanged));
+            }
+          }
           return;
         }
         deps.candles.current=data;
