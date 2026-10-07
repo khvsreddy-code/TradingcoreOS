@@ -15,6 +15,7 @@ export type CoreSpiritBuiltin = {
 };
 
 export type CoreSpiritLibraryGroupId =
+  | 'core'
   | 'price'
   | 'math'
   | 'trend'
