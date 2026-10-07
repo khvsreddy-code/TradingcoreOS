@@ -3,9 +3,10 @@ import { coreSpiritComponentRegistry, resolveCoreSpiritComponent, type CoreSpiri
 import type { CoreSpiritComponentContract } from './coreSpiritExecutionModel';
 
 export type CoreSpiritLibraryNamespace =
-  | 'market' | 'series' | 'math' | 'stats' | 'time' | 'structure'
-  | 'volatility' | 'liquidity' | 'probability' | 'model' | 'visual'
-  | 'automation' | 'risk' | 'background' | 'ta' | 'data' | 'state';
+  | 'core' | 'market' | 'series' | 'math' | 'stats' | 'time' | 'structure'
+  | 'volatility' | 'liquidity' | 'probability' | 'model' | 'ml' | 'prediction'
+  | 'visual' | 'chart' | 'automation' | 'events' | 'strategy' | 'portfolio' | 'risk'
+  | 'background' | 'ta' | 'data' | 'orderflow' | 'options' | 'state';
 
 export type CoreSpiritLibraryEntryStatus = 'builtin' | 'component' | 'catalog';
 export type CoreSpiritLibraryNamespaceEntry = Readonly<{
@@ -24,10 +25,13 @@ const k=(namespace:CoreSpiritLibraryNamespace,member:string,description:string):
 
 export const CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES:readonly CoreSpiritLibraryNamespace[]=Object.freeze([
   'market','series','math','stats','time','structure','volatility','liquidity',
-  'probability','model','visual','automation','risk','background','ta','data','state',
+  'core','probability','model','ml','prediction','visual','chart','automation','events','strategy','portfolio','risk','background','ta','data','orderflow','options','state',
 ]);
 
 export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNamespaceEntry[]=Object.freeze([
+  // Stable semantic namespaces for the general-purpose CoreSpirit core.
+  b('core','abs','abs','Deterministic absolute value.'), b('core','min','min','Deterministic minimum.'), b('core','max','max','Deterministic maximum.'),
+  b('core','sqrt','sqrt','Deterministic square root.'), b('core','pow','pow','Deterministic power.'), b('core','log','log','Natural logarithm.'), b('core','exp','exp','Exponential function.'),
   b('series','sma','sma','Simple moving average.'),
   b('series','ema','ema','Exponential moving average.'),
   b('series','hma','hma','Hull moving average.'),
@@ -71,13 +75,21 @@ export const CORE_SPIRIT_LIBRARY_NAMESPACE_ENTRIES:readonly CoreSpiritLibraryNam
   b('stats','beta','beta','Rolling regression beta.'),
   b('stats','roc','roc','Rate of change.'), b('probability','sigmoid','sigmoid','Sigmoid transform.'), k('probability','calibrate','Probability calibration surface.'), k('probability','entropy','Entropy surface.'),
   b('model','predict','model.predict','Typed model prediction.'), b('model','probability','model.probability','Typed model probability.'), b('model','score','score','Model score.'), b('model','ref','model','Model reference.'), k('model','run','MODEL ABI invocation surface.'),
+  b('ml','predict','model.predict','Model prediction through the shared model graph.'), b('ml','probability','model.probability','Model probability through the shared model graph.'), k('ml','train','Host-orchestrated training surface.'),
+  b('prediction','probability','probability','Probability semantic transform.'), b('prediction','confidence','probability','Prediction confidence semantic transform.'), k('prediction','calibrate','Prediction calibration surface.'),
   b('visual','show','show','Universal SHOW projection.'), b('visual','plot','plot','Plot projection.'),
   b('automation','signal','signal','Signal emission.'), b('automation','emit','emit','Event emission.'), b('automation','order','order','Order intent.'),
+  b('events','signal','signal','Signal event emission.'), b('events','emit','emit','Named event emission.'), b('events','event','event','Event query.'),
+  b('strategy','signal','signal','Strategy signal emission; no broker submission.'), b('strategy','order','order','Strategy order intent; routed through host authority.'), b('strategy','entry','entry','Strategy entry intent; routed through host authority.'), b('strategy','exit','exit','Strategy exit intent; routed through host authority.'),
+  k('portfolio','position','Portfolio position query surface.'), k('portfolio','exposure','Portfolio exposure query surface.'), k('portfolio','pnl','Portfolio P&L query surface.'),
   b('automation','notify','automation.notify','Host-routed automation notification event.'),
   b('automation','route','automation.route','Host-routed automation execution event.'),
   b('risk','allowed','risk.allowed','Host risk-policy query; never grants broker authority.'),
   b('background','when','background.when','Conditional chart background projection.'),
   b('data','request','request','Market-data request.'), b('data','requestBatch','requestBatch','Batched request.'), b('data','bid','bid','Bid.'), b('data','ask','ask','Ask.'), b('data','spread','spread','Spread.'), b('data','mid','mid','Mid.'),
+  b('orderflow','depthImbalance','depthImbalance','Depth imbalance from the host market-data plane.'), b('orderflow','footprintDelta','footprintDelta','Footprint delta from normalized order-flow data.'), b('orderflow','footprintBuy','footprintBuy','Footprint buy volume.'), b('orderflow','footprintSell','footprintSell','Footprint sell volume.'),
+  k('orderflow','imbalance','Order-flow imbalance component surface.'), k('orderflow','sweep','Liquidity sweep component surface.'),
+  k('options','impliedVolatility','Options implied-volatility surface.'), k('options','delta','Options delta surface.'), k('options','gamma','Options gamma surface.'), k('options','theta','Options theta surface.'), k('options','vega','Options vega surface.'),
   b('state','nz','nz','Missing-value fallback.'), b('state','na','na','Missing-value marker.'), b('state','isNa','isNa','Missing-value predicate.'),
 ]);
 
