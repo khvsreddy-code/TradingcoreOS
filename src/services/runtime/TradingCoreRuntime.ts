@@ -35,6 +35,8 @@ export class TradingCoreRuntime {
   public hasConnectedBroker(): boolean { return this.brokerMgr.getAllConnections().length > 0; }
   public getPrimaryBroker(): BrokerAdapter | null { return this.brokerMgr.getPrimaryBroker(); }
   public getPrimaryBrokerInfo(): BrokerConnectionInfo | null { return this.brokerMgr.getPrimaryBrokerInfo(); }
+  /** Canonical broker identity for every market-data consumer. Never let a chart/provider invent a broker key. */
+  public getPrimaryBrokerId(): string | null { return this.brokerMgr.getPrimaryBrokerInfo()?.brokerId?.toLowerCase() ?? null; }
   public getAllConnections(): BrokerConnectionInfo[] { return this.brokerMgr.getAllConnections(); }
 
   public restoreBrokerConnections(): Promise<void> {
@@ -256,8 +258,37 @@ export class TradingCoreRuntime {
     }
     const broker = this.getPrimaryBroker();
     const brokerId = brokerInfo?.brokerId?.toLowerCase();
-    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER' || !broker.getHistoricalDataColumns) return null;
-    return broker.getHistoricalDataColumns(symbol, timeframe, signal, Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000))), beforeTimestamp);
+    if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return null;
+    const requestedLimit = Math.max(100, Math.min(5000, Math.floor(Number(limit) || 5000)));
+
+    // Prefer the compact broker-native path, but never let an empty/unsupported
+    // column response strand Vela with a blank chart when the ordinary history API
+    // can return usable candles. The conversion happens once at this boundary.
+    if (broker.getHistoricalDataColumns) {
+      try {
+        const columns = await broker.getHistoricalDataColumns(symbol, timeframe, signal, requestedLimit, beforeTimestamp);
+        if (columns && columns.time.length > 0) return columns;
+      } catch {
+        // Fall through to the ordinary history path below.
+      }
+    }
+
+    try {
+      const rows = await broker.getHistoricalData(symbol, timeframe, signal, requestedLimit);
+      if (!rows.length) return null;
+      const ordered = [...rows].sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp))).slice(-requestedLimit);
+      return {
+        time: ordered.map(row => Date.parse(String(row.timestamp))),
+        open: ordered.map(row => Number(row.open)),
+        high: ordered.map(row => Number(row.high)),
+        low: ordered.map(row => Number(row.low)),
+        close: ordered.map(row => Number(row.close)),
+        volume: ordered.map(row => Number(row.volume) || 0),
+        timeUnit: 'milliseconds',
+      };
+    } catch {
+      return null;
+    }
   }
 
   public async getHistoricalDataBefore(symbol: string, timeframe: string, beforeTimestamp: string, limit = 5000): Promise<HistoricalCandle[]> {
