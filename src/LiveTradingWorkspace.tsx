@@ -55,7 +55,7 @@ export function LiveTradingWorkspace() {
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
         bars: 5000,
-        timeframes: ['1', '3', '5', '10', '15'],
+        timeframes: ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
         live: true,
         theme: {
           background: '#07080c',
@@ -81,7 +81,7 @@ export function LiveTradingWorkspace() {
         indicatorPicker: true,
         topbar: {
           left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
-          right: ['tco.watchlist', 'tco.journal', 'tco.panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
+          right: ['tco.watchlist', 'tco.journal', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
         },
         sync: { symbol: false, timeframe: false, crosshair: true, style: false, drawings: false },
         volume: true,
@@ -90,7 +90,7 @@ export function LiveTradingWorkspace() {
         bottombar: true,
         autofocus: false,
         persist: VELA_STATE_KEY,
-        storage: createTcoVelaSupabaseStorage('fyers'),
+        storage: createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
         maxWebglCells: 8,
         cells: {
           primary: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
