@@ -290,8 +290,12 @@ export type CoreSpiritSemanticMetadata = Readonly<{
 
 export function inspectSemanticType(type: CoreSpiritSemanticType | undefined): CoreSpiritSemanticMetadata | undefined {
   if (!type) return undefined;
+  const metadata = mergeSemanticMetadata([type]);
   return Object.freeze({
-    ...mergeSemanticMetadata([type]),
+    phase: metadata.phase ?? 'developing',
+    causal: metadata.causal ?? true,
+    lookahead: metadata.lookahead ?? false,
+    lookback: metadata.lookback ?? 0,
     ...(type.symbol ? { symbol: type.symbol } : {}),
     ...(type.timeframe ? { timeframe: type.timeframe } : {}),
     ...(type.unit ? { unit: type.unit } : {}),
