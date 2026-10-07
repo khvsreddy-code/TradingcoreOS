@@ -9,3 +9,18 @@ export {
   VelaNativeSeriesKernel as VelaSeriesFacade,
   createVelaNativeChart as createChart,
 } from './velaNativeChartKernel';
+
+export {
+  registerSidePanel, unregisterSidePanel,
+  registerWidgetAction, unregisterWidgetAction,
+  registerWidgetAttachment, unregisterWidgetAttachment,
+  registerLegendAction, unregisterLegendAction,
+  registerLegendCallout, unregisterLegendCallout,
+  registerStatePersistence, unregisterStatePersistence,
+  registerSymbolRanking, symbolRanking,
+  type SidePanelDescriptor, type SidePanelHandle, type SidePanelHeader,
+  type WidgetActionDescriptor, type WidgetContext, type WidgetAttachment,
+  type LegendActionDescriptor, type LegendCalloutDescriptor, type LegendCalloutSpec,
+  type LegendIndicatorInfo, type StatePersistenceHandler, type SymbolRankingHook,
+  type ExternalIndicatorEntry,
+} from '../../../../vendor/vela/src/widget/contributions';
