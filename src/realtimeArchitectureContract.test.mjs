@@ -27,7 +27,9 @@ assert.match(ticket, /createHmac/);
 assert.match(ticket, /REALTIME_GATEWAY_SHARED_SECRET/);
 
 const gateway = fs.readFileSync(new URL('../realtime-gateway/server.ts', import.meta.url), 'utf8');
-assert.match(gateway, /REDIS_URL/);
+assert.match(gateway, /SUPABASE_URL/);
+assert.match(gateway, /SUPABASE_SERVICE_ROLE_KEY/);
+assert.match(gateway, /claim_realtime_gateway_owner/);
 assert.match(gateway, /tco:realtime:owner/);
 assert.match(gateway, /tco:realtime:events/);
 assert.match(gateway, /verifyRealtimeTicket/);
