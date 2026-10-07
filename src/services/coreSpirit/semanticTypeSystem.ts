@@ -207,10 +207,8 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     time: semanticScalar('time', { unit: 'timestamp' }), duration: semanticScalar('duration', { unit: 'duration' }),
     currency: semanticScalar('currency', { unit: 'notional' }),
     probability: semanticScalar('number', { unit: 'probability', scale: 'percent', valueKind: 'probability' }),
-    signalIntent: semanticScalar('signalIntent', { valueKind:'signalIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
-    orderIntent: semanticScalar('orderIntent', { valueKind:'orderIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
-    signalIntent: semanticScalar('signalIntent', { valueKind:'signalIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
-    orderIntent: semanticScalar('orderIntent', { valueKind:'orderIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
+    signalintent: semanticScalar('signalIntent', { valueKind:'signalIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
+    orderintent: semanticScalar('orderIntent', { valueKind:'orderIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
   };
   if (direct[normalized]) return direct[normalized];
   const generic = normalized.match(/^(market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|dataset|modelartifact)<(.+)>$/i);
