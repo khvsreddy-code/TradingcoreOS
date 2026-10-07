@@ -19,16 +19,18 @@ function localKey(broker: string, key: string): string {
 }
 
 function localGet(broker: string, key: string): string | null {
-  try { return localStorage.getItem(localKey(broker, key)) ?? localStorage.getItem(LOCAL_PREFIX + key); } catch { return null; }
+  try {
+    return localStorage.getItem(localKey(broker, key)) ?? localStorage.getItem(LOCAL_PREFIX + key);
+  } catch { return null; }
 }
 
 function localSet(broker: string, key: string, value: string): void {
   try { localStorage.setItem(localKey(broker, key), value); } catch {}
 }
-
 function journalLocalGet(): string | null {
   try { return localStorage.getItem(LOCAL_PREFIX + 'journal') ?? null; } catch { return null; }
 }
+
 function journalLocalSet(value: string): void {
   try { localStorage.setItem(LOCAL_PREFIX + 'journal', value); } catch {}
 }
@@ -54,20 +56,18 @@ export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers')
       try {
         const snapshot = JSON.parse(value) as Record<string, unknown>;
         await getSupabaseClient().from('workspace_layouts').upsert({
-          user_id: id, broker,
-          layout: typeof snapshot.layout === 'string' ? snapshot.layout : null,
-          snapshot,
-          updated_at: new Date().toISOString(),
+          user_id: id, broker, layout: typeof snapshot.layout === 'string' ? snapshot.layout : null,
+          snapshot, updated_at: new Date().toISOString(),
         });
       } catch {}
     },
     async remove(key) {
       const broker = resolveBroker(brokerScope);
-      const id = await currentUserId();
       try {
         localStorage.removeItem(localKey(broker, key));
         localStorage.removeItem(LOCAL_PREFIX + key);
       } catch {}
+      const id = await currentUserId();
       if (!id) return;
       try { await getSupabaseClient().from('workspace_layouts').delete().eq('user_id', id).eq('broker', broker); } catch {}
     },
