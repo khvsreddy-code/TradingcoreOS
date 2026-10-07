@@ -108,6 +108,23 @@ export function buildCoreSpiritSemanticDependencyGraph(
     }
   }
 
+  const resolveIdentifier = (name: string): string => {
+    if (bindings[name]) return bindings[name];
+    const declaredModel = modelDecls.get(name);
+    if (declaredModel) {
+      const modelId = 'model:' + name;
+      bindings[name] = modelId;
+      return addNode({ id:modelId, kind:'model', name, type:'model:ref', declarationKind:'model' });
+    }
+    if (SERIES_NAMES.has(name)) {
+      return addNode({ id:'data:' + name, kind:'data-source', name, type:'series<number>' });
+    }
+    if (name === 'bar_index' || name === 'na') {
+      return addNode({ id:'data:' + name, kind:'data-source', name, type:name === 'bar_index' ? 'number' : 'unknown' });
+    }
+    return addNode({ id:'symbol:unresolved:' + name, kind:'symbol', name, type:'unknown' });
+  };
+
   // Model declarations are part of the same semantic graph as features and predictions.
   // This makes MODEL a graph node, not an isolated metadata island.
   for (const declaration of surface.declarations) {
@@ -138,22 +155,7 @@ export function buildCoreSpiritSemanticDependencyGraph(
     }
   }
 
-  const resolveIdentifier = (name: string): string => {
-    if (bindings[name]) return bindings[name];
-    const declaredModel = modelDecls.get(name);
-    if (declaredModel) {
-      const modelId = 'model:' + name;
-      bindings[name] = modelId;
-      return addNode({ id:modelId, kind:'model', name, type:'model:ref', declarationKind:'model' });
-    }
-    if (SERIES_NAMES.has(name)) {
-      return addNode({ id:'data:' + name, kind:'data-source', name, type:'series<number>' });
-    }
-    if (name === 'bar_index' || name === 'na') {
-      return addNode({ id:'data:' + name, kind:'data-source', name, type:name === 'bar_index' ? 'number' : 'unknown' });
-    }
-    return addNode({ id:'symbol:unresolved:' + name, kind:'symbol', name, type:'unknown' });
-  };
+
 
   const expression = (node: CoreSpiritAstNode, conditionOwner?: string): string => {
     switch (node.type) {
