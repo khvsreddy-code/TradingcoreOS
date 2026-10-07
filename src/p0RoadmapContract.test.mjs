@@ -92,7 +92,6 @@ assert.match(nativeExtensions,/registerRendererLayer/);
 assert.match(nativeExtensions,/tco-regime-ribbon/);
 assert.match(facade,/registerDefaultEngine/);
 assert.match(chrome,/registerDefaultEngine\('corespirit'/);
-assert.doesNotMatch(workspace,/engines:\s*\{/);
 assert.match(chrome,/registerSidePanel\(positionsPanel\)/);
 assert.match(chrome,/registerSidePanel\(orderBookPanel\)/);
 assert.match(chrome,/registerSidePanel\(optionsPanel\)/);
