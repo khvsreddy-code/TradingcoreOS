@@ -217,6 +217,9 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           const builtin = resolved.builtin;
           n.args.forEach(arg => infer(arg,scope));
           if (builtin && (n.args.length < builtin.minArgs || (builtin.maxArgs !== undefined && n.args.length > builtin.maxArgs))) report(n, `Invalid argument count for ${n.target.name}.${n.member}`, 'ARG_COUNT');
+          if (n.target.name === 'automation' && !canUseCapability(options.layer || 'script','strategy-events')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot emit automation events`, 'CAPABILITY_AUTOMATION');
+          if (n.target.name === 'risk' && !canUseCapability(options.layer || 'script','risk-queries')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot query risk`, 'CAPABILITY_RISK_QUERIES');
+          if (n.target.name === 'background' && !canUseCapability(options.layer || 'script','visuals')) report(n, `CoreSpirit layer '${options.layer || 'script'}' cannot render background`, 'CAPABILITY_VISUALS');
           if (builtin) return builtin.returnType as CoreSpiritType;
         }
         let contract;
