@@ -369,7 +369,7 @@ export class CoreSpiritCompiler {
         multiSymbol: tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1,
         research: researchPlan.backtests.length > 0 || researchPlan.modelSpecs.length > 0,
         strategy: layer === 'strategy' || semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent'),
-        automation: layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation' || node.kind === 'event'),
+        automation: layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation'),
         orderIntent: semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent'),
       });
       const languageCapabilities = Object.freeze([...new Set([
