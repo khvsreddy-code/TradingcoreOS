@@ -50,12 +50,12 @@ export function loadChartState(brokerId:string,instrumentKey:string):PersistedCh
     const x=raw?JSON.parse(raw):null;
     if(x&&typeof x==='object'){
       const drawings=normalizeCoreDrawings(x.drawings,'user');
-      const velaDocument=migrateVelaDrawings({version:1,drawings:Array.isArray(x.velaDrawings)?x.velaDrawings:[]});
+      const velaDrawings=migrateVelaDrawings({version:1,drawings:Array.isArray(x.velaDrawings)?x.velaDrawings:[]});
       return {
         version:2,
         timeframe:typeof x.timeframe==='string'&&chartIntervals[x.timeframe as keyof typeof chartIntervals]?x.timeframe:'5m',
         drawings,
-        velaDrawings:velaDocument.drawings,
+        velaDrawings,
         showLevels:Boolean(x.showLevels),
         showVolume:Boolean(x.showVolume),
         showOI:Boolean(x.showOI),
