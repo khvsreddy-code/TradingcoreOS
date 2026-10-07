@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine.ts';
 import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
-import { defaultToolbar } from './vendor/vela/src/core/drawings/toolbar.ts';
-import { drawingTypes, loadAdvancedDrawingCatalog } from './vendor/vela/src/core/drawings/registry.ts';
+import { defaultToolbar } from '../vendor/vela/src/core/drawings/toolbar.ts';
+import { drawingTypes, loadAdvancedDrawingCatalog } from '../vendor/vela/src/core/drawings/registry.ts';
 
 const velaBars = [
   { time: 1791350000000, open: 22650, high: 22680, low: 22640, close: 22670, volume: 1200 },
