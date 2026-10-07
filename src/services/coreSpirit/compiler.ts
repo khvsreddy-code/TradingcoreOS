@@ -23,6 +23,7 @@ import { isStateType } from './typeSystem';
 import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { buildCoreSpiritResearchPlan } from './researchSurface';
+import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 export type CoreSpiritCompilerOptions = {
@@ -360,6 +361,25 @@ export class CoreSpiritCompiler {
       const graphs = buildCoreSpiritGraphBundle(graphInput, { components: componentSource });
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
       const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
+      const researchPlan = buildCoreSpiritResearchPlan(options.artifactContext?.source ?? '', surface);
+      const authoringLevel = inferCoreSpiritAuthoringLevel({
+        model: researchPlan.models.length > 0 || semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output'),
+        multiSymbol: tradingNativePlan.multiSymbol,
+        research: researchPlan.backtests.length > 0 || researchPlan.modelSpecs.length > 0,
+        strategy: layer === 'strategy' || semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent'),
+        automation: layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation' || node.kind === 'event'),
+        orderIntent: semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent'),
+      });
+      const languageCapabilities = Object.freeze([...new Set([
+        'core',
+        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'data-source') ? ['market-data'] : []),
+        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output') ? ['models','predictions'] : []),
+        ...(researchPlan.backtests.length || researchPlan.modelSpecs.length ? ['research','backtest'] : []),
+        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent') ? ['strategy','order-intents'] : []),
+        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'event' || node.kind === 'automation') ? ['events','automation'] : []),
+        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'visual') ? ['visualization'] : []),
+        ...(tradingNativePlan.multiSymbol ? ['multi-symbol'] : []),
+      ])]);
       const repaintSafety = analyzeCoreSpiritRepaintSafety(ast);
       const repaintDiagnostics = [
         ...repaintSafety.warnings.map(message => ({severity:'warning' as const,message,code:'REPAINT_SAFETY'})),
@@ -369,7 +389,7 @@ export class CoreSpiritCompiler {
       if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
       const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {
