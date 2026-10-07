@@ -11,9 +11,19 @@ realtimeTicketRoutes.get('/', (req: AuthenticatedRequest, res: Response) => {
   const host = String(req.get('host') || '').trim();
   const gatewayUrl = configuredGatewayUrl || (host ? `${forwardedProto}://${host}/api/realtime` : '');
   if (!gatewayUrl || !process.env.REALTIME_GATEWAY_SHARED_SECRET) {
-    // No signed gateway ticket can be issued until the shared secret exists.
-    // The browser knows how to consume this explicit legacy capability without
-    // turning the missing gateway configuration into a retry/503 storm.
+    // Production must never silently downgrade back to the legacy stream. That
+    // hides gateway rollout failures and can create two competing realtime paths.
+    // Development may still use the explicit legacy capability for local work.
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({
+        success: false,
+        error: 'Realtime gateway is not configured.',
+        code: 'REALTIME_GATEWAY_UNAVAILABLE',
+        requestId: req.get('x-request-id') || null,
+      });
+      return;
+    }
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       success: true,
