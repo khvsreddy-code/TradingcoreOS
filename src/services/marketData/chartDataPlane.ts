@@ -198,11 +198,131 @@ export class ChartDataPlane {
     }
   }
 
+  private columnarSnapshot(): ChartColumnarSnapshot {
+    const view = this.canonicalPlane.read();
+    return Object.freeze({
+      time: view.time,
+      open: view.open,
+      high: view.high,
+      low: view.low,
+      close: view.close,
+      volume: view.volume,
+      timeUnit: 'seconds',
+    });
+  }
+
+  private onColumnarTick(tick: NormalizedMarketTick, price: number): { changed: boolean; bucketChanged: boolean; latest: HistoricalCandle | null } {
+    const view = this.canonicalPlane.read();
+    const rawTimestamp = tick.lastTradeTimestamp ?? tick.receivedAt ?? Date.now();
+    const numericTimestamp = typeof rawTimestamp === 'number' ? rawTimestamp : Number(rawTimestamp);
+    const timestampMs = Number.isFinite(numericTimestamp)
+      ? (numericTimestamp > 1e12 ? numericTimestamp : numericTimestamp * 1000)
+      : (() => {
+          const parsed = Date.parse(String(rawTimestamp));
+          return Number.isFinite(parsed) ? parsed : Date.now();
+        })();
+    const intervalSeconds = CHART_TIMEFRAME_SECONDS[this.timeframe] || 300;
+    const bucketTime = Math.floor(timestampMs / (intervalSeconds * 1000)) * intervalSeconds;
+    const lastIndex = view.length - 1;
+    const lastTime = lastIndex >= 0 ? Number(view.time[lastIndex]) : Number.NaN;
+
+    if (Number.isFinite(lastTime) && bucketTime < lastTime) {
+      return { changed: false, bucketChanged: false, latest: null };
+    }
+
+    if (lastIndex < 0 || !Number.isFinite(lastTime)) {
+      this.canonicalPlane.append({
+        time: bucketTime,
+        open: price,
+        high: price,
+        low: price,
+        close: price,
+        volume: 0,
+      });
+    } else if (bucketTime === lastTime) {
+      this.canonicalPlane.updateLast({
+        time: lastTime,
+        open: Number(view.open[lastIndex]),
+        high: Math.max(Number(view.high[lastIndex]), price),
+        low: Math.min(Number(view.low[lastIndex]), price),
+        close: price,
+        volume: Number(view.volume[lastIndex]) || 0,
+      });
+    } else {
+      this.canonicalPlane.append({
+        time: bucketTime,
+        open: price,
+        high: price,
+        low: price,
+        close: price,
+        volume: 0,
+      });
+    }
+
+    const next = this.canonicalPlane.read();
+    const i = next.length - 1;
+    if (i < 0) return { changed: false, bucketChanged: false, latest: null };
+    const latest: HistoricalCandle = {
+      timestamp: new Date(Number(next.time[i]) * 1000).toISOString(),
+      open: Number(next.open[i]),
+      high: Number(next.high[i]),
+      low: Number(next.low[i]),
+      close: Number(next.close[i]),
+      volume: Number(next.volume[i]) || 0,
+    };
+    const changed = lastIndex < 0
+      || bucketTime !== lastTime
+      || Number(next.close[i]) !== Number(view.close[lastIndex]);
+    const bucketChanged = lastIndex < 0 || bucketTime > lastTime;
+
+    // Keep Vela on the typed canonical path. Only the compatibility tail is touched;
+    // never rebuild a 5k candle object array on every tick.
+    const compat = this.state.compatibilityCandles;
+    if (!compat.length) compat.push(latest);
+    else {
+      const lastCompat = compat[compat.length - 1]!;
+      const lastCompatTime = Date.parse(lastCompat.timestamp);
+      if (Date.parse(latest.timestamp) === lastCompatTime) compat[compat.length - 1] = latest;
+      else if (Date.parse(latest.timestamp) > lastCompatTime) {
+        compat.push(latest);
+        if (compat.length > MAX_HISTORY_CANDLES) compat.shift();
+      }
+    }
+    this.state.compatibilityCandles = compat;
+    this.state.columns = this.columnarSnapshot();
+    this.state.candles = [];
+    return { changed, bucketChanged, latest };
+  }
+
   private onTick = (tick: NormalizedMarketTick): void => {
     if (String(tick.instrumentKey || '') !== String(this.instrumentKey)) return;
     this.state.latestTick = tick;
     const price = Number(tick.ltp);
     if (!Number.isFinite(price)) return;
+
+    // Preserve the columnar render path after live updates. The previous implementation
+    // reconciled against the entire compatibility candle array and then replaced the
+    // typed state with OHLCV[]; that was the remaining zero-object hot-path leak and could
+    // also delay first paint when history was temporarily empty.
+    if (this.state.columns && this.state.candles.length === 0) {
+      const result = this.onColumnarTick(tick, price);
+      if (!result.latest || !result.changed) return;
+
+      this.state.revision += 1;
+      this.state.compatibilityRevision = this.state.revision;
+      marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, result.latest);
+      historyStore.upsertLatest(
+        this.brokerId,
+        this.instrumentKey,
+        CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe,
+        result.latest,
+      );
+      this.emit({ type: 'tick', bucketChanged: result.bucketChanged, snapshot: this.snapshot() });
+      return;
+    }
+
+    // Cold/compatibility path used only when the plane was bootstrapped from OHLCV rows
+    // or after an older-history merge. This path preserves the mature candle reconciler.
     const compatibility = this.state.candles.length ? this.state.candles : this.getCompatibilityCandles();
     const result = reconcileRealtimeCandle(
       compatibility,
@@ -222,8 +342,8 @@ export class ChartDataPlane {
     this.state.compatibilityCandles = result.candles;
     this.state.compatibilityRevision = -1;
     const latest = result.candles[result.candles.length - 1];
-    const latestPoint = latest ? { time: Math.floor(Date.parse(latest.timestamp) / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 } : null;
-    if (latestPoint) {
+    if (latest) {
+      const latestPoint = { time: Math.floor(Date.parse(latest.timestamp) / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 };
       const canonicalLength = this.canonicalPlane.market.length;
       const canonicalLastTime = canonicalLength ? this.canonicalPlane.market.time[canonicalLength - 1] : NaN;
       const canonicalNeedsReplace = canonicalLength !== previousLength && canonicalLength !== previousLength - 1;
@@ -232,8 +352,7 @@ export class ChartDataPlane {
       else if (latestPoint.time === canonicalLastTime) this.canonicalPlane.updateLast(latestPoint);
       else this.syncCanonical();
     }
-    const latestCandle = result.candles[result.candles.length - 1];
-    if (latestCandle) marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, latestCandle);
+    if (latest) marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, latest);
     if (result.bucketChanged || result.candles.length !== previousLength || Number(previousClose) !== Number(result.candles[result.candles.length - 1]?.close)) {
       this.state.revision += 1;
       historyStore.upsertLatest(this.brokerId, this.instrumentKey, CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, result.candles[result.candles.length - 1]);
