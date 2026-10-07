@@ -281,7 +281,6 @@ export class TcoVelaDataProvider implements DataProvider {
       const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
-      const timelineKey = `${symbol}|${tcoTimeframe}`;
       const bar: ColumnarBarUpdate = { time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey };
       onBar(bar);
     };
