@@ -76,7 +76,7 @@ export class BrokerMarketDataClient {
         }
       }
 
-      const legacyAllowed = String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
+      const legacyAllowed = import.meta.env.DEV || String(import.meta.env.VITE_REALTIME_LEGACY_FALLBACK || '').toLowerCase() === 'true';
       if (legacyAllowed) {
         await this.connectLegacy(stream, generation);
       } else {
