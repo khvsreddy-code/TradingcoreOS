@@ -105,7 +105,7 @@ function upperBoundMarketTime(bars:readonly CoreSpiritMarketBar[], targetMs:numb
 }
 
 function timeframeDurationMs(timeframe: string): number {
-  const match = String(timeframe || '').trim().match(/^(\\d+)([smhdw]?)$/i);
+  const match = String(timeframe || '').trim().match(/^(\d+)([smhdw]?)$/i);
   if (!match) return 5 * 60_000;
   const count = Math.max(1, Number(match[1]));
   switch (String(match[2] || 'm').toLowerCase()) {
