@@ -112,10 +112,13 @@ function lineStyle(value: unknown): VelaLineStyle {
   return n === 1 ? 'dashed' : n === 2 ? 'dotted' : 'solid';
 }
 
-function msFromTime(value: unknown): number {
+export function msFromTime(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return NaN;
-  return n < 2_000_000_000_000 ? n * 1000 : n;
+  // Epoch seconds are ~1.7e9; epoch milliseconds are ~1.7e12 in 2026.
+  // The previous 2e12 cutoff misclassified modern millisecond timestamps
+  // and multiplied them by 1,000 a second time.
+  return n >= 1_000_000_000_000 ? n : n * 1000;
 }
 
 function velaThemeFromOptions(options: any): VelaTheme {

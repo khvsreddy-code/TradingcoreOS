@@ -78,7 +78,10 @@ export class ChartController {
     const closeRows = new Array<{ time: Time; value: number }>(market.length);
     const volumeRows = new Array<{ time: Time; value: number; color: string }>(market.length);
     for (let i = 0; i < market.length; i += 1) {
-      const time = (market.time[i]! * 1000) as Time;
+      // CanonicalDataPlane stores chart time in epoch seconds. Keep the
+      // renderer facade in the same unit; Vela performs the single seconds→ms
+      // conversion at its native boundary.
+      const time = Number(market.time[i]!) as Time;
       const open = market.open[i]!;
       const high = market.high[i]!;
       const low = market.low[i]!;
@@ -99,7 +102,7 @@ export class ChartController {
     const b = this.bindings;
     if (!b || !market.length) return;
     const i = market.length - 1;
-    const time = (market.time[i]! * 1000) as Time;
+    const time = Number(market.time[i]!) as Time;
     const open = market.open[i]!;
     const high = market.high[i]!;
     const low = market.low[i]!;
