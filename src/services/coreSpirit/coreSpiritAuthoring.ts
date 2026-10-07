@@ -42,37 +42,41 @@ export type CoreSpiritAuthoringProfile = Readonly<{
   showModelComponentAbi: boolean;
 }>;
 
-const SIMPLE_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
+const BEGINNER_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
   'core-data', 'simple-visuals', 'reactive-conditions',
 ]);
-const ADVANCED_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
-  ...SIMPLE_FEATURES, 'component-composition', 'model-declarations', 'multi-symbol', 'multi-timeframe', 'custom-visuals', 'automation', 'stdlib-namespaces',
+const TRADER_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
+  ...BEGINNER_FEATURES, 'component-composition', 'model-declarations', 'multi-symbol', 'multi-timeframe', 'custom-visuals', 'automation', 'stdlib-namespaces',
 ]);
-const PROFESSIONAL_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
-  ...ADVANCED_FEATURES, 'programmable-indicators', 'declarative-indicator-artifacts', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
+const QUANT_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
+  ...TRADER_FEATURES, 'programmable-indicators', 'declarative-indicator-artifacts', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
 ]);
 
 function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringProfile {
-  if (level === 'simple') return Object.freeze({
-    level, label:'Simple', description:'Start with readable data, visuals and reactive conditions.', features:SIMPLE_FEATURES,
+  if (level === 'beginner') return Object.freeze({
+    level, label:'Beginner', description:'Start with readable data, indicators, visuals and reactive conditions.', features:BEGINNER_FEATURES,
     showAdvancedGraph:false, showRuntimeDetails:false, showCapabilities:false, showIr:false, showComponentContracts:false, showPerformanceControls:false, showLibraryNamespaces:false, showComplexityLayers:false, showModelComponentAbi:false,
   });
-  if (level === 'advanced') return Object.freeze({
-    level, label:'Advanced', description:'Compose calculations, components, models and richer realtime logic on the same language.', features:ADVANCED_FEATURES,
+  if (level === 'trader') return Object.freeze({
+    level, label:'Trader', description:'Compose multi-symbol calculations, strategies and richer realtime conditions on the same language.', features:TRADER_FEATURES,
     showAdvancedGraph:true, showRuntimeDetails:false, showCapabilities:false, showIr:false, showComponentContracts:false, showPerformanceControls:false, showLibraryNamespaces:true, showComplexityLayers:false, showModelComponentAbi:false,
   });
+  if (level === 'quant') return Object.freeze({
+    level, label:'Quant', description:'Use first-class features, predictions, models, research and backtesting without leaving CoreSpirit.', features:QUANT_FEATURES,
+    showAdvancedGraph:true, showRuntimeDetails:true, showCapabilities:true, showIr:true, showComponentContracts:true, showPerformanceControls:true, showLibraryNamespaces:true, showComplexityLayers:true, showModelComponentAbi:true,
+  });
   return Object.freeze({
-    level, label:'Professional', description:'Expose the full composition, execution, research and inspection surfaces without changing the language.', features:PROFESSIONAL_FEATURES,
+    level, label:'System Builder', description:'Compose events and automation around the host-owned risk and execution authority boundary.', features:Object.freeze([...QUANT_FEATURES, 'automation'] as CoreSpiritAuthoringFeature[]),
     showAdvancedGraph:true, showRuntimeDetails:true, showCapabilities:true, showIr:true, showComponentContracts:true, showPerformanceControls:true, showLibraryNamespaces:true, showComplexityLayers:true, showModelComponentAbi:true,
   });
 }
 
 export function detectCoreSpiritAuthoringLevel(source:string): CoreSpiritAuthoringLevel {
   const text = String(source ?? '').trim();
-  if (!text) return 'simple';
+  if (!text) return 'beginner';
   const advanced = /\b(model|automate|market\(|timeframe\(|request\(|multi|predict|scan\.|regime\(|volatility\(|motion\()\b/i.test(text);
   const professional = /\b(type\b|gpu|wasm|worker|capabilit|order\b|risk\b|research\b|replay\b|optimization\b|backtest\b|component\b|pipeline\b|ir\b)\b/i.test(text);
-  return professional ? 'professional' : advanced ? 'advanced' : 'simple';
+  return professional ? 'quant' : advanced ? 'trader' : 'beginner';
 }
 
 export function getCoreSpiritAuthoringProfile(source:string): CoreSpiritAuthoringProfile {
