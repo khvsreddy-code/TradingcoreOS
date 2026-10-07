@@ -535,11 +535,39 @@ const marketHealthAction: WidgetActionDescriptor = {
 const healthAttachment: WidgetAttachment = {
   id: 'tco.market-health-attachment',
   mount(ctx) {
-    const listener = () => {
-      try { ctx.stateChanged(); } catch {}
+    const strip = document.createElement('div');
+    strip.style.cssText = 'height:22px;display:flex;align-items:center;justify-content:center;gap:14px;padding:0 10px;border-top:1px solid rgba(255,255,255,.06);background:rgba(7,10,16,.96);color:#64748b;font:9px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.03em;';
+    const status = document.createElement('span');
+    const broker = document.createElement('span');
+    const latency = document.createElement('span');
+    const renderer = document.createElement('span');
+    strip.append(status, broker, latency, renderer);
+    const undock = ctx.dockStrip(strip);
+
+    const refresh = () => {
+      const info = tradingCoreRuntime.getPrimaryBrokerInfo();
+      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol);
+      const tickAge = tick?.receivedAt ? Math.max(0, Date.now() - Date.parse(String(tick.receivedAt))) : Number.POSITIVE_INFINITY;
+      const healthy = info?.status === 'Connected' && tickAge < 4000;
+      status.textContent = healthy ? '● LIVE' : '● DEGRADED';
+      status.style.color = healthy ? '#4ade80' : '#fb7185';
+      broker.textContent = info?.brokerId ? String(info.brokerId).toUpperCase() : 'NO BROKER';
+      broker.style.color = '#cbd5e1';
+      latency.textContent = Number.isFinite(tickAge) ? `TICK ${Math.round(tickAge)}MS` : 'TICK —';
+      latency.style.color = tickAge < 1200 ? '#cbd5e1' : '#facc15';
+      const perf = (window as Window & { __TCO_PERF__?: { cells?: Array<{ backend?: string; fps?: number; p95FrameMs?: number }> } }).__TCO_PERF__;
+      const cell = perf?.cells?.[0];
+      renderer.textContent = cell?.backend ? `VELA ${String(cell.backend).toUpperCase()}` : 'VELA AUTO';
+      if (cell?.p95FrameMs != null && Number(cell.p95FrameMs) > 20) renderer.style.color = '#facc15';
+      else renderer.style.color = '#cbd5e1';
     };
-    window.addEventListener('visibilitychange', listener);
-    return () => window.removeEventListener('visibilitychange', listener);
+
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => {
+      window.clearInterval(timer);
+      undock();
+    };
   },
 };
 
