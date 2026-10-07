@@ -30,8 +30,10 @@ const gateway = fs.readFileSync(new URL('../realtime-gateway/server.ts', import.
 assert.match(gateway, /SUPABASE_URL/);
 assert.match(gateway, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.match(gateway, /claim_realtime_gateway_owner/);
-assert.match(gateway, /tco:realtime:owner/);
-assert.match(gateway, /tco:realtime:events/);
+assert.match(gateway, /realtime_gateway_subscriptions/);
+assert.match(gateway, /realtime_gateway_owner/);
+assert.match(gateway, /broadcast/);
+assert.match(gateway, /COORDINATION_CHANNEL/);
 assert.match(gateway, /verifyRealtimeTicket/);
 assert.match(gateway, /WebSocketServer/);
 
