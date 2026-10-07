@@ -800,7 +800,7 @@ const tradeMarksAttachment: WidgetAttachment = {
 const dataWindowPanel: SidePanelDescriptor = {
   id: 'tco.data-window',
   title: 'Data Window',
-  icon: 'table',
+  icon: 'datawindow',
   order: 35,
   width: 360,
   resizable: true,
@@ -1045,7 +1045,7 @@ const vpvrAction: WidgetActionDescriptor = {
   id: 'tco.vpvr',
   target: 'topbar',
   label: 'VPVR',
-  icon: 'layers',
+  icon: 'objects',
   iconOnly: true,
   align: 'right',
   order: 9,
