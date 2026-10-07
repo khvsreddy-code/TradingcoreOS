@@ -11,7 +11,7 @@
  * CoreSpirit never owns broker access. Vela is a projection/renderer consumer,
  * never the execution authority.
  */
-import { CORE_SPIRIT_BROKER_BOUNDARY, validateCoreSpiritBrokerBoundarySource } from './brokerBoundary';
+import { CORE_SPIRIT_BROKER_BOUNDARY, validateCoreSpiritBrokerBoundarySource } from './brokerBoundary.ts';
 
 export const CORE_SPIRIT_ARCHITECTURE_VERSION = 1 as const;
 
