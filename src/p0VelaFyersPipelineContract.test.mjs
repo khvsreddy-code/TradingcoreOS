@@ -17,7 +17,7 @@ assert.equal(historyRoute.includes('withBrokerRequestGate'), false);
 
 const gate = read('src/server/brokers/BrokerRequestGate.ts');
 assert.match(gate, /'fyers-data': \\{ minIntervalMs: 250, maxPerMinute: 45 \\}/);
-assert.equal(rr.result.content.includes('seedLiveCandle?.('), false);
+assert.equal(read('src/services/core/chart/ChartRuntimeController.ts').includes('seedLiveCandle?.('), false);
 const client = read('src/server/fyers/core/FyersApiClient.ts');
 assert.match(client, /base === DATA_BASE \\? 'fyers-data' : 'fyers'/);
 
