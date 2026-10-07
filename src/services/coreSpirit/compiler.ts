@@ -137,7 +137,6 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
-        case 'memberCall': {
           const targetSemanticType = n.target.type === 'identifier' ? semantic.symbols.get(n.target.name) : undefined;
           const isModelTarget = targetSemanticType === 'model:ref' || targetSemanticType?.startsWith('model<') || (n.target.type === 'call' && n.target.name === 'model');
           if (isModelTarget && ['predict','prediction','probability','confidence'].includes(n.member)) {
