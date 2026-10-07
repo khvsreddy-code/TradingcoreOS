@@ -10,6 +10,13 @@ export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_E
 export type EventListener = (payload: any) => void;
 export type MarketDataProviderType = 'CONNECTED_BROKER';
 
+function epochMs(value: unknown): number {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
+  const parsed = Date.parse(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export class TradingCoreRuntime {
   private static instance: TradingCoreRuntime;
   private brokerMgr: BrokerManager = brokerManager;
