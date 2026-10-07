@@ -99,7 +99,12 @@ export class CoreSpiritCompiler {
         case 'identifier': {
           const dest = `t${temp++}`;
           const semanticType=semantic.symbols.get(n.name);
-          if (semanticType && isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
+          if (semanticType && (semanticType.startsWith('model<') || semanticType === 'model:ref')) {
+            const modelName = semanticType.startsWith('model<') ? semanticType.slice(6,-1) : n.name;
+            const modelNameDest = `t${temp++}`;
+            emitInstruction(n, { op:'const', dest:modelNameDest, value:modelName });
+            emitInstruction(n, { op:'call', dest, name:'model', args:[modelNameDest], callId:`model:${n.name}:${n.span?.start ?? temp}` });
+          } else if (semanticType && isStateType(semanticType as any)) emitInstruction(n, { op:'loadState', dest, name:n.name });
           else if (['open','high','low','close','volume','time'].includes(n.name)) emitInstruction(n, { op:'loadSeries', dest, name:n.name, offset:0 });
           else if (n.name === 'bar_index') emitInstruction(n, { op:'call', dest, name:'bar_index', args:[], callId:`bar_index:${n.span?.start ?? temp}` });
           else if (n.name === 'na') emitInstruction(n, { op:'const', dest, value:null });
