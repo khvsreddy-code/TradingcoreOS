@@ -3,6 +3,8 @@ import { normalizeCoreSpiritSource } from './services/coreSpirit/syntax.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { buildCoreSpiritResearchPlan } from './services/coreSpirit/researchSurface.ts';
 import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './services/coreSpirit/quantKernels.ts';
+import { CoreSpiritCapabilitySandbox } from './services/coreSpirit/capabilitySandbox.ts';
+import { getCoreSpiritLibraryEntry } from './services/coreSpirit/standardLibraryNamespaces.ts';
 
 const source=`
 data market = market("NSE:NIFTY50", "5m")
@@ -166,3 +168,29 @@ const metadataSurface = (await import('./services/coreSpirit/languageConcepts.ts
 const factorModel = metadataSurface.declarations.find(item => item.kind === 'model' && item.name === 'factorModel');
 assert.ok(factorModel);
 assert.deepEqual(factorModel?.inputs, ['returns', 'stats.zscore(returns, 100)', 'volume.zscore(50)']);
+
+const automationSandbox = new CoreSpiritCapabilitySandbox({ layer: 'automation', target: 'automation' });
+assert.equal(automationSandbox.can('market-data'), true);
+assert.equal(automationSandbox.can('models'), true);
+assert.equal(automationSandbox.can('risk-queries'), true);
+assert.equal(automationSandbox.can('order-intents'), true);
+assert.equal(automationSandbox.can('webhooks'), true);
+assert.equal(automationSandbox.can('broker-credentials'), false);
+
+for (const [namespace, member] of [
+  ['ta', 'ema'],
+  ['stats', 'beta'],
+  ['math', 'log'],
+  ['market', 'market'],
+  ['orderflow', 'depthImbalance'],
+  ['strategy', 'signal'],
+  ['portfolio', 'position'],
+  ['model', 'predict'],
+  ['ml', 'predict'],
+  ['prediction', 'probability'],
+  ['automation', 'notify'],
+  ['events', 'signal'],
+  ['visual', 'show'],
+]) {
+  assert.ok(getCoreSpiritLibraryEntry(namespace, member), 'missing CoreSpirit domain entry ' + namespace + '.' + member);
+}
