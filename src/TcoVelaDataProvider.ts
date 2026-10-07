@@ -1,6 +1,4 @@
-import type { DataProvider, ProviderInfo, SymbolDescriptor } from '../vendor/vela/src/core/ports/DataProvider';
-import type { BarRange } from '../vendor/vela/src/core/ports/MarketDataFeed';
-import type { OHLCV, ColumnarBars, ColumnarBarUpdate } from '../vendor/vela/src/core/model/ohlcv';
+import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaNativeChartKernel';
 import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
