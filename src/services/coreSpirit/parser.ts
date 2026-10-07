@@ -101,18 +101,34 @@ export class CoreSpiritParser {
 
   private onEventStatement():CoreSpiritAstNode {
     const start=this.previous();
-    const parts:string[]=[];
-    parts.push(this.consume('identifier','Expected event name after on').lexeme);
+    const nameToken=this.consume('identifier','Expected event name after on');
+    const parts=[nameToken.lexeme];
     while(this.match('dot')) parts.push(this.consume('identifier','Expected event segment after .').lexeme);
+    let eventName=parts.join('.');
+    if(this.match('leftParen')){
+      const args:CoreSpiritAstNode[]=[];
+      if(!this.check('rightParen')) { do { args.push(this.expression()); } while(this.match('comma')); }
+      const endToken=this.consume('rightParen','Expected ) after event filter');
+      const rendered=args.map(arg=>this.eventExpressionText(arg)).join(', ');
+      eventName = `${eventName}(${rendered})`;
+      void endToken;
+    }
     const body=this.block();
-    return {
-      type:'onEvent',
-      eventName:parts.join('.'),
-      body,
-      span:this.makeSpan(start,this.previous()),
-    };
+    return { type:'onEvent', eventName, body, span:this.makeSpan(start,this.previous()) };
   }
 
+  private eventExpressionText(node:CoreSpiritAstNode):string {
+    switch(node.type){
+      case 'string': return JSON.stringify(node.value);
+      case 'number': return String(node.value);
+      case 'boolean': return node.value ? 'true' : 'false';
+      case 'null': return 'null';
+      case 'identifier': return node.name;
+      case 'member': return `${this.eventExpressionText(node.target)}.${node.member}`;
+      case 'call': return `${node.name}(${node.args.map(arg=>this.eventExpressionText(arg)).join(', ')})`;
+      default: return node.type;
+    }
+  }
   private typeDeclaration():CoreSpiritAstNode {
     const start=this.previous();
     const name=this.consume('identifier','Expected type name');
