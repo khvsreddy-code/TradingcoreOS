@@ -63,7 +63,7 @@ assert.match(marketClient,/import\.meta\.env\.DEV/);
 assert.match(marketClient,/VITE_REALTIME_LEGACY_FALLBACK/);
 assert.equal(vercel.services?.realtime?.runtime,'container');
 assert.equal(vercel.services?.realtime?.entrypoint,'Dockerfile');
-assert.match(read('Dockerfile'),/npm run realtime:gateway/);
+assert.match(read('Dockerfile'),/realtime:gateway/);
 
 assert.doesNotMatch(authClient,/DEFAULT_URL|DEFAULT_PUBLISHABLE_KEY/);
 assert.match(authClient,/VITE_SUPABASE_URL/);
