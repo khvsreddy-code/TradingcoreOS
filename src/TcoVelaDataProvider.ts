@@ -127,6 +127,10 @@ function timeframeMs(timeframe: string): number {
   }
 }
 
+function activeBrokerIdSync(): string | null {
+  return tradingCoreRuntime.getPrimaryBrokerId();
+}
+
 export class TcoVelaDataProvider implements DataProvider {
   info(): ProviderInfo {
     return {
@@ -246,7 +250,8 @@ export class TcoVelaDataProvider implements DataProvider {
   subscribeColumns(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void): () => void {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const brokerId = await activeBrokerId();
+    const brokerId = activeBrokerIdSync();
+    if (!brokerId) return () => {};
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
     let scheduled = false;
@@ -301,7 +306,8 @@ export class TcoVelaDataProvider implements DataProvider {
   subscribe(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void): () => void {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const brokerId = await activeBrokerId();
+    const brokerId = activeBrokerIdSync();
+    if (!brokerId) return () => {};
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     let fingerprint = '';
     let scheduled = false;
