@@ -335,6 +335,23 @@ const healthPanel: SidePanelDescriptor = {
     rows.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
     root.append(status, rows);
 
+    let latestLtp: number | null = null;
+    let latestTickAt = 0;
+    let quoteStop: (() => void) | undefined;
+
+    const subscribe = () => {
+      quoteStop?.();
+      quoteStop = tradingCoreRuntime.subscribeMarketData([ctx.symbol], (event) => {
+        if (event.type !== 'tick' || !event.tick) return;
+        const symbol = String(event.tick.instrumentKey || '').trim();
+        if (symbol !== String(ctx.symbol || '').trim()) return;
+        const ltp = Number(event.tick.ltp ?? event.tick.close);
+        if (!Number.isFinite(ltp)) return;
+        latestLtp = ltp;
+        latestTickAt = Date.now();
+      });
+    };
+
     const setValue = (label: string, value: string, tone = '#cbd5e1') => {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;justify-content:space-between;gap:14px;border:1px solid rgba(255,255,255,.06);border-radius:7px;padding:7px 8px;background:rgba(255,255,255,.025);';
@@ -351,16 +368,15 @@ const healthPanel: SidePanelDescriptor = {
     const render = () => {
       rows.textContent = '';
       const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
-      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol);
       const now = Date.now();
-      const age = tick?.receivedAt ? Math.max(0, now - Date.parse(String(tick.receivedAt))) : Number.POSITIVE_INFINITY;
+      const age = latestTickAt ? Math.max(0, now - latestTickAt) : Number.POSITIVE_INFINITY;
       const ageText = Number.isFinite(age) ? `${Math.round(age)} ms` : 'no tick';
       const ageTone = age < 1200 ? '#4ade80' : age < 4000 ? '#facc15' : '#fb7185';
       status.textContent = `${ctx.symbol} · ${ctx.timeframe}`;
       status.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:2px;';
       setValue('Broker', broker?.brokerId || 'none', broker?.status === 'Connected' ? '#4ade80' : '#facc15');
       setValue('Connection', broker?.status || 'Unavailable', broker?.status === 'Connected' ? '#4ade80' : '#facc15');
-      setValue('LTP', tick && Number.isFinite(Number(tick.ltp)) ? Number(tick.ltp).toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+      setValue('LTP', latestLtp != null ? latestLtp.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
       setValue('Tick age', ageText, ageTone);
       setValue('Transport', 'Vela → TCO canonical feed', '#c4b5fd');
 
@@ -375,12 +391,13 @@ const healthPanel: SidePanelDescriptor = {
       setValue('Shared memory', isolated ? 'available' : 'unavailable', isolated ? '#4ade80' : '#facc15');
     };
 
+    subscribe();
     render();
     const timer = window.setInterval(render, 1000);
     return {
-      onOpen: render,
-      onChart: render,
-      destroy: () => window.clearInterval(timer),
+      onOpen: () => { subscribe(); render(); },
+      onChart: () => { subscribe(); render(); },
+      destroy: () => { window.clearInterval(timer); quoteStop?.(); quoteStop = undefined; },
     };
   },
 };
