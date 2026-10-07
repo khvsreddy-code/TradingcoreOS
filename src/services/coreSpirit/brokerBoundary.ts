@@ -46,17 +46,17 @@ export const CORE_SPIRIT_BROKER_BOUNDARY = Object.freeze({
 
 function stripCommentsAndStrings(source: string): string {
   return String(source || '')
-    .replace(/\/\*[\\s\\S]*?\*\//g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/\/\/.*$/gm, ' ')
-    .replace(/'(?:\\\\.|[^'\\\\])*'|"(?:\\\\.|[^"\\\\])*"|\`(?:\\\\.|[^\`\\\\])*\`/g, '""');
+    .replace(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g, '""');
 }
 
 function importSpecifiers(source: string): string[] {
   const specs: string[] = [];
-  const importPattern = /\b(?:import|export)\\s+(?:[^'"]+?\\s+from\\s+)?['"]([^'"]+)['"]/g;
+  const importPattern = /\b(?:import|export)\s+(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]/g;
   let match: RegExpExecArray | null;
   while ((match = importPattern.exec(source)) !== null) specs.push(match[1]);
-  const dynamicImportPattern = /\\bimport\\s*\\(\\s*['"]([^'"]+)['"]\\s*\\)/g;
+  const dynamicImportPattern = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
   while ((match = dynamicImportPattern.exec(source)) !== null) specs.push(match[1]);
   return specs;
 }
@@ -75,7 +75,7 @@ export function validateCoreSpiritBrokerBoundarySource(source: string, filePath 
   }
 
   for (const typeName of CORE_SPIRIT_BROKER_BOUNDARY.forbiddenBrokerTypes) {
-    const pattern = new RegExp(\\b${typeName}\\b);
+    const pattern = new RegExp(`\\b${typeName}\\b`);
     if (pattern.test(executable)) errors.push(`${filePath}: forbidden broker adapter type/reference '${typeName}'`);
   }
 
