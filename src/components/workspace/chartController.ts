@@ -121,7 +121,7 @@ export class ChartController {
    * visually empty while the canonical history path recovers. This is a one-shot
    * compatibility guard, not the steady-state tick path.
    */
-  seedLiveCandle(tick: NormalizedMarketTick, appearance: CandleAppearance, syncCanonical = true): HistoricalCandle | null {
+  seedLiveCandle(tick: NormalizedMarketTick, appearance: CandleAppearance, timeframe = '5m', syncCanonical = true): HistoricalCandle | null {
     const b = this.bindings;
     const ltp = Number(tick.ltp);
     if (!b || !Number.isFinite(ltp) || ltp <= 0) return null;
@@ -133,7 +133,10 @@ export class ChartController {
           const parsed = Date.parse(String(raw));
           return Number.isFinite(parsed) ? parsed : Date.now();
         })();
-    const intervalMs = 60_000;
+    const match = String(timeframe || '5m').trim().match(/^(\\d+)([smhd]?)$/i);
+    const count = Math.max(1, Number(match?.[1] || 5));
+    const unit = String(match?.[2] || 'm').toLowerCase();
+    const intervalMs = unit === 's' ? count * 1_000 : unit === 'h' ? count * 3_600_000 : unit === 'd' ? count * 86_400_000 : count * 60_000;
     const time = Math.floor(ms / intervalMs) * intervalMs;
     const bar: HistoricalCandle = {
       timestamp: new Date(time).toISOString(),
