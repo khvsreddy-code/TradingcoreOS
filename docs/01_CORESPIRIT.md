@@ -266,3 +266,77 @@ Type validation remains a semantic compiler responsibility. The emitted IR is on
 ### One artifact, one runtime
 
 The compiler produces one `CoreSpiritExecutableArtifact` containing the IR plus its semantic/optimization/execution metadata. Historical, replay and realtime hosts continue to execute the same artifact through the existing execution VM and host contracts.
+
+## Unified language architecture — four authoring depths
+
+CoreSpirit is now treated as one trading-native language with four progressive authoring depths. The surface remains intentionally small; deeper semantics are compiler capabilities, not separate languages.
+
+```text
+Beginner
+  DATA / LET / WHEN / SHOW
+      ↓
+Trader
+  multi-symbol + strategy signals
+      ↓
+Quant
+  features + statistics + models + predictions + research
+      ↓
+System Builder
+  events + automation + host-owned risk/execution requests
+```
+
+All four levels compile into the same executable artifact and the same runtime family. The artifact records `authoringLevel` and `languageCapabilities` so the IDE can progressively expose detail without forking the language.
+
+### First-class semantic values
+
+CoreSpirit no longer treats every computed number as an interchangeable `series<float>`. The type system recognizes model and research semantics such as:
+
+`model<T>` · `prediction<T>` · `probability` · `forecast<T>` · `distribution<T>` · `feature<T>` · `featureSet<T>` · `dataset<T>` · `trainingData<T>` · `experiment<T>` · `modelArtifact<T>`
+
+A prediction remains semantically distinct from an observed market series. A forecast is explicitly future-oriented, while a probability carries its own semantic unit. This distinction is preserved through semantic analysis and IR generation.
+
+### Quant and model graph
+
+```text
+market data
+   ↓
+features / indicators / statistics
+   ↓
+model declaration
+   ↓
+prediction / probability
+   ├── visualization
+   ├── signal
+   ├── research evaluation
+   └── automation event
+```
+
+Model declarations are declarative metadata. The compiler lowers model references and prediction calls to host-provided model resolvers; CoreSpirit does not create a second Python execution environment.
+
+### Shared data dependency graph
+
+Multi-symbol and multi-timeframe access is represented as an explicit dependency graph in the executable plan. The same graph drives batching, chronological execution, fusion eligibility and incremental invalidation.
+
+```text
+NIFTY 5m ─┐
+          ├─ dependency DAG ─→ feature graph ─→ model graph
+BANKNIFTY ┘
+```
+
+### Automation is a host request, never broker authority
+
+`risk.allowed()`, `automation.notify(...)`, and `automation.route(...)` are host capabilities. They produce decisions/events or order-intent requests; they do not expose broker credentials or broker APIs to the CoreSpirit VM.
+
+```text
+CoreSpirit
+   ↓
+signal / event / order intent
+   ↓
+TradingCoreOS execution authority
+   ↓
+risk → policy → execution adapter
+   ↓
+broker
+```
+
+Vela remains a visualization consumer. It can project CoreSpirit signals and order intents into its scene graph, but it cannot authorize or submit broker execution.
