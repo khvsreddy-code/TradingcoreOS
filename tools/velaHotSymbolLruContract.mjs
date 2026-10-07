@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { BarStore } from '../vendor/vela/src/data/BarStore.ts';
 
 const store = new BarStore();
-const bar = (time:number) => ({time,open:1,high:1,low:1,close:1});
+const bar = (time) => ({time,open:1,high:1,low:1,close:1});
 for (let i=0;i<12;i++) {
   const symbol = `SYM${i}`;
   store.retainSymbol(symbol);
