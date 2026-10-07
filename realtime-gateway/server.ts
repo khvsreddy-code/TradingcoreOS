@@ -257,7 +257,7 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
   });
 
   socket.send(JSON.stringify({type:'status',status:'connected',instanceId:INSTANCE_ID}));
-  await broadcast('control',local);
+  await broadcast('control',serializableConnection(local));
   await ensureOwnership(local.userId);
 }
 
