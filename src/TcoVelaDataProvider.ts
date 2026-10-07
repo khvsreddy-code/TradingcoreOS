@@ -243,9 +243,8 @@ export class TcoVelaDataProvider implements DataProvider {
     }
     const loaded = plane.readCanonical();
     if (loaded.length) return marketViewToBars(loaded, range, requested);
-    // A zero-row canonical plane is not a successful history response.
-    // Reuse the same broker/quote fallback as normal chart bootstrap.
-    return this.getBars(ticker, timeframe, range);
+    // A zero-row canonical plane is not a successful Vela history response.
+    throw new Error(`No canonical FYERS history available for ${symbol} ${tcoTimeframe}.`);
   }
 
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
