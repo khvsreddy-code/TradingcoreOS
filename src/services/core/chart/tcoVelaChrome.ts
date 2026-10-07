@@ -720,13 +720,26 @@ const optionsPanel: SidePanelDescriptor = {
 const tradeMarksAttachment: WidgetAttachment = {
   id: 'tco.trade-marks',
   mount(ctx) {
-    const chart = ctx.chart;
-    chart.marks.defineGroup({ id: 'trades', label: 'Trades', visible: true });
+    let lastChart: typeof ctx.chart | null = null;
+    let lastMarketListener: (() => void) | undefined;
+    let generation = 0;
 
     const refresh = async (): Promise<void> => {
+      const chart = ctx.chart;
+      const currentGeneration = ++generation;
+      if (chart !== lastChart) {
+        lastMarketListener?.();
+        lastMarketListener = undefined;
+        lastChart?.marks.clear();
+        lastChart = chart;
+        chart.marks.defineGroup({ id: 'trades', label: 'Trades', visible: true });
+        lastMarketListener = chart.on('market:changed', () => void refresh());
+      }
+
       try {
         const symbol = String(ctx.symbol || '').trim().toUpperCase();
         const trades = await tradingCoreRuntime.getTradeHistory();
+        if (currentGeneration !== generation) return;
         const marks = trades
           .filter((trade) => String(trade.symbol || '').trim().toUpperCase() === symbol)
           .slice(-250)
@@ -767,18 +780,19 @@ const tradeMarksAttachment: WidgetAttachment = {
 
         chart.marks.set(marks);
       } catch {
-        chart.marks.clear();
+        if (currentGeneration === generation) chart.marks.clear();
       }
     };
 
     void refresh();
     const timer = window.setInterval(() => void refresh(), 10_000);
-    const marketOff = chart.on('market:changed', () => void refresh());
 
     return () => {
       window.clearInterval(timer);
-      marketOff();
-      chart.marks.clear();
+      lastMarketListener?.();
+      lastMarketListener = undefined;
+      lastChart?.marks.clear();
+      lastChart = null;
     };
   },
 };
