@@ -17,6 +17,7 @@ const BrokerCallbackPage = lazy(() => import('./pages/BrokerCallbackPage').then(
 const LegalPage = lazy(() => import('./pages/LegalPage').then(m => ({ default: m.LegalPage })));
 const IndicatorExplorePage = lazy(() => import('./pages/IndicatorExplorePage').then(m => ({ default: m.IndicatorExplorePage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const VelaBrowserSmokePage = lazy(() => import('./pages/VelaBrowserSmokePage').then(m => ({ default: m.VelaBrowserSmokePage })));
 
 const workspacePaths = WORKSPACE_ROUTES;
 
@@ -73,6 +74,7 @@ function AppContent() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [routeErrorReset, setRouteErrorReset] = useState(0);
   const publicIndicatorRoute = pathnameIsPublicIndicator(pathname) || pathnameIsPublicScript(pathname);
+  const velaBrowserSmokeRoute = pathname === '/__smoke/vela';
   const initialProtectedEntry = useRef(workspacePaths.includes(window.location.pathname as WorkspaceRoute));
   const [runtime, setRuntime] = useState<TradingCoreRuntimeApi | null>(null);
   const [hasConnectedBroker, setHasConnectedBroker] = useState(false);
@@ -93,7 +95,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || publicIndicatorRoute || !protectedEntry || authStatus === 'degraded') return;
+    if (!isAuthenticated || publicIndicatorRoute || velaBrowserSmokeRoute || !protectedEntry || authStatus === 'degraded') return;
 
     let cancelled = false;
     setBrokerRestoreReady(false);
@@ -125,7 +127,7 @@ function AppContent() {
       });
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, user?.id, authStatus, publicIndicatorRoute, protectedEntry]);
+  }, [isAuthenticated, user?.id, authStatus, publicIndicatorRoute, velaBrowserSmokeRoute, protectedEntry]);
 
   useEffect(() => {
     if (!runtime) return;
@@ -138,7 +140,7 @@ function AppContent() {
 
   useEffect(() => {
     const isBrokerCallbackRoute = pathname.startsWith('/auth/broker-callback');
-    if (publicIndicatorRoute || isBrokerCallbackRoute) return;
+    if (publicIndicatorRoute || velaBrowserSmokeRoute || isBrokerCallbackRoute) return;
     if (authLoading || authStatus === 'degraded' || (initialProtectedEntry.current && !brokerRestoreReady)) return;
 
     if (isAuthenticated && user) {
@@ -194,6 +196,10 @@ function AppContent() {
     else if (view === 'landing') navigate('/landing');
     else if (view === 'login') navigate('/login');
   };
+
+  if (velaBrowserSmokeRoute) {
+    return <Suspense fallback={routeFallback('Loading Vela smoke...', 'Starting native chart runtime')}><VelaBrowserSmokePage /></Suspense>;
+  }
 
   if (window.location.pathname.startsWith('/auth/broker-callback')) {
     return <Suspense fallback={routeFallback('Loading callback...', 'Finalizing broker authorization')}><BrokerCallbackPage /></Suspense>;
