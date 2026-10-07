@@ -447,8 +447,10 @@ const replayPanel: SidePanelDescriptor = {
       play(intervalMs?: number): unknown;
       pause(): unknown;
       stop(): unknown;
-      on(event: string, handler: () => void): () => void;
+      on?: (event: string, handler: () => void) => () => void;
     } }).replay ?? ctx.chart.replay;
+    const replayOn = (event: string, handler: () => void): (() => void) =>
+      typeof replay.on === 'function' ? replayOn(event, handler) : () => undefined;
     const root = panelRoot(body);
     const status = document.createElement('div');
     status.style.cssText = 'font-size:10px;color:#64748b;margin-bottom:8px;';
@@ -493,11 +495,11 @@ const replayPanel: SidePanelDescriptor = {
     };
     refresh();
     const timer = window.setInterval(refresh, 250);
-    const offStart = replay.on('replay:start', refresh);
-    const offStep = replay.on('replay:step', refresh);
-    const offPlay = replay.on('replay:play', refresh);
-    const offPause = replay.on('replay:pause', refresh);
-    const offEnd = replay.on('replay:end', refresh);
+    const offStart = replayOn('replay:start', refresh);
+    const offStep = replayOn('replay:step', refresh);
+    const offPlay = replayOn('replay:play', refresh);
+    const offPause = replayOn('replay:pause', refresh);
+    const offEnd = replayOn('replay:end', refresh);
     return {
       onOpen: refresh,
       onChart: refresh,
