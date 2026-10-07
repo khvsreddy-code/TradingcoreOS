@@ -24,6 +24,16 @@ export type CoreSpiritType =
   | `array<${string}>`
   | `matrix<${string}>`
   | `tensor<${string}>`
+  | `market<${string}>`
+  | `bar<${string}>`
+  | `tick<${string}>`
+  | `orderbook<${string}>`
+  | `footprint<${string}>`
+  | `portfolio<${string}>`
+  | `position<${string}>`
+  | `order<${string}>`
+  | `fill<${string}>`
+  | `probability<${string}>`
   | `model<${string}>`
   | `prediction<${string}>`
   | `distribution<${string}>`
@@ -56,6 +66,7 @@ export type CoreSpiritType =
   | 'timeframe:ref'
   | 'model:ref'
   | 'event'
+  | 'signal-intent'
   | 'order-intent'
   | 'unknown';
 
@@ -102,6 +113,14 @@ export const isStreamType = (type: CoreSpiritType): boolean =>
 
 export const isSnapshotType = (type: CoreSpiritType): boolean =>
   type.startsWith('snapshot<');
+
+export const isSignalIntentType = (type: CoreSpiritType): boolean => type === 'signal-intent';
+export const isOrderIntentType = (type: CoreSpiritType): boolean => type === 'order-intent' || type.startsWith('order<');
+export const isTradingObjectType = (type: CoreSpiritType): boolean =>
+  type === 'trade' || type === 'orderbook' || type === 'footprint' || type === 'volume-profile' ||
+  type.startsWith('market<') || type.startsWith('bar<') || type.startsWith('tick<') ||
+  type.startsWith('orderbook<') || type.startsWith('footprint<') || type.startsWith('portfolio<') ||
+  type.startsWith('position<') || type.startsWith('order<') || type.startsWith('fill<');
 
 export const isNumericType = (type: CoreSpiritType): boolean => {
   if (isNumericScalarType(type) || type === 'probability') return true;
@@ -178,10 +197,10 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
-  if (/^(array|matrix|tensor|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
+  if (/^(array|matrix|tensor|market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
-  if (['trade','orderbook','footprint'].includes(name)) return name as CoreSpiritType;
+  if (['trade','orderbook','footprint','portfolio','position','order','fill','signal-intent','order-intent'].includes(name)) return name as CoreSpiritType;
   if (name === 'volumeProfile' || name === 'volume-profile') return 'volume-profile';
   return `udt:${name}`;
 }
@@ -193,6 +212,9 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (temporalAssignmentCompatible(expected, actual)) return true;
   if (isModelType(expected) && actual === 'model:ref') return true;
   if (expected === 'model:ref' && isModelType(actual)) return true;
+  if (expected === 'signal-intent' && actual === 'signal-intent') return true;
+  if (expected === 'order-intent' && actual === 'order-intent') return true;
+  if (expected.startsWith('order<') && actual.startsWith('order<')) return expected === actual || expected === 'order<number>' || actual === 'order<number>';
   if (expected === 'number') return isNumericType(actual);
   if (expected === 'probability') return actual === 'probability' || actual === 'number';
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
