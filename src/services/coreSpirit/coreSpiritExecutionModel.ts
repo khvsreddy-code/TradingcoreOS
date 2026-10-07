@@ -33,8 +33,9 @@ export const CORE_SPIRIT_EXECUTION_CONTEXTS = Object.freeze([
 export type CoreSpiritExecutionContext = typeof CORE_SPIRIT_EXECUTION_CONTEXTS[number];
 
 export const CORE_SPIRIT_VALUE_KINDS = Object.freeze([
-  'scalar', 'series', 'boolean', 'event', 'condition', 'feature', 'model',
-  'distribution', 'signal', 'visual', 'automation', 'order-intent', 'dataset', 'state',
+  'scalar', 'series', 'boolean', 'event', 'condition', 'feature', 'featureSet', 'model',
+  'prediction', 'forecast', 'probability', 'distribution', 'signal', 'visual', 'automation', 'order-intent',
+  'dataset', 'trainingData', 'experiment', 'modelArtifact', 'state',
 ] as const);
 export type CoreSpiritValueKind = typeof CORE_SPIRIT_VALUE_KINDS[number];
 
@@ -119,6 +120,16 @@ export type CoreSpiritNodeExecutionDescriptor = Readonly<{
 
 export function classifyCoreSpiritValueKind(type: string): CoreSpiritValueKind {
   if (type.startsWith('series<')) return 'series';
+  if (type.startsWith('prediction<')) return 'prediction';
+  if (type.startsWith('forecast<')) return 'forecast';
+  if (type === 'probability') return 'probability';
+  if (type.startsWith('featureSet<')) return 'featureSet';
+  if (type.startsWith('feature<')) return 'feature';
+  if (type.startsWith('distribution<')) return 'distribution';
+  if (type.startsWith('modelArtifact<')) return 'modelArtifact';
+  if (type.startsWith('trainingData<')) return 'trainingData';
+  if (type.startsWith('experiment<')) return 'experiment';
+  if (type.startsWith('dataset<')) return 'dataset';
   if (type === 'event') return 'event';
   if (type === 'visual') return 'visual';
   if (type === 'order-intent') return 'order-intent';
