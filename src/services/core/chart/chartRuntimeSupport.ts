@@ -1,8 +1,6 @@
 import type { AutomationConfig } from '../../workspace/workspaceState';
 import type { HistoricalCandle } from '../../brokers/BrokerAdapter';
 import { getIndicatorDefaultPatch } from '../../coreSpirit/indicatorSettingsSchema';
-import { normalizeCoreDrawings } from '../drawing/coreDrawing';
-import type { CoreDrawing } from '../drawing/coreDrawing';
 import { series, vwap, rsi, donchian, supertrend, indianKeyLevels, cpr, bollinger } from '../../marketData/indicatorEngine';
 import type { SerializedDrawing } from './velaNativeChartKernel';
 import { migrateVelaDrawings } from './velaNativeChartKernel';
@@ -15,8 +13,8 @@ export const chartIntervals = {
 export type PersistedChartState = {
   version: 2;
   timeframe: string;
-  drawings: CoreDrawing[];
-  velaDrawings?: SerializedDrawing[];
+  /** Vela is the single active drawing authority. Legacy drawing state is ignored on read. */
+  velaDrawings: SerializedDrawing[];
   showLevels?: boolean;
   showVolume?: boolean;
   showOI?: boolean;
@@ -49,12 +47,10 @@ export function loadChartState(brokerId:string,instrumentKey:string):PersistedCh
     const raw=localStorage.getItem(chartStateKey(brokerId,instrumentKey));
     const x=raw?JSON.parse(raw):null;
     if(x&&typeof x==='object'){
-      const drawings=normalizeCoreDrawings(x.drawings,'user');
       const velaDrawings=migrateVelaDrawings({version:1,drawings:Array.isArray(x.velaDrawings)?x.velaDrawings:[]});
       return {
         version:2,
         timeframe:typeof x.timeframe==='string'&&chartIntervals[x.timeframe as keyof typeof chartIntervals]?x.timeframe:'5m',
-        drawings,
         velaDrawings,
         showLevels:Boolean(x.showLevels),
         showVolume:Boolean(x.showVolume),
@@ -63,7 +59,7 @@ export function loadChartState(brokerId:string,instrumentKey:string):PersistedCh
       };
     }
   }catch{}
-  return{version:2,timeframe:'5m',drawings:[]};
+  return{version:2,timeframe:'5m',velaDrawings:[]};
 }
 
 export function markerForAutomation(
