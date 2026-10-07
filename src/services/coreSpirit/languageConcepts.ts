@@ -23,7 +23,7 @@ export type CoreSpiritModelSurfaceBinding = {
   locator: string;
 };
 
-export type CoreSpiritModelSurfaceFieldType = 'unknown' | 'number' | 'string' | 'boolean' | 'series<number>';
+export type CoreSpiritModelSurfaceFieldType = 'unknown' | 'number' | 'string' | 'boolean' | 'series<number>' | 'prediction<number>' | 'forecast<number>' | 'probability' | 'feature<number>';
 
 export type CoreSpiritEventDestination =
   | { kind: 'webhook'; target: string }
@@ -56,6 +56,8 @@ export type CoreSpiritSurfaceDeclaration =
       /** Compatibility aliases for the earlier feature/predict vocabulary. */
       features: string[];
       predictions: string[];
+      /** Target/predict expression retained as research metadata, never executed as model code. */
+      target?: string;
       start: number;
       end: number;
     }
@@ -140,6 +142,7 @@ export function makeCoreSpiritSurfaceMetadata(
         outputTypes: { ...declaration.outputTypes },
         features: [...declaration.features],
         predictions: [...declaration.predictions],
+        ...(declaration.target ? { target: declaration.target } : {}),
       } : declaration.kind === 'automation' ? {
         triggers: [...declaration.triggers],
       } : {}),
@@ -158,7 +161,7 @@ function lineIndent(raw: string): number {
 }
 
 function parseModelField(value: string): { name: string; type: CoreSpiritModelSurfaceFieldType } | undefined {
-  const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>))?$/i);
+  const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>|prediction<number>|forecast<number>|probability|feature<number>))?$/i);
   if (!match) return undefined;
   return {
     name: match[1],
@@ -224,6 +227,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
         outputTypes: {} as Record<string, CoreSpiritModelSurfaceFieldType>,
         features: [] as string[],
         predictions: [] as string[],
+        target: undefined as string | undefined,
         start: offset,
         end: offset + raw.length,
       };
@@ -312,6 +316,13 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
             current.declaration.outputTypes[field.name] = field.type;
             if (!current.declaration.predictions.includes(field.name)) current.declaration.predictions.push(field.name);
           }
+          concepts.add('MODEL');
+        } else if (/^predict\s*:/i.test(trimmed)) {
+          const target = trimmed.replace(/^predict\s*:\s*/i, '').trim();
+          if (target) current.declaration.target = target;
+          if (!current.declaration.outputs.includes('prediction')) current.declaration.outputs.push('prediction');
+          current.declaration.outputTypes.prediction = 'prediction<number>';
+          if (!current.declaration.predictions.includes('prediction')) current.declaration.predictions.push('prediction');
           concepts.add('MODEL');
         } else if (/^predict\s+/.test(trimmed)) {
           const name = trimmed.replace(/^predict\s+/i, '').trim();
