@@ -54,6 +54,12 @@ try {
     historyComplete: state.historyComplete,
     nativeIndicator: state.nativeIndicator,
   }, null, 2));
+} catch (error) {
+  try { console.error('[vela-smoke] url=' + run(['get', 'url'])); } catch {}
+  try { console.error('[vela-smoke] title=' + run(['get', 'title'])); } catch {}
+  try { console.error('[vela-smoke] errors=' + run(['errors', '--json'])); } catch {}
+  try { console.error('[vela-smoke] console=' + run(['console', '--json'])); } catch {}
+  throw error;
 } finally {
   try { run(['close']); } catch {}
 }
