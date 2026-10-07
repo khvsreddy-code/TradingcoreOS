@@ -10,7 +10,10 @@ realtimeTicketRoutes.get('/', (req: AuthenticatedRequest, res: Response) => {
   const forwardedProto = String(req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
   const host = String(req.get('host') || '').trim();
   const gatewayUrl = configuredGatewayUrl || (host ? `${forwardedProto}://${host}/api/realtime` : '');
-  if (!gatewayUrl || !process.env.REALTIME_GATEWAY_SHARED_SECRET || !configuredGatewayUrl) {
+  if (!gatewayUrl || !process.env.REALTIME_GATEWAY_SHARED_SECRET) {
+    // No signed gateway ticket can be issued until the shared secret exists.
+    // The browser knows how to consume this explicit legacy capability without
+    // turning the missing gateway configuration into a retry/503 storm.
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       success: true,
