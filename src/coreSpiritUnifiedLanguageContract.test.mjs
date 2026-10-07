@@ -90,7 +90,7 @@ const runtime = new CoreSpiritRuntime({
   symbol:'NSE:NIFTY50',
   timeframe:'5m',
   executionMode:'historical',
-  executionTarget:'automation',
+  executionTarget:'chart',
   layer:'automation',
   riskResolver:()=>true,
   modelPredictionResolver:({field})=>{ modelCalls+=1; return field==='probability'?0.81:123.45; },
