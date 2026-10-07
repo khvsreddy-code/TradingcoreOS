@@ -19,7 +19,7 @@ import type {
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
 import type { OHLCV } from '../../core/model/ohlcv';
-import { createMutableColumnarBars, appendColumnarBar } from '../../core/model/columnar-bars';
+import { columnarTimeToMillis, createMutableColumnarBars, appendColumnarBar } from '../../core/model/columnar-bars';
 import type { ColumnarBars, ColumnarBarUpdate, ColumnarLodIndex, MutableColumnarBars } from '../../core/model/columnar-bars';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
@@ -1947,8 +1947,25 @@ export class NativeRenderer implements IChartRenderer {
 
     updateBarColumns(update: ColumnarBarUpdate): void {
         const unit = update.timeUnit ?? this.columnarBars?.timeUnit ?? 'milliseconds';
-        const barTime = update.time;
-        this.applyColumnarBar(barTime, unit, update.open, update.high, update.low, update.close, update.volume);
+        // LiveSession may select the compact columnar transport even when the initial
+        // history had to fall back to the object-bar path. In that case there is no
+        // columnar store to mutate; fall back to the canonical scalar bar updater so
+        // the live tick still reaches the renderer instead of becoming a silent no-op.
+        if (!this.columnarBars) {
+            this.updateBar({
+                time: columnarTimeToMillis(update.time, unit),
+                open: update.open,
+                high: update.high,
+                low: update.low,
+                close: update.close,
+                volume: Number.isFinite(update.volume ?? Number.NaN) ? Number(update.volume) : undefined,
+            });
+            return;
+        }
+        this.applyColumnarBar(update.time, unit, update.open, update.high, update.low, update.close, update.volume);
+        // Columnar updates mutate typed arrays in place, so explicitly invalidate the
+        // data tier. Without this, forming-candle LTP changes never repaint.
+        this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
     setLodIndex(index: ColumnarLodIndex | null): void {
@@ -2041,8 +2058,9 @@ export class NativeRenderer implements IChartRenderer {
         }
         if (n > 0 && incoming < columns.time[n - 1]!) return;
         const next = appendColumnarBar(columns, incoming, open, high, low, close, volume);
-        this.bars.push({ time: next.time, open, high, low, close, volume: Number.isFinite(volume ?? Number.NaN) ? volume : undefined });
-        this.coords.appendBar(this.bars[this.bars.length - 1]!.time);
+        const nextTimeMs = columnarTimeToMillis(next.time, columns.timeUnit ?? 'milliseconds');
+        this.bars.push({ time: nextTimeMs, open, high, low, close, volume: Number.isFinite(volume ?? Number.NaN) ? volume : undefined });
+        this.coords.appendBar(nextTimeMs);
         this.scene.bars = this.bars;
     }
 
