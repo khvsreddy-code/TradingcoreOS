@@ -8,7 +8,7 @@ import {
   type InputValue,
   type RendererLayerDefinition,
   type RendererLayerArgs,
-} from '../../../../vendor/vela/src/plugin';
+} from './velaChartFacade';
 
 type RegimeLayerData = {
   state: -1 | 0 | 1;
