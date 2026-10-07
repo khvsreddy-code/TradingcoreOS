@@ -225,6 +225,10 @@ export class ChartDataPlane {
     const bucketTime = Math.floor(timestampMs / (intervalSeconds * 1000)) * intervalSeconds;
     const lastIndex = view.length - 1;
     const lastTime = lastIndex >= 0 ? Number(view.time[lastIndex]) : Number.NaN;
+    const previousOpen = lastIndex >= 0 ? Number(view.open[lastIndex]) : Number.NaN;
+    const previousHigh = lastIndex >= 0 ? Number(view.high[lastIndex]) : Number.NaN;
+    const previousLow = lastIndex >= 0 ? Number(view.low[lastIndex]) : Number.NaN;
+    const previousClose = lastIndex >= 0 ? Number(view.close[lastIndex]) : Number.NaN;
 
     if (Number.isFinite(lastTime) && bucketTime < lastTime) {
       return { changed: false, bucketChanged: false, latest: null };
@@ -272,7 +276,10 @@ export class ChartDataPlane {
     };
     const changed = lastIndex < 0
       || bucketTime !== lastTime
-      || Number(next.close[i]) !== Number(view.close[lastIndex]);
+      || Number(next.open[i]) !== previousOpen
+      || Number(next.high[i]) !== previousHigh
+      || Number(next.low[i]) !== previousLow
+      || Number(next.close[i]) !== previousClose;
     const bucketChanged = lastIndex < 0 || bucketTime > lastTime;
 
     // Keep Vela on the typed canonical path. Only the compatibility tail is touched;
