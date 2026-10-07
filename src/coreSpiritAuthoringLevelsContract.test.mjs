@@ -93,3 +93,60 @@ assert.ok((trendKernel.update(7) ?? 0)>0.99);
 assert.equal(detectQuantRegime(0.01,0.8),'trend-up');
 assert.equal(detectQuantRegime(0.01,-0.8),'trend-down');
 assert.equal(detectQuantRegime(0.03,0.1),'volatile');
+
+
+const unifiedSource = `
+data nifty = market("NSE:NIFTY50", "5m")
+
+let trend = ta.ema(nifty.close, 50)
+let volatility = stats.stdev(returns(nifty), 50)
+let momentum = ta.rsi(nifty.close, 14)
+
+model trendModel {
+    inputs:
+        trend,
+        volatility,
+        momentum
+    predict:
+        forward_return(10)
+}
+
+let prediction: prediction<float> = trendModel.predict()
+let confidence: probability = trendModel.probability()
+
+show line(prediction)
+
+when prediction > 0.70
+    signal("LONG")
+
+on signal("LONG") {
+    if risk.allowed() {
+        automation.notify("High-confidence bullish regime")
+        automation.route("execution.long")
+    }
+}
+`;
+
+const unifiedResult = compileCoreSpirit(unifiedSource, 'unified-language-contract');
+assert.ok(!unifiedResult.diagnostics.some(d => d.severity === 'error'), unifiedResult.diagnostics.map(d => d.message).join('; '));
+assert.equal(unifiedResult.ir?.authoringLevel, 'system');
+assert.ok(unifiedResult.ir?.languageCapabilities?.includes('models'));
+assert.ok(unifiedResult.ir?.languageCapabilities?.includes('events'));
+assert.ok(unifiedResult.ir?.languageCapabilities?.includes('automation'));
+
+const graph = unifiedResult.ir?.semanticDependencyGraph;
+assert.ok(graph?.nodes.some(node => node.kind === 'model' && node.name === 'trendModel'));
+assert.ok(graph?.nodes.some(node => node.kind === 'model-input' && node.name === 'trend'));
+assert.ok(graph?.nodes.some(node => node.kind === 'model-input' && node.name === 'volatility'));
+assert.ok(graph?.nodes.some(node => node.kind === 'model-output' && node.name === 'trendModel.prediction'));
+assert.ok(graph?.nodes.some(node => node.kind === 'automation' && node.name === 'automation.notify'));
+assert.ok(graph?.edges.some(edge => edge.to === 'model:trendModel' && edge.relation === 'depends-on'));
+
+const triggers = unifiedResult.ir?.tradingNativePlan?.eventTriggers ?? [];
+const signalTrigger = triggers.find(trigger => trigger.kind === 'signal' && trigger.source.toLowerCase().startsWith('signal('));
+assert.ok(signalTrigger);
+assert.equal(signalTrigger?.busEvent, 'script.signal');
+assert.equal(signalTrigger?.filter?.kind, 'signal');
+assert.equal(signalTrigger?.filter?.value, 'LONG');
+
+console.log('CORESPIRIT_UNIFIED_LANGUAGE_CONTRACT_OK');
