@@ -6,8 +6,11 @@ export const realtimeTicketRoutes = Router();
 realtimeTicketRoutes.use(requireUser);
 
 realtimeTicketRoutes.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const gatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\/$/, '');
-  if (!gatewayUrl) {
+  const configuredGatewayUrl = String(process.env.REALTIME_GATEWAY_URL || '').trim().replace(/\/$/, '');
+  const forwardedProto = String(req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  const host = String(req.get('host') || '').trim();
+  const gatewayUrl = configuredGatewayUrl || (host ? `${forwardedProto}://${host}/api/realtime` : '');
+  if (!gatewayUrl || !process.env.REALTIME_GATEWAY_SHARED_SECRET) {
     res.status(503).json({ success: false, error: 'Realtime gateway is not configured.' });
     return;
   }
