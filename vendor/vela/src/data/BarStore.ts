@@ -8,8 +8,14 @@ export function seriesKey(provider: string, symbol: string, timeframe: string, s
     return `${provider}|${symbol}|${timeframe}${session && session !== 'regular' ? `|${session}` : ''}`;
 }
 
+function symbolIdentity(value: string): string {
+    const raw = String(value ?? '').trim();
+    const colon = raw.indexOf(':');
+    return (colon >= 0 ? raw.slice(colon + 1) : raw).trim().toUpperCase();
+}
+
 function symbolOf(key: string): string {
-    return key.split('|')[1] ?? '';
+    return symbolIdentity(key.split('|')[1] ?? '');
 }
 
 /** Bounded recent-symbol hot cache. Visible workspace symbols are protected separately. */
@@ -80,7 +86,7 @@ export class BarStore {
      * Symbols declared via {@link retain} are never purged.
      */
     retainSymbol(symbol: string): void {
-        const normalized = symbol.trim();
+        const normalized = symbolIdentity(symbol);
         if (!normalized) return;
         this.currentSymbol = normalized;
         this.hotSymbols.delete(normalized);
@@ -107,7 +113,7 @@ export class BarStore {
      */
     retain(symbols: ReadonlySet<string>, owner: unknown = 'default'): void {
         if (symbols.size === 0) this.retainedByOwner.delete(owner);
-        else this.retainedByOwner.set(owner, new Set(symbols));
+        else this.retainedByOwner.set(owner, new Set([...symbols].map(symbolIdentity)));
         const union = new Set<string>();
         for (const set of this.retainedByOwner.values()) for (const s of set) union.add(s);
         this.retained = union;
