@@ -319,13 +319,14 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           if (!current.declaration.predictions.includes(fieldName)) current.declaration.predictions.push(fieldName);
         };
 
-        if (current.modelSection === 'input') {
+        const isModelStructuralLine = /^(?:use|input(?:s)?|feature(?:s)?|output(?:s)?|target|predict)\b/i.test(trimmed);
+        if (current.modelSection === 'input' && !isModelStructuralLine) {
           for (const entry of splitModelBindingList(trimmed)) addModelInput(entry);
           concepts.add('MODEL');
           offset += raw.length + 1;
           continue;
         }
-        if (current.modelSection === 'output') {
+        if (current.modelSection === 'output' && !isModelStructuralLine) {
           for (const entry of splitModelBindingList(trimmed)) addModelOutput(entry);
           concepts.add('MODEL');
           offset += raw.length + 1;
