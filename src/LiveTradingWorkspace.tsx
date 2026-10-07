@@ -50,7 +50,7 @@ export function LiveTradingWorkspace() {
       const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
-      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout && defaults.layout !== '4' ? defaults.layout : '1');
+      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '4');
 
       workspace = new VelaWorkspaceClass(host.current, {
         layout: initialLayout,
