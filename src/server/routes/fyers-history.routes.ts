@@ -128,32 +128,6 @@ function normalize(rows: any[], limit: number): any[] {
  * not presented as historical data; subsequent websocket ticks build the live
  * candle normally in the browser.
  */
-async function fallbackQuoteCandle(accessToken: string, symbol: string, signal: AbortSignal): Promise<any[]> {
-  const params = new URLSearchParams({ symbols: symbol });
-  const response = await fetch(`https://api-t1.fyers.in/data/quotes?${params.toString()}`, {
-    headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-    signal,
-  });
-  const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch { return []; }
-  if (!response.ok || payload?.s === 'error') return [];
-  const quote = Array.isArray(payload?.d) ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0] : undefined;
-  const value = quote?.v || {};
-  const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
-  if (!Number.isFinite(ltp) || ltp <= 0) return [];
-  const now = new Date();
-  const volume = Number(value.volume ?? value.vol ?? 0);
-  return [{
-    timestamp: now.toISOString(),
-    open: ltp,
-    high: ltp,
-    low: ltp,
-    close: ltp,
-    volume: Number.isFinite(volume) ? volume : 0,
-    liveSeed: true,
-  }];
-}
 
 const cache = new Map<string, { expiresAt: number; data: any }>();
 const inflight = new Map<string, Promise<any>>();
@@ -262,13 +236,8 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         throw new Error(payload?.message || `Fyers history failed (${response.status})`);
       }
       let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
-      const dataLength = isColumnarData(data) ? data.time.length : data.length;
-      if (!beforeDate && dataLength < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
-        if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
-      }
       const finalLength = isColumnarData(data) ? data.time.length : data.length;
-      if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
+      if (!finalLength) throw new Error(`Fyers returned no historical candles for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
     }, requestSignal);
@@ -278,7 +247,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     const returned = isColumnarData(data) ? data.time.length : data.length;
     const oldestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
     const newestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
-    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !isColumnarData(data) && data.length === 1 && data[0]?.liveSeed === true });
+    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp });
   } catch (error: any) {
     sendHistoryError(res, error);
   } finally {
