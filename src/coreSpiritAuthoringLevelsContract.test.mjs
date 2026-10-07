@@ -143,6 +143,9 @@ assert.ok(graph?.nodes.some(node => node.kind === 'model-input' && node.name ===
 assert.ok(graph?.nodes.some(node => node.kind === 'model-output' && node.name === 'trendModel.prediction'));
 assert.ok(graph?.nodes.some(node => node.kind === 'automation' && node.name === 'automation.notify'));
 assert.ok(graph?.edges.some(edge => edge.to === 'model:trendModel' && edge.relation === 'depends-on'));
+const predictInstruction = unifiedResult.ir?.entry.instructions.find(instruction => instruction.op === 'call' && instruction.name === '__model_predict');
+assert.ok(predictInstruction);
+assert.ok(predictInstruction?.args.length >= 7);
 
 const triggers = unifiedResult.ir?.tradingNativePlan?.eventTriggers ?? [];
 const signalTrigger = triggers.find(trigger => trigger.kind === 'signal' && trigger.source.toLowerCase().startsWith('signal('));
