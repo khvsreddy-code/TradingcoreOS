@@ -18,7 +18,8 @@ function sleep(ms) {
 
 try {
   run(['open', url]);
-  run(['wait', '--load', 'networkidle']);
+  run(['wait', '--load', 'domcontentloaded']);
+  run(['wait', '[data-tco-vela-smoke]']);
 
   const started = Date.now();
   let state = null;
