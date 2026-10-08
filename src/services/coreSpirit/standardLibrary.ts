@@ -103,6 +103,8 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
  * They are deliberately not part of the small language core.
  */
 export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
+  { name:'__input', minArgs:2, maxArgs:2, returnType:'unknown', pure:true, category:'extension' },
+
   // Visual/output compatibility and advanced surface contracts. These remain
   // executable through the shared registry but are intentionally outside the
   // 30-primitive semantic core. SHOW/EMIT are discoverability-first surfaces.
