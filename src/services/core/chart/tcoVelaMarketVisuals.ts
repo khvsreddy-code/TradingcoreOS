@@ -12,6 +12,7 @@ import {
   type SeriesDataEngineHost,
   type InputSchema,
   type InputValue,
+  type SettingsRowDescriptor,
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 
