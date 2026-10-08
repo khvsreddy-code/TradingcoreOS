@@ -18,8 +18,18 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run test:contracts
       - run: npm run build
       - run: npm run typecheck
       - run: npm run bundle:budget
+      - name: Browser smoke (real Vela runtime)
+        run: |
+          npm install --no-save --no-audit --no-fund agent-browser
+          PORT=3000 NODE_ENV=test npm run dev > /tmp/tradingcoreos.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:3000/api/health/live >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/api/health/live >/dev/null
+          npm run verify:browser:smoke

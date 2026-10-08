@@ -564,6 +564,7 @@ const positionsPanel: SidePanelDescriptor = {
 };
 
 const riskPanel: SidePanelDescriptor = {
+  maximizable: true,
   id: 'tco.risk',
   title: 'Risk',
   icon: 'shield',
@@ -607,6 +608,7 @@ const riskPanel: SidePanelDescriptor = {
 };
 
 const orderBookPanel: SidePanelDescriptor = {
+  maximizable: true,
   id: 'tco.orderbook',
   title: 'Order Book',
   icon: 'list',
@@ -660,6 +662,7 @@ const orderBookPanel: SidePanelDescriptor = {
 };
 
 const optionsPanel: SidePanelDescriptor = {
+  maximizable: true,
   id: 'tco.options',
   title: 'Options',
   icon: 'layers',

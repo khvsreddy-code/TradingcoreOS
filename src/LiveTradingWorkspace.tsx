@@ -6,6 +6,9 @@ import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
+import './services/core/chart/tcoVelaMarketVisuals';
+import './services/core/chart/tcoVelaTradingUi';
+import './services/core/chart/tcoVelaResearchUi';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 
@@ -101,7 +104,7 @@ export function LiveTradingWorkspace() {
         indicatorPicker: true,
         topbar: {
           left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
-          right: ['tco.watchlist', 'tco.journal', 'tco.replay', 'tco.positions', 'tco.risk', 'tco.orderbook', 'tco.options', 'tco.data-window', 'tco.vpvr', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
+          right: ['tco.watchlist', 'tco.journal', 'tco.replay', 'tco.replay-sim.action', 'tco.quick-order.topbar', 'tco.native-ta.topbar', 'tco.ai-analysis.action', 'tco.positions', 'tco.risk', 'tco.orderbook', 'tco.options', 'tco.data-window', 'tco.vpvr', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
         },
         // Vela owns workspace synchronization. Keep symbols/timeframes independent for
         // focused multi-chart analysis, but synchronize cursor and visual style across cells.

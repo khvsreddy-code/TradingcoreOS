@@ -3,7 +3,7 @@
 // itself is the kit Menu anchored at the pointer.
 import type { Vela } from '../Vela';
 import { Menu, type MenuItemDescriptor } from '../ui/components/menu';
-import { widgetActions, type WidgetContext } from './contributions';
+import { widgetActions, type WidgetContext, type ContextMenuPointer } from './contributions';
 import {
     bodyItems,
     invertWrite,
@@ -37,6 +37,9 @@ export interface ContextMenuCallbacks {
 export class ChartContextMenu {
     private readonly menu: Menu;
     private readonly host: HTMLElement;
+    private offCrosshair: (() => void) | null = null;
+    private crosshair: ContextMenuPointer = { price: null, time: null, paneKind: null };
+    private pointer: ContextMenuPointer = { price: null, time: null, paneKind: null };
     private chart: Vela | null = null;
     private lastZone: Zone = 'body';
     /** The pane whose scale the open price-axis menu targets (null ⇒ the main scale). */
@@ -44,6 +47,7 @@ export class ChartContextMenu {
     private readonly onContextMenu = (e: MouseEvent): void => {
         e.preventDefault();
         if (!this.chart) return;
+        this.pointer = this.crosshair;
         this.lastZone = this.zoneOf(e);
         this.lastPane = this.lastZone === 'price-axis' ? this.paneAt(e) : null;
         this.menu.setItems(this.itemsFor(this.lastZone));
@@ -66,11 +70,27 @@ export class ChartContextMenu {
 
     /** (Re)bind to a chart instance — called after every widget rebuild. */
     onChart(chart: Vela): void {
+        this.offCrosshair?.();
+        this.offCrosshair = null;
         this.chart = chart;
+        const onMove = chart.renderer.onCrosshairMove;
+        if (typeof onMove === 'function') {
+            this.offCrosshair = onMove.call(chart.renderer, (event: any) => {
+                const price = Number(event?.price);
+                const time = Number(event?.time);
+                this.crosshair = {
+                    price: Number.isFinite(price) ? price : null,
+                    time: Number.isFinite(time) ? time : null,
+                    paneKind: event?.paneKind === 'study' ? 'study' : event?.paneKind === 'price' ? 'price' : (Number.isFinite(price) ? 'price' : null),
+                };
+            });
+        }
     }
 
     destroy(): void {
         this.host.removeEventListener('contextmenu', this.onContextMenu);
+        this.offCrosshair?.();
+        this.offCrosshair = null;
         this.menu.destroy();
     }
 
@@ -92,8 +112,17 @@ export class ChartContextMenu {
         return Boolean(this.chart?.renderer.get(feature));
     }
 
-    private contributed(zone: Zone): MenuItemDescriptor[] {
+    private context(): WidgetContext | undefined {
         const ctx = this.cbs.getContext?.();
+        if (!ctx) return undefined;
+        return Object.create(Object.getPrototypeOf(ctx) as object | null, {
+            ...Object.getOwnPropertyDescriptors(ctx),
+            pointer: { value: this.pointer, enumerable: true },
+        }) as WidgetContext;
+    }
+
+    private contributed(zone: Zone): MenuItemDescriptor[] {
+        const ctx = this.context();
         return widgetActions(`context:${zone}`, ctx).map((a, i) => ({
             id: `action:${a.id}`,
             label: a.label,

@@ -55,6 +55,14 @@ export interface WidgetContext {
      *  `state:changed` + storage write follows). Only needed for state with no shell
      *  event of its own — indicator adds/removals already trigger the save cycle. */
     stateChanged(): void;
+    /** Right-click location captured when a context menu opens; only supplied to context:* actions. */
+    pointer?: ContextMenuPointer;
+}
+
+export interface ContextMenuPointer {
+    price: number | null;
+    time: number | null;
+    paneKind: 'price' | 'study' | null;
 }
 
 /** What {@link WidgetContext.addIndicator} takes: a named script, ready to run. */
@@ -159,6 +167,10 @@ export interface SidePanelHeader {
     /** Replace the header title (an empty string hides it). The topbar toggle keeps the
      *  DECLARED `title` as its tooltip. */
     setTitle(title: string): void;
+    /** Whether the panel currently covers the shell host. */
+    readonly maximized?: boolean;
+    /** Maximize over the shell host or restore the panel. */
+    setMaximized?: (maximized: boolean) => void;
 }
 
 /**
@@ -191,6 +203,8 @@ export interface SidePanelDescriptor {
      *  column that shrinks the chart). For panels wide enough that a column would crush
      *  the plot. The dock stays exclusive either way. */
     overlay?: boolean;
+    /** Show a maximize/restore control in the panel header. */
+    maximizable?: boolean;
     mount(ctx: WidgetContext, body: HTMLElement, header: SidePanelHeader): SidePanelHandle | void;
 }
 

@@ -30,7 +30,9 @@ assert.match(coreSpirit, /Secondary market data refresh failed/);
 assert.match(coreSpirit, /void loadSecondaryData\(\)/);
 assert.doesNotMatch(provider, /getChartDataPlane\(['"]fyers['"]/);
 assert.match(provider, /activeBrokerIdSync/);
-assert.match(provider, /tradingCoreRuntime\.getMarketQuotes\(\[symbol\]\)/, 'Vela history must retain an independent quote fallback');
+assert.doesNotMatch(provider, /tradingCoreRuntime\.getMarketQuotes\(\[symbol\]\)/, 'Vela history must never synthesize history from realtime quotes');
+assert.doesNotMatch(provider, /Promise\.race/, 'progressive Vela history must not race primary history against realtime quotes');
+assert.match(provider, /createProgressiveHistoryEmitter/);
 assert.match(runtime, /getPrimaryBrokerId\(\)/);
 assert.match(runtime, /columns && columns\.time\.length > 0/);
 assert.match(runtime, /getHistoricalData\(/);
@@ -44,7 +46,8 @@ assert.match(auth, /Do not perform additional Supabase calls inside onAuthStateC
 assert.match(dataPlane, /Keep Vela on the typed canonical path/);
 assert.match(dataPlane, /setColumnarHistory/);
 assert.match(chartController, /seedLiveCandle/);
-assert.match(runtimeController, /seedLiveCandle/);
+assert.match(chartController, /applyRealtimeBar\(bar, appearance, false\)/);
+assert.doesNotMatch(runtimeController, /seedLiveCandle/);
 assert.match(runtimeController, /setHistoryFromCanonical/);
 assert.match(velaChrome, /registerSidePanel\(bookmarksPanel\)/);
 assert.match(velaChrome, /registerStatePersistence\(watchlistStatePersistence\)/);
@@ -53,4 +56,10 @@ assert.match(velaExtensions, /registerRendererLayer/);
 assert.match(velaExtensions, /registerNativeIndicator/);
 assert.match(velaChrome, /registerWidgetAttachment/);
 
+
+const tickStart = dataPlane.indexOf('private onTick = (tick: NormalizedMarketTick): void => {');
+const tickEnd = dataPlane.indexOf('  private start(): void {', tickStart);
+assert.ok(tickStart >= 0 && tickEnd > tickStart);
+assert.match(dataPlane.slice(tickStart, tickEnd), /if \(!this\.state\.historyReady\) return;/);
+assert.match(dataPlane, /const pendingTick = this\.state\.latestTick;/);
 console.log('TCO_P0_ROADMAP_CONTRACT_OK');

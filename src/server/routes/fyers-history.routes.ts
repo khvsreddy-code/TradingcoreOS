@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 
 /**
@@ -121,40 +121,6 @@ function normalize(rows: any[], limit: number): any[] {
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, candle]) => candle).slice(-limit);
 }
 
-/**
- * Some newly listed/far-dated option contracts legitimately have no historical
- * trades yet. In that case the chart should not fail completely: use the
- * broker's last known quote as a single live seed candle. This is explicitly
- * not presented as historical data; subsequent websocket ticks build the live
- * candle normally in the browser.
- */
-async function fallbackQuoteCandle(accessToken: string, symbol: string, signal: AbortSignal): Promise<any[]> {
-  const params = new URLSearchParams({ symbols: symbol });
-  const response = await fetch(`https://api-t1.fyers.in/data/quotes?${params.toString()}`, {
-    headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-    signal,
-  });
-  const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch { return []; }
-  if (!response.ok || payload?.s === 'error') return [];
-  const quote = Array.isArray(payload?.d) ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0] : undefined;
-  const value = quote?.v || {};
-  const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
-  if (!Number.isFinite(ltp) || ltp <= 0) return [];
-  const now = new Date();
-  const volume = Number(value.volume ?? value.vol ?? 0);
-  return [{
-    timestamp: now.toISOString(),
-    open: ltp,
-    high: ltp,
-    low: ltp,
-    close: ltp,
-    volume: Number.isFinite(volume) ? volume : 0,
-    liveSeed: true,
-  }];
-}
-
 const cache = new Map<string, { expiresAt: number; data: any }>();
 const inflight = new Map<string, Promise<any>>();
 
@@ -230,7 +196,9 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
     const requestSignal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
-    const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
+    const client = new FyersApiClient(accessToken);
+
+    const task = (async () => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
       const minuteResolution = Number(resolution);
       const barsPerDay = Number.isFinite(minuteResolution) && minuteResolution > 0 ? (6.25 * 60) / minuteResolution : 1;
@@ -241,44 +209,35 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
         ? Math.max(3650, limit)
         : Math.min(3650, Math.max(7, estimatedCalendarDays));
       const from = new Date(end.getTime() - lookbackDays * 86_400_000);
-      const params = new URLSearchParams({
-        symbol: instrumentKey,
-        resolution,
-        // Use epoch timestamps for paged history so `before` maps to an exact
-        // candle boundary instead of being truncated to an India calendar date.
-        date_format: '0',
-        range_from: String(Math.floor(from.getTime() / 1000)),
-        range_to: String(Math.floor(end.getTime() / 1000)),
-        cont_flag: '1',
-      });
-      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-        headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-        signal,
-      });
-      const text = await response.text();
-      let payload: any;
-      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-      if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
-        throw new Error(payload?.message || `Fyers history failed (${response.status})`);
-      }
-      let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
-      const dataLength = isColumnarData(data) ? data.time.length : data.length;
-      if (!beforeDate && dataLength < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
-        if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
-      }
+      // The History API is the sole source for this route. Quote/LTP data is
+      // realtime and must never be converted into a historical candle.
+      const payload = await client.dataGet<{ candles?: unknown[] }>(
+        '/history',
+        {
+          symbol: instrumentKey,
+          resolution,
+          date_format: '0',
+          range_from: String(Math.floor(from.getTime() / 1000)),
+          range_to: String(Math.floor(end.getTime() / 1000)),
+          cont_flag: '1',
+        },
+        requestSignal,
+        API_LATENCY_BUDGET_MS.history,
+      );
+      const candles = Array.isArray(payload?.candles) ? payload.candles : [];
+      const data: FyersHistoryData = columnar ? normalizeColumns(candles as any[], limit) : normalize(candles as any[], limit);
       const finalLength = isColumnarData(data) ? data.time.length : data.length;
-      if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
+      if (!finalLength) throw new Error(`Fyers returned no historical candles for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    }, requestSignal);
+    })();
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
     const returned = isColumnarData(data) ? data.time.length : data.length;
     const oldestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[0]).toISOString() : null) : data[0]?.timestamp || null;
     const newestTimestamp = isColumnarData(data) ? (returned ? new Date(data.time[returned - 1]).toISOString() : null) : data[data.length - 1]?.timestamp || null;
-    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp, liveSeed: !isColumnarData(data) && data.length === 1 && data[0]?.liveSeed === true });
+    res.json({ success: true, data, requested: limit, returned, before: beforeDate?.toISOString() || null, oldestTimestamp, newestTimestamp });
   } catch (error: any) {
     sendHistoryError(res, error);
   } finally {
