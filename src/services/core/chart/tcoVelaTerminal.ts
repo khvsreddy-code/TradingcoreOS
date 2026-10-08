@@ -1,16 +1,15 @@
-import type { ScriptingEngine } from '../../../../vendor/vela/src/core/ports/ScriptingEngine';
-import type { DataProvider } from '../../../../vendor/vela/src/core/ports/DataProvider';
-import type { WorkspaceStorage } from '../../../../vendor/vela/src/workspace/persist';
 import type { VelaWorkspaceOptions } from './velaWorkspaceLoader';
+import { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
+import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 
 export type TcoVelaTerminalDependencies = {
   symbol:string;
   timeframe:string;
   layout:string|false;
-  storage:WorkspaceStorage;
-  createDataProvider:()=>DataProvider;
-  createCoreSpiritEngine:()=>ScriptingEngine;
-  resolveIndicatorManifest:()=>unknown|Promise<unknown>;
+  storage:VelaWorkspaceOptions['storage'];
+  createDataProvider:typeof createTcoVelaDataProvider;
+  createCoreSpiritEngine:()=>LazyCoreSpiritVelaEngine;
+  resolveIndicatorManifest:NonNullable<VelaWorkspaceOptions['indicators']>;
 };
 
 export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
