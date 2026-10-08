@@ -8,6 +8,7 @@ import './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
 import './services/core/chart/tcoVelaMarketVisuals';
 import './services/core/chart/tcoVelaTradingUi';
+import './services/core/chart/tcoVelaResearchUi';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 
