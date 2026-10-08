@@ -34,6 +34,7 @@ export type CoreSpiritDiagnosticCode =
   | 'UNKNOWN_FUNCTION'
   | 'WRONG_ARG_COUNT'
   | 'UNSUPPORTED_FEATURE'
+  | 'CAPABILITY_REQUIRED'
   | 'SEMANTIC_ERROR';
 
 export type CoreSpiritSourceSpan = {
