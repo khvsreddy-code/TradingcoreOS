@@ -20,8 +20,6 @@ type FlowRow = { time:number; high:number; low:number; buy:number; sell:number; 
 type ProfileRow = { price:number; volume:number; buy:number; sell:number; };
 type LiquidityRow = { price:number; side:'bid'|'ask'; quantity:number; };
 
-const TAU = Math.PI * 2;
-
 function num(v: unknown, fallback: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -271,8 +269,10 @@ registerRendererLayer({id:'tco-footprint',placement:'above-data',create(){let ca
   mount(c){canvas=c;},render(args){if(!canvas)return;const g=clearCanvas(canvas,args);if(!g)return;const rows=Array.isArray(args.data)?args.data as FlowRow[]:[];const bw=bodyWidth(args);for(const row of rows.slice(-220)){const x=barX(args,row as any);const levels=row.levels;for(const lv of levels){const y=priceY(args,lv.price);const buy=lv.buy,sell=lv.sell,total=Math.max(1,buy+sell);g.fillStyle=alpha(args.theme.upColor,0.25+0.45*(buy/total));g.fillRect(x-bw/2,y-2,bw/2,4);g.fillStyle=alpha(args.theme.downColor,0.25+0.45*(sell/total));g.fillRect(x,y-2,bw/2,4);}}},destroy(){canvas=null;}};}});
 registerRendererLayer({id:'tco-delta',placement:'above-data',create(){let canvas:HTMLCanvasElement|null=null;return{
   mount(c){canvas=c;},render(args){if(!canvas)return;const g=clearCanvas(canvas,args);if(!g)return;const rows=Array.isArray(args.data)?args.data as FlowRow[]:[];const bw=bodyWidth(args);for(const row of rows.slice(-260)){const x=barX(args,row as any);const yh=priceY(args,row.high),yl=priceY(args,row.low);const up=row.delta>=0;g.strokeStyle=alpha(up?args.theme.upColor:args.theme.downColor,0.85);g.lineWidth=Math.max(2,bw*0.22);g.beginPath();g.moveTo(x,(yh+yl)/2);g.lineTo(x,yl);g.stroke();const top=Math.min(priceY(args,row.open),priceY(args,row.close));const bottom=Math.max(priceY(args,row.open),priceY(args,row.close));g.fillStyle=alpha(up?args.theme.upColor:args.theme.downColor,0.65);g.fillRect(x-bw/2,top,bw,Math.max(2,bottom-top));}},destroy(){canvas=null;}};}});
-function brickRows(bars:readonly Bar[],box:number){const out:Array<{time:number;open:number;close:number;high:number;low:number;up:boolean}>=[];let last:Number|number=Number.NaN;for(const b of bars){const c=Number(b.close);if(!Number.isFinite(c))continue;if(!Number.isFinite(Number(last))) {last=c;continue;} while(c-Number(last)>=box){const o=Number(last),cl=o+box;out.push({time:b.time,open:o,close:cl,high:cl,low:o,up:true});last=cl;}while(Number(last)-c>=box){const o=Number(last),cl=o-box;out.push({time:b.time,open:o,close:cl,high:o,low:cl,up:false});last=cl;}if(out.length>3000)out.splice(0,out.length-3000);}return out;}
-registerChartType(chartType('tco-renko','Renko',bars=>brickRows(bars,Math.max(0.01,Math.abs(Number(bars.at(-1)?.close||1))*0.002)),
+function brickRows(bars:readonly Bar[],boxPercent:number){
+  const lastClose=Math.abs(Number(bars.at(-1)?.close||1));
+  const box=Math.max(0.0001,lastClose*(Math.max(0.0001,boxPercent)/100));const out:Array<{time:number;open:number;close:number;high:number;low:number;up:boolean}>=[];let last:Number|number=Number.NaN;for(const b of bars){const c=Number(b.close);if(!Number.isFinite(c))continue;if(!Number.isFinite(Number(last))) {last=c;continue;} while(c-Number(last)>=box){const o=Number(last),cl=o+box;out.push({time:b.time,open:o,close:cl,high:cl,low:o,up:true});last=cl;}while(Number(last)-c>=box){const o=Number(last),cl=o-box;out.push({time:b.time,open:o,close:cl,high:o,low:cl,up:false});last=cl;}if(out.length>3000)out.splice(0,out.length-3000);}return out;}
+registerChartType(chartType('tco-renko','Renko',(bars,settings)=>brickRows(bars,Math.max(0.01,num(settings.boxPercent,0.2))),
   ()=>[{kind:'number',key:'boxPercent',label:'Box %',defval:0.2,min:0.01,max:5,step:0.01}],
 ));
 registerRendererLayer({id:'tco-renko',placement:'above-data',create(){let canvas:HTMLCanvasElement|null=null;return{
@@ -281,4 +281,4 @@ registerChartType(chartType('tco-range','Range Bars',bars=>bars.slice(-260),
   ()=>[{kind:'number',key:'minRange',label:'Minimum range',defval:0.25,min:0,max:10000,step:0.05}],
 ));
 registerRendererLayer({id:'tco-range',placement:'above-data',create(){let canvas:HTMLCanvasElement|null=null;return{
-  mount(c){canvas=c;},render(args){if(!canvas)return;const g=clearCanvas(canvas,args);if(!g)return;const rows=Array.isArray(args.data)?args.data as Bar[]:[];const bw=bodyWidth(args);for(const b of rows.slice(-260)){if(Number(b.high)-Number(b.low)<0.25)continue;const x=barX(args,b);const y1=priceY(args,b.high),y2=priceY(args,b.low);g.strokeStyle=alpha(b.close>=b.open?args.theme.upColor:args.theme.downColor,0.82);g.lineWidth=Math.max(2,bw*0.22);g.beginPath();g.moveTo(x,y1);g.lineTo(x,y2);g.stroke();}},destroy(){canvas=null;}};}});
+  mount(c){canvas=c;},render(args){if(!canvas)return;const g=clearCanvas(canvas,args);if(!g)return;const rows=Array.isArray(args.data)?args.data as Bar[]:[];const minRange=Math.max(0,Number(args.settings?.minRange)||0.25);const bw=bodyWidth(args);for(const b of rows.slice(-260)){if(Number(b.high)-Number(b.low)<minRange)continue;const x=barX(args,b);const y1=priceY(args,b.high),y2=priceY(args,b.low);g.strokeStyle=alpha(b.close>=b.open?args.theme.upColor:args.theme.downColor,0.82);g.lineWidth=Math.max(2,bw*0.22);g.beginPath();g.moveTo(x,y1);g.lineTo(x,y2);g.stroke();}},destroy(){canvas=null;}};}});
