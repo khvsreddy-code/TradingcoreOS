@@ -189,21 +189,18 @@ export class CoreSpiritRuntime {
   private readonly fusedCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
   /** O(1) plan lookup for fused instruction execution. */
   private readonly fusedGroupById = new Map<string, CoreSpiritSeriesFusionPlan['groups'][number]>();
-  /** One bounded snapshot per active forming-bar group; never history-sized. */
-  private readonly fusedCursorSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
   /** Direct stateful built-ins that are not absorbed into a fusion group. */
   private readonly directKernelCursors = new Map<string, CoreSpiritFusedSeriesCursor>();
-  private readonly directKernelSnapshots = new Map<string, CoreSpiritFusedSeriesCursor>();
   private readonly rsiKernels = new Map<string, RSIState>();
   private readonly atrKernels = new Map<string, ATRState>();
   private readonly vwapKernels = new Map<string, VWAPSessionState>();
-  private readonly rsiKernelSnapshots = new Map<string, RSIState>();
-  private readonly atrKernelSnapshots = new Map<string, ATRState>();
-  private readonly vwapKernelSnapshots = new Map<string, VWAPSessionState>();
   private readonly betaKernels = new Map<string, RollingBetaState>();
-  private readonly betaKernelSnapshots = new Map<string, RollingBetaState>();
   private readonly trendStrengthKernels = new Map<string, RollingCorrelationState>();
-  private readonly trendStrengthKernelSnapshots = new Map<string, RollingCorrelationState>();
+  /**
+   * Bounded confirmed-bar checkpoints. The fast hot path restores only the
+   * stateful kernels that the dirty graph says are affected by the forming bar.
+   */
+  private readonly kernelStateSnapshots = new CoreSpiritKernelSnapshotStore<CoreSpiritKernelState>(4);
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
