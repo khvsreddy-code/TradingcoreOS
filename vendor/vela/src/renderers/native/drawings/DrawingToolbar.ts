@@ -4,6 +4,7 @@ import type { ToolbarDefinition, ToolGroup, ToolSection } from '../../../core/dr
 import { icon } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
+import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily } from '../../../core/drawings/registry';
 
 /** Expanded bar width in px — a docked host's left-gutter reservation must match it. */
 export const TOOLBAR_WIDTH = 44;
@@ -332,7 +333,16 @@ export class DrawingToolbar {
     /** Clicking the icon arms the group's last-used tool (it does NOT open the flyout). */
     private onGroupIconClick(group: ToolGroup): void {
         const type = this.lastUsed.get(group.id) ?? group.tools[0]?.type;
-        if (type) this.onArm(type);
+        if (!type) return;
+        const family = drawingFamilyForType(type);
+        if (family && !drawingTypes().some((meta) => meta.type === type)) {
+            void loadDrawingFamily(family).then(() => this.onArm(type)).catch((error) => {
+                this.onArm(null);
+                console.error('[vela] failed to load drawing family', family, error);
+            });
+            return;
+        }
+        this.onArm(type);
     }
 
     /** Clicking the chevron toggles the group's flyout (same group → close; another → switch). */
@@ -487,8 +497,23 @@ export class DrawingToolbar {
     private openGroupFlyout(group: ToolGroup): void {
         const cell = this.groupCells.get(group.id);
         if (!cell) return;
-        const fly = this.beginFlyout(group.id, cell);
         const sections: ToolSection[] = group.sections ?? [{ label: '', tools: group.tools }];
+        const families = [...new Set(group.tools.map((tool) => drawingFamilyForType(tool.type)).filter((family): family is NonNullable<ReturnType<typeof drawingFamilyForType>> => family !== undefined))];
+        const pending = families.filter((family) => group.tools.some((tool) => drawingFamilyForType(tool.type) === family && !drawingTypes().some((meta) => meta.type === tool.type)));
+        if (pending.length) {
+            void Promise.all(pending.map(loadDrawingFamily)).then(() => {
+                for (const tool of group.tools) {
+                    const loaded = getDrawingType(tool.type);
+                    if (loaded) { tool.label = loaded.label; tool.icon = loaded.icon; }
+                }
+                if (this.flyoutOwnerId === group.id && this.flyout) {
+                    const openCell = this.flyoutCell;
+                    this.closeFlyout();
+                    if (openCell && this.groupCells.get(group.id) === openCell) this.openGroupFlyout(group);
+                }
+            }).catch((error) => console.error('[vela] failed to load drawing flyout family', error));
+        }
+        const fly = this.beginFlyout(group.id, cell);
         for (let si = 0; si < sections.length; si++) {
             const section = sections[si]!;
             if (section.label) {
