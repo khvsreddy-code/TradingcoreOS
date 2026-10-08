@@ -16,7 +16,7 @@ import {
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 
 type Bar = { time:number; open:number; high:number; low:number; close:number; volume?:number };
-type FlowRow = { time:number; high:number; low:number; buy:number; sell:number; delta:number; total:number; levels:Array<{price:number;buy:number;sell:number}> };
+type FlowRow = { time:number; open:number; close:number; high:number; low:number; buy:number; sell:number; delta:number; total:number; levels:Array<{price:number;buy:number;sell:number}> };
 type ProfileRow = { price:number; volume:number; buy:number; sell:number; };
 type LiquidityRow = { price:number; side:'bid'|'ask'; quantity:number; };
 
@@ -72,7 +72,7 @@ function flowOf(bar:Bar):FlowRow {
     const lvBuy=total/8*skew;
     return {price,buy:lvBuy,sell:Math.max(0,total/8-lvBuy)};
   });
-  return {time:Number(bar.time),high,low,buy,sell,delta:buy-sell,total,levels};
+  return {time:Number(bar.time),open:Number(bar.open),close:Number(bar.close),high,low,buy,sell,delta:buy-sell,total,levels};
 }
 
 function computeProfile(bars:readonly Bar[], bins=36):ProfileRow[] {
@@ -199,7 +199,7 @@ registerRendererLayer(orderflowLayer);
 registerRendererLayer(profileLayer);
 registerRendererLayer(liquidityLayer);
 
-function nativeDescriptor(type:string,title:string,layer:string,compute:(ctx:NativeIndicatorContext,inputs:Record<string,InputValue>)=>unknown,inputsSchema:()=>InputSchema[]=[]):NativeIndicatorDescriptor{
+function nativeDescriptor(type:string,title:string,compute:(ctx:NativeIndicatorContext,inputs:Record<string,InputValue>)=>unknown,inputsSchema:()=>InputSchema[]=()=>[]):NativeIndicatorDescriptor{
   return {
     type,title,shortTitle:title,paneHint:'price',overlay:true,legend:false,multiInstance:false,
     inputsSchema,defaultInputs:()=>Object.fromEntries(inputsSchema().map(x=>[x.key,x.defval])),
@@ -228,18 +228,18 @@ function nativeDescriptor(type:string,title:string,layer:string,compute:(ctx:Nat
 }
 
 registerNativeIndicator(nativeDescriptor(
-  'tco-orderflow-heatmap','Orderflow Heatmap','tco-orderflow-heatmap',
+  'tco-orderflow-heatmap','Orderflow Heatmap',
   ctx=>ctx.bars().slice(-300).map(flowOf),
 ));
 
 registerNativeIndicator(nativeDescriptor(
-  'tco-market-profile','Market Profile','tco-market-profile',
+  'tco-market-profile','Market Profile',
   (ctx,inputs)=>computeProfile(ctx.bars(),clamp(Math.floor(num(inputs.bins,36)),12,80)),
   ()=>[{key:'bins',title:'Price bins',type:'int',defval:36,min:12,max:80,step:1}],
 ));
 
 registerNativeIndicator(nativeDescriptor(
-  'tco-liquidity-heatmap','Liquidity Heatmap','tco-liquidity-heatmap',
+  'tco-liquidity-heatmap','Liquidity Heatmap',
   ctx=>{
     const last=ctx.bars().at(-1); if(!last)return [];
     const f=flowOf(last);
