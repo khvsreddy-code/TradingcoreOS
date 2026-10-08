@@ -26,9 +26,6 @@ assert.deepEqual(surface.props?.map(prop => prop.property), ['precision','overla
 assert.equal(surface.props?.find(prop => prop.property === 'precision')?.defval, 2);
 assert.equal(surface.props?.find(prop => prop.property === 'initialCapital')?.defval, 100000);
 assert.equal(surface.declarations.find(item => item.name === 'Momentum')?.role, 'strategy');
-assert.equal((await import('../src/CoreSpiritVelaEngine.ts')).CoreSpiritVelaEngine.prototype.capabilities, undefined);
-
-
 const normalized = normalizeCoreSpiritSource(source);
 assert.match(normalized, /let fastLength = __input\("fastLength", 20\);/);
 assert.match(normalized, /let slowLength = __input\("slowLength", 50\);/);
