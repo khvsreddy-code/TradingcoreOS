@@ -205,6 +205,8 @@ export class InputController {
     /** When true (the default), the separators between stacked panes are draggable to
      *  resize the panes above/below. When false, a press there is a normal data-area pan. */
     paneResize = true;
+    /** When false, user drawings are visually preserved but never claim pointer gestures. */
+    drawings = true;
     private el: HTMLElement | null = null;
     private dragging = false;
     private moved = false;
@@ -393,21 +395,21 @@ export class InputController {
         this.startY = y;
         // The drawings layer gets first refusal: when a tool is armed or the press is
         // over a drawing/handle it claims the WHOLE gesture (no pan/fling), atomically.
-        if (this.deps.drawingsClaim?.(x, y)) {
+        if (this.drawings && this.deps.drawingsClaim?.(x, y)) {
             this.region = 'drawing';
-            this.deps.drawingsPointerDown?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
+            if (this.drawings) this.deps.drawingsPointerDown?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
             this.capture(e.pointerId);
             return;
         }
         // Shift+press on the empty plot starts the measure ruler in one gesture (a press
         // over a drawing keeps the additive-select meaning of shift, via the claim above).
-        if (e.shiftKey && this.regionAt(x, y) === 'data' && this.deps.drawingsMeasureStart?.(x, y, this.snapMode(e))) {
+        if (this.drawings && e.shiftKey && this.regionAt(x, y) === 'data' && this.deps.drawingsMeasureStart?.(x, y, this.snapMode(e))) {
             this.region = 'drawing';
             this.capture(e.pointerId);
             return;
         }
         // Ctrl/Cmd+press on the empty plot sweeps a selection box over the drawings.
-        if ((e.ctrlKey || e.metaKey) && this.regionAt(x, y) === 'data' && this.deps.drawingsMarqueeStart?.(x, y)) {
+        if (this.drawings && (e.ctrlKey || e.metaKey) && this.regionAt(x, y) === 'data' && this.deps.drawingsMarqueeStart?.(x, y)) {
             this.region = 'drawing';
             this.capture(e.pointerId);
             return;
@@ -544,7 +546,7 @@ export class InputController {
                 this.deps.apply({ barSpacing, rightOffset: this.startRightOffset });
             } else if (this.region === 'drawing') {
                 if (Math.abs(x - this.startX) > slop || Math.abs(y - this.startY) > slop) this.moved = true;
-                this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
+                if (this.drawings) this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
             } else {
                 const coords = this.deps.getCoords();
                 const vp = coords.getViewport();
@@ -569,7 +571,7 @@ export class InputController {
         } else if (this.el) {
             // Cursor affordance: a drawing under the cursor wins (pointer), else the
             // draggable axis-strip cursors.
-            const drawCursor = this.deps.drawingsCursor?.(x, y);
+            const drawCursor = this.drawings ? this.deps.drawingsCursor?.(x, y) : null;
             const r = this.regionAt(x, y);
             this.el.style.cursor = drawCursor ?? (r === 'price' ? 'ns-resize' : r === 'time' ? 'ew-resize' : r === 'separator' ? 'row-resize' : '');
             // Forward hover moves so the drawings layer can advance a placing ghost
@@ -623,7 +625,7 @@ export class InputController {
         // chart and must not double as a click/tap on release.
         const tapRelease = this.dragging && !this.moved && (!wasTouch || Math.hypot(x - this.startX, y - this.startY) <= TOUCH_TAP_SLOP);
         if (this.dragging && this.region === 'drawing') {
-            this.deps.drawingsPointerUp?.(x, y, this.snapMode(e));
+            if (this.drawings) this.deps.drawingsPointerUp?.(x, y, this.snapMode(e));
         } else if (tapRelease && this.region === 'data') {
             this.deps.onClick(x, y);
         } else if (this.dragging && this.region === 'data') {
@@ -693,7 +695,7 @@ export class InputController {
     /** Shared double-click / double-tap routing, by the region under the point. */
     private doubleActivate(x: number, y: number): void {
         // A drawing double-click opens its settings — suppress the view/scale reset.
-        if (this.deps.drawingsDblClick?.(x, y)) return;
+        if (this.drawings && this.deps.drawingsDblClick?.(x, y)) return;
         const region = this.regionAt(x, y);
         if (region === 'price') this.deps.resetPriceScale(x, y);
         else if (region === 'separator') this.deps.resetPaneSize(y);
