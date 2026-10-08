@@ -11,6 +11,7 @@ import type { CoreSpiritExecutionTarget } from './executionTarget';
 import type { CoreSpiritComputeBackend } from './executionPlanner';
 import type { CoreSpiritEnvironmentCapability, CoreSpiritEnvironmentName } from './executionEnvironment';
 import { CORE_SPIRIT_EXECUTION_ENVIRONMENTS } from './executionEnvironment';
+import type { CoreScriptRequiredCapability } from './coreScriptLanguagePolicy';
 
 export type CoreSpiritSandboxCapability =
   | 'market-data'
@@ -22,6 +23,7 @@ export type CoreSpiritSandboxCapability =
   | 'research-data'
   | 'scanner'
   | 'webhooks'
+  | 'automation'
   | 'strategy-events'
   | 'order-intents'
   | 'risk-queries'
@@ -72,7 +74,7 @@ const TARGET_CAPABILITY_MAP: Readonly<Record<CoreSpiritExecutionTarget, readonly
   scanner: ['series','signals','models','scanner','market-data','compute-cpu','compute-wasm','compute-gpu'],
   alert: ['series','signals','models','webhooks','market-data','compute-cpu'],
   server: ['series','signals','models','webhooks','market-data','compute-cpu','compute-wasm','compute-gpu'],
-  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
+  automation: ['series','models','market-data','signals','automation','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
   research: ['series','signals','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
 };
 
@@ -80,7 +82,7 @@ const LAYER_CAPABILITY_MAP: Readonly<Record<CoreSpiritProgramLayer, readonly Cor
   script: ['series','visuals','interactive-ui','signals','market-data','compute-cpu','compute-wasm','compute-gpu'],
   model: ['series','models','research-data','market-data','compute-cpu','compute-wasm','compute-gpu'],
   strategy: ['series','visuals','interactive-ui','signals','models','strategy-events','market-data','compute-cpu','compute-wasm','compute-gpu'],
-  automation: ['series','models','market-data','signals','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
+  automation: ['series','models','market-data','signals','automation','strategy-events','order-intents','risk-queries','policy-evaluation','webhooks','compute-cpu'],
 };
 
 export class CoreSpiritCapabilityDeniedError extends Error {
@@ -189,6 +191,36 @@ function environmentCapabilityForSandbox(capability: CoreSpiritSandboxCapability
   if (capability === 'policy-evaluation') return 'policy';
   if (capability === 'order-intents') return 'simulated-orders';
   return undefined;
+}
+
+const CORE_SCRIPT_TO_SANDBOX_CAPABILITY: Readonly<Record<CoreScriptRequiredCapability, CoreSpiritSandboxCapability>> = Object.freeze({
+  'market.tick':'market-data',
+  'order.fill':'strategy-events',
+  'position.update':'strategy-events',
+  'risk.evaluate':'risk-queries',
+  'execution.route':'order-intents',
+  'webhooks':'webhooks',
+  'automation':'automation',
+});
+
+export function sandboxCapabilityForCoreScriptCapability(
+  capability: CoreScriptRequiredCapability,
+): CoreSpiritSandboxCapability {
+  return CORE_SCRIPT_TO_SANDBOX_CAPABILITY[capability];
+}
+
+export function validateCoreScriptCapabilitiesAgainstSandbox(
+  sandbox: CoreSpiritCapabilitySandbox,
+  required: readonly CoreScriptRequiredCapability[],
+): string[] {
+  const errors:string[]=[];
+  for(const capability of required){
+    const mapped=CORE_SCRIPT_TO_SANDBOX_CAPABILITY[capability];
+    if(!sandbox.can(mapped)){
+      errors.push(`CoreScript capability '${capability}' is unavailable to layer '${sandbox.layer}' on target '${sandbox.target}'.`);
+    }
+  }
+  return errors;
 }
 
 export function computeCapabilityForBackend(backend: CoreSpiritComputeBackend): CoreSpiritSandboxCapability {
