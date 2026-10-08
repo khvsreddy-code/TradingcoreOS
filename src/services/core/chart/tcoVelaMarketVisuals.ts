@@ -253,7 +253,7 @@ registerNativeIndicator(nativeDescriptor(
 
 function chartType(
   id:string,label:string,compute:(bars:readonly Bar[],settings:Record<string,unknown>)=>unknown,
-  schema:()=>InputSchema[]=[],
+  schema:()=>SettingsRowDescriptor[]=()=>[],
 ):ChartTypeDefinition{
   return {
     id,label,basePainting:'none',
