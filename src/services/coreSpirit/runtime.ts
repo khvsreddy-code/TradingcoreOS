@@ -486,6 +486,123 @@ export class CoreSpiritRuntime {
   getDeclarativeVisualScene(identity: CoreSpiritSceneIdentity, revision = this.declarativeVisualState.revision): CoreSpiritScene { return buildCoreSpiritSceneFromDeclarativeVisuals(identity,this.declarativeVisualState.specs,this.options.sourceId,revision); }
   getDebugTrace() { return this.debugHost.snapshot(); }
 
+  private kernelModelVersion(): string {
+    const ir = this.compiledIr;
+    if (!ir) throw new Error('CoreSpirit kernel snapshots require a loaded IR.');
+    return `ir${ir.version}:${ir.sourceId}:${ir.graphs?.semantic.checksum ?? 'no-graph'}`;
+  }
+
+  private kernelIdentity(
+    family: CoreSpiritKernelState['family'],
+    key: string,
+  ): { nodeId: string; inputDependencies: readonly string[] } {
+    const instructionIndex = this.compiledIr?.entry.instructions.findIndex((instruction) =>
+      instruction.op === 'call' && (instruction.callId || instruction.dest) === key,
+    ) ?? -1;
+    const node = instructionIndex >= 0 ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
+    return {
+      nodeId: node?.id ?? `kernel:${family}:${key}`,
+      inputDependencies: Object.freeze([...(node?.inputs ?? [])]),
+    };
+  }
+
+  private captureKernelSnapshot(
+    family: CoreSpiritKernelState['family'],
+    key: string,
+    state: CoreSpiritKernelState['state'],
+    barIndex: number,
+  ): void {
+    const identity = this.kernelIdentity(family, key);
+    this.kernelStateSnapshots.capture(
+      {
+        nodeId: identity.nodeId,
+        revision: 0,
+        inputDependencies: identity.inputDependencies,
+        barIndex,
+        modelVersion: this.kernelModelVersion(),
+      },
+      { family, state } as CoreSpiritKernelState,
+      cloneCoreSpiritKernelState,
+    );
+  }
+
+  private snapshotKernelsForBar(barIndex: number): void {
+    if (!this.compiledIr || barIndex < 0) return;
+    for (const [groupId, cursor] of this.fusedCursors) {
+      const group = this.seriesFusionPlan?.groups.find((item) => item.id === groupId);
+      const instructionIndex = group?.instructions[0];
+      const node = instructionIndex != null ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
+      this.kernelStateSnapshots.capture(
+        {
+          nodeId: node?.id ?? `kernel:fused:${groupId}`,
+          revision: 0,
+          inputDependencies: Object.freeze([...(node?.inputs ?? [])]),
+          barIndex,
+          modelVersion: this.kernelModelVersion(),
+        },
+        { family:'fused', state:cursor },
+        cloneCoreSpiritKernelState,
+      );
+    }
+    for (const [key, cursor] of this.directKernelCursors) this.captureKernelSnapshot('direct', key, cursor, barIndex);
+    for (const [key, kernel] of this.rsiKernels) this.captureKernelSnapshot('rsi', key, kernel, barIndex);
+    for (const [key, kernel] of this.atrKernels) this.captureKernelSnapshot('atr', key, kernel, barIndex);
+    for (const [key, kernel] of this.vwapKernels) this.captureKernelSnapshot('vwap', key, kernel, barIndex);
+    for (const [key, kernel] of this.betaKernels) this.captureKernelSnapshot('beta', key, kernel, barIndex);
+    for (const [key, kernel] of this.trendStrengthKernels) this.captureKernelSnapshot('trend', key, kernel, barIndex);
+  }
+
+  private restoreKernelSnapshotsAtBar(barIndex: number): void {
+    if (!this.compiledIr || barIndex < 0) return;
+    const modelVersion = this.kernelModelVersion();
+    const restore = <T extends CoreSpiritKernelState>(
+      family: T['family'],
+      key: string,
+      state: T['state'],
+    ): void => {
+      const identity = this.kernelIdentity(family, key);
+      const snapshot = this.kernelStateSnapshots.latest(identity.nodeId);
+      if (!snapshot || snapshot.barIndex !== barIndex || snapshot.modelVersion !== modelVersion || snapshot.state.family !== family) return;
+      copyCoreSpiritKernelState(
+        { family, state } as T,
+        snapshot.state as T,
+      );
+    };
+    for (const [key, cursor] of this.directKernelCursors) restore('direct', key, cursor);
+    for (const [key, kernel] of this.rsiKernels) restore('rsi', key, kernel);
+    for (const [key, kernel] of this.atrKernels) restore('atr', key, kernel);
+    for (const [key, kernel] of this.vwapKernels) restore('vwap', key, kernel);
+    for (const [key, kernel] of this.betaKernels) restore('beta', key, kernel);
+    for (const [key, kernel] of this.trendStrengthKernels) restore('trend', key, kernel);
+
+    for (const [groupId, cursor] of this.fusedCursors) {
+      const group = this.seriesFusionPlan?.groups.find((item) => item.id === groupId);
+      const instructionIndex = group?.instructions[0];
+      const node = instructionIndex != null ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
+      const nodeId = node?.id ?? `kernel:fused:${groupId}`;
+      const snapshot = this.kernelStateSnapshots.latest(nodeId);
+      if (snapshot?.barIndex === barIndex && snapshot.modelVersion === modelVersion && snapshot.state.family === 'fused') {
+        copyCoreSpiritKernelState({ family:'fused', state:cursor }, snapshot.state);
+      }
+    }
+  }
+
+  getKernelStateSnapshots(): readonly CoreSpiritKernelSnapshot<CoreSpiritKernelState>[] {
+    return this.kernelStateSnapshots.entries();
+  }
+
+  getKernelStateSnapshot(
+    nodeId: string,
+    barIndex?: number,
+  ): CoreSpiritKernelSnapshot<CoreSpiritKernelState> | undefined {
+    const modelVersion = this.compiledIr ? this.kernelModelVersion() : '';
+    const snapshot = barIndex == null
+      ? this.kernelStateSnapshots.latest(nodeId)
+      : this.kernelStateSnapshots.at(nodeId, barIndex);
+    if (!snapshot || (modelVersion && snapshot.modelVersion !== modelVersion)) return undefined;
+    return snapshot;
+  }
+
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
     this.viewportMemo.clear();
     const diagnostics: string[] = [];
@@ -511,6 +628,7 @@ export class CoreSpiritRuntime {
       catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
       finally { this.profiler.endBar(); }
     }
+    if (bars.length) this.snapshotKernelsForBar(bars.length - 1);
     return { outputs, state: this.getState(), diagnostics };
   }
 
