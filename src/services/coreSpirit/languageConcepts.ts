@@ -99,9 +99,15 @@ function parseOptionsLiteral(value:string):string[] {
     const ch=inner[i];
     if(quote){if(escaped){escaped=false;continue;}if(ch==='\\'){escaped=true;continue;}if(ch===quote)quote=null;continue;}
     if(ch==='"'||ch==="'"){quote=ch;continue;}
-    if(ch===','){const value=parseSurfaceLiteral(inner.slice(start,i).trim());if(typeof value!=='string')throw new Error('CoreSpirit input options must be strings.');out.push(value);start=i+1;}
+    if(ch===','){
+      const parsed=parseSurfaceLiteral(inner.slice(start,i).trim());
+      if(typeof parsed!=='string')throw new Error('CoreSpirit input options must be strings.');
+      out.push(parsed); start=i+1;
+    }
   }
-  const value=parseSurfaceLiteral(inner.slice(start).trim());if(typeof value!=='string')throw new Error('CoreSpirit input options must be strings.');out.push(value);return out;
+  const parsed=parseSurfaceLiteral(inner.slice(start).trim());
+  if(typeof parsed!=='string')throw new Error('CoreSpirit input options must be strings.');
+  out.push(parsed); return out;
 }
 
 function normalizeInputType(type:string|undefined, defval:CoreSpiritSurfaceLiteral):CoreSpiritSurfaceInputType {
