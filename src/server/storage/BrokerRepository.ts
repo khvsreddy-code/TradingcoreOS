@@ -1,4 +1,4 @@
-import { EncryptedPayload } from '../encryption/EncryptionService.js';
+import { EncryptionService, EncryptedPayload } from '../encryption/EncryptionService.js';
 import { createClient } from '@supabase/supabase-js';
 import { getSharedRedis } from '../coordination/UpstashRedisRest.js';
 
@@ -181,19 +181,19 @@ export class BrokerRepository {
     return session;
   }
 
-  public static async getUserSessions(userId: string): Promise<BrokerSessionRecord[]> {  public static async getAccessTokenForExecution(brokerId: string, userId: string): Promise<string | undefined> {
+  public static async getAccessTokenForExecution(brokerId: string, userId: string): Promise<string | undefined> {
     const session = await this.getSession(brokerId, userId);
     if (!session || session.status !== 'Connected') return undefined;
-    if (new Date(session.expiresAt).getTime() <= Date.now()) return undefined;
+    const expiresAt = new Date(session.expiresAt).getTime();
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return undefined;
 
     const key = this.accessTokenCacheKey(userId, brokerId);
     const fingerprint = this.sessionFingerprint(session);
     const cached = this.accessTokenCache.get(key);
     if (cached && cached.expiresAt > Date.now() && cached.sessionFingerprint === fingerprint) return cached.token;
 
-    const { EncryptionService } = await import('../encryption/EncryptionService.js');
     const token = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const remaining = Math.max(100, new Date(session.expiresAt).getTime() - Date.now() - 30_000);
+    const remaining = Math.max(100, expiresAt - Date.now() - 30_000);
     this.accessTokenCache.set(key, {
       token,
       sessionFingerprint: fingerprint,
@@ -202,7 +202,7 @@ export class BrokerRepository {
     return token;
   }
 
-
+  public static async getUserSessions(userId: string): Promise<BrokerSessionRecord[]> {
     if (!userId) throw new Error('Authenticated TradingCore user is required');
     this.requireSupabaseForProduction();
     if (this.supabase) {
@@ -243,7 +243,7 @@ export class BrokerRepository {
     }
     const session = this.devStore().get(`${userId}:${brokerId.toLowerCase()}`);
     if (session) session.status = status;
-      this.invalidateSessionCaches(userId, brokerId);
+    this.invalidateSessionCaches(userId, brokerId);
     await getSharedRedis().del(this.getSharedCacheKey(userId, brokerId)).catch(() => undefined);
   }
 
