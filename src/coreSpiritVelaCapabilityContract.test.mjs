@@ -44,4 +44,16 @@ assert.equal(metadata.inputs[0].key, 'fastLength');
 assert.equal(metadata.props?.length, 4);
 assert.equal(metadata.reactsToViewport, false);
 
+const viewportSource = `
+indicator "Viewport Profile"
+    input rows: int = 24 min=2 max=400 step=1 title="Profile Rows"
+    plot(vpvr(rows))
+`;
+const viewportPrepared = await instance.prepare(viewportSource, 'contract:vela-viewport-capability');
+assert.equal(viewportPrepared.reactsToViewport, true);
+assert.equal(viewportPrepared.inputs[0].key, 'rows');
+assert.equal(viewportPrepared.inputs[0].min, 2);
+assert.equal(viewportPrepared.inputs[0].max, 400);
+assert.equal(viewportPrepared.inputs[0].title, 'Profile Rows');
+
 console.log('CORESPIRIT_VELA_FULL_CAPABILITY_CONTRACT_OK');
