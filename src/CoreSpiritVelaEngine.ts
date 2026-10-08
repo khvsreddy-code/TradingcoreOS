@@ -8,6 +8,7 @@ import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
+import { buildCoreSpiritDirtyGraph } from './services/coreSpirit/dirtyGraph.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 
 type DirtyRange = { from: number; to: number };
@@ -185,8 +186,15 @@ function metaWithProps(base: IndicatorMeta, declaration: CoreSpiritScriptDeclara
   return { title, ...(shorttitle ? { shorttitle } : {}), overlay, ...(precision != null ? { precision } : {}), ...(format ? { format } : {}) };
 }
 
-function inferViewportDependency(source: string): boolean {
-  return /@viewport\b|@visibleRange\b|chart\.(?:left|right)_visible_(?:bar_time|bar_index|time)|\b(?:viewport|visibleRange|visible_range|vpvr|volumeProfile)\s*\(/i.test(source);
+function inferViewportDependency(source: string, ir: NonNullable<ReturnType<typeof compileCoreSpirit>['ir']>): boolean {
+  if (/^\s*\/\//m.test(source) && /chart\.(?:left|right)_visible_/i.test(source)) {
+    const uncommented = source.replace(/^\s*\/\/.*$/gm, '');
+    if (/chart\.(?:left|right)_visible_/i.test(uncommented)) return true;
+  }
+  if (/[^A-Za-z0-9_]@viewport\b|[^A-Za-z0-9_]@visibleRange\b|chart\.(?:left|right)_visible_(?:bar_time|bar_index|time)|\b(?:viewport|visibleRange|visible_range|vpvr|volumeProfile)\s*\(/i.test(source)) return true;
+  const bundle = ir.graphs;
+  if (!bundle) return false;
+  return buildCoreSpiritDirtyGraph(bundle.semantic, bundle.reactive, ir.entry.instructions).some((node) => node.viewportDependent);
 }
 
 export class CoreSpiritVelaEngine {
@@ -218,7 +226,7 @@ export class CoreSpiritVelaEngine {
     const baseMeta: IndicatorMeta = { title: declaration.name || titleFromSource(source), overlay: true };
     const defaultProps = resolveSchemaValues(props, undefined);
     const meta = metaWithProps(baseMeta, declaration, defaultProps);
-    const viewportDependent = inferViewportDependency(source);
+    const viewportDependent = inferViewportDependency(source, compiled.ir);
     const token: PreparedToken = { sourceId: instanceId, source: normalized, declaration, viewportDependent, ir: compiled.ir };
 
     return {
