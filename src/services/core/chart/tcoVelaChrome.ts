@@ -721,7 +721,12 @@ const optionsPanel: SidePanelDescriptor = {
 
 function navigateTcoTerminalRoute(route:string): void {
   if (typeof window === 'undefined') return;
-  window.location.assign(route);
+  if (window.location.pathname === route) {
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    return;
+  }
+  window.history.pushState({}, '', route);
+  window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
 function terminalRouteButton(parent:HTMLElement, label:string, route:string, icon:string):void {
