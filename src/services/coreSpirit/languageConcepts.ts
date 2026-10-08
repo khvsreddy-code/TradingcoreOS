@@ -67,28 +67,20 @@ function parseSurfaceLiteral(value:string):CoreSpiritSurfaceLiteral {
 
 function scanSurfaceAttributes(text:string):{base:string;attrs:Record<string,string>} {
   const attrs:Record<string,string>={};
-  let depth=0; let quote:'"'|"'"|null=null; let escaped=false; let firstAttrStart=-1; let attrStart=-1;
-  const chunks:Array<{start:number;end:number}> = [];
-  const findKeyAt=(index:number)=>{const m=text.slice(index).match(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*/);return m?{key:m[1],len:m[0].length}:null;};
-  for(let i=0;i<text.length;i+=1){
-    const ch=text[i];
-    if(quote){if(escaped){escaped=false;continue;}if(ch==='\\'){escaped=true;continue;}if(ch===quote)quote=null;continue;}
-    if(ch==='"'||ch==="'"){quote=ch;continue;}
-    if(ch==='('||ch==='['||ch==='{'){depth+=1;continue;}
-    if(ch===')'||ch===']'||ch==='}'){depth=Math.max(0,depth-1);continue;}
-    if(depth!==0 || !/\s/.test(ch)) continue;
-    const found=findKeyAt(i);
-    if(!found||!KNOWN_INPUT_ATTRIBUTES.has(found.key))continue;
-    if(firstAttrStart<0){firstAttrStart=i;attrStart=i;i+=found.len-1;}
-    else{chunks.push({start:attrStart,end:i});attrStart=i;i+=found.len-1;}
+  const token=/\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\[(?:[^\]\\]|\\.)*\]|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+)/g;
+  let first=-1;
+  for(const match of text.matchAll(token)){
+    const key=match[1]!;
+    if(!KNOWN_INPUT_ATTRIBUTES.has(key)) continue;
+    const index=match.index ?? -1;
+    if(index<0) continue;
+    if(first<0) first=index;
+    attrs[key]=match[2]!;
   }
-  if(attrStart>=0)chunks.push({start:attrStart,end:text.length});
-  const base=(firstAttrStart<0?text:text.slice(0,firstAttrStart)).trim();
-  for(const chunk of chunks){
-    const part=text.slice(chunk.start).trim(); const eq=part.indexOf('=');
-    if(eq<0)continue; attrs[part.slice(0,eq).trim()]=part.slice(eq+1).trim();
-  }
-  return {base,attrs};
+  return {
+    base:(first<0?text:text.slice(0,first)).trim(),
+    attrs,
+  };
 }
 
 function parseOptionsLiteral(value:string):string[] {
