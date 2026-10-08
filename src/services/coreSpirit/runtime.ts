@@ -363,7 +363,7 @@ export class CoreSpiritRuntime {
       this.stateStore.beginRealtimeTransaction();
       this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
       this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
-      if (this.history.length && this.kernelStateSnapshots.size === 0) this.snapshotKernelsForBar(this.history.length - 1);
+      this.snapshotKernelsForBar(this.history.length - 1);
       this.history.push(normalized);
       this.columnarHistory.append(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
@@ -550,7 +550,7 @@ export class CoreSpiritRuntime {
   }
 
   private snapshotKernelsForBar(barIndex: number): void {
-    if (!this.compiledIr || barIndex < 0) return;
+    if (!this.compiledIr || barIndex < -1) return;
     for (const [groupId, cursor] of this.fusedCursors) {
       const group = this.seriesFusionPlan?.groups.find((item) => item.id === groupId);
       const instructionIndex = group?.instructions[0];
@@ -576,7 +576,7 @@ export class CoreSpiritRuntime {
   }
 
   private restoreKernelSnapshotsAtBar(barIndex: number): void {
-    if (!this.compiledIr || barIndex < 0) return;
+    if (!this.compiledIr || barIndex < -1) return;
     const modelVersion = this.kernelModelVersion();
     const restore = <T extends CoreSpiritKernelState>(
       family: T['family'],
