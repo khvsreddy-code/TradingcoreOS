@@ -17,6 +17,7 @@ import {
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
+import { getAutomations } from '../../workspace/workspaceState';
 
 type WatchlistItem = { symbol: string; label: string; short: string };
 
@@ -924,6 +925,137 @@ const accountPanel: SidePanelDescriptor = {
   },
 };
 
+function navigateWorkspaceRoute(path: string): void {
+  if (!/^\/(?:dashboard|live|models|predictions|automations|indicators|portfolio|profile|corespirit)(?:\/docs)?$/.test(path)) {
+    throw new Error(`Unsupported TCO workspace route: ${path}`);
+  }
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+function panelButton(label: string, run: () => void, primary = false): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.style.cssText = `flex:1;min-height:34px;border:1px solid ${primary ? 'rgba(124,92,255,.45)' : 'rgba(255,255,255,.08)'};border-radius:8px;padding:8px 10px;background:${primary ? 'rgba(124,92,255,.12)' : '#0d1017'};color:${primary ? '#ddd6fe' : '#cbd5e1'};font:600 10px ui-monospace;cursor:pointer;`;
+  button.addEventListener('click', run);
+  return button;
+}
+
+const researchPanel: SidePanelDescriptor = {
+  id: 'tco.research',
+  title: 'Research',
+  icon: 'indicators',
+  order: 20,
+  width: 310,
+  resizable: true,
+  minWidth: 280,
+  maxWidth: 420,
+  mount(ctx, body, header) {
+    header.setTitle('TCO Research');
+    const root = panelRoot(body);
+    const title = document.createElement('div');
+    title.textContent = 'CoreSpirit Research';
+    title.style.cssText = 'font-size:13px;font-weight:700;color:#f8fafc;';
+    const scope = document.createElement('div');
+    scope.style.cssText = 'margin-top:4px;font-size:10px;color:#7f899e;';
+    const description = document.createElement('div');
+    description.textContent = 'Compiler, model and prediction work stays outside the terminal renderer while the terminal remains the execution surface.';
+    description.style.cssText = 'margin-top:12px;font-size:10px;line-height:1.6;color:#94a3b8;';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;margin-top:14px;';
+    actions.append(
+      panelButton('CoreSpirit', () => navigateWorkspaceRoute('/corespirit'), true),
+      panelButton('Models', () => navigateWorkspaceRoute('/models')),
+      panelButton('Predictions', () => navigateWorkspaceRoute('/predictions')),
+    );
+    const status = document.createElement('div');
+    status.style.cssText = 'margin-top:14px;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:#0a0d13;font-size:10px;line-height:1.6;color:#9aa1b2;';
+    const refresh = (): void => {
+      scope.textContent = `${ctx.symbol} · ${ctx.timeframe}`;
+      status.textContent = 'Vela-native terminal · CoreSpirit engine available on demand';
+    };
+    refresh();
+    root.append(title, scope, description, actions, status);
+    return { onChart: refresh, onOpen: refresh };
+  },
+};
+
+const automationPanel: SidePanelDescriptor = {
+  id: 'tco.automation',
+  title: 'Automation',
+  icon: 'zap',
+  order: 21,
+  width: 310,
+  resizable: true,
+  minWidth: 280,
+  maxWidth: 420,
+  mount(_ctx, body, header) {
+    header.setTitle('TCO Automation');
+    const root = panelRoot(body);
+    const summary = document.createElement('div');
+    summary.style.cssText = 'font-size:11px;color:#cbd5e1;';
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:12px;';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;margin-top:14px;';
+    actions.append(panelButton('Open Automation Workspace', () => navigateWorkspaceRoute('/automations'), true));
+    const refresh = (): void => {
+      const automations = getAutomations();
+      const enabled = automations.filter((item) => item.enabled !== false).length;
+      summary.textContent = `${enabled} enabled · ${automations.length} total`;
+      list.replaceChildren();
+      for (const item of automations.slice(0, 8)) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;gap:8px;padding:8px 9px;border:1px solid rgba(255,255,255,.06);border-radius:8px;background:#0a0d13;color:#94a3b8;font:10px ui-monospace;';
+        const name = document.createElement('span');
+        name.textContent = item.name || 'Unnamed automation';
+        const state = document.createElement('span');
+        state.textContent = item.enabled === false ? 'OFF' : 'ON';
+        state.style.color = item.enabled === false ? '#94a3b8' : '#4ade80';
+        row.append(name, state);
+        list.append(row);
+      }
+    };
+    refresh();
+    root.append(summary, list, actions);
+    window.addEventListener('tradingcore:automations', refresh);
+    return { onOpen: refresh, destroy: () => window.removeEventListener('tradingcore:automations', refresh) };
+  },
+};
+
+const tradingPanel: SidePanelDescriptor = {
+  id: 'tco.trading',
+  title: 'Trading',
+  icon: 'briefcase',
+  order: 22,
+  width: 330,
+  resizable: true,
+  minWidth: 290,
+  maxWidth: 460,
+  mount(ctx, body, header) {
+    header.setTitle('TCO Trading');
+    const root = panelRoot(body);
+    const scope = document.createElement('div');
+    scope.style.cssText = 'font-size:10px;color:#7f899e;';
+    const description = document.createElement('div');
+    description.textContent = 'Execution controls remain separated from indicator computation and chart rendering.';
+    description.style.cssText = 'margin-top:10px;font-size:10px;line-height:1.6;color:#94a3b8;';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px;';
+    grid.append(
+      panelButton('Positions', () => ctx.togglePanel('tco.positions')),
+      panelButton('Risk', () => ctx.togglePanel('tco.risk')),
+      panelButton('Order Book', () => ctx.togglePanel('tco.orderbook')),
+      panelButton('Options', () => ctx.togglePanel('tco.options')),
+    );
+    const refresh = (): void => { scope.textContent = `${ctx.symbol} · ${ctx.timeframe}`; };
+    refresh();
+    root.append(scope, description, grid);
+    return { onChart: refresh, onOpen: refresh };
+  },
+};
+
 const coreSpiritOpenAction: Parameters<typeof registerLegendAction>[0] = {
   id: 'tco.corespirit.open',
   icon: 'indicators',
@@ -963,6 +1095,9 @@ const coreSpiritStatusCallout: Parameters<typeof registerLegendCallout>[0] = {
 registerLegendAction(coreSpiritOpenAction);
 registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
+registerSidePanel(researchPanel);
+registerSidePanel(automationPanel);
+registerSidePanel(tradingPanel);
 
 const brandAction: WidgetActionDescriptor = {
   id: 'tco.brand', target: 'topbar', label: 'TradingCoreOS × Vela', iconOnly: false, align: 'left', order: 0, mobile: 'menu',
@@ -1058,6 +1193,21 @@ const vpvrAction: WidgetActionDescriptor = {
       ctx.toast(error instanceof Error ? error.message : 'Unable to add VPVR', 'error');
     }
   },
+};
+
+const researchAction: WidgetActionDescriptor = {
+  id: 'tco.research', target: 'topbar', label: 'Research', icon: 'indicators', iconOnly: false, align: 'right', order: 11, mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.research'); },
+};
+
+const automationAction: WidgetActionDescriptor = {
+  id: 'tco.automation', target: 'topbar', label: 'Automation', icon: 'zap', iconOnly: false, align: 'right', order: 12, mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.automation'); },
+};
+
+const tradingAction: WidgetActionDescriptor = {
+  id: 'tco.trading', target: 'topbar', label: 'Trading', icon: 'briefcase', iconOnly: false, align: 'right', order: 13, mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.trading'); },
 };
 
 const watchlistAction: WidgetActionDescriptor = {
@@ -1158,6 +1308,9 @@ registerWidgetAction(dataWindowAction);
 registerWidgetAction(vpvrAction);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(journalAction);
+registerWidgetAction(researchAction);
+registerWidgetAction(automationAction);
+registerWidgetAction(tradingAction);
 registerWidgetAction(panelsAction);
 registerWidgetAction(profileAction);
 registerWidgetAction(brokerAction);
