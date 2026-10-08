@@ -8,6 +8,7 @@ import './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
+import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
@@ -70,62 +71,15 @@ export function LiveTradingWorkspace() {
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
       const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '4');
 
-      workspace = new VelaWorkspaceClass(host.current, {
+      workspace = new VelaWorkspaceClass(host.current, createTcoVelaTerminalOptions({
         layout: initialLayout,
         symbol: 'NSE:NIFTY50-INDEX',
         timeframe: defaults.timeframe || '5',
-        bars: 5000,
-        timeframes: ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
-        live: true,
-        theme: {
-          background: '#07080c',
-          textColor: '#9aa1b2',
-          gridColor: '#171b27',
-          borderColor: '#252a35',
-          upColor: '#46d89a',
-          downColor: '#ef6b7a',
-          fontFamily: 'DM Sans, system-ui, sans-serif',
-        },
-        // Live trading stays motion-light: the market feed is the animation.
-        animations: false,
-        defaultLanguage: 'corespirit',
-        providers: {
-          tco: () => createTcoVelaDataProvider(),
-        },
-        engines: {
-          corespirit: () => new LazyCoreSpiritVelaEngine(),
-        },
-        indicators: async () => readCoreSpiritManifest(),
-        drawings: true,
-        drawingToolbar: true,
-        indicatorPicker: true,
-        topbar: {
-          left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
-          right: ['tco.watchlist', 'tco.journal', 'tco.replay', 'tco.positions', 'tco.risk', 'tco.orderbook', 'tco.options', 'tco.data-window', 'tco.vpvr', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
-        },
-        // Vela owns workspace synchronization. Keep symbols/timeframes independent for
-        // focused multi-chart analysis, but synchronize cursor and visual style across cells.
-        sync: { symbol: false, timeframe: false, crosshair: true, style: true, drawings: false },
-        volume: true,
-        watermark: true,
-        statusline: true,
-        bottombar: true,
-        autofocus: false,
-        persist: VELA_STATE_KEY,
         storage: createTcoVelaSupabaseStorage(() => tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers'),
-        maxWebglCells: 8,
-        alertCap: 100,
-        cells: {
-          primary: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
-          bank: { symbol: 'NSE:NIFTYBANK-INDEX', timeframe: '5' },
-          sensex: { symbol: 'BSE:SENSEX-INDEX', timeframe: '5' },
-          finnifty: { symbol: 'NSE:FINNIFTY-INDEX', timeframe: '5' },
-          midcap: { symbol: 'NSE:MIDCPNIFTY-INDEX', timeframe: '5' },
-          nifty1m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '1' },
-          nifty15m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '15' },
-          nifty60m: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '60' },
-        },
-      });
+        createDataProvider: createTcoVelaDataProvider,
+        createCoreSpiritEngine: () => new LazyCoreSpiritVelaEngine(),
+        resolveIndicatorManifest: readCoreSpiritManifest,
+      }));
       workspaceRef.current = workspace;
 
       // Background warm-up for common Indian index symbols. This runs only after the
