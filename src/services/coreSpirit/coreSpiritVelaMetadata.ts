@@ -1,4 +1,4 @@
-import type { IndicatorMeta, InputSchema, InputType, InputValue } from '../services/core/chart/velaNativeChartKernel';
+import type { IndicatorMeta, InputSchema, InputValue } from '../core/chart/velaNativeChartKernel';
 import type { CoreSpiritIrProgram } from './ir';
 import type { CoreSpiritSurfaceMetadata, CoreSpiritSurfaceInput, CoreSpiritSurfaceProp } from './languageConcepts';
 
@@ -57,7 +57,7 @@ function toInputSchema(item: CoreSpiritSurfaceInput): InputSchema {
   return {
     key: item.key,
     title: item.title,
-    type: item.type as InputType,
+    type: item.type as InputSchema['type'],
     defval: item.defval,
     ...(item.min !== undefined ? { min: item.min } : {}),
     ...(item.max !== undefined ? { max: item.max } : {}),
