@@ -47,6 +47,10 @@ export function buildCoreSpiritVelaIndicatorModel(
   rectBatches:readonly HighCardinalityRectBatch[] = [],
   anchorTime?:number,
   dirty?:CoreSpiritVelaDirtyRange,
+  inputs: readonly InputSchema[] = [],
+  inputValues: Record<string, InputValue> = {},
+  props: readonly InputSchema[] = [],
+  propValues: Record<string, InputValue> = {},
 ): IndicatorModel {
   const series:SeriesSpec[]=[...points.entries()].map(([seriesId, seriesPoints], index)=>({
     id:`${id}:series:${seriesId}`,
@@ -60,7 +64,7 @@ export function buildCoreSpiritVelaIndicatorModel(
       lineStyle:'solid',
     },
     visible:true,
-    overlay:true,
+    overlay:meta.overlay,
   }));
 
   if(markers.length){
@@ -89,7 +93,8 @@ export function buildCoreSpiritVelaIndicatorModel(
     backgrounds:[],
     ...(rectBatches.length ? { instanceBatches:[...rectBatches] } : {}),
     priceLines,
-    inputs:[],
-    inputValues:{},
+    inputs:[...inputs],
+    inputValues:{...inputValues},
+    ...(props.length ? { props:[...props], propValues:{...propValues} } : {}),
   };
 }
