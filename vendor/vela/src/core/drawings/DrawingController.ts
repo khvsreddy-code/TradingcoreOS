@@ -373,7 +373,10 @@ export class DrawingController {
         this.history.clear(); // a new document is a context switch — don't undo into the old one
         this.selectedIds = [];
         const records = this.serializedDrawingRecords(doc);
-        const pendingFamilies = [...new Set(records.map((record) => drawingFamilyForType(record.type)).filter((family): family is NonNullable<ReturnType<typeof drawingFamilyForType>> => family !== undefined && !drawingTypes().some((meta) => meta.type === records.find((item) => drawingFamilyForType(item.type) === family)?.type)) )];
+        const pendingFamilies = [...new Set(records
+            .filter((record) => drawingFamilyForType(record.type) !== undefined && !drawingTypes().some((meta) => meta.type === record.type))
+            .map((record) => drawingFamilyForType(record.type))
+            .filter((family): family is NonNullable<ReturnType<typeof drawingFamilyForType>> => family !== undefined))];
         if (pendingFamilies.length) {
             void loadDrawingFamiliesForTypes(records.map((record) => record.type)).then(() => this.store.load(doc)).catch((error) => console.error('[vela] failed to hydrate drawing document', error));
             return;
