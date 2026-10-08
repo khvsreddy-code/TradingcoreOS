@@ -51,10 +51,10 @@ const BEGINNER_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
   'core-data', 'simple-visuals', 'reactive-conditions',
 ]);
 const TRADER_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
-  ...BEGINNER_FEATURES, 'component-composition', 'model-declarations', 'multi-symbol', 'multi-timeframe', 'custom-visuals', 'automation', 'stdlib-namespaces',
+  ...BEGINNER_FEATURES, 'component-composition', 'multi-symbol', 'multi-timeframe', 'custom-visuals', 'strategy', 'order-intent', 'stdlib-namespaces',
 ]);
 const QUANT_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
-  ...TRADER_FEATURES, 'programmable-indicators', 'declarative-indicator-artifacts', 'matrix', 'tensor', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
+  ...TRADER_FEATURES, 'model-declarations', 'programmable-indicators', 'declarative-indicator-artifacts', 'matrix', 'tensor', 'models', 'research', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
 ]);
 
 function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringProfile {
