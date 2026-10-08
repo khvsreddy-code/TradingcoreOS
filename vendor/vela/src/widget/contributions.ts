@@ -55,6 +55,14 @@ export interface WidgetContext {
      *  `state:changed` + storage write follows). Only needed for state with no shell
      *  event of its own — indicator adds/removals already trigger the save cycle. */
     stateChanged(): void;
+    /** Right-click location captured when a context menu opens; only supplied to context:* actions. */
+    pointer?: ContextMenuPointer;
+}
+
+export interface ContextMenuPointer {
+    price: number | null;
+    time: number | null;
+    paneKind: 'price' | 'study' | null;
 }
 
 /** What {@link WidgetContext.addIndicator} takes: a named script, ready to run. */
