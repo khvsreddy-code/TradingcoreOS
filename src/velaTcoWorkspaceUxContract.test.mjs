@@ -25,6 +25,7 @@ assert(topology.includes("shell:'VelaWorkspace'"));
 assert(topology.includes("'tco.research'"));
 assert(topology.includes("'tco.automation'"));
 assert(topology.includes("'tco.trading'"));
+assert(topology.includes('bottombar:false'), 'live Vela terminal must use the topbar-only command surface');
 assert(chrome.includes("label: 'TradingCoreOS × Vela'") || chrome.includes("label:'TradingCoreOS × Vela'"));
 assert(chrome.includes("id: 'tco.watchlist'") || chrome.includes("id:'tco.watchlist'"));
 assert(chrome.includes("id: 'tco.journal'") || chrome.includes("id:'tco.journal'"));
