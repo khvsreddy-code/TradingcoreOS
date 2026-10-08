@@ -669,6 +669,8 @@ export class CoreSpiritRuntime {
   getLastDirtyPlan(): CoreSpiritDirtyExecutionPlan | undefined { return this.lastDirtyPlan; }
   getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
+    this.kernelStateSnapshots.clear();
+    this.kernelNodeIdentities.clear();
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
     this.installDirtyGraph(ir);
