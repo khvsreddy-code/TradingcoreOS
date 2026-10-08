@@ -19,7 +19,7 @@ export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
     quant: 'typed research, matrix/tensor/statistics, models, predictions and fitting surfaces',
     system: 'host events, automation and execution routing guarded by explicit capabilities',
   } as const),
-  systemCapabilities: Object.freeze(['market.tick','order.fill','position.update','risk.evaluate','execution.route','webhooks'] as const),
+  systemCapabilities: Object.freeze(['market.tick','order.fill','position.update','risk.evaluate','execution.route','webhooks','automation'] as const),
   namespaces: Object.freeze([
     'core', 'ta', 'stats', 'math', 'probability', 'regime', 'market', 'orderflow',
     'strategy', 'portfolio', 'risk', 'model', 'ml', 'prediction', 'automation', 'events',
