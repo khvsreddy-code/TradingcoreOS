@@ -109,6 +109,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   // executable through the shared registry but are intentionally outside the
   // 30-primitive semantic core. SHOW/EMIT are discoverability-first surfaces.
   { name:'plot', minArgs:1, maxArgs:10, returnType:'event', pure:true, category:'extension', emitKind:'plot' },
+{ name:'vpvr', minArgs:0, maxArgs:1, returnType:'number', pure:false, category:'extension', temporalSafety:{causality:'causal',lookahead:false,realtimeSafe:true} },
   { name:'panel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
   { name:'sidePanel', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
   { name:'floatingArea', minArgs:1, maxArgs:1, returnType:'visual:area', pure:true, category:'extension' },
