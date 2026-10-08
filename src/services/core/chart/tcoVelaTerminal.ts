@@ -1,5 +1,5 @@
 import type { VelaWorkspaceOptions } from './velaWorkspaceLoader';
-import type { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
+import { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
 import type { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 
 export type TcoVelaTerminalDependencies = {
