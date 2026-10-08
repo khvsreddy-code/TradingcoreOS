@@ -19,11 +19,20 @@ export type {
   NativeIndicatorOutput,
 } from '../../../../vendor/vela/src/core/native-indicators';
 export {
+  registerChartType,
+  unregisterChartType,
+  chartType,
+  chartTypes,
   registerRendererLayer,
   unregisterRendererLayer,
   rendererLayers,
 } from '../../../../vendor/vela/src/renderers/native/layers';
 export type {
+  ChartTypeDefinition,
+  SeriesDataEngine,
+  SeriesDataEngineHost,
+  ChartTypeSettingsSection,
+  SettingsRowDescriptor,
   RendererLayerDefinition,
   RendererLayerArgs,
   RendererLayerInstance,
