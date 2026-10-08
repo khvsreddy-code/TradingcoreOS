@@ -7,6 +7,7 @@ export * from './velaNativeChartKernel';
 /** Public TCO chart boundary for the vendored Vela composition root and neutral OHLCV model. */
 export { Vela } from '../../../../vendor/vela/src/Vela';
 export type { OHLCV } from '../../../../vendor/vela/src/core/model/ohlcv';
+export { registerChartType, unregisterChartType, chartType, chartTypes } from '../../../../vendor/vela/src/chart-types/registry';
 export {
   registerNativeIndicator,
   unregisterNativeIndicator,
@@ -19,14 +20,13 @@ export type {
   NativeIndicatorOutput,
 } from '../../../../vendor/vela/src/core/native-indicators';
 export {
-  registerChartType,
-  unregisterChartType,
-  chartType,
-  chartTypes,
   registerRendererLayer,
   unregisterRendererLayer,
   rendererLayers,
+  unregisterRendererLayer,
+  rendererLayers,
 } from '../../../../vendor/vela/src/renderers/native/layers';
+export type { InputSchema, InputValue } from '../../../../vendor/vela/src/core/model/inputs';
 export type {
   ChartTypeDefinition,
   SeriesDataEngine,
@@ -51,8 +51,17 @@ export {
   unregisterDefaultEngine,
   registerWidgetAttachment,
   unregisterWidgetAttachment,
+  registerWidgetAction,
+  unregisterWidgetAction,
+  registerSidePanel,
+  unregisterSidePanel,
+  sidePanels,
 } from '../../../../vendor/vela/src/widget/contributions';
 export type {
+  WidgetActionDescriptor,
+  WidgetActionTarget,
+  SidePanelDescriptor,
+  SidePanelHandle,
   LegendActionDescriptor,
   LegendCalloutDescriptor,
   LegendIndicatorInfo,
