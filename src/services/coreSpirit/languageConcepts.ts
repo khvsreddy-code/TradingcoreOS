@@ -76,7 +76,7 @@ function scanSurfaceAttributes(text:string):{base:string;attrs:Record<string,str
     if(ch==='"'||ch==="'"){quote=ch;continue;}
     if(ch==='('||ch==='['||ch==='{'){depth+=1;continue;}
     if(ch===')'||ch===']'||ch==='}'){depth=Math.max(0,depth-1);continue;}
-    if(depth!==0||!\s.test(ch))continue;
+    if(depth!==0 || !/\s/.test(ch)) continue;
     const found=findKeyAt(i);
     if(!found||!KNOWN_INPUT_ATTRIBUTES.has(found.key))continue;
     if(attrStart<0){attrStart=i;i+=found.len-1;}
