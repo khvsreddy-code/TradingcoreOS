@@ -616,7 +616,11 @@ export class CoreSpiritRuntime {
   }
 
   getKernelStateSnapshots(): readonly CoreSpiritKernelSnapshot<CoreSpiritKernelState>[] {
-    return this.kernelStateSnapshots.entries();
+    return Object.freeze(this.kernelStateSnapshots.entries().map((snapshot) => Object.freeze({
+      ...snapshot,
+      inputDependencies: Object.freeze([...snapshot.inputDependencies]),
+      state: cloneCoreSpiritKernelState(snapshot.state),
+    })));
   }
 
   getKernelStateSnapshot(
@@ -628,7 +632,11 @@ export class CoreSpiritRuntime {
       ? this.kernelStateSnapshots.latest(nodeId)
       : this.kernelStateSnapshots.at(nodeId, barIndex);
     if (!snapshot || (modelVersion && snapshot.modelVersion !== modelVersion)) return undefined;
-    return snapshot;
+    return Object.freeze({
+      ...snapshot,
+      inputDependencies: Object.freeze([...snapshot.inputDependencies]),
+      state: cloneCoreSpiritKernelState(snapshot.state),
+    });
   }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
