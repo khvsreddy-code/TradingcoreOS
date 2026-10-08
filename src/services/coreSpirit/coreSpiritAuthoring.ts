@@ -24,6 +24,7 @@ export const CORE_SPIRIT_AUTHORING_FEATURES = Object.freeze([
   'semantic-lineage',
   'programmable-indicators',
   'declarative-indicator-artifacts',
+  'strategy',
   'matrix',
   'tensor',
   'system-events',
