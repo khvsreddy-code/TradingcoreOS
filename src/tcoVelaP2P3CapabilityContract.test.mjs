@@ -47,7 +47,11 @@ assert.match(aiContext, /presentNativeIndicators/);
 assert.match(researchUi, /buildVelaAiContext/);
 assert.match(researchUi, /simulateReplayStrategyFromSource/);
 assert.match(simulator, /replayCoreSpirit/);
-assert.match(simulator, /kind==='orderIntent'/);
+assert.match(simulator, /kind === 'orderIntent'/);
 assert.match(researchUi, /No broker order API is called from this panel/);
+assert.match(simulator, /currentStop/);
+assert.match(simulator, /currentTarget/);
+assert.match(simulator, /riskPercent/);
+assert.match(simulator, /riskEvents/);
 
 console.log('TCO_VELA_P2_P3_CAPABILITY_CONTRACT_OK');
