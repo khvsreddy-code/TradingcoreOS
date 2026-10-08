@@ -92,6 +92,7 @@ const CAPABILITY_ALIASES: Readonly<Record<string, CoreScriptRequiredCapability |
   'execution.route': 'execution.route',
   'execution-routing': 'execution.route',
   'webhooks': 'webhooks',
+  'automation': 'automation',
 });
 
 export function normalizeCoreScriptCapability(value: string): CoreScriptRequiredCapability | undefined {
