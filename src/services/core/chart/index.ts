@@ -7,4 +7,4 @@
  * renderer-layer registries.
  */
 export * from './velaNativeChartKernel';
-export { chartTimeToEpochSeconds, epochSecondsToChartTime } from './velaTime';
+export { msFromTime } from './velaTime';
