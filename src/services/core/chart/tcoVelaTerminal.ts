@@ -57,7 +57,7 @@ export function createTcoVelaTerminalOptions(
     engines:{
       corespirit:()=>deps.createCoreSpiritEngine(),
     },
-    indicators:()=>deps.resolveIndicatorManifest(),
+    indicators:deps.resolveIndicatorManifest,
     drawings:true,
     drawingToolbar:true,
     indicatorPicker:true,
