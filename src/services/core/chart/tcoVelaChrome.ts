@@ -17,6 +17,7 @@ import {
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
+import { getAutomations } from '../../workspace/workspaceState';
 
 type WatchlistItem = { symbol: string; label: string; short: string };
 
@@ -717,6 +718,166 @@ const optionsPanel: SidePanelDescriptor = {
   },
 };
 
+
+function navigateTcoTerminalRoute(route:string): void {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === route) {
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    return;
+  }
+  window.history.pushState({}, '', route);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+function terminalRouteButton(parent:HTMLElement, label:string, route:string, icon:string):void {
+  const button=document.createElement('button');
+  button.type='button';
+  button.textContent=\`\${icon}  \${label}\`;
+  button.title=\`Open \${label}\`;
+  button.style.cssText='width:100%;text-align:left;border:1px solid rgba(255,255,255,.07);border-radius:7px;padding:8px 10px;background:rgba(255,255,255,.025);color:#cbd5e1;font:10px ui-monospace;cursor:pointer;';
+  button.addEventListener('mouseenter',()=>{button.style.background='rgba(124,92,255,.10)';button.style.borderColor='rgba(155,138,255,.20)';});
+  button.addEventListener('mouseleave',()=>{button.style.background='rgba(255,255,255,.025)';button.style.borderColor='rgba(255,255,255,.07)';});
+  button.addEventListener('click',()=>navigateTcoTerminalRoute(route));
+  parent.appendChild(button);
+}
+
+const researchPanel:SidePanelDescriptor={
+  id:'tco.research',
+  title:'Research',
+  icon:'search',
+  order:12,
+  width:320,
+  resizable:true,
+  minWidth:280,
+  maxWidth:480,
+  mount(ctx,body,header){
+    header.setTitle('Research');
+    const root=panelRoot(body);
+    const summary=document.createElement('div');
+    summary.style.cssText='font-size:10px;color:#64748b;line-height:1.5;margin-bottom:8px;';
+    summary.textContent=\`Vela terminal · \${ctx.symbol} · \${ctx.timeframe}\`;
+    root.appendChild(summary);
+
+    const section=panelSectionTitle('Research surfaces');
+    root.appendChild(section);
+    const actions=document.createElement('div');
+    actions.style.cssText='display:flex;flex-direction:column;gap:5px;';
+    terminalRouteButton(actions,'CoreSpirit editor','/corespirit','⌘');
+    terminalRouteButton(actions,'Indicators','/indicators','◈');
+    terminalRouteButton(actions,'Models','/models','∿');
+    terminalRouteButton(actions,'Predictions','/predictions','↗');
+    terminalRouteButton(actions,'CoreSpirit documentation','/corespirit/docs','▤');
+    root.appendChild(actions);
+
+    const chartSection=panelSectionTitle('Active chart');
+    root.appendChild(chartSection);
+    const chartInfo=document.createElement('div');
+    chartInfo.style.cssText='display:flex;flex-direction:column;gap:2px;font:9px ui-monospace;color:#94a3b8;';
+    chartInfo.innerHTML=\`<span>Engine: <b style="color:#c4b5fd">CoreSpirit → Vela</b></span><span>Viewport: Vela-managed</span><span>Data: canonical columnar</span>\`;
+    root.appendChild(chartInfo);
+    return { onOpen:()=>{summary.textContent=\`Vela terminal · \${ctx.symbol} · \${ctx.timeframe}\`;} };
+  },
+};
+
+const automationPanel:SidePanelDescriptor={
+  id:'tco.automation',
+  title:'Automation',
+  icon:'replay',
+  order:13,
+  width:340,
+  resizable:true,
+  minWidth:300,
+  maxWidth:520,
+  mount(_ctx,body,header){
+    header.setTitle('Automation');
+    const root=panelRoot(body);
+    const status=document.createElement('div');
+    status.style.cssText='font-size:10px;color:#64748b;margin-bottom:8px;';
+    root.appendChild(status);
+    const rows=document.createElement('div');
+    rows.style.cssText='display:flex;flex-direction:column;gap:4px;min-height:0;overflow:auto;';
+    root.appendChild(rows);
+
+    const render=()=>{
+      rows.textContent='';
+      const automations=getAutomations();
+      const enabled=automations.filter(item=>item.enabled);
+      status.textContent=\`\${enabled.length} enabled · \${automations.length} configured\`;
+      if(!automations.length){
+        rows.appendChild(panelSectionTitle('No automations configured'));
+      }else{
+        for(const item of automations.slice(0,50)){
+          const row=document.createElement('div');
+          row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid rgba(255,255,255,.06);border-radius:7px;padding:7px 8px;background:rgba(255,255,255,.025);';
+          const left=document.createElement('span');
+          left.style.cssText='min-width:0;display:flex;flex-direction:column;gap:2px;';
+          const name=document.createElement('span'); name.textContent=item.name; name.style.cssText='font-size:10px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          const detail=document.createElement('span'); detail.textContent=\`\${item.kind} · \${item.mode}\`; detail.style.cssText='font-size:9px;color:#64748b;';
+          left.append(name,detail);
+          const badge=document.createElement('span'); badge.textContent=item.enabled?'ON':'OFF'; badge.style.cssText=\`font:700 8px ui-monospace;padding:3px 5px;border-radius:4px;color:\${item.enabled?'#4ade80':'#64748b'};background:\${item.enabled?'rgba(34,197,94,.08)':'rgba(100,116,139,.08)'};\`;
+          row.append(left,badge); rows.appendChild(row);
+        }
+      }
+      const manage=document.createElement('button');
+      manage.type='button'; manage.textContent='Manage automations';
+      manage.style.cssText='margin-top:7px;border:1px solid rgba(155,138,255,.20);border-radius:7px;padding:8px;background:rgba(124,92,255,.10);color:#ddd6fe;font:600 10px ui-monospace;cursor:pointer;';
+      manage.addEventListener('click',()=>navigateTcoTerminalRoute('/automations'));
+      rows.appendChild(manage);
+    };
+    render();
+    const refresh=()=>render();
+    window.addEventListener('tradingcore:automations',refresh as EventListener);
+    return { onOpen:render, onChart:render, destroy:()=>window.removeEventListener('tradingcore:automations',refresh as EventListener) };
+  },
+};
+
+const tradingPanel:SidePanelDescriptor={
+  id:'tco.trading',
+  title:'Trading',
+  icon:'datawindow',
+  order:14,
+  width:350,
+  resizable:true,
+  minWidth:300,
+  maxWidth:520,
+  mount(ctx,body,header){
+    header.setTitle('Trading');
+    const root=panelRoot(body);
+    const summary=document.createElement('div');
+    summary.style.cssText='font-size:10px;color:#64748b;margin-bottom:8px;';
+    root.appendChild(summary);
+    const rows=document.createElement('div');
+    rows.style.cssText='display:flex;flex-direction:column;gap:4px;';
+    root.appendChild(rows);
+
+    const render=async()=>{
+      rows.textContent='';
+      try{
+        const [funds,positions]=await Promise.all([tradingCoreRuntime.getFunds(),tradingCoreRuntime.getPositions()]);
+        summary.textContent=\`\${ctx.symbol} · \${positions.length} open positions\`;
+        panelValueRow(rows,'Available margin',funds?Number(funds.availableMargin).toLocaleString('en-IN',{maximumFractionDigits:2}):'—');
+        panelValueRow(rows,'Used margin',funds?Number(funds.usedMargin).toLocaleString('en-IN',{maximumFractionDigits:2}):'—');
+        panelValueRow(rows,'Open P&L',positions.reduce((sum,p)=>sum+Number(p.pnl||0),0).toLocaleString('en-IN',{maximumFractionDigits:2}));
+        const actions=panelSectionTitle('Trading tools');
+        rows.appendChild(actions);
+        for(const [label,id] of [['Positions','tco.positions'],['Risk','tco.risk'],['Order Book','tco.orderbook'],['Options Chain','tco.options'],['Market Health','tco.market-health']] as const){
+          const button=document.createElement('button');
+          button.type='button'; button.textContent=label;
+          button.style.cssText='border:1px solid rgba(255,255,255,.07);border-radius:7px;padding:7px 8px;background:rgba(255,255,255,.025);color:#cbd5e1;font:10px ui-monospace;text-align:left;cursor:pointer;';
+          button.addEventListener('click',()=>ctx.togglePanel(id));
+          rows.appendChild(button);
+        }
+      }catch(error){
+        summary.textContent='Trading services unavailable';
+        const msg=document.createElement('div'); msg.textContent=error instanceof Error?error.message:String(error); msg.style.cssText='font-size:10px;color:#fb7185;padding:8px 0;'; rows.appendChild(msg);
+      }
+    };
+    void render();
+    const timer=window.setInterval(()=>void render(),3000);
+    return { onOpen:()=>void render(), onChart:()=>void render(), destroy:()=>window.clearInterval(timer) };
+  },
+};
+
 const tradeMarksAttachment: WidgetAttachment = {
   id: 'tco.trade-marks',
   mount(ctx) {
@@ -969,6 +1130,21 @@ const brandAction: WidgetActionDescriptor = {
   run() {},
 };
 
+const researchAction:WidgetActionDescriptor={
+  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
+  run(ctx){ctx.togglePanel('tco.research');},
+};
+
+const automationAction:WidgetActionDescriptor={
+  id:'tco.automation', target:'topbar', label:'Automation', icon:'replay', iconOnly:false, align:'right', order:1.6, mobile:'menu',
+  run(ctx){ctx.togglePanel('tco.automation');},
+};
+
+const tradingAction:WidgetActionDescriptor={
+  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:false, align:'right', order:1.7, mobile:'menu',
+  run(ctx){ctx.togglePanel('tco.trading');},
+};
+
 const replayAction: WidgetActionDescriptor = {
   id: 'tco.replay',
   target: 'topbar',
@@ -1086,6 +1262,9 @@ const brokerAction: WidgetActionDescriptor = {
 };
 
 registerSidePanel(bookmarksPanel);
+registerSidePanel(researchPanel);
+registerSidePanel(automationPanel);
+registerSidePanel(tradingPanel);
 registerSidePanel(journalPanel);
 registerSidePanel(dataWindowPanel);
 registerSidePanel(healthPanel);
@@ -1149,6 +1328,9 @@ const healthAttachment: WidgetAttachment = {
 registerWidgetAction(marketHealthAction);
 registerWidgetAttachment(healthAttachment);
 registerWidgetAttachment(tradeMarksAttachment);
+registerWidgetAction(researchAction);
+registerWidgetAction(automationAction);
+registerWidgetAction(tradingAction);
 registerWidgetAction(replayAction);
 registerWidgetAction(positionsAction);
 registerWidgetAction(riskAction);
