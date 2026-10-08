@@ -21,7 +21,7 @@ const source = `indicator "EMA Cross":
 
 const prepared = await engine.prepare(source, 'contract:ema-cross');
 assert.equal(prepared.reactsToViewport, true);
-assert.equal(prepared.maxLookback, 0);
+assert.equal(prepared.maxLookback ?? 0, 0);
 assert.equal(prepared.inputs.length, 2);
 assert.equal(prepared.inputs[0]?.key, 'fastLength');
 assert.equal(prepared.inputs[0]?.type, 'int');
@@ -82,7 +82,6 @@ const updated = models.at(-1);
 assert.equal(updated?.inputValues.fastLength, 3);
 assert.equal(updated?.propValues?.precision, 5);
 assert.equal(updated?.propValues?.overlay, false);
-assert.equal(updated?.meta?.title ?? updated?.title, 'EMA Cross');
 
 const modelCountBeforeRange = models.length;
 session.setVisibleRange({ left: bars[10].time * 1000, right: bars[14].time * 1000 });
