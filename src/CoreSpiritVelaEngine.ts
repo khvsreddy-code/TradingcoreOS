@@ -1,6 +1,5 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel.ts';
 import type { InputValue } from './services/core/chart/velaNativeChartKernel.ts';
-import type { IndicatorMeta } from './services/core/chart/velaNativeChartKernel.ts';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
@@ -85,11 +84,6 @@ function upperBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: numbe
   return lo;
 }
 
-function titleFromSource(source: string): string {
-  const match = source.match(/\b(?:indicator|strategy|study|component)\s+["']([^"']+)["']/i);
-  if (match?.[1]) return match[1].trim();
-  return 'CoreSpirit';
-}
 
 function dependencyKey(symbol:string,timeframe:string):string {
   return `${symbol.toUpperCase()}|${timeframe.toLowerCase()}`;
