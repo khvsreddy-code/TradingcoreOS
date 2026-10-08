@@ -350,19 +350,7 @@ export class CoreSpiritRuntime {
       this.stateStore.beginRealtimeTransaction();
       this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
       this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
-      for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
-        const cursor = this.fusedCursors.get(groupId);
-        if (cursor) cursor.copyFrom(snapshot);
-      }
-      for (const [key, snapshot] of this.directKernelSnapshots) {
-        const cursor = this.directKernelCursors.get(key);
-        if (cursor) cursor.copyFrom(snapshot);
-      }
-      for (const [key, snapshot] of this.rsiKernelSnapshots) this.rsiKernels.get(key)?.copyFrom(snapshot);
-      for (const [key, snapshot] of this.atrKernelSnapshots) this.atrKernels.get(key)?.copyFrom(snapshot);
-      for (const [key, snapshot] of this.vwapKernelSnapshots) this.vwapKernels.get(key)?.copyFrom(snapshot);
-      for (const [key, snapshot] of this.betaKernelSnapshots) this.betaKernels.get(key)?.copyFrom(snapshot);
-      for (const [key, snapshot] of this.trendStrengthKernelSnapshots) this.trendStrengthKernels.get(key)?.copyFrom(snapshot);
+      this.restoreKernelSnapshotsAtBar(this.history.length - 1);
       this.history[this.history.length - 1] = normalized;
       this.columnarHistory.replaceLast(normalized);
     } else {
@@ -372,40 +360,12 @@ export class CoreSpiritRuntime {
       this.stateStore.beginRealtimeTransaction();
       this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
       this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
-      for (const [groupId, cursor] of this.fusedCursors) {
-        const snapshot = this.fusedCursorSnapshots.get(groupId);
-        if (snapshot) snapshot.copyFrom(cursor);
-        else this.fusedCursorSnapshots.set(groupId, cursor.clone());
-      }
-      for (const [key, cursor] of this.directKernelCursors) {
-        const snapshot = this.directKernelSnapshots.get(key);
-        if (snapshot) snapshot.copyFrom(cursor);
-        else this.directKernelSnapshots.set(key, cursor.clone());
-      }
-      for (const [key, cursor] of this.rsiKernels) {
-        const snapshot = this.rsiKernelSnapshots.get(key);
-        if (snapshot) snapshot.copyFrom(cursor); else this.rsiKernelSnapshots.set(key, cursor.clone());
-      }
-      for (const [key, cursor] of this.atrKernels) {
-        const snapshot = this.atrKernelSnapshots.get(key);
-        if (snapshot) snapshot.copyFrom(cursor); else this.atrKernelSnapshots.set(key, cursor.clone());
-      }
-      for (const [key, cursor] of this.vwapKernels) {
-        const snapshot = this.vwapKernelSnapshots.get(key);
-        if (snapshot) snapshot.copyFrom(cursor); else this.vwapKernelSnapshots.set(key, cursor.clone());
-      }
-      for (const [key, kernel] of this.betaKernels) {
-        const snapshot = this.betaKernelSnapshots.get(key);
-        if (snapshot) snapshot.copyFrom(kernel); else this.betaKernelSnapshots.set(key, kernel.clone());
-      }
-      for (const [key, kernel] of this.trendStrengthKernels) {
-        const snapshot = this.trendStrengthKernelSnapshots.get(key);
-        if (snapshot) snapshot.copyFrom(kernel); else this.trendStrengthKernelSnapshots.set(key, kernel.clone());
-      }
+      this.snapshotKernelsForBar(Math.max(0, this.history.length - 1));
       this.history.push(normalized);
       this.columnarHistory.append(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
     }
+
     const barIndex = this.history.length - 1;
     this.state.barIndex = barIndex;
     this.state.time = this.toEpoch(normalized.timestamp);
@@ -421,7 +381,7 @@ export class CoreSpiritRuntime {
     if (sameBucket && dirtyPlan) {
       this.realtimeDirtyInstructions.clear();
       for (const instruction of dirtyPlan.instructions) this.realtimeDirtyInstructions.add(instruction);
-      for (const instruction of this.dirtyGraph?.statefulInstructions ?? []) this.realtimeDirtyInstructions.add(instruction);
+      // Stateful kernels are dirty only when their dependency graph reaches the changed bar inputs.
     }
     try { this.executeBlock(this.compiledIr.entry.instructions, normalized, this.history, barIndex, this.outputCollector, diagnostics, { reuseValues: sameBucket && this.executionTier === 'optimized', dirtyInstructions: sameBucket ? this.realtimeDirtyInstructions : undefined }); }
     catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${barIndex}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex, message }); }
