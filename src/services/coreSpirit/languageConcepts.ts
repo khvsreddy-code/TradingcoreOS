@@ -67,7 +67,7 @@ function parseSurfaceLiteral(value:string):CoreSpiritSurfaceLiteral {
 
 function scanSurfaceAttributes(text:string):{base:string;attrs:Record<string,string>} {
   const attrs:Record<string,string>={};
-  let depth=0; let quote:'"'|"'"|null=null; let escaped=false; let attrStart=-1;
+  let depth=0; let quote:'"'|"'"|null=null; let escaped=false; let firstAttrStart=-1; let attrStart=-1;
   const chunks:Array<{start:number;end:number}> = [];
   const findKeyAt=(index:number)=>{const m=text.slice(index).match(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*/);return m?{key:m[1],len:m[0].length}:null;};
   for(let i=0;i<text.length;i+=1){
@@ -79,11 +79,11 @@ function scanSurfaceAttributes(text:string):{base:string;attrs:Record<string,str
     if(depth!==0 || !/\s/.test(ch)) continue;
     const found=findKeyAt(i);
     if(!found||!KNOWN_INPUT_ATTRIBUTES.has(found.key))continue;
-    if(attrStart<0){attrStart=i;i+=found.len-1;}
+    if(firstAttrStart<0){firstAttrStart=i;attrStart=i;i+=found.len-1;}
     else{chunks.push({start:attrStart,end:i});attrStart=i;i+=found.len-1;}
   }
   if(attrStart>=0)chunks.push({start:attrStart,end:text.length});
-  const base=(attrStart<0?text:text.slice(0,attrStart)).trim();
+  const base=(firstAttrStart<0?text:text.slice(0,firstAttrStart)).trim();
   for(const chunk of chunks){
     const part=text.slice(chunk.start).trim(); const eq=part.indexOf('=');
     if(eq<0)continue; attrs[part.slice(0,eq).trim()]=part.slice(eq+1).trim();
