@@ -7,6 +7,7 @@ import { CORE_SPIRIT_LANGUAGE_CONCEPTS } from './languageConcepts';
 import { getCoreSpiritModelSurfaceDeclarations } from './modelSurface';
 import { createCoreSpiritCompilationUnit } from './compilerPipeline';
 import { CORE_SPIRIT_LIBRARY_ROOT_NAMESPACES, getCoreSpiritLibraryNamespaceEntries } from './standardLibraryNamespaces';
+import { CORE_SPIRIT_SURFACE_CAPABILITIES } from './languageConcepts';
 
 export type CoreSpiritCompletion = { label: string; kind: 'function'|'keyword'|'series'|'visual'|'data'|'type'|'property'; detail: string; insertText?: string };
 export type CoreSpiritTypeInfo = { name:string; type:string; detail:string };
@@ -36,6 +37,7 @@ const KEYWORDS: CoreSpiritCompletion[] = [
   { label: 'model', kind: 'keyword', detail: 'MODEL • declare a host-bound model artifact' },
   { label: 'automate', kind: 'keyword', detail: 'AUTOMATE • declare an event-to-intent flow' },
   { label: 'order', kind: 'keyword', detail: 'AUTOMATE • declare one universal order intent' },
+  { label: 'requires', kind: 'keyword', detail: 'SYSTEM • declare host capabilities required by this script' },
   { label: 'true', kind: 'keyword', detail: 'boolean literal' },
   { label: 'false', kind: 'keyword', detail: 'boolean literal' },
 ];
@@ -76,6 +78,13 @@ const UI_PANEL_MEMBERS: CoreSpiritCompletion[] = [
   {label:'toggle',kind:'property',detail:'panel.toggle(label, value, action?)'},
   {label:'slider',kind:'property',detail:'panel.slider(label, min, max, value?, action?)'},
 ];
+const SYSTEM_CAPABILITIES: CoreSpiritCompletion[] = CORE_SPIRIT_SURFACE_CAPABILITIES.map(label => ({
+  label,
+  kind:'property' as const,
+  detail:'explicit CoreScript system capability',
+  insertText:label,
+}));
+
 const DATA: CoreSpiritCompletion[] = ['request','lowerTf','depthImbalance','footprintDelta','footprintBuy','footprintSell','footprintPoc','footprintVah','footprintVal','footprintRows'].map(label => ({ label, kind:'data', detail:'host-provided market-data capability' }));
 
 function getCoreSpiritUdtInfos(source: string): CoreSpiritUdtInfo[] {
@@ -152,7 +161,7 @@ function allCompletions(): CoreSpiritCompletion[] {
     kind:'visual' as const,
     detail:'advanced/compatibility visual API • SHOW is the primary surface',
   }));
-  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
+  return [...READABLE_OPERATORS, ...KEYWORDS, ...TEMPORAL_TYPES, ...SAFETY_ANNOTATIONS, ...SERIES, ...SYSTEM_CAPABILITIES, ...UI_ROOT, ...WORKSPACE_ROOTS, ...STANDARD_LIBRARY_ROOTS, ...DATA, ...functions, ...advancedVisuals];
 }
 
 
