@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 const read = (p) => fs.readFileSync(new URL(`./${p}`, import.meta.url), 'utf8');
 
-const nativeAdapter = read('services/core/chart/velaNativeChartRenderer.ts');
 const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 const iRenderer = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
 const provider = read('TcoVelaDataProvider.ts');
@@ -14,9 +13,10 @@ const feedPort = read('../vendor/vela/src/core/ports/MarketDataFeed.ts');
 const workspace = read('LiveTradingWorkspace.tsx');
 const scene = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
 
-assert.match(nativeAdapter, /setBarsColumns\(/, 'TCO native adapter must use setBarsColumns');
-assert.doesNotMatch(nativeAdapter, /new Array<OHLCV>\(store\.length\)/, 'TCO store path must not materialize OHLCV rows');
-assert.match(nativeAdapter, /setLodIndex\(/, 'TCO native adapter must forward LOD index');
+const nativeKernel = read('services/core/chart/velaNativeChartKernel.ts');
+assert.match(nativeKernel, /setBarsColumns\(/, 'Vela native kernel must use the columnar chart seam');
+assert.doesNotMatch(nativeKernel, /new Array<OHLCV>\(store\.length\)/, 'Vela native kernel must not materialize OHLCV rows from the store');
+assert.match(nativeKernel, /setLodIndex\(/, 'Vela native kernel must forward typed LOD index');
 assert.match(nativeRenderer, /setBarsColumns\(columns:/, 'Vela native renderer must accept columnar bars');
 assert.match(nativeRenderer, /setLodIndex\(index:/, 'Vela native renderer must accept external LOD');
 assert.match(nativeRenderer, /createMutableColumnarBars/, 'Vela must retain numeric history in a typed buffer');
@@ -39,4 +39,5 @@ assert.match(liveSession, /subscribeColumns/);
 assert.match(provider, /subscribeColumns/);
 assert.match(nativeRenderer, /setVisibleRange\(range:/);
 assert.match(nativeRenderer, /updateBarColumns\(update:/);
+for (const retired of ['webgl2ChartRenderer.ts','canvas2dChartRenderer.ts','velaNativeChartRenderer.ts']) assert.throws(() => read(`services/core/chart/${retired}`), /ENOENT|no such file|NOT_FOUND/, `retired renderer file still exists: ${retired}`);
 console.log('TRADINGCORE_V116_VELA_COLUMNAR_BOUNDARY_CONTRACT_OK');

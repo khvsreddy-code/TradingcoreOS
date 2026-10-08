@@ -1,7 +1,10 @@
-export { TradingCoreChartApi } from './chartApi';
-export { ChartNavigationApi } from './chartNavigationApi';
-export { ChartGestureController } from './chartGestureController';
-export { TradingCoreChartEngine } from './chartEngine';
-export { ChartViewportController } from './chartViewportController';
-export { ChartTimeScale } from './chartTimeScale';
-export { ChartPriceScaleEngine } from './chartPriceScale';
+/**
+ * Canonical chart boundary.
+ *
+ * TradingCoreOS no longer exposes its retired standalone chart engine/renderer
+ * stack from this barrel. All production chart pixels and interactions terminate
+ * in the Vela-native kernel; TCO-specific features attach through Vela ports and
+ * renderer-layer registries.
+ */
+export * from './velaNativeChartKernel';
+export { msFromTime } from './velaTime';

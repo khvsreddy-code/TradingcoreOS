@@ -10,6 +10,12 @@ if (pkg.dependencies?.['lightweight-charts']) throw new Error('Lightweight Chart
 if (pkg.dependencies?.['Vela renderer']) throw new Error('Vela must be vendored behind the TCO chart boundary, not installed as a duplicate package');
 if (!exists('vendor/vela/src/renderers/native/NativeRenderer.ts')) throw new Error('vendored Vela NativeRenderer missing');
 if (!exists('vendor/vela/LICENSE') || !exists('vendor/vela/NOTICE')) throw new Error('Vela LICENSE/NOTICE must travel with the vendored source');
+for (const retired of [
+  'src/services/core/chart/webgl2ChartRenderer.ts',
+  'src/services/core/chart/canvas2dChartRenderer.ts',
+  'src/services/core/chart/chartGpuBuffer.ts',
+  'src/services/core/chart/velaNativeChartRenderer.ts',
+]) if (exists(retired)) throw new Error(`Retired standalone chart renderer remains: ${retired}`);
 if (!/private attributionEnabled = true/.test(read('vendor/vela/src/renderers/native/NativeRenderer.ts'))) throw new Error('Vela native attribution must remain enabled by default');
 for (const dep of ['@zag-js/core','@zag-js/dialog','@zag-js/dom-query','@zag-js/menu','@zag-js/tooltip','@zag-js/types','@zag-js/vanilla']) if (!pkg.dependencies?.[dep]) throw new Error(`Missing Vela runtime dependency: ${dep}`);
 if (read('src/services/core/chart/chartBackendPolicy.ts').includes("'Vela renderer'")) throw new Error('legacy chart backend policy token remains');
@@ -28,7 +34,6 @@ walk(path.join(root, 'src'));
 const directVendorImports = sourceFiles.filter((p) => /from ['"][^'"]*vendor\/vela/.test(fs.readFileSync(p, 'utf8')));
 const allowed = new Set([
   path.join(root, 'src/services/core/chart/velaChartFacade.ts'),
-  path.join(root, 'src/services/core/chart/velaNativeChartRenderer.ts'),
   path.join(root, 'src/services/core/chart/velaWorkspaceLoader.ts'),
   path.join(root, 'src/services/core/chart/velaNativeChartKernel.ts'),
   path.join(root, 'src/services/core/chart/velaDrawingPersistence.ts'),
@@ -42,4 +47,9 @@ for (const file of sourceFiles) {
   if (forbidden.test(text)) throw new Error(`legacy Pine/chart dependency reference remains: ${path.relative(root, file)}`);
 }
 
+const backendPolicy = read('src/services/core/chart/chartBackendPolicy.ts');
+if (backendPolicy.includes('webgl2') || backendPolicy.includes('canvas2d')) throw new Error('Retired TCO renderer backend tokens remain');
+const index = read('src/services/core/chart/index.ts');
+if (index.includes('TradingCoreChartEngine') || index.includes('ChartCore')) throw new Error('Retired standalone chart engine is still exported');
+if (!index.includes("export * from './velaNativeChartKernel'")) throw new Error('Canonical Vela native kernel is not the chart barrel');
 console.log('TCO_V108_CORESPIRIT_VELA_BOUNDARY_OK');

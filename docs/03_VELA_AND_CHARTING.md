@@ -83,6 +83,26 @@ Advanced families should be independently loaded only when their UI or drawing t
 
 TCO feature code crosses into the vendored Vela fork only through the TCO chart facade/provider boundary. Vela renderer internals stay behind that seam.
 
+## Canonical single-engine boundary
+
+TradingCoreOS now has one chart engine boundary: the Vela-native kernel. The retired TCO-owned WebGL2/Canvas2D renderer stack is no longer present in the production tree.
+
+The active path is:
+
+```
+TradingCoreOS market/data semantics
+        ↓
+velaNativeChartKernel
+        ↓
+Vela NativeRenderer
+        ↓
+Vela renderer layers / panes / drawings / workspace
+```
+
+TCO-specific visual behavior belongs in Vela contribution surfaces such as `registerRendererLayer()`, rather than in a second chart renderer, coordinate system, or frame scheduler. This keeps candle rendering, interaction, scales, retained scene state, and GPU/backend selection inside Vela.
+
+The chart barrel exports the Vela-native kernel as the canonical TCO chart boundary. The legacy `velaChartFacade` remains only as a compatibility shim for older consumers.
+
 ## Boundary
 
 ```
