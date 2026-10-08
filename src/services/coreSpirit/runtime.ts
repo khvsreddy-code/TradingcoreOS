@@ -52,7 +52,7 @@ export type CoreSpiritRuntimeOptions = {
   inputValues?: Readonly<Record<string, CoreSpiritValue>>;
   propValues?: Readonly<Record<string, CoreSpiritValue>>;
 };
-type CoreSpiritKernelState =
+export type CoreSpiritKernelState =
   | { family:'fused'; state:CoreSpiritFusedSeriesCursor }
   | { family:'direct'; state:CoreSpiritFusedSeriesCursor }
   | { family:'rsi'; state:RSIState }
@@ -362,7 +362,7 @@ export class CoreSpiritRuntime {
       this.stateStore.beginRealtimeTransaction();
       this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
       this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
-      this.snapshotKernelsForBar(Math.max(0, this.history.length - 1));
+      if (this.history.length && this.kernelStateSnapshots.size === 0) this.snapshotKernelsForBar(this.history.length - 1);
       this.history.push(normalized);
       this.columnarHistory.append(normalized);
       if (this.history.length > this.maxHistoryBars) this.history.splice(0, this.history.length - this.maxHistoryBars);
