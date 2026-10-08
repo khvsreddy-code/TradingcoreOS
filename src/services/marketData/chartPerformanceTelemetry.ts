@@ -32,6 +32,11 @@ export type ChartPerformanceSnapshot = {
   fullSeriesRewriteCount: number;
   formingBarReplaceLastCount: number;
   indicatorIncrementalUpdateCount: number;
+  initialHistoryLoadMs: number;
+  olderHistoryLoadMs: number;
+  initialHistoryCandles: number;
+  olderHistoryCandles: number;
+  historyPrependOps: number;
   computeCoalescedTicks: number;
   stageMs: Readonly<{ transport:number; compute:number; patch:number; renderer:number; frame:number }>;
 };
@@ -73,6 +78,11 @@ type MutableMetrics = {
   fullSeriesRewriteCount: number;
   formingBarReplaceLastCount: number;
   indicatorIncrementalUpdateCount: number;
+  initialHistoryLoadMs: number;
+  olderHistoryLoadMs: number;
+  initialHistoryCandles: number;
+  olderHistoryCandles: number;
+  historyPrependOps: number;
   stageMs: { transport:number; compute:number; patch:number; renderer:number; frame:number };
 };
 
@@ -108,7 +118,7 @@ class ChartPerformanceTelemetry {
         tickToRenderSamples: new Float64Array(SAMPLE_CAPACITY),
         tickToComputeCount: 0, tickToPatchCount: 0, tickToRenderCount: 0,
         tickToComputeCursor: 0, tickToPatchCursor: 0, tickToRenderCursor: 0,
-        lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0, indicatorIncrementalUpdateCount: 0,
+        lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0, indicatorIncrementalUpdateCount: 0, initialHistoryLoadMs: 0, olderHistoryLoadMs: 0, initialHistoryCandles: 0, olderHistoryCandles: 0, historyPrependOps: 0,
         stageMs: { transport:0, compute:0, patch:0, renderer:0, frame:0 },
       };
       this.metrics.set(key, value);
@@ -163,6 +173,20 @@ class ChartPerformanceTelemetry {
 
   recordIndicatorIncrementalUpdate(key: string): void {
     this.entry(key).indicatorIncrementalUpdateCount += 1;
+  }
+
+  recordHistoryLoad(key: string, kind: 'initial' | 'older', durationMs: number, candles: number): void {
+    const m = this.entry(key);
+    const duration = Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : 0;
+    const count = Math.max(0, Math.floor(Number(candles) || 0));
+    if (kind === 'initial') {
+      m.initialHistoryLoadMs = duration;
+      m.initialHistoryCandles = count;
+    } else {
+      m.olderHistoryLoadMs = Math.max(m.olderHistoryLoadMs, duration);
+      m.olderHistoryCandles += count;
+      m.historyPrependOps += 1;
+    }
   }
 
   private recordSample(
@@ -229,7 +253,7 @@ class ChartPerformanceTelemetry {
       firstPacketAt:0, lastPacketAt:0, computeUpdates:0, renderUpdates:0, computeCoalescedTicks:0, packetsAtLastCompute:0,
       tickToComputeSamples:new Float64Array(SAMPLE_CAPACITY), tickToPatchSamples:new Float64Array(SAMPLE_CAPACITY), tickToRenderSamples:new Float64Array(SAMPLE_CAPACITY),
       tickToComputeCount:0, tickToPatchCount:0, tickToRenderCount:0, tickToComputeCursor:0, tickToPatchCursor:0, tickToRenderCursor:0, lastPacketAtForLatency:0,
-      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0},
+      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, initialHistoryLoadMs:0, olderHistoryLoadMs:0, initialHistoryCandles:0, olderHistoryCandles:0, historyPrependOps:0, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0},
     };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     const elapsedMs = m.firstPacketAt && m.lastPacketAt ? Math.max(1, m.lastPacketAt - m.firstPacketAt) : 0;
@@ -268,6 +292,11 @@ class ChartPerformanceTelemetry {
       fullSeriesRewriteCount: m.fullSeriesRewriteCount,
       formingBarReplaceLastCount: m.formingBarReplaceLastCount,
       indicatorIncrementalUpdateCount: m.indicatorIncrementalUpdateCount,
+      initialHistoryLoadMs: m.initialHistoryLoadMs,
+      olderHistoryLoadMs: m.olderHistoryLoadMs,
+      initialHistoryCandles: m.initialHistoryCandles,
+      olderHistoryCandles: m.olderHistoryCandles,
+      historyPrependOps: m.historyPrependOps,
       computeCoalescedTicks: m.computeCoalescedTicks,
       stageMs: Object.freeze({ ...m.stageMs }),
     };

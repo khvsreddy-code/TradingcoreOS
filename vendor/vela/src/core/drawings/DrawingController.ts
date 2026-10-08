@@ -5,7 +5,7 @@ import type { VelaEventMap } from '../events/types';
 import type { IDrawingsRendererPort, DrawingIntent, DrawingMode } from './port';
 import type { DrawingSeriesGateway } from './series';
 import type { DrawingsOption } from './toolbar';
-import { getDrawingType, loadAdvancedDrawingCatalog } from './registry';
+import { drawingFamilyForType, getDrawingType, drawingTypes, loadDrawingFamiliesForTypes, loadDrawingFamily } from './registry';
 import { buildToolbar } from './toolbar';
 import { DrawingStore } from './DrawingStore';
 import { DrawingHistory } from './DrawingHistory';
@@ -70,9 +70,6 @@ export class DrawingController {
             if (seriesGateway) this.port.setSeriesGateway?.(seriesGateway);
             this.subs.push(this.port.onDrawingIntent((i) => this.onIntent(i)));
             this.subs.push(this.store.onChange(() => this.sync()));
-            void loadAdvancedDrawingCatalog().then(() => {
-                if (this.port) this.port.setToolbar(buildToolbar(option).definition);
-            });
         }
     }
 
@@ -84,6 +81,16 @@ export class DrawingController {
     // ── tool / toolbar control ──
     setTool(type: DrawingTypeKey | null): void {
         if (!this.port) return;
+        if (type) {
+            const family = drawingFamilyForType(type);
+            if (family && !drawingTypes().some((meta) => meta.type === type)) {
+                void loadDrawingFamily(family).then(() => this.setTool(type)).catch((error) => {
+                    console.error('[vela] failed to load drawing tool', type, error);
+                    this.setTool(null);
+                });
+                return;
+            }
+        }
         const changed = type !== this.activeTool;
         this.activeTool = type;
         // Seed the renderer's placement preview with the tool's last-used style so the
@@ -365,7 +372,23 @@ export class DrawingController {
     fromJSON(doc: unknown): void {
         this.history.clear(); // a new document is a context switch — don't undo into the old one
         this.selectedIds = [];
+        const records = this.serializedDrawingRecords(doc);
+        const pendingFamilies = [...new Set(records
+            .filter((record) => drawingFamilyForType(record.type) !== undefined && !drawingTypes().some((meta) => meta.type === record.type))
+            .map((record) => drawingFamilyForType(record.type))
+            .filter((family): family is NonNullable<ReturnType<typeof drawingFamilyForType>> => family !== undefined))];
+        if (pendingFamilies.length) {
+            void loadDrawingFamiliesForTypes(records.map((record) => record.type)).then(() => this.store.load(doc)).catch((error) => console.error('[vela] failed to hydrate drawing document', error));
+            return;
+        }
         this.store.load(doc); // load() emits change → sync() when enabled
+    }
+
+    private serializedDrawingRecords(doc: unknown): SerializedDrawing[] {
+        if (!doc || typeof doc !== 'object') return [];
+        const drawings = (doc as { drawings?: unknown }).drawings;
+        if (!Array.isArray(drawings)) return [];
+        return drawings.filter((value): value is SerializedDrawing => Boolean(value && typeof value === 'object' && typeof (value as { type?: unknown }).type === 'string'));
     }
 
     destroy(): void {

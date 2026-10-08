@@ -8,6 +8,7 @@ import { historyStore, reconcileRealtimeCandle } from './HistoryStore';
 import { acquireSharedChartMarketFeed } from './sharedChartMarketFeed';
 import { chartHistoryCoordinator, historyPageCandles, historyDemandPageCandles, historyWarmTarget, initialHistoryCandles, shouldLoadOlderHistory } from './chartHistoryCoordinator';
 import { marketDataGraph } from '../core/data/marketDataGraph';
+import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
 
 export const CHART_TIMEFRAME_INTERVALS: Record<string, string> = {
   '1m': '1minute',
@@ -512,6 +513,7 @@ export class ChartDataPlane {
     this.state.historyLoading = true;
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     const requestKey = `${this.key}:initial-columns:${requestedLimit}`;
+    const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requestedLimit), 'initial')
       .then(columns => {
         if (!columns || columns.time.length === 0) {
@@ -520,6 +522,7 @@ export class ChartDataPlane {
         }
         const active = this.setColumnarHistory(columns, requestedLimit, 'history');
         if (!active.length) throw new Error('No historical candles available');
+        chartPerformanceTelemetry.recordHistoryLoad(this.key, 'initial', Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - historyStartedAt), active.length);
         this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         return active;
       })
@@ -559,6 +562,7 @@ export class ChartDataPlane {
     this.state.historyLoading = true;
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     const requestKey = `${this.key}:initial:${initialLimit}`;
+    const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, initialLimit), 'initial')
       .then(rows => {
         const normalized = normalizeHistory(rows);
@@ -569,6 +573,7 @@ export class ChartDataPlane {
         this.state.historyReady = true;
         const active = this.activeWindow(normalized);
         this.setCandles(active, 'history');
+        chartPerformanceTelemetry.recordHistoryLoad(this.key, 'initial', Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - historyStartedAt), active.length);
         this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         return active;
       })
@@ -628,13 +633,16 @@ export class ChartDataPlane {
       this.state.olderHistoryLoading = true;
       this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     }
+    const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataBefore(this.instrumentKey, interval, oldest.timestamp, limit), priority)
       .then(rows => {
         const older = normalizeHistory(rows).filter(row => Date.parse(row.timestamp) < Date.parse(oldest.timestamp));
         if (!older.length) { this.state.olderHistoryExhausted = true; return this.state.candles; }
         historyStore.mergeInto(this.brokerId, this.instrumentKey, interval, older, MAX_HISTORY_CANDLES);
         this.state.olderHistoryExhausted = false;
-        return this.mergeOlder(older, 'older-history', limit);
+        const merged = this.mergeOlder(older, 'older-history', limit);
+        chartPerformanceTelemetry.recordHistoryLoad(this.key, 'older', Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - historyStartedAt), older.length);
+        return merged;
       })
       .finally(() => {
         this.state.olderHistoryLoading = false;

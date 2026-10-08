@@ -1,5 +1,5 @@
 import type { DrawingTypeKey } from './Drawing';
-import { drawingTypes, getDrawingType } from './registry';
+import { allDrawingTypeMetadata, drawingTypes, getDrawingType } from './registry';
 
 /**
  * Inert, renderer-neutral toolbar data. The core builds it from the type registry;
@@ -156,7 +156,7 @@ function toolFor(type: DrawingTypeKey): ToolDefinition | null {
 /** Index registered tools by their declared registry group (registration order preserved). */
 function toolsByRegistryGroup(allowed?: ReadonlySet<DrawingTypeKey>): Map<string, ToolDefinition[]> {
     const byGroup = new Map<string, ToolDefinition[]>();
-    for (const meta of drawingTypes()) {
+    for (const meta of allDrawingTypeMetadata()) {
         if (allowed && !allowed.has(meta.type)) continue;
         const tool = { type: meta.type, label: meta.label, icon: meta.icon };
         if (!byGroup.has(meta.group)) byGroup.set(meta.group, []);

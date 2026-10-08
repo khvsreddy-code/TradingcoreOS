@@ -38,19 +38,21 @@ async function injectBrokerSession(req: BrokerSessionRequest, res: Response, nex
     const refreshed = await OAuthService.refreshSession(brokerId, userId);
     if (refreshed.success) session = await BrokerRepository.getSession(brokerId, userId) || session;
   }
-  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+  const expiresAt = new Date(session.expiresAt).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     await BrokerRepository.updateStatus(brokerId, userId, 'Expired');
     return res.status(401).json({ success: false, error: 'Broker session expired. Reconnect the broker to continue.' });
   }
   const adapter = BrokerRegistry.getAdapter(brokerId);
   if (!adapter) return res.status(400).json({ success: false, error: 'Unknown broker ID' });
   try {
-    const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
+    const accessToken = await BrokerRepository.getAccessTokenForExecution(brokerId, userId);
+    if (!accessToken) return res.status(401).json({ success: false, error: 'Broker session token is unavailable or expired' });
     req.brokerAdapter = adapter;
     req.accessToken = accessToken;
     next();
   } catch {
-    return res.status(500).json({ success: false, error: 'Failed to decrypt session token' });
+    return res.status(500).json({ success: false, error: 'Failed to prepare broker session token' });
   }
 }
 
