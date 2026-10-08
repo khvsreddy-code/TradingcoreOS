@@ -104,7 +104,7 @@ export function LiveTradingWorkspace() {
         indicatorPicker: true,
         topbar: {
           left: ['tco.brand', 'symbol', 'timeframes', 'style', 'layout', 'indicators'],
-          right: ['tco.watchlist', 'tco.journal', 'tco.replay', 'tco.positions', 'tco.risk', 'tco.orderbook', 'tco.options', 'tco.data-window', 'tco.vpvr', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
+          right: ['tco.watchlist', 'tco.journal', 'tco.replay', 'tco.replay-sim.action', 'tco.quick-order.topbar', 'tco.native-ta.topbar', 'tco.ai-analysis.action', 'tco.positions', 'tco.risk', 'tco.orderbook', 'tco.options', 'tco.data-window', 'tco.vpvr', 'alerts', 'panels', 'tco.profile', 'tco.broker-connection', 'screenshot'],
         },
         // Vela owns workspace synchronization. Keep symbols/timeframes independent for
         // focused multi-chart analysis, but synchronize cursor and visual style across cells.
