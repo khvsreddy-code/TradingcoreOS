@@ -538,7 +538,7 @@ export class CoreSpiritRuntime {
     this.kernelStateSnapshots.capture(
       {
         nodeId: identity.nodeId,
-        revision: 0,
+        revision: this.state.barState.revision,
         inputDependencies: identity.inputDependencies,
         barIndex,
         modelVersion: this.kernelModelVersion(),
@@ -557,7 +557,7 @@ export class CoreSpiritRuntime {
       this.kernelStateSnapshots.capture(
         {
           nodeId: node?.id ?? `kernel:fused:${groupId}`,
-          revision: 0,
+          revision: this.state.barState.revision,
           inputDependencies: Object.freeze([...(node?.inputs ?? [])]),
           barIndex,
           modelVersion: this.kernelModelVersion(),
