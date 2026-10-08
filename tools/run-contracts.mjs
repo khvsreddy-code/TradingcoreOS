@@ -51,6 +51,10 @@ const contracts = [
   ['vela-v108-boundary', ['src/velaV108BoundaryContract.test.mjs', false]],
   ['corespirit-vela-full-capability', ['src/coreSpiritVelaCapabilityContract.test.mjs', true]],
   ['corespirit-live-startup-single-pass', ['src/coreSpiritLiveStartupContract.test.mjs', true]],
+  ['corespirit-exact-dirty-span', ['src/coreSpiritExactDirtySpanContract.test.mjs', true]],
+  ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
+  ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
+  ['vela-advanced-drawing-family-lazy', ['src/velaAdvancedDrawingFamilyLazyContract.test.mjs', true]],
   ['corespirit-kernel-snapshots', ['src/coreSpiritKernelSnapshotContract.test.mjs', true]],
 
   ['vela-fyers-motion', ['src/velaFyers5kMotionContract.test.mjs', false]],
