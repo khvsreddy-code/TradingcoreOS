@@ -49,11 +49,15 @@ export function registerDrawingType(meta: DrawingTypeMeta): void {
 }
 
 export function getDrawingType(type: string): DrawingTypeMeta | undefined {
-    return REGISTRY.get(type);
+    return REGISTRY.get(type) ?? lazyDrawingTypes(drawingFamilyForType(type as DrawingTypeKey)).find((meta) => meta.type === type);
 }
 
 export function drawingTypes(): DrawingTypeMeta[] {
     return [...REGISTRY.values()];
+}
+
+export function allDrawingTypeMetadata(): DrawingTypeMeta[] {
+    return [...REGISTRY.values(), ...lazyDrawingTypes()];
 }
 
 /** Build a fresh drawing of `type` on `paneId`, seeding the type's default style. */
@@ -277,16 +281,87 @@ registerDrawingType({
 });
 
 
-let advancedDrawingCatalogPromise: Promise<void> | undefined;
+export type AdvancedDrawingFamily = 'channels' | 'fibonacci' | 'patterns';
 
-/** Load heavyweight drawing family chunks only when the drawings capability is shown. */
-export function loadAdvancedDrawingCatalog(): Promise<void> {
-    if (!advancedDrawingCatalogPromise) {
-        advancedDrawingCatalogPromise = Promise.all([
-            import('./advancedRegistryChannels').then((module) => module.registerAdvancedDrawingTypes()),
-            import('./advancedRegistryFibonacci').then((module) => module.registerAdvancedDrawingTypes()),
-            import('./advancedRegistryPatterns').then((module) => module.registerAdvancedDrawingTypes()),
-        ]).then(() => undefined);
+const ADVANCED_DRAWING_TYPES: Readonly<Record<AdvancedDrawingFamily, readonly DrawingTypeKey[]>> = Object.freeze({
+    channels: Object.freeze([
+        'parallelchannel','disjointchannel','flattopbottom','regressionchannel',
+        'pitchfork','schiffpitchfork','modifiedschiffpitchfork','insidepitchfork',
+        'arrow','ellipse','triangle','polyline','freehand','highlighter','circle','rotatedrect','path','arc','curve',
+        'arrowmarkup','arrowmarkdown','flagmark','iconstamp',
+    ]),
+    fibonacci: Object.freeze([
+        'fibretracement','fibextension','fibextensiontrend','fibfan','fibtimezones','fibchannel','fibspeedfan','trendfibtime',
+        'fibcircles','fibarcs','fibwedge','fibspiral','gannfan','gannbox','gannsquare','dedekind',
+        'sonic','supersonic','goldensonic','goldensupersonic',
+        'anchoredvwap','fixedrangevp','position','datepricerange','magnifier',
+    ]),
+    patterns: Object.freeze([
+        'xabcd','abcd','headshoulders','elliottimpulse','elliottcorrection',
+        'gartley','bat','butterfly','crab','shark','cypher',
+    ]),
+});
+
+export const ADVANCED_DRAWING_FAMILIES = Object.freeze([
+    'channels','fibonacci','patterns',
+] as const);
+
+const ADVANCED_DRAWING_FAMILY_BY_TYPE = new Map<DrawingTypeKey, AdvancedDrawingFamily>(
+    ADVANCED_DRAWING_FAMILIES.flatMap((family) => ADVANCED_DRAWING_TYPES[family].map((type) => [type, family] as const)),
+);
+
+function prettyLazyDrawingLabel(type: DrawingTypeKey): string {
+    return type.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').replace(/\b\w/g, (value) => value.toUpperCase());
+}
+
+/** Metadata for tools whose implementation is intentionally not imported yet. */
+export function lazyDrawingTypes(family?: AdvancedDrawingFamily): DrawingTypeMeta[] {
+    const families = family ? [family] : ADVANCED_DRAWING_FAMILIES;
+    const out: DrawingTypeMeta[] = [];
+    for (const currentFamily of families) {
+        for (const type of ADVANCED_DRAWING_TYPES[currentFamily]) {
+            if (REGISTRY.has(type)) continue;
+            out.push({
+                type,
+                group: currentFamily === 'channels' ? (['parallelchannel','disjointchannel','flattopbottom','regressionchannel'].includes(type) ? 'channels' : 'pitchforks')
+                    : currentFamily === 'fibonacci' ? (type.startsWith('fib') || type.startsWith('trendfib') || type.startsWith('gann') || ['dedekind','sonic','supersonic','goldensonic','goldensupersonic'].includes(type) ? 'fibonacci' : 'measure')
+                    : ['xabcd','abcd','headshoulders','elliottimpulse','elliottcorrection','gartley','bat','butterfly','crab','shark','cypher'].includes(type) ? 'patterns' : 'harmonics',
+                label: prettyLazyDrawingLabel(type),
+                icon: svg24('<circle cx="12" cy="12" r="7"/>'),
+                defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+                create: () => { throw new Error(`Drawing type '${type}' is not loaded; load its advanced drawing family before creating it.`); },
+            });
+        }
     }
-    return advancedDrawingCatalogPromise;
+    return out;
+}
+
+export function drawingFamilyForType(type: DrawingTypeKey): AdvancedDrawingFamily | undefined {
+    return ADVANCED_DRAWING_FAMILY_BY_TYPE.get(type);
+}
+
+const advancedFamilyPromises = new Map<AdvancedDrawingFamily, Promise<void>>();
+
+export function loadDrawingFamily(family: AdvancedDrawingFamily): Promise<void> {
+    const existing = advancedFamilyPromises.get(family);
+    if (existing) return existing;
+    const promise = (
+        family === 'channels'
+            ? import('./advancedRegistryChannels').then((module) => module.registerAdvancedDrawingTypes())
+            : family === 'fibonacci'
+                ? import('./advancedRegistryFibonacci').then((module) => module.registerAdvancedDrawingTypes())
+                : import('./advancedRegistryPatterns').then((module) => module.registerAdvancedDrawingTypes())
+    ).then(() => undefined);
+    advancedFamilyPromises.set(family, promise);
+    return promise;
+}
+
+export function loadDrawingFamiliesForTypes(types: readonly DrawingTypeKey[]): Promise<void> {
+    const families = [...new Set(types.map((type) => drawingFamilyForType(type)).filter((family): family is AdvancedDrawingFamily => family !== undefined))];
+    return Promise.all(families.map(loadDrawingFamily)).then(() => undefined);
+}
+
+/** Load all heavyweight drawing families for compatibility callers that explicitly request the full catalog. */
+export function loadAdvancedDrawingCatalog(): Promise<void> {
+    return Promise.all(ADVANCED_DRAWING_FAMILIES.map(loadDrawingFamily)).then(() => undefined);
 }
