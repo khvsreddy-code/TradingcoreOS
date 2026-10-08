@@ -739,7 +739,7 @@ function terminalRouteButton(parent:HTMLElement, label:string, route:string, ico
 const researchPanel:SidePanelDescriptor={
   id:'tco.research',
   title:'Research',
-  icon:'book',
+  icon:'indicators',
   order:12,
   width:320,
   resizable:true,
@@ -777,7 +777,7 @@ const researchPanel:SidePanelDescriptor={
 const automationPanel:SidePanelDescriptor={
   id:'tco.automation',
   title:'Automation',
-  icon:'zap',
+  icon:'play',
   order:13,
   width:340,
   resizable:true,
@@ -1126,12 +1126,12 @@ const brandAction: WidgetActionDescriptor = {
 };
 
 const researchAction:WidgetActionDescriptor={
-  id:'tco.research', target:'topbar', label:'Research', icon:'book', iconOnly:false, align:'right', order:1.5, mobile:'menu',
+  id:'tco.research', target:'topbar', label:'Research', icon:'indicators', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
 };
 
 const automationAction:WidgetActionDescriptor={
-  id:'tco.automation', target:'topbar', label:'Automation', icon:'zap', iconOnly:false, align:'right', order:1.6, mobile:'menu',
+  id:'tco.automation', target:'topbar', label:'Automation', icon:'play', iconOnly:false, align:'right', order:1.6, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.automation');},
 };
 
