@@ -458,7 +458,7 @@ export class CoreSpiritVelaEngine {
       if (!currentBars.length || liveStarted) return;
 
       if (token.viewportDependent && visibleRange) {
-        if (!visibleRangeContainsLatest(currentBars, visibleRange)) return;
+        if (!visibleRangeContainsLatest(currentBars, visibleRange, req.market.timeframe)) return;
         if (!runVisibleRange(currentBars, visibleRange)) return;
         liveStarted = true;
         return;
@@ -527,7 +527,7 @@ export class CoreSpiritVelaEngine {
           const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
           if (token.viewportDependent && visibleRange) {
             runVisibleRange(currentBars, visibleRange);
-            liveStarted = req.mode === 'live' && visibleRangeContainsLatest(currentBars, visibleRange);
+            liveStarted = req.mode === 'live' && visibleRangeContainsLatest(currentBars, visibleRange, req.market.timeframe);
           } else {
             const result = safeOutputs(runtime.executeIr(activeIr, currentBars).outputs);
             scene.reset();
@@ -594,7 +594,7 @@ export class CoreSpiritVelaEngine {
           }
         }
 
-        if (token.viewportDependent && visibleRange && !visibleRangeContainsLatest(currentBars, visibleRange)) return;
+        if (token.viewportDependent && visibleRange && !visibleRangeContainsLatest(currentBars, visibleRange, req.market.timeframe)) return;
         if (!liveStarted) rehydrateForLive();
         if (token.viewportDependent && !liveStarted) return;
         if (req.mode==='live' && secondaryDependencies.length) void loadSecondaryData();
