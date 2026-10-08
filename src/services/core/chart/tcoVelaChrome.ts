@@ -744,7 +744,7 @@ function terminalRouteButton(parent:HTMLElement, label:string, route:string, ico
 const researchPanel:SidePanelDescriptor={
   id:'tco.research',
   title:'Research',
-  icon:'indicators',
+  icon:'search',
   order:12,
   width:320,
   resizable:true,
@@ -782,7 +782,7 @@ const researchPanel:SidePanelDescriptor={
 const automationPanel:SidePanelDescriptor={
   id:'tco.automation',
   title:'Automation',
-  icon:'play',
+  icon:'replay',
   order:13,
   width:340,
   resizable:true,
@@ -834,7 +834,7 @@ const automationPanel:SidePanelDescriptor={
 const tradingPanel:SidePanelDescriptor={
   id:'tco.trading',
   title:'Trading',
-  icon:'briefcase',
+  icon:'datawindow',
   order:14,
   width:350,
   resizable:true,
@@ -1131,17 +1131,17 @@ const brandAction: WidgetActionDescriptor = {
 };
 
 const researchAction:WidgetActionDescriptor={
-  id:'tco.research', target:'topbar', label:'Research', icon:'indicators', iconOnly:false, align:'right', order:1.5, mobile:'menu',
+  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
 };
 
 const automationAction:WidgetActionDescriptor={
-  id:'tco.automation', target:'topbar', label:'Automation', icon:'play', iconOnly:false, align:'right', order:1.6, mobile:'menu',
+  id:'tco.automation', target:'topbar', label:'Automation', icon:'replay', iconOnly:false, align:'right', order:1.6, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.automation');},
 };
 
 const tradingAction:WidgetActionDescriptor={
-  id:'tco.trading', target:'topbar', label:'Trading', icon:'briefcase', iconOnly:false, align:'right', order:1.7, mobile:'menu',
+  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:false, align:'right', order:1.7, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
