@@ -7,6 +7,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 const terminal = read('src/LiveTradingTerminal.tsx');
 const workspace = read('src/LiveTradingWorkspace.tsx');
+const terminalTopology = read('src/services/core/chart/tcoVelaTerminal.ts');
 
 assert.match(terminal, /return\s*<LiveTradingWorkspace\s*\/>/);
 assert.doesNotMatch(terminal, /useEffect\(|history\.|popstate|setTimeout\(/);
