@@ -8,6 +8,7 @@ import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
+import { resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
 
 type DirtyRange = { from: number; to: number };
 
@@ -85,7 +86,7 @@ function upperBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: numbe
 }
 
 function titleFromSource(source: string): string {
-  const match = source.match(/\b(?:indicator|study|component)\s+["']([^"']+)["']/i);
+  const match = source.match(/\b(?:indicator|strategy|study|component)\s+["']([^"']+)["']/i);
   if (match?.[1]) return match[1].trim();
   return 'CoreSpirit';
 }
@@ -122,9 +123,9 @@ export class CoreSpiritVelaEngine {
 
   readonly capabilities: EngineCapabilities = {
     streaming: true,
-    visibleRange: false,
-    inputs: false,
-    props: false,
+    visibleRange: true,
+    inputs: true,
+    props: true,
   };
 
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
@@ -133,15 +134,15 @@ export class CoreSpiritVelaEngine {
     const error = compiled.diagnostics?.find(diagnostic => diagnostic.severity === 'error');
     if (!compiled.ir || error) throw new Error(error?.message || 'CoreSpirit compilation failed');
 
-    const meta: IndicatorMeta = { title: titleFromSource(normalized), overlay: true };
+    const metadata = resolveCoreSpiritVelaMetadata(source, compiled.ir);
     const token: PreparedToken = { sourceId: instanceId, source: normalized, ir: compiled.ir };
 
     return {
       language: this.language,
-      inputs: [],
-      props: [],
-      meta,
-      reactsToViewport: false,
+      inputs: metadata.inputs,
+      props: metadata.props,
+      meta: metadata.meta,
+      reactsToViewport: metadata.reactsToViewport,
       maxLookback: compiled.ir.maxLookback,
       token,
     };
@@ -259,7 +260,12 @@ export class CoreSpiritVelaEngine {
       return task;
     };
 
-    const runtime = new CoreSpiritRuntime({
+    let currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, {
+      inputs: req.inputs,
+      props: req.props,
+    });
+
+    const createRuntime = (): CoreSpiritRuntime => new CoreSpiritRuntime({
       symbol: req.market.symbol,
       timeframe: req.market.timeframe,
       sourceId: token.sourceId,
@@ -267,7 +273,11 @@ export class CoreSpiritVelaEngine {
       executionTarget: 'chart',
       executionTier: 'optimized',
       dataResolver,
+      inputValues: currentMetadata.inputValues,
+      propValues: currentMetadata.propValues,
     });
+
+    let runtime = createRuntime();
     runtime.loadIr(token.ir);
 
     const scene = new CoreSpiritSceneDiff(token.sourceId);
@@ -285,7 +295,7 @@ export class CoreSpiritVelaEngine {
       const snapshot = scene.snapshot();
       handlers.onModel(buildCoreSpiritVelaIndicatorModel(
         token.sourceId,
-        req.prepared.meta,
+        currentMetadata.meta,
         snapshot.points,
         snapshot.markers.map(marker => ({
           time: Number(marker.time),
@@ -298,6 +308,10 @@ export class CoreSpiritVelaEngine {
         snapshot.rectBatches,
         Number.isFinite(firstSeriesTime) ? firstSeriesTime : undefined,
         dirty,
+        currentMetadata.inputs,
+        currentMetadata.inputValues,
+        currentMetadata.props,
+        currentMetadata.propValues,
       ));
     };
 
@@ -364,10 +378,10 @@ export class CoreSpiritVelaEngine {
           phase: req.mode === 'live' && !stopped ? 'streaming' : 'idle',
           barIndex: state.barIndex,
           meta: {
-            title: req.prepared.meta.title,
-            overlay: req.prepared.meta.overlay,
-            precision: req.prepared.meta.precision,
-            shorttitle: req.prepared.meta.shorttitle,
+            title: currentMetadata.meta.title,
+            overlay: currentMetadata.meta.overlay,
+            precision: currentMetadata.meta.precision,
+            shorttitle: currentMetadata.meta.shorttitle,
           },
           plots: Object.fromEntries([...snapshot.points.entries()].map(([key, values]) => [key, values])),
           variables: state.locals,
@@ -377,10 +391,12 @@ export class CoreSpiritVelaEngine {
       stop() {
         stopped = true;
       },
-      update(_inputs: Record<string, InputValue>, _props?: Record<string, InputValue>) {
+      update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
         if (stopped) return;
+        currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
         const runUpdate = (): void => {
           const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+          runtime = createRuntime();
           runtime.loadIr(token.ir);
           const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
           scene.reset();
@@ -390,11 +406,30 @@ export class CoreSpiritVelaEngine {
           emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
           liveStarted = req.mode === 'live';
         };
-        if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) void loadSecondaryData(true).then(runUpdate); else if (secondaryDependencies.length) void loadSecondaryData();
+        if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) void loadSecondaryData(true).then(runUpdate);
+        else if (secondaryDependencies.length) void loadSecondaryData().then(runUpdate);
         else runUpdate();
       },
-      setVisibleRange() {
-        // CoreSpirit execution remains renderer-neutral and range-insensitive.
+      setVisibleRange(range) {
+        if (stopped || !currentMetadata.reactsToViewport) return;
+        const left = Number(range.from);
+        const right = Number(range.to);
+        if (!Number.isFinite(left) || !Number.isFinite(right)) return;
+        const viewportFrom = Math.min(left, right);
+        const viewportTo = Math.max(left, right);
+        const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+        if (!currentBars.length) return;
+        const start = lowerBoundBarTime(currentBars, viewportFrom);
+        const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, viewportTo));
+        const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
+        const executionStart = Math.max(0, start - maxLookback);
+        const rangeBars = currentBars.slice(executionStart, end);
+        if (!rangeBars.length) return;
+
+        const rangeRuntime = createRuntime();
+        rangeRuntime.loadIr(token.ir);
+        const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
+        emitScenePatches(rangeResult, { from: viewportFrom, to: viewportTo });
       },
       notifyBars(reason, dirtyRange) {
         if (stopped) return;
@@ -424,15 +459,7 @@ export class CoreSpiritVelaEngine {
           const executionStart = Math.max(0, start - maxLookback);
           const rangeBars = currentBars.slice(executionStart, end);
           if (rangeBars.length) {
-            const rangeRuntime = new CoreSpiritRuntime({
-              symbol: req.market.symbol,
-              timeframe: req.market.timeframe,
-              sourceId: token.sourceId,
-              executionMode: req.mode === 'live' ? 'realtime' : 'historical',
-              executionTarget: 'chart',
-              executionTier: 'optimized',
-              dataResolver,
-            });
+            const rangeRuntime = createRuntime();
             rangeRuntime.loadIr(token.ir);
             const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
             emitScenePatches(rangeResult, dirtyRange);
