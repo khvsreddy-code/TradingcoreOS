@@ -571,7 +571,6 @@ export class NativeRenderer implements IChartRenderer {
             case 'drawingsInteractive':
                 this.drawingsInteractive = value !== false;
                 if (this.input) this.input.drawings = this.drawingsInteractive;
-                if (!this.drawingsInteractive) this.userDrawings?.clearHover();
                 return;
             case 'keyboard':
                 this.setKeyboardEnabled(Boolean(value));
