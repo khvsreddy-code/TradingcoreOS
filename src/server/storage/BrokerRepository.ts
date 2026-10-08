@@ -18,6 +18,7 @@ export class BrokerRepository {
   private static accessTokenCache = new Map<string, { token: string; sessionFingerprint: string; expiresAt: number }>();
   private static readonly SESSION_CACHE_MS = 5000;
   private static readonly ACCESS_TOKEN_CACHE_MS = 2000;
+  private static readonly ACCESS_TOKEN_CACHE_MAX_ENTRIES = 1024;
   private static supabase = BrokerRepository.createSupabaseClient();
 
   private static requireSupabaseForProduction(): void {
@@ -199,6 +200,11 @@ export class BrokerRepository {
       sessionFingerprint: fingerprint,
       expiresAt: Date.now() + Math.min(this.ACCESS_TOKEN_CACHE_MS, remaining),
     });
+    while (this.accessTokenCache.size > this.ACCESS_TOKEN_CACHE_MAX_ENTRIES) {
+      const oldestKey = this.accessTokenCache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.accessTokenCache.delete(oldestKey);
+    }
     return token;
   }
 
