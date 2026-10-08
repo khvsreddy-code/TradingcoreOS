@@ -88,6 +88,7 @@ export class PanelDock {
                 minWidth: desc.minWidth,
                 maxWidth: desc.maxWidth,
                 overlay: desc.overlay,
+                maximizable: desc.maximizable,
             });
             const entry: Entry = {
                 id: desc.id,
@@ -100,7 +101,12 @@ export class PanelDock {
             // A contribution that throws on mount must not take the shell down with it: the
             // panel stays docked but empty, and the reason is on the console.
             try {
-                const mounted = desc.mount(this.deps.context(), panel.content, { slot: panel.headerSlot, setTitle: (t) => panel.setTitle(t) });
+                const mounted = desc.mount(this.deps.context(), panel.content, {
+                    slot: panel.headerSlot,
+                    setTitle: (t) => panel.setTitle(t),
+                    get maximized() { return panel.maximized; },
+                    setMaximized: (on) => panel.setMaximized(on),
+                });
                 entry.handle = mounted ? mounted : undefined;
                 if (this.chart) entry.handle?.onChart?.(this.chart);
             } catch (err) {
