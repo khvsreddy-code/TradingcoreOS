@@ -180,7 +180,7 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
       const declaration = parseCoreSpiritInputDeclaration(line, 0, line.length);
       if (!declaration) return line;
       const indent = line.match(/^\s*/)?.[0] ?? '';
-      return \`${indent}let ${declaration.key} = __input(${JSON.stringify(declaration.key)}, ${formatCoreSpiritSurfaceLiteral(declaration.defval)});\`;
+      return `${indent}let ${declaration.key} = __input(${JSON.stringify(declaration.key)}, ${formatCoreSpiritSurfaceLiteral(declaration.defval)});`;
     },
   },
   {
