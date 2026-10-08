@@ -95,6 +95,8 @@ assert.equal(CORE_SCRIPT_LANGUAGE_VERSION, 1);
 const beginnerIr = compile(beginner, 'corescript-beginner');
 assert.equal(beginnerIr?.language, 'CoreScript');
 assert.equal(beginnerIr?.languageVersion, 1);
+assert.equal(beginnerIr?.languagePolicy?.language, 'CoreScript');
+assert.equal(beginnerIr?.languagePolicy?.version, 1);
 assert.equal(beginnerIr?.authoringLevel, 'beginner');
 assert.ok(beginnerIr?.languageFeatures?.includes('beginner'));
 assert.ok(!normalizeCoreSpiritSource(beginner).includes(';;'));
@@ -112,6 +114,8 @@ const systemIr = compile(system, 'corescript-system', 'automation');
 assert.equal(systemIr?.authoringLevel, 'system');
 assert.ok(systemIr?.languageFeatures?.includes('system-events'));
 assert.ok(systemIr?.languageFeatures?.includes('automation'));
+assert.ok(systemIr?.capabilityRequirements?.some(item => item.capability === 'market.tick'));
+assert.equal(systemIr?.languagePolicy?.level, 'system');
 assert.deepEqual(
   [...(systemIr?.requiredCapabilities ?? [])].sort(),
   ['automation', 'execution.route', 'market.tick', 'order.fill', 'position.update', 'risk.evaluate', 'webhooks'].sort(),
