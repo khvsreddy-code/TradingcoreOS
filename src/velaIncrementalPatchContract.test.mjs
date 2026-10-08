@@ -42,5 +42,5 @@ assert(kernel.includes('syncBandFillsForSeries(seriesId: string, op:'), 'native 
 assert(!kernel.includes("points: series.points }] } as ScenePatch"), 'native kernel still sends full series.points');
 assert(coord.includes('Float64Array') && coord.includes('timeCapacity'), 'coordinate time storage not typed');
 assert(workspace.includes('workspaceListenerDisposers'), 'workspace cleanup ownership missing');
-for (const retired of ['webgl2ChartRenderer.ts','canvas2dChartRenderer.ts','velaNativeChartRenderer.ts']) assert.throws(() => read(`src/services/core/chart/${retired}`), /ENOENT|no such file|NOT_FOUND/, `retired renderer file still exists: ${retired}`);
+for (const retired of ['webgl2ChartRenderer.ts','canvas2dChartRenderer.ts','velaNativeChartRenderer.ts']) assert(!fs.existsSync(path.join(root, `src/services/core/chart/${retired}`)), `retired renderer file still exists: ${retired}`);
 console.log('TRADINGCORE_V117_INCREMENTAL_PATCH_CONTRACT_OK');
