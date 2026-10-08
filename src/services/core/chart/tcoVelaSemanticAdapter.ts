@@ -1,4 +1,4 @@
-import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec, HighCardinalityRectBatch } from './velaNativeChartKernel';
+import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec, HighCardinalityRectBatch, InputSchema, InputValue } from './velaNativeChartKernel';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 
 export type CoreSpiritVelaMarker = {
@@ -84,7 +84,7 @@ export function buildCoreSpiritVelaIndicatorModel(
     ...(dirty ? {dirty} : {}),
     title:meta.title,
     shorttitle:meta.shorttitle,
-    overlay:true,
+    overlay:meta.overlay,
     paneHint:'price',
     legend:true,
     anchorTime:anchorTime as IndicatorModel['anchorTime'],
