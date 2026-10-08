@@ -9,7 +9,7 @@ const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 25);
 const maxRenderRateHz = Number(process.env.TCO_MAX_RENDER_RATE_HZ || 150);
 const maxComputeRateHz = Number(process.env.TCO_MAX_COMPUTE_RATE_HZ || 60);
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
-const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount'];
+const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
 
 function run(args) {
   const result = spawnSync('agent-browser', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -53,6 +53,8 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     }
     const renderRate = Number(sample.renderUpdatesPerSec) || 0;
     const computeRate = Number(sample.computeUpdatesPerSec) || 0;
+    const initialHistoryCandles = Number(sample.initialHistoryCandles) || 0;
+    if (initialHistoryCandles < 1 || initialHistoryCandles > 5000) throw new Error(`Browser verification: invalid initial history size (${initialHistoryCandles}); expected 1-5000 candles.`);
     if (renderRate > maxRenderRateHz) throw new Error(`Browser verification: render rate exceeded (${renderRate.toFixed(2)}Hz > ${maxRenderRateHz}Hz)`);
     if (computeRate > maxComputeRateHz) throw new Error(`Browser verification: compute rate exceeded (${computeRate.toFixed(2)}Hz > ${maxComputeRateHz}Hz)`);
   }
@@ -86,6 +88,11 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
       fullSeriesRewriteCount: sample.fullSeriesRewriteCount,
       formingBarReplaceLastCount: sample.formingBarReplaceLastCount,
       indicatorIncrementalUpdateCount: sample.indicatorIncrementalUpdateCount,
+      initialHistoryLoadMs: sample.initialHistoryLoadMs,
+      initialHistoryCandles: sample.initialHistoryCandles,
+      historyPrependOps: sample.historyPrependOps,
+      olderHistoryLoadMs: sample.olderHistoryLoadMs,
+      olderHistoryCandles: sample.olderHistoryCandles,
       frameBudgetMissRate: sample.frameBudgetMissRate,
     })),
     backends: perf.cells.map((cell) => ({ cellId: cell.cellId, backend: cell.backend, fps: cell.fps, p95FrameMs: cell.p95FrameMs, budgetMissRate: cell.frameBudgetMissRate })),
