@@ -240,7 +240,7 @@ export function buildCoreSpiritGraphBundle(program: CoreSpiritIrProgram, options
       ...(() => { const descriptor = deriveCoreSpiritNodeExecutionDescriptor({ nodeId: id, effectful, stateful, latencyClass, kind, parallelizable, deterministic }); return { executionLane: descriptor.lane, executionClass: descriptor.class, cacheable: descriptor.cacheable }; })(),
       lookback: inferNodeLookback(ins, program.entry.instructions, stateful),
       incremental: deterministic && (pure || stateful),
-      viewportDependent: ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right/.test(ins.name),
+      viewportDependent: ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right|\b(?:vpvr|volumeProfile|fixedRangeVolumeProfile)\b/.test(ins.name),
       realtimeSafe: deterministic && !external && !(ins.op === 'call' && /visible_(bar|range|time)|chart\.left|chart\.right/.test(ins.name)),
     };
     nodes.push(node);
