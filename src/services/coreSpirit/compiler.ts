@@ -26,7 +26,7 @@ import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
-import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
+import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 export type CoreSpiritCompilerOptions = {
@@ -443,7 +443,14 @@ export class CoreSpiritCompiler {
       if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
       const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:Object.freeze([...new Set(languageFeatures)]), requiredCapabilities, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const uniqueLanguageFeatures = Object.freeze([...new Set(languageFeatures)]);
+      const languagePolicy = buildCoreScriptLanguagePolicy({
+        level:authoringLevel,
+        features:uniqueLanguageFeatures,
+        requiredCapabilities,
+        capabilityRequirements:capabilityCheck.requirements,
+      });
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements:capabilityCheck.requirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {
