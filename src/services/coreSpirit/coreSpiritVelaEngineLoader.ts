@@ -29,9 +29,9 @@ export class LazyCoreSpiritVelaEngine implements ScriptingEngine {
 
   readonly capabilities: EngineCapabilities = {
     streaming: true,
-    visibleRange: false,
-    inputs: false,
-    props: false,
+    visibleRange: true,
+    inputs: true,
+    props: true,
   };
 
   private inner: ScriptingEngine | null = null;
