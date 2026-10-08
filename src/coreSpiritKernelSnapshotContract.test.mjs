@@ -79,6 +79,29 @@ try {
   CoreSpiritFusedSeriesCursor.prototype.copyFrom = cursorCopyFrom;
 }
 
+const emptyBaselineRuntime = new CoreSpiritRuntime({
+  symbol: 'NSE:NIFTY50-INDEX',
+  timeframe: '5',
+  sourceId: 'snapshot-empty-baseline',
+  executionTier: 'optimized',
+});
+emptyBaselineRuntime.loadIr(compiled.ir!);
+const emptyBaselineSpy = CoreSpiritFusedSeriesCursor.prototype.copyFrom;
+let emptyBaselineRestores = 0;
+CoreSpiritFusedSeriesCursor.prototype.copyFrom = function (...args) {
+  emptyBaselineRestores += 1;
+  return emptyBaselineSpy.apply(this, args);
+};
+try {
+  const firstBar = bars(1)[0]!;
+  emptyBaselineRuntime.executeBar(firstBar);
+  emptyBaselineRuntime.executeBar({ ...firstBar, close: firstBar.close + 1, high: firstBar.high + 1 });
+  assert.ok(emptyBaselineRestores >= 1, 'first live bar revisions must restore the empty baseline checkpoint');
+  assert.ok(emptyBaselineRuntime.getKernelStateSnapshot('missing') === undefined);
+} finally {
+  CoreSpiritFusedSeriesCursor.prototype.copyFrom = emptyBaselineSpy;
+}
+
 const afterRevisionSnapshots = runtime.getKernelStateSnapshots();
 assert.ok(afterRevisionSnapshots.some((entry) => entry.barIndex === history.length - 1));
 
