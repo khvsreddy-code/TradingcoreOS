@@ -38,16 +38,26 @@ when fast crossesAbove slow and trend:
 const quant = `
 indicator "Quant Regime"
 
+type QuantFeatureVector {
+    values: matrix<float>
+}
+
+type QuantTensor {
+    values: tensor<float>
+}
+
 returns = roc(close, 1)
 z = zscore(returns, 50)
 betaFactor = beta(returns, returns, 50)
 
-features: matrix(returns, z, betaFactor)
-
-model "regime"
-    input returns: feature<number>
-    input z: feature<number>
-    input betaFactor: feature<number>
+model "regime" {
+    inputs:
+        returns,
+        z,
+        betaFactor
+    predict:
+        forward_return(10)
+}
 
 prediction: prediction<number> = regime.predict()
 confidence: probability = regime.probability()
