@@ -374,9 +374,9 @@ export class CoreSpiritVelaEngine {
 
     const emitModel = (dirty?: DirtyRange): void => {
       const snapshot = scene.snapshot();
-      handlers.onModel(buildCoreSpiritVelaIndicatorModel(
+      const model = buildCoreSpiritVelaIndicatorModel(
         token.sourceId,
-        req.prepared.meta,
+        activeMeta,
         snapshot.points,
         snapshot.markers.map(marker => ({
           time: Number(marker.time),
@@ -389,7 +389,12 @@ export class CoreSpiritVelaEngine {
         snapshot.rectBatches,
         Number.isFinite(firstSeriesTime) ? firstSeriesTime : undefined,
         dirty,
-      ));
+        req.prepared.inputs,
+        activeInputs,
+        req.prepared.props ?? [],
+        activeProps,
+      );
+      handlers.onModel(model);
     };
 
     const emitScenePatches = (outputs: CoreSpiritObject[], dirty: DirtyRange): void => {
@@ -397,17 +402,47 @@ export class CoreSpiritVelaEngine {
       if (patches.length) handlers.onScenePatches?.(patches);
     };
 
+    const runVisibleRange = (currentBars: readonly CoreSpiritMarketBar[], range: { left: number; right: number } | null): boolean => {
+      if (stopped || !currentBars.length) return false;
+      try {
+        const left = range ? Math.min(range.left, range.right) : Number.NaN;
+        const right = range ? Math.max(range.left, range.right) : Number.NaN;
+        const visibleStart = Number.isFinite(left) ? lowerBoundBarTime(currentBars, left) : 0;
+        const visibleEnd = Number.isFinite(right)
+          ? Math.min(currentBars.length, Math.max(visibleStart + 1, upperBoundBarTime(currentBars, right)))
+          : currentBars.length;
+        const executionStart = Math.max(0, visibleStart - Math.max(0, Number(activeIr.maxLookback) || 0));
+        const rows = currentBars.slice(executionStart, visibleEnd);
+        if (!rows.length) return false;
+        runtime.loadIr(activeIr);
+        const result = safeOutputs(runtime.executeIr(activeIr, rows).outputs);
+        scene.reset();
+        scene.seed(result);
+        firstSeriesTime = barTimeMillis(rows[0]?.timestamp);
+        lastTime = latestTimeOf(currentBars);
+        emitModel(Number.isFinite(left) && Number.isFinite(right) ? { from: left, to: right } : undefined);
+        return true;
+      } catch (error) {
+        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+        return false;
+      }
+    };
+
     const initialRun = (): void => {
       if (stopped) return;
       try {
-        const initial = safeOutputs(runtime.executeIr(activeIr, bars).outputs);
-        scene.seed(initial);
-        firstSeriesTime = bars.length ? barTimeMillis(bars[0]?.timestamp) : Number.NaN;
-        lastTime = bars.length ? barTimeMillis(bars.at(-1)?.timestamp) : Number.NaN;
-        emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
+        if (token.viewportDependent && visibleRange) {
+          runVisibleRange(bars, visibleRange);
+        } else {
+          const initial = safeOutputs(runtime.executeIr(activeIr, bars).outputs);
+          scene.seed(initial);
+          firstSeriesTime = bars.length ? barTimeMillis(bars[0]?.timestamp) : Number.NaN;
+          lastTime = bars.length ? barTimeMillis(bars.at(-1)?.timestamp) : Number.NaN;
+          emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
+        }
         if (req.mode === 'static') handlers.onDone?.();
       } catch (error) {
-        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+        handlers.onError?.(error instanceof Error ? error.message === 'string' ? new Error(error.message) : (error instanceof Error ? error : new Error(String(error))) : new Error(String(error)));
       }
     };
 
@@ -421,6 +456,13 @@ export class CoreSpiritVelaEngine {
     const rehydrateForLive = (): void => {
       const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
       if (!currentBars.length || liveStarted) return;
+
+      if (token.viewportDependent && visibleRange) {
+        if (!visibleRangeContainsLatest(currentBars, visibleRange)) return;
+        if (!runVisibleRange(currentBars, visibleRange)) return;
+        liveStarted = true;
+        return;
+      }
 
       runtime.loadIr(activeIr);
       const historical = currentBars.slice(0, -1);
@@ -468,24 +510,45 @@ export class CoreSpiritVelaEngine {
       stop() {
         stopped = true;
       },
-      update(_inputs: Record<string, InputValue>, _props?: Record<string, InputValue>) {
+      update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
         if (stopped) return;
-        const runUpdate = (): void => {
-          const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+        try {
+          const nextInputs = resolveSchemaValues(req.prepared.inputs, { ...activeInputs, ...inputs });
+          const nextProps = resolveSchemaValues(req.prepared.props ?? [], { ...activeProps, ...(props ?? {}) });
+          const boundSource = bindCoreSpiritInputValues(token.source, token.declaration, nextInputs);
+          const compiled = compileCoreSpirit(boundSource, token.sourceId);
+          const error = compiled.diagnostics.find((diagnostic) => diagnostic.severity === 'error');
+          if (!compiled.ir || error) throw new Error(error?.message || 'CoreSpirit input/property update failed');
+          activeInputs = nextInputs;
+          activeProps = nextProps;
+          activeMeta = metaWithProps(baseMeta, token.declaration, activeProps);
+          activeIr = compiled.ir;
           runtime.loadIr(activeIr);
-          const result = safeOutputs(runtime.executeIr(activeIr, currentBars).outputs);
-          scene.reset();
-          scene.seed(result);
-          firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
-          lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
-          emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
-          liveStarted = req.mode === 'live';
-        };
-        if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) void loadSecondaryData(true).then(runUpdate); else if (secondaryDependencies.length) void loadSecondaryData();
-        else runUpdate();
+          const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+          if (token.viewportDependent && visibleRange) {
+            runVisibleRange(currentBars, visibleRange);
+            liveStarted = req.mode === 'live' && visibleRangeContainsLatest(currentBars, visibleRange);
+          } else {
+            const result = safeOutputs(runtime.executeIr(activeIr, currentBars).outputs);
+            scene.reset();
+            scene.seed(result);
+            firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
+            lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
+            emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
+            liveStarted = req.mode === 'live';
+          }
+        } catch (error) {
+          handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+        }
       },
-      setVisibleRange() {
-        // CoreSpirit execution remains renderer-neutral and range-insensitive.
+      setVisibleRange(range) {
+        if (stopped) return;
+        visibleRange = range;
+        if (!token.viewportDependent) return;
+        const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+        if (!currentBars.length) return;
+        runVisibleRange(currentBars, range);
+        liveStarted = req.mode === 'live' && visibleRangeContainsLatest(currentBars, range);
       },
       notifyBars(reason, dirtyRange) {
         if (stopped) return;
@@ -531,7 +594,9 @@ export class CoreSpiritVelaEngine {
           }
         }
 
+        if (token.viewportDependent && visibleRange && !visibleRangeContainsLatest(currentBars, visibleRange)) return;
         if (!liveStarted) rehydrateForLive();
+        if (token.viewportDependent && !liveStarted) return;
         if (req.mode==='live' && secondaryDependencies.length) void loadSecondaryData();
         const latest = currentBars.at(-1);
         if (!latest) return;
