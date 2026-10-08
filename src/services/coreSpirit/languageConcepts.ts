@@ -403,7 +403,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       continue;
     }
 
-    const strategy = trimmed.match(/^strategy\\s+(?:"([^"]+)"|'([^']+)')\\s*(?::|\\{)?\\s*$/i);\n    if (strategy) {\n      concepts.add('AUTOMATE');\n      const name = strategy[1] ?? strategy[2] ?? 'Strategy';\n      const declaration = { kind:'indicator' as const, name, role:'strategy' as const, start:offset, end:offset+raw.length };\n      active.push({ kind:'indicator', declaration, indent });\n      offset += raw.length + 1;\n      continue;\n    }\n\n    const strategy = trimmed.match(/^strategy\s+(?:"([^"]+)"|'([^']+)')\s*(?::|\{)?\s*$/i);
+    const strategy = trimmed.match(/^strategy\s+(?:"([^"]+)"|'([^']+)')\s*(?::|\{)?\s*$/i);
     if (strategy) {
       concepts.add('AUTOMATE');
       const name = strategy[1] ?? strategy[2] ?? 'Strategy';
@@ -435,6 +435,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       const declaration = {
         kind: 'indicator' as const,
         name,
+        role: 'indicator' as const,
         start: offset,
         end: offset + raw.length,
       };
