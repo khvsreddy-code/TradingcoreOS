@@ -201,6 +201,7 @@ export class CoreSpiritRuntime {
    * stateful kernels that the dirty graph says are affected by the forming bar.
    */
   private readonly kernelStateSnapshots = new CoreSpiritKernelSnapshotStore<CoreSpiritKernelState>(4);
+  private readonly kernelNodeIdentities = new Map<string, { nodeId:string; inputDependencies:readonly string[] }>();
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
@@ -282,6 +283,7 @@ export class CoreSpiritRuntime {
     this.betaKernels.clear();
     this.trendStrengthKernels.clear();
     this.kernelStateSnapshots.clear();
+    this.kernelNodeIdentities.clear();
     this.resetFusedSeriesCursors();
   }
   getState(options: { clone?: boolean } = {}): CoreSpiritRuntimeState {
@@ -492,10 +494,30 @@ export class CoreSpiritRuntime {
     return `ir${ir.version}:${ir.sourceId}:${ir.graphs?.semantic.checksum ?? 'no-graph'}`;
   }
 
+  private rememberKernelIdentity(
+    family: CoreSpiritKernelState['family'],
+    key: string,
+    callKey: string,
+    fallbackDependencies: readonly string[],
+  ): void {
+    const identityKey = `${family}:${key}`;
+    if (this.kernelNodeIdentities.has(identityKey)) return;
+    const instructionIndex = this.compiledIr?.entry.instructions.findIndex((instruction) =>
+      instruction.op === 'call' && (instruction.callId || instruction.dest) === callKey,
+    ) ?? -1;
+    const node = instructionIndex >= 0 ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
+    this.kernelNodeIdentities.set(identityKey, {
+      nodeId: node?.id ?? `kernel:${family}:${key}`,
+      inputDependencies: Object.freeze([...(node?.inputs?.length ? node.inputs : fallbackDependencies)]),
+    });
+  }
+
   private kernelIdentity(
     family: CoreSpiritKernelState['family'],
     key: string,
   ): { nodeId: string; inputDependencies: readonly string[] } {
+    const remembered = this.kernelNodeIdentities.get(`${family}:${key}`);
+    if (remembered) return remembered;
     const instructionIndex = this.compiledIr?.entry.instructions.findIndex((instruction) =>
       instruction.op === 'call' && (instruction.callId || instruction.dest) === key,
     ) ?? -1;
@@ -561,11 +583,13 @@ export class CoreSpiritRuntime {
       state: T['state'],
     ): void => {
       const identity = this.kernelIdentity(family, key);
-      const snapshot = this.kernelStateSnapshots.latest(identity.nodeId);
-      if (!snapshot || snapshot.barIndex !== barIndex || snapshot.modelVersion !== modelVersion || snapshot.state.family !== family) return;
-      copyCoreSpiritKernelState(
+      this.kernelStateSnapshots.restoreAt(
         { family, state } as T,
-        snapshot.state as T,
+        identity.nodeId,
+        modelVersion,
+        identity.inputDependencies,
+        barIndex,
+        (target, source) => copyCoreSpiritKernelState(target as CoreSpiritKernelState, source as CoreSpiritKernelState),
       );
     };
     for (const [key, cursor] of this.directKernelCursors) restore('direct', key, cursor);
@@ -580,10 +604,14 @@ export class CoreSpiritRuntime {
       const instructionIndex = group?.instructions[0];
       const node = instructionIndex != null ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
       const nodeId = node?.id ?? `kernel:fused:${groupId}`;
-      const snapshot = this.kernelStateSnapshots.latest(nodeId);
-      if (snapshot?.barIndex === barIndex && snapshot.modelVersion === modelVersion && snapshot.state.family === 'fused') {
-        copyCoreSpiritKernelState({ family:'fused', state:cursor }, snapshot.state);
-      }
+      this.kernelStateSnapshots.restoreAt(
+        { family:'fused', state:cursor },
+        nodeId,
+        modelVersion,
+        Object.freeze([...(node?.inputs ?? [])]),
+        barIndex,
+        (target, source) => copyCoreSpiritKernelState(target, source),
+      );
     }
   }
 
@@ -628,7 +656,7 @@ export class CoreSpiritRuntime {
       catch (error) { const message = error instanceof Error ? error.message : String(error); diagnostics.push(`bar ${i}: ${message}`); this.debugHost.record({ kind:'execution-error', barIndex:i, message }); }
       finally { this.profiler.endBar(); }
     }
-    if (bars.length) this.snapshotKernelsForBar(bars.length - 1);
+    if (this.history.length) this.snapshotKernelsForBar(this.history.length - 1);
     return { outputs, state: this.getState(), diagnostics };
   }
 
@@ -716,6 +744,7 @@ export class CoreSpiritRuntime {
     if (binding.stageIndex !== 0) return true;
     const first = instructions[instructionIndex];
     if (!first || first.op !== 'call') return false;
+    this.rememberKernelIdentity('fused', group.id, first.callId || first.dest, first.seriesArgs || []);
     const sourceRaw = values.get(first.args[0]!);
     if (sourceRaw == null) return false;
     const source = Number(sourceRaw);
@@ -999,6 +1028,7 @@ export class CoreSpiritRuntime {
       const x=Number(args[0]), y=Number(args[1]), period=Math.max(2,Math.floor(Number(args[2] ?? 252)));
       if(!Number.isFinite(x)||!Number.isFinite(y))return finish(null);
       const key=`beta:${callKey}:${period}`;
+      this.rememberKernelIdentity('beta', key, callKey, seriesArgs);
       let kernel=this.betaKernels.get(key);
       if(!kernel){kernel=new RollingBetaState(period);this.betaKernels.set(key,kernel);}
       const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
@@ -1008,6 +1038,7 @@ export class CoreSpiritRuntime {
       const value=Number(args[0]), period=Math.max(2,Math.floor(Number(args[1] ?? 50)));
       if(!Number.isFinite(value))return finish(null);
       const key=`trend:${callKey}:${period}`;
+      this.rememberKernelIdentity('trend', key, callKey, seriesArgs);
       let kernel=this.trendStrengthKernels.get(key);
       if(!kernel){kernel=new RollingCorrelationState(period);this.trendStrengthKernels.set(key,kernel);}
       const mode:'append'|'replace'=this.lastBarWasRealtime&&this.realtimeRevision>0?'replace':'append';
@@ -1027,6 +1058,7 @@ export class CoreSpiritRuntime {
       if (!Number.isFinite(current)) return finish(null);
       const operation = { name: name as CoreSpiritSeriesOperationName, length };
       const key = 'direct:' + name + ':' + series + ':' + length;
+      this.rememberKernelIdentity('direct', key, callKey, seriesArgs);
       let cursor = this.directKernelCursors.get(key);
       if (!cursor) {
         cursor = new CoreSpiritFusedSeriesCursor([operation]);
@@ -1038,18 +1070,21 @@ export class CoreSpiritRuntime {
     if(name==='rsi') {
       const current = Number(args[0]); if (!Number.isFinite(current)) return finish(null);
       const key = 'rsi:' + series + ':' + length;
+      this.rememberKernelIdentity('rsi', key, callKey, seriesArgs);
       let kernel = this.rsiKernels.get(key); if (!kernel) { kernel = new RSIState(length); this.rsiKernels.set(key, kernel); }
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(current, mode));
     }
     if(name==='atr') {
       const key = 'atr:' + length;
+      this.rememberKernelIdentity('atr', key, callKey, seriesArgs);
       let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(length); this.atrKernels.set(key, kernel); }
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(Number(bar.high), Number(bar.low), Number(bar.close), mode));
     }
     if(name==='vwap') {
       const key = 'vwap:session';
+      this.rememberKernelIdentity('vwap', key, callKey, seriesArgs);
       let kernel = this.vwapKernels.get(key); if (!kernel) { kernel = new VWAPSessionState(); this.vwapKernels.set(key, kernel); }
       const price = (Number(bar.high) + Number(bar.low) + Number(bar.close)) / 3;
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
