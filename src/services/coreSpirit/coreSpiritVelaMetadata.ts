@@ -19,8 +19,12 @@ function declarations(surface: CoreSpiritSurfaceMetadata) {
   return surface.declarations.filter((item): item is Extract<CoreSpiritSurfaceMetadata['declarations'][number], { kind: 'indicator' }> => item.kind === 'indicator');
 }
 
+function executableDeclarations(surface: CoreSpiritSurfaceMetadata) {
+  return surface.declarations.filter((item): item is Extract<CoreSpiritSurfaceMetadata['declarations'][number], { kind: 'indicator' }> => item.kind === 'indicator' && (item.role === 'indicator' || item.role === 'strategy'));
+}
+
 function surfaceTitle(surface: CoreSpiritSurfaceMetadata, source: string): string {
-  const declaration = declarations(surface)[0];
+  const declaration = executableDeclarations(surface)[0] ?? declarations(surface)[0];
   if (declaration?.name) return declaration.name;
   const match = source.match(/\b(?:indicator|strategy|study|component)\s+(?:"([^"]+)"|'([^']+)')/i);
   return match?.[1] ?? match?.[2] ?? 'CoreSpirit';
