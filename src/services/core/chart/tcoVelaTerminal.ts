@@ -21,7 +21,6 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
     'drawingToolbar',
     'workspaceReplay',
     'panelDock',
-    'bottombar',
   ],
   chartCell:[
     'TCO DataProvider',
@@ -102,7 +101,7 @@ export function createTcoVelaTerminalOptions(
     volume:true,
     watermark:true,
     statusline:true,
-    bottombar:true,
+    bottombar:false,
     autofocus:false,
     persist:'tradingcore-live-vela-v5',
     storage,
