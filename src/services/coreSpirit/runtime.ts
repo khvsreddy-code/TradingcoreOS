@@ -279,9 +279,9 @@ export class CoreSpiritRuntime {
     this.eventRouter.rollbackTransaction();
     this.realtimeTransactionId = undefined;
     this.rsiKernels.clear(); this.atrKernels.clear(); this.vwapKernels.clear();
-    this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
-    this.betaKernels.clear(); this.betaKernelSnapshots.clear();
-    this.trendStrengthKernels.clear(); this.trendStrengthKernelSnapshots.clear();
+    this.betaKernels.clear();
+    this.trendStrengthKernels.clear();
+    this.kernelStateSnapshots.clear();
     this.resetFusedSeriesCursors();
   }
   getState(options: { clone?: boolean } = {}): CoreSpiritRuntimeState {
@@ -445,11 +445,8 @@ export class CoreSpiritRuntime {
     this.stateStore.commitRealtimeTransaction();
     if (this.realtimeTransactionId) this.eventRouter.commitTransaction(this.realtimeTransactionId);
     this.realtimeTransactionId = undefined;
+    this.snapshotKernelsForBar(this.state.barIndex);
     this.currentBarSnapshot = undefined;
-    this.fusedCursorSnapshots.clear();
-    this.directKernelSnapshots.clear();
-    this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
-    this.betaKernelSnapshots.clear(); this.trendStrengthKernelSnapshots.clear();
     this.lastBarWasRealtime = false;
   }
 
@@ -460,9 +457,7 @@ export class CoreSpiritRuntime {
     this.stateStore.rollbackRealtimeTransaction();
     this.eventRouter.rollbackTransaction(this.realtimeEventTransactionId);
     this.realtimeEventTransactionId = undefined;
-    for (const [groupId, snapshot] of this.fusedCursorSnapshots) {
-      this.fusedCursors.set(groupId, snapshot.clone());
-    }
+    this.restoreKernelSnapshotsAtBar(this.currentBarSnapshot.historyLength - 1);
     this.history=this.history.slice(0,this.currentBarSnapshot.historyLength);
     this.columnarHistory.trimTo(this.currentBarSnapshot.historyLength);
     this.state.barIndex=this.history.length-1;
@@ -471,10 +466,6 @@ export class CoreSpiritRuntime {
     this.state.barState={ index:this.state.barIndex,time:this.state.time,isFirst:this.state.barIndex===0,isLast:false,isRealtime:false,isConfirmed:true,revision:0,symbol:this.options.symbol,timeframe:this.options.timeframe,mode:this.executionContext.mode };
     if(this.state.barIndex>=0){ this.executionContext.frame=createCoreSpiritExecutionFrame({timestamp:this.state.time*1000,barIndex:this.state.barIndex,symbol:this.options.symbol,timeframe:this.options.timeframe,timezone:this.timezone,mode:this.executionContext.mode,isRealtime:false,isConfirmed:true,isNewBar:true,revision:0,isFirst:this.state.barIndex===0,isLast:false}); this.executionContext.session=this.executionContext.frame.session; }
     this.currentBarSnapshot=undefined;
-    this.fusedCursorSnapshots.clear();
-    this.directKernelSnapshots.clear();
-    this.rsiKernelSnapshots.clear(); this.atrKernelSnapshots.clear(); this.vwapKernelSnapshots.clear();
-    this.betaKernelSnapshots.clear(); this.trendStrengthKernelSnapshots.clear();
     this.lastBarWasRealtime=false;
     this.realtimeLifecycle='idle';
     this.lastDirtyPlan=undefined;
@@ -591,9 +582,7 @@ export class CoreSpiritRuntime {
   private resetFusedSeriesCursors(): void {
     this.fusedCursors.clear();
     this.fusedGroupById.clear();
-    this.fusedCursorSnapshots.clear();
     this.directKernelCursors.clear();
-    this.directKernelSnapshots.clear();
     if (!this.seriesFusionPlan) return;
     for (const group of this.seriesFusionPlan.groups) {
       this.fusedGroupById.set(group.id, group);
