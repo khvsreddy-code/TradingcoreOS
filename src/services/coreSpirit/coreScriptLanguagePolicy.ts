@@ -92,6 +92,7 @@ const CAPABILITY_ALIASES: Readonly<Record<string, CoreScriptRequiredCapability |
   'execution.route': 'execution.route',
   'execution-routing': 'execution.route',
   'webhooks': 'webhooks',
+  'automation': 'automation',
 });
 
 export function normalizeCoreScriptCapability(value: string): CoreScriptRequiredCapability | undefined {
@@ -162,6 +163,9 @@ export function validateCoreScriptCapabilityRequirements(
   }
   if (/\bwebhook\s*\(/i.test(source)) {
     add('webhooks', 'webhook delivery requires explicit webhooks capability', 'webhook');
+  }
+  if (/\bautomation\.notify\s*\(/i.test(source)) {
+    add('automation', 'automation notifications require explicit automation capability', 'automation.notify');
   }
   if (/\bautomate\s+(?:["'][^"']+["']|[A-Za-z_][A-Za-z0-9_]*)\s*:/i.test(source)) {
     add('automation', 'automation declarations require explicit automation capability', 'automation declaration');
