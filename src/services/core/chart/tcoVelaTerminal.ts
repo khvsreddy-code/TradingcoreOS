@@ -1,6 +1,6 @@
 import type { VelaWorkspaceOptions } from './velaWorkspaceLoader';
-import { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
-import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
+import type { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
+import type { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 
 export type TcoVelaTerminalDependencies = {
   symbol:string;
@@ -95,7 +95,7 @@ export function createTcoVelaTerminalOptions(
     statusline:true,
     bottombar:true,
     autofocus:false,
-    persist:'tradingcore-live-vela-v6',
+    persist:'tradingcore-live-vela-v5',
     storage,
     maxWebglCells:8,
     alertCap:100,
