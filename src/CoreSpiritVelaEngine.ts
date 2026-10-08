@@ -552,7 +552,6 @@ export class CoreSpiritVelaEngine {
           handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
         }
       },
-      },
     };
   }
 }
