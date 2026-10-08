@@ -49,6 +49,8 @@ const contracts = [
   ['vela-incremental-patch', ['src/velaIncrementalPatchContract.test.mjs', false]],
   ['vela-v108-boundary', ['src/velaV108BoundaryContract.test.mjs', false]],
   ['corespirit-vela-full-capability', ['src/coreSpiritVelaCapabilityContract.test.mjs', true]],
+  ['corespirit-live-startup-single-pass', ['src/coreSpiritLiveStartupContract.test.mjs', true]],
+  ['corespirit-kernel-snapshots', ['src/coreSpiritKernelSnapshotContract.test.mjs', true]],
 
   ['vela-fyers-motion', ['src/velaFyers5kMotionContract.test.mjs', false]],
   ['vela-workspace-ux', ['src/velaTcoWorkspaceUxContract.test.mjs', false]],
