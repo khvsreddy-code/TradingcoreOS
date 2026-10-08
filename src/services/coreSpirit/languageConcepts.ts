@@ -20,6 +20,43 @@ export type CoreSpiritLanguageConcept = typeof CORE_SPIRIT_LANGUAGE_CONCEPTS[num
 
 export type CoreSpiritSurfaceInputType = 'int'|'float'|'bool'|'string'|'source'|'color'|'price'|'time'|'session'|'timeframe'|'symbol'|'text_area';
 export type CoreSpiritSurfaceLiteral = number|string|boolean;
+export type CoreSpiritSurfaceCapability =
+  | 'market.tick'
+  | 'order.fill'
+  | 'position.update'
+  | 'risk.evaluate'
+  | 'execution.route'
+  | 'webhooks';
+
+export const CORE_SPIRIT_SURFACE_CAPABILITIES = Object.freeze([
+  'market.tick','order.fill','position.update','risk.evaluate','execution.route','webhooks',
+] as const);
+
+function normalizeSurfaceCapability(value:string):CoreSpiritSurfaceCapability|undefined {
+  const normalized=value.trim().toLowerCase();
+  if((CORE_SPIRIT_SURFACE_CAPABILITIES as readonly string[]).includes(normalized)) return normalized as CoreSpiritSurfaceCapability;
+  if(normalized==='market-events')return 'market.tick';
+  if(normalized==='order-events')return 'order.fill';
+  if(normalized==='position-events')return 'position.update';
+  if(normalized==='risk')return 'risk.evaluate';
+  if(normalized==='execution-routing')return 'execution.route';
+  return undefined;
+}
+
+export function parseCoreSpiritCapabilityRequirement(line:string):CoreSpiritSurfaceCapability[]|undefined {
+  const match=line.trim().match(/^requires\s+(.+?)\s*;?$/i);
+  if(!match)return undefined;
+  const values=match[1]!.split(',').map(value=>value.trim()).filter(Boolean);
+  if(!values.length)throw new Error('CoreScript requires at least one capability.');
+  const out:CoreSpiritSurfaceCapability[]=[];
+  for(const value of values){
+    const capability=normalizeSurfaceCapability(value);
+    if(!capability)throw new Error(`Unknown CoreScript capability '${value}'. Valid capabilities: ${CORE_SPIRIT_SURFACE_CAPABILITIES.join(', ')}.`);
+    if(!out.includes(capability))out.push(capability);
+  }
+  return out;
+}
+
 
 export type CoreSpiritSurfaceInput = {
   key:string;
@@ -214,6 +251,7 @@ export type CoreSpiritSurfaceMetadata = {
   eventRoutes?: CoreSpiritEventRoute[];
   inputs?: CoreSpiritSurfaceInput[];
   props?: CoreSpiritSurfaceProp[];
+  requiredCapabilities?: CoreSpiritSurfaceCapability[];
   composition?: CoreSpiritCompositionMetadata;
 };
 
@@ -258,6 +296,7 @@ export function makeCoreSpiritSurfaceMetadata(
   eventRoutes: CoreSpiritEventRoute[] = [],
   inputs: CoreSpiritSurfaceInput[] = [],
   props: CoreSpiritSurfaceProp[] = [],
+  requiredCapabilities: CoreSpiritSurfaceCapability[] = [],
 ): CoreSpiritSurfaceMetadata {
   const ordered = CORE_SPIRIT_LANGUAGE_CONCEPTS.filter(concept => Array.from(concepts).includes(concept));
   const unique = [...new Set(ordered)];
@@ -268,6 +307,7 @@ export function makeCoreSpiritSurfaceMetadata(
     concepts: unique,
     ...(inputs.length ? { inputs: inputs.map(input => ({ ...input, ...(input.options ? { options:[...input.options] } : {}) })) } : {}),
     ...(props.length ? { props: props.map(prop => ({ ...prop, ...(prop.options ? { options:[...prop.options] } : {}) })) } : {}),
+    ...(requiredCapabilities.length ? { requiredCapabilities:[...new Set(requiredCapabilities)] } : {}),
     declarations: declarations.map(declaration => ({
       ...declaration,
       ...(declaration.kind === 'model' ? {
@@ -353,6 +393,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
   const active: Active[] = [];
   const surfaceInputs: CoreSpiritSurfaceInput[] = [];
   const surfaceProps: CoreSpiritSurfaceProp[] = [];
+  const requiredCapabilities = new Set<CoreSpiritSurfaceCapability>();
 
   const finishToIndent = (indent: number, offset: number) => {
     while (active.length && indent <= active[active.length - 1].indent) {
@@ -366,6 +407,10 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
   for (const raw of lines) {
     const trimmed = raw.trim();
     const indent = lineIndent(raw);
+    if (indent === 0) {
+      const capabilities = parseCoreSpiritCapabilityRequirement(trimmed);
+      if (capabilities) { for (const capability of capabilities) requiredCapabilities.add(capability); offset += raw.length + 1; continue; }
+    }
     // Blank/comment lines never close an indentation-based declaration.
     if (!trimmed || trimmed.startsWith('//')) {
       offset += raw.length + 1;
@@ -640,5 +685,5 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       });
     }
   }
-  return makeCoreSpiritSurfaceMetadata(concepts, declarations, mergedEventRoutes, surfaceInputs, surfaceProps);
+  return makeCoreSpiritSurfaceMetadata(concepts, declarations, mergedEventRoutes, surfaceInputs, surfaceProps, [...requiredCapabilities]);
 }
