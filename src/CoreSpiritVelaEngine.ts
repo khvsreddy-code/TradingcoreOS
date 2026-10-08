@@ -1,6 +1,7 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel.ts';
-import type { InputValue } from './services/core/chart/velaNativeChartKernel.ts';
+import type { InputSchema, InputValue } from './services/core/chart/velaNativeChartKernel.ts';
 import type { IndicatorMeta } from './services/core/chart/velaNativeChartKernel.ts';
+import { bindCoreSpiritInputValues, parseCoreSpiritScriptDeclaration, type CoreSpiritDeclarationField, type CoreSpiritScriptDeclaration } from './services/coreSpirit/velaDeclarationSurface.ts';
 import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
@@ -14,6 +15,8 @@ type DirtyRange = { from: number; to: number };
 type PreparedToken = {
   sourceId: string;
   source: string;
+  declaration: CoreSpiritScriptDeclaration;
+  viewportDependent: boolean;
   ir: NonNullable<ReturnType<typeof compileCoreSpirit>['ir']>;
 };
 
@@ -85,7 +88,7 @@ function upperBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: numbe
 }
 
 function titleFromSource(source: string): string {
-  const match = source.match(/\b(?:indicator|study|component)\s+["']([^"']+)["']/i);
+  const match = source.match(/\b(?:indicator|strategy|study|component)\s+["']([^"']+)["']/i);
   if (match?.[1]) return match[1].trim();
   return 'CoreSpirit';
 }
@@ -117,31 +120,113 @@ function timeframeDurationMs(timeframe:string):number{
   }
 }
 
+function velaInputType(typeName: string | undefined, value: CoreSpiritDeclarationField['defval']): InputSchema['type'] {
+  const type = String(typeName ?? '').toLowerCase();
+  if (type === 'int') return 'int';
+  if (type === 'float' || type === 'number') return 'float';
+  if (type === 'boolean' || type === 'bool') return 'bool';
+  if (type === 'color') return 'color';
+  if (type === 'price') return 'price';
+  if (type === 'time') return 'time';
+  if (type === 'session') return 'session';
+  if (type === 'timeframe') return 'timeframe';
+  if (type === 'symbol') return 'symbol';
+  if (type === 'text_area') return 'text_area';
+  if (typeof value === 'boolean') return 'bool';
+  if (typeof value === 'number') return Number.isInteger(value) ? 'int' : 'float';
+  return 'string';
+}
+
+function toVelaSchema(fields: readonly CoreSpiritDeclarationField[]): InputSchema[] {
+  return fields.map((field) => ({
+    key: field.key,
+    title: field.title ?? field.key,
+    type: velaInputType(field.typeName, field.defval),
+    defval: field.defval,
+    ...(field.min != null ? { min: field.min } : {}),
+    ...(field.max != null ? { max: field.max } : {}),
+    ...(field.step != null ? { step: field.step } : {}),
+    ...(field.options ? { options: field.options } : {}),
+    ...(field.group ? { group: field.group } : {}),
+    ...(field.inline ? { inline: field.inline } : {}),
+    ...(field.tab ? { tab: field.tab } : {}),
+    ...(field.tooltip ? { tooltip: field.tooltip } : {}),
+  }));
+}
+
+function resolveSchemaValues(schema: readonly InputSchema[], supplied: Readonly<Record<string, InputValue>> | undefined): Record<string, InputValue> {
+  const values: Record<string, InputValue> = {};
+  for (const field of schema) {
+    const candidate = supplied?.[field.key] ?? field.defval;
+    if (field.type === 'int' || field.type === 'float' || field.type === 'price' || field.type === 'time') {
+      const numeric = Number(candidate);
+      if (!Number.isFinite(numeric)) throw new Error(`CoreSpirit setting "${field.key}" must be finite.`);
+      const normalized = field.type === 'int' ? Math.trunc(numeric) : numeric;
+      values[field.key] = Math.min(field.max ?? normalized, Math.max(field.min ?? normalized, normalized));
+    } else if (field.type === 'bool') {
+      if (typeof candidate !== 'boolean') throw new Error(`CoreSpirit setting "${field.key}" must be boolean.`);
+      values[field.key] = candidate;
+    } else {
+      const value = String(candidate);
+      if (field.options?.length && !field.options.includes(value)) throw new Error(`CoreSpirit setting "${field.key}" must be one of: ${field.options.join(', ')}.`);
+      values[field.key] = value;
+    }
+  }
+  return values;
+}
+
+function metaWithProps(base: IndicatorMeta, declaration: CoreSpiritScriptDeclaration, props: Readonly<Record<string, InputValue>>): IndicatorMeta {
+  const title = typeof props.title === 'string' && props.title.trim() ? props.title : (base.title || declaration.name);
+  const shorttitle = typeof props.shorttitle === 'string' && props.shorttitle.trim() ? props.shorttitle : undefined;
+  const overlay = typeof props.overlay === 'boolean' ? props.overlay : base.overlay;
+  const precisionValue = Number(props.precision);
+  const precision = Number.isFinite(precisionValue) ? Math.max(0, Math.min(16, Math.trunc(precisionValue))) : base.precision;
+  const format = typeof props.format === 'string' && props.format.trim() ? props.format : base.format;
+  return { title, ...(shorttitle ? { shorttitle } : {}), overlay, ...(precision != null ? { precision } : {}), ...(format ? { format } : {}) };
+}
+
+function inferViewportDependency(source: string): boolean {
+  return /@viewport\b|@visibleRange\b|chart\.(?:left|right)_visible_(?:bar_time|bar_index|time)|\b(?:viewport|visibleRange|visible_range|vpvr|volumeProfile)\s*\(/i.test(source);
+}
+
 export class CoreSpiritVelaEngine {
   readonly language = 'corespirit';
 
   readonly capabilities: EngineCapabilities = {
     streaming: true,
-    visibleRange: false,
-    inputs: false,
-    props: false,
+    visibleRange: true,
+    inputs: true,
+    props: true,
   };
 
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
     const normalized = normalizeCoreSpirit(source);
-    const compiled = compileCoreSpirit(source, instanceId);
+    const declaration = parseCoreSpiritScriptDeclaration(source) ?? {
+      kind: 'indicator' as const,
+      name: titleFromSource(source),
+      inputs: [],
+      props: [],
+    };
+    const inputs = toVelaSchema(declaration.inputs);
+    const props = toVelaSchema(declaration.props);
+    const defaults = Object.fromEntries(declaration.inputs.map((field) => [field.key, field.defval])) as Record<string, InputValue>;
+    const boundSource = bindCoreSpiritInputValues(normalized, declaration, defaults);
+    const compiled = compileCoreSpirit(boundSource, instanceId);
     const error = compiled.diagnostics?.find(diagnostic => diagnostic.severity === 'error');
     if (!compiled.ir || error) throw new Error(error?.message || 'CoreSpirit compilation failed');
 
-    const meta: IndicatorMeta = { title: titleFromSource(normalized), overlay: true };
-    const token: PreparedToken = { sourceId: instanceId, source: normalized, ir: compiled.ir };
+    const baseMeta: IndicatorMeta = { title: declaration.name || titleFromSource(source), overlay: true };
+    const defaultProps = resolveSchemaValues(props, undefined);
+    const meta = metaWithProps(baseMeta, declaration, defaultProps);
+    const viewportDependent = inferViewportDependency(source);
+    const token: PreparedToken = { sourceId: instanceId, source: normalized, declaration, viewportDependent, ir: compiled.ir };
 
     return {
       language: this.language,
-      inputs: [],
-      props: [],
+      inputs,
+      props,
       meta,
-      reactsToViewport: false,
+      reactsToViewport: viewportDependent,
       maxLookback: compiled.ir.maxLookback,
       token,
     };
@@ -150,13 +235,19 @@ export class CoreSpiritVelaEngine {
   execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
     const token = req.prepared.token as PreparedToken;
     const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
+    let activeInputs = resolveSchemaValues(req.prepared.inputs, req.inputs);
+    let activeProps = resolveSchemaValues(req.prepared.props ?? [], req.props);
+    const baseMeta: IndicatorMeta = { title: token.declaration.name || titleFromSource(token.source), overlay: true };
+    let activeMeta = metaWithProps(baseMeta, token.declaration, activeProps);
+    let activeIr = activeIr;
+    let visibleRange = req.visibleRange ?? null;
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryRefreshPromise: Promise<void>|undefined;
     let secondaryLastRefreshAt=0;
     let secondaryDegraded=false;
     const secondaryFailed = new Set<string>();
     const secondaryWarnings:string[]=[];
-    const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
+    const dataDependencies = activeIr.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
       dataDependencies
         .filter(dep => dep.symbol !== 'current' && !(dep.symbol === req.market.symbol && (dep.timeframe === 'chart' || dep.timeframe === req.market.timeframe)))
@@ -221,7 +312,7 @@ export class CoreSpiritVelaEngine {
       if (!force && now-secondaryLastRefreshAt<1500) return;
       const latestBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
       const endTime=latestBars.length?barTimeMillis(latestBars[latestBars.length-1]?.timestamp):undefined;
-      const limit=Math.min(50000,Math.max(5000,latestBars.length+token.ir.maxLookback+64));
+      const limit=Math.min(50000,Math.max(5000,latestBars.length+activeIr.maxLookback+64));
       const task=Promise.all(secondaryDependencies.map(async dep=>{
         const key=dependencyKey(dep.symbol,dep.timeframe);
         try{
@@ -268,7 +359,7 @@ export class CoreSpiritVelaEngine {
       executionTier: 'optimized',
       dataResolver,
     });
-    runtime.loadIr(token.ir);
+    runtime.loadIr(activeIr);
 
     const scene = new CoreSpiritSceneDiff(token.sourceId);
     let stopped = false;
@@ -309,7 +400,7 @@ export class CoreSpiritVelaEngine {
     const initialRun = (): void => {
       if (stopped) return;
       try {
-        const initial = safeOutputs(runtime.executeIr(token.ir, bars).outputs);
+        const initial = safeOutputs(runtime.executeIr(activeIr, bars).outputs);
         scene.seed(initial);
         firstSeriesTime = bars.length ? barTimeMillis(bars[0]?.timestamp) : Number.NaN;
         lastTime = bars.length ? barTimeMillis(bars.at(-1)?.timestamp) : Number.NaN;
@@ -331,11 +422,11 @@ export class CoreSpiritVelaEngine {
       const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
       if (!currentBars.length || liveStarted) return;
 
-      runtime.loadIr(token.ir);
+      runtime.loadIr(activeIr);
       const historical = currentBars.slice(0, -1);
       scene.reset();
       if (historical.length) {
-        const warm = safeOutputs(runtime.executeIr(token.ir, historical).outputs);
+        const warm = safeOutputs(runtime.executeIr(activeIr, historical).outputs);
         scene.seed(warm);
       }
 
@@ -381,8 +472,8 @@ export class CoreSpiritVelaEngine {
         if (stopped) return;
         const runUpdate = (): void => {
           const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
-          runtime.loadIr(token.ir);
-          const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
+          runtime.loadIr(activeIr);
+          const result = safeOutputs(runtime.executeIr(activeIr, currentBars).outputs);
           scene.reset();
           scene.seed(result);
           firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
@@ -403,8 +494,8 @@ export class CoreSpiritVelaEngine {
 
         if (reason === 'complete') {
           const runComplete = (): void => {
-            runtime.loadIr(token.ir);
-            const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
+            runtime.loadIr(activeIr);
+            const result = safeOutputs(runtime.executeIr(activeIr, currentBars).outputs);
             scene.reset();
             scene.seed(result);
             firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
@@ -420,7 +511,7 @@ export class CoreSpiritVelaEngine {
         if (reason === 'backfill' && dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
           const start = lowerBoundBarTime(currentBars, dirtyRange.from);
           const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirtyRange.to));
-          const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
+          const maxLookback = Math.max(0, Number(activeIr.maxLookback) || 0);
           const executionStart = Math.max(0, start - maxLookback);
           const rangeBars = currentBars.slice(executionStart, end);
           if (rangeBars.length) {
@@ -433,8 +524,8 @@ export class CoreSpiritVelaEngine {
               executionTier: 'optimized',
               dataResolver,
             });
-            rangeRuntime.loadIr(token.ir);
-            const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
+            rangeRuntime.loadIr(activeIr);
+            const rangeResult = safeOutputs(rangeRuntime.executeIr(activeIr, rangeBars).outputs);
             emitScenePatches(rangeResult, dirtyRange);
             return;
           }
