@@ -46,10 +46,16 @@ assert.ok(snapshot.inputDependencies.length >= 1);
 assert.ok(snapshot.inputDependencies.includes('close'));
 
 const cursorUpdate = CoreSpiritFusedSeriesCursor.prototype.update;
+const cursorCopyFrom = CoreSpiritFusedSeriesCursor.prototype.copyFrom;
 let formingKernelUpdates = 0;
+let kernelRestores = 0;
 CoreSpiritFusedSeriesCursor.prototype.update = function (...args) {
   formingKernelUpdates += 1;
   return cursorUpdate.apply(this, args);
+};
+CoreSpiritFusedSeriesCursor.prototype.copyFrom = function (...args) {
+  kernelRestores += 1;
+  return cursorCopyFrom.apply(this, args);
 };
 
 try {
@@ -63,12 +69,14 @@ try {
   assert.equal(runtime.getExecutionFrame().revision, 1);
   assert.ok(secondRevision.outputs.some((item) => item.kind === 'series'));
   assert.ok(formingKernelUpdates >= updatesAfterFirstRevision, 'forming revision did not execute its affected kernel');
+  assert.ok(kernelRestores >= 1, 'same-bar revision did not restore a confirmed kernel snapshot');
 
   const restored = runtime.getKernelStateSnapshot(snapshot.nodeId, snapshot.barIndex);
   assert.ok(restored, 'confirmed snapshot was lost after intrabar revisions');
   assert.equal(restored?.barIndex, history.length - 1);
 } finally {
   CoreSpiritFusedSeriesCursor.prototype.update = cursorUpdate;
+  CoreSpiritFusedSeriesCursor.prototype.copyFrom = cursorCopyFrom;
 }
 
 const afterRevisionSnapshots = runtime.getKernelStateSnapshots();
