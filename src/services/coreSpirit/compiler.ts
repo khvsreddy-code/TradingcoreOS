@@ -26,6 +26,7 @@ import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
+import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 export type CoreSpiritCompilerOptions = {
@@ -385,34 +386,71 @@ export class CoreSpiritCompiler {
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
       const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
       const researchPlan = buildCoreSpiritResearchPlan(options.researchSource ?? options.artifactContext?.source ?? '', surface);
-      const authoringLevel = inferCoreSpiritAuthoringLevel({
-        model: researchPlan.models.length > 0 || semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output'),
-        multiSymbol: tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1,
-        research: researchPlan.backtests.length > 0 || researchPlan.modelSpecs.length > 0,
-        strategy: layer === 'strategy' || semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent'),
-        automation: layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation'),
-        orderIntent: semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent'),
+      const capabilityCheck = validateCoreScriptCapabilityRequirements(options.researchSource ?? options.artifactContext?.source ?? '', surface);
+      const sourceText = options.researchSource ?? options.artifactContext?.source ?? '';
+      const hasModel = researchPlan.models.length > 0 || semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output');
+      const hasResearch = researchPlan.backtests.length > 0 || researchPlan.modelSpecs.length > 0;
+      const hasMatrix = /\b(?:matrix|matrix<)/i.test(sourceText);
+      const hasTensor = /\b(?:tensor|tensor<)/i.test(sourceText);
+      const hasMultiSymbol = tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1;
+      const hasMultiTimeframe = /(?:\.timeframe\s*\(|\btimeframe\s*\()/i.test(sourceText) || tradingNativePlan.dataDependencies.some(dep => dep.timeframe !== 'chart');
+      const hasSystemEvent = /\bon\s+(?:market\.tick|order\.fill|position\.update)\b/i.test(sourceText);
+      const hasAutomation = layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation') || /\bautomate\s+/i.test(sourceText);
+      const hasOrderIntent = semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent');
+      const languageFeatures:CoreScriptLanguageFeature[] = ['beginner'];
+      if (hasMultiSymbol) languageFeatures.push('trader','multi-symbol');
+      if (hasMultiTimeframe) languageFeatures.push('trader','multi-timeframe');
+      if (hasModel) languageFeatures.push('quant','models');
+      if (hasResearch) languageFeatures.push('quant','research');
+      if (hasMatrix) languageFeatures.push('quant','matrix');
+      if (hasTensor) languageFeatures.push('quant','tensor');
+      if (hasOrderIntent) languageFeatures.push('trader','order-intent');
+      if (hasSystemEvent) languageFeatures.push('system','system-events');
+      if (hasAutomation) languageFeatures.push('system','automation');
+      const authoringLevel = inferCoreScriptLevel({
+        baseLevel: inferCoreSpiritAuthoringLevel({
+          model:hasModel,
+          multiSymbol:hasMultiSymbol,
+          research:hasResearch,
+          strategy:layer === 'strategy' || hasOrderIntent,
+          automation:hasAutomation,
+          orderIntent:hasOrderIntent,
+        }),
+        hasModel, hasResearch, hasMatrix, hasTensor, hasMultiSymbol, hasMultiTimeframe, hasSystemEvent, hasAutomation, hasOrderIntent,
       });
+      const requiredCapabilities = Object.freeze([...new Set(capabilityCheck.requirements.map(item => item.capability))]);
       const languageCapabilities = Object.freeze([...new Set([
         'core',
+        ...(hasMultiSymbol ? ['multi-symbol'] : []),
+        ...(hasMultiTimeframe ? ['multi-timeframe'] : []),
+        ...(hasModel ? ['models','predictions'] : []),
+        ...(hasResearch ? ['research','backtest'] : []),
+        ...(hasMatrix ? ['matrix','linear-algebra'] : []),
+        ...(hasTensor ? ['tensor'] : []),
+        ...(hasOrderIntent ? ['strategy','order-intents'] : []),
+        ...(hasSystemEvent ? ['events','system-events'] : []),
+        ...(hasAutomation ? ['automation'] : []),
         ...(semanticDependencyGraph.nodes.some(node => node.kind === 'data-source') ? ['market-data'] : []),
-        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output') ? ['models','predictions'] : []),
-        ...(researchPlan.backtests.length || researchPlan.modelSpecs.length ? ['research','backtest'] : []),
-        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent') ? ['strategy','order-intents'] : []),
-        ...(semanticDependencyGraph.nodes.some(node => node.kind === 'event' || node.kind === 'automation') ? ['events','automation'] : []),
         ...(semanticDependencyGraph.nodes.some(node => node.kind === 'visual') ? ['visualization'] : []),
-        ...(tradingNativePlan.multiSymbol ? ['multi-symbol'] : []),
       ])]);
       const repaintSafety = analyzeCoreSpiritRepaintSafety(ast);
       const repaintDiagnostics = [
         ...repaintSafety.warnings.map(message => ({severity:'warning' as const,message,code:'REPAINT_SAFETY'})),
         ...repaintSafety.errors.map(message => ({severity:'error' as const,message,code:'REPAINT_SAFETY_ASSERTION'})),
       ];
-      const allDiagnostics = [...stageDiagnostics,...repaintDiagnostics];
+      const capabilityDiagnostics = capabilityCheck.errors.map(message => ({ severity:'error' as const, message, code:'CAPABILITY_REQUIRED' }));
+      const allDiagnostics = [...stageDiagnostics,...capabilityDiagnostics,...repaintDiagnostics];
       if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
       const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const uniqueLanguageFeatures = Object.freeze([...new Set(languageFeatures)]);
+      const languagePolicy = buildCoreScriptLanguagePolicy({
+        level:authoringLevel,
+        features:uniqueLanguageFeatures,
+        requiredCapabilities,
+        capabilityRequirements:capabilityCheck.requirements,
+      });
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements:capabilityCheck.requirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {

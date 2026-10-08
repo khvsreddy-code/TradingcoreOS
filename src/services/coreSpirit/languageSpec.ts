@@ -6,9 +6,20 @@
  * then converge through the same lexer/parser/type-system/compiler/runtime path. Renderer/broker concerns are not part of the language core.
  */
 export const CORE_SPIRIT_V1_SURFACE = Object.freeze({
+  language: 'CoreScript' as const,
+  languageVersion: 1 as const,
+  languageModel: 'one language with progressive authoring levels' as const,
+  capabilityDeclaration: 'requires <capability>[, <capability>...]' as const,
   userConcepts: Object.freeze(['DATA', 'LET', 'WHEN', 'SHOW', 'MODEL', 'AUTOMATE'] as const),
   statements: Object.freeze(['let', 'if', 'else', 'type', 'on', ':='] as const),
   authoringLevels: Object.freeze(['beginner', 'trader', 'quant', 'system'] as const),
+  levelSemantics: Object.freeze({
+    beginner: 'readable indicator authoring over DATA / LET / WHEN / SHOW',
+    trader: 'strategy, risk arithmetic, multi-symbol and multi-timeframe composition',
+    quant: 'typed research, matrix/tensor/statistics, models, predictions and fitting surfaces',
+    system: 'host events, automation and execution routing guarded by explicit capabilities',
+  } as const),
+  systemCapabilities: Object.freeze(['market.tick','order.fill','position.update','risk.evaluate','execution.route','webhooks','automation'] as const),
   namespaces: Object.freeze([
     'core', 'ta', 'stats', 'math', 'probability', 'regime', 'market', 'orderflow',
     'strategy', 'portfolio', 'risk', 'model', 'ml', 'prediction', 'automation', 'events',

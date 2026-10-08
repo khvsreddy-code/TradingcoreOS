@@ -12,6 +12,7 @@ import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisual
 import type { CoreSpiritResearchPlan } from './researchSurface';
 import type { CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 import type { CoreSpiritSemanticType } from './semanticTypeSystem';
+import type { CoreScriptLanguageFeature, CoreScriptRequiredCapability, CoreScriptCapabilityRequirement, CoreScriptLanguagePolicy } from './coreScriptLanguagePolicy';
 
 export type CoreSpiritIrValueType = 'number' | 'boolean' | 'string' | 'null' | 'unknown';
 export type CoreSpiritIrValue = { kind:'const'; value:number|string|boolean|null } | { kind:'series'; name:string; offset:number } | { kind:'local'; name:string };
@@ -86,6 +87,12 @@ export type CoreSpiritIrProgram = {
   researchPlan?:CoreSpiritResearchPlan;
   authoringLevel?:CoreSpiritAuthoringLevel;
   languageCapabilities?: readonly string[];
+  languageFeatures?: readonly CoreScriptLanguageFeature[];
+  requiredCapabilities?: readonly CoreScriptRequiredCapability[];
+  capabilityRequirements?: readonly CoreScriptCapabilityRequirement[];
+  languagePolicy?: CoreScriptLanguagePolicy;
+  language?: 'CoreScript';
+  languageVersion?: 1;
   /** Inferred semantic facts retained on the executable artifact for advanced inspection. */
   semanticEnvironment?: Readonly<Record<string, CoreSpiritSemanticType>>;
   compilerPipeline?:CoreSpiritCompilerPipelineTrace;

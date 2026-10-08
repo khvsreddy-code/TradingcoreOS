@@ -17,6 +17,7 @@ const contracts = [
   ['optimized-execution', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
   ['authoring-levels', ['src/coreSpiritAuthoringLevelsContract.test.mjs', true]],
   ['unified-language', ['src/coreSpiritUnifiedLanguageContract.test.mjs', true]],
+  ['corescript-progressive-unified-language', ['src/coreScriptProgressiveLanguageContract.test.mjs', true]],
   ['architecture-consolidation', ['src/architectureConsolidationGuard.test.mjs', false]],
   ['corespirit-broker-boundary', ['src/coreSpiritBrokerBoundaryContract.test.mjs', false]],
   ['broker-launch-workspace', ['src/brokerLaunchWorkspaceContract.test.mjs', false]],
