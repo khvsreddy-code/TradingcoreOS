@@ -54,7 +54,7 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     clone: (state: TState) => TState,
   ): CoreSpiritKernelSnapshot<TState> {
     if (!metadata.nodeId.trim()) throw new Error('CoreSpirit kernel snapshot nodeId is required.');
-    if (!Number.isInteger(metadata.barIndex) || metadata.barIndex < 0) throw new Error('CoreSpirit kernel snapshot barIndex is invalid.');
+    if (!Number.isInteger(metadata.barIndex) || metadata.barIndex < -1) throw new Error('CoreSpirit kernel snapshot barIndex is invalid.');
     if (!Number.isInteger(metadata.revision) || metadata.revision < 0) throw new Error('CoreSpirit kernel snapshot revision is invalid.');
     if (!metadata.modelVersion.trim()) throw new Error('CoreSpirit kernel snapshot modelVersion is required.');
 
