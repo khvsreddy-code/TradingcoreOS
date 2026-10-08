@@ -10,7 +10,8 @@ export type CoreScriptRequiredCapability =
   | 'position.update'
   | 'risk.evaluate'
   | 'execution.route'
-  | 'webhooks';
+  | 'webhooks'
+  | 'automation';
 
 export const CORE_SCRIPT_REQUIRED_CAPABILITIES = Object.freeze([
   'market.tick',
@@ -160,6 +161,9 @@ export function validateCoreScriptCapabilityRequirements(
   }
   if (/\bwebhook\s*\(/i.test(source)) {
     add('webhooks', 'webhook delivery requires explicit webhooks capability', 'webhook');
+  }
+  if (/\bautomate\s+(?:["'][^"']+["']|[A-Za-z_][A-Za-z0-9_]*)\s*:/i.test(source)) {
+    add('automation', 'automation declarations require explicit automation capability', 'automation declaration');
   }
 
   const uniqueRequirements = [...new Map(requirements.map(item => [item.capability, item])).values()];
