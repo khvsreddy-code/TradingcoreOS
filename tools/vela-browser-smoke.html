@@ -15,18 +15,19 @@
     <h1 style="position:absolute;left:-10000px">TradingCore Vela Browser Smoke</h1>
     <div id="chart" data-tco-vela-smoke="boot" aria-label="TradingCoreOS Vela browser smoke chart"></div>
   </main>
-  <script type="module">
-    import { Vela } from '/src/services/core/chart/velaChartFacade.ts';
-
-    const host = document.querySelector('#chart');
-    const initial = {
-      phase: 'boot',
+  <script>
+    window.__TCO_VELA_SMOKE__ = {
+      phase: 'loading-module',
       bars: 0,
       canvasCount: 0,
       historyComplete: false,
       nativeIndicator: null,
       error: null,
     };
+  </script>
+  <script type="module">
+    const host = document.querySelector('#chart');
+    const initial = window.__TCO_VELA_SMOKE__;
 
     function publish(patch) {
       const previous = window.__TCO_VELA_SMOKE__ || initial;
@@ -66,6 +67,8 @@
     }
 
     try {
+      const { Vela } = await import('/src/services/core/chart/velaChartFacade.ts');
+      publish({ phase: 'boot' });
       const bars = makeBars();
       const chart = new Vela(host, {
         data: bars,
