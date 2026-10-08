@@ -352,7 +352,8 @@ export class CoreSpiritRuntime {
       this.stateStore.beginRealtimeTransaction();
       this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
       this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
-      this.restoreKernelSnapshotsAtBar(this.history.length - 1);
+      const confirmedBarIndex = this.currentBarSnapshot ? this.currentBarSnapshot.historyLength - 1 : this.history.length - 1;
+      this.restoreKernelSnapshotsAtBar(confirmedBarIndex);
       this.history[this.history.length - 1] = normalized;
       this.columnarHistory.replaceLast(normalized);
     } else {
