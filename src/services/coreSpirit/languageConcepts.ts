@@ -18,6 +18,123 @@ export const CORE_SPIRIT_LANGUAGE_CONCEPTS = Object.freeze([
 
 export type CoreSpiritLanguageConcept = typeof CORE_SPIRIT_LANGUAGE_CONCEPTS[number];
 
+export type CoreSpiritSurfaceInputType = 'int'|'float'|'bool'|'string'|'source'|'color'|'price'|'time'|'session'|'timeframe'|'symbol'|'text_area';
+export type CoreSpiritSurfaceLiteral = number|string|boolean;
+
+export type CoreSpiritSurfaceInput = {
+  key:string;
+  title:string;
+  type:CoreSpiritSurfaceInputType;
+  defval:CoreSpiritSurfaceLiteral;
+  min?:number;
+  max?:number;
+  step?:number;
+  options?:string[];
+  group?:string;
+  inline?:string;
+  tab?:string;
+  tooltip?:string;
+  start:number;
+  end:number;
+};
+
+export type CoreSpiritSurfaceProp = CoreSpiritSurfaceInput & { property:string };
+
+const KNOWN_INPUT_ATTRIBUTES = new Set(['min','max','step','title','group','inline','tab','tooltip','options']);
+const CORESPIRIT_PROP_DEFINITIONS: Readonly<Record<string,{ key:string; type:CoreSpiritSurfaceInputType; min?:number; max?:number; defval?:CoreSpiritSurfaceLiteral }>> = Object.freeze({
+  title:{key:'title',type:'string'}, shorttitle:{key:'shorttitle',type:'string'},
+  overlay:{key:'overlay',type:'bool'}, precision:{key:'precision',type:'int',min:0,max:16}, format:{key:'format',type:'string'},
+  initialCapital:{key:'initialCapital',type:'float',min:0}, initial_capital:{key:'initialCapital',type:'float',min:0},
+  commission:{key:'commission',type:'float',min:0}, slippage:{key:'slippage',type:'float',min:0},
+  pyramiding:{key:'pyramiding',type:'int',min:0,max:100}, processOrdersOnClose:{key:'processOrdersOnClose',type:'bool'},
+});
+
+function prettySurfaceKey(key:string):string { return key.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[_-]+/g,' ').replace(/\\s+/g,' ').trim().replace(/(^|\\s)\\w/g,m=>m.toUpperCase()); }
+
+function parseSurfaceLiteral(value:string):CoreSpiritSurfaceLiteral {
+  const raw=value.trim();
+  if(/^[-+]?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?$/.test(raw)){const n=Number(raw);if(!Number.isFinite(n))throw new Error('CoreSpirit input/property literal is not finite.');return n;}
+  if(raw==='true')return true;
+  if(raw==='false')return false;
+  if((raw.startsWith('"')&&raw.endsWith('"'))||(raw.startsWith("'")&&raw.endsWith("'"))){
+    const q=raw.slice(1,-1); return q.replace(/\\\\([\\\\"'nrt])/g,(_m,e)=>e==='n'?'\\n':e==='r'?'\\r':e==='t'?'\\t':e);
+  }
+  throw new Error('CoreSpirit input/property defaults must be numeric, boolean, or quoted strings.');
+}
+
+function scanSurfaceAttributes(text:string):{base:string;attrs:Record<string,string>} {
+  const attrs:Record<string,string>={};
+  let depth=0; let quote:'"'|"'"|null=null; let escaped=false; let attrStart=-1; let key='';
+  const chunks:Array<{start:number;end:number}> = [];
+  const findKeyAt=(index:number)=>{ const m=text.slice(index).match(/^\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*/); return m ? {key:m[1],len:m[0].length} : null; };
+  for(let i=0;i<text.length;i+=1){
+    const ch=text[i];
+    if(quote){ if(escaped){escaped=false;continue;} if(ch==='\\\\'){escaped=true;continue;} if(ch===quote)quote=null; continue; }
+    if(ch==='"'||ch==="'"){quote=ch;continue;}
+    if(ch==='('||ch==='['||ch==='{'){depth+=1;continue;}
+    if(ch===')'||ch===']'||ch==='}'){depth=Math.max(0,depth-1);continue;}
+    if(depth!==0||!\\s.test(ch))continue;
+    const found=findKeyAt(i); if(!found||!KNOWN_INPUT_ATTRIBUTES.has(found.key))continue;
+    if(attrStart<0){ attrStart=i; key=found.key; i += found.len-1; }
+    else { chunks.push({start:attrStart,end:i}); attrStart=i; key=found.key; i += found.len-1; }
+  }
+  if(attrStart>=0)chunks.push({start:attrStart,end:text.length});
+  const base=(attrStart<0?text:text.slice(0,attrStart)).trim();
+  for(const chunk of chunks){
+    const part=text.slice(chunk.start).trim();
+    const eq=part.indexOf('='); const attrKey=part.slice(0,eq).trim(); const attrValue=part.slice(eq+1).trim();
+    if(attrKey)attrs[attrKey]=attrValue;
+  }
+  return {base,attrs};
+}
+
+function parseOptionsLiteral(value:string):string[] {
+  const raw=value.trim(); if(!raw.startsWith('[')||!raw.endsWith(']')) throw new Error('CoreSpirit input options must use ["A", "B"] syntax.');
+  const inner=raw.slice(1,-1).trim(); if(!inner)return [];
+  const out:string[]=[]; let start=0; let quote:'"'|"'"|null=null; let escaped=false;
+  for(let i=0;i<inner.length;i+=1){const ch=inner[i];if(quote){if(escaped){escaped=false;continue;}if(ch==='\\\\'){escaped=true;continue;}if(ch===quote)quote=null;continue;}if(ch==='"'||ch==="'"){quote=ch;continue;}if(ch===','){const value=parseSurfaceLiteral(inner.slice(start,i).trim());if(typeof value!=='string')throw new Error('CoreSpirit input options must be strings.');out.push(value);start=i+1;}}
+  const value=parseSurfaceLiteral(inner.slice(start).trim());if(typeof value!=='string')throw new Error('CoreSpirit input options must be strings.');out.push(value);return out;
+}
+
+function normalizeInputType(type:string|undefined, defval:CoreSpiritSurfaceLiteral):CoreSpiritSurfaceInputType {
+  const t=String(type??'').toLowerCase();
+  if(t==='number'||t==='float')return 'float'; if(t==='int'||t==='integer')return 'int'; if(t==='bool'||t==='boolean')return 'bool';
+  if(t==='string')return 'string'; if(['source','color','price','time','session','timeframe','symbol','text_area'].includes(t))return t as CoreSpiritSurfaceInputType;
+  if(t)throw new Error(`Unsupported CoreSpirit input type '${type}'.`);
+  if(typeof defval==='boolean')return 'bool'; if(typeof defval==='number')return Number.isInteger(defval)?'int':'float'; return 'string';
+}
+
+export function parseCoreSpiritInputDeclaration(line:string,start:number,end:number=start+line.length):CoreSpiritSurfaceInput|undefined {
+  const match=line.trim().match(/^input\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s*:\\s*([A-Za-z_][A-Za-z0-9_]*))?\\s*=\\s*(.+)$/i);
+  if(!match)return undefined;
+  const scanned=scanSurfaceAttributes(match[3]); const defval=parseSurfaceLiteral(scanned.base); const type=normalizeInputType(match[2],defval);
+  const attrNum=(name:string)=>scanned.attrs[name]!==undefined?Number(scanned.attrs[name]):undefined;
+  const title=scanned.attrs.title ? String(parseSurfaceLiteral(scanned.attrs.title)) : prettySurfaceKey(match[1]);
+  const out:CoreSpiritSurfaceInput={key:match[1],title,type,defval,start,end};
+  const min=attrNum('min'),max=attrNum('max'),step=attrNum('step');
+  if(min!==undefined){if(!Number.isFinite(min))throw new Error(`CoreSpirit input '${match[1]}' has an invalid min.`);out.min=min;}
+  if(max!==undefined){if(!Number.isFinite(max))throw new Error(`CoreSpirit input '${match[1]}' has an invalid max.`);out.max=max;}
+  if(step!==undefined){if(!Number.isFinite(step)||step<=0)throw new Error(`CoreSpirit input '${match[1]}' has an invalid step.`);out.step=step;}
+  if(out.min!==undefined&&out.max!==undefined&&out.min>out.max)throw new Error(`CoreSpirit input '${match[1]}' has min greater than max.`);
+  if(scanned.attrs.options!==undefined)out.options=parseOptionsLiteral(scanned.attrs.options);
+  for(const k of ['group','inline','tab','tooltip'] as const)if(scanned.attrs[k]!==undefined){const v=parseSurfaceLiteral(scanned.attrs[k]);if(typeof v!=='string')throw new Error(`CoreSpirit input '${match[1]}' attribute '${k}' must be a string.`);out[k]=v;}
+  if(type==='int'&&typeof defval==='number'&&!Number.isInteger(defval))throw new Error(`CoreSpirit integer input '${match[1]}' requires an integer default.`);
+  return out;
+}
+
+export function parseCoreSpiritDeclarationProperty(line:string,start:number,end:number=start+line.length):CoreSpiritSurfaceProp|undefined {
+  const match=line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.+)$/);
+  if(!match) return undefined;
+  const definition=CORESPIRIT_PROP_DEFINITIONS[match[1]]; if(!definition)return undefined;
+  const value=parseSurfaceLiteral(match[2]); const defval=definition.defval ?? value;
+  if(definition.type==='int'&&typeof value==='number'&&!Number.isInteger(value))throw new Error(`CoreSpirit property '${match[1]}' requires an integer.`);
+  if(definition.type==='bool'&&typeof value!=='boolean')throw new Error(`CoreSpirit property '${match[1]}' requires a boolean.`);
+  if((definition.type==='float'||definition.type==='price')&&typeof value!=='number')throw new Error(`CoreSpirit property '${match[1]}' requires a number.`);
+  return { key:definition.key,property:match[1],title:prettySurfaceKey(definition.key),type:definition.type,defval:value,min:definition.min,max:definition.max,start,end };
+}
+
+export function formatCoreSpiritSurfaceLiteral(value:CoreSpiritSurfaceLiteral):string { return typeof value==='string'?JSON.stringify(value):String(value); }
+
 export type CoreSpiritModelSurfaceBinding = {
   kind: 'registry' | 'python' | 'cpp' | 'rust' | 'wasm' | 'onnx' | 'remote';
   locator: string;
@@ -263,7 +380,7 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       continue;
     }
 
-    const automate = trimmed.match(/^automate\s+(?:"([^"]+)"|'([^']+)')\s*:\s*$/i);
+    const strategy = trimmed.match(/^strategy\\s+(?:"([^"]+)"|'([^']+)')\\s*(?::|\\{)?\\s*$/i);\n    if (strategy) {\n      concepts.add('AUTOMATE');\n      const name = strategy[1] ?? strategy[2] ?? 'Strategy';\n      const declaration = { kind:'indicator' as const, name, role:'strategy' as const, start:offset, end:offset+raw.length };\n      active.push({ kind:'indicator', declaration, indent });\n      offset += raw.length + 1;\n      continue;\n    }\n\n    const automate = trimmed.match(/^automate\s+(?:"([^"]+)"|'([^']+)')\s*:\s*$/i);
     if (automate) {
       concepts.add('AUTOMATE');
       const name = automate[1] ?? automate[2] ?? 'Automation';
