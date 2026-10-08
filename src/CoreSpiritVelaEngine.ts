@@ -259,7 +259,7 @@ export class CoreSpiritVelaEngine {
       props: req.props,
     });
 
-    let activeVisibleRange = req.visibleRange ? { from:Number(req.visibleRange.from), to:Number(req.visibleRange.to) } : undefined;
+    let activeVisibleRange = req.visibleRange ? { left:Number(req.visibleRange.left), right:Number(req.visibleRange.right) } : undefined;
 
     const createRuntime = (): CoreSpiritRuntime => new CoreSpiritRuntime({
       symbol: req.market.symbol,
@@ -269,7 +269,7 @@ export class CoreSpiritVelaEngine {
       executionTarget: 'chart',
       executionTier: 'optimized',
       dataResolver,
-      visibleRange: activeVisibleRange,
+      visibleRange: activeVisibleRange ? { from:activeVisibleRange.left, to:activeVisibleRange.right } : undefined,
       inputValues: currentMetadata.inputValues,
       propValues: currentMetadata.propValues,
     });
@@ -409,12 +409,12 @@ export class CoreSpiritVelaEngine {
       },
       setVisibleRange(range) {
         if (stopped || !currentMetadata.reactsToViewport) return;
-        const left = Number(range.from);
-        const right = Number(range.to);
+        const left = Number(range.left);
+        const right = Number(range.right);
         if (!Number.isFinite(left) || !Number.isFinite(right)) return;
         const viewportFrom = Math.min(left, right);
         const viewportTo = Math.max(left, right);
-        activeVisibleRange = { from:viewportFrom, to:viewportTo };
+        activeVisibleRange = { left:viewportFrom, right:viewportTo };
         const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
         if (!currentBars.length) return;
         const start = lowerBoundBarTime(currentBars, viewportFrom);
