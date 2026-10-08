@@ -34,6 +34,7 @@ import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId } from './seriesRegis
 import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProfilerSnapshot } from './profiler';
 import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, type CoreSpiritDirtyExecutionPlan } from './dirtyGraph';
 import { CoreSpiritColumnarHistory } from './columnarMarketData';
+import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot } from './kernelStateSnapshots';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
