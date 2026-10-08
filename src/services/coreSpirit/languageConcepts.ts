@@ -226,7 +226,7 @@ export type CoreSpiritSurfaceMetadata = {
 const DATA_NAMES = new Set([
   'open','high','low','close','volume','time',
   'market','timeframe','request','requestBatch','lowerTf',
-  'bid','ask','spread','mid','trade','orderbook','footprint','volumeProfile',
+  'bid','ask','spread','mid','trade','orderbook','footprint','volumeProfile','vpvr',
   'intrabarCount','intrabarSum','intrabarHigh','intrabarLow','intrabarDelta',
   'depthImbalance','footprintDelta','footprintBuy','footprintSell',
   'footprintPoc','footprintVah','footprintVal','footprintRows',
