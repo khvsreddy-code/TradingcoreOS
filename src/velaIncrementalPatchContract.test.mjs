@@ -13,7 +13,6 @@ const outputController = read('src/services/coreSpirit/chartOutputController.ts'
 const liveChart = read('src/components/workspace/LiveChart.tsx');
 const coord = read('vendor/vela/src/renderers/native/core/CoordinateSystem.ts');
 const workspace = read('src/LiveTradingWorkspace.tsx');
-const nativeFacade = read('src/services/core/chart/velaNativeChartRenderer.ts');
 assert(patch.includes("SeriesPatchOperation = 'replace' | 'append' | 'prepend' | 'replace-last' | 'replace-range'"), 'missing explicit series patch operations');
 assert(patch.includes('seriesStyles?: SeriesStyleDelta[]'), 'missing style-only patch channel');
 assert(patch.includes('fillDeltas?: FillValueDelta[]'), 'missing fill value patch channel');
@@ -43,5 +42,5 @@ assert(kernel.includes('syncBandFillsForSeries(seriesId: string, op:'), 'native 
 assert(!kernel.includes("points: series.points }] } as ScenePatch"), 'native kernel still sends full series.points');
 assert(coord.includes('Float64Array') && coord.includes('timeCapacity'), 'coordinate time storage not typed');
 assert(workspace.includes('workspaceListenerDisposers'), 'workspace cleanup ownership missing');
-assert(nativeFacade.includes('VelaLegacyBar'), 'Vela legacy compatibility bar type seam missing');
+for (const retired of ['webgl2ChartRenderer.ts','canvas2dChartRenderer.ts','velaNativeChartRenderer.ts']) assert.throws(() => read(`src/services/core/chart/${retired}`), /ENOENT|no such file|NOT_FOUND/, `retired renderer file still exists: ${retired}`);
 console.log('TRADINGCORE_V117_INCREMENTAL_PATCH_CONTRACT_OK');
