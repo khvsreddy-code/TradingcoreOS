@@ -65,6 +65,13 @@ export class CoreSpiritDirtyGraph {
     this.statefulInstructions = new Set(nodes.filter((node) => node.stateful).map((node) => node.instruction));
   }
 
+  nodeForInstruction(instruction: number): CoreSpiritDirtyNode | undefined {
+    for (const node of this.nodesById.values()) {
+      if (node.instruction === instruction) return node;
+    }
+    return undefined;
+  }
+
   planTail(sources: readonly CoreSpiritDirtySource[], barIndex: number, executionEnd = barIndex): CoreSpiritDirtyExecutionPlan {
     const dirty = new Map<string, CoreSpiritDirtyRange>();
     const queue: string[] = [];
