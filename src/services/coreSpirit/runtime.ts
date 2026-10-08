@@ -47,6 +47,8 @@ export type CoreSpiritRuntimeOptions = {
   riskResolver?: CoreSpiritRiskResolver;
   eventResolver?: (eventName:string) => boolean | unknown;
   profiler?: CoreSpiritProfilerOptions;
+  inputValues?: Readonly<Record<string, CoreSpiritValue>>;
+  propValues?: Readonly<Record<string, CoreSpiritValue>>;
 };
 export type CoreSpiritRuntimeState = {
   barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean; revision:number; symbol:string; timeframe:string; mode:CoreSpiritExecutionMode };
@@ -120,6 +122,8 @@ export class CoreSpiritRuntime {
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
+  private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
+  private readonly propValues: Readonly<Record<string, CoreSpiritValue>>;
   private readonly stateStore = new CoreSpiritStateStore();
   /** Numeric IDs are stable for one loaded runtime/program. Names are resolved only during lowering. */
   private readonly seriesRegistry: CoreSpiritSeriesRegistry = this.stateStore.series;
@@ -142,6 +146,8 @@ export class CoreSpiritRuntime {
     this.modelOutputResolver = options.modelOutputResolver;
     this.modelPredictionResolver = options.modelPredictionResolver;
     this.riskResolver = options.riskResolver;
+    this.inputValues = Object.freeze({ ...(options.inputValues ?? {}) });
+    this.propValues = Object.freeze({ ...(options.propValues ?? {}) });
     this.eventResolver = options.eventResolver;
     this.executionTarget = options.executionTarget || 'chart';
     this.executionTier = options.executionTier === 'reference' ? 'reference' : 'optimized';
@@ -682,6 +688,11 @@ export class CoreSpiritRuntime {
     if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
     const finish = (value: unknown) => { this.indicatorMemo.set(memoKey, value); return value; };
     this.capabilityHost.assert(name);
+    if(name==='__input') {
+      const key = String(args[0] ?? '');
+      const override = this.inputValues[key];
+      return finish(override !== undefined ? override : args[1] ?? null);
+    }
     if(name==='meta') {
       const out:Record<string,unknown>={};
       for(let i=0;i+1<args.length;i+=2) out[String(args[i])]=args[i+1];
