@@ -391,16 +391,18 @@ export class CoreSpiritVelaEngine {
       ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[])
       : bars;
 
-    if (!secondaryDependencies.length) {
-      initializeFromBars(initialBars);
-    } else {
-      void secondaryReady.then(() => {
-        if (!stopped) initializeFromBars(
-          req.getBars
-            ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[])
-            : bars,
-        );
-      });
+    if (req.mode !== 'live' || req.historyState !== 'backfill') {
+      if (!secondaryDependencies.length) {
+        initializeFromBars(initialBars);
+      } else {
+        void secondaryReady.then(() => {
+          if (!stopped) initializeFromBars(
+            req.getBars
+              ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[])
+              : bars,
+          );
+        });
+      }
     }
 
     return {
@@ -543,7 +545,6 @@ export class CoreSpiritVelaEngine {
         } catch (error) {
           handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
         }
-      },
       },
     };
   }
