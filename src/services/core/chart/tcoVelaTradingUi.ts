@@ -91,7 +91,7 @@ const nativeTaPanel:SidePanelDescriptor={
           const heading=document.createElement('div'); heading.textContent=group.toUpperCase(); heading.style.cssText='font-size:8px;color:#94a3b8;letter-spacing:.12em;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:3px;'; list.appendChild(heading);
           for(const type of types){
             const info=byType.get(type); if(!info)continue;
-            const b=button((info.present?'✓ ':'')+info.title+(info.supported?'':' · unsupported')); b.disabled=!info.supported; b.onclick=()=>{const h=chart.addNativeIndicator(info.type); if(h?.id)ctx.toast(info.title+' added to Vela','success'); render();}; list.appendChild(b);
+            const b=button((info.present?'✓ ':'')+info.title+(info.supported?'':' · unsupported')); b.disabled=!info.supported; b.onclick=()=>{ctx.addNativeIndicator(info.type); ctx.toast(info.title+' added to Vela','success'); render();}; list.appendChild(b);
           }
         }
         status.textContent='Native indicators on chart: '+chart.presentNativeIndicators().length;
@@ -104,7 +104,7 @@ const nativeTaPanel:SidePanelDescriptor={
 const quickOrderTopbar:WidgetActionDescriptor={id:'tco.quick-order.topbar',target:'topbar',label:'Quick Order',icon:'zap',iconOnly:true,align:'right',order:11,mobile:'menu',run(ctx){ctx.togglePanel('tco.quick-order');}};
 const contextBuy:WidgetActionDescriptor={id:'tco.context.buy-limit',target:'context:body',label:'Buy limit at price',icon:'arrow-up',order:10,when:ctx=>ctx.pointer?.paneKind==='price'&&Number.isFinite(Number(ctx.pointer?.price)),run(ctx){const p=ctx.pointer!;setVelaOrderDraft({side:'Buy',symbol:ctx.symbol,price:Number(p.price),time:p.time,source:'context',quantity:1,orderType:'Limit',product:'MIS'});ctx.togglePanel('tco.quick-order');}};
 const contextSell:WidgetActionDescriptor={id:'tco.context.sell-limit',target:'context:body',label:'Sell limit at price',icon:'arrow-down',order:11,when:ctx=>ctx.pointer?.paneKind==='price'&&Number.isFinite(Number(ctx.pointer?.price)),run(ctx){const p=ctx.pointer!;setVelaOrderDraft({side:'Sell',symbol:ctx.symbol,price:Number(p.price),time:p.time,source:'context',quantity:1,orderType:'Limit',product:'MIS'});ctx.togglePanel('tco.quick-order');}};
-const contextPickRisk:WidgetActionDescriptor={id:'tco.context.pick-risk',target:'context:body',label:'Pick risk levels',icon:'crosshair',order:12,when:ctx=>ctx.pointer?.paneKind==='price',run(ctx){ctx.togglePanel('tco.quick-order');beginVelaPricePick(ctx,'stop',pick=>{ctx.toast('Stop selected at '+pick.price.toFixed(2),'success');});}};
+const contextPickRisk:WidgetActionDescriptor={id:'tco.context.pick-risk',target:'context:body',label:'Pick risk levels',icon:'crosshair',order:12,when:ctx=>ctx.pointer?.paneKind==='price',run(ctx){ctx.togglePanel('tco.quick-order');beginVelaPricePick(ctx,'stop',pick=>{setVelaOrderDraft({side:'Buy',symbol:ctx.symbol,price:pick.price,time:pick.time,source:'pick',quantity:1,orderType:'Limit',product:'MIS'});ctx.toast('Stop selected at '+pick.price.toFixed(2),'success');});}};
 const nativeTaTopbar:WidgetActionDescriptor={id:'tco.native-ta.topbar',target:'topbar',label:'Native TA',icon:'indicators',iconOnly:true,align:'right',order:12,mobile:'menu',run(ctx){ctx.togglePanel('tco.native-ta');}};
 
 registerSidePanel(quickOrderPanel); registerSidePanel(nativeTaPanel);
