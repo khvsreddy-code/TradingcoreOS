@@ -1,4 +1,4 @@
-import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec, HighCardinalityRectBatch } from './velaNativeChartKernel';
+import type { IndicatorMeta, IndicatorModel, SeriesPoint, SeriesSpec, HighCardinalityRectBatch, InputSchema, InputValue } from './velaNativeChartKernel';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 
 export type CoreSpiritVelaMarker = {
@@ -47,6 +47,10 @@ export function buildCoreSpiritVelaIndicatorModel(
   rectBatches:readonly HighCardinalityRectBatch[] = [],
   anchorTime?:number,
   dirty?:CoreSpiritVelaDirtyRange,
+  inputs:readonly InputSchema[] = [],
+  inputValues:Readonly<Record<string,InputValue>> = {},
+  props:readonly InputSchema[] = [],
+  propValues:Readonly<Record<string,InputValue>> = {},
 ): IndicatorModel {
   const series:SeriesSpec[]=[...points.entries()].map(([seriesId, seriesPoints], index)=>({
     id:`${id}:series:${seriesId}`,
@@ -80,7 +84,9 @@ export function buildCoreSpiritVelaIndicatorModel(
     ...(dirty ? {dirty} : {}),
     title:meta.title,
     shorttitle:meta.shorttitle,
-    overlay:true,
+    overlay:meta.overlay,
+    ...(meta.precision !== undefined ? { precision:meta.precision } : {}),
+    ...(meta.format ? { format:meta.format } : {}),
     paneHint:'price',
     legend:true,
     anchorTime:anchorTime as IndicatorModel['anchorTime'],
@@ -89,7 +95,8 @@ export function buildCoreSpiritVelaIndicatorModel(
     backgrounds:[],
     ...(rectBatches.length ? { instanceBatches:[...rectBatches] } : {}),
     priceLines,
-    inputs:[],
-    inputValues:{},
+    inputs:[...inputs],
+    inputValues:{...inputValues},
+    ...(props.length ? { props:[...props], propValues:{...propValues} } : {}),
   };
 }

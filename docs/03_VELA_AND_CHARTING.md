@@ -83,6 +83,32 @@ Advanced families should be independently loaded only when their UI or drawing t
 
 TCO feature code crosses into the vendored Vela fork only through the TCO chart facade/provider boundary. Vela renderer internals stay behind that seam.
 
+## Terminal-shell topology
+
+The live trading surface is initialized as a VelaWorkspace, not as a React chart wrapper. Vela owns the shared topbar, object tree, Data Window, drawing toolbar, panel dock, bottombar and workspace replay clock. Each ChartCell receives the TCO provider, CoreSpirit scripting engine, native-indicator registry, renderer layers and drawing/data contributions.
+
+The TCO additions are registered as first-class Vela contributions:
+
+```text
+VelaWorkspace
+├── ChartCell(s)
+│   ├── TCO DataProvider
+│   ├── CoreSpirit engine
+│   ├── Vela native indicators / VPVR
+│   ├── TCO renderer layers
+│   └── TCO drawing + data contributions
+├── shared topbar
+├── object tree
+├── Data Window
+├── Replay
+├── drawing toolbar
+├── tco.research
+├── tco.automation
+└── tco.trading
+```
+
+React remains outside this terminal boundary for routing/authentication, application chrome, research pages, settings, billing and the AI/coding surfaces.
+
 ## Canonical single-engine boundary
 
 TradingCoreOS now has one chart engine boundary: the Vela-native kernel. The retired TCO-owned WebGL2/Canvas2D renderer stack is no longer present in the production tree.
