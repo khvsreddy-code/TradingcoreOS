@@ -239,7 +239,7 @@ export class CoreSpiritVelaEngine {
     let activeProps = resolveSchemaValues(req.prepared.props ?? [], req.props);
     const baseMeta: IndicatorMeta = { title: token.declaration.name || titleFromSource(token.source), overlay: true };
     let activeMeta = metaWithProps(baseMeta, token.declaration, activeProps);
-    let activeIr = activeIr;
+    let activeIr = token.ir;
     let visibleRange = req.visibleRange ?? null;
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryRefreshPromise: Promise<void>|undefined;
@@ -442,7 +442,7 @@ export class CoreSpiritVelaEngine {
         }
         if (req.mode === 'static') handlers.onDone?.();
       } catch (error) {
-        handlers.onError?.(error instanceof Error ? error.message === 'string' ? new Error(error.message) : (error instanceof Error ? error : new Error(String(error))) : new Error(String(error)));
+        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
       }
     };
 
