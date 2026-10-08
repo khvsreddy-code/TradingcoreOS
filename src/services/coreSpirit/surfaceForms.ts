@@ -1,5 +1,5 @@
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
-import { extractCoreSpiritSurfaceMetadata, formatCoreSpiritSurfaceLiteral, parseCoreSpiritDeclarationProperty, parseCoreSpiritInputDeclaration } from './languageConcepts';
+import { extractCoreSpiritSurfaceMetadata, formatCoreSpiritSurfaceLiteral, parseCoreSpiritDeclarationProperty, parseCoreSpiritInputDeclaration, parseCoreSpiritCapabilityRequirement } from './languageConcepts';
 import { inferCoreSpiritPointCall, parseCoreSpiritCoordinatePair } from './visualSurface';
 import { modelSurfaceNames, normalizeCoreSpiritModelReferences, normalizedModelReference, isModelNameExpression } from './modelSurface';
 import { normalizeCoreSpiritAutomationSource } from './automationSurface';
@@ -174,6 +174,18 @@ function whenCondition(condition: string, modelNames: ReadonlySet<string>): stri
  * the canonical core grammar.
  */
 export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform[] = [
+  {
+    id: 'system-capabilities',
+    apply: line => parseCoreSpiritCapabilityRequirement(line) ? '' : line,
+  },
+  {
+    id: 'broker-route',
+    apply: line => line.replace(
+      /^(\\s*)route\\s+order\\s+through\\s+broker\\s*\\(\\s*(["'])([^"']+)\\2\\s*\\)\\s*;?$/i,
+      '$1automation.route("broker.$3")',
+    ),
+  },
+
   {
     id:'structured-input',
     apply: line => {
