@@ -49,7 +49,11 @@ export function registerDrawingType(meta: DrawingTypeMeta): void {
 }
 
 export function getDrawingType(type: string): DrawingTypeMeta | undefined {
-    return REGISTRY.get(type) ?? lazyDrawingTypes(drawingFamilyForType(type as DrawingTypeKey)).find((meta) => meta.type === type);
+    const registered = REGISTRY.get(type);
+    if (registered) return registered;
+    const family = drawingFamilyForType(type as DrawingTypeKey);
+    if (!family) return undefined;
+    return lazyDrawingTypes(family).find((meta) => meta.type === type);
 }
 
 export function drawingTypes(): DrawingTypeMeta[] {
