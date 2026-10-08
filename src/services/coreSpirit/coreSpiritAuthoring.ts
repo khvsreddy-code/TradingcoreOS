@@ -1,4 +1,5 @@
 import { CORE_SPIRIT_AUTHORING_LEVELS, type CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
+import { inferCoreScriptLevel } from './coreScriptLanguagePolicy';
 
 export const CORE_SPIRIT_AUTHORING_FEATURES = Object.freeze([
   'core-data',
@@ -23,6 +24,10 @@ export const CORE_SPIRIT_AUTHORING_FEATURES = Object.freeze([
   'semantic-lineage',
   'programmable-indicators',
   'declarative-indicator-artifacts',
+  'matrix',
+  'tensor',
+  'system-events',
+  'explicit-capabilities',
 ] as const);
 export type CoreSpiritAuthoringFeature = typeof CORE_SPIRIT_AUTHORING_FEATURES[number];
 
@@ -49,7 +54,7 @@ const TRADER_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
   ...BEGINNER_FEATURES, 'component-composition', 'model-declarations', 'multi-symbol', 'multi-timeframe', 'custom-visuals', 'automation', 'stdlib-namespaces',
 ]);
 const QUANT_FEATURES: readonly CoreSpiritAuthoringFeature[] = Object.freeze([
-  ...TRADER_FEATURES, 'programmable-indicators', 'declarative-indicator-artifacts', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
+  ...TRADER_FEATURES, 'programmable-indicators', 'declarative-indicator-artifacts', 'matrix', 'tensor', 'execution-targets', 'component-contracts', 'ir-inspection', 'runtime-inspection', 'research', 'backtesting', 'optimization', 'complexity-absorber', 'model-component-abi', 'semantic-lineage',
 ]);
 
 function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringProfile {
@@ -74,9 +79,17 @@ function authoringProfile(level: CoreSpiritAuthoringLevel): CoreSpiritAuthoringP
 export function detectCoreSpiritAuthoringLevel(source:string): CoreSpiritAuthoringLevel {
   const text = String(source ?? '').trim();
   if (!text) return 'beginner';
-  const advanced = /\b(model|automate|market\(|timeframe\(|request\(|multi|predict|scan\.|regime\(|volatility\(|motion\()\b/i.test(text);
-  const professional = /\b(type\b|gpu|wasm|worker|capabilit|order\b|risk\b|research\b|replay\b|optimization\b|backtest\b|component\b|pipeline\b|ir\b)\b/i.test(text);
-  return professional ? 'quant' : advanced ? 'trader' : 'beginner';
+  return inferCoreScriptLevel({
+    hasModel: /\bmodel\s+/i.test(text) || /\b(?:predict|probability|featureSet|trainingData|modelArtifact)\b/i.test(text),
+    hasResearch: /\b(?:research|backtest|evaluate|optimi[sz]e|experiment|trainingData)\b/i.test(text),
+    hasMatrix: /\bmatrix(?:<|\s*\()/i.test(text),
+    hasTensor: /\btensor(?:<|\s*\()/i.test(text),
+    hasMultiSymbol: /\bmarket\s*\(/i.test(text) && (text.match(/\bmarket\s*\(/gi)?.length ?? 0) > 1),
+    hasMultiTimeframe: /\.timeframe\s*\(|\btimeframe\s*\(/i.test(text),
+    hasSystemEvent: /\bon\s+(?:market\.tick|order\.fill|position\.update)\b/i.test(text),
+    hasAutomation: /\b(?:automate\s+|automation\.)/i.test(text),
+    hasOrderIntent: /\b(?:entry|exit|buy|sell|order)\s*(?:\(|\b)/i.test(text),
+  });
 }
 
 export function getCoreSpiritAuthoringProfile(source:string): CoreSpiritAuthoringProfile {
