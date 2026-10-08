@@ -434,39 +434,40 @@ export class CoreSpiritVelaEngine {
         const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
         if (!currentBars.length) return;
 
-        if (reason === 'complete') {
-          const runComplete = (): void => {
-            runtime.loadIr(token.ir);
-            const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
-            scene.reset();
-            scene.seed(result);
-            firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
-            lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
-            emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
-            liveStarted = req.mode === 'live';
-          };
-          if (secondaryDependencies.length) { void loadSecondaryData(true).then(runComplete); return; }
-          runComplete();
+        if (reason === 'backfill') {
+          // Initial live startup is intentionally deferred while Vela is still
+          // prepending history. This prevents executing a partial dataset and
+          // then immediately rebuilding the whole runtime at completion.
+          if (!historyInitialized) return;
+
+          if (dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
+            const start = lowerBoundBarTime(currentBars, dirtyRange.from);
+            const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirtyRange.to));
+            const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
+            const executionStart = Math.max(0, start - maxLookback);
+            const rangeBars = currentBars.slice(executionStart, end);
+            if (rangeBars.length) {
+              const rangeRuntime = createRuntime();
+              rangeRuntime.loadIr(token.ir);
+              const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
+              emitScenePatches(rangeResult, dirtyRange);
+            }
+          }
           return;
         }
 
-        if (reason === 'backfill' && dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
-          const start = lowerBoundBarTime(currentBars, dirtyRange.from);
-          const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirtyRange.to));
-          const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
-          const executionStart = Math.max(0, start - maxLookback);
-          const rangeBars = currentBars.slice(executionStart, end);
-          if (rangeBars.length) {
-            const rangeRuntime = createRuntime();
-            rangeRuntime.loadIr(token.ir);
-            const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
-            emitScenePatches(rangeResult, dirtyRange);
-            return;
+        if (reason === 'complete' && !historyInitialized) {
+          if (secondaryDependencies.length) {
+            void loadSecondaryData(true).then(() => initializeHistory(currentBars));
+          } else {
+            initializeHistory(currentBars);
           }
+          return;
         }
 
-        if (!liveStarted) rehydrateForLive();
-        if (req.mode==='live' && secondaryDependencies.length) void loadSecondaryData();
+        if (!historyInitialized) return;
+        if (req.mode === 'live' && secondaryDependencies.length) void loadSecondaryData();
+
         const latest = currentBars.at(-1);
         if (!latest) return;
         const latestTime = barTimeMillis(latest.timestamp);
