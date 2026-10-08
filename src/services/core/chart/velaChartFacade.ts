@@ -23,8 +23,6 @@ export {
   registerRendererLayer,
   unregisterRendererLayer,
   rendererLayers,
-  unregisterRendererLayer,
-  rendererLayers,
 } from '../../../../vendor/vela/src/renderers/native/layers';
 export type { InputSchema, InputValue } from '../../../../vendor/vela/src/core/model/inputs';
 export type {
@@ -33,6 +31,8 @@ export type {
   SeriesDataEngineHost,
   ChartTypeSettingsSection,
   SettingsRowDescriptor,
+} from '../../../../vendor/vela/src/chart-types/registry';
+export type {
   RendererLayerDefinition,
   RendererLayerArgs,
   RendererLayerInstance,
