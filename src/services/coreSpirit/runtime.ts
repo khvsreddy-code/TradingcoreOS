@@ -35,6 +35,7 @@ import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProf
 import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, type CoreSpiritDirtyExecutionPlan } from './dirtyGraph';
 import { CoreSpiritColumnarHistory } from './columnarMarketData';
 import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot } from './kernelStateSnapshots';
+import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandbox } from './capabilitySandbox';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
@@ -678,6 +679,12 @@ export class CoreSpiritRuntime {
   getLastDirtyPlan(): CoreSpiritDirtyExecutionPlan | undefined { return this.lastDirtyPlan; }
   getTradingNativePlan() { return this.compiledIr?.tradingNativePlan; }
   loadIr(ir: CoreSpiritIrProgram): void {
+    const requiredCapabilities = ir.requiredCapabilities ?? [];
+    if (requiredCapabilities.length) {
+      const sandbox = new CoreSpiritCapabilitySandbox({ layer:this.layer, target:this.executionTarget });
+      const capabilityErrors = validateCoreScriptCapabilitiesAgainstSandbox(sandbox, requiredCapabilities);
+      if (capabilityErrors.length) throw new Error(capabilityErrors.join('; '));
+    }
     this.kernelStateSnapshots.clear();
     this.kernelNodeIdentities.clear();
     this.compiledIr = ir;
