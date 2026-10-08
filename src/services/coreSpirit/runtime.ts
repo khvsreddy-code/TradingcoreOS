@@ -47,6 +47,7 @@ export type CoreSpiritRuntimeOptions = {
   riskResolver?: CoreSpiritRiskResolver;
   eventResolver?: (eventName:string) => boolean | unknown;
   profiler?: CoreSpiritProfilerOptions;
+  visibleRange?: { from:number; to:number };
   inputValues?: Readonly<Record<string, CoreSpiritValue>>;
   propValues?: Readonly<Record<string, CoreSpiritValue>>;
 };
@@ -55,6 +56,56 @@ export type CoreSpiritRuntimeState = {
   workspaceState: { ui: CoreSpiritUiState; app: CoreSpiritVisualAppState; visuals: CoreSpiritDeclarativeVisualState };
 };
 export type CoreSpiritExecutionResult = { outputs: CoreSpiritObject[]; state: CoreSpiritRuntimeState; diagnostics: string[] };
+
+function candleTimeMillis(value: HistoricalCandle['timestamp']): number {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric >= 1e11 ? numeric : numeric * 1000;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function visibleVpvrPoc(
+  bars: readonly HistoricalCandle[],
+  visibleRange: { from:number; to:number } | undefined,
+  rows: number,
+): number | null {
+  if (!bars.length) return null;
+  let from = 0;
+  let to = bars.length;
+  if (visibleRange && Number.isFinite(visibleRange.from) && Number.isFinite(visibleRange.to)) {
+    const left = Math.min(visibleRange.from, visibleRange.to);
+    const right = Math.max(visibleRange.from, visibleRange.to);
+    while (from < bars.length && candleTimeMillis(bars[from]!.timestamp) < left) from += 1;
+    to = from;
+    while (to < bars.length && candleTimeMillis(bars[to]!.timestamp) <= right) to += 1;
+  }
+  if (to <= from) return null;
+
+  let low = Number.POSITIVE_INFINITY;
+  let high = Number.NEGATIVE_INFINITY;
+  for (let i=from;i<to;i+=1) {
+    const bar=bars[i]!;
+    low=Math.min(low,Number(bar.low));
+    high=Math.max(high,Number(bar.high));
+  }
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  if (high <= low) return low;
+
+  const safeRows=Math.max(2,Math.min(400,Math.floor(rows)));
+  const bins=new Float64Array(safeRows);
+  const width=(high-low)/safeRows;
+  for(let i=from;i<to;i+=1){
+    const bar=bars[i]!;
+    const volume=Math.max(0,Number(bar.volume)||0);
+    if(volume<=0)continue;
+    const typical=(Number(bar.high)+Number(bar.low)+Number(bar.close))/3;
+    const index=Math.max(0,Math.min(safeRows-1,Math.floor((typical-low)/width)));
+    bins[index]+=volume;
+  }
+  let poc=0;
+  for(let i=1;i<bins.length;i+=1)if(bins[i]!>bins[poc]!)poc=i;
+  return low+(poc+0.5)*width;
+}
 
 /** Stateful, chronological CoreSpirit executor. No DOM, network or broker APIs are exposed here. */
 export class CoreSpiritRuntime {
@@ -124,6 +175,8 @@ export class CoreSpiritRuntime {
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
   private readonly propValues: Readonly<Record<string, CoreSpiritValue>>;
+  private visibleRange?: { from:number; to:number };
+  private readonly viewportMemo = new Map<string, number | null>();
   private readonly stateStore = new CoreSpiritStateStore();
   /** Numeric IDs are stable for one loaded runtime/program. Names are resolved only during lowering. */
   private readonly seriesRegistry: CoreSpiritSeriesRegistry = this.stateStore.series;
@@ -148,6 +201,7 @@ export class CoreSpiritRuntime {
     this.riskResolver = options.riskResolver;
     this.inputValues = Object.freeze({ ...(options.inputValues ?? {}) });
     this.propValues = Object.freeze({ ...(options.propValues ?? {}) });
+    this.visibleRange = options.visibleRange ? { from:Number(options.visibleRange.from), to:Number(options.visibleRange.to) } : undefined;
     this.eventResolver = options.eventResolver;
     this.executionTarget = options.executionTarget || 'chart';
     this.executionTier = options.executionTier === 'reference' ? 'reference' : 'optimized';
@@ -182,7 +236,7 @@ export class CoreSpiritRuntime {
     this.reactiveRevision = 0; this.reactiveRecomputed = 0; this.reactiveReused = 0; this.reactiveEffects = 0;
     this.realtimeRevision = 0; this.eventRouter.rollbackTransaction(); this.realtimeEventTransactionId = undefined; this.debugHost.reset(); this.realtimeLifecycle='idle';
     this.state = { barIndex: -1, time: 0, locals: {}, seriesState: this.seriesRegistry.createNumericCompatibilityView(), localSeries: this.seriesRegistry.createValueCompatibilityView(), barState: { index:-1, time:0, isFirst:true, isLast:false, isRealtime:false, isConfirmed:true, revision:0, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode }, workspaceState: this.workspaceSnapshot() };
-    this.history = []; this.columnarHistory.clear(); this.crossState = {}; this.lastDirtyPlan=undefined; this.realtimeDirtyInstructions.clear();
+    this.history = []; this.columnarHistory.clear(); this.crossState = {}; this.lastDirtyPlan=undefined; this.realtimeDirtyInstructions.clear(); this.viewportMemo.clear();
     this.seriesRegistry.reset();
     this.stateStore.bind(this.crossState);
     this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
@@ -450,6 +504,7 @@ export class CoreSpiritRuntime {
   getDebugTrace() { return this.debugHost.snapshot(); }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
+    this.viewportMemo.clear();
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
@@ -692,6 +747,18 @@ export class CoreSpiritRuntime {
       const key = String(args[0] ?? '');
       const override = this.inputValues[key];
       return finish(override !== undefined ? override : args[1] ?? null);
+    }
+    if(name==='vpvr') {
+      const rows = Math.max(2, Math.min(400, Math.floor(Number(args[0] ?? 24))));
+      const from = this.visibleRange?.from ?? Number.NaN;
+      const to = this.visibleRange?.to ?? Number.NaN;
+      const firstTime = candleTimeMillis(bars[0]?.timestamp);
+      const lastTime = candleTimeMillis(bars.at(-1)?.timestamp);
+      const key = [bars.length, firstTime, lastTime, from, to, rows].join('|');
+      if (this.viewportMemo.has(key)) return finish(this.viewportMemo.get(key) ?? null);
+      const value = visibleVpvrPoc(bars, this.visibleRange, rows);
+      this.viewportMemo.set(key, value);
+      return finish(value);
     }
     if(name==='meta') {
       const out:Record<string,unknown>={};
