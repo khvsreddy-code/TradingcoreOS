@@ -88,7 +88,7 @@ export function detectCoreSpiritAuthoringLevel(source:string): CoreSpiritAuthori
     hasMultiTimeframe: /\.timeframe\s*\(|\btimeframe\s*\(/i.test(text),
     hasSystemEvent: /\bon\s+(?:market\.tick|order\.fill|position\.update)\b/i.test(text),
     hasAutomation: /\b(?:automate\s+|automation\.)/i.test(text),
-    hasOrderIntent: /\b(?:entry|exit|buy|sell|order)\s*(?:\(|\b)/i.test(text),
+    hasOrderIntent: /\b(?:entry|exit|buy|sell)\s*(?:\(|(?:long|short|flat)\b)/i.test(text) || /\border\s*\(/i.test(text),
   });
 }
 
