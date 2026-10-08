@@ -20,6 +20,7 @@ export const CORE_SCRIPT_REQUIRED_CAPABILITIES = Object.freeze([
   'risk.evaluate',
   'execution.route',
   'webhooks',
+  'automation',
 ] as const);
 
 export type CoreScriptLanguageFeature =
