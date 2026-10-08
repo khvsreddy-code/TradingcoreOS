@@ -209,13 +209,14 @@ export class CoreSpiritSceneDiff {
         let to = dirty.to;
 
         for (const output of outputs) {
+            const span = outputDirtySpan(output);
+            if (span && (span.to < dirty.from || span.from > dirty.to)) continue;
             const result = this.applyOutput(output, true);
             if (result?.schema) out.push(result.schema);
             if (result?.delta) series.push(result.delta);
             if (result?.collection) collections.push(result.collection);
             if (result?.instanceDelta) instanceBatches.push(result.instanceDelta);
-            const span = outputDirtySpan(output);
-            if (span) { from=Math.min(from,span.from); to=Math.max(to,span.to); }
+            if (span) { from=Math.max(dirty.from, Math.min(from, span.from)); to=Math.min(dirty.to, Math.max(to, span.to)); }
         }
 
         if (!this.markerSeriesMounted && this.markers.size > 0) {
