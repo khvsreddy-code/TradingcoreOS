@@ -52,6 +52,40 @@ export type CoreSpiritRuntimeOptions = {
   inputValues?: Readonly<Record<string, CoreSpiritValue>>;
   propValues?: Readonly<Record<string, CoreSpiritValue>>;
 };
+type CoreSpiritKernelState =
+  | { family:'fused'; state:CoreSpiritFusedSeriesCursor }
+  | { family:'direct'; state:CoreSpiritFusedSeriesCursor }
+  | { family:'rsi'; state:RSIState }
+  | { family:'atr'; state:ATRState }
+  | { family:'vwap'; state:VWAPSessionState }
+  | { family:'beta'; state:RollingBetaState }
+  | { family:'trend'; state:RollingCorrelationState };
+
+function cloneCoreSpiritKernelState(value: CoreSpiritKernelState): CoreSpiritKernelState {
+  switch (value.family) {
+    case 'fused': return { family:'fused', state:value.state.clone() };
+    case 'direct': return { family:'direct', state:value.state.clone() };
+    case 'rsi': return { family:'rsi', state:value.state.clone() };
+    case 'atr': return { family:'atr', state:value.state.clone() };
+    case 'vwap': return { family:'vwap', state:value.state.clone() };
+    case 'beta': return { family:'beta', state:value.state.clone() };
+    case 'trend': return { family:'trend', state:value.state.clone() };
+  }
+}
+
+function copyCoreSpiritKernelState(target: CoreSpiritKernelState, source: CoreSpiritKernelState): void {
+  if (target.family !== source.family) throw new Error(`CoreSpirit kernel snapshot family mismatch: ${target.family} !== ${source.family}`);
+  switch (target.family) {
+    case 'fused': target.state.copyFrom(source.state); break;
+    case 'direct': target.state.copyFrom(source.state); break;
+    case 'rsi': target.state.copyFrom(source.state); break;
+    case 'atr': target.state.copyFrom(source.state); break;
+    case 'vwap': target.state.copyFrom(source.state); break;
+    case 'beta': target.state.copyFrom(source.state); break;
+    case 'trend': target.state.copyFrom(source.state); break;
+  }
+}
+
 export type CoreSpiritRuntimeState = {
   barIndex: number; time: number; locals: Record<string, unknown>; seriesState: Record<string, number[]>; localSeries: Record<string, Array<number | boolean | string | null>>; barState: { index:number; time:number; isFirst:boolean; isLast:boolean; isRealtime:boolean; isConfirmed:boolean; revision:number; symbol:string; timeframe:string; mode:CoreSpiritExecutionMode };
   workspaceState: { ui: CoreSpiritUiState; app: CoreSpiritVisualAppState; visuals: CoreSpiritDeclarativeVisualState };
