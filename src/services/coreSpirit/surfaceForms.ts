@@ -1,5 +1,5 @@
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
-import { extractCoreSpiritSurfaceMetadata } from './languageConcepts';
+import { extractCoreSpiritSurfaceMetadata, formatCoreSpiritSurfaceLiteral, parseCoreSpiritDeclarationProperty, parseCoreSpiritInputDeclaration } from './languageConcepts';
 import { inferCoreSpiritPointCall, parseCoreSpiritCoordinatePair } from './visualSurface';
 import { modelSurfaceNames, normalizeCoreSpiritModelReferences, normalizedModelReference, isModelNameExpression } from './modelSurface';
 import { normalizeCoreSpiritAutomationSource } from './automationSurface';
@@ -175,6 +175,15 @@ function whenCondition(condition: string, modelNames: ReadonlySet<string>): stri
  */
 export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform[] = [
   {
+    id:'structured-input',
+    apply: line => {
+      const declaration = parseCoreSpiritInputDeclaration(line, 0, line.length);
+      if (!declaration) return line;
+      const indent = line.match(/^\s*/)?.[0] ?? '';
+      return \`\${indent}let \${declaration.key} = __input(\${JSON.stringify(declaration.key)}, \${formatCoreSpiritSurfaceLiteral(declaration.defval)});\`;
+    },
+  },
+  {
     id: 'typed-input',
     apply: line => line.replace(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(int|float|number|bool|string)\s*\(\s*([^,)]*).*\)\s*;?$/i, '$1let $2: $3 = $4;'),
   },
@@ -320,7 +329,7 @@ export function normalizeCoreSpiritSource(source: string): string {
   const modelNames = modelSurfaceNames(source);
   const out: string[] = [];
   const whenBlocks: number[] = [];
-  const wrappers: Array<{ indent: number; kind: 'indicator' | 'model' | 'automation' }> = [];
+  const wrappers: Array<{ indent: number; kind: 'indicator' | 'strategy' | 'model' | 'automation' }> = [];
   const modelBraceIndents: number[] = [];
   let researchSkipIndent: number | null = null;
 
@@ -397,15 +406,15 @@ export function normalizeCoreSpiritSource(source: string): string {
     const topLevel = wrappers.length === 0;
     if (topLevel && /^strategy\s*\(.*\)\s*$/i.test(trimmed)) continue;
 
-    const wrapperHeader = trimmed.match(/^(indicator|model|automate)\s+(?:"[^"]*"|'[^']*')\s*:\s*$/i);
+    const wrapperHeader = trimmed.match(/^(indicator|strategy|model|automate)\s+(?:"[^"]*"|'[^']*')\s*(?::)?\s*$/i);
     if (wrapperHeader) {
       wrappers.push({ indent, kind: wrapperHeader[1].toLowerCase() as any });
       continue;
     }
 
-    const oldIndicatorBrace = trimmed.match(/^indicator\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
+    const oldIndicatorBrace = trimmed.match(/^(indicator|strategy)\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
     if (oldIndicatorBrace) {
-      wrappers.push({ indent, kind: 'indicator' });
+      wrappers.push({ indent, kind: oldIndicatorBrace[1].toLowerCase() as 'indicator'|'strategy' });
       continue;
     }
 
@@ -414,6 +423,13 @@ export function normalizeCoreSpiritSource(source: string): string {
       // expressions are captured by languageConcepts/researchSurface and are not
       // executable indicator statements.
       continue;
+    }
+
+    if (wrappers.length && (wrappers[wrappers.length - 1].kind === 'indicator' || wrappers[wrappers.length - 1].kind === 'strategy')) {
+      const prop = parseCoreSpiritDeclarationProperty(trimmed, 0, raw.length);
+      if (prop) {
+        continue;
+      }
     }
 
     // Dedicated WHEN concept: indentation/colon is only a source convenience.
