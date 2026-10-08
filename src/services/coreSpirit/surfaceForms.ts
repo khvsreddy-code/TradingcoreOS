@@ -3,6 +3,7 @@ import { extractCoreSpiritSurfaceMetadata } from './languageConcepts';
 import { inferCoreSpiritPointCall, parseCoreSpiritCoordinatePair } from './visualSurface';
 import { modelSurfaceNames, normalizeCoreSpiritModelReferences, normalizedModelReference, isModelNameExpression } from './modelSurface';
 import { normalizeCoreSpiritAutomationSource } from './automationSurface';
+import { isCoreSpiritDeclarationPropertyLine } from './velaDeclarationSurface';
 import { normalizeCoreSpiritEventSource, normalizeCoreSpiritWhenCondition } from './eventSurface';
 import { buildCoreSpiritCompositionGraph } from './composability';
 import { CoreSpiritParser } from './parser';
@@ -175,6 +176,16 @@ function whenCondition(condition: string, modelNames: ReadonlySet<string>): stri
  */
 export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform[] = [
   {
+    id: 'typed-input-declaration',
+    apply: line => {
+      const match = line.match(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([A-Za-z_][A-Za-z0-9_<>]*))?\s*=\s*("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|true|false)(?:\s+(?:min|max|step|title|tooltip|group|inline|tab|options)\s*=.*)?\s*;?$/i);
+      if (!match) return line;
+      const rawType = String(match[3] ?? '').toLowerCase();
+      const typeName = rawType === 'bool' ? 'boolean' : rawType || (/^(?:true|false)$/i.test(match[4]!) ? 'boolean' : /[.e]/i.test(match[4]!) ? 'float' : 'int');
+      return match[1] + 'let ' + match[2] + ': ' + typeName + ' = ' + match[4] + ';';
+    },
+  },
+  {
     id: 'typed-input',
     apply: line => line.replace(/^(\s*)input\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(int|float|number|bool|string)\s*\(\s*([^,)]*).*\)\s*;?$/i, '$1let $2: $3 = $4;'),
   },
@@ -320,7 +331,7 @@ export function normalizeCoreSpiritSource(source: string): string {
   const modelNames = modelSurfaceNames(source);
   const out: string[] = [];
   const whenBlocks: number[] = [];
-  const wrappers: Array<{ indent: number; kind: 'indicator' | 'model' | 'automation' }> = [];
+  const wrappers: Array<{ indent: number; kind: 'indicator' | 'strategy' | 'model' | 'automation' }> = [];
   const modelBraceIndents: number[] = [];
   let researchSkipIndent: number | null = null;
 
@@ -395,17 +406,16 @@ export function normalizeCoreSpiritSource(source: string): string {
     }
 
     const topLevel = wrappers.length === 0;
-    if (topLevel && /^strategy\s*\(.*\)\s*$/i.test(trimmed)) continue;
 
-    const wrapperHeader = trimmed.match(/^(indicator|model|automate)\s+(?:"[^"]*"|'[^']*')\s*:\s*$/i);
+    const wrapperHeader = trimmed.match(/^(indicator|strategy|model|automate)\s+(?:"[^"]*"|'[^']*')\s*:\s*$/i);
     if (wrapperHeader) {
-      wrappers.push({ indent, kind: wrapperHeader[1].toLowerCase() as any });
+      wrappers.push({ indent, kind: wrapperHeader[1].toLowerCase() as 'indicator' | 'strategy' | 'model' | 'automation' });
       continue;
     }
 
-    const oldIndicatorBrace = trimmed.match(/^indicator\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
+    const oldIndicatorBrace = trimmed.match(/^(indicator|strategy)\s*(?:\([^)]*\)|["'][^"']*["'])\s*\{\s*$/i);
     if (oldIndicatorBrace) {
-      wrappers.push({ indent, kind: 'indicator' });
+      wrappers.push({ indent, kind: oldIndicatorBrace[1].toLowerCase() as 'indicator' | 'strategy' });
       continue;
     }
 
@@ -430,6 +440,8 @@ export function normalizeCoreSpiritSource(source: string): string {
       whenBlocks.push(indent);
       continue;
     }
+
+    if (wrappers.length && (wrappers[wrappers.length - 1].kind === 'indicator' || wrappers[wrappers.length - 1].kind === 'strategy') && isCoreSpiritDeclarationPropertyLine(trimmed, wrappers[wrappers.length - 1].kind)) continue;
 
     // SHOW is one semantic concept even when multiple expressions are listed.
     if (/^show\b/i.test(trimmed)) {
