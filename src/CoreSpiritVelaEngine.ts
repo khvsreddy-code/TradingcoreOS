@@ -280,6 +280,7 @@ export class CoreSpiritVelaEngine {
     const scene = new CoreSpiritSceneDiff(token.sourceId);
     let stopped = false;
     let liveStarted = false;
+    let historyInitialized = false;
     let firstSeriesTime = Number.NaN;
     let lastTime = Number.NaN;
 
@@ -317,53 +318,89 @@ export class CoreSpiritVelaEngine {
       if (patches.length) handlers.onScenePatches?.(patches);
     };
 
-    const initialRun = (): void => {
-      if (stopped) return;
-      try {
-        const initial = safeOutputs(runtime.executeIr(token.ir, bars).outputs);
-        scene.seed(initial);
-        firstSeriesTime = bars.length ? barTimeMillis(bars[0]?.timestamp) : Number.NaN;
-        lastTime = bars.length ? barTimeMillis(bars.at(-1)?.timestamp) : Number.NaN;
-        emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
-        if (req.mode === 'static') handlers.onDone?.();
-      } catch (error) {
-        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
-      }
+    const initializeStatic = (currentBars: CoreSpiritMarketBar[]): void => {
+      if (stopped || historyInitialized) return;
+      const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
+      scene.reset();
+      scene.seed(result);
+      firstSeriesTime = currentBars.length ? barTimeMillis(currentBars[0]?.timestamp) : Number.NaN;
+      lastTime = currentBars.length ? barTimeMillis(currentBars.at(-1)?.timestamp) : Number.NaN;
+      historyInitialized = true;
+      emitModel(
+        Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
+          ? { from:firstSeriesTime, to:lastTime }
+          : undefined,
+      );
+      handlers.onDone?.();
     };
 
-    let secondaryReady = secondaryDependencies.length
-      ? loadSecondaryData(true).then(() => true)
-      : Promise.resolve(true);
-
-    if (!secondaryDependencies.length) initialRun();
-    else void secondaryReady.then(() => initialRun());
-
-    const rehydrateForLive = (): void => {
-      const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
-      if (!currentBars.length || liveStarted) return;
-
-      runtime.loadIr(token.ir);
-      const historical = currentBars.slice(0, -1);
+    const initializeLive = (currentBars: CoreSpiritMarketBar[]): void => {
+      if (stopped || liveStarted) return;
       scene.reset();
+
+      if (!currentBars.length) {
+        historyInitialized = true;
+        liveStarted = true;
+        return;
+      }
+
+      const historical = currentBars.slice(0, -1);
       if (historical.length) {
+        // One confirmed-history pass establishes the runtime's stable baseline.
+        // The same runtime then evaluates the forming bar without rehydrating history.
         const warm = safeOutputs(runtime.executeIr(token.ir, historical).outputs);
         scene.seed(warm);
       }
 
       const latest = currentBars.at(-1);
-      if (!latest) return;
+      if (!latest) {
+        historyInitialized = true;
+        liveStarted = true;
+        return;
+      }
+
       const result = safeOutputs(runtime.executeBar(latest).outputs);
       const latestTime = barTimeMillis(latest.timestamp);
-      if (Number.isFinite(latestTime)) {
-        emitScenePatches(result, { from: latestTime, to: latestTime });
-        lastTime = latestTime;
-      }
+      firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
+      lastTime = latestTime;
+      historyInitialized = true;
       liveStarted = true;
+
+      if (Number.isFinite(latestTime)) emitScenePatches(result, { from:latestTime, to:latestTime });
+      emitModel(
+        Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
+          ? { from:firstSeriesTime, to:lastTime }
+          : undefined,
+      );
     };
 
-    if (req.mode === 'live') {
-      if (secondaryDependencies.length) void secondaryReady.then(() => { if (!liveStarted) rehydrateForLive(); });
-      else rehydrateForLive();
+    const initializeFromBars = (currentBars: CoreSpiritMarketBar[]): void => {
+      try {
+        if (req.mode === 'live') initializeLive(currentBars);
+        else initializeStatic(currentBars);
+      } catch (error) {
+        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    const getCurrentBars = (): CoreSpiritMarketBar[] =>
+      req.getBars
+        ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[])
+        : bars;
+
+    const initialBars = getCurrentBars();
+    let secondaryReady = secondaryDependencies.length
+      ? loadSecondaryData(true).then(() => true)
+      : Promise.resolve(true);
+
+    if (req.mode !== 'live' || req.historyState !== 'backfill') {
+      if (!secondaryDependencies.length) {
+        initializeFromBars(initialBars);
+      } else {
+        void secondaryReady.then(() => {
+          if (!stopped) initializeFromBars(getCurrentBars());
+        });
+      }
     }
 
     return {
@@ -391,21 +428,51 @@ export class CoreSpiritVelaEngine {
       update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
         if (stopped) return;
         currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
+
         const runUpdate = (): void => {
-          const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+          const currentBars = getCurrentBars();
           runtime = createRuntime();
           runtime.loadIr(token.ir);
-          const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
           scene.reset();
-          scene.seed(result);
-          firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
-          lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
-          emitModel(Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime) ? { from: firstSeriesTime, to: lastTime } : undefined);
-          liveStarted = req.mode === 'live';
+
+          if (req.mode === 'live') {
+            const historical = currentBars.slice(0, -1);
+            if (historical.length) scene.seed(safeOutputs(runtime.executeIr(token.ir, historical).outputs));
+
+            const latest = currentBars.at(-1);
+            if (latest) {
+              const latestResult = safeOutputs(runtime.executeBar(latest).outputs);
+              const latestTime = barTimeMillis(latest.timestamp);
+              if (Number.isFinite(latestTime)) emitScenePatches(latestResult, { from:latestTime, to:latestTime });
+              lastTime = latestTime;
+            }
+
+            firstSeriesTime = currentBars.length ? barTimeMillis(currentBars[0]?.timestamp) : Number.NaN;
+            historyInitialized = true;
+            liveStarted = true;
+          } else {
+            const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
+            scene.seed(result);
+            firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
+            lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
+            historyInitialized = true;
+          }
+
+          emitModel(
+            Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
+              ? { from:firstSeriesTime, to:lastTime }
+              : undefined,
+          );
         };
-        if (secondaryDependencies.length && secondaryData.size < secondaryDependencies.length) void loadSecondaryData(true).then(runUpdate);
-        else if (secondaryDependencies.length) void loadSecondaryData().then(runUpdate);
-        else runUpdate();
+
+        if (secondaryDependencies.length) {
+          void loadSecondaryData(true)
+            .then(runUpdate)
+            .catch(error => handlers.onError?.(error instanceof Error ? error : new Error(String(error))));
+        } else {
+          try { runUpdate(); }
+          catch (error) { handlers.onError?.(error instanceof Error ? error : new Error(String(error))); }
+        }
       },
       setVisibleRange(range) {
         if (stopped || !currentMetadata.reactsToViewport) return;
@@ -431,13 +498,12 @@ export class CoreSpiritVelaEngine {
       },
       notifyBars(reason, dirtyRange) {
         if (stopped) return;
-        const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+        const currentBars = getCurrentBars();
         if (!currentBars.length) return;
 
         if (reason === 'backfill') {
-          // Initial live startup is intentionally deferred while Vela is still
-          // prepending history. This prevents executing a partial dataset and
-          // then immediately rebuilding the whole runtime at completion.
+          // Older pages may arrive while Vela is still building the initial dataset.
+          // Do not execute partial history; wait for the single complete snapshot.
           if (!historyInitialized) return;
 
           if (dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
@@ -456,25 +522,34 @@ export class CoreSpiritVelaEngine {
           return;
         }
 
-        if (reason === 'complete' && !historyInitialized) {
-          if (secondaryDependencies.length) {
-            void loadSecondaryData(true).then(() => initializeHistory(currentBars));
-          } else {
-            initializeHistory(currentBars);
+        if (reason === 'complete') {
+          if (!historyInitialized) {
+            if (secondaryDependencies.length) {
+              void loadSecondaryData(true)
+                .then(() => initializeFromBars(getCurrentBars()))
+                .catch(error => handlers.onError?.(error instanceof Error ? error : new Error(String(error))));
+            } else {
+              initializeFromBars(currentBars);
+            }
           }
           return;
         }
 
-        if (!historyInitialized) return;
-        if (req.mode === 'live' && secondaryDependencies.length) void loadSecondaryData();
+        if (!historyInitialized || req.mode !== 'live') return;
+        if (secondaryDependencies.length) void loadSecondaryData();
 
         const latest = currentBars.at(-1);
         if (!latest) return;
+
         const latestTime = barTimeMillis(latest.timestamp);
-        const result = safeOutputs(runtime.executeBar(latest).outputs);
-        if (Number.isFinite(latestTime)) {
-          emitScenePatches(result, { from: latestTime, to: latestTime });
-          lastTime = latestTime;
+        try {
+          const result = safeOutputs(runtime.executeBar(latest).outputs);
+          if (Number.isFinite(latestTime)) {
+            emitScenePatches(result, { from:latestTime, to:latestTime });
+            lastTime = latestTime;
+          }
+        } catch (error) {
+          handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
         }
       },
     };
