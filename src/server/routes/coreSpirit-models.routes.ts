@@ -13,6 +13,7 @@ import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../se
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
+import { materializeCoreSpiritFeatureRows } from '../../services/coreSpirit/coreSpiritFeatureMaterializer.js';
 
 export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
@@ -253,11 +254,13 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
   if (!researchArtifactId) return fail(res, 400, 'researchArtifactId is required.');
   let range: { from: string; to: string };
   let featureNames: string[];
-  let rows: ReturnType<typeof parseRows>;
+  let rows: ReturnType<typeof parseRows> | null = null;
+  const rawBars = req.body?.bars;
   try {
     range = parseRange(req.body?.trainingRange);
     featureNames = parseFeatureNames(req.body?.featureNames);
-    rows = parseRows(req.body?.rows, featureNames, range);
+    if (Array.isArray(req.body?.rows)) rows = parseRows(req.body.rows, featureNames, range);
+    else if (!Array.isArray(rawBars)) throw new Error('Provide precomputed rows or chronological OHLCV bars for automatic CoreScript feature materialization.');
   } catch (error) {
     return fail(res, 400, error instanceof Error ? error.message : 'Invalid training request.');
   }
@@ -294,6 +297,19 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     if (graph.featureNames.length !== featureNames.length ||
         graph.featureNames.some((name, index) => name !== featureNames[index])) {
       return fail(res, 422, 'Training feature names must exactly match the compiled research artifact feature schema.');
+    }
+    if (!rows) {
+      try {
+        const materialized = materializeCoreSpiritFeatureRows({
+          source: research.source,
+          bars: rawBars,
+          trainingRange: range,
+          expectedFeatureNames: featureNames,
+        });
+        rows = parseRows(materialized.rows, featureNames, range);
+      } catch (error) {
+        return fail(res, 422, error instanceof Error ? error.message : 'Unable to materialize research features.');
+      }
     }
     if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
       return fail(res, 422, 'No training backend is registered for this model family.');
