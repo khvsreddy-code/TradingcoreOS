@@ -300,7 +300,46 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
     cursor=close+1;
     marker.lastIndex=cursor;
   }
-  return rebuilt;
+  // Lower typed HMM and dataset syntax to the shared parser/IR/runtime.
+  const hmmNames = new Set(Array.from(out.matchAll(/^\s*model\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*HMM(?:<[^>]+>)?\s*\{/gim), match => match[1]!));
+  const sourceLines = rebuilt.split('\n');
+  const loweredLines = [];
+  for (let i = 0; i < sourceLines.length; i += 1) {
+    const line = sourceLines[i];
+    const datasetHeader = line.match(/^(\s*)(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*dataset\s*\{\s*$/i);
+    if (datasetHeader) {
+      const fields = [];
+      let j = i + 1;
+      for (; j < sourceLines.length; j += 1) {
+        const candidate = sourceLines[j];
+        if (candidate.trim() === '}') break;
+        if (!candidate.trim() || candidate.trim().startsWith('//')) continue;
+        const field = candidate.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*?)\s*,?$/);
+        if (!field || !field[2]) throw new Error('dataset blocks require fieldName: numericExpression entries');
+        fields.push(JSON.stringify(field[1]), field[2].replace(/,\s*$/, '').trim());
+      }
+      if (j >= sourceLines.length) throw new Error('Unterminated dataset block; expected a closing brace');
+      if (!fields.length) throw new Error('dataset blocks require at least one feature');
+      loweredLines.push(datasetHeader[1] + 'let ' + datasetHeader[2] + ' = dataset(' + fields.join(', ') + ');');
+      i = j;
+      continue;
+    }
+    const fit = line.match(/^(\s*)fit\s+([A-Za-z_][A-Za-z0-9_]*)\s+on\s+([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
+    if (fit && hmmNames.has(fit[2])) {
+      loweredLines.push(fit[1] + 'hmmFit(' + JSON.stringify(fit[2]) + ', ' + fit[3] + ');');
+      continue;
+    }
+    loweredLines.push(line);
+  }
+
+  return loweredLines.map(line => {
+    const method = line.match(/^(\s*)(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.(decode|probability|posterior)\s*\((.*)\)\s*;?$/i);
+    if (!method || !hmmNames.has(method[3])) return line;
+    const functionName = method[4].toLowerCase() === 'decode' ? 'hmmDecode'
+      : method[4].toLowerCase() === 'probability' ? 'hmmProbability' : 'hmmPosterior';
+    return method[1] + 'let ' + method[2] + ' = ' + functionName + '(' + JSON.stringify(method[3]) +
+      (method[5].trim() ? ', ' + method[5].trim() : '') + ');';
+  }).join('\n');
 }
 
 export function normalizeCoreSpiritSource(source: string): string {
@@ -393,7 +432,7 @@ export function normalizeCoreSpiritSource(source: string): string {
       }
     }
 
-    const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\{\s*$/i);
+    const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))(?:\s*:\s*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)?\s*\{\s*$/i);
     if (braceModel) {
       wrappers.push({ indent, kind:'model' });
       modelBraceIndents.push(indent);
