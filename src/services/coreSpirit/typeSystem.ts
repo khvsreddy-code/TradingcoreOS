@@ -22,6 +22,7 @@ export type CoreSpiritType =
   | `developing<${string}>`
   | `forecast<${string}>`
   | `array<${string}>`
+  | `vector<${string}>`
   | `matrix<${string}>`
   | `tensor<${string}>`
   | `market<${string}>`
@@ -199,7 +200,8 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
-  if (/^(array|matrix|tensor|market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
+  if (/^(array|vector|matrix|tensor|market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
+  if (name.startsWith('vector<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
   if (['trade','orderbook','footprint','portfolio','position','order','fill','signal-intent','order-intent'].includes(name)) return name as CoreSpiritType;
@@ -231,6 +233,15 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'series<boolean>') return actual === 'boolean';
   if (expected === 'series<string>') return actual === 'string';
   if (expected === 'series<int>') return actual === 'int';
+  const expectedShape = expected.match(/^(array|vector|matrix|tensor)<(.+)>$/i);
+  const actualShape = actual.match(/^(array|vector|matrix|tensor)<(.+)>$/i);
+  if (expectedShape || actualShape) {
+    if (!expectedShape || !actualShape || expectedShape[1]!.toLowerCase() !== actualShape[1]!.toLowerCase()) return false;
+    const numeric = new Set(['int','float','number']);
+    const wanted = expectedShape[2]!.toLowerCase();
+    const received = actualShape[2]!.toLowerCase();
+    return wanted === received || (numeric.has(wanted) && numeric.has(received));
+  }
   return false;
 }
 
