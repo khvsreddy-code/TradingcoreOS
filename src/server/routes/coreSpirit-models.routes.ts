@@ -62,15 +62,15 @@ function splitCallArguments(text: string): string[] {
 }
 
 function extractDeclaredFeatureNames(source: string, modelFeatures: readonly string[]): string[] {
-  const block = source.match(/(?:^|\\n)\\s*(?:features?|inputs?)\\s*[:=]\\s*(?:dataset|featureSet)\\s*\\{([\\s\\S]*?)\\}/i);
+  const block = source.match(/(?:^|\n)\s*(?:features?|inputs?)\s*[:=]\s*(?:dataset|featureSet)\s*\{([\s\S]*?)\\}/i);
   if (block) {
-    const names = block[1]!.split(/\\r?\\n/)
+    const names = block[1]!.split(/\r?\n/)
       .map(line => line.trim().replace(/,$/, ''))
-      .map(line => line.match(/^([A-Za-z_][A-Za-z0-9_]*)\\s*(?::|$)/)?.[1])
+      .map(line => line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?::|$)/)?.[1])
       .filter((name): name is string => Boolean(name));
     if (names.length) return [...new Set(names)];
   }
-  const datasetStart = /\\bdataset\\s*\\(/gi;
+  const datasetStart = /\bdataset\s*\(/gi;
   for (const match of source.matchAll(datasetStart)) {
     const open = (match.index ?? 0) + match[0].lastIndexOf('(');
     let depth = 0;
