@@ -310,6 +310,9 @@ export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
     ? await store.getByHash(nameOrHash)
     : await store.getByName(nameOrHash);
   if (!artifact) throw new Error('Model artifact "' + nameOrHash + '" was not found');
+  if (/^[a-f0-9]{64}$/i.test(nameOrHash) && artifact.hash.toLowerCase() !== nameOrHash.toLowerCase()) {
+    throw new Error('Model artifact lookup hash does not match the stored artifact identity');
+  }
   if (!(await verifyModelArtifactIntegrity(artifact))) {
     throw new Error('Model artifact integrity check failed for "' + artifact.name + '"');
   }
