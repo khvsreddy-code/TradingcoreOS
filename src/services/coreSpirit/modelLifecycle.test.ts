@@ -104,6 +104,7 @@ async function main(): Promise<void> {
 
   const store = new InMemoryModelArtifactStore<typeof artifact.weights>();
   await store.put(artifact);
+  await store.put(republished);
   const inference = await loadModelForInference(store, artifact.hash, async loaded => {
     const weights = loaded.weights as typeof artifact.weights;
     const model = CoreSpiritGaussianHMM.fromTrainedState(weights.hmm);
