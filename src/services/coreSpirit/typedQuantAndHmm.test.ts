@@ -47,6 +47,18 @@ const explicitAlgebra = compileCoreSpirit([
 ].join('\n'), 'typed-quant-algebra-valid', { layer: 'model' });
 assert(Boolean(explicitAlgebra.ir), 'explicit shaped constructors and linear algebra should compile: ' + explicitAlgebra.diagnostics.map(item => item.message).join('; '));
 
+const invalidFunctionArgument = compileCoreSpirit([
+  'let vectorValue: vector<float> = vector(1, 2);',
+  'fn multiply(left: matrix<float>, right: matrix<float>) -> matrix<float> {',
+  '  return matmul(left, right);',
+  '}',
+  'let invalidProduct = multiply(vectorValue, vectorValue);',
+].join('\n'), 'typed-quant-function-arguments', { layer: 'model' });
+assert(!invalidFunctionArgument.ir, 'function inlining must preserve builtin matrix operand type checks');
+assert(invalidFunctionArgument.diagnostics.some(item => item.code === 'TYPE_MATRIX_OPERAND'),
+  'wrongly typed function arguments should be caught in the inlined body');
+
+
 const invalidSeriesAssignment = compileCoreSpirit([
   'let notASeries: series<float> = 2;',
 ].join('\n'), 'typed-quant-no-scalar-to-series', { layer: 'model' });
