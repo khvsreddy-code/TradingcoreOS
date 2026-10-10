@@ -12,6 +12,7 @@ type TrainingPayload = Readonly<{
   trainingRange: Readonly<{ from: string; to: string }>;
   trainingParameters: Readonly<Record<string, string | number | boolean | null>>;
   randomSeed: number;
+  modelArtifactName?: string;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -66,6 +67,8 @@ function parsePayload(value: unknown): TrainingPayload {
     trainingRange: { from: trainingRange.from, to: trainingRange.to },
     trainingParameters: trainingParameters as TrainingPayload['trainingParameters'],
     randomSeed: Number(value.randomSeed),
+    ...(typeof value.modelArtifactName === 'string' && value.modelArtifactName.trim()
+      ? { modelArtifactName: value.modelArtifactName.trim() } : {}),
   };
 }
 
@@ -171,6 +174,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         maxObservations: payload.rows.length,
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
+        artifactName: payload.modelArtifactName ?? String((featureGraph as Record<string, unknown>).saveAs ?? research.name),
       },
       randomSeed: payload.randomSeed,
       modelImplementation: 'corespirit-gaussian-hmm-v1',
@@ -183,6 +187,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     };
     const artifact = await sealModelArtifact({
       research,
+      name: payload.modelArtifactName ?? String((featureGraph as Record<string, unknown>).saveAs ?? research.name),
       provenance,
       weights: {
         modelType: 'gaussian-hmm',

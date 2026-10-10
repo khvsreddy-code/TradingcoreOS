@@ -14,6 +14,7 @@ import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 import { materializeCoreSpiritFeatureRows } from '../../services/coreSpirit/coreSpiritFeatureMaterializer.js';
+import { lowerCoreSpiritResearchSource, parseCoreSpiritModelLifecycleSurface } from '../../services/coreSpirit/modelLifecycleSurface.js';
 
 export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
@@ -174,9 +175,13 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     return fail(res, 400, error instanceof Error ? error.message : 'Invalid feature schema.');
   }
 
+  let lifecyclePlan;
+  try { lifecyclePlan = parseCoreSpiritModelLifecycleSurface(source); }
+  catch (error) { return fail(res, 422, error instanceof Error ? error.message : 'Invalid model lifecycle directives.'); }
+  const compilerSource = lowerCoreSpiritResearchSource(source, lifecyclePlan);
   let compiled: ReturnType<typeof compileCoreSpirit>;
   try {
-    compiled = compileCoreSpirit(source, 'research:' + name, { layer: 'model' });
+    compiled = compileCoreSpirit(compilerSource, 'research:' + name, { layer: 'model' });
   } catch (error) {
     return fail(res, 422, error instanceof Error ? 'CoreScript compilation failed: ' + error.message : 'CoreScript compilation failed.');
   }
@@ -218,6 +223,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     modelType: (declaration.modelType ?? '').toLowerCase() === 'hmm' ? 'HMM' : 'HMM<float>',
     states,
     covariance: declaration.covariance ?? 'full',
+    lifecyclePlan,
   };
   try {
     const featureGraph = { ...featureGraphBase, executionPlanHash: await coreSpiritSha256(compiled.ir) };
@@ -241,6 +247,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
         compilerVersion: stored.artifact.compilerVersion,
         irVersion: stored.artifact.irVersion,
         supportedTrainer: 'corespirit-gaussian-hmm-v1',
+        lifecyclePlan,
         warnings: compiled.diagnostics.filter(item => item.severity === 'warning').map(item => item.message),
       },
     });
@@ -343,6 +350,9 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
         datasetVersion,
         trainingParameters,
         randomSeed,
+        modelArtifactName: typeof req.body?.modelArtifactName === 'string' && req.body.modelArtifactName.trim()
+          ? req.body.modelArtifactName.trim()
+          : String((research.featureGraph as Record<string, unknown>).lifecyclePlan && ((research.featureGraph as Record<string, any>).lifecyclePlan.saveAs ?? '')),
       });
       res.status(202).json({
         success: true,

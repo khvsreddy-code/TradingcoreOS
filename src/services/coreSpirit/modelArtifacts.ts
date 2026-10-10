@@ -63,6 +63,7 @@ export type ResearchCompileInput = Readonly<{
 
 export type TrainModelInput<TWeights = unknown> = Readonly<{
   research: ResearchArtifact;
+  name?: string;
   provenance: ModelProvenance;
   weights: TWeights;
   metrics?: Readonly<Record<string, number>>;
@@ -222,6 +223,8 @@ export async function createResearchArtifact(input: ResearchCompileInput): Promi
 
 /** Seals trained weights together with every declared reproducibility input. */
 export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeights>): Promise<ModelArtifact<TWeights>> {
+  const artifactName = String(input.name ?? input.research.name).trim();
+  if (!artifactName || artifactName.length > 120) throw new Error('Model artifact name must be 1–120 characters');
   validateProvenance(input.provenance);
   if (input.provenance.sourceHash !== input.research.sourceHash) {
     throw new Error('Model sourceHash does not match the compiled research artifact');
@@ -240,7 +243,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
   const createdAt = input.createdAt ?? new Date().toISOString();
   const hash = await coreSpiritSha256(modelArtifactHashPayload({
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
-    name: input.research.name,
+    name: artifactName,
     provenance,
     weights,
     metrics,
@@ -248,7 +251,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
   return deepFreeze({
     kind: 'corespirit-model',
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
-    name: input.research.name,
+    name: artifactName,
     hash,
     provenance,
     weights,
