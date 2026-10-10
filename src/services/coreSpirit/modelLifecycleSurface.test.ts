@@ -1,5 +1,6 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import {
+  lowerCoreSpiritLiveInferenceSource,
   lowerCoreSpiritResearchSource,
   parseCoreSpiritModelLifecycleSurface,
 } from './modelLifecycleSurface.ts';
@@ -77,5 +78,15 @@ try {
   invalidDatasetName = error instanceof Error && /dataset name must be 1–120 characters/.test(error.message);
 }
 assert(invalidDatasetName, 'named datasets must be length-bounded before any provider call');
+
+const liveLowered = lowerCoreSpiritLiveInferenceSource(source, plan);
+assert(!liveLowered.includes('loadModel') && !/^train |^save /m.test(liveLowered),
+  'live chart lowering must strip training-only control-plane declarations');
+assert(liveLowered.includes('model("nifty-regime-v7").predict(features)'),
+  'live loadModel binding must lower to the existing model(name).predict runtime ABI');
+const liveCompiled = compileCoreSpirit(liveLowered, 'model-lifecycle-live-surface-contract', { layer: 'model' });
+assert(Boolean(liveCompiled.ir) && !liveCompiled.diagnostics.some(item => item.severity === 'error'),
+  'lowered live inference source must compile through the existing CoreSpirit compiler: ' +
+  liveCompiled.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
 
 console.log('CORESPIRIT_MODEL_LIFECYCLE_SURFACE_OK');
