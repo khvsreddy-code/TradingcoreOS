@@ -1052,6 +1052,10 @@ export class CoreSpiritRuntime {
       if(artifactModel) {
         const row=args[1] as CoreSpiritDatasetRow | null | undefined;
         if(!row || row.kind!=='dataset') throw new Error('Loaded HMM model.predict expects a dataset<float> feature row.');
+        // Indicator warm-up naturally produces nulls on early bars. Keep those
+        // outputs null instead of turning warm-up into a per-bar runtime error.
+        if(!Array.isArray(row.values) || row.values.length !== row.fields.length ||
+          row.values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return finish(null);
         const timestamp=this.toEpoch(bar.timestamp);
         if(!artifactModel.canPredictAt(timestamp)) return finish(null);
         const prediction=artifactModel.predict(row.values as readonly number[],row.fields,timestamp);
