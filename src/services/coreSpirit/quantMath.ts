@@ -8,6 +8,7 @@
 export type CoreSpiritVector = Readonly<{ kind: 'vector'; length: number; data: Float64Array }>;
 export type CoreSpiritDenseMatrix = Readonly<{ kind: 'matrix'; rows: number; columns: number; data: Float64Array }>;
 export type CoreSpiritDenseTensor = Readonly<{ kind: 'tensor'; shape: readonly number[]; data: Float64Array }>;
+export type CoreSpiritDistribution = Readonly<{ kind: 'distribution'; length: number; data: Float64Array }>;
 export type CoreSpiritDatasetRow = Readonly<{ kind: 'dataset'; fields: readonly string[]; values: readonly (number | null)[] }>;
 
 const MAX_MATRIX_CELLS = 65_536;
@@ -336,8 +337,10 @@ export class CoreSpiritGaussianHMM {
     return Math.max(...this.latestPosterior);
   }
 
-  posterior(): CoreSpiritVector | null {
-    return this.fitted && this.latestPosterior.length ? coreSpiritVector(this.latestPosterior) : null;
+  posterior(): CoreSpiritDistribution | null {
+    return this.fitted && this.latestPosterior.length
+      ? Object.freeze({ kind: 'distribution' as const, length: this.latestPosterior.length, data: Float64Array.from(this.latestPosterior) })
+      : null;
   }
 
   private fitBounded(): void {
