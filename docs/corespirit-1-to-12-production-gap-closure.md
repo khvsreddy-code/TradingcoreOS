@@ -24,7 +24,8 @@ This is an implementation map, not a claim that every research capability is pro
 1. Compile and persist a research artifact: POST /api/corespirit/research
 2. Persist a content-hashed dataset snapshot and enqueue a training run: POST /api/corespirit/training-runs
 3. Poll the owner-scoped run: GET /api/corespirit/training-runs/:runId
-4. Run inference against one immutable model hash: POST /api/corespirit/models/:hash/predict
+4. Fetch one verified immutable model artifact: GET /api/corespirit/models/:hash
+5. Run a forward-only single-step prediction: POST /api/corespirit/models/:hash/predict
 
 All routes require a valid TradingCoreOS/Supabase bearer session. Research artifacts, dataset snapshots, training runs and model artifacts are owner-scoped. Artifact and dataset tables are append-only; publish a new versioned model name instead of overwriting an existing model. The background job contains snapshot IDs, not a large mutable copy of the dataset.
 
@@ -57,13 +58,13 @@ Training request (timestamps are epoch milliseconds; rows must be chronological,
 
 The API currently requires 12–1,024 rows and 1–16 features. The row in the example is illustrative only; a real request must include the minimum row count. Dataset identity is computed server-side over the exact feature names, rows and training range. The HMM initializer is deterministic today; the seed is recorded for lineage but does not currently introduce randomness into this algorithm.
 
-Inference takes a model SHA-256 and one feature vector:
+The single-step inference API takes a model SHA-256, a feature vector and an epoch-millisecond timestamp strictly after the model's training range. It rejects in-sample timestamps to avoid accidental look-ahead leakage:
 
 ~~~json
-{ "features": [-0.003, 0.014] }
+{ "timestamp": 1767225900000, "features": [-0.003, 0.014] }
 ~~~
 
-The inference handle exposes only prediction, verifies the stored artifact hash before execution and does not expose training methods. The chart runtime has an explicit artifact-resolver hook so an application runtime can provide a preloaded sealed model. Developing-bar revisions are handled by rolling the HMM posterior back to the state before that timestamp and recomputing the prediction, rather than conditioning twice on a revised candle.
+The inference handle exposes only prediction, verifies the stored artifact hash before execution and does not expose training methods. For chart use, fetch the artifact once with GET /api/corespirit/models/:hash, then use fetchCoreSpiritHMMArtifact from src/services/coreSpirit/modelArtifactClient.ts to verify and hydrate a per-runtime HMM instance. Pass its createRuntimeResolver() result as hmmArtifactResolver when constructing CoreSpiritRuntime. Do not fetch the artifact or call the single-step API for every candle; that would add network latency to the hot path. Developing-bar revisions are handled by rolling the HMM posterior back to the state before that timestamp and recomputing the prediction, rather than conditioning twice on a revised candle.
 
 ## Operational requirements
 
