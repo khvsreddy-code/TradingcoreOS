@@ -222,6 +222,8 @@ export type CoreSpiritSurfaceDeclaration =
       states?: number;
       emission?: 'gaussian';
       covariance?: 'full' | 'diagonal';
+      unsupportedEmission?: string;
+      unsupportedCovariance?: string;
       binding?: CoreSpiritModelSurfaceBinding;
       inputs: string[];
       outputs: string[];
@@ -513,12 +515,23 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           const covariance = trimmed.match(/^covariance\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
           if (states) { current.declaration.states = Number(states[1]); offset += raw.length + 1; continue; }
           if (emission) {
-            if (emission[1]!.toLowerCase() === 'gaussian') current.declaration.emission = 'gaussian';
+            const value = emission[1]!.toLowerCase();
+            if (value === 'gaussian') {
+              current.declaration.emission = 'gaussian';
+              delete current.declaration.unsupportedEmission;
+            } else {
+              current.declaration.unsupportedEmission = value;
+            }
             concepts.add('MODEL'); offset += raw.length + 1; continue;
           }
           if (covariance) {
             const value = covariance[1]!.toLowerCase();
-            if (value === 'full' || value === 'diagonal') current.declaration.covariance = value;
+            if (value === 'full' || value === 'diagonal') {
+              current.declaration.covariance = value;
+              delete current.declaration.unsupportedCovariance;
+            } else {
+              current.declaration.unsupportedCovariance = value;
+            }
             concepts.add('MODEL'); offset += raw.length + 1; continue;
           }
         }
