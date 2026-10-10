@@ -185,6 +185,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       provenance,
       weights: {
         modelType: 'gaussian-hmm',
+        modelAlias: String(featureGraph.modelName ?? research.name),
         featureNames: payload.featureNames,
         hmm: hmmState,
       },
