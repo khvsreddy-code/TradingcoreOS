@@ -173,7 +173,12 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     return fail(res, 400, error instanceof Error ? error.message : 'Invalid feature schema.');
   }
 
-  const compiled = compileCoreSpirit(source, 'research:' + name, { layer: 'model' });
+  let compiled: ReturnType<typeof compileCoreSpirit>;
+  try {
+    compiled = compileCoreSpirit(source, 'research:' + name, { layer: 'model' });
+  } catch (error) {
+    return fail(res, 422, error instanceof Error ? 'CoreScript compilation failed: ' + error.message : 'CoreScript compilation failed.');
+  }
   const errors = compiled.diagnostics.filter(item => item.severity === 'error');
   if (!compiled.ir || errors.length) {
     res.status(422).json({
