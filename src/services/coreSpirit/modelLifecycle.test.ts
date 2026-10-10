@@ -38,6 +38,7 @@ async function main(): Promise<void> {
     modelType: declaration.modelType,
     states: declaration.states ?? 3,
     covariance: declaration.covariance ?? 'full',
+    ...(declaration.stateLabels ? { stateLabels: [...declaration.stateLabels] } : {}),
   };
   const research = await createResearchArtifact({
     name: 'nifty-regime-v7',
@@ -63,7 +64,11 @@ async function main(): Promise<void> {
       Math.abs(Math.cos(index * 0.19)) * 0.2 + Math.abs(regime) * 0.1,
     ], Date.UTC(2025, 0, 1) + index * 300_000, featureGraph.featureNames);
   }
+  hmm.setStateLabels(['bear', 'range', 'bull']);
   const snapshot = hmm.exportTrainedState();
+  assert(snapshot.stateLabels?.join(',') === 'bear,range,bull', 'sealed HMM snapshots must preserve explicit state labels');
+  assert(CoreSpiritGaussianHMM.fromTrainedState(snapshot).getStateLabels().join(',') === 'bear,range,bull',
+    'restored HMMs must preserve the same state labels for live inference');
   const provenance: ModelProvenance = {
     sourceHash: research.sourceHash,
     compilerVersion: research.compilerVersion,
@@ -138,7 +143,7 @@ async function main(): Promise<void> {
     'features = dataset("returns", 0.2, "volatility", 0.1)',
     'model = loadModel("nifty-regime-v7")',
     'prediction = model.predict(features)',
-    'confidence = model.probability(features, "state_0")',
+    'confidence = model.probability(features, "bull")',
     'plot confidence',
   ].join('\\n');
   const preparedLiveSource = await prepareCoreSpiritLiveInference(
@@ -171,7 +176,7 @@ async function main(): Promise<void> {
   });
   preparedRuntime.loadProgram(makeCoreSpiritProgram(preparedLiveSource.source, 'prepared-live-model-runtime'));
   const preparedExecution = preparedRuntime.executeIr(preparedCompile.ir!, chartBars);
-  assert(!preparedExecution.diagnostics.some(message => /No immutable HMM artifact|HMM fitting is disabled/.test(message)),
+  assert(!preparedExecution.diagnostics.some(message => /No immutable HMM artifact|HMM fitting is disabled|Unknown model state label/.test(message)),
     'a live loadModel binding must resolve by artifact name without fitting inside the chart runtime');
   assert(preparedExecution.outputs.some(output => output.kind === 'series'),
     'loadModel inference outputs must remain available to the existing chart renderer');
