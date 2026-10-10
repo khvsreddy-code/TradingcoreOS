@@ -87,6 +87,7 @@ const encoder = new TextEncoder();
 
 /** Convert supported values to an acyclic, JSON-safe tree before hashing/publishing. */
 function normalizeArtifactValue(value: unknown, ancestors = new WeakSet<object>()): unknown {
+  if (value === undefined) return undefined;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error('Artifact payload cannot contain non-finite numbers');
@@ -98,7 +99,7 @@ function normalizeArtifactValue(value: unknown, ancestors = new WeakSet<object>(
   if (Array.isArray(value)) {
     if (ancestors.has(value)) throw new Error('Artifact payload cannot contain circular references');
     ancestors.add(value);
-    const result = value.map(item => normalizeArtifactValue(item, ancestors));
+    const result = value.map(item => normalizeArtifactValue(item, ancestors) ?? null);
     ancestors.delete(value);
     return result;
   }
@@ -116,7 +117,7 @@ function normalizeArtifactValue(value: unknown, ancestors = new WeakSet<object>(
     ancestors.add(value);
     const result: Record<string, unknown> = {};
     for (const key of Object.keys(object).sort()) {
-      if (object[key] === undefined) throw new Error('Artifact payload cannot contain undefined values');
+      if (object[key] === undefined) continue;
       result[key] = normalizeArtifactValue(object[key], ancestors);
     }
     ancestors.delete(value);
