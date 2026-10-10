@@ -21,6 +21,20 @@ assert(definitions[0]?.name === 'ret1' && definitions[2]?.expression === 'rsi(cl
   'feature names and expressions must retain declaration order');
 
 
+const shorthandSource = [
+  'features = featureSet {',
+  '  ret1',
+  '  ret5',
+  '  atr20',
+  '  volumeZ',
+  '}',
+].join('\\n');
+const shorthandDefinitions = extractCoreSpiritFeatureDefinitions(shorthandSource);
+assert(shorthandDefinitions.length === 4 &&
+  shorthandDefinitions.every((definition, index) => definition.name === ['ret1', 'ret5', 'atr20', 'volumeZ'][index] &&
+    definition.expression === definition.name),
+  'concise featureSet aliases should be accepted as both output name and supported expression');
+
 const callSource = 'model regime: HMM<float> { states = 3 }\nfeatures = dataset("returns", pctchange(close), "volatility", atr(14))';
 const callDefinitions = extractCoreSpiritFeatureDefinitions(callSource);
 assert(callDefinitions.length === 2 && callDefinitions[0]?.expression === 'pctchange(close)' &&
@@ -51,6 +65,16 @@ assert(result.rows.every(row => row.values.length === 4 && row.values.every(Numb
   'materialized features must be aligned and finite');
 assert(result.rows.every((row, index) => index === 0 || row.timestamp > result.rows[index - 1]!.timestamp),
   'materialized observations must be strictly chronological');
+
+const shorthandResult = materializeCoreSpiritFeatureRows({
+  source: shorthandSource,
+  bars,
+  trainingRange: { from: '2025-01-01', to: '2025-01-02' },
+  expectedFeatureNames: ['ret1', 'ret5', 'atr20', 'volumeZ'],
+});
+assert(shorthandResult.rows.length >= 50 &&
+  shorthandResult.rows.every(row => row.values.length === 4 && row.values.every(Number.isFinite)),
+  'the concise featureSet form in the CoreScript authoring example must materialize aligned finite rows');
 
 let mismatchedNames = false;
 try {
