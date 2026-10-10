@@ -207,8 +207,15 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
       return fail(res, 422, 'No training backend is registered for this model family.');
     }
     const datasetVersion = await coreSpiritSha256({ featureNames, rows, trainingRange: range });
+    const snapshot = await repository.putDatasetSnapshot({
+      datasetVersion,
+      featureNames,
+      trainingRange: range,
+      rows,
+    });
     const trainingRunId = await repository.createTrainingRun({
       researchArtifactId,
+      datasetSnapshotId: snapshot.id,
       datasetVersion,
       datasetRowCount: rows.length,
       featureNames,
@@ -220,10 +227,8 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
       const queued = await enqueueBackgroundJob(req.tradingCoreUserId!, 'corespirit_model_training', {
         trainingRunId,
         researchArtifactId,
+        datasetSnapshotId: snapshot.id,
         datasetVersion,
-        rows,
-        featureNames,
-        trainingRange: range,
         trainingParameters,
         randomSeed,
       });
