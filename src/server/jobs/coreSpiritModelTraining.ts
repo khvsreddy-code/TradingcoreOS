@@ -100,7 +100,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       throw new Error('Research artifact source or feature-graph integrity check failed');
     }
 
-    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; lifecyclePlan?: { saveAs?: unknown } };
+    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; stateLabels?: unknown; lifecyclePlan?: { saveAs?: unknown } };
     if (!Array.isArray(featureGraph?.featureNames) ||
         featureGraph.featureNames.length !== payload.featureNames.length ||
         featureGraph.featureNames.some((name, index) => name !== payload.featureNames[index])) {
@@ -143,6 +143,10 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       fitEvery,
       fitIterations,
     });
+    if (featureGraph.stateLabels !== undefined) {
+      if (!Array.isArray(featureGraph.stateLabels)) throw new Error('Research artifact stateLabels must be an array');
+      hmm.setStateLabels(featureGraph.stateLabels as string[]);
+    }
     const decoded = new Set<number>();
     for (let index = 0; index < payload.rows.length; index += 1) {
       const row = payload.rows[index]!;
