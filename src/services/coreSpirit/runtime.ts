@@ -17,6 +17,7 @@ import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
 import { ATRState, RSIState, VWAPSessionState } from './statefulIndicatorKernel';
 import { RollingBetaState, RollingCorrelationState, detectQuantRegime } from './quantKernels';
+import { CoreSpiritGaussianHMM, coreSpiritDataset, coreSpiritIdentity, coreSpiritMatrix, coreSpiritMatrixAdd, coreSpiritMatrixMultiply, coreSpiritMatrixScale, coreSpiritMatrixTranspose, coreSpiritTensor, coreSpiritVector, coreSpiritVectorDot, coreSpiritZeros, type CoreSpiritDatasetRow } from './quantMath';
 import { createCoreSpiritOrderIntent, normalizeCoreSpiritOrderDirection, normalizeCoreSpiritOrderSizing } from './orderIntent';
 import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './seriesFusion';
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
@@ -197,6 +198,7 @@ export class CoreSpiritRuntime {
   private readonly vwapKernels = new Map<string, VWAPSessionState>();
   private readonly betaKernels = new Map<string, RollingBetaState>();
   private readonly trendStrengthKernels = new Map<string, RollingCorrelationState>();
+  private readonly hmmModels = new Map<string, { signature:string; model:CoreSpiritGaussianHMM }>();
   /**
    * Bounded confirmed-bar checkpoints. The fast hot path restores only the
    * stateful kernels that the dirty graph says are affected by the forming bar.
@@ -273,7 +275,7 @@ export class CoreSpiritRuntime {
     this.history = []; this.columnarHistory.clear(); this.crossState = {}; this.lastDirtyPlan=undefined; this.realtimeDirtyInstructions.clear(); this.viewportMemo.clear();
     this.seriesRegistry.reset();
     this.stateStore.bind(this.crossState);
-    this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
+    this.currentBarSnapshot = undefined; this.plotOrdinal = 0; this.indicatorMemo.clear(); this.dataMemo.clear(); this.hmmModels.clear(); this.outputCount = 0; this.lastBarWasRealtime = false;
     this.stateStore.commitRealtimeTransaction();
     this.committedSeriesState=this.seriesRegistry.snapshotNumericObject();
     this.committedLocalSeries=this.seriesRegistry.snapshotValueObject();
@@ -883,12 +885,54 @@ export class CoreSpiritRuntime {
     return Boolean(resolved);
   }
 
+  private getHMMModel(modelName: string): CoreSpiritGaussianHMM {
+    const declaration = this.loadedSurface?.declarations.find(
+      (item): item is Extract<CoreSpiritSurfaceDeclaration, { kind:'model' }> =>
+        item.kind === 'model' && item.name === modelName,
+    );
+    if (!declaration || !declaration.modelType || !/^HMM(?:<.*>)?$/i.test(declaration.modelType)) {
+      throw new Error("Unknown typed HMM model '" + modelName + "'. Declare it with model name: HMM<float> { ... }.");
+    }
+    const options = {
+      states: declaration.states ?? 3,
+      emission: declaration.emission ?? 'gaussian' as const,
+      covariance: declaration.covariance ?? 'full' as const,
+    };
+    const signature = JSON.stringify(options);
+    const cached = this.hmmModels.get(modelName);
+    if (cached?.signature === signature) return cached.model;
+    const model = new CoreSpiritGaussianHMM(options);
+    this.hmmModels.set(modelName, { signature, model });
+    return model;
+  }
+
   private call(callKey:string,name:string,args:unknown[],bar:HistoricalCandle,bars:HistoricalCandle[],index:number,seriesArgs:string[]):unknown {
     const series = seriesArgs[0] || 'close'; const length = Math.max(1,Math.floor(Number(args[1] ?? 14)));
     const memoKey = `${name}|${series}|${length}|${index}|${args.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(',')}`;
     if (this.indicatorMemo.has(memoKey)) return this.indicatorMemo.get(memoKey);
     const finish = (value: unknown) => { this.indicatorMemo.set(memoKey, value); return value; };
     this.capabilityHost.assert(name);
+    if (name === 'vector') return finish(coreSpiritVector(...args));
+    if (name === 'matrix') return finish(coreSpiritMatrix(args[0], args[1], ...args.slice(2)));
+    if (name === 'tensor') return finish(coreSpiritTensor(args[0], ...args.slice(1)));
+    if (name === 'zeros') return finish(coreSpiritZeros(args[0], args[1]));
+    if (name === 'identity') return finish(coreSpiritIdentity(args[0]));
+    if (name === 'matrixAdd') return finish(coreSpiritMatrixAdd(args[0], args[1]));
+    if (name === 'matrixScale') return finish(coreSpiritMatrixScale(args[0], args[1]));
+    if (name === 'matmul') return finish(coreSpiritMatrixMultiply(args[0], args[1]));
+    if (name === 'transpose') return finish(coreSpiritMatrixTranspose(args[0]));
+    if (name === 'dot') return finish(coreSpiritVectorDot(args[0], args[1]));
+    if (name === 'dataset') return finish(coreSpiritDataset(...args));
+    if (name === 'hmmFit') {
+      const modelName = String(args[0] ?? '');
+      const row = args[1] as CoreSpiritDatasetRow | null | undefined;
+      if (!row || row.kind !== 'dataset') throw new Error('hmmFit expects a dataset<float> row');
+      if (row.values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return finish(null);
+      return finish(this.getHMMModel(modelName).observe(row.values as readonly number[], this.toEpoch(bar.timestamp), row.fields));
+    }
+    if (name === 'hmmDecode') return finish(this.getHMMModel(String(args[0] ?? '')).decodeLatest());
+    if (name === 'hmmProbability') return finish(this.getHMMModel(String(args[0] ?? '')).probabilityLatest());
+    if (name === 'hmmPosterior') return finish(this.getHMMModel(String(args[0] ?? '')).posterior());
     if(name==='__input') {
       const key = String(args[0] ?? '');
       const override = this.inputValues[key];
