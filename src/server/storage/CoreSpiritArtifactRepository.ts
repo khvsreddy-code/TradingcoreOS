@@ -177,7 +177,22 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       .eq('owner_user_id', this.ownerUserId)
       .maybeSingle();
     if (error) throw new Error('Unable to load CoreSpirit training run: ' + error.message);
-    return data as Record<string, unknown> | null;
+    if (!data) return null;
+    let modelName: string | null = null;
+    let modelHash: string | null = null;
+    if (typeof data.model_artifact_id === 'string') {
+      const model = await this.db.from('corespirit_model_artifacts')
+        .select('name,artifact_hash')
+        .eq('id', data.model_artifact_id)
+        .eq('owner_user_id', this.ownerUserId)
+        .maybeSingle();
+      if (model.error) throw new Error('Unable to load trained model reference: ' + model.error.message);
+      if (model.data) {
+        modelName = String(model.data.name);
+        modelHash = String(model.data.artifact_hash);
+      }
+    }
+    return { ...(data as Record<string, unknown>), modelName, modelHash };
   }
 
   async put(artifact: ModelArtifact<unknown>): Promise<void> {
