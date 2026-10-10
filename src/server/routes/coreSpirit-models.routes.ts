@@ -48,6 +48,12 @@ async function fetchFyersResearchBars(
   } catch {
     throw new CoreSpiritDatasetProviderError('Unable to decrypt the connected FYERS session. Reconnect FYERS and retry.', 401);
   }
+  if (!process.env.FYERS_CLIENT_ID) {
+    throw new CoreSpiritDatasetProviderError('FYERS_CLIENT_ID is not configured for market-history requests.', 503);
+  }
+  if (!accessToken.trim()) {
+    throw new CoreSpiritDatasetProviderError('The connected FYERS session has no access token. Reconnect FYERS and retry.', 401);
+  }
   const marketData = new FyersMarketDataService(new FyersApiClient(accessToken));
   return fetchCoreSpiritDatasetBars(datasetName, trainingRange, (dataset, from, to) =>
     marketData.history(dataset.symbol, dataset.resolution, from, to, { dateFormat: '1' }));
@@ -320,7 +326,8 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
       throw new Error('datasetName must be a non-empty string of at most 120 characters.');
     }
     const requestedDatasetName = typeof req.body?.datasetName === 'string' ? req.body.datasetName.trim() : '';
-    if (declaredDatasetName && requestedDatasetName && declaredDatasetName !== requestedDatasetName) {
+    if (declaredDatasetName && requestedDatasetName &&
+        declaredDatasetName.toUpperCase() !== requestedDatasetName.toUpperCase()) {
       throw new Error('datasetName must match the immutable dataset declared in the CoreScript train directive.');
     }
     datasetName = declaredDatasetName || requestedDatasetName;
