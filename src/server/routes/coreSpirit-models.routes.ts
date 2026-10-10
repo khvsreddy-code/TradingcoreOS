@@ -357,7 +357,7 @@ coreSpiritModelRoutes.get('/models/:hash', async (req: AuthenticatedRequest, res
     const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
     const artifact = await repository.getByHash(hash);
     if (!artifact) return fail(res, 404, 'Model artifact not found.');
-    if (!(await verifyModelArtifactIntegrity(artifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    if (artifact.hash.toLowerCase() !== hash || !(await verifyModelArtifactIntegrity(artifact))) return fail(res, 409, 'Model artifact integrity check failed.');
     res.setHeader('Cache-Control', 'private, no-store');
     res.json({ success: true, data: { artifact } });
   } catch (error) {
@@ -381,7 +381,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     const store = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
     const storedArtifact = await store.getByHash(hash);
     if (!storedArtifact) return fail(res, 404, 'Model artifact not found.');
-    if (!(await verifyModelArtifactIntegrity(storedArtifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    if (storedArtifact.hash.toLowerCase() !== hash || !(await verifyModelArtifactIntegrity(storedArtifact))) return fail(res, 409, 'Model artifact integrity check failed.');
     const rangeEnd = storedArtifact.provenance.trainingRange.to;
     const rangeEndIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(rangeEnd);
     const trainedThrough = Date.parse(rangeEnd) + (rangeEndIsDateOnly ? 86_399_999 : 0);
