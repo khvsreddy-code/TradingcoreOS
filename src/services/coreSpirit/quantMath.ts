@@ -215,6 +215,7 @@ export type CoreSpiritGaussianHMMState = Readonly<{
 export type CoreSpiritHMMArtifactBinding = Readonly<{
   artifactHash: string;
   modelAlias: string;
+  trainingEndTimestampMs: number;
   state: CoreSpiritGaussianHMMState;
 }>;
 
