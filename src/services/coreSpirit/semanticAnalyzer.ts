@@ -150,6 +150,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return 'unknown';
         }
 
+        if(n.name==='model') {
+          const name=n.args[0]?.type==='string' ? String(n.args[0].value) : undefined;
+          const declaration=name ? modelDeclarationMap.get(name) : undefined;
+          if (declaration?.kind==='model' && declaration.modelType) return `model<${declaration.modelType}>` as CoreSpiritType;
+        }
         if(n.name==='series') {
           if(n.args.length !== 1 || !compatible('string', argTypes[0])) {
             report(n,'series expects one string timeframe','TYPE_SERIES_TIMEFRAME');
@@ -158,6 +163,34 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         }
 
         const builtin=CORE_SPIRIT_BUILTINS.get(n.name);
+        const isMatrix = (type:CoreSpiritType) => type.startsWith('matrix<');
+        const isVector = (type:CoreSpiritType) => type.startsWith('vector<');
+        const isTensor = (type:CoreSpiritType) => type.startsWith('tensor<');
+        if (['matmul','matrixAdd'].includes(n.name) && argTypes.some(type => !isMatrix(type))) {
+          report(n, `${n.name} expects two matrix<float> operands; use vector/matrix constructors before linear algebra`, 'TYPE_MATRIX_OPERAND');
+        }
+        if (n.name === 'matrixScale' && (!isMatrix(argTypes[0] ?? 'unknown') || !isNumericType(argTypes[1] ?? 'unknown'))) {
+          report(n, 'matrixScale expects matrix<float> and a numeric scalar', 'TYPE_MATRIX_SCALE');
+        }
+        if (n.name === 'transpose' && !isMatrix(argTypes[0] ?? 'unknown')) report(n, 'transpose expects matrix<float>', 'TYPE_MATRIX_OPERAND');
+        if (n.name === 'dot' && (!isVector(argTypes[0] ?? 'unknown') || !isVector(argTypes[1] ?? 'unknown'))) {
+          report(n, 'dot expects two vector<float> operands', 'TYPE_VECTOR_OPERAND');
+        }
+        if (n.name === 'tensor' && !isVector(argTypes[0] ?? 'unknown')) report(n, 'tensor expects a vector<float> shape as its first argument', 'TYPE_TENSOR_SHAPE');
+        if (n.name === 'dataset') {
+          if (n.args.length % 2 !== 0) report(n, 'dataset expects alternating field names and numeric values', 'TYPE_DATASET_FIELDS');
+          for (let i = 0; i < argTypes.length; i += 2) {
+            if (argTypes[i] !== 'string') report(n.args[i]!, 'dataset field names must be strings', 'TYPE_DATASET_FIELD_NAME');
+            if (argTypes[i + 1] !== undefined && !isNumericType(argTypes[i + 1]!)) report(n.args[i + 1]!, 'dataset feature values must be numeric', 'TYPE_DATASET_FIELD_VALUE');
+          }
+        }
+        if (n.name === 'hmmFit') {
+          if (argTypes[0] !== 'string') report(n.args[0] ?? n, 'hmmFit first argument must be the declared model name', 'TYPE_HMM_MODEL_NAME');
+          if (!(argTypes[1] ?? '').startsWith('dataset<')) report(n.args[1] ?? n, 'hmmFit expects a dataset<float> feature row', 'TYPE_HMM_DATASET');
+        }
+        if (['hmmDecode','hmmProbability','hmmPosterior'].includes(n.name) && argTypes[0] !== 'string') {
+          report(n.args[0] ?? n, `${n.name} first argument must be the declared model name`, 'TYPE_HMM_MODEL_NAME');
+        }
         if(['buy','sell','order'].includes(n.name) && !canUseCapability(options.layer || 'script','order-intents')) {
           report(n,`CoreSpirit layer '${options.layer || 'script'}' cannot use capability 'order-intents'`,'CAPABILITY_ORDER_INTENTS');
         }
@@ -329,6 +362,15 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
         }
         if(n.name==='model') return semanticScalar('model',{valueKind:'model',phase:'developing',causal:true,lookahead:false,lookback:0});
+        if(n.name==='vector') return semanticScalar('number',{container:'vector'});
+        if(['matrix','zeros','identity','matrixAdd','matrixScale','matmul','transpose'].includes(n.name)) return semanticScalar('number',{container:'matrix'});
+        if(n.name==='tensor') return semanticScalar('number',{container:'tensor'});
+        if(n.name==='dataset') return semanticScalar('number',{container:'dataset',valueKind:'dataset'});
+        if(n.name==='dot') return semanticScalar('number');
+        if(n.name==='hmmFit') return semanticScalar('number',{valueKind:'observed'});
+        if(n.name==='hmmDecode') return semanticScalar('number',{valueKind:'prediction'});
+        if(n.name==='hmmProbability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability'});
+        if(n.name==='hmmPosterior') return semanticScalar('number',{valueKind:'distribution'});
         if(n.name==='market') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:n.args[0]?.type==='string'?String(n.args[0].value):'current',timeframe:'chart'});
         if(n.name==='timeframe' || n.name==='series') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:'current',timeframe:n.args[0]?.type==='string'?String(n.args[0].value):'requested'});
         if(n.name==='bar_index') return semanticScalar('number',{phase:'developing',causal:true,lookahead:false,lookback:0});
