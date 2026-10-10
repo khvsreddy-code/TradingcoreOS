@@ -122,7 +122,7 @@ const conciseSource = [
 ].join('\n');
 const concisePlan = parseCoreSpiritModelLifecycleSurface(conciseSource);
 const conciseResearch = lowerCoreSpiritResearchSource(conciseSource, concisePlan);
-const canonicalFeatures = 'dataset("ret1", pctchange(close, 1), "ret5", pctchange(close, 5), "atr20", atr(close, 20), "volumeZ", zscore(volume, 20))';
+const canonicalFeatures = 'dataset("ret1", pctchange(close, 1), "ret5", pctchange(close, 5), "atr20", atr(20), "volumeZ", zscore(volume, 20))';
 assert(conciseResearch.includes(canonicalFeatures),
   'bare featureSet aliases must lower to the same explicit feature expressions used for live inference');
 const conciseResearchCompile = compileCoreSpirit(conciseResearch, 'concise-featureSet-research-contract', { layer: 'model' });
