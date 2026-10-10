@@ -135,9 +135,9 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     modelType: declaration.modelType ?? 'HMM<float>',
     states,
     covariance: declaration.covariance ?? 'full',
-    executionPlanHash: await coreSpiritSha256(compiled.ir),
   };
   try {
+    featureGraph.executionPlanHash = await coreSpiritSha256(compiled.ir);
     const research = await createResearchArtifact({
       name,
       source,
