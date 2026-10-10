@@ -1,4 +1,5 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
+import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import {
   lowerCoreSpiritLiveInferenceSource,
   lowerCoreSpiritResearchSource,
@@ -13,6 +14,7 @@ const source = [
   'model artifact RegimeV7',
   'model RegimeV7: HMM<float> {',
   '  states = 3',
+  '  stateLabels = ["bear", "range", "bull"]',
   '  emission = gaussian',
   '}',
   'features = dataset {',
@@ -39,6 +41,11 @@ assert(plan.training.from === '2018-01-01' && plan.training.to === '2025-12-31',
 assert(plan.saveAs === 'nifty-regime-v7', 'save-as should define an immutable versioned model name');
 assert(plan.loadModelName === 'nifty-regime-v7' && plan.loadBinding === 'model',
   'loadModel binding should resolve a stable model name');
+const surface = extractCoreSpiritSurfaceMetadata(source);
+const modelDeclaration = surface.declarations.find(item => item.kind === 'model');
+assert(modelDeclaration?.kind === 'model' &&
+  modelDeclaration.stateLabels?.join(',') === 'bear,range,bull',
+  'HMM state labels should be parsed as model metadata and remain ordered');
 
 const lowered = lowerCoreSpiritResearchSource(source, plan);
 assert(!/model artifact|^train |^save /m.test(lowered), 'orchestration statements must not leak into executable CoreScript');
@@ -46,6 +53,11 @@ assert(!lowered.includes('loadModel') && !lowered.includes('prediction ='), 'tra
 assert(lowered.includes('model RegimeV7: HMM<float>') && lowered.includes('ret1: pctchange(close)'),
   'lowering must preserve model and feature declarations');
 const compiled = compileCoreSpirit(lowered, 'model-lifecycle-surface-contract', { layer: 'model' });
+const invalidLabelsSource = source.replace('["bear", "range", "bull"]', '["bull", "bull", "range"]');
+const invalidLabels = compileCoreSpirit(lowerCoreSpiritResearchSource(invalidLabelsSource,
+  parseCoreSpiritModelLifecycleSurface(invalidLabelsSource)), 'invalid-hmm-labels-contract', { layer: 'model' });
+assert(invalidLabels.diagnostics.some(item => item.code === 'TYPE_HMM_STATE_LABELS'),
+  'duplicate HMM state labels must be rejected by semantic validation');
 assert(Boolean(compiled.ir) && !compiled.diagnostics.some(item => item.severity === 'error'),
   'lowered lifecycle source must compile through the existing CoreSpirit pipeline: ' +
   compiled.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
