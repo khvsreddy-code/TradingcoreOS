@@ -180,7 +180,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const isMatrix = (type:CoreSpiritType) => type.startsWith('matrix<');
         const isVector = (type:CoreSpiritType) => type.startsWith('vector<');
         if (n.name === 'vector' && argTypes.some(type => !isNumericScalarType(type))) {
-          report(n, 'vector expects numeric scalar or series values', 'TYPE_VECTOR_VALUE');
+          report(n, 'vector expects numeric scalar values; convert series explicitly before constructing a vector', 'TYPE_VECTOR_VALUE');
         }
         if (n.name === 'matrix') {
           if (!isNumericScalarType(argTypes[0] ?? 'unknown') || !isNumericScalarType(argTypes[1] ?? 'unknown')) {
