@@ -336,10 +336,21 @@ export class CoreSpiritWorkerPool {
     const { CoreSpiritRuntime } = await import('./runtime');
     const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
     for(const binding of hmmArtifacts ?? []){
-      if(!Number.isFinite(binding.trainingEndTimestampMs))throw new Error('Invalid CoreSpirit HMM training cutoff');
+      if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
+        typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
+        binding.artifactName !== undefined && (typeof binding.artifactName !== 'string' || !binding.artifactName.trim() || binding.artifactName.length > 120) ||
+        !Number.isFinite(binding.trainingEndTimestampMs)) {
+        throw new Error('Invalid CoreSpirit HMM artifact binding');
+      }
       const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
       model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
-      hmmModels.set(binding.modelAlias,model);
+      const aliases=new Set([binding.modelAlias,binding.artifactName,binding.artifactHash].filter(
+        (alias):alias is string=>typeof alias==='string'&&Boolean(alias.trim()),
+      ));
+      for(const alias of aliases){
+        if(hmmModels.has(alias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+alias);
+        hmmModels.set(alias,model);
+      }
     }
     const runtime=new CoreSpiritRuntime({
       sourceId,
