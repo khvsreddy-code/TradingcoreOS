@@ -119,7 +119,7 @@ const conciseSource = [
   'prediction = model.predict(features)',
   'confidence = model.probability(features, "bull")',
   'plot confidence',
-].join('\\n');
+].join('\n');
 const concisePlan = parseCoreSpiritModelLifecycleSurface(conciseSource);
 const conciseResearch = lowerCoreSpiritResearchSource(conciseSource, concisePlan);
 const canonicalFeatures = 'dataset("ret1", pctchange(close, 1), "ret5", pctchange(close, 5), "atr20", atr(close, 20), "volumeZ", zscore(volume, 20))';
