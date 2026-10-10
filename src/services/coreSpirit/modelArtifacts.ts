@@ -140,6 +140,16 @@ function canonical(value: unknown): string {
   throw new Error('Artifact payload cannot contain ' + typeof value);
 }
 
+function modelArtifactHashPayload<TWeights>(artifact: Pick<ModelArtifact<TWeights>, 'schemaVersion' | 'name' | 'provenance' | 'weights' | 'metrics'>): unknown {
+  return {
+    schemaVersion: artifact.schemaVersion,
+    name: artifact.name,
+    provenance: artifact.provenance,
+    weights: artifact.weights,
+    metrics: artifact.metrics,
+  };
+}
+
 /** Stable SHA-256 of canonical JSON; fails closed where WebCrypto is unavailable. */
 export async function coreSpiritSha256(value: unknown): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error('SHA-256 requires WebCrypto; refusing to create an unhashed model artifact');
@@ -228,13 +238,13 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
     if (!Number.isFinite(value)) throw new Error('Model metric "' + key + '" must be finite');
   }
   const createdAt = input.createdAt ?? new Date().toISOString();
-  const hash = await coreSpiritSha256({
+  const hash = await coreSpiritSha256(modelArtifactHashPayload({
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
     name: input.research.name,
     provenance,
     weights,
     metrics,
-  });
+  }));
   return deepFreeze({
     kind: 'corespirit-model',
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
@@ -257,7 +267,7 @@ export class InMemoryModelArtifactStore<TWeights = unknown> implements ModelArti
 
   async put(artifact: ModelArtifact<TWeights>): Promise<void> {
     const existing = this.byHash.get(artifact.hash);
-    if (existing && canonical(existing) !== canonical(artifact)) {
+    if (existing && canonical(modelArtifactHashPayload(existing)) !== canonical(modelArtifactHashPayload(artifact))) {
       throw new Error('Model artifact hash collision or inconsistent artifact payload');
     }
     const namedHash = this.nameToHash.get(artifact.name);
@@ -283,13 +293,7 @@ export async function verifyModelArtifactIntegrity<TWeights>(artifact: ModelArti
   if (!artifact || artifact.kind !== 'corespirit-model' ||
       artifact.schemaVersion !== CORESPIRIT_MODEL_ARTIFACT_VERSION ||
       !/^[a-f0-9]{64}$/.test(artifact.hash)) return false;
-  const expectedHash = await coreSpiritSha256({
-    schemaVersion: artifact.schemaVersion,
-    name: artifact.name,
-    provenance: artifact.provenance,
-    weights: artifact.weights,
-    metrics: artifact.metrics,
-  });
+  const expectedHash = await coreSpiritSha256(modelArtifactHashPayload(artifact));
   return expectedHash === artifact.hash;
 }
 
