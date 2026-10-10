@@ -240,7 +240,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     return fail(res, 422, 'train directive model name must match the compiled model declaration name.');
   }
   if (declaration.unsupportedEmission || declaration.unsupportedCovariance || declaration.unsupportedStateLabels) {
-    return fail(res, 422, 'Unsupported HMM configuration: ' + (declaration.unsupportedEmission || declaration.unsupportedCovariance));
+    return fail(res, 422, 'Unsupported HMM configuration: ' + (declaration.unsupportedEmission || declaration.unsupportedCovariance || declaration.unsupportedStateLabels));
   }
   const states = Number(declaration.states ?? 3);
   if (!Number.isInteger(states) || states < 2 || states > 12) return fail(res, 422, 'HMM states must be between 2 and 12.');
