@@ -256,6 +256,17 @@ async function main(): Promise<void> {
   assert(chartExecution.outputs.some(output => output.kind === 'series'),
     'inference-only model outputs should remain available to chart rendering');
 
+  const logreturnSource = ['logret = logreturn(close, 1)', 'plot logret'].join('\\n');
+  const logreturnCompile = compileCoreSpirit(logreturnSource, 'live-logreturn-contract', { layer: 'indicator' });
+  assert(Boolean(logreturnCompile.ir) && !logreturnCompile.diagnostics.some(item => item.severity === 'error'),
+    'logreturn must be a registered causal feature primitive');
+  const logreturnRuntime = new CoreSpiritRuntime({ layer: 'indicator', symbol: 'NIFTY', timeframe: '5m' });
+  logreturnRuntime.loadProgram(makeCoreSpiritProgram(logreturnSource, 'live-logreturn-contract'));
+  const logreturnExecution = logreturnRuntime.executeIr(logreturnCompile.ir!, chartBars);
+  assert(!logreturnExecution.diagnostics.some(message => /Unknown function|Unsupported call/.test(message)) &&
+    logreturnExecution.outputs.some(output => output.kind === 'series'),
+    'live logreturn must execute on chart bars using only prior closes');
+
   const revisedTimestamp = Date.UTC(2025, 0, 3);
   const rollbackModel = CoreSpiritGaussianHMM.fromTrainedState(snapshot);
   rollbackModel.predict([0.2, 0.1], featureGraph.featureNames, revisedTimestamp);
