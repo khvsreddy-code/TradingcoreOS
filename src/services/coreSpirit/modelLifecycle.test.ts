@@ -167,6 +167,15 @@ async function main(): Promise<void> {
   assert(chartExecution.outputs.some(output => output.kind === 'series'),
     'inference-only model outputs should remain available to chart rendering');
 
+  const revisedTimestamp = Date.UTC(2025, 0, 3);
+  const rollbackModel = CoreSpiritGaussianHMM.fromTrainedState(snapshot);
+  rollbackModel.predict([0.2, 0.1], featureGraph.featureNames, revisedTimestamp);
+  const revisedPrediction = rollbackModel.predict([0.7, 0.4], featureGraph.featureNames, revisedTimestamp);
+  const cleanPrediction = CoreSpiritGaussianHMM.fromTrainedState(snapshot)
+    .predict([0.7, 0.4], featureGraph.featureNames, revisedTimestamp);
+  assert(revisedPrediction.probabilities.every((value, index) => Math.abs(value - cleanPrediction.probabilities[index]!) < 1e-10),
+    'a developing-bar revision must be recomputed from the posterior before that bar');
+
   const blockedRuntime = new CoreSpiritRuntime({ layer: 'model', symbol: 'NIFTY', timeframe: '5m' });
   blockedRuntime.loadProgram(makeCoreSpiritProgram(source, 'model-lifecycle-training-guard'));
   const blockedExecution = blockedRuntime.executeIr(compiled.ir!, chartBars);
