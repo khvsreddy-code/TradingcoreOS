@@ -220,6 +220,22 @@ export class InMemoryModelArtifactStore<TWeights = unknown> implements ModelArti
   }
 }
 
+/** Recomputes a sealed artifact's content identity before persistence or inference. */
+export async function verifyModelArtifactIntegrity<TWeights>(artifact: ModelArtifact<TWeights>): Promise<boolean> {
+  if (!artifact || artifact.kind !== 'corespirit-model' ||
+      artifact.schemaVersion !== CORESPIRIT_MODEL_ARTIFACT_VERSION ||
+      !/^[a-f0-9]{64}$/.test(artifact.hash)) return false;
+  const expectedHash = await coreSpiritSha256({
+    schemaVersion: artifact.schemaVersion,
+    name: artifact.name,
+    provenance: artifact.provenance,
+    weights: artifact.weights,
+    metrics: artifact.metrics,
+    createdAt: artifact.createdAt,
+  });
+  return expectedHash === artifact.hash;
+}
+
 /** Pins inference to one immutable artifact; it never invokes training. */
 export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
   store: ModelArtifactStore<TWeights>,
