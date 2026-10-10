@@ -1,6 +1,8 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { CoreSpiritGaussianHMM } from './quantMath.ts';
+import { CoreSpiritRuntime } from './runtime.ts';
+import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
 import {
   createResearchArtifact,
   InMemoryModelArtifactStore,
@@ -111,6 +113,46 @@ async function main(): Promise<void> {
     integrityMismatchRejected = true;
   }
   assert(integrityMismatchRejected, 'tampered weights must fail the artifact SHA-256 integrity check');
+
+  const chartSource = [
+    'model regime: HMM<float> {',
+    '  states = 3',
+    '  emission = gaussian',
+    '  covariance = diagonal',
+    '}',
+    'features = dataset("returns", 0.2, "volatility", 0.1)',
+    'state = hmmDecode("regime", features)',
+    'confidence = hmmProbability("regime", features)',
+  ].join('\\n');
+  const chartCompile = compileCoreSpirit(chartSource, 'model-lifecycle-chart-inference', { layer: 'model' });
+  assert(Boolean(chartCompile.ir), 'inference-only chart source must compile: ' + chartCompile.diagnostics.map(item => item.message).join('; '));
+  const loadedHMM = CoreSpiritGaussianHMM.fromTrainedState(snapshot);
+  const chartRuntime = new CoreSpiritRuntime({
+    layer: 'model',
+    symbol: 'NIFTY',
+    timeframe: '5m',
+    hmmArtifactResolver: name => name === 'regime' ? loadedHMM : undefined,
+  });
+  chartRuntime.loadProgram(makeCoreSpiritProgram(chartSource, 'model-lifecycle-chart-inference'));
+  const chartBars = Array.from({ length: 3 }, (_, index) => ({
+    timestamp: new Date(Date.UTC(2025, 0, 2) + index * 300_000).toISOString(),
+    open: 100 + index,
+    high: 101 + index,
+    low: 99 + index,
+    close: 100.5 + index,
+    volume: 1000 + index * 10,
+  }));
+  const chartExecution = chartRuntime.executeIr(chartCompile.ir!, chartBars);
+  assert(!chartExecution.diagnostics.some(message => /HMM fitting is disabled|No immutable HMM artifact/.test(message)),
+    'a loaded model artifact must run inference without training inside the chart runtime');
+  assert(chartExecution.outputs.some(output => output.kind === 'series'),
+    'inference-only model outputs should remain available to chart rendering');
+
+  const blockedRuntime = new CoreSpiritRuntime({ layer: 'model', symbol: 'NIFTY', timeframe: '5m' });
+  blockedRuntime.loadProgram(makeCoreSpiritProgram(source, 'model-lifecycle-training-guard'));
+  const blockedExecution = blockedRuntime.executeIr(compiled.ir!, chartBars);
+  assert(blockedExecution.diagnostics.some(message => /HMM fitting is disabled in chart execution/.test(message)),
+    'default chart runtimes must reject HMM fitting instead of learning from live candles');
 }
 
 void main().catch(error => {
