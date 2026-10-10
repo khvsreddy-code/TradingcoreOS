@@ -20,7 +20,7 @@ create index if not exists corespirit_research_owner_created_idx
 create table if not exists public.corespirit_model_artifacts (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid not null references auth.users(id) on delete cascade,
-  research_artifact_id uuid not null references public.corespirit_research_artifacts(id) on delete restrict,
+  research_artifact_id uuid not null references public.corespirit_research_artifacts(id) on delete cascade,
   name text not null check (length(trim(name)) between 1 and 120),
   artifact_hash text not null unique check (artifact_hash ~ '^[a-f0-9]{64}$'),
   provenance jsonb not null,
@@ -41,7 +41,7 @@ create table if not exists public.corespirit_dataset_snapshots (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid not null references auth.users(id) on delete cascade,
   research_artifact_id uuid not null references public.corespirit_research_artifacts(id) on delete restrict,
-  dataset_snapshot_id uuid not null references public.corespirit_dataset_snapshots(id) on delete restrict,
+  dataset_snapshot_id uuid not null references public.corespirit_dataset_snapshots(id) on delete cascade,
   model_artifact_id uuid references public.corespirit_model_artifacts(id) on delete set null,
   status text not null default 'queued' check (status in ('queued','running','succeeded','failed','cancelled')),
   dataset_version text not null check (dataset_version ~ '^[a-f0-9]{64}$'),
