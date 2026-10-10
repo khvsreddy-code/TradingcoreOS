@@ -70,8 +70,22 @@ function parsePayload(value: unknown): TrainingPayload {
 }
 
 export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload: unknown): Promise<Record<string, unknown>> {
-  const payload = parsePayload(rawPayload);
-  const repository = new CoreSpiritArtifactRepository(ownerUserId, payload.researchArtifactId);
+  if (!isRecord(rawPayload)) throw new Error('CoreSpirit training payload must be an object');
+  const researchArtifactId = String(rawPayload.researchArtifactId ?? '');
+  const datasetSnapshotId = String(rawPayload.datasetSnapshotId ?? '');
+  const repository = new CoreSpiritArtifactRepository(ownerUserId, researchArtifactId);
+  if (!researchArtifactId || !datasetSnapshotId) throw new Error('Research artifact and immutable dataset snapshot IDs are required');
+  const snapshot = await repository.getDatasetSnapshot(datasetSnapshotId);
+  if (!snapshot) throw new Error('Immutable dataset snapshot not found for this owner');
+  if (String(rawPayload.datasetVersion ?? '') !== snapshot.datasetVersion) {
+    throw new Error('Queued dataset version does not match the immutable snapshot');
+  }
+  const payload = parsePayload({
+    ...rawPayload,
+    rows: snapshot.rows,
+    featureNames: snapshot.featureNames,
+    trainingRange: snapshot.trainingRange,
+  });
   await repository.updateTrainingRun(payload.trainingRunId, { status: 'running', progress: 5 });
 
   try {
