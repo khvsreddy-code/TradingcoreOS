@@ -40,7 +40,8 @@ function validateRange(from: string | undefined, to: string | undefined): void {
   if ((from && !to) || (!from && to)) throw new Error('CoreScript train directive must specify both from and to dates.');
   if (!from || !to) return;
   const fromMs = Date.parse(from);
-  const toMs = Date.parse(to);
+  const dateOnlyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(to);
+  const toMs = Date.parse(to) + (dateOnlyTo ? 86_399_999 : 0);
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs) {
     throw new Error('CoreScript train range must contain valid dates with from < to.');
   }

@@ -160,7 +160,8 @@ export async function coreSpiritSha256(value: unknown): Promise<string> {
 
 function validateDateRange(range: TrainingRange): void {
   const from = Date.parse(range.from);
-  const to = Date.parse(range.to);
+  const dateOnlyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(range.to);
+  const to = Date.parse(range.to) + (dateOnlyTo ? 86_399_999 : 0);
   if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
     throw new Error('Training range must contain valid dates with from < to');
   }

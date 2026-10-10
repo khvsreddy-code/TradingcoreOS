@@ -108,7 +108,8 @@ function parseRange(value: unknown): { from: string; to: string } {
   const range = value as Record<string, unknown>;
   if (typeof range.from !== 'string' || typeof range.to !== 'string') throw new Error('trainingRange.from and trainingRange.to must be strings.');
   const from = Date.parse(range.from);
-  const to = Date.parse(range.to);
+  const dateOnlyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(range.to);
+  const to = Date.parse(range.to) + (dateOnlyTo ? 86_399_999 : 0);
   if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error('Training range must contain valid dates with from < to.');
   return { from: range.from, to: range.to };
 }
@@ -200,6 +201,12 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   if (!declaration || declaration.kind !== 'model' || !['hmm<float>', 'hmm'].includes((declaration.modelType ?? '').toLowerCase())) {
     return fail(res, 422, 'The first production training backend supports typed Gaussian HMM models. Other model families need their own registered trainer.');
   }
+  if (lifecyclePlan.artifactSymbol && lifecyclePlan.artifactSymbol !== declaration.name) {
+    return fail(res, 422, 'model artifact declaration must match the compiled model declaration name.');
+  }
+  if (lifecyclePlan.training && lifecyclePlan.training.modelName !== declaration.name) {
+    return fail(res, 422, 'train directive model name must match the compiled model declaration name.');
+  }
   if (declaration.unsupportedEmission || declaration.unsupportedCovariance) {
     return fail(res, 422, 'Unsupported HMM configuration: ' + (declaration.unsupportedEmission || declaration.unsupportedCovariance));
   }
@@ -210,7 +217,10 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   if (!declaredFeatureNames.length) {
     return fail(res, 422, 'Declare named feature fields with features = dataset { name: expression } or dataset("name", expression, ...) before creating a research artifact.');
   }
-  if (!featureNames.length) featureNames = [...declaredFeatureNames];
+  if (!featureNames.length) {
+    try { featureNames = parseFeatureNames(declaredFeatureNames); }
+    catch (error) { return fail(res, 422, error instanceof Error ? error.message : 'Invalid declared feature names.'); }
+  }
   if (declaredFeatureNames.length !== featureNames.length ||
       declaredFeatureNames.some((name, index) => name !== featureNames[index])) {
     return fail(res, 422, 'featureNames must exactly match the ordered feature names declared in the CoreScript dataset expression.');
