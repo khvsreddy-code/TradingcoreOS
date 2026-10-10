@@ -399,6 +399,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
       }
       if (weights.featureNames.length !== values.length) throw new Error('Feature count does not match the trained model schema.');
       const hmm = CoreSpiritGaussianHMM.fromTrainedState(weights.hmm);
+      hmm.setInferenceBoundaryExclusive(trainedThrough);
       return { predict: async (features: readonly number[]) => hmm.predict(features, weights.featureNames, timestamp) };
     });
     const prediction = await inference.predict(values as number[]);
