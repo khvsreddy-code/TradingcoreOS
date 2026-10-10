@@ -239,7 +239,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   if (lifecyclePlan.training && lifecyclePlan.training.modelName !== declaration.name) {
     return fail(res, 422, 'train directive model name must match the compiled model declaration name.');
   }
-  if (declaration.unsupportedEmission || declaration.unsupportedCovariance) {
+  if (declaration.unsupportedEmission || declaration.unsupportedCovariance || declaration.unsupportedStateLabels) {
     return fail(res, 422, 'Unsupported HMM configuration: ' + (declaration.unsupportedEmission || declaration.unsupportedCovariance));
   }
   const states = Number(declaration.states ?? 3);
@@ -266,6 +266,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     modelType: (declaration.modelType ?? '').toLowerCase() === 'hmm' ? 'HMM' : 'HMM<float>',
     states,
     covariance: declaration.covariance ?? 'full',
+    ...(declaration.stateLabels ? { stateLabels: [...declaration.stateLabels] } : {}),
     lifecyclePlan,
   };
   try {
