@@ -1235,9 +1235,14 @@ export class CoreSpiritRuntime {
       return finish(kernel.update(current, mode));
     }
     if(name==='atr') {
-      const key = 'atr:' + length;
+      // atr(period) is the public CoreScript signature; accept the explicit
+      // two-argument series form as a compatibility path as well.
+      const atrLength = args.length === 1
+        ? Math.max(1, Math.floor(Number(args[0] ?? 14)))
+        : length;
+      const key = 'atr:' + atrLength;
       this.rememberKernelIdentity('atr', key, callKey, seriesArgs);
-      let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(length); this.atrKernels.set(key, kernel); }
+      let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(atrLength); this.atrKernels.set(key, kernel); }
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(Number(bar.high), Number(bar.low), Number(bar.close), mode));
     }
