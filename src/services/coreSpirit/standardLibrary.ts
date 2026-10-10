@@ -103,6 +103,23 @@ export const CORE_SPIRIT_STANDARD_LIBRARY: readonly CoreSpiritBuiltin[] = [
  * They are deliberately not part of the small language core.
  */
 export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
+  // Typed quant research primitives. Structured values are only combined by
+  // explicit operations; there is deliberately no implicit matrix/scalar broadcast.
+  { name:'vector', minArgs:1, returnType:'vector<float>', pure:true, category:'extension' },
+  { name:'matrix', minArgs:2, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'tensor', minArgs:2, returnType:'tensor<float>', pure:true, category:'extension' },
+  { name:'zeros', minArgs:2, maxArgs:2, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'identity', minArgs:1, maxArgs:1, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'matrixAdd', minArgs:2, maxArgs:2, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'matrixScale', minArgs:2, maxArgs:2, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'matmul', minArgs:2, maxArgs:2, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'transpose', minArgs:1, maxArgs:1, returnType:'matrix<float>', pure:true, category:'extension' },
+  { name:'dot', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'extension' },
+  { name:'dataset', minArgs:2, returnType:'dataset<float>', pure:true, category:'extension' },
+  { name:'hmmFit', minArgs:2, maxArgs:2, returnType:'number', pure:false, category:'extension' },
+  { name:'hmmDecode', minArgs:1, maxArgs:2, returnType:'prediction<float>', pure:false, category:'extension' },
+  { name:'hmmProbability', minArgs:1, maxArgs:2, returnType:'probability', pure:false, category:'extension' },
+  { name:'hmmPosterior', minArgs:1, maxArgs:2, returnType:'distribution<float>', pure:false, category:'extension' },
   { name:'__input', minArgs:2, maxArgs:2, returnType:'unknown', pure:true, category:'extension' },
 
   // Visual/output compatibility and advanced surface contracts. These remain

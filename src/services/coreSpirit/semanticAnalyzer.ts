@@ -1,6 +1,6 @@
 import { CoreSpiritAstNode, CoreSpiritAst } from './ast';
 import { CORE_SPIRIT_BUILTINS } from './standardLibrary';
-import { CoreSpiritType, compatible, isBooleanType, isNumericType, isStateType, joinTypes, normalizeDeclaredType, elementType } from './typeSystem';
+import { CoreSpiritType, compatible, isBooleanType, isNumericType, isNumericScalarType, isStateType, joinTypes, normalizeDeclaredType, elementType, isSeriesType } from './typeSystem';
 import { componentResultLanguageType, resolveCoreSpiritComponent, validateCoreSpiritComponentInvocation, type CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { combineSemanticArithmetic, compareSemanticTypes, mergeSemanticMetadata, semanticSeriesField, semanticScalar, semanticSeries, semanticTypeCompatible, semanticTypeForDeclaredName, semanticTypeToString, scalarize, type CoreSpiritSemanticType } from './semanticTypeSystem';
 import { getCoreSpiritMemberContract, CORE_SPIRIT_ROOT_NAMESPACES } from './memberRegistry';
@@ -40,6 +40,19 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
     severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
   });
+  for (const declaration of modelDeclarations) {
+    if (declaration.kind !== 'model' || !declaration.modelType || !/^HMM(?:<.*>)?$/i.test(declaration.modelType)) continue;
+    if (declaration.states !== undefined &&
+        (!Number.isInteger(declaration.states) || declaration.states < 2 || declaration.states > 12)) {
+      diagnostics.push({ severity:'error', message:'HMM states must be an integer between 2 and 12', code:'TYPE_HMM_STATES' });
+    }
+    if (declaration.unsupportedEmission) {
+      diagnostics.push({ severity:'error', message:"Unsupported HMM emission '" + declaration.unsupportedEmission + "'; currently use emission = gaussian", code:'TYPE_HMM_EMISSION' });
+    }
+    if (declaration.unsupportedCovariance) {
+      diagnostics.push({ severity:'error', message:"Unsupported HMM covariance '" + declaration.unsupportedCovariance + "'; use full or diagonal", code:'TYPE_HMM_COVARIANCE' });
+    }
+  }
 
   const mapDeclaredType=(name:string):CoreSpiritType=> normalizeDeclaredType(name);
 
@@ -54,7 +67,8 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='na') return 'null';
         if(n.name==='bar_index') return 'number';
         if(n.name==='bar') return 'udt:bar:context';
-        return scope.get(n.name) || 'unknown';
+        const resolved = scope.get(n.name) || 'unknown';
+        return isStateType(resolved) ? elementType(resolved) : resolved;
 
       case 'member': {
         if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return 'boolean';
@@ -122,16 +136,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const t=infer(n.operand,scope);
         if(n.operator==='!' && !isBooleanType(t)) report(n,'! expects a boolean value','TYPE_UNARY_BOOL');
         if(n.operator!=='!' && !isNumericType(t)) report(n,'Unary + and - expect a number','TYPE_UNARY_NUMBER');
-        return n.operator==='!'?'boolean':t;
+        return n.operator==='!' ? (t.startsWith('series<') ? 'series<boolean>' : 'boolean') : t;
       }
 
       case 'binary': {
         const a=infer(n.left,scope), b=infer(n.right,scope);
         if(n.operator==='and'||n.operator==='or'){
           if(!isBooleanType(a)||!isBooleanType(b)) report(n,`${n.operator} expects boolean operands`,'TYPE_LOGICAL');
-          return 'boolean';
+          return isSeriesType(a) || isSeriesType(b) ? 'series<boolean>' : 'boolean';
         }
-        if(comparisonOps.has(n.operator)) return 'boolean';
+        if(comparisonOps.has(n.operator)) return isSeriesType(a) || isSeriesType(b) ? 'series<boolean>' : 'boolean';
         if(!isNumericType(a)||!isNumericType(b)) report(n,`Operator '${n.operator}' expects numeric operands`,'TYPE_ARITHMETIC');
         return joinTypes(a,b);
       }
@@ -150,6 +164,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return 'unknown';
         }
 
+        if(n.name==='model') {
+          const name=n.args[0]?.type==='string' ? String(n.args[0].value) : undefined;
+          const declaration=name ? modelDeclarationMap.get(name) : undefined;
+          if (declaration?.kind==='model' && declaration.modelType) return `model<${declaration.modelType}>` as CoreSpiritType;
+        }
         if(n.name==='series') {
           if(n.args.length !== 1 || !compatible('string', argTypes[0])) {
             report(n,'series expects one string timeframe','TYPE_SERIES_TIMEFRAME');
@@ -158,6 +177,53 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         }
 
         const builtin=CORE_SPIRIT_BUILTINS.get(n.name);
+        const isMatrix = (type:CoreSpiritType) => type.startsWith('matrix<');
+        const isVector = (type:CoreSpiritType) => type.startsWith('vector<');
+        if (n.name === 'vector' && argTypes.some(type => !isNumericScalarType(type))) {
+          report(n, 'vector expects numeric scalar values; convert series explicitly before constructing a vector', 'TYPE_VECTOR_VALUE');
+        }
+        if (n.name === 'matrix') {
+          if (!isNumericScalarType(argTypes[0] ?? 'unknown') || !isNumericScalarType(argTypes[1] ?? 'unknown')) {
+            report(n, 'matrix dimensions must be numeric integer values', 'TYPE_MATRIX_DIMENSIONS');
+          }
+          if (argTypes.slice(2).some(type => !isNumericScalarType(type))) report(n, 'matrix elements must be numeric scalar values; series require an explicit data/window conversion', 'TYPE_MATRIX_VALUE');
+          const rows = constantNumber(n.args[0] ?? n);
+          const columns = constantNumber(n.args[1] ?? n);
+          if (rows !== undefined && (!Number.isInteger(rows) || rows < 1 || rows > 256)) report(n, 'matrix rows must be an integer from 1 to 256', 'TYPE_MATRIX_ROWS');
+          if (columns !== undefined && (!Number.isInteger(columns) || columns < 1 || columns > 256)) report(n, 'matrix columns must be an integer from 1 to 256', 'TYPE_MATRIX_COLUMNS');
+          if (rows !== undefined && columns !== undefined && rows * columns > 65_536) report(n, 'matrix exceeds the 65,536-element compile-time limit', 'TYPE_MATRIX_SIZE');
+        }
+        if (['zeros','identity'].includes(n.name) && argTypes.some(type => !isNumericScalarType(type))) {
+          report(n, n.name + ' dimensions must be numeric integer values', 'TYPE_MATRIX_DIMENSIONS');
+        }
+        if (n.name === 'tensor' && argTypes.slice(1).some(type => !isNumericScalarType(type))) {
+          report(n, 'tensor elements must be numeric', 'TYPE_TENSOR_VALUE');
+        }
+        if (['matmul','matrixAdd'].includes(n.name) && argTypes.some(type => !isMatrix(type))) {
+          report(n, `${n.name} expects two matrix<float> operands; use vector/matrix constructors before linear algebra`, 'TYPE_MATRIX_OPERAND');
+        }
+        if (n.name === 'matrixScale' && (!isMatrix(argTypes[0] ?? 'unknown') || !isNumericScalarType(argTypes[1] ?? 'unknown'))) {
+          report(n, 'matrixScale expects matrix<float> and a numeric scalar', 'TYPE_MATRIX_SCALE');
+        }
+        if (n.name === 'transpose' && !isMatrix(argTypes[0] ?? 'unknown')) report(n, 'transpose expects matrix<float>', 'TYPE_MATRIX_OPERAND');
+        if (n.name === 'dot' && (!isVector(argTypes[0] ?? 'unknown') || !isVector(argTypes[1] ?? 'unknown'))) {
+          report(n, 'dot expects two vector<float> operands', 'TYPE_VECTOR_OPERAND');
+        }
+        if (n.name === 'tensor' && !isVector(argTypes[0] ?? 'unknown')) report(n, 'tensor expects a vector<float> shape as its first argument', 'TYPE_TENSOR_SHAPE');
+        if (n.name === 'dataset') {
+          if (n.args.length % 2 !== 0) report(n, 'dataset expects alternating field names and numeric values', 'TYPE_DATASET_FIELDS');
+          for (let i = 0; i < argTypes.length; i += 2) {
+            if (argTypes[i] !== 'string') report(n.args[i]!, 'dataset field names must be strings', 'TYPE_DATASET_FIELD_NAME');
+            if (argTypes[i + 1] !== undefined && !isNumericType(argTypes[i + 1]!)) report(n.args[i + 1]!, 'dataset feature values must be numeric', 'TYPE_DATASET_FIELD_VALUE');
+          }
+        }
+        if (n.name === 'hmmFit') {
+          if (argTypes[0] !== 'string') report(n.args[0] ?? n, 'hmmFit first argument must be the declared model name', 'TYPE_HMM_MODEL_NAME');
+          if (!(argTypes[1] ?? '').startsWith('dataset<')) report(n.args[1] ?? n, 'hmmFit expects a dataset<float> feature row', 'TYPE_HMM_DATASET');
+        }
+        if (['hmmDecode','hmmProbability','hmmPosterior'].includes(n.name) && argTypes[0] !== 'string') {
+          report(n.args[0] ?? n, `${n.name} first argument must be the declared model name`, 'TYPE_HMM_MODEL_NAME');
+        }
         if(['buy','sell','order'].includes(n.name) && !canUseCapability(options.layer || 'script','order-intents')) {
           report(n,`CoreSpirit layer '${options.layer || 'script'}' cannot use capability 'order-intents'`,'CAPABILITY_ORDER_INTENTS');
         }
@@ -300,17 +366,21 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return target.kind==='series' ? scalarize({ ...target, ...inherited, lookback }) : target;
       }
       case 'unary': {
-        const operand=inferSemantic(n.operand,scope); return n.operator==='!' ? semanticScalar('boolean') : operand;
+        const operand=inferSemantic(n.operand,scope);
+        if (n.operator !== '!') return operand;
+        return operand?.kind === 'series'
+          ? semanticSeries('boolean', mergeSemanticMetadata([operand]))
+          : semanticScalar('boolean');
       }
       case 'binary': {
         const left=inferSemantic(n.left,scope), right=inferSemantic(n.right,scope);
-        if(n.operator==='and'||n.operator==='or') return semanticScalar('boolean');
+        if(n.operator==='and'||n.operator==='or') return left?.kind==='series' || right?.kind==='series' ? semanticSeries('boolean', mergeSemanticMetadata([left,right])) : semanticScalar('boolean');
         if(comparisonOps.has(n.operator)) {
           if(left && right) {
             const comparison=compareSemanticTypes(n.operator as '=='|'!='|'<'|'<='|'>'|'>=',left,right);
             if(!comparison.compatible) report(n,comparison.error ?? `semantic domains '${left.atom}' and '${right.atom}' cannot be compared`,'TYPE_SEMANTIC_COMPARISON');
           }
-          return semanticScalar('boolean');
+          return left?.kind==='series' || right?.kind==='series' ? semanticSeries('boolean', mergeSemanticMetadata([left,right])) : semanticScalar('boolean');
         }
         if(!left||!right) return undefined;
         const combined=combineSemanticArithmetic(n.operator as '+'|'-'|'*'|'/'|'%',left,right);
@@ -329,6 +399,15 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           return semanticSeries('number',{symbol:'current', timeframe:n.args[0]?.type==='string' ? String(n.args[0].value) : 'requested'});
         }
         if(n.name==='model') return semanticScalar('model',{valueKind:'model',phase:'developing',causal:true,lookahead:false,lookback:0});
+        if(n.name==='vector') return semanticScalar('number',{container:'vector'});
+        if(['matrix','zeros','identity','matrixAdd','matrixScale','matmul','transpose'].includes(n.name)) return semanticScalar('number',{container:'matrix'});
+        if(n.name==='tensor') return semanticScalar('number',{container:'tensor'});
+        if(n.name==='dataset') return semanticScalar('number',{container:'dataset',valueKind:'dataset'});
+        if(n.name==='dot') return semanticScalar('number');
+        if(n.name==='hmmFit') return semanticScalar('number',{valueKind:'observed'});
+        if(n.name==='hmmDecode') return semanticScalar('number',{valueKind:'prediction'});
+        if(n.name==='hmmProbability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability'});
+        if(n.name==='hmmPosterior') return semanticScalar('number',{container:'distribution',valueKind:'distribution'});
         if(n.name==='market') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:n.args[0]?.type==='string'?String(n.args[0].value):'current',timeframe:'chart'});
         if(n.name==='timeframe' || n.name==='series') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:'current',timeframe:n.args[0]?.type==='string'?String(n.args[0].value):'requested'});
         if(n.name==='bar_index') return semanticScalar('number',{phase:'developing',causal:true,lookahead:false,lookback:0});
@@ -339,7 +418,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           if(result.startsWith('series<')) return semanticSeries(result.slice(7,-1) as CoreSpiritSemanticType['atom']);
           return result==='boolean' ? semanticScalar('boolean') : semanticScalar('number');
         }
-        if(semanticBooleanFunctions.has(n.name)) return semanticScalar('boolean');
+        if(semanticBooleanFunctions.has(n.name)) return args.some(type => type?.kind === 'series') ? semanticSeries('boolean', mergeSemanticMetadata(args)) : semanticScalar('boolean');
         if(Object.prototype.hasOwnProperty.call(semanticConversionFunctions,n.name)) {
           const source=args[0];
           const atom=semanticConversionFunctions[n.name]!;

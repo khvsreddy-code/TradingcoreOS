@@ -255,6 +255,196 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
   },
 ];
 
+function lowerCoreSpiritInlineFunctions(source: string): string {
+  type InlineFunction = { params: string[]; locals: Array<{name:string; expression:string}>; body: string; returnType: string };
+  const functions = new Map<string, InlineFunction>();
+  const inputLines = source.split('\n');
+  const outputLines: string[] = [];
+
+  for (let i = 0; i < inputLines.length; i += 1) {
+    const line = inputLines[i]!;
+    if (!/^\s*fn\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
+      outputLines.push(line);
+      continue;
+    }
+
+    const headerLines = [line];
+    let headerLineIndex = i;
+    while (!/\)\s*(?:->\s*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)?\s*\{\s*$/.test(headerLines.join('\n'))) {
+      headerLineIndex += 1;
+      if (headerLineIndex >= inputLines.length) throw new Error('Unterminated CoreScript fn signature');
+      headerLines.push(inputLines[headerLineIndex]!);
+    }
+    const header = headerLines.join('\n').match(/^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([\s\S]*)\)\s*(?:->\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?))?\s*\{\s*$/);
+    if (!header) throw new Error('Invalid CoreScript fn declaration; expected fn name(arguments) -> type {');
+    const name = header[1]!;
+    if (!header[3]) throw new Error("CoreScript function '" + name + "' must declare a return type after ->");
+    if (functions.has(name)) throw new Error("Duplicate CoreScript function '" + name + "'");
+    const params = splitTopLevel(header[2] ?? '').filter(item => item.trim()).map(item => {
+      const part = item.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)$/);
+      if (!part) throw new Error("Invalid parameter in function '" + name + "'; expected name: type");
+      return part[1]!;
+    });
+    const duplicateParams = params.filter((param, index) => params.indexOf(param) !== index);
+    if (duplicateParams.length) throw new Error("Duplicate parameter '" + duplicateParams[0] + "' in function '" + name + "'");
+
+    const bodyLines: string[] = [];
+    let closingLine = headerLineIndex + 1;
+    for (; closingLine < inputLines.length && inputLines[closingLine]!.trim() !== '}'; closingLine += 1) {
+      bodyLines.push(inputLines[closingLine]!);
+    }
+    if (closingLine >= inputLines.length) throw new Error("Unterminated body for CoreScript function '" + name + "'");
+    const cleanedBody = bodyLines.map(item => item.replace(/\/\/.*$/, '').trim()).filter(Boolean).join('\n');
+    const statements = cleanedBody.split(/[;\n]/).map(item => item.trim()).filter(Boolean);
+    const locals: Array<{name:string; expression:string}> = [];
+    const localNames = new Set(params);
+    let returnExpression = '';
+    for (let statementIndex = 0; statementIndex < statements.length; statementIndex += 1) {
+      const statement = statements[statementIndex]!;
+      const returned = statement.match(/^return\s+([\s\S]+)$/);
+      if (returned) {
+        if (statementIndex !== statements.length - 1) throw new Error("CoreScript function '" + name + "' must return after its local declarations");
+        returnExpression = returned[1]!.trim();
+        continue;
+      }
+      const local = statement.match(/^(?:let|const)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)?\s*=\s*([\s\S]+)$/);
+      if (!local) {
+        throw new Error("CoreScript function '" + name + "' supports typed local assignments followed by one return expression; loops and control-flow bodies are not yet supported in this inline execution tier");
+      }
+      const localName = local[1]!;
+      if (localNames.has(localName)) throw new Error("Duplicate local or parameter '" + localName + "' in function '" + name + "'");
+      localNames.add(localName);
+      locals.push({ name: localName, expression: local[2]!.trim() });
+    }
+    if (!returnExpression) throw new Error("CoreScript function '" + name + "' must end with return expression");
+    functions.set(name, { params, locals, body: returnExpression, returnType: header[3]!.trim() });
+    i = closingLine;
+  }
+
+  if (!functions.size) return source;
+
+  const matchingParen = (text: string, open: number): number => {
+    let depth = 0;
+    let quote: '"' | "'" | null = null;
+    let escaped = false;
+    for (let i = open; i < text.length; i += 1) {
+      const ch = text[i]!;
+      if (quote) {
+        if (escaped) { escaped = false; continue; }
+        if (ch === '\\') { escaped = true; continue; }
+        if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { quote = ch; continue; }
+      if (ch === '/' && text[i + 1] === '/') {
+        const end = text.indexOf('\n', i + 2);
+        if (end < 0) return -1;
+        i = end;
+        continue;
+      }
+      if (ch === '(') depth += 1;
+      else if (ch === ')') {
+        depth -= 1;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  };
+
+  const substitute = (text: string, values: Map<string, string>): string => {
+    let result = '';
+    let quote: '"' | "'" | null = null;
+    let escaped = false;
+    for (let i = 0; i < text.length;) {
+      const ch = text[i]!;
+      if (quote) {
+        result += ch;
+        i += 1;
+        if (escaped) { escaped = false; continue; }
+        if (ch === '\\') { escaped = true; continue; }
+        if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { quote = ch; result += ch; i += 1; continue; }
+      if (ch === '/' && text[i + 1] === '/') {
+        const end = text.indexOf('\n', i + 2);
+        if (end < 0) { result += text.slice(i); break; }
+        result += text.slice(i, end);
+        i = end;
+        continue;
+      }
+      if (/[A-Za-z_]/.test(ch)) {
+        let end = i + 1;
+        while (end < text.length && /[A-Za-z0-9_]/.test(text[end]!)) end += 1;
+        const identifier = text.slice(i, end);
+        const value = values.get(identifier);
+        result += value === undefined ? identifier : '(' + value + ')';
+        i = end;
+        continue;
+      }
+      result += ch;
+      i += 1;
+    }
+    return result;
+  };
+
+  const expandCalls = (text: string, stack: string[] = [], depth = 0): string => {
+    if (depth > 32) throw new Error('CoreScript inline function expansion exceeded 32 nested calls');
+    let result = '';
+    let quote: '"' | "'" | null = null;
+    let escaped = false;
+    for (let i = 0; i < text.length;) {
+      const ch = text[i]!;
+      if (quote) {
+        result += ch;
+        i += 1;
+        if (escaped) { escaped = false; continue; }
+        if (ch === '\\') { escaped = true; continue; }
+        if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { quote = ch; result += ch; i += 1; continue; }
+      if (ch === '/' && text[i + 1] === '/') {
+        const end = text.indexOf('\n', i + 2);
+        if (end < 0) { result += text.slice(i); break; }
+        result += text.slice(i, end);
+        i = end;
+        continue;
+      }
+      if (/[A-Za-z_]/.test(ch)) {
+        let end = i + 1;
+        while (end < text.length && /[A-Za-z0-9_]/.test(text[end]!)) end += 1;
+        const identifier = text.slice(i, end);
+        let open = end;
+        while (open < text.length && /\s/.test(text[open]!)) open += 1;
+        const previous = result.trimEnd().slice(-1);
+        const definition = functions.get(identifier);
+        if (definition && text[open] === '(' && previous !== '.') {
+          if (stack.includes(identifier)) throw new Error("Recursive CoreScript function '" + identifier + "' cannot be inlined in this execution tier");
+          const close = matchingParen(text, open);
+          if (close < 0) throw new Error("Unclosed call to CoreScript function '" + identifier + "'");
+          const args = splitTopLevel(text.slice(open + 1, close));
+          if (args.length !== definition.params.length) throw new Error("Function '" + identifier + "' expects " + definition.params.length + ' arguments; received ' + args.length);
+          const bindings = new Map<string, string>(definition.params.map((param, index) => [param, args[index]!.trim()] as const));
+          for (const local of definition.locals) bindings.set(local.name, substitute(local.expression, bindings));
+          const expandedBody = substitute(definition.body, bindings);
+          result += '(' + expandCalls(expandedBody, [...stack, identifier], depth + 1) + ')';
+          i = close + 1;
+          continue;
+        }
+        result += identifier;
+        i = end;
+        continue;
+      }
+      result += ch;
+      i += 1;
+    }
+    return result;
+  };
+
+  return expandCalls(outputLines.join('\n'));
+}
+
 function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
   let out = source;
   // `.tf(...)` is a concise market reference spelling; the canonical IR uses `timeframe(...)`.
@@ -300,7 +490,47 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
     cursor=close+1;
     marker.lastIndex=cursor;
   }
-  return rebuilt;
+  // Lower typed HMM and dataset syntax to the shared parser/IR/runtime.
+  const hmmNames = new Set(Array.from(out.matchAll(/^\s*model\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*HMM(?:<[^>]+>)?\s*\{/gim), match => match[1]!));
+  const sourceLines = rebuilt.split('\n');
+  const loweredLines = [];
+  for (let i = 0; i < sourceLines.length; i += 1) {
+    const line = sourceLines[i];
+    const datasetHeader = line.match(/^(\s*)(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*dataset\s*\{\s*$/i);
+    if (datasetHeader) {
+      const fields = [];
+      let j = i + 1;
+      for (; j < sourceLines.length; j += 1) {
+        const candidate = sourceLines[j];
+        if (candidate.trim() === '}') break;
+        if (!candidate.trim() || candidate.trim().startsWith('//')) continue;
+        const field = candidate.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*?)\s*,?$/);
+        if (!field || !field[2]) throw new Error('dataset blocks require fieldName: numericExpression entries');
+        fields.push(JSON.stringify(field[1]), field[2].replace(/,\s*$/, '').trim());
+      }
+      if (j >= sourceLines.length) throw new Error('Unterminated dataset block; expected a closing brace');
+      if (!fields.length) throw new Error('dataset blocks require at least one feature');
+      loweredLines.push(datasetHeader[1] + 'let ' + datasetHeader[2] + ' = dataset(' + fields.join(', ') + ');');
+      i = j;
+      continue;
+    }
+    const fit = line.match(/^(\s*)fit\s+([A-Za-z_][A-Za-z0-9_]*)\s+on\s+([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
+    if (fit && hmmNames.has(fit[2])) {
+      loweredLines.push(fit[1] + 'hmmFit(' + JSON.stringify(fit[2]) + ', ' + fit[3] + ');');
+      continue;
+    }
+    loweredLines.push(line);
+  }
+
+  const lowered = loweredLines.map(line => {
+    const method = line.match(/^(\s*)(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.(decode|probability|posterior)\s*\((.*)\)\s*;?$/i);
+    if (!method || !hmmNames.has(method[3])) return line;
+    const functionName = method[4].toLowerCase() === 'decode' ? 'hmmDecode'
+      : method[4].toLowerCase() === 'probability' ? 'hmmProbability' : 'hmmPosterior';
+    return method[1] + 'let ' + method[2] + ' = ' + functionName + '(' + JSON.stringify(method[3]) +
+      (method[5].trim() ? ', ' + method[5].trim() : '') + ');';
+  }).join('\n');
+  return lowerCoreSpiritInlineFunctions(lowered);
 }
 
 export function normalizeCoreSpiritSource(source: string): string {
@@ -393,7 +623,7 @@ export function normalizeCoreSpiritSource(source: string): string {
       }
     }
 
-    const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\{\s*$/i);
+    const braceModel = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))(?:\s*:\s*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)?\s*\{\s*$/i);
     if (braceModel) {
       wrappers.push({ indent, kind:'model' });
       modelBraceIndents.push(indent);

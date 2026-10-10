@@ -191,7 +191,7 @@ export type CoreSpiritModelSurfaceBinding = {
   locator: string;
 };
 
-export type CoreSpiritModelSurfaceFieldType = 'unknown' | 'number' | 'string' | 'boolean' | 'series<number>' | 'prediction<number>' | 'forecast<number>' | 'probability' | 'feature<number>';
+export type CoreSpiritModelSurfaceFieldType = 'unknown' | 'number' | 'string' | 'boolean' | 'series<number>' | 'prediction<number>' | 'forecast<number>' | 'probability' | 'feature<number>' | 'vector<float>' | 'matrix<float>' | 'tensor<float>' | 'distribution<float>';
 
 export type CoreSpiritEventDestination =
   | { kind: 'webhook'; target: string }
@@ -217,6 +217,13 @@ export type CoreSpiritSurfaceDeclaration =
   | {
       kind: 'model';
       name: string;
+      /** Typed algorithm family, e.g. HMM<float>, retained in the source artifact. */
+      modelType?: string;
+      states?: number;
+      emission?: 'gaussian';
+      covariance?: 'full' | 'diagonal';
+      unsupportedEmission?: string;
+      unsupportedCovariance?: string;
       binding?: CoreSpiritModelSurfaceBinding;
       inputs: string[];
       outputs: string[];
@@ -366,7 +373,7 @@ function splitModelBindingList(value: string): string[] {
   return out;
 }
 function parseModelField(value: string): { name: string; type: CoreSpiritModelSurfaceFieldType } | undefined {
-  const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>|prediction<number>|forecast<number>|probability|feature<number>))?$/i);
+  const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>|prediction<number>|forecast<number>|probability|feature<number>|vector<float>|matrix<float>|tensor<float>|distribution<float>))?$/i);
   if (!match) return undefined;
   return {
     name: match[1],
@@ -425,13 +432,17 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       continue;
     }
 
-    const model = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*(?::|\{)\s*$/i);
+    const model = trimmed.match(/^model\s+(?:"([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))(?:\s*:\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^{}]+>)?))?\s*(?::|\{)\s*$/i);
     if (model) {
       concepts.add('MODEL');
       const name = model[1] ?? model[2] ?? model[3] ?? 'Model';
       const declaration = {
         kind: 'model' as const,
         name,
+        modelType: model[4]?.trim(),
+        states: model[4] && /^HMM(?:<.*>)?$/i.test(model[4].trim()) ? 3 : undefined,
+        emission: model[4] && /^HMM(?:<.*>)?$/i.test(model[4].trim()) ? 'gaussian' as const : undefined,
+        covariance: model[4] && /^HMM(?:<.*>)?$/i.test(model[4].trim()) ? 'full' as const : undefined,
         binding: undefined as CoreSpiritModelSurfaceBinding | undefined,
         inputs: [] as string[],
         outputs: [] as string[],
@@ -498,6 +509,32 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
         if (prop) { surfaceProps.push(prop); concepts.add('LET'); offset += raw.length + 1; continue; }
       }
       if (current.kind === 'model') {
+        if (current.declaration.modelType && /^HMM(?:<.*>)?$/i.test(current.declaration.modelType)) {
+          const states = trimmed.match(/^states\s*=\s*(\d+)\s*;?$/i);
+          const emission = trimmed.match(/^emission\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
+          const covariance = trimmed.match(/^covariance\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
+          if (states) { current.declaration.states = Number(states[1]); offset += raw.length + 1; continue; }
+          if (emission) {
+            const value = emission[1]!.toLowerCase();
+            if (value === 'gaussian') {
+              current.declaration.emission = 'gaussian';
+              delete current.declaration.unsupportedEmission;
+            } else {
+              current.declaration.unsupportedEmission = value;
+            }
+            concepts.add('MODEL'); offset += raw.length + 1; continue;
+          }
+          if (covariance) {
+            const value = covariance[1]!.toLowerCase();
+            if (value === 'full' || value === 'diagonal') {
+              current.declaration.covariance = value;
+              delete current.declaration.unsupportedCovariance;
+            } else {
+              current.declaration.unsupportedCovariance = value;
+            }
+            concepts.add('MODEL'); offset += raw.length + 1; continue;
+          }
+        }
         const field = current.modelSection ? parseModelField(trimmed) : undefined;
         if (/^(?:input(?:s)?|feature(?:s)?)\s*:\s*$/i.test(trimmed)) { current.modelSection = 'input'; offset += raw.length + 1; continue; }
         if (/^output(?:s)?\s*:\s*$/i.test(trimmed)) { current.modelSection = 'output'; offset += raw.length + 1; continue; }

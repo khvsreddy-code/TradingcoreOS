@@ -47,11 +47,13 @@ export type CoreSpiritSemanticType = Readonly<{
   causal?: boolean;
   lookahead?: boolean;
   lookback?: number;
+  /** Structured values have shape identity and never broadcast implicitly. */
+  container?: 'array' | 'vector' | 'matrix' | 'tensor' | 'dataset' | 'distribution';
 }>;
 
 export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): string {
   if (!type) return 'unknown';
-  const base = `${type.kind}<${type.atom}>`;
+  const base = type.container ? `${type.container}<${type.atom}>` : `${type.kind}<${type.atom}>`;
   const qualifiers = [
     type.symbol ? `symbol=${type.symbol}` : '',
     type.timeframe ? `timeframe=${type.timeframe}` : '',
@@ -114,6 +116,13 @@ export function combineSemanticArithmetic(
   left: CoreSpiritSemanticType,
   right: CoreSpiritSemanticType,
 ): { type: CoreSpiritSemanticType; error?: string } {
+  if (left.container || right.container || left.valueKind === 'model' || right.valueKind === 'model') {
+    const involved = [left, right].filter(type => type.container).map(type => semanticTypeToString(type));
+    return {
+      type: left.container ? left : right,
+      error: `operator '${operator}' does not implicitly broadcast or operate on structured numeric containers (${involved.join(', ')}); use an explicit vector/matrix/tensor operation`,
+    };
+  }
   const resultKind: 'scalar' | 'series' = left.kind === 'series' || right.kind === 'series' ? 'series' : 'scalar';
   const derived = mergeSemanticMetadata([left, right]);
   const broadcast = (atom: CoreSpiritSemanticAtom, metadata: CoreSpiritSemanticType = left): CoreSpiritSemanticType => Object.freeze({
@@ -177,6 +186,9 @@ export function compareSemanticTypes(
   left: CoreSpiritSemanticType,
   right: CoreSpiritSemanticType,
 ): { compatible: boolean; error?: string } {
+  if (left.container || right.container || left.valueKind === 'model' || right.valueKind === 'model') {
+    return { compatible:false, error: `operator '${operator}' cannot compare structured values; use explicit vector/matrix/tensor operations` };
+  }
   if (left.atom === 'boolean' || right.atom === 'boolean' || left.atom === 'string' || right.atom === 'string') {
     if (operator === '==' || operator === '!=') {
       return { compatible: left.atom === right.atom };
@@ -190,6 +202,7 @@ export function compareSemanticTypes(
 
 export function semanticTypeCompatible(expected: CoreSpiritSemanticType, actual: CoreSpiritSemanticType): boolean {
   if (expected.kind !== actual.kind) return false;
+  if (expected.container !== actual.container) return false;
   if (expected.atom !== actual.atom && expected.atom !== 'number' && actual.atom !== 'number') return false;
   if (expected.symbol && actual.symbol && expected.symbol !== actual.symbol) return false;
   if (expected.timeframe && actual.timeframe && expected.timeframe !== actual.timeframe) return false;
@@ -211,7 +224,17 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     orderintent: semanticScalar('orderIntent', { valueKind:'orderIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
   };
   if (direct[normalized]) return direct[normalized];
-  const generic = normalized.match(/^(market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|dataset|modelartifact)<(.+)>$/i);
+  const shaped = normalized.match(/^(array|vector|matrix|tensor|dataset|distribution)<(.+)>$/i);
+  if (shaped) {
+    const container = shaped[1]!.toLowerCase() as 'array'|'vector'|'matrix'|'tensor'|'dataset'|'distribution';
+    const rawElement = shaped[2]!.toLowerCase();
+    const element = ['float','int','number'].includes(rawElement) ? 'number' : rawElement;
+    const atom = (['number','price','volume','currency','duration','time','boolean','string'] as string[]).includes(element)
+      ? element as CoreSpiritSemanticAtom : 'number';
+    const valueKind = container === 'dataset' ? 'dataset' : container === 'distribution' ? 'distribution' : undefined;
+    return semanticScalar(atom, { container, ...(valueKind ? { valueKind } : {}) });
+  }
+  const generic = normalized.match(/^(market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|modelartifact)<(.+)>$/i);
   if (generic) {
     const genericName = generic[1].toLowerCase();
     const atom = genericName === 'model' ? 'model'
@@ -225,7 +248,9 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
 
   const parsed = parseCoreSpiritTemporalType(normalized);
   if (!parsed) return undefined;
-  const element = parsed.element === 'float' || parsed.element === 'int' ? 'number' : parsed.element as CoreSpiritSemanticAtom;
+  const element = parsed.element === 'float' || parsed.element === 'int' || parsed.element === 'number' ? 'number'
+    : parsed.element === 'bool' ? 'boolean'
+    : parsed.element as CoreSpiritSemanticAtom;
   const isSeries = parsed.container === 'series';
   const phase = parsed.container === 'confirmed' || parsed.container === 'developing' || parsed.container === 'forecast'
     ? parsed.container
