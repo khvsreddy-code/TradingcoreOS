@@ -14,7 +14,7 @@ import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 import { materializeCoreSpiritFeatureRows } from '../../services/coreSpirit/coreSpiritFeatureMaterializer.js';
-import { lowerCoreSpiritResearchSource, parseCoreSpiritModelLifecycleSurface } from '../../services/coreSpirit/modelLifecycleSurface.js';
+import { lowerCoreSpiritResearchSource, parseCoreSpiritModelLifecycleSurface, type CoreSpiritModelLifecyclePlan } from '../../services/coreSpirit/modelLifecycleSurface.js';
 
 export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
@@ -168,14 +168,14 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     return fail(res, 413, 'CoreScript source is required and limited to 64 KiB.');
   }
 
-  let featureNames: string[];
+  let featureNames: string[] = [];
   try {
-    featureNames = parseFeatureNames(req.body?.featureNames);
+    if (req.body?.featureNames !== undefined) featureNames = parseFeatureNames(req.body.featureNames);
   } catch (error) {
     return fail(res, 400, error instanceof Error ? error.message : 'Invalid feature schema.');
   }
 
-  let lifecyclePlan;
+  let lifecyclePlan: CoreSpiritModelLifecyclePlan;
   try { lifecyclePlan = parseCoreSpiritModelLifecycleSurface(source); }
   catch (error) { return fail(res, 422, error instanceof Error ? error.message : 'Invalid model lifecycle directives.'); }
   const compilerSource = lowerCoreSpiritResearchSource(source, lifecyclePlan);
@@ -210,6 +210,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   if (!declaredFeatureNames.length) {
     return fail(res, 422, 'Declare named feature fields with features = dataset { name: expression } or dataset("name", expression, ...) before creating a research artifact.');
   }
+  if (!featureNames.length) featureNames = [...declaredFeatureNames];
   if (declaredFeatureNames.length !== featureNames.length ||
       declaredFeatureNames.some((name, index) => name !== featureNames[index])) {
     return fail(res, 422, 'featureNames must exactly match the ordered feature names declared in the CoreScript dataset expression.');
@@ -259,13 +260,29 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
 coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, res: Response) => {
   const researchArtifactId = String(req.body?.researchArtifactId ?? '').trim();
   if (!researchArtifactId) return fail(res, 400, 'researchArtifactId is required.');
+  const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!, researchArtifactId);
+  let research: ResearchArtifact;
+  try {
+    const loadedResearch = await repository.getResearchArtifact(researchArtifactId);
+    if (!loadedResearch) return fail(res, 404, 'Research artifact not found.');
+    research = loadedResearch;
+  } catch (error) {
+    return fail(res, 503, error instanceof Error ? error.message : 'Unable to load research artifact.');
+  }
+  const graph = featureGraphOf(research);
+  const lifecyclePlan = (research.featureGraph as Record<string, unknown>).lifecyclePlan as CoreSpiritModelLifecyclePlan | undefined;
   let range: { from: string; to: string };
   let featureNames: string[];
   let rows: ReturnType<typeof parseRows> | null = null;
   const rawBars = req.body?.bars;
   try {
-    range = parseRange(req.body?.trainingRange);
-    featureNames = parseFeatureNames(req.body?.featureNames);
+    const plannedRange = lifecyclePlan?.training?.from && lifecyclePlan.training.to
+      ? { from: lifecyclePlan.training.from, to: lifecyclePlan.training.to }
+      : undefined;
+    range = parseRange(req.body?.trainingRange ?? plannedRange);
+    featureNames = req.body?.featureNames === undefined
+      ? [...graph.featureNames]
+      : parseFeatureNames(req.body.featureNames);
     if (Array.isArray(req.body?.rows)) rows = parseRows(req.body.rows, featureNames, range);
     else if (!Array.isArray(rawBars)) throw new Error('Provide precomputed rows or chronological OHLCV bars for automatic CoreScript feature materialization.');
   } catch (error) {
@@ -296,11 +313,7 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     }
   }
 
-  const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!, researchArtifactId);
   try {
-    const research = await repository.getResearchArtifact(researchArtifactId);
-    if (!research) return fail(res, 404, 'Research artifact not found.');
-    const graph = featureGraphOf(research);
     if (graph.featureNames.length !== featureNames.length ||
         graph.featureNames.some((name, index) => name !== featureNames[index])) {
       return fail(res, 422, 'Training feature names must exactly match the compiled research artifact feature schema.');
@@ -350,9 +363,12 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
         datasetVersion,
         trainingParameters,
         randomSeed,
-        modelArtifactName: typeof req.body?.modelArtifactName === 'string' && req.body.modelArtifactName.trim()
-          ? req.body.modelArtifactName.trim()
-          : String((research.featureGraph as Record<string, unknown>).lifecyclePlan && ((research.featureGraph as Record<string, any>).lifecyclePlan.saveAs ?? '')),
+        ...(() => {
+          const requested = typeof req.body?.modelArtifactName === 'string' ? req.body.modelArtifactName.trim() : '';
+          const planned = typeof lifecyclePlan?.saveAs === 'string' ? lifecyclePlan.saveAs : '';
+          const modelArtifactName = requested || planned;
+          return modelArtifactName ? { modelArtifactName } : {};
+        })(),
       });
       res.status(202).json({
         success: true,
@@ -387,6 +403,21 @@ coreSpiritModelRoutes.get('/training-runs/:runId', async (req: AuthenticatedRequ
     res.json({ success: true, data: run });
   } catch (error) {
     fail(res, 503, error instanceof Error ? error.message : 'Unable to load training run.');
+  }
+});
+
+coreSpiritModelRoutes.get('/models/by-name/:name', async (req: AuthenticatedRequest, res: Response) => {
+  const name = String(req.params.name ?? '').trim();
+  if (!name || name.length > 120) return fail(res, 400, 'Model name must be 1–120 characters.');
+  try {
+    const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
+    const artifact = await repository.getByName(name);
+    if (!artifact) return fail(res, 404, 'Model artifact not found.');
+    if (!(await verifyModelArtifactIntegrity(artifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ success: true, data: { artifact, artifactHash: artifact.hash } });
+  } catch (error) {
+    fail(res, 503, error instanceof Error ? error.message : 'Unable to load model artifact.');
   }
 });
 

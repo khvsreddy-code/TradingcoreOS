@@ -88,13 +88,13 @@ export function parseCoreSpiritModelLifecycleSurface(source: string): CoreSpirit
       if (fromMatch) {
         if (training.from) throw new Error('Duplicate from date in CoreScript train directive.');
         training = { ...training, from: unquote(fromMatch[1]!) };
-        validateRange(training.from, training.to);
+        if (training.from && training.to) validateRange(training.from, training.to);
         continue;
       }
       if (toMatch) {
         if (training.to) throw new Error('Duplicate to date in CoreScript train directive.');
         training = { ...training, to: unquote(toMatch[1]!) };
-        validateRange(training.from, training.to);
+        if (training.from && training.to) validateRange(training.from, training.to);
         continue;
       }
     }

@@ -100,7 +100,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       throw new Error('Research artifact source or feature-graph integrity check failed');
     }
 
-    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown };
+    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; lifecyclePlan?: { saveAs?: unknown } };
     if (!Array.isArray(featureGraph?.featureNames) ||
         featureGraph.featureNames.length !== payload.featureNames.length ||
         featureGraph.featureNames.some((name, index) => name !== payload.featureNames[index])) {
@@ -174,6 +174,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         maxObservations: payload.rows.length,
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
+        artifactName: payload.modelArtifactName ?? String(featureGraph.lifecyclePlan?.saveAs ?? research.name),
         artifactName: payload.modelArtifactName ?? String((featureGraph as Record<string, unknown>).saveAs ?? research.name),
       },
       randomSeed: payload.randomSeed,
@@ -187,7 +188,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     };
     const artifact = await sealModelArtifact({
       research,
-      name: payload.modelArtifactName ?? String((featureGraph as Record<string, unknown>).saveAs ?? research.name),
+      name: payload.modelArtifactName ?? String(featureGraph.lifecyclePlan?.saveAs ?? research.name),
       provenance,
       weights: {
         modelType: 'gaussian-hmm',
