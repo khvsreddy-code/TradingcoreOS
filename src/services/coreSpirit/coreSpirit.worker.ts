@@ -124,6 +124,7 @@ function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpirit
       throw new Error('Invalid CoreSpirit HMM artifact binding');
     }
     const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+    model.setStateLabels(binding.stateLabels ?? Array.from({length:model.states},(_value,index)=>'state_'+index));
     model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
     // The VM may resolve the same sealed model by its internal model alias,
     // immutable artifact name, or SHA-256. Register all identities to the

@@ -11,6 +11,7 @@ type GaussianHMMWeights = Readonly<{
   modelType: 'gaussian-hmm';
   modelAlias: string;
   featureNames: readonly string[];
+  stateLabels?: readonly string[];
   hmm: CoreSpiritGaussianHMMState;
 }>;
 
@@ -19,6 +20,7 @@ export type LoadedCoreSpiritHMMArtifact = Readonly<{
   artifactName: string;
   modelAlias: string;
   featureNames: readonly string[];
+  stateLabels: readonly string[];
   toWorkerBinding: () => CoreSpiritHMMArtifactBinding;
   createRuntimeResolver: () => CoreSpiritHMMArtifactResolver;
 }>;
@@ -42,9 +44,18 @@ async function hydrateCoreSpiritHMMArtifact(
       weights.featureNames.some(name => typeof name !== 'string' || !name.trim())) {
     throw new Error('Artifact feature schema is invalid');
   }
+  const stateLabels = weights.stateLabels === undefined
+    ? Array.from({ length: weights.hmm.states }, (_value, index) => 'state_' + index)
+    : [...weights.stateLabels];
+  if (stateLabels.length !== weights.hmm.states ||
+      stateLabels.some(label => typeof label !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(label)) ||
+      new Set(stateLabels).size !== stateLabels.length) {
+    throw new Error('Artifact stateLabels must be unique identifiers matching the HMM state count');
+  }
 
   const modelAlias = weights.modelAlias;
   const featureNames = Object.freeze([...weights.featureNames]);
+  const immutableStateLabels = Object.freeze(stateLabels);
   const hmmState = weights.hmm;
   const trainingEndText = artifact.provenance.trainingRange.to;
   const trainingEndDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trainingEndText);
@@ -61,6 +72,7 @@ async function hydrateCoreSpiritHMMArtifact(
     createRuntimeResolver: () => {
       // A new mutable posterior state per runtime; learned parameters remain sealed.
       const model = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
+      model.setStateLabels(immutableStateLabels);
       model.setInferenceBoundaryExclusive(runtimeTrainingBoundary);
       return (requestedName: string) =>
         requestedName === modelAlias || requestedName === artifact.name || requestedName === artifact.hash

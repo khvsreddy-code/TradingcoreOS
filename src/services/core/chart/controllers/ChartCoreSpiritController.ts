@@ -6,6 +6,9 @@ import { runCoreSpiritInWorker } from '../../../coreSpirit/chartRunner';
 import { compileCoreSpirit } from '../../../coreSpirit/coreSpiritCompilerLoader';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
+import { getSupabaseClient } from '../../../auth/supabaseClient';
+import { prepareCoreSpiritLiveInference, type PreparedCoreSpiritLiveInference } from '../../../coreSpirit/modelArtifactClient';
+import { lowerCoreSpiritLiveInferenceSource, parseCoreSpiritModelLifecycleSurface } from '../../../coreSpirit/modelLifecycleSurface';
 
 type Ref<T>={current:T};
 
@@ -26,6 +29,7 @@ export type ChartCoreSpiritControllerDeps={
 export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDeps){
   const {chartId,chart,candle,host,candles,coreSpiritOutput,coreSpiritRunId,resolvedInstrumentKey,timeframe,store,publishLifecycle}=deps;
   let datasetVersion=0;
+  let cachedLiveInference:{source:string;modelName:string;userId:string;prepared:PreparedCoreSpiritLiveInference}|null=null;
 
   const ensureOutput=()=>{
     if(!chart.current||!host.current)return null;
@@ -46,8 +50,26 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
         if(!bars.length)throw new Error('Chart has no candles yet; wait for the first history paint.');
         publishLifecycle('updating');
         try{
+          const lifecyclePlan=parseCoreSpiritModelLifecycleSurface(source);
+          let executionSource=source;
+          let hmmArtifacts:PreparedCoreSpiritLiveInference['hmmArtifacts']|undefined;
+          if(lifecyclePlan.loadModelName){
+            const sessionResult=await getSupabaseClient().auth.getSession();
+            if(sessionResult.error)throw new Error('Unable to read the signed-in model session: '+sessionResult.error.message);
+            const session=sessionResult.data.session;
+            if(!session?.access_token||!session.user?.id)throw new Error('Sign in before loading a private CoreSpirit model artifact.');
+            if(!cachedLiveInference || cachedLiveInference.source!==source ||
+              cachedLiveInference.modelName!==lifecyclePlan.loadModelName || cachedLiveInference.userId!==session.user.id){
+              const prepared=await prepareCoreSpiritLiveInference(source,session.access_token);
+              cachedLiveInference={source,modelName:lifecyclePlan.loadModelName,userId:session.user.id,prepared};
+            }
+            executionSource=cachedLiveInference.prepared.source;
+            hmmArtifacts=cachedLiveInference.prepared.hmmArtifacts;
+          }else{
+            executionSource=lowerCoreSpiritLiveInferenceSource(source,lifecyclePlan);
+          }
           datasetVersion += 1;
-          const result=await runCoreSpiritInWorker(source,bars,sourceId,{contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe});
+          const result=await runCoreSpiritInWorker(executionSource,bars,sourceId,{contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe,hmmArtifacts});
           if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
           ensureOutput()?.reset();
           ensureOutput()?.applyObjects(result.outputs);
@@ -66,7 +88,10 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
   const open=()=>{store.setOpen(true);store.resetStatus();coreSpiritChartRegistry.activate(chartId);};
   const compile=async()=>{
     try{
-      const result=await compileCoreSpirit(store.getSnapshot().source);
+      const source=store.getSnapshot().source;
+      const plan=parseCoreSpiritModelLifecycleSurface(source);
+      const compileSource=lowerCoreSpiritLiveInferenceSource(source,plan);
+      const result=await compileCoreSpirit(compileSource);
       const diagnostics=(result.diagnostics||[]).map((d:any)=>`${d.line?`Line ${d.line}: `:''}${d.message}`);
       const errors=(result.diagnostics||[]).filter((d:any)=>d.severity==='error');
       store.setDiagnostics(diagnostics);

@@ -219,7 +219,7 @@ export class CoreSpiritWorkerPool {
     const artifactId=artifactIdFor(job.artifact);
     const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId;
     const graphChanged=!!job.graphSnapshot && this.contextGraphRevisions.get(job.contextKey)!==job.graphSnapshot.revision;
-    const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias).sort().join('|');
+    const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias+':'+(binding.artifactName??'')+':'+(binding.stateLabels??[]).join(',')).sort().join('|');
     const hmmArtifactsChanged=job.hmmArtifacts!==undefined && this.contextHMMArtifacts.get(job.contextKey)!==hmmSignature;
     const sendArtifact=artifactChanged ? {
       type:'loadArtifact' as const,
@@ -336,10 +336,21 @@ export class CoreSpiritWorkerPool {
     const { CoreSpiritRuntime } = await import('./runtime');
     const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
     for(const binding of hmmArtifacts ?? []){
-      if(!Number.isFinite(binding.trainingEndTimestampMs))throw new Error('Invalid CoreSpirit HMM training cutoff');
+      if(!binding || !binding.modelAlias.trim() || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
+        !Number.isFinite(binding.trainingEndTimestampMs) ||
+        (binding.artifactName !== undefined && !binding.artifactName.trim())) {
+        throw new Error('Invalid CoreSpirit HMM artifact binding');
+      }
       const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+      model.setStateLabels(binding.stateLabels ?? Array.from({length:model.states},(_value,index)=>'state_'+index));
       model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
-      hmmModels.set(binding.modelAlias,model);
+      const aliases=new Set([binding.modelAlias,binding.artifactName,binding.artifactHash].filter(
+        (alias):alias is string=>typeof alias==='string'&&Boolean(alias.trim()),
+      ));
+      for(const alias of aliases){
+        if(hmmModels.has(alias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+alias);
+        hmmModels.set(alias,model);
+      }
     }
     const runtime=new CoreSpiritRuntime({
       sourceId,
