@@ -121,11 +121,12 @@ async function main(): Promise<void> {
     }),
   );
   const workerBinding = loadedClientArtifact.toWorkerBinding();
-  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime', 'the client loader must produce a hash-pinned binding for the persistent chart worker');
+  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs), 'the client loader must produce a hash-pinned, cutoff-aware binding for the persistent chart worker');
   const runtimeResolver = loadedClientArtifact.createRuntimeResolver();
   const clientRuntimeModel = runtimeResolver('regime');
   assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
-  const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Date.UTC(2026, 0, 1));
+  assert(!clientRuntimeModel!.canPredictAt(Math.floor(Date.UTC(2025, 0, 1) / 1000)), 'chart-loaded artifacts must reject bars inside the training range');
+  const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Math.floor(Date.UTC(2026, 0, 1) / 1000));
   assert(Number.isInteger(clientPrediction.state), 'the client-loaded artifact must provide an inference-ready HMM instance');
   assert(inference.artifactHash === artifact.hash, 'live inference must remain pinned to the exact immutable artifact hash');
   assert(Number.isInteger(prediction.state) && prediction.state >= 0 && prediction.state < 3, 'HMM inference must produce a valid state');
