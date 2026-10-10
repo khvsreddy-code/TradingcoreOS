@@ -76,7 +76,7 @@ export async function fetchCoreSpiritHMMArtifact(
     artifactName: artifact.name,
     modelAlias,
     featureNames,
-    toWorkerBinding: () => Object.freeze({ artifactHash: artifact.hash, modelAlias, state: hmmState }),
+    toWorkerBinding: () => Object.freeze({ artifactHash: artifact.hash, modelAlias, trainingEndTimestampMs: trainingEndMs, state: hmmState }),
     createRuntimeResolver: () => {
       // A new mutable posterior state per runtime; learned parameters remain sealed.
       const model = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
