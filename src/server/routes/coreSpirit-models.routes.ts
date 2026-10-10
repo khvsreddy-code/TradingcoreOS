@@ -191,7 +191,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
 
   const surface = extractCoreSpiritSurfaceMetadata(source);
   const declaration = surface.declarations.find(item => item.kind === 'model');
-  if (!declaration || declaration.kind !== 'model' || !/^HMM(?:<.*>)?$/i.test(declaration.modelType ?? '')) {
+  if (!declaration || declaration.kind !== 'model' || !['hmm<float>', 'hmm'].includes((declaration.modelType ?? '').toLowerCase())) {
     return fail(res, 422, 'The first production training backend supports typed Gaussian HMM models. Other model families need their own registered trainer.');
   }
   if (declaration.unsupportedEmission || declaration.unsupportedCovariance) {
@@ -214,7 +214,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     featureNames,
     declaredFeatureNames,
     modelName: declaration.name,
-    modelType: declaration.modelType ?? 'HMM<float>',
+    modelType: (declaration.modelType ?? '').toLowerCase() === 'hmm' ? 'HMM' : 'HMM<float>',
     states,
     covariance: declaration.covariance ?? 'full',
   };
