@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   const republished = await sealModelArtifact({
     research,
     provenance,
-    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, hmm: snapshot },
+    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, stateLabels: ['bear', 'flat', 'bull'], hmm: snapshot },
     metrics: { observations: 64, featureCount: 2, stateCount: 3 },
     createdAt: '2026-02-02T00:00:00.000Z',
   });

@@ -9,7 +9,7 @@ type GaussianHMMWeights = Readonly<{
   modelType: 'gaussian-hmm';
   modelAlias: string;
   featureNames: readonly string[];
-  stateLabels: readonly string[];
+  stateLabels?: readonly string[];
   hmm: CoreSpiritGaussianHMMState;
 }>;
 
@@ -18,6 +18,7 @@ export type LoadedCoreSpiritHMMArtifact = Readonly<{
   artifactName: string;
   modelAlias: string;
   featureNames: readonly string[];
+  stateLabels: readonly string[];
   toWorkerBinding: () => CoreSpiritHMMArtifactBinding;
   createRuntimeResolver: () => CoreSpiritHMMArtifactResolver;
 }>;
