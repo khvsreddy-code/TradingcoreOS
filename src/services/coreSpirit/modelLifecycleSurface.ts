@@ -5,6 +5,8 @@
  * statements. They are parsed separately, then removed before the existing
  * CoreSpirit compiler receives the model/feature program.
  */
+import { extractCoreSpiritFeatureDefinitions, lowerCoreSpiritFeatureExpressionForRuntime } from './coreSpiritFeatureMaterializer.js';
+
 export type CoreSpiritModelLifecyclePlan = Readonly<{
   version: 1;
   artifactSymbol?: string;
@@ -142,6 +144,26 @@ export function parseCoreSpiritModelLifecycleSurface(source: string): CoreSpirit
 }
 
 /**
+ * Turn the declarative featureSet/dataset block into the VM's ordered dataset(...)
+ * expression. Aliases are expanded with the same allowlisted grammar used by
+ * research materialization so training and live inference share feature order
+ * and indicator periods.
+ */
+export function lowerCoreSpiritFeatureBlocksForRuntime(source: string): string {
+  const blockPattern = /(^|\n)([ \t]*)(features?|inputs?)\s*[:=]\s*(?:dataset|featureSet)\s*\{([\s\S]*?)\n[ \t]*\}/i;
+  const match = source.match(blockPattern);
+  if (!match) return source;
+  const definitions = extractCoreSpiritFeatureDefinitions(source);
+  if (!definitions.length) throw new Error('CoreScript feature block must declare at least one feature.');
+  const args = definitions.flatMap(definition => [
+    JSON.stringify(definition.name),
+    lowerCoreSpiritFeatureExpressionForRuntime(definition.expression),
+  ]);
+  const replacement = match[1] + match[2] + match[3] + ' = dataset(' + args.join(', ') + ')';
+  return source.replace(match[0], replacement);
+}
+
+/**
  * Strip orchestration-only statements before compilation. If the same source
  * also contains a loadModel binding, compile only the research/model section
  * before that binding; live inference policy belongs to its separate runtime
@@ -174,7 +196,7 @@ export function lowerCoreSpiritResearchSource(source: string, plan = parseCoreSp
     if (/^save\s+[A-Za-z_][A-Za-z0-9_]*\s+as\s+["']/i.test(line)) continue;
     kept.push(raw);
   }
-  return kept.join('\n').trim();
+  return lowerCoreSpiritFeatureBlocksForRuntime(kept.join('\n').trim());
 }
 
 /**
@@ -217,5 +239,5 @@ export function lowerCoreSpiritLiveInferenceSource(
     const target = 'model(' + JSON.stringify(plan.loadModelName) + ').$1(';
     lowered = lowered.replace(new RegExp('\\b' + escapedBinding + '\\.(predict|probability)\\s*\\(', 'g'), target);
   }
-  return lowered;
+  return lowerCoreSpiritFeatureBlocksForRuntime(lowered);
 }
