@@ -37,6 +37,7 @@ const contracts = [
   ['corespirit-model-artifact-provenance', ['src/services/coreSpirit/modelArtifacts.test.ts', true]],
   ['corespirit-research-feature-materializer', ['src/services/coreSpirit/coreSpiritFeatureMaterializer.test.ts', true]],
   ['corespirit-named-dataset-provider', ['src/services/coreSpirit/coreSpiritDatasetProvider.test.ts', true]],
+  ['corespirit-chart-lifecycle-binding', ['src/coreSpiritChartLifecycleBindingContract.test.mjs', false]],
   ['corespirit-model-lifecycle-surface', ['src/services/coreSpirit/modelLifecycleSurface.test.ts', true]],
   ['corespirit-model-lifecycle-training-inference', ['src/services/coreSpirit/modelLifecycle.test.ts', true]],
   ['artifact-hygiene', ['src/generatedArtifactHygieneContract.test.mjs', false]],
