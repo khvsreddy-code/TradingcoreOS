@@ -13,6 +13,10 @@ assert.match(source, /const\s+latestBars\s*=\s*req\.getBars\s*\?/);
 assert.match(source, /latestBars\[latestBars\.length-1\]/);
 assert.match(source, /loadSecondaryData = async \(force=false\)/);
 assert.match(source, /secondaryRefreshPromise/);
+assert.match(source, /secondaryRequestVersion/);
+assert.match(source, /requestVersion !== secondaryRequestVersion/);
+assert.match(source, /requestVersion === secondaryRequestVersion/);
+assert.match(source, /secondaryRequestVersion \+= 1/);
 assert.match(source, /Secondary market data unavailable/);
 assert.match(source, /Secondary market data refresh failed/);
 
