@@ -33,7 +33,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     };
     const { data, error } = await this.db
       .from('corespirit_research_artifacts')
-      .upsert(row, { onConflict: 'owner_user_id,source_hash,feature_graph_hash', ignoreDuplicates: true })
+      .upsert(row, { onConflict: 'owner_user_id,name,source_hash,feature_graph_hash', ignoreDuplicates: true })
       .select('id,artifact')
       .maybeSingle();
     if (error) throw new Error('Unable to persist CoreSpirit research artifact: ' + error.message);
@@ -42,6 +42,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     const existing = await this.db.from('corespirit_research_artifacts')
       .select('id,artifact')
       .eq('owner_user_id', this.ownerUserId)
+      .eq('name', artifact.name)
       .eq('source_hash', artifact.sourceHash)
       .eq('feature_graph_hash', artifact.featureGraphHash)
       .maybeSingle();
