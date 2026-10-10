@@ -231,7 +231,8 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     const element = ['float','int','number'].includes(rawElement) ? 'number' : rawElement;
     const atom = (['number','price','volume','currency','duration','time','boolean','string'] as string[]).includes(element)
       ? element as CoreSpiritSemanticAtom : 'number';
-    return semanticScalar(atom, { container });
+    const valueKind = container === 'dataset' ? 'dataset' : container === 'distribution' ? 'distribution' : undefined;
+    return semanticScalar(atom, { container, ...(valueKind ? { valueKind } : {}) });
   }
   const generic = normalized.match(/^(market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|feature|featureset|distribution|experiment|trainingdata|modelartifact)<(.+)>$/i);
   if (generic) {
