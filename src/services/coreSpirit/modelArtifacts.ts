@@ -10,6 +10,8 @@ export const CORESPIRIT_RESEARCH_ARTIFACT_VERSION = '1';
 export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '1';
 
 export type TrainingRange = Readonly<{ from: string; to: string }>;
+export type CoreSpiritDatasetSource = 'fyers-history' | 'provided-ohlcv' | 'precomputed-features';
+export type CoreSpiritDatasetRow = Readonly<{ timestamp: number; values: readonly number[] }>;
 export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
 
 export type ModelProvenance = Readonly<{
@@ -63,6 +65,7 @@ export type ResearchCompileInput = Readonly<{
 
 export type TrainModelInput<TWeights = unknown> = Readonly<{
   research: ResearchArtifact;
+  name?: string;
   provenance: ModelProvenance;
   weights: TWeights;
   metrics?: Readonly<Record<string, number>>;
@@ -159,10 +162,59 @@ export async function coreSpiritSha256(value: unknown): Promise<string> {
 
 function validateDateRange(range: TrainingRange): void {
   const from = Date.parse(range.from);
-  const to = Date.parse(range.to);
+  const dateOnlyTo = /^\d{4}-\d{2}-\d{2}$/.test(range.to);
+  const to = Date.parse(range.to) + (dateOnlyTo ? 86_399_999 : 0);
   if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
     throw new Error('Training range must contain valid dates with from < to');
   }
+}
+
+/**
+ * Canonical content identity for an immutable research dataset. Keep this in
+ * one place so API enqueue and worker verification cannot drift apart.
+ */
+export async function coreSpiritDatasetVersion(input: Readonly<{
+  datasetName: string;
+  datasetSource: CoreSpiritDatasetSource;
+  featureNames: readonly string[];
+  rows: readonly CoreSpiritDatasetRow[];
+  trainingRange: TrainingRange;
+}>): Promise<string> {
+  const datasetName = input.datasetName.trim();
+  const sources: readonly CoreSpiritDatasetSource[] = ['fyers-history', 'provided-ohlcv', 'precomputed-features'];
+  if (!datasetName || datasetName.length > 120 || !sources.includes(input.datasetSource)) {
+    throw new Error('Dataset identity requires a name and a supported source');
+  }
+  if (input.featureNames.length < 1 || input.featureNames.length > 16 ||
+      input.featureNames.some(name => typeof name !== 'string' || !name.trim()) ||
+      new Set(input.featureNames).size !== input.featureNames.length) {
+    throw new Error('Dataset identity requires 1–16 unique named features');
+  }
+  if (input.rows.length < 12 || input.rows.length > 1024) {
+    throw new Error('Dataset identity requires 12–1,024 observations');
+  }
+  validateDateRange(input.trainingRange);
+  const from = Date.parse(input.trainingRange.from);
+  const dateOnlyTo = /^\d{4}-\d{2}-\d{2}$/.test(input.trainingRange.to);
+  const to = Date.parse(input.trainingRange.to) + (dateOnlyTo ? 86_399_999 : 0);
+  let previous = Number.NEGATIVE_INFINITY;
+  const rows = input.rows.map((row, index) => {
+    if (!Number.isFinite(row.timestamp) || row.timestamp < from || row.timestamp > to ||
+        row.values.length !== input.featureNames.length ||
+        row.values.some(value => !Number.isFinite(value))) {
+      throw new Error('Dataset row ' + index + ' is outside the range or does not match the finite feature schema');
+    }
+    if (row.timestamp <= previous) throw new Error('Dataset rows must be strictly chronological with no duplicate timestamps');
+    previous = row.timestamp;
+    return { timestamp: row.timestamp, values: [...row.values] };
+  });
+  return coreSpiritSha256({
+    datasetName,
+    datasetSource: input.datasetSource,
+    featureNames: [...input.featureNames],
+    rows,
+    trainingRange: { from: input.trainingRange.from, to: input.trainingRange.to },
+  });
 }
 
 function validateProvenance(provenance: ModelProvenance): void {
@@ -222,6 +274,8 @@ export async function createResearchArtifact(input: ResearchCompileInput): Promi
 
 /** Seals trained weights together with every declared reproducibility input. */
 export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeights>): Promise<ModelArtifact<TWeights>> {
+  const artifactName = String(input.name ?? input.research.name).trim();
+  if (!artifactName || artifactName.length > 120) throw new Error('Model artifact name must be 1–120 characters');
   validateProvenance(input.provenance);
   if (input.provenance.sourceHash !== input.research.sourceHash) {
     throw new Error('Model sourceHash does not match the compiled research artifact');
@@ -240,7 +294,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
   const createdAt = input.createdAt ?? new Date().toISOString();
   const hash = await coreSpiritSha256(modelArtifactHashPayload({
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
-    name: input.research.name,
+    name: artifactName,
     provenance,
     weights,
     metrics,
@@ -248,7 +302,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
   return deepFreeze({
     kind: 'corespirit-model',
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
-    name: input.research.name,
+    name: artifactName,
     hash,
     provenance,
     weights,

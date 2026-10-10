@@ -907,10 +907,11 @@ export class CoreSpiritRuntime {
       emission: declaration.emission ?? 'gaussian' as const,
       covariance: declaration.covariance ?? 'full' as const,
     };
-    const signature = JSON.stringify(options);
+    const signature = JSON.stringify({ ...options, stateLabels: declaration.stateLabels ?? null });
     const cached = this.hmmModels.get(modelName);
     if (cached?.signature === signature) return cached.model;
     const model = new CoreSpiritGaussianHMM(options);
+    if (declaration.stateLabels) model.setStateLabels(declaration.stateLabels);
     this.hmmModels.set(modelName, { signature, model });
     return model;
   }
@@ -1032,8 +1033,50 @@ export class CoreSpiritRuntime {
         ?? null;
       return finish(typeof resolved === 'number' || typeof resolved === 'boolean' || typeof resolved === 'string' ? resolved : (resolved == null ? null : (resolved as any).value ?? resolved));
     }
+    if(name==='prediction.probability') {
+      const prediction=args[0] as { kind?: unknown; probabilities?: unknown; stateLabels?: unknown } | null | undefined;
+      const label=String(args[1]??'');
+      if(!prediction || prediction.kind!=='model-prediction' || !Array.isArray(prediction.probabilities) ||
+          !Array.isArray(prediction.stateLabels)) {
+        throw new Error('prediction.probability expects the result of model.predict(features).');
+      }
+      const index=prediction.stateLabels.indexOf(label);
+      if(index<0) throw new Error('Unknown model state label "'+label+'"; available labels: '+prediction.stateLabels.join(', '));
+      const probability=prediction.probabilities[index];
+      if(typeof probability!=='number' || !Number.isFinite(probability)) throw new Error('Model prediction probability is invalid.');
+      return finish(probability);
+    }
     if(name==='model.predict' || name==='model.probability') {
       const modelName=String(args[0]??'');
+      const artifactModel=this.hmmArtifactResolver?.(modelName);
+      if(artifactModel) {
+        const row=args[1] as CoreSpiritDatasetRow | null | undefined;
+        if(!row || row.kind!=='dataset') throw new Error('Loaded HMM model.predict expects a dataset<float> feature row.');
+        // Indicator warm-up naturally produces nulls on early bars. Keep those
+        // outputs null instead of turning warm-up into a per-bar runtime error.
+        if(!Array.isArray(row.values) || row.values.length !== row.fields.length ||
+          row.values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return finish(null);
+        const timestamp=this.toEpoch(bar.timestamp);
+        if(!artifactModel.canPredictAt(timestamp)) return finish(null);
+        const prediction=artifactModel.predict(row.values as readonly number[],row.fields,timestamp);
+        const labels=artifactModel.getStateLabels();
+        if(name==='model.probability') {
+          const label=args.length>2 ? String(args[2]??'') : '';
+          if(!label) return finish(prediction.confidence);
+          const labelIndex=labels.indexOf(label);
+          if(labelIndex<0) throw new Error('Unknown model state label "'+label+'"; available labels: '+labels.join(', '));
+          return finish(prediction.probabilities[labelIndex] ?? null);
+        }
+        return finish(Object.freeze({
+          kind:'model-prediction' as const,
+          state:prediction.state,
+          stateLabel:labels[prediction.state] ?? ('state_'+prediction.state),
+          confidence:prediction.confidence,
+          probabilities:Array.from(prediction.probabilities),
+          stateLabels:[...labels],
+          timestamp,
+        }));
+      }
       const inputs:Record<string,unknown>={};
       for(let i=1;i+1<args.length;i+=2) inputs[String(args[i])]=args[i+1];
       const field=name==='model.probability' ? 'probability' : 'prediction';
@@ -1103,6 +1146,14 @@ export class CoreSpiritRuntime {
       const seriesName=seriesArgs[0] || 'close';
       const previous=this.loadSeries(seriesName,period,bar,bars,index);
       return finish(Number.isFinite(current) && previous !== null && Number.isFinite(Number(previous)) && Number(previous)!==0 ? (current/Number(previous)-1)*100 : null);
+    }
+    if (name==='logreturn') {
+      const period = Math.max(1, Math.floor(Number(args[1] ?? 1)));
+      const current = Number(args[0]);
+      const previous = this.loadSeries(seriesArgs[0] || 'close', period, bar, bars, index);
+      if (!Number.isFinite(current) || previous == null || !Number.isFinite(Number(previous)) ||
+          current <= 0 || Number(previous) <= 0) return finish(null);
+      return finish(Math.log(current / Number(previous)));
     }
     if (name==='exp') return finish(Math.exp(Number(args[0])));
     if(name==='returns'){
@@ -1184,9 +1235,14 @@ export class CoreSpiritRuntime {
       return finish(kernel.update(current, mode));
     }
     if(name==='atr') {
-      const key = 'atr:' + length;
+      // atr(period) is the public CoreScript signature; accept the explicit
+      // two-argument series form as a compatibility path as well.
+      const atrLength = args.length === 1
+        ? Math.max(1, Math.floor(Number(args[0] ?? 14)))
+        : length;
+      const key = 'atr:' + atrLength;
       this.rememberKernelIdentity('atr', key, callKey, seriesArgs);
-      let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(length); this.atrKernels.set(key, kernel); }
+      let kernel = this.atrKernels.get(key); if (!kernel) { kernel = new ATRState(atrLength); this.atrKernels.set(key, kernel); }
       const mode: 'append'|'replace' = this.lastBarWasRealtime && this.realtimeRevision > 0 ? 'replace' : 'append';
       return finish(kernel.update(Number(bar.high), Number(bar.low), Number(bar.close), mode));
     }

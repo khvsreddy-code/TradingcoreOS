@@ -52,6 +52,12 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
     if (declaration.unsupportedCovariance) {
       diagnostics.push({ severity:'error', message:"Unsupported HMM covariance '" + declaration.unsupportedCovariance + "'; use full or diagonal", code:'TYPE_HMM_COVARIANCE' });
     }
+    if (declaration.unsupportedStateLabels) {
+      diagnostics.push({ severity:'error', message:"Invalid HMM stateLabels: " + declaration.unsupportedStateLabels, code:'TYPE_HMM_STATE_LABELS' });
+    }
+    if (declaration.stateLabels && declaration.stateLabels.length !== (declaration.states ?? 3)) {
+      diagnostics.push({ severity:'error', message:'HMM stateLabels must contain exactly one unique label per declared state', code:'TYPE_HMM_STATE_LABELS' });
+    }
   }
 
   const mapDeclaredType=(name:string):CoreSpiritType=> normalizeDeclaredType(name);

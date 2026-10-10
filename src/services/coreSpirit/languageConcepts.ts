@@ -222,8 +222,10 @@ export type CoreSpiritSurfaceDeclaration =
       states?: number;
       emission?: 'gaussian';
       covariance?: 'full' | 'diagonal';
+      stateLabels?: string[];
       unsupportedEmission?: string;
       unsupportedCovariance?: string;
+      unsupportedStateLabels?: string;
       binding?: CoreSpiritModelSurfaceBinding;
       inputs: string[];
       outputs: string[];
@@ -513,7 +515,25 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
           const states = trimmed.match(/^states\s*=\s*(\d+)\s*;?$/i);
           const emission = trimmed.match(/^emission\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
           const covariance = trimmed.match(/^covariance\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
+          const stateLabels = trimmed.match(/^stateLabels\s*=\s*(\[[\s\S]*\])\s*;?$/i);
           if (states) { current.declaration.states = Number(states[1]); offset += raw.length + 1; continue; }
+          if (stateLabels) {
+            try {
+              const parsed: unknown = JSON.parse(stateLabels[1]!);
+              if (!Array.isArray(parsed) || parsed.some(label => typeof label !== 'string' ||
+                  !/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(label)) || new Set(parsed).size !== parsed.length) {
+                current.declaration.unsupportedStateLabels = 'stateLabels must be unique identifier strings';
+                delete current.declaration.stateLabels;
+              } else {
+                current.declaration.stateLabels = [...parsed] as string[];
+                delete current.declaration.unsupportedStateLabels;
+              }
+            } catch {
+              current.declaration.unsupportedStateLabels = 'stateLabels must be a JSON-style string array';
+              delete current.declaration.stateLabels;
+            }
+            concepts.add('MODEL'); offset += raw.length + 1; continue;
+          }
           if (emission) {
             const value = emission[1]!.toLowerCase();
             if (value === 'gaussian') {

@@ -1,4 +1,4 @@
-import { coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../../services/coreSpirit/modelArtifacts.js';
+import { coreSpiritDatasetVersion, coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../../services/coreSpirit/modelArtifacts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 
@@ -12,6 +12,7 @@ type TrainingPayload = Readonly<{
   trainingRange: Readonly<{ from: string; to: string }>;
   trainingParameters: Readonly<Record<string, string | number | boolean | null>>;
   randomSeed: number;
+  modelArtifactName?: string;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -66,6 +67,8 @@ function parsePayload(value: unknown): TrainingPayload {
     trainingRange: { from: trainingRange.from, to: trainingRange.to },
     trainingParameters: trainingParameters as TrainingPayload['trainingParameters'],
     randomSeed: Number(value.randomSeed),
+    ...(typeof value.modelArtifactName === 'string' && value.modelArtifactName.trim()
+      ? { modelArtifactName: value.modelArtifactName.trim() } : {}),
   };
 }
 
@@ -97,7 +100,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       throw new Error('Research artifact source or feature-graph integrity check failed');
     }
 
-    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown };
+    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; stateLabels?: unknown; lifecyclePlan?: { saveAs?: unknown } };
     if (!Array.isArray(featureGraph?.featureNames) ||
         featureGraph.featureNames.length !== payload.featureNames.length ||
         featureGraph.featureNames.some((name, index) => name !== payload.featureNames[index])) {
@@ -106,7 +109,15 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     if (featureGraph.modelType !== 'HMM<float>' && featureGraph.modelType !== 'HMM') {
       throw new Error('The built-in background trainer currently supports Gaussian HMM artifacts; other model families need a registered training backend');
     }
-    const expectedDatasetVersion = await coreSpiritSha256({
+    const datasetName = String(payload.trainingParameters.datasetName ?? 'uploaded-feature-snapshot');
+    const datasetSource = String(payload.trainingParameters.datasetSource ?? 'precomputed-features');
+    if (!datasetName.trim() || datasetName.length > 120 ||
+        !['fyers-history', 'provided-ohlcv', 'precomputed-features'].includes(datasetSource)) {
+      throw new Error('Dataset provenance is missing or invalid; refusing to train on an unidentified snapshot');
+    }
+    const expectedDatasetVersion = await coreSpiritDatasetVersion({
+      datasetName,
+      datasetSource: datasetSource as 'fyers-history' | 'provided-ohlcv' | 'precomputed-features',
       featureNames: payload.featureNames,
       rows: payload.rows,
       trainingRange: payload.trainingRange,
@@ -132,6 +143,10 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       fitEvery,
       fitIterations,
     });
+    if (featureGraph.stateLabels !== undefined) {
+      if (!Array.isArray(featureGraph.stateLabels)) throw new Error('Research artifact stateLabels must be an array');
+      hmm.setStateLabels(featureGraph.stateLabels as string[]);
+    }
     const decoded = new Set<number>();
     for (let index = 0; index < payload.rows.length; index += 1) {
       const row = payload.rows[index]!;
@@ -171,6 +186,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         maxObservations: payload.rows.length,
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
+        artifactName: payload.modelArtifactName ?? String(featureGraph.lifecyclePlan?.saveAs ?? research.name),
       },
       randomSeed: payload.randomSeed,
       modelImplementation: 'corespirit-gaussian-hmm-v1',
@@ -183,6 +199,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     };
     const artifact = await sealModelArtifact({
       research,
+      name: payload.modelArtifactName ?? String(featureGraph.lifecyclePlan?.saveAs ?? research.name),
       provenance,
       weights: {
         modelType: 'gaussian-hmm',

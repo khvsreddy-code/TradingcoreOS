@@ -210,11 +210,15 @@ export type CoreSpiritGaussianHMMState = Readonly<{
   startProbability: readonly number[];
   emissions: readonly Readonly<{ mean: readonly number[]; covariance: readonly (readonly number[])[] }>[];
   latestPosterior: readonly number[];
+  /** Optional semantic labels supplied by the model author; HMM state order is otherwise arbitrary. */
+  stateLabels?: readonly string[];
 }>;
 
 export type CoreSpiritHMMArtifactBinding = Readonly<{
   artifactHash: string;
+  artifactName?: string;
   modelAlias: string;
+  stateLabels?: readonly string[];
   trainingEndTimestampMs: number;
   state: CoreSpiritGaussianHMMState;
 }>;
@@ -299,6 +303,7 @@ export class CoreSpiritGaussianHMM {
   private lastInferenceTimestamp?: number;
   private posteriorBeforeLastInference?: number[];
   private minimumInferenceTimestampExclusive?: number;
+  private stateLabels: string[] = [];
 
   constructor(options: CoreSpiritGaussianHMMOptions) {
     if (options.emission && options.emission !== 'gaussian') throw new Error('Only Gaussian HMM emissions are supported by the built-in HMM runtime');
@@ -383,6 +388,7 @@ export class CoreSpiritGaussianHMM {
         covariance: Object.freeze(item.covariance.map(row => Object.freeze([...row]))),
       }))),
       latestPosterior: Object.freeze([...this.latestPosterior]),
+      ...(this.stateLabels.length ? { stateLabels: Object.freeze([...this.stateLabels]) } : {}),
     });
   }
 
@@ -394,6 +400,12 @@ export class CoreSpiritGaussianHMM {
     }
     const states = snapshot.states;
     if (snapshot.covarianceMode !== 'full' && snapshot.covarianceMode !== 'diagonal') throw new Error('HMM snapshot covariance mode is invalid');
+    if (snapshot.stateLabels !== undefined &&
+        (!Array.isArray(snapshot.stateLabels) || snapshot.stateLabels.length !== states ||
+          snapshot.stateLabels.some(label => typeof label !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(label)) ||
+          new Set(snapshot.stateLabels).size !== snapshot.stateLabels.length)) {
+      throw new Error('HMM snapshot state labels are invalid');
+    }
     if (!Number.isInteger(snapshot.maxObservations) || snapshot.maxObservations < states * 4 || snapshot.maxObservations > 1024) {
       throw new Error('HMM snapshot observation limit is invalid');
     }
@@ -444,12 +456,27 @@ export class CoreSpiritGaussianHMM {
       snapshot.covarianceMode,
     ));
     model.latestPosterior = normalizeProbabilities([...snapshot.latestPosterior]);
+    if (snapshot.stateLabels) model.setStateLabels(snapshot.stateLabels);
     model.fitted = true;
     model.updatesSinceFit = 0;
     return model;
   }
 
   /** Prevents accidental in-sample predictions when a model is loaded for a backtest or chart. */
+  setStateLabels(labels: readonly string[]): void {
+    if (labels.length !== this.states || labels.some(label => typeof label !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(label)) ||
+        new Set(labels).size !== labels.length) {
+      throw new Error('HMM state labels must be unique identifiers matching the trained state count');
+    }
+    this.stateLabels = [...labels];
+  }
+
+  getStateLabels(): readonly string[] {
+    return this.stateLabels.length === this.states
+      ? [...this.stateLabels]
+      : Array.from({ length: this.states }, (_value, index) => 'state_' + index);
+  }
+
   setInferenceBoundaryExclusive(timestamp: number): void {
     if (!Number.isFinite(timestamp)) throw new Error('HMM inference boundary must be finite');
     this.minimumInferenceTimestampExclusive = timestamp;

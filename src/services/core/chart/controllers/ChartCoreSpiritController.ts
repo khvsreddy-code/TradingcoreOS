@@ -6,6 +6,7 @@ import { runCoreSpiritInWorker } from '../../../coreSpirit/chartRunner';
 import { compileCoreSpirit } from '../../../coreSpirit/coreSpiritCompilerLoader';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
+import { lowerCoreSpiritLiveInferenceSource, parseCoreSpiritModelLifecycleSurface } from '../../../coreSpirit/modelLifecycleSurface';
 
 type Ref<T>={current:T};
 
@@ -66,7 +67,12 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
   const open=()=>{store.setOpen(true);store.resetStatus();coreSpiritChartRegistry.activate(chartId);};
   const compile=async()=>{
     try{
-      const result=await compileCoreSpirit(store.getSnapshot().source);
+      const source=store.getSnapshot().source;
+      const lifecyclePlan=parseCoreSpiritModelLifecycleSurface(source);
+      const compilableSource=(lifecyclePlan.artifactSymbol||lifecyclePlan.training||lifecyclePlan.saveAs||lifecyclePlan.loadModelName)
+        ? lowerCoreSpiritLiveInferenceSource(source,lifecyclePlan)
+        : source;
+      const result=await compileCoreSpirit(compilableSource);
       const diagnostics=(result.diagnostics||[]).map((d:any)=>`${d.line?`Line ${d.line}: `:''}${d.message}`);
       const errors=(result.diagnostics||[]).filter((d:any)=>d.severity==='error');
       store.setDiagnostics(diagnostics);

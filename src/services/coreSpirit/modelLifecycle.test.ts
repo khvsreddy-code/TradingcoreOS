@@ -1,7 +1,7 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { CoreSpiritGaussianHMM } from './quantMath.ts';
-import { fetchCoreSpiritHMMArtifact } from './modelArtifactClient.ts';
+import { fetchCoreSpiritHMMArtifact, fetchCoreSpiritHMMArtifactByName, prepareCoreSpiritLiveInference } from './modelArtifactClient.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
 import {
@@ -21,6 +21,7 @@ async function main(): Promise<void> {
     'model regime: HMM<float> {',
     '  states = 3',
     '  emission = gaussian',
+    '  stateLabels = ["bear", "range", "bull"]',
     '  covariance = diagonal',
     '}',
     'features = dataset("returns", 0.1, "volatility", 0.2)',
@@ -38,6 +39,7 @@ async function main(): Promise<void> {
     modelType: declaration.modelType,
     states: declaration.states ?? 3,
     covariance: declaration.covariance ?? 'full',
+    ...(declaration.stateLabels ? { stateLabels: [...declaration.stateLabels] } : {}),
   };
   const research = await createResearchArtifact({
     name: 'nifty-regime-v7',
@@ -63,7 +65,11 @@ async function main(): Promise<void> {
       Math.abs(Math.cos(index * 0.19)) * 0.2 + Math.abs(regime) * 0.1,
     ], Date.UTC(2025, 0, 1) + index * 300_000, featureGraph.featureNames);
   }
+  hmm.setStateLabels(['bear', 'range', 'bull']);
   const snapshot = hmm.exportTrainedState();
+  assert(snapshot.stateLabels?.join(',') === 'bear,range,bull', 'sealed HMM snapshots must preserve explicit state labels');
+  assert(CoreSpiritGaussianHMM.fromTrainedState(snapshot).getStateLabels().join(',') === 'bear,range,bull',
+    'restored HMMs must preserve the same state labels for live inference');
   const provenance: ModelProvenance = {
     sourceHash: research.sourceHash,
     compilerVersion: research.compilerVersion,
@@ -120,8 +126,66 @@ async function main(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
     }),
   );
+  const loadedByName = await fetchCoreSpiritHMMArtifactByName(
+    artifact.name,
+    'contract-access-token',
+    async (input) => {
+      assert(String(input).includes('/api/corespirit/models/by-name/'), 'name-based loading must use the dedicated authenticated name route');
+      return new Response(JSON.stringify({ success: true, data: { artifact, artifactHash: artifact.hash } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  );
+  assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name,
+    'name-based model loading must verify the artifact and pin to its immutable hash');
+
+  const lifecycleChartSource = [
+    'features = dataset("returns", 0.2, "volatility", 0.1)',
+    'model = loadModel("nifty-regime-v7")',
+    'prediction = model.predict(features)',
+    'confidence = model.probability(features, "bull")',
+    'plot confidence',
+  ].join('\n');
+  const preparedLiveSource = await prepareCoreSpiritLiveInference(
+    lifecycleChartSource,
+    'contract-access-token',
+    async (input) => {
+      assert(String(input).includes('/api/corespirit/models/by-name/'),
+        'live loadModel preparation must resolve the artifact by its immutable name');
+      return new Response(JSON.stringify({ success: true, data: { artifact } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  );
+  assert(preparedLiveSource.artifactHash === artifact.hash &&
+      preparedLiveSource.source.includes('model("nifty-regime-v7").predict(features)') &&
+      !preparedLiveSource.source.includes('loadModel'),
+    'loadModel should lower to the existing model(name).predict ABI and pin the verified hash');
+  assert(preparedLiveSource.hmmArtifacts[0]?.artifactName === artifact.name &&
+      preparedLiveSource.hmmArtifacts[0]?.artifactHash === artifact.hash,
+    'persistent-worker bindings must carry both immutable name and SHA-256 identities');
+  const preparedCompile = compileCoreSpirit(preparedLiveSource.source, 'prepared-live-model-source', { layer: 'model' });
+  assert(Boolean(preparedCompile.ir) && !preparedCompile.diagnostics.some(item => item.severity === 'error'),
+    'the lowered loadModel source must compile through the existing CoreSpirit compiler');
+  const preparedRuntime = new CoreSpiritRuntime({
+    layer: 'model',
+    symbol: 'NIFTY',
+    timeframe: '5m',
+    hmmArtifactResolver: loadedByName.createRuntimeResolver(),
+  });
+  preparedRuntime.loadProgram(makeCoreSpiritProgram(preparedLiveSource.source, 'prepared-live-model-runtime'));
+  const preparedExecution = preparedRuntime.executeIr(preparedCompile.ir!, chartBars);
+  assert(!preparedExecution.diagnostics.some(message => /No immutable HMM artifact|HMM fitting is disabled|Unknown model state label/.test(message)),
+    'a live loadModel binding must resolve by artifact name without fitting inside the chart runtime');
+  assert(preparedExecution.outputs.some(output => output.kind === 'series'),
+    'loadModel inference outputs must remain available to the existing chart renderer');
+
   const workerBinding = loadedClientArtifact.toWorkerBinding();
-  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs), 'the client loader must produce a hash-pinned, cutoff-aware binding for the persistent chart worker');
+  assert(workerBinding.artifactHash === artifact.hash && workerBinding.artifactName === artifact.name &&
+      workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs),
+    'the client loader must produce a hash-pinned, name-resolvable, cutoff-aware binding for the persistent chart worker');
   const runtimeResolver = loadedClientArtifact.createRuntimeResolver();
   const clientRuntimeModel = runtimeResolver('regime');
   assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
@@ -168,7 +232,7 @@ async function main(): Promise<void> {
     'state = hmmDecode("regime", features)',
     'confidence = hmmProbability("regime", features)',
     'plot state',
-  ].join('\\n');
+  ].join('\n');
   const chartCompile = compileCoreSpirit(chartSource, 'model-lifecycle-chart-inference', { layer: 'model' });
   assert(Boolean(chartCompile.ir), 'inference-only chart source must compile: ' + chartCompile.diagnostics.map(item => item.message).join('; '));
   const chartRuntime = new CoreSpiritRuntime({
@@ -191,6 +255,17 @@ async function main(): Promise<void> {
     'a loaded model artifact must run inference without training inside the chart runtime');
   assert(chartExecution.outputs.some(output => output.kind === 'series'),
     'inference-only model outputs should remain available to chart rendering');
+
+  const logreturnSource = ['logret = logreturn(close, 1)', 'plot logret'].join('\n');
+  const logreturnCompile = compileCoreSpirit(logreturnSource, 'live-logreturn-contract', { layer: 'indicator' });
+  assert(Boolean(logreturnCompile.ir) && !logreturnCompile.diagnostics.some(item => item.severity === 'error'),
+    'logreturn must be a registered causal feature primitive');
+  const logreturnRuntime = new CoreSpiritRuntime({ layer: 'indicator', symbol: 'NIFTY', timeframe: '5m' });
+  logreturnRuntime.loadProgram(makeCoreSpiritProgram(logreturnSource, 'live-logreturn-contract'));
+  const logreturnExecution = logreturnRuntime.executeIr(logreturnCompile.ir!, chartBars);
+  assert(!logreturnExecution.diagnostics.some(message => /Unknown function|Unsupported call/.test(message)) &&
+    logreturnExecution.outputs.some(output => output.kind === 'series'),
+    'live logreturn must execute on chart bars using only prior closes');
 
   const revisedTimestamp = Date.UTC(2025, 0, 3);
   const rollbackModel = CoreSpiritGaussianHMM.fromTrainedState(snapshot);
