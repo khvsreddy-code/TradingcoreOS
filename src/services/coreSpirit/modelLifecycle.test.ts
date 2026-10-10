@@ -1,6 +1,7 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { CoreSpiritGaussianHMM } from './quantMath.ts';
+import { fetchCoreSpiritHMMArtifact } from './modelArtifactClient.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
 import {
@@ -79,7 +80,7 @@ async function main(): Promise<void> {
   const artifact = await sealModelArtifact({
     research,
     provenance,
-    weights: { modelType: 'gaussian-hmm', featureNames: featureGraph.featureNames, hmm: snapshot },
+    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, hmm: snapshot },
     metrics: { observations: 64, featureCount: 2, stateCount: 3 },
     createdAt: '2026-01-02T00:00:00.000Z',
   });
@@ -111,6 +112,19 @@ async function main(): Promise<void> {
     return { predict: async (features: readonly number[]) => model.predict(features, weights.featureNames) };
   });
   const prediction = await inference.predict([0.2, 0.1]);
+  const loadedClientArtifact = await fetchCoreSpiritHMMArtifact(
+    artifact.hash,
+    'contract-access-token',
+    async () => new Response(JSON.stringify({ success: true, data: { artifact } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+  const runtimeResolver = loadedClientArtifact.createRuntimeResolver();
+  const clientRuntimeModel = runtimeResolver('regime');
+  assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
+  const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Date.UTC(2026, 0, 1));
+  assert(Number.isInteger(clientPrediction.state), 'the client-loaded artifact must provide an inference-ready HMM instance');
   assert(inference.artifactHash === artifact.hash, 'live inference must remain pinned to the exact immutable artifact hash');
   assert(Number.isInteger(prediction.state) && prediction.state >= 0 && prediction.state < 3, 'HMM inference must produce a valid state');
   assert(Math.abs(prediction.probabilities.reduce((sum, value) => sum + value, 0) - 1) < 1e-5, 'posterior probabilities must sum to one');
