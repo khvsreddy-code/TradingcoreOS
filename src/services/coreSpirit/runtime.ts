@@ -925,10 +925,11 @@ export class CoreSpiritRuntime {
     if (name === 'dataset') return finish(coreSpiritDataset(...args));
     if (name === 'hmmFit') {
       const modelName = String(args[0] ?? '');
+      const model = this.getHMMModel(modelName);
       const row = args[1] as CoreSpiritDatasetRow | null | undefined;
       if (!row || row.kind !== 'dataset') throw new Error('hmmFit expects a dataset<float> row');
       if (row.values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return finish(null);
-      return finish(this.getHMMModel(modelName).observe(row.values as readonly number[], this.toEpoch(bar.timestamp), row.fields));
+      return finish(model.observe(row.values as readonly number[], this.toEpoch(bar.timestamp), row.fields));
     }
     if (name === 'hmmDecode') return finish(this.getHMMModel(String(args[0] ?? '')).decodeLatest());
     if (name === 'hmmProbability') return finish(this.getHMMModel(String(args[0] ?? '')).probabilityLatest());
