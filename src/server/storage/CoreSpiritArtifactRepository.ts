@@ -148,6 +148,16 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     throw new Error('Unable to persist CoreSpirit model artifact: ' + error.message);
   }
 
+  async getModelArtifactIdByHash(hash: string): Promise<string | null> {
+    const { data, error } = await this.db.from('corespirit_model_artifacts')
+      .select('id')
+      .eq('owner_user_id', this.ownerUserId)
+      .eq('artifact_hash', hash)
+      .maybeSingle();
+    if (error) throw new Error('Unable to load CoreSpirit model artifact ID: ' + error.message);
+    return data ? String(data.id) : null;
+  }
+
   async getByName(name: string): Promise<ModelArtifact<unknown> | null> {
     const { data, error } = await this.db.from('corespirit_model_artifacts')
       .select('artifact')
