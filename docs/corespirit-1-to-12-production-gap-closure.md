@@ -22,7 +22,7 @@ This is an implementation map, not a claim that every research capability is pro
 ## Lifecycle now available
 
 1. Compile and persist a research artifact: POST /api/corespirit/research
-2. Persist a content-hashed dataset snapshot and enqueue a training run: POST /api/corespirit/training-runs
+2. Persist a content-hashed dataset snapshot and enqueue a training run: POST /api/corespirit/training-runs. If the CoreScript train directive names a supported market dataset and the request contains neither rows nor bars, the API fetches that user's authenticated FYERS history before queuing.
 3. Poll the owner-scoped run: GET /api/corespirit/training-runs/:runId
 4. Fetch one verified immutable model artifact: GET /api/corespirit/models/:hash
 5. Run a forward-only single-step prediction: POST /api/corespirit/models/:hash/predict
@@ -56,7 +56,7 @@ Training request (timestamps are epoch milliseconds; rows must be chronological,
 }
 ~~~
 
-The API currently requires 12–1,024 rows and 1–16 features. The row in the example is illustrative only; a real request must include the minimum row count. Dataset identity is computed server-side over the exact feature names, rows and training range. The HMM initializer is deterministic today; the seed is recorded for lineage but does not currently introduce randomness into this algorithm.
+The API currently requires 12–1,024 rows and 1–16 features. The row in the example is illustrative only; a real request must include the minimum row count. Dataset identity is computed by one shared validator/hash function over the dataset name, data source, exact feature names, rows and training range; the background worker recomputes this identity before fitting. The HMM initializer is deterministic today; the seed is recorded for lineage but does not currently introduce randomness into this algorithm. To use automatic FYERS history, keep the dataset in the CoreScript train directive and omit rows/bars from the training request; a connected FYERS session is required.
 
 The single-step inference API takes a model SHA-256, a feature vector and an epoch-millisecond timestamp strictly after the model's training range. It rejects in-sample timestamps to avoid accidental look-ahead leakage:
 
@@ -83,7 +83,7 @@ The worker installs the immutable model snapshot in its existing runtime and upd
 - Supabase server-side configuration is required: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY). Client-supplied user IDs are never trusted.
 - The existing Vercel Queue/background-job service must be configured and running. Training never runs in a request handler or candle callback.
 - The first built-in trainer is deliberately Gaussian HMM only. Other families must register an explicit bounded training adapter; this route does not pretend to train arbitrary Python/ONNX/GPU models.
-- The training API accepts either precomputed finite feature rows or OHLCV candle snapshots. The bounded feature materializer evaluates a safe allowlist (OHLCV fields, returns, SMA/EMA/RSI/ATR and volume z-score), enforces chronological candles and date bounds, uses pre-range candles only for indicator warm-up, drops warm-up rows, and rejects unsupported expressions instead of evaluating arbitrary JavaScript. History acquisition remains an explicit market-data-provider responsibility; arbitrary CoreScript expression execution and datasets beyond the 1,024-observation HMM limit are not implied.
+- The training API accepts precomputed finite feature rows, OHLCV candle snapshots, or a named market dataset. Named datasets use the connected user's FYERS session and strict SYMBOL_TIMEFRAME resolution (for example NIFTY_5M, BANKNIFTY_15M, NSE:RELIANCE-EQ_1D, or SENSEX_1W); the provider uses the existing authenticated FYERS request gate, bounded date windows, and rejects oversized ranges instead of silently truncating. The feature materializer evaluates a safe allowlist (OHLCV fields, returns, SMA/EMA/RSI/ATR and volume z-score), enforces chronological candles and date bounds, uses pre-range candles only for indicator warm-up, drops warm-up rows, and rejects unsupported expressions instead of evaluating arbitrary JavaScript. The built-in HMM still accepts at most 1,024 usable observations and 16 features; multi-year intraday ranges will be rejected unless they fit that cap, not silently downsampled.
 - Research sources may now include declarative model artifact/train/save/loadModel directives. A dedicated lifecycle-surface parser validates these directives and lowers the training source to the existing CoreSpirit compiler; model/feature declarations still use the one authoritative compiler/IR/VM. Training range and save-as metadata are persisted in the research graph, and save-as names flow into the sealed artifact identity. These directives remain control-plane syntax, not executable chart-VM instructions; live inference still binds a verified artifact hash.
 - WASM SIMD/GPU execution is not enabled by this change. Existing backend-dispatch contracts should not be mistaken for proof that every kernel has a production WASM/GPU implementation.
 - Model predictions still flow through the existing signal → automation → risk engine → order intent → broker boundary. This API never submits an order.
