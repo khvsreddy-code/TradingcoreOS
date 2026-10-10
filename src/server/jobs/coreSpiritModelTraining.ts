@@ -1,4 +1,4 @@
-import { coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../../services/coreSpirit/modelArtifacts.js';
+import { coreSpiritDatasetVersion, coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../../services/coreSpirit/modelArtifacts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 
@@ -115,9 +115,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         !['fyers-history', 'provided-ohlcv', 'precomputed-features'].includes(datasetSource)) {
       throw new Error('Dataset provenance is missing or invalid; refusing to train on an unidentified snapshot');
     }
-    const expectedDatasetVersion = await coreSpiritSha256({
+    const expectedDatasetVersion = await coreSpiritDatasetVersion({
       datasetName,
-      datasetSource,
+      datasetSource: datasetSource as 'fyers-history' | 'provided-ohlcv' | 'precomputed-features',
       featureNames: payload.featureNames,
       rows: payload.rows,
       trainingRange: payload.trainingRange,
