@@ -46,7 +46,9 @@ export class CoreSpiritParser {
   private statement():CoreSpiritAstNode {
     const annotations=this.parseAnnotations();
     let node:CoreSpiritAstNode;
-    if(this.match('type')) node=this.typeDeclaration();
+    if(this.check('identifier') && this.peek().lexeme === 'fn') { this.advance(); node=this.functionDeclaration(); }
+    else if(this.check('identifier') && this.peek().lexeme === 'return') { this.advance(); node=this.returnStatement(); }
+    else if(this.match('type')) node=this.typeDeclaration();
     else if(this.match('let')) node=this.letStatement();
     else if(this.match('on')) node=this.onEventStatement();
     else if(this.match('if')) node=this.ifStatement();
@@ -129,6 +131,36 @@ export class CoreSpiritParser {
       default: return node.type;
     }
   }
+  private functionDeclaration():CoreSpiritAstNode {
+    const start=this.previous(); // the 'fn' identifier
+    const name=this.consume('identifier','Expected function name after fn');
+    this.consume('leftParen','Expected ( after function name');
+    const parameters:Array<{name:string;typeName:string;span?:CoreSpiritSpan}>=[];
+    if(!this.check('rightParen')) {
+      do {
+        const parameter=this.consume('identifier','Expected parameter name');
+        this.consume('colon','Expected : after parameter name');
+        const typeStart=this.peek();
+        const typeName=this.typeName();
+        parameters.push({name:parameter.lexeme,typeName,span:this.makeSpan(parameter,this.previous())});
+        void typeStart;
+      } while(this.match('comma'));
+    }
+    this.consume('rightParen','Expected ) after function parameters');
+    this.consume('minus','Expected -> before function return type');
+    this.consume('greater','Expected -> before function return type');
+    const returnType=this.typeName();
+    const body=this.block();
+    return {type:'functionDeclaration',name:name.lexeme,parameters,returnType,body,span:this.makeSpan(start,this.previous())} as any;
+  }
+
+  private returnStatement():CoreSpiritAstNode {
+    const start=this.previous();
+    const expression=this.expression();
+    this.match('semicolon');
+    return {type:'return',expression,span:this.makeSpan(start,this.previous())} as any;
+  }
+
   private typeDeclaration():CoreSpiritAstNode {
     const start=this.previous();
     const name=this.consume('identifier','Expected type name');
