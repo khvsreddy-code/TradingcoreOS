@@ -19,8 +19,13 @@ const valid = compileCoreSpirit([
   'let fast: series<float> = ema(close, 3);',
   'let blended = close + ema(close, 20);',
   'let isReady: bool = true;',
-  'let stateEstimate: prediction<float> = 1;',
-  'let stateProbabilities: distribution<float> = 0.75;',
+  'model testHMM: HMM<float> {',
+  '  states = 3',
+  '}',
+  'let features = dataset("returns", 1.0, "volatility", 0.5);',
+  'hmmFit("testHMM", features);',
+  'let stateEstimate: prediction<float> = hmmDecode("testHMM", features);',
+  'let stateProbabilities: distribution<float> = hmmPosterior("testHMM", features);',
 ].join('\n'), 'typed-quant-values-valid', { layer: 'model' });
 assert(Boolean(valid.ir), 'scalar, series, model-output and probability declarations should compile: ' + valid.diagnostics.map(item => item.message).join('; '));
 
