@@ -70,8 +70,15 @@ export function extractCoreSpiritFeatureDefinitions(source: string): CoreSpiritF
     for (const rawLine of block[1]!.split('\n')) {
       const line = rawLine.replace(/\/\/.*$/, '').trim().replace(/,$/, '');
       if (!line) continue;
+      const bare = line.match(/^([A-Za-z_][A-Za-z0-9_]*)$/);
+      if (bare) {
+        // CoreScript's concise featureSet form treats a supported alias as both
+        // the output name and its expression: ret5, atr20, volumeZ, close, etc.
+        definitions.push({ name: bare[1]!, expression: bare[1]! });
+        continue;
+      }
       const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?::|=)[ \t]*(.+)$/);
-      if (!match) throw new Error('Feature declarations must use name: expression or name = expression syntax.');
+      if (!match) throw new Error('Feature declarations must use a bare supported alias, name: expression, or name = expression syntax.');
       definitions.push({ name: match[1]!, expression: match[2]!.trim() });
     }
   } else {
