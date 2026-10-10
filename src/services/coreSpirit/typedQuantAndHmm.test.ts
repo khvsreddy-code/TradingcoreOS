@@ -57,6 +57,12 @@ const invalidBroadcast = compileCoreSpirit([
   'let invalid = a + close;',
 ].join('\n'), 'typed-quant-no-implicit-broadcast', { layer: 'model' });
 assert(!invalidBroadcast.ir, 'matrix + series must not compile');
+
+const invalidSeriesToScalar = compileCoreSpirit([
+  'let scalarFlag: bool = close > ema(close, 3);',
+].join('\n'), 'typed-quant-no-series-to-scalar', { layer: 'model' });
+assert(!invalidSeriesToScalar.ir, 'series<bool> must not be assigned to bool without explicit reduction/indexing');
+
 assert(invalidBroadcast.diagnostics.some(item => item.code === 'TYPE_SEMANTIC_ARITHMETIC' || item.code === 'TYPE_ARITHMETIC'),
   'matrix + series should produce an actionable arithmetic diagnostic');
 
