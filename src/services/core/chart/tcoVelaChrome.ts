@@ -732,8 +732,8 @@ function navigateTcoTerminalRoute(route:string): void {
 function terminalRouteButton(parent:HTMLElement, label:string, route:string, icon:string):void {
   const button=document.createElement('button');
   button.type='button';
-  button.textContent=\`\${icon}  \${label}\`;
-  button.title=\`Open \${label}\`;
+  button.textContent=`${icon}  ${label}`;
+  button.title=`Open ${label}`;
   button.style.cssText='width:100%;text-align:left;border:1px solid rgba(255,255,255,.07);border-radius:7px;padding:8px 10px;background:rgba(255,255,255,.025);color:#cbd5e1;font:10px ui-monospace;cursor:pointer;';
   button.addEventListener('mouseenter',()=>{button.style.background='rgba(124,92,255,.10)';button.style.borderColor='rgba(155,138,255,.20)';});
   button.addEventListener('mouseleave',()=>{button.style.background='rgba(255,255,255,.025)';button.style.borderColor='rgba(255,255,255,.07)';});
@@ -755,7 +755,7 @@ const researchPanel:SidePanelDescriptor={
     const root=panelRoot(body);
     const summary=document.createElement('div');
     summary.style.cssText='font-size:10px;color:#64748b;line-height:1.5;margin-bottom:8px;';
-    summary.textContent=\`Vela terminal · \${ctx.symbol} · \${ctx.timeframe}\`;
+    summary.textContent=`Vela terminal · ${ctx.symbol} · ${ctx.timeframe}`;
     root.appendChild(summary);
 
     const section=panelSectionTitle('Research surfaces');
@@ -773,9 +773,9 @@ const researchPanel:SidePanelDescriptor={
     root.appendChild(chartSection);
     const chartInfo=document.createElement('div');
     chartInfo.style.cssText='display:flex;flex-direction:column;gap:2px;font:9px ui-monospace;color:#94a3b8;';
-    chartInfo.innerHTML=\`<span>Engine: <b style="color:#c4b5fd">CoreSpirit → Vela</b></span><span>Viewport: Vela-managed</span><span>Data: canonical columnar</span>\`;
+    chartInfo.innerHTML=`<span>Engine: <b style="color:#c4b5fd">CoreSpirit → Vela</b></span><span>Viewport: Vela-managed</span><span>Data: canonical columnar</span>`;
     root.appendChild(chartInfo);
-    return { onOpen:()=>{summary.textContent=\`Vela terminal · \${ctx.symbol} · \${ctx.timeframe}\`;} };
+    return { onOpen:()=>{summary.textContent=`Vela terminal · ${ctx.symbol} · ${ctx.timeframe}`;} };
   },
 };
 
@@ -802,7 +802,7 @@ const automationPanel:SidePanelDescriptor={
       rows.textContent='';
       const automations=getAutomations();
       const enabled=automations.filter(item=>item.enabled);
-      status.textContent=\`\${enabled.length} enabled · \${automations.length} configured\`;
+      status.textContent=`${enabled.length} enabled · ${automations.length} configured`;
       if(!automations.length){
         rows.appendChild(panelSectionTitle('No automations configured'));
       }else{
@@ -812,9 +812,9 @@ const automationPanel:SidePanelDescriptor={
           const left=document.createElement('span');
           left.style.cssText='min-width:0;display:flex;flex-direction:column;gap:2px;';
           const name=document.createElement('span'); name.textContent=item.name; name.style.cssText='font-size:10px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-          const detail=document.createElement('span'); detail.textContent=\`\${item.kind} · \${item.mode}\`; detail.style.cssText='font-size:9px;color:#64748b;';
+          const detail=document.createElement('span'); detail.textContent=`${item.kind} · ${item.mode}`; detail.style.cssText='font-size:9px;color:#64748b;';
           left.append(name,detail);
-          const badge=document.createElement('span'); badge.textContent=item.enabled?'ON':'OFF'; badge.style.cssText=\`font:700 8px ui-monospace;padding:3px 5px;border-radius:4px;color:\${item.enabled?'#4ade80':'#64748b'};background:\${item.enabled?'rgba(34,197,94,.08)':'rgba(100,116,139,.08)'};\`;
+          const badge=document.createElement('span'); badge.textContent=item.enabled?'ON':'OFF'; badge.style.cssText=`font:700 8px ui-monospace;padding:3px 5px;border-radius:4px;color:${item.enabled?'#4ade80':'#64748b'};background:${item.enabled?'rgba(34,197,94,.08)':'rgba(100,116,139,.08)'};`;
           row.append(left,badge); rows.appendChild(row);
         }
       }
@@ -854,7 +854,7 @@ const tradingPanel:SidePanelDescriptor={
       rows.textContent='';
       try{
         const [funds,positions]=await Promise.all([tradingCoreRuntime.getFunds(),tradingCoreRuntime.getPositions()]);
-        summary.textContent=\`\${ctx.symbol} · \${positions.length} open positions\`;
+        summary.textContent=`${ctx.symbol} · ${positions.length} open positions`;
         panelValueRow(rows,'Available margin',funds?Number(funds.availableMargin).toLocaleString('en-IN',{maximumFractionDigits:2}):'—');
         panelValueRow(rows,'Used margin',funds?Number(funds.usedMargin).toLocaleString('en-IN',{maximumFractionDigits:2}):'—');
         panelValueRow(rows,'Open P&L',positions.reduce((sum,p)=>sum+Number(p.pnl||0),0).toLocaleString('en-IN',{maximumFractionDigits:2}));
