@@ -21,6 +21,7 @@ async function main(): Promise<void> {
     'model regime: HMM<float> {',
     '  states = 3',
     '  emission = gaussian',
+    '  stateLabels = ["bear", "range", "bull"]',
     '  covariance = diagonal',
     '}',
     'features = dataset("returns", 0.1, "volatility", 0.2)',
