@@ -200,6 +200,18 @@ export type CoreSpiritGaussianHMMOptions = Readonly<{
 
 type GaussianParameters = { mean: number[]; covariance: number[][]; lower: number[][]; logDeterminant: number };
 
+export type CoreSpiritGaussianHMMState = Readonly<{
+  schemaVersion: 1;
+  states: number;
+  covarianceMode: 'full' | 'diagonal';
+  maxObservations: number;
+  fields: readonly string[];
+  transition: readonly (readonly number[])[];
+  startProbability: readonly number[];
+  emissions: readonly Readonly<{ mean: readonly number[]; covariance: readonly (readonly number[])[] }>[];
+  latestPosterior: readonly number[];
+}>;
+
 const EPSILON = 1e-8;
 
 function logSumExp(values: readonly number[]): number {
@@ -341,6 +353,114 @@ export class CoreSpiritGaussianHMM {
     return this.fitted && this.latestPosterior.length
       ? Object.freeze({ kind: 'distribution' as const, length: this.latestPosterior.length, data: Float64Array.from(this.latestPosterior) })
       : null;
+  }
+
+  /** Snapshot only the fitted numerical parameters; no training history is persisted. */
+  exportTrainedState(): CoreSpiritGaussianHMMState {
+    if (!this.fitted || !this.emissions.length || !this.transition.length) {
+      throw new Error('Cannot export an HMM before it has been fitted on historical observations');
+    }
+    return Object.freeze({
+      schemaVersion: 1 as const,
+      states: this.states,
+      covarianceMode: this.covarianceMode,
+      maxObservations: this.maxObservations,
+      fields: Object.freeze([...(this.fields ?? [])]),
+      transition: Object.freeze(this.transition.map(row => Object.freeze([...row]))),
+      startProbability: Object.freeze([...this.startProbability]),
+      emissions: Object.freeze(this.emissions.map(item => Object.freeze({
+        mean: Object.freeze([...item.mean]),
+        covariance: Object.freeze(item.covariance.map(row => Object.freeze([...row]))),
+      }))),
+      latestPosterior: Object.freeze([...this.latestPosterior]),
+    });
+  }
+
+  /** Rehydrates a sealed HMM for inference without running fitBounded(). */
+  static fromTrainedState(snapshot: CoreSpiritGaussianHMMState): CoreSpiritGaussianHMM {
+    if (!snapshot || snapshot.schemaVersion !== 1) throw new Error('Unsupported HMM state snapshot version');
+    if (!Number.isInteger(snapshot.states) || snapshot.states < 2 || snapshot.states > 12) {
+      throw new Error('HMM snapshot has an invalid state count');
+    }
+    const states = snapshot.states;
+    const finite = (values: readonly number[]) => values.every(Number.isFinite);
+    if (snapshot.transition.length !== states || snapshot.startProbability.length !== states ||
+        snapshot.emissions.length !== states || snapshot.latestPosterior.length !== states ||
+        !finite(snapshot.startProbability) || !finite(snapshot.latestPosterior)) {
+      throw new Error('HMM snapshot dimensions or probabilities are invalid');
+    }
+    for (const row of snapshot.transition) {
+      if (row.length !== states || !finite(row) || row.some(value => value < 0) ||
+          Math.abs(row.reduce((sum, value) => sum + value, 0) - 1) > 1e-5) {
+        throw new Error('HMM snapshot transition matrix is invalid');
+      }
+    }
+    if (Math.abs(snapshot.startProbability.reduce((sum, value) => sum + value, 0) - 1) > 1e-5 ||
+        Math.abs(snapshot.latestPosterior.reduce((sum, value) => sum + value, 0) - 1) > 1e-5) {
+      throw new Error('HMM snapshot probabilities must sum to one');
+    }
+    const dimensions = snapshot.emissions[0]?.mean.length ?? 0;
+    if (dimensions < 1 || dimensions > 16 || snapshot.fields.length && snapshot.fields.length !== dimensions) {
+      throw new Error('HMM snapshot feature dimensions are invalid');
+    }
+    for (const emission of snapshot.emissions) {
+      if (emission.mean.length !== dimensions || !finite(emission.mean) ||
+          emission.covariance.length !== dimensions ||
+          emission.covariance.some(row => row.length !== dimensions || !finite(row))) {
+        throw new Error('HMM snapshot emission dimensions are invalid');
+      }
+    }
+    const model = new CoreSpiritGaussianHMM({
+      states,
+      covariance: snapshot.covarianceMode,
+      maxObservations: snapshot.maxObservations,
+    });
+    model.fields = [...snapshot.fields];
+    model.transition = snapshot.transition.map(row => [...row]);
+    model.startProbability = [...snapshot.startProbability];
+    model.emissions = snapshot.emissions.map(item => gaussianParameters(
+      [...item.mean],
+      item.covariance.map(row => [...row]),
+      snapshot.covarianceMode,
+    ));
+    model.latestPosterior = normalizeProbabilities([...snapshot.latestPosterior]);
+    model.fitted = true;
+    model.updatesSinceFit = 0;
+    return model;
+  }
+
+  /**
+   * One-step posterior update using frozen fitted parameters. This path never
+   * calls fitBounded() and is safe for a loaded model in a live chart loop.
+   */
+  predict(row: readonly number[], fields?: readonly string[]): Readonly<{ state: number; probabilities: readonly number[]; confidence: number }> {
+    if (!this.fitted || !this.latestPosterior.length) {
+      throw new Error('HMM inference requires a previously trained model artifact');
+    }
+    if (row.length !== this.emissions[0]!.mean.length || !row.every(Number.isFinite)) {
+      throw new Error('HMM inference features must be finite and match the trained feature schema');
+    }
+    if (this.fields?.length && fields &&
+        (this.fields.length !== fields.length || this.fields.some((name, index) => name !== fields[index]))) {
+      throw new Error('HMM inference feature names do not match the trained feature schema');
+    }
+    const logScores = this.emissions.map((emission, to) => {
+      const prior = this.latestPosterior.reduce((sum, probability, from) =>
+        sum + probability * this.transition[from]![to]!, 0);
+      return Math.log(Math.max(prior, EPSILON)) + gaussianLogDensity(row, emission);
+    });
+    const normalizer = logSumExp(logScores);
+    const probabilities = normalizeProbabilities(logScores.map(value => Math.exp(value - normalizer)));
+    this.latestPosterior = probabilities;
+    let state = 0;
+    for (let index = 1; index < probabilities.length; index += 1) {
+      if (probabilities[index]! > probabilities[state]!) state = index;
+    }
+    return Object.freeze({
+      state,
+      probabilities: Object.freeze([...probabilities]),
+      confidence: probabilities[state]!,
+    });
   }
 
   private fitBounded(): void {
