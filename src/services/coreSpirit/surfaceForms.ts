@@ -503,7 +503,7 @@ function normalizeCoreSpiritQuantSurfaceSyntax(source: string): string {
     loweredLines.push(line);
   }
 
-  return loweredLines.map(line => {
+  const lowered = loweredLines.map(line => {
     const method = line.match(/^(\s*)(?:let\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.(decode|probability|posterior)\s*\((.*)\)\s*;?$/i);
     if (!method || !hmmNames.has(method[3])) return line;
     const functionName = method[4].toLowerCase() === 'decode' ? 'hmmDecode'
