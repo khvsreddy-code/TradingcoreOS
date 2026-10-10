@@ -83,6 +83,25 @@ async function main(): Promise<void> {
     metrics: { observations: 64, featureCount: 2, stateCount: 3 },
     createdAt: '2026-01-02T00:00:00.000Z',
   });
+  const republished = await sealModelArtifact({
+    research,
+    provenance,
+    weights: { modelType: 'gaussian-hmm', featureNames: featureGraph.featureNames, hmm: snapshot },
+    metrics: { observations: 64, featureCount: 2, stateCount: 3 },
+    createdAt: '2026-02-02T00:00:00.000Z',
+  });
+  assert(republished.hash === artifact.hash, 'artifact identity must not change solely because publication time changed');
+
+  const typedArrayArtifact = await sealModelArtifact({
+    research,
+    provenance,
+    weights: { buffer: new Float64Array([1, 2, 3]) },
+    metrics: { observations: 64 },
+    createdAt: '2026-01-02T00:00:00.000Z',
+  });
+  assert(Array.isArray((typedArrayArtifact.weights as { buffer: unknown }).buffer),
+    'typed-array weights must normalize into immutable JSON-safe arrays before sealing');
+
   const store = new InMemoryModelArtifactStore<typeof artifact.weights>();
   await store.put(artifact);
   const inference = await loadModelForInference(store, artifact.hash, async loaded => {
