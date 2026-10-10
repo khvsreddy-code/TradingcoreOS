@@ -11,6 +11,11 @@ import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION } from '../../serv
 import { extractCoreSpiritSurfaceMetadata } from '../../services/coreSpirit/languageConcepts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
+import { BrokerRepository } from '../storage/BrokerRepository.js';
+import { EncryptionService } from '../encryption/EncryptionService.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
+import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
+import { CoreSpiritDatasetProviderError, fetchCoreSpiritDatasetBars } from '../marketData/CoreSpiritDatasetProvider.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 import { materializeCoreSpiritFeatureRows } from '../../services/coreSpirit/coreSpiritFeatureMaterializer.js';
@@ -25,6 +30,26 @@ const MAX_FEATURES = 16;
 
 function fail(res: Response, status: number, message: string): void {
   res.status(status).json({ success: false, error: message });
+}
+
+async function fetchFyersResearchBars(
+  ownerUserId: string,
+  datasetName: string,
+  trainingRange: { from: string; to: string },
+) {
+  const session = await BrokerRepository.getSession('fyers', ownerUserId);
+  if (!session || session.status !== 'Connected') {
+    throw new CoreSpiritDatasetProviderError('Connect a FYERS account to fetch a named market dataset.', 401);
+  }
+  let accessToken: string;
+  try {
+    accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
+  } catch {
+    throw new CoreSpiritDatasetProviderError('Unable to decrypt the connected FYERS session. Reconnect FYERS and retry.', 401);
+  }
+  const marketData = new FyersMarketDataService(new FyersApiClient(accessToken));
+  return fetchCoreSpiritDatasetBars(datasetName, trainingRange, (dataset, from, to) =>
+    marketData.history(dataset.symbol, dataset.resolution, from, to, { dateFormat: '1' }));
 }
 
 function parseFeatureNames(value: unknown): string[] {
@@ -284,8 +309,20 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
   let range: { from: string; to: string };
   let featureNames: string[];
   let rows: ReturnType<typeof parseRows> | null = null;
-  const rawBars = req.body?.bars;
+  let rawBars: unknown = req.body?.bars;
+  let datasetName = '';
+  let datasetSource: 'fyers-history' | 'provided-ohlcv' | 'precomputed-features' = 'precomputed-features';
   try {
+    const declaredDatasetName = lifecyclePlan?.training?.datasetName?.trim() ?? '';
+    if (req.body?.datasetName !== undefined &&
+        (typeof req.body.datasetName !== 'string' || !req.body.datasetName.trim() || req.body.datasetName.trim().length > 120)) {
+      throw new Error('datasetName must be a non-empty string of at most 120 characters.');
+    }
+    const requestedDatasetName = typeof req.body?.datasetName === 'string' ? req.body.datasetName.trim() : '';
+    if (declaredDatasetName && requestedDatasetName && declaredDatasetName !== requestedDatasetName) {
+      throw new Error('datasetName must match the immutable dataset declared in the CoreScript train directive.');
+    }
+    datasetName = declaredDatasetName || requestedDatasetName;
     const plannedRange = lifecyclePlan?.training?.from && lifecyclePlan.training.to
       ? { from: lifecyclePlan.training.from, to: lifecyclePlan.training.to }
       : undefined;
@@ -299,8 +336,17 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     featureNames = req.body?.featureNames === undefined
       ? [...graph.featureNames]
       : parseFeatureNames(req.body.featureNames);
-    if (Array.isArray(req.body?.rows)) rows = parseRows(req.body.rows, featureNames, range);
-    else if (!Array.isArray(rawBars)) throw new Error('Provide precomputed rows or chronological OHLCV bars for automatic CoreScript feature materialization.');
+    if (Array.isArray(req.body?.rows)) {
+      rows = parseRows(req.body.rows, featureNames, range);
+      datasetSource = 'precomputed-features';
+    } else if (Array.isArray(rawBars)) {
+      datasetSource = 'provided-ohlcv';
+    } else if (datasetName) {
+      datasetSource = 'fyers-history';
+    } else {
+      throw new Error('Provide rows/bars or declare a named market dataset such as NIFTY_5M in the CoreScript train directive.');
+    }
+    if (!datasetName) datasetName = 'uploaded-feature-snapshot';
   } catch (error) {
     return fail(res, 400, error instanceof Error ? error.message : 'Invalid training request.');
   }
@@ -310,7 +356,16 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
   if (rawParameters !== undefined && (!rawParameters || typeof rawParameters !== 'object' || Array.isArray(rawParameters))) {
     return fail(res, 400, 'trainingParameters must be an object.');
   }
-  const trainingParameters = (rawParameters ?? {}) as Record<string, string | number | boolean | null>;
+  const suppliedTrainingParameters = (rawParameters ?? {}) as Record<string, string | number | boolean | null>;
+  if (Object.prototype.hasOwnProperty.call(suppliedTrainingParameters, 'datasetName') ||
+      Object.prototype.hasOwnProperty.call(suppliedTrainingParameters, 'datasetSource')) {
+    return fail(res, 400, 'datasetName and datasetSource are reserved provenance fields; supply datasetName at the request top level or in the CoreScript train directive.');
+  }
+  const trainingParameters: Record<string, string | number | boolean | null> = {
+    ...suppliedTrainingParameters,
+    datasetName,
+    datasetSource,
+  };
   if (req.body?.modelArtifactName !== undefined &&
       (typeof req.body.modelArtifactName !== 'string' || !req.body.modelArtifactName.trim() || req.body.modelArtifactName.trim().length > 120)) {
     return fail(res, 400, 'modelArtifactName must be a non-empty string of at most 120 characters.');
@@ -344,6 +399,16 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     }
     if (!rows) {
       try {
+        if (!Array.isArray(rawBars)) {
+          try {
+            rawBars = await fetchFyersResearchBars(req.tradingCoreUserId!, datasetName, range);
+          } catch (error) {
+            if (error instanceof CoreSpiritDatasetProviderError) return fail(res, error.statusCode, error.message);
+            const providerStatus = Number((error as { status?: unknown } | null)?.status);
+            return fail(res, providerStatus === 429 ? 429 : 503,
+              error instanceof Error ? 'Unable to fetch named FYERS dataset: ' + error.message : 'Unable to fetch named FYERS dataset.');
+          }
+        }
         const materialized = materializeCoreSpiritFeatureRows({
           source: research.source,
           bars: rawBars,
@@ -362,7 +427,7 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
         rows.length < Math.max(12, graph.states * 4)) {
       return fail(res, 422, 'This HMM configuration needs at least max(12, states × 4) historical rows.');
     }
-    const datasetVersion = await coreSpiritSha256({ featureNames, rows, trainingRange: range });
+    const datasetVersion = await coreSpiritSha256({ datasetName, datasetSource, featureNames, rows, trainingRange: range });
     const snapshot = await repository.putDatasetSnapshot({
       datasetVersion,
       featureNames,
@@ -400,6 +465,8 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
           jobId: queued.job.id,
           status: 'queued',
           datasetVersion,
+          datasetName,
+          datasetSource,
           rowCount: rows.length,
           researchArtifactId,
         },
