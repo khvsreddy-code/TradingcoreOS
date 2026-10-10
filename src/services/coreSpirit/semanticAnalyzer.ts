@@ -122,16 +122,16 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const t=infer(n.operand,scope);
         if(n.operator==='!' && !isBooleanType(t)) report(n,'! expects a boolean value','TYPE_UNARY_BOOL');
         if(n.operator!=='!' && !isNumericType(t)) report(n,'Unary + and - expect a number','TYPE_UNARY_NUMBER');
-        return n.operator==='!'?'boolean':t;
+        return n.operator==='!' ? (t.startsWith('series<') ? 'series<boolean>' : 'boolean') : t;
       }
 
       case 'binary': {
         const a=infer(n.left,scope), b=infer(n.right,scope);
         if(n.operator==='and'||n.operator==='or'){
           if(!isBooleanType(a)||!isBooleanType(b)) report(n,`${n.operator} expects boolean operands`,'TYPE_LOGICAL');
-          return 'boolean';
+          return isSeriesType(a) || isSeriesType(b) ? 'series<boolean>' : 'boolean';
         }
-        if(comparisonOps.has(n.operator)) return 'boolean';
+        if(comparisonOps.has(n.operator)) return isSeriesType(a) || isSeriesType(b) ? 'series<boolean>' : 'boolean';
         if(!isNumericType(a)||!isNumericType(b)) report(n,`Operator '${n.operator}' expects numeric operands`,'TYPE_ARITHMETIC');
         return joinTypes(a,b);
       }
@@ -336,13 +336,13 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
       }
       case 'binary': {
         const left=inferSemantic(n.left,scope), right=inferSemantic(n.right,scope);
-        if(n.operator==='and'||n.operator==='or') return semanticScalar('boolean');
+        if(n.operator==='and'||n.operator==='or') return left?.kind==='series' || right?.kind==='series' ? semanticSeries('boolean', mergeSemanticMetadata([left,right])) : semanticScalar('boolean');
         if(comparisonOps.has(n.operator)) {
           if(left && right) {
             const comparison=compareSemanticTypes(n.operator as '=='|'!='|'<'|'<='|'>'|'>=',left,right);
             if(!comparison.compatible) report(n,comparison.error ?? `semantic domains '${left.atom}' and '${right.atom}' cannot be compared`,'TYPE_SEMANTIC_COMPARISON');
           }
-          return semanticScalar('boolean');
+          return left?.kind==='series' || right?.kind==='series' ? semanticSeries('boolean', mergeSemanticMetadata([left,right])) : semanticScalar('boolean');
         }
         if(!left||!right) return undefined;
         const combined=combineSemanticArithmetic(n.operator as '+'|'-'|'*'|'/'|'%',left,right);
@@ -380,7 +380,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           if(result.startsWith('series<')) return semanticSeries(result.slice(7,-1) as CoreSpiritSemanticType['atom']);
           return result==='boolean' ? semanticScalar('boolean') : semanticScalar('number');
         }
-        if(semanticBooleanFunctions.has(n.name)) return semanticScalar('boolean');
+        if(semanticBooleanFunctions.has(n.name)) return args.some(type => type?.kind === 'series') ? semanticSeries('boolean', mergeSemanticMetadata(args)) : semanticScalar('boolean');
         if(Object.prototype.hasOwnProperty.call(semanticConversionFunctions,n.name)) {
           const source=args[0];
           const atom=semanticConversionFunctions[n.name]!;
