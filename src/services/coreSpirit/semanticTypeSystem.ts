@@ -48,7 +48,7 @@ export type CoreSpiritSemanticType = Readonly<{
   lookahead?: boolean;
   lookback?: number;
   /** Structured values have shape identity and never broadcast implicitly. */
-  container?: 'array' | 'vector' | 'matrix' | 'tensor' | 'dataset';
+  container?: 'array' | 'vector' | 'matrix' | 'tensor' | 'dataset' | 'distribution';
 }>;
 
 export function semanticTypeToString(type: CoreSpiritSemanticType | undefined): string {
@@ -116,7 +116,7 @@ export function combineSemanticArithmetic(
   left: CoreSpiritSemanticType,
   right: CoreSpiritSemanticType,
 ): { type: CoreSpiritSemanticType; error?: string } {
-  if (left.container || right.container) {
+  if (left.container || right.container || left.valueKind === 'model' || right.valueKind === 'model') {
     const involved = [left, right].filter(type => type.container).map(type => semanticTypeToString(type));
     return {
       type: left.container ? left : right,
@@ -186,6 +186,9 @@ export function compareSemanticTypes(
   left: CoreSpiritSemanticType,
   right: CoreSpiritSemanticType,
 ): { compatible: boolean; error?: string } {
+  if (left.container || right.container || left.valueKind === 'model' || right.valueKind === 'model') {
+    return { compatible:false, error: `operator '${operator}' cannot compare structured values; use explicit vector/matrix/tensor operations` };
+  }
   if (left.atom === 'boolean' || right.atom === 'boolean' || left.atom === 'string' || right.atom === 'string') {
     if (operator === '==' || operator === '!=') {
       return { compatible: left.atom === right.atom };
@@ -221,9 +224,9 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
     orderintent: semanticScalar('orderIntent', { valueKind:'orderIntent', phase:'developing', causal:true, lookahead:false, lookback:0 }),
   };
   if (direct[normalized]) return direct[normalized];
-  const shaped = normalized.match(/^(array|vector|matrix|tensor|dataset)<(.+)>$/i);
+  const shaped = normalized.match(/^(array|vector|matrix|tensor|dataset|distribution)<(.+)>$/i);
   if (shaped) {
-    const container = shaped[1]!.toLowerCase() as 'array'|'vector'|'matrix'|'tensor'|'dataset';
+    const container = shaped[1]!.toLowerCase() as 'array'|'vector'|'matrix'|'tensor'|'dataset'|'distribution';
     const rawElement = shaped[2]!.toLowerCase();
     const element = ['float','int','number'].includes(rawElement) ? 'number' : rawElement;
     const atom = (['number','price','volume','currency','duration','time','boolean','string'] as string[]).includes(element)
