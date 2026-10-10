@@ -34,6 +34,72 @@ function parseFeatureNames(value: unknown): string[] {
   return names;
 }
 
+function splitCallArguments(text: string): string[] {
+  const args: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (quote) {
+      if (escaped) { escaped = false; continue; }
+      if (character === '\\') { escaped = true; continue; }
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '"' || character === "'") { quote = character; continue; }
+    if (character === '(' || character === '[' || character === '{') depth += 1;
+    else if (character === ')' || character === ']' || character === '}') depth = Math.max(0, depth - 1);
+    else if (character === ',' && depth === 0) {
+      args.push(text.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  const tail = text.slice(start).trim();
+  if (tail) args.push(tail);
+  return args;
+}
+
+function extractDeclaredFeatureNames(source: string, modelFeatures: readonly string[]): string[] {
+  const block = source.match(/(?:^|\\n)\\s*(?:features?|inputs?)\\s*[:=]\\s*(?:dataset|featureSet)\\s*\\{([\\s\\S]*?)\\}/i);
+  if (block) {
+    const names = block[1]!.split(/\\r?\\n/)
+      .map(line => line.trim().replace(/,$/, ''))
+      .map(line => line.match(/^([A-Za-z_][A-Za-z0-9_]*)\\s*(?::|$)/)?.[1])
+      .filter((name): name is string => Boolean(name));
+    if (names.length) return [...new Set(names)];
+  }
+  const datasetStart = /\\bdataset\\s*\\(/gi;
+  for (const match of source.matchAll(datasetStart)) {
+    const open = (match.index ?? 0) + match[0].lastIndexOf('(');
+    let depth = 0;
+    let quote: '"' | "'" | null = null;
+    let escaped = false;
+    let close = -1;
+    for (let index = open; index < source.length; index += 1) {
+      const character = source[index]!;
+      if (quote) {
+        if (escaped) { escaped = false; continue; }
+        if (character === '\\') { escaped = true; continue; }
+        if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '"' || character === "'") { quote = character; continue; }
+      if (character === '(') depth += 1;
+      else if (character === ')' && --depth === 0) { close = index; break; }
+    }
+    if (close < 0) continue;
+    const args = splitCallArguments(source.slice(open + 1, close));
+    const names = args.filter((_, index) => index % 2 === 0)
+      .map(argument => argument.match(/^(?:"([^"]+)"|'([^']+)')$/)?.[1] ??
+        argument.match(/^(?:"([^"]+)"|'([^']+)')$/)?.[2])
+      .filter((name): name is string => Boolean(name));
+    if (names.length) return [...new Set(names)];
+  }
+  return [...modelFeatures];
+}
+
 function parseRange(value: unknown): { from: string; to: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('trainingRange with from and to is required.');
   const range = value as Record<string, unknown>;
@@ -128,9 +194,19 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   const states = Number(declaration.states ?? 3);
   if (!Number.isInteger(states) || states < 2 || states > 12) return fail(res, 422, 'HMM states must be between 2 and 12.');
 
+  const declaredFeatureNames = extractDeclaredFeatureNames(source, declaration.features);
+  if (!declaredFeatureNames.length) {
+    return fail(res, 422, 'Declare named feature fields with features = dataset { name: expression } or dataset("name", expression, ...) before creating a research artifact.');
+  }
+  if (declaredFeatureNames.length !== featureNames.length ||
+      declaredFeatureNames.some((name, index) => name !== featureNames[index])) {
+    return fail(res, 422, 'featureNames must exactly match the ordered feature names declared in the CoreScript dataset expression.');
+  }
+
   const featureGraphBase = {
     version: 1,
     featureNames,
+    featureExpressions: declaredFeatureNames,
     modelName: declaration.name,
     modelType: declaration.modelType ?? 'HMM<float>',
     states,
