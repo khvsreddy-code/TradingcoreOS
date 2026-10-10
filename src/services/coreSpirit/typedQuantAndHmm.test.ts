@@ -66,6 +66,20 @@ assert(!invalidSeriesAssignment.ir, 'a scalar must not be assigned to series<flo
 assert(invalidSeriesAssignment.diagnostics.some(item => item.code === 'TYPE_DECLARATION' || item.code === 'TYPE_ASSIGNMENT' || /series/.test(item.message)),
   'scalar-to-series mismatch should produce a declaration diagnostic');
 
+const invalidSeriesContainer = compileCoreSpirit([
+  'let invalidVector: vector<float> = vector(close, 2);',
+].join('\n'), 'typed-quant-series-in-vector', { layer: 'model' });
+assert(!invalidSeriesContainer.ir, 'a bar-aligned series must not be silently packed into a scalar vector');
+assert(invalidSeriesContainer.diagnostics.some(item => item.code === 'TYPE_VECTOR_VALUE'),
+  'series-to-vector constructor mismatch should have a typed diagnostic');
+
+const invalidShape = compileCoreSpirit([
+  'let invalidMatrix: matrix<float> = matrix(close, 2, 1, 2, 3, 4);',
+].join('\n'), 'typed-quant-series-matrix-shape', { layer: 'model' });
+assert(!invalidShape.ir, 'matrix dimensions must not be supplied by a bar-aligned series');
+assert(invalidShape.diagnostics.some(item => item.code === 'TYPE_MATRIX_DIMENSIONS'),
+  'series matrix dimensions should have a typed diagnostic');
+
 const invalidBroadcast = compileCoreSpirit([
   'let a: matrix<float> = identity(2);',
   'let invalid = a + close;',
