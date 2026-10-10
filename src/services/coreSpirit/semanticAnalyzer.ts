@@ -165,6 +165,26 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const builtin=CORE_SPIRIT_BUILTINS.get(n.name);
         const isMatrix = (type:CoreSpiritType) => type.startsWith('matrix<');
         const isVector = (type:CoreSpiritType) => type.startsWith('vector<');
+        if (n.name === 'vector' && argTypes.some(type => !isNumericType(type))) {
+          report(n, 'vector expects numeric scalar or series values', 'TYPE_VECTOR_VALUE');
+        }
+        if (n.name === 'matrix') {
+          if (!isNumericType(argTypes[0] ?? 'unknown') || !isNumericType(argTypes[1] ?? 'unknown')) {
+            report(n, 'matrix dimensions must be numeric integer values', 'TYPE_MATRIX_DIMENSIONS');
+          }
+          if (argTypes.slice(2).some(type => !isNumericType(type))) report(n, 'matrix elements must be numeric', 'TYPE_MATRIX_VALUE');
+          const rows = constantNumber(n.args[0] ?? n);
+          const columns = constantNumber(n.args[1] ?? n);
+          if (rows !== undefined && (!Number.isInteger(rows) || rows < 1 || rows > 256)) report(n, 'matrix rows must be an integer from 1 to 256', 'TYPE_MATRIX_ROWS');
+          if (columns !== undefined && (!Number.isInteger(columns) || columns < 1 || columns > 256)) report(n, 'matrix columns must be an integer from 1 to 256', 'TYPE_MATRIX_COLUMNS');
+          if (rows !== undefined && columns !== undefined && rows * columns > 65_536) report(n, 'matrix exceeds the 65,536-element compile-time limit', 'TYPE_MATRIX_SIZE');
+        }
+        if (['zeros','identity'].includes(n.name) && argTypes.some(type => !isNumericType(type))) {
+          report(n, n.name + ' dimensions must be numeric integer values', 'TYPE_MATRIX_DIMENSIONS');
+        }
+        if (n.name === 'tensor' && argTypes.slice(1).some(type => !isNumericType(type))) {
+          report(n, 'tensor elements must be numeric', 'TYPE_TENSOR_VALUE');
+        }
         if (['matmul','matrixAdd'].includes(n.name) && argTypes.some(type => !isMatrix(type))) {
           report(n, `${n.name} expects two matrix<float> operands; use vector/matrix constructors before linear algebra`, 'TYPE_MATRIX_OPERAND');
         }
