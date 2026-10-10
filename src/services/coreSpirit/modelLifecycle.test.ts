@@ -146,7 +146,7 @@ async function main(): Promise<void> {
     'prediction = model.predict(features)',
     'confidence = model.probability(features, "bull")',
     'plot confidence',
-  ].join('\\n');
+  ].join('\n');
   const preparedLiveSource = await prepareCoreSpiritLiveInference(
     lifecycleChartSource,
     'contract-access-token',
