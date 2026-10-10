@@ -256,7 +256,7 @@ export const CORE_SPIRIT_SURFACE_TRANSFORMS: readonly CoreSpiritSurfaceTransform
 ];
 
 function lowerCoreSpiritInlineFunctions(source: string): string {
-  type InlineFunction = { params: string[]; body: string; returnType: string };
+  type InlineFunction = { params: string[]; locals: Array<{name:string; expression:string}>; body: string; returnType: string };
   const functions = new Map<string, InlineFunction>();
   const inputLines = source.split('\n');
   const outputLines: string[] = [];
@@ -294,13 +294,30 @@ function lowerCoreSpiritInlineFunctions(source: string): string {
       bodyLines.push(inputLines[closingLine]!);
     }
     if (closingLine >= inputLines.length) throw new Error("Unterminated body for CoreScript function '" + name + "'");
-    const bodySource = bodyLines.map(item => item.replace(/\/\/.*$/, '').trim()).filter(Boolean).join(' ');
-    if (!/^return\s+[\s\S]+$/.test(bodySource)) {
-      throw new Error("CoreScript function '" + name + "' currently requires a single return expression; use typed matrix/vector primitives for each explicit step");
+    const cleanedBody = bodyLines.map(item => item.replace(/\/\/.*$/, '').trim()).filter(Boolean).join('\n');
+    const statements = cleanedBody.split(/[;\n]/).map(item => item.trim()).filter(Boolean);
+    const locals: Array<{name:string; expression:string}> = [];
+    const localNames = new Set(params);
+    let returnExpression = '';
+    for (let statementIndex = 0; statementIndex < statements.length; statementIndex += 1) {
+      const statement = statements[statementIndex]!;
+      const returned = statement.match(/^return\s+([\s\S]+)$/);
+      if (returned) {
+        if (statementIndex !== statements.length - 1) throw new Error("CoreScript function '" + name + "' must return after its local declarations");
+        returnExpression = returned[1]!.trim();
+        continue;
+      }
+      const local = statement.match(/^(?:let|const)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)?\s*=\s*([\s\S]+)$/);
+      if (!local) {
+        throw new Error("CoreScript function '" + name + "' supports typed local assignments followed by one return expression; loops and control-flow bodies are not yet supported in this inline execution tier");
+      }
+      const localName = local[1]!;
+      if (localNames.has(localName)) throw new Error("Duplicate local or parameter '" + localName + "' in function '" + name + "'");
+      localNames.add(localName);
+      locals.push({ name: localName, expression: local[2]!.trim() });
     }
-    const expression = bodySource.replace(/^return\s+/, '').replace(/;\s*$/, '').trim();
-    if (!expression) throw new Error("CoreScript function '" + name + "' must return an expression");
-    functions.set(name, { params, body: expression, returnType: (header[3] ?? 'unknown').trim() });
+    if (!returnExpression) throw new Error("CoreScript function '" + name + "' must end with return expression");
+    functions.set(name, { params, locals, body: returnExpression, returnType: header[3]!.trim() });
     i = closingLine;
   }
 
@@ -409,6 +426,7 @@ function lowerCoreSpiritInlineFunctions(source: string): string {
           const args = splitTopLevel(text.slice(open + 1, close));
           if (args.length !== definition.params.length) throw new Error("Function '" + identifier + "' expects " + definition.params.length + ' arguments; received ' + args.length);
           const bindings = new Map<string, string>(definition.params.map((param, index) => [param, args[index]!.trim()] as const));
+          for (const local of definition.locals) bindings.set(local.name, substitute(local.expression, bindings));
           const expandedBody = substitute(definition.body, bindings);
           result += '(' + expandCalls(expandedBody, [...stack, identifier], depth + 1) + ')';
           i = close + 1;
