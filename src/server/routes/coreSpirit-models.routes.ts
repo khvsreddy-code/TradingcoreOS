@@ -295,6 +295,14 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     return fail(res, 400, 'trainingParameters must be an object.');
   }
   const trainingParameters = (rawParameters ?? {}) as Record<string, string | number | boolean | null>;
+  if (req.body?.modelArtifactName !== undefined &&
+      (typeof req.body.modelArtifactName !== 'string' || !req.body.modelArtifactName.trim() || req.body.modelArtifactName.trim().length > 120)) {
+    return fail(res, 400, 'modelArtifactName must be a non-empty string of at most 120 characters.');
+  }
+  const requestedModelArtifactName = typeof req.body?.modelArtifactName === 'string' ? req.body.modelArtifactName.trim() : '';
+  if (requestedModelArtifactName && lifecyclePlan?.saveAs && requestedModelArtifactName !== lifecyclePlan.saveAs) {
+    return fail(res, 422, 'modelArtifactName must match the immutable save-as name declared in the research source.');
+  }
   if (trainingParameters.fitIterations !== undefined &&
       (typeof trainingParameters.fitIterations !== 'number' || !Number.isInteger(trainingParameters.fitIterations) ||
        trainingParameters.fitIterations < 1 || trainingParameters.fitIterations > 6)) {
@@ -364,9 +372,8 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
         trainingParameters,
         randomSeed,
         ...(() => {
-          const requested = typeof req.body?.modelArtifactName === 'string' ? req.body.modelArtifactName.trim() : '';
           const planned = typeof lifecyclePlan?.saveAs === 'string' ? lifecyclePlan.saveAs : '';
-          const modelArtifactName = requested || planned;
+          const modelArtifactName = requestedModelArtifactName || planned;
           return modelArtifactName ? { modelArtifactName } : {};
         })(),
       });

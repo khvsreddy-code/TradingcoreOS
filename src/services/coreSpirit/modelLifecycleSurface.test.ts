@@ -1,3 +1,4 @@
+import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import {
   lowerCoreSpiritResearchSource,
   parseCoreSpiritModelLifecycleSurface,
@@ -42,6 +43,10 @@ assert(!/model artifact|^train |^save /m.test(lowered), 'orchestration statement
 assert(!lowered.includes('loadModel') && !lowered.includes('prediction ='), 'training compilation must stop before live inference code');
 assert(lowered.includes('model RegimeV7: HMM<float>') && lowered.includes('ret1: pctchange(close)'),
   'lowering must preserve model and feature declarations');
+const compiled = compileCoreSpirit(lowered, 'model-lifecycle-surface-contract', { layer: 'model' });
+assert(Boolean(compiled.ir) && !compiled.diagnostics.some(item => item.severity === 'error'),
+  'lowered lifecycle source must compile through the existing CoreSpirit pipeline: ' +
+  compiled.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
 
 let mismatch = false;
 try {
