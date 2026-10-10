@@ -163,16 +163,15 @@ async function main(): Promise<void> {
   ].join('\\n');
   const chartCompile = compileCoreSpirit(chartSource, 'model-lifecycle-chart-inference', { layer: 'model' });
   assert(Boolean(chartCompile.ir), 'inference-only chart source must compile: ' + chartCompile.diagnostics.map(item => item.message).join('; '));
-  const loadedHMM = CoreSpiritGaussianHMM.fromTrainedState(snapshot);
   const chartRuntime = new CoreSpiritRuntime({
     layer: 'model',
     symbol: 'NIFTY',
     timeframe: '5m',
-    hmmArtifactResolver: name => name === 'regime' ? loadedHMM : undefined,
+    hmmArtifactResolver: loadedClientArtifact.createRuntimeResolver(),
   });
   chartRuntime.loadProgram(makeCoreSpiritProgram(chartSource, 'model-lifecycle-chart-inference'));
   const chartBars = Array.from({ length: 3 }, (_, index) => ({
-    timestamp: new Date(Date.UTC(2025, 0, 2) + index * 300_000).toISOString(),
+    timestamp: new Date(Date.UTC(2026, 0, 2) + index * 300_000).toISOString(),
     open: 100 + index,
     high: 101 + index,
     low: 99 + index,
