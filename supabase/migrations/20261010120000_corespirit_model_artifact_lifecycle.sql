@@ -12,7 +12,7 @@ create table if not exists public.corespirit_research_artifacts (
   feature_graph_hash text not null check (feature_graph_hash ~ '^[a-f0-9]{64}$'),
   artifact jsonb not null,
   created_at timestamptz not null default now(),
-  unique (owner_user_id, source_hash, feature_graph_hash)
+  unique (owner_user_id, name, source_hash, feature_graph_hash)
 );
 create index if not exists corespirit_research_owner_created_idx
   on public.corespirit_research_artifacts(owner_user_id, created_at desc);
@@ -80,6 +80,8 @@ grant all on public.corespirit_research_artifacts, public.corespirit_model_artif
 create or replace function public.reject_corespirit_artifact_mutation()
 returns trigger language plpgsql as $$
 begin
+  -- Permit account-deletion cascades while rejecting direct artifact mutation.
+  if TG_OP = 'DELETE' and pg_trigger_depth() > 1 then return OLD; end if;
   raise exception 'CoreSpirit artifacts are immutable; publish a new versioned artifact instead';
 end;
 $$;
