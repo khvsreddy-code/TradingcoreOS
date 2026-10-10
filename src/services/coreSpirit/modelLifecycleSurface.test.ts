@@ -18,6 +18,7 @@ const source = [
   '  ret1: pctchange(close)',
   '  atr14: atr(14)',
   '}',
+  'fit RegimeV7 on features',
   'train RegimeV7 using dataset("NIFTY_5M")',
   '    from "2018-01-01"',
   '    to "2025-12-31"',
