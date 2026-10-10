@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     compilerVersion: research.compilerVersion,
     irVersion: research.irVersion,
     featureGraphHash: research.featureGraphHash,
-    datasetVersion: 'NIFTY_5M@2025-12-31:v4',
+    datasetVersion: 'a'.repeat(64),
     trainingRange: { from: '2018-01-01', to: '2025-12-31' },
     trainingParameters: { epochs: 20, learningRate: 0.001 },
     randomSeed: 42,
