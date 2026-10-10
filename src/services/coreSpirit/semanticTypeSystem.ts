@@ -248,7 +248,9 @@ export function semanticTypeForDeclaredName(name: string): CoreSpiritSemanticTyp
 
   const parsed = parseCoreSpiritTemporalType(normalized);
   if (!parsed) return undefined;
-  const element = parsed.element === 'float' || parsed.element === 'int' ? 'number' : parsed.element as CoreSpiritSemanticAtom;
+  const element = parsed.element === 'float' || parsed.element === 'int' || parsed.element === 'number' ? 'number'
+    : parsed.element === 'bool' ? 'boolean'
+    : parsed.element as CoreSpiritSemanticAtom;
   const isSeries = parsed.container === 'series';
   const phase = parsed.container === 'confirmed' || parsed.container === 'developing' || parsed.container === 'forecast'
     ? parsed.container
