@@ -166,7 +166,7 @@ export function lowerCoreSpiritResearchSource(source: string, plan = parseCoreSp
       skipTrainContinuationAtIndent = indent;
       continue;
     }
-    if (/^save\s+[A-Za-z_][A-Za-z0-9_]*\s+as\s+["']/.test(line)) continue;
+    if (/^save\\s+[A-Za-z_][A-Za-z0-9_]*\\s+as\\s+["']/i.test(line)) continue;
     kept.push(raw);
   }
   return kept.join('\n').trim();

@@ -175,7 +175,6 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
         artifactName: payload.modelArtifactName ?? String(featureGraph.lifecyclePlan?.saveAs ?? research.name),
-        artifactName: payload.modelArtifactName ?? String((featureGraph as Record<string, unknown>).saveAs ?? research.name),
       },
       randomSeed: payload.randomSeed,
       modelImplementation: 'corespirit-gaussian-hmm-v1',
