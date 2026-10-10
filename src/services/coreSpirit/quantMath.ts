@@ -426,7 +426,7 @@ export class CoreSpiritGaussianHMM {
       if (!emission || !Array.isArray(emission.mean) || !Array.isArray(emission.covariance) ||
           emission.mean.length !== dimensions || !finite(emission.mean) ||
           emission.covariance.length !== dimensions ||
-          emission.covariance.some(row => row.length !== dimensions || !finite(row))) {
+          emission.covariance.some(row => !Array.isArray(row) || row.length !== dimensions || !finite(row))) {
         throw new Error('HMM snapshot emission dimensions are invalid');
       }
     }
