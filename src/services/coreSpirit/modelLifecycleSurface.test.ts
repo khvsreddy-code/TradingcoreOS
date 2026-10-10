@@ -101,4 +101,38 @@ assert(Boolean(liveCompiled.ir) && !liveCompiled.diagnostics.some(item => item.s
   'lowered live inference source must compile through the existing CoreSpirit compiler: ' +
   liveCompiled.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
 
+const conciseSource = [
+  'model artifact RegimeV7',
+  'model RegimeV7: HMM<float> {',
+  '  states = 3',
+  '  stateLabels = ["bear", "range", "bull"]',
+  '}',
+  'features = featureSet {',
+  '  ret1',
+  '  ret5',
+  '  atr20',
+  '  volumeZ',
+  '}',
+  'train RegimeV7 using dataset("NIFTY_5M") from "2025-01-01" to "2025-01-14"',
+  'save RegimeV7 as "nifty-regime-v7"',
+  'model = loadModel("nifty-regime-v7")',
+  'prediction = model.predict(features)',
+  'confidence = model.probability(features, "bull")',
+  'plot confidence',
+].join('\\n');
+const concisePlan = parseCoreSpiritModelLifecycleSurface(conciseSource);
+const conciseResearch = lowerCoreSpiritResearchSource(conciseSource, concisePlan);
+const canonicalFeatures = 'dataset("ret1", pctchange(close, 1), "ret5", pctchange(close, 5), "atr20", atr(close, 20), "volumeZ", zscore(volume, 20))';
+assert(conciseResearch.includes(canonicalFeatures),
+  'bare featureSet aliases must lower to the same explicit feature expressions used for live inference');
+const conciseResearchCompile = compileCoreSpirit(conciseResearch, 'concise-featureSet-research-contract', { layer: 'model' });
+assert(Boolean(conciseResearchCompile.ir) && !conciseResearchCompile.diagnostics.some(item => item.severity === 'error'),
+  'concise featureSet research source must compile after safe feature lowering');
+const conciseLive = lowerCoreSpiritLiveInferenceSource(conciseSource, concisePlan);
+assert(conciseLive.includes(canonicalFeatures) && conciseLive.includes('model("nifty-regime-v7").predict(features)'),
+  'live source must use the same feature expressions and immutable artifact binding as training');
+const conciseLiveCompile = compileCoreSpirit(conciseLive, 'concise-featureSet-live-contract', { layer: 'model' });
+assert(Boolean(conciseLiveCompile.ir) && !conciseLiveCompile.diagnostics.some(item => item.severity === 'error'),
+  'concise featureSet inference source must compile through the existing chart VM');
+
 console.log('CORESPIRIT_MODEL_LIFECYCLE_SURFACE_OK');
