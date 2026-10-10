@@ -143,15 +143,15 @@ export function coreSpiritTensor(shapeValue: unknown, ...values: unknown[]): Cor
 export function coreSpiritDataset(...values: unknown[]): CoreSpiritDatasetRow {
   if (!values.length || values.length % 2 !== 0) throw new Error('dataset expects alternating field-name and numeric-value arguments');
   const fields: string[] = [];
-  const row: number[] = [];
+  const row: (number | null)[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < values.length; i += 2) {
     const field = String(values[i] ?? '').trim();
     const rawValue = values[i + 1];
     const value = rawValue == null ? null : Number(rawValue);
     if (!field) throw new Error('dataset field names cannot be empty');
-    if (seen.has(field)) throw new Error(\`dataset contains duplicate field '\${field}'\`);
-    if (value !== null && !Number.isFinite(value)) throw new Error(\`dataset field '\${field}' must be numeric or missing during warm-up\`);
+    if (seen.has(field)) throw new Error("dataset contains duplicate field '" + field + "'");
+    if (value !== null && !Number.isFinite(value)) throw new Error("dataset field '" + field + "' must be numeric or missing during warm-up");
     seen.add(field);
     fields.push(field);
     row.push(value);
