@@ -161,7 +161,7 @@ assert(declaration?.kind === 'model' && declaration.modelType === 'HMM<float>' &
 const compiledHmm = compileCoreSpirit(hmmSource, 'typed-hmm-surface', { layer: 'model' });
 assert(Boolean(compiledHmm.ir), 'high-level HMM/data-set syntax should lower into executable CoreScript IR: ' + compiledHmm.diagnostics.map(item => item.message).join('; '));
 const program = makeCoreSpiritProgram(hmmSource, 'typed-hmm-runtime-contract');
-const runtime = new CoreSpiritRuntime({ layer: 'model', symbol: 'NIFTY', timeframe: '1m' });
+const runtime = new CoreSpiritRuntime({ layer: 'model', modelTrainingMode: 'research', symbol: 'NIFTY', timeframe: '1m' });
 const ir = runtime.loadProgram(program);
 const bars = Array.from({ length: 84 }, (_, index) => {
   const drift = index < 28 ? -0.08 : index < 56 ? 0.015 : 0.11;

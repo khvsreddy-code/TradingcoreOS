@@ -41,12 +41,17 @@ import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandb
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritRiskResolver = (input: { action:string; symbol:string; quantity?:number; sourceId:string; timestamp:number }) => boolean;
+export type CoreSpiritHMMArtifactResolver = (modelName: string) => CoreSpiritGaussianHMM | undefined;
 export type CoreSpiritRuntimeOptions = {
   symbol?: string; timeframe?: string; sourceId?: string; maxStepsPerBar?: number;
   timezone?: string; stateHistoryLimit?: number; maxOutputsPerBar?: number; maxHistoryBars?: number; executionMode?: CoreSpiritExecutionMode; runId?: string; abortSignal?: AbortSignal; dataResolver?: CoreSpiritDataResolver; executionPolicy?: CoreSpiritExecutionContext['policy'];
   layer?: CoreSpiritProgramLayer; executionTarget?: CoreSpiritExecutionTarget; reactiveExecution?: boolean; executionTier?: CoreSpiritExecutionTier;
   modelOutputResolver?: CoreSpiritModelOutputResolver;
   modelPredictionResolver?: CoreSpiritModelPredictionResolver;
+  /** HMM fitting is disabled in chart runtimes; only explicit research jobs may enable it. */
+  modelTrainingMode?: 'disabled' | 'research';
+  /** Supplies a preloaded immutable HMM artifact for inference-only chart execution. */
+  hmmArtifactResolver?: CoreSpiritHMMArtifactResolver;
   riskResolver?: CoreSpiritRiskResolver;
   eventResolver?: (eventName:string) => boolean | unknown;
   profiler?: CoreSpiritProfilerOptions;
@@ -179,6 +184,8 @@ export class CoreSpiritRuntime {
   private realtimeLifecycle: 'idle'|'evaluating'|'committed' = 'idle';
   private readonly modelOutputResolver?: CoreSpiritModelOutputResolver;
   private readonly modelPredictionResolver?: CoreSpiritModelPredictionResolver;
+  private readonly modelTrainingMode: 'disabled' | 'research';
+  private readonly hmmArtifactResolver?: CoreSpiritHMMArtifactResolver;
   private readonly riskResolver?: CoreSpiritRiskResolver;
   private readonly eventResolver?: (eventName:string)=>boolean|unknown;
   private readonly executionTarget: CoreSpiritExecutionTarget = 'chart';
@@ -234,6 +241,8 @@ export class CoreSpiritRuntime {
     this.profiler = new CoreSpiritProfiler(options.profiler);
     this.modelOutputResolver = options.modelOutputResolver;
     this.modelPredictionResolver = options.modelPredictionResolver;
+    this.modelTrainingMode = options.modelTrainingMode === 'research' ? 'research' : 'disabled';
+    this.hmmArtifactResolver = options.hmmArtifactResolver;
     this.riskResolver = options.riskResolver;
     this.inputValues = Object.freeze({ ...(options.inputValues ?? {}) });
     this.propValues = Object.freeze({ ...(options.propValues ?? {}) });
@@ -924,6 +933,9 @@ export class CoreSpiritRuntime {
     if (name === 'dot') return finish(coreSpiritVectorDot(args[0], args[1]));
     if (name === 'dataset') return finish(coreSpiritDataset(...args));
     if (name === 'hmmFit') {
+      if (this.modelTrainingMode !== 'research') {
+        throw new Error('HMM fitting is disabled in chart execution. Train a versioned model in the CoreSpirit background research worker and load its immutable artifact for inference.');
+      }
       const modelName = String(args[0] ?? '');
       const model = this.getHMMModel(modelName);
       const row = args[1] as CoreSpiritDatasetRow | null | undefined;
@@ -931,9 +943,42 @@ export class CoreSpiritRuntime {
       if (row.values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return finish(null);
       return finish(model.observe(row.values as readonly number[], this.toEpoch(bar.timestamp), row.fields));
     }
-    if (name === 'hmmDecode') return finish(this.getHMMModel(String(args[0] ?? '')).decodeLatest());
-    if (name === 'hmmProbability') return finish(this.getHMMModel(String(args[0] ?? '')).probabilityLatest());
-    if (name === 'hmmPosterior') return finish(this.getHMMModel(String(args[0] ?? '')).posterior());
+    if (name === 'hmmDecode' || name === 'hmmProbability' || name === 'hmmPosterior') {
+      const modelName = String(args[0] ?? '');
+      const artifactModel = this.hmmArtifactResolver?.(modelName);
+      if (artifactModel) {
+        const row = args[1] as CoreSpiritDatasetRow | null | undefined;
+        if (!row || row.kind !== 'dataset') {
+          throw new Error('Loaded HMM artifacts require a dataset<float> feature row for inference.');
+        }
+        const inferenceTimestamp = this.toEpoch(bar.timestamp);
+        // Bars inside the model's fit range are deliberately blanked to avoid
+        // leaking an in-sample model into historical chart/backtest results.
+        if (!artifactModel.canPredictAt(inferenceTimestamp)) return finish(null);
+        // predict() is timestamp-aware: repeated calls for the same developing bar
+        // roll back to the prior posterior before recomputing, so a revised candle
+        // never gets counted twice and no stale feature-value memo can leak state.
+        const prediction = artifactModel.predict(
+          row.values as readonly number[],
+          row.fields,
+          inferenceTimestamp,
+        );
+        if (name === 'hmmDecode') return finish(prediction.state);
+        if (name === 'hmmProbability') return finish(prediction.confidence);
+        return finish(Object.freeze({
+          kind: 'distribution' as const,
+          length: prediction.probabilities.length,
+          data: Float64Array.from(prediction.probabilities),
+        }));
+      }
+      if (this.modelTrainingMode !== 'research') {
+        throw new Error('No immutable HMM artifact is loaded for model "' + modelName + '". Fit is disabled in chart execution.');
+      }
+      const model = this.getHMMModel(modelName);
+      if (name === 'hmmDecode') return finish(model.decodeLatest());
+      if (name === 'hmmProbability') return finish(model.probabilityLatest());
+      return finish(model.posterior());
+    }
     if(name==='__input') {
       const key = String(args[0] ?? '');
       const override = this.inputValues[key];

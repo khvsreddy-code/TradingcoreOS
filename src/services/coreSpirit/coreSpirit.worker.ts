@@ -1,5 +1,6 @@
 import { CoreSpiritRuntime } from './runtime';
 import type { CoreSpiritMarketBar } from './marketData';
+import { CoreSpiritGaussianHMM, type CoreSpiritHMMArtifactBinding } from './quantMath';
 import {
   readCoreSpiritSharedMarketDescriptor,
   type CoreSpiritSharedMarketDescriptor,
@@ -20,6 +21,7 @@ type WorkerContext={
   datasetVersion:number;
   initialized:boolean;
   graphResolver:CoreSpiritDataGraphResolver;
+  hmmModels:Map<string,CoreSpiritGaussianHMM>;
 };
 
 type LoadArtifactMessage={
@@ -31,6 +33,15 @@ type LoadArtifactMessage={
   graphSnapshot?:CoreSpiritGraphSnapshot;
   graphBaseSymbol?:string;
   graphBaseTimeframe?:string;
+  hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
+  replaceHMMArtifacts?:boolean;
+};
+
+type UpdateHMMArtifactsMessage={
+  type:'updateHMMArtifacts';
+  requestId:string;
+  contextKey:string;
+  hmmArtifacts:readonly CoreSpiritHMMArtifactBinding[];
 };
 
 type UpdateGraphMessage={
@@ -55,7 +66,7 @@ type RunMessage={
   bars?:CoreSpiritMarketBar[];
 };
 
-type Message=LoadArtifactMessage|UpdateGraphMessage|RunMessage;
+type Message=LoadArtifactMessage|UpdateHMMArtifactsMessage|UpdateGraphMessage|RunMessage;
 
 const contexts=new Map<string,WorkerContext>();
 
@@ -103,11 +114,29 @@ function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirty
   return {dirtyFrom:0,dirtyTo:bars.length};
 }
 
+function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpiritHMMArtifactBinding[]):void {
+  const next=new Map<string,CoreSpiritGaussianHMM>();
+  for(const binding of bindings){
+    if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
+      typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
+      !Number.isFinite(binding.trainingEndTimestampMs)){
+      throw new Error('Invalid CoreSpirit HMM artifact binding');
+    }
+    if(next.has(binding.modelAlias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+binding.modelAlias);
+    const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+    model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
+    next.set(binding.modelAlias,model);
+  }
+  context.hmmModels.clear();
+  for(const [alias,model] of next)context.hmmModels.set(alias,model);
+}
+
 function installArtifact(message:LoadArtifactMessage):void{
   if(!validateExecutableArtifact(message.artifact))throw new Error('Invalid CoreSpirit executable artifact');
   const current=contexts.get(message.contextKey);
   if(current && artifactIdFor(current.artifact)===artifactIdFor(message.artifact)){
     if(message.graphSnapshot)current.graphResolver.replaceSnapshot(message.graphSnapshot);
+    if(message.replaceHMMArtifacts)replaceHMMArtifacts(current,message.hmmArtifacts ?? []);
     return;
   }
 
@@ -116,12 +145,14 @@ function installArtifact(message:LoadArtifactMessage):void{
     message.graphBaseSymbol ?? message.sourceId,
     message.graphBaseTimeframe ?? 'chart',
   );
+  const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
   const runtime=new CoreSpiritRuntime({
     sourceId:message.sourceId,
     executionMode:'historical',
     executionTarget:'chart',
     executionTier:'optimized',
     dataResolver:graphResolver,
+    hmmArtifactResolver:modelName=>hmmModels.get(modelName),
   });
   runtime.loadIr(message.artifact.ir);
   contexts.set(message.contextKey,{
@@ -132,7 +163,9 @@ function installArtifact(message:LoadArtifactMessage):void{
     datasetVersion:0,
     initialized:false,
     graphResolver,
+    hmmModels,
   });
+  replaceHMMArtifacts(contexts.get(message.contextKey)!,message.hmmArtifacts ?? []);
 }
 function getContext(message:RunMessage):WorkerContext{
   const context=contexts.get(message.contextKey);
@@ -151,6 +184,19 @@ self.onmessage=(event:MessageEvent<Message>)=>{
         requestId:message.requestId,
         contextKey:message.contextKey,
         artifactId:artifactIdFor(message.artifact),
+      });
+      return;
+    }
+
+    if(message.type==='updateHMMArtifacts'){
+      const context=contexts.get(message.contextKey);
+      if(!context)throw new Error('CoreSpirit worker HMM context is not loaded: '+message.contextKey);
+      replaceHMMArtifacts(context,message.hmmArtifacts);
+      self.postMessage({
+        type:'updatedHMMArtifacts',
+        requestId:message.requestId,
+        contextKey:message.contextKey,
+        artifactHashes:message.hmmArtifacts.map(binding=>binding.artifactHash),
       });
       return;
     }

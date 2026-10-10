@@ -15,6 +15,7 @@ import { tradingRoutes } from './src/server/routes/trading.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 import { newsRoutes } from './src/server/routes/news.routes.js';
 import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
+import { coreSpiritModelRoutes } from './src/server/routes/coreSpirit-models.routes.js';
 import { realtimeTicketRoutes } from './src/server/routes/realtime-ticket.routes.js';
 import { requestDeadline } from './src/server/middleware/requestDeadline.js';
 import { sharedRedisConfigured } from './src/server/coordination/UpstashRedisRest.js';
@@ -39,7 +40,9 @@ app.use((req: TradingCoreRequest, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '32kb' }));
+// CoreSpirit training uploads are bounded by row/feature quotas in the route; the
+// parser limit accommodates a compact <=1024-row dataset snapshot without accepting unbounded payloads.
+app.use(express.json({ limit: '512kb' }));
 app.use(createRateLimiter({ windowMs: 60_000, max: 180, name: 'api', key: (req) => req.ip || 'unknown' }));
 
 app.use((req, res, next) => {
@@ -162,6 +165,7 @@ app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
 app.use('/api/jobs', backgroundJobRoutes);
+app.use('/api/corespirit', coreSpiritModelRoutes);
 app.use('/api/realtime/ticket', realtimeTicketRoutes);
 app.use('/api', newsRoutes);
 

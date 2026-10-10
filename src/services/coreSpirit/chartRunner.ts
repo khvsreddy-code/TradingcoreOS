@@ -1,4 +1,5 @@
 import type { CoreSpiritMarketBar } from './marketData';
+import type { CoreSpiritHMMArtifactBinding } from './quantMath';
 import { coreSpiritWorkerPool, type CoreSpiritWorkerRunResult } from './coreSpiritWorkerPool';
 import { loadOrCompileCoreSpiritArtifact } from './artifactCache';
 import { marketDataGraph, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
@@ -12,6 +13,8 @@ export type CoreSpiritWorkerRunOptions = {
   baseSymbol?:string;
   baseTimeframe?:string;
   graphSnapshot?:CoreSpiritGraphSnapshot;
+  /** Preverified artifacts loaded once per chart/runtime, never fetched per candle. */
+  hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
 };
 
 /**
@@ -54,6 +57,7 @@ export async function runCoreSpiritInWorker(
       graphSnapshot,
       graphBaseSymbol:options.baseSymbol,
       graphBaseTimeframe:options.baseTimeframe,
+      hmmArtifacts:options.hmmArtifacts,
     },
   );
 }
