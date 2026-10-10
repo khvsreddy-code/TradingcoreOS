@@ -207,7 +207,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   const featureGraphBase = {
     version: 1,
     featureNames,
-    featureExpressions: declaredFeatureNames,
+    declaredFeatureNames,
     modelName: declaration.name,
     modelType: declaration.modelType ?? 'HMM<float>',
     states,
