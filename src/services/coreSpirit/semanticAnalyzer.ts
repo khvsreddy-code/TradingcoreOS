@@ -332,7 +332,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         return target.kind==='series' ? scalarize({ ...target, ...inherited, lookback }) : target;
       }
       case 'unary': {
-        const operand=inferSemantic(n.operand,scope); return n.operator==='!' ? semanticScalar('boolean') : operand;
+        const operand=inferSemantic(n.operand,scope);
+        if (n.operator !== '!') return operand;
+        return operand?.kind === 'series'
+          ? semanticSeries('boolean', mergeSemanticMetadata([operand]))
+          : semanticScalar('boolean');
       }
       case 'binary': {
         const left=inferSemantic(n.left,scope), right=inferSemantic(n.right,scope);
