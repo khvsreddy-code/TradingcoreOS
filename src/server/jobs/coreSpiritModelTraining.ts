@@ -156,6 +156,15 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       }
     }
 
+    const rawStateLabels = payload.trainingParameters.stateLabels;
+    const stateLabels = typeof rawStateLabels === 'string' && rawStateLabels.trim()
+      ? rawStateLabels.split(',').map(label => label.trim())
+      : Array.from({ length: states }, (_value, index) => 'state_' + index);
+    if (stateLabels.length !== states ||
+        stateLabels.some(label => !/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(label)) ||
+        new Set(stateLabels).size !== stateLabels.length) {
+      throw new Error('trainingParameters.stateLabels must be a comma-separated list of unique identifiers with exactly one label per HMM state.');
+    }
     const hmmState: CoreSpiritGaussianHMMState = hmm.exportTrainedState();
     const finalPosterior = hmm.posterior();
     const confidence = hmm.probabilityLatest() ?? 0;
@@ -183,6 +192,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
         artifactName: payload.modelArtifactName ?? String(featureGraph.lifecyclePlan?.saveAs ?? research.name),
+        stateLabels: stateLabels.join(','),
       },
       randomSeed: payload.randomSeed,
       modelImplementation: 'corespirit-gaussian-hmm-v1',
@@ -201,6 +211,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         modelType: 'gaussian-hmm',
         modelAlias: String(featureGraph.modelName ?? research.name),
         featureNames: payload.featureNames,
+        stateLabels,
         hmm: hmmState,
       },
       metrics,

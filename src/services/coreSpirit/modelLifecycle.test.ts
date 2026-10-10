@@ -2,6 +2,7 @@ import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { CoreSpiritGaussianHMM } from './quantMath.ts';
 import { fetchCoreSpiritHMMArtifact, fetchCoreSpiritHMMArtifactByName } from './modelArtifactClient.ts';
+import { lowerCoreSpiritLiveInferenceSource, parseCoreSpiritModelLifecycleSurface } from './modelLifecycleSurface.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
 import {
@@ -80,7 +81,7 @@ async function main(): Promise<void> {
   const artifact = await sealModelArtifact({
     research,
     provenance,
-    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, hmm: snapshot },
+    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, stateLabels: ['bear', 'flat', 'bull'], hmm: snapshot },
     metrics: { observations: 64, featureCount: 2, stateCount: 3 },
     createdAt: '2026-01-02T00:00:00.000Z',
   });
@@ -131,7 +132,7 @@ async function main(): Promise<void> {
       });
     },
   );
-  assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name,
+  assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name && loadedByName.stateLabels[2] === 'bull',
     'name-based model loading must verify the artifact and pin to its immutable hash');
   const workerBinding = loadedClientArtifact.toWorkerBinding();
   assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs), 'the client loader must produce a hash-pinned, cutoff-aware binding for the persistent chart worker');
@@ -148,6 +149,29 @@ async function main(): Promise<void> {
   assert(missingTimestampRejected, 'a boundary-protected artifact must require timestamps on every inference call');
   const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Math.floor(Date.UTC(2026, 0, 1) / 1000));
   assert(Number.isInteger(clientPrediction.state), 'the client-loaded artifact must provide an inference-ready HMM instance');
+  const declarativeLiveSource = [
+    'features = dataset("returns", 0.2, "volatility", 0.1)',
+    'model = loadModel("nifty-regime-v7")',
+    'prediction = model.predict(features)',
+    'bullProbability = prediction.probability("bull")',
+    'plot bullProbability',
+  ].join('\\n');
+  const declarativePlan = parseCoreSpiritModelLifecycleSurface(declarativeLiveSource);
+  const loweredDeclarative = lowerCoreSpiritLiveInferenceSource(declarativeLiveSource, declarativePlan);
+  const declarativeCompile = compileCoreSpirit(loweredDeclarative, 'model-lifecycle-loaded-model-prediction', { layer: 'model' });
+  assert(Boolean(declarativeCompile.ir) && !declarativeCompile.diagnostics.some(item => item.severity === 'error'),
+    'loadModel/model.predict/probability syntax should compile after lifecycle lowering: ' +
+    declarativeCompile.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
+  const declarativeRuntime = new CoreSpiritRuntime({
+    layer: 'model',
+    symbol: 'NIFTY',
+    timeframe: '5m',
+    hmmArtifactResolver: loadedClientArtifact.createRuntimeResolver(),
+  });
+  declarativeRuntime.loadProgram(makeCoreSpiritProgram(loweredDeclarative, 'model-lifecycle-loaded-model-prediction'));
+  const declarativeExecution = declarativeRuntime.executeIr(declarativeCompile.ir!, chartBars);
+  assert(!declarativeExecution.diagnostics.some(message => /Unknown model state label|No immutable HMM artifact|model.predict expects/.test(message)),
+    'named artifact prediction should run with its verified state labels');
   assert(inference.artifactHash === artifact.hash, 'live inference must remain pinned to the exact immutable artifact hash');
   assert(Number.isInteger(prediction.state) && prediction.state >= 0 && prediction.state < 3, 'HMM inference must produce a valid state');
   assert(Math.abs(prediction.probabilities.reduce((sum, value) => sum + value, 0) - 1) < 1e-5, 'posterior probabilities must sum to one');

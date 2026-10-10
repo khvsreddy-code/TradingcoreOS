@@ -1,5 +1,6 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import {
+  lowerCoreSpiritLiveInferenceSource,
   lowerCoreSpiritResearchSource,
   parseCoreSpiritModelLifecycleSurface,
 } from './modelLifecycleSurface.ts';
@@ -64,6 +65,22 @@ try {
   invalidRange = error instanceof Error && /from < to/.test(error.message);
 }
 assert(invalidRange, 'training date range must be validated before enqueue');
+const liveSource = [
+  'features = dataset("returns", 0.1, "volatility", 0.2)',
+  'model = loadModel("nifty-regime-v7")',
+  'prediction = model.predict(features)',
+  'bullProbability = prediction.probability("bull")',
+  'plot bullProbability',
+].join('\\n');
+const livePlan = parseCoreSpiritModelLifecycleSurface(liveSource);
+const loweredLive = lowerCoreSpiritLiveInferenceSource(liveSource, livePlan);
+assert(!loweredLive.includes('loadModel') && loweredLive.includes('model("nifty-regime-v7").predict(features)'),
+  'live source should resolve a model name to the existing model prediction ABI');
+const liveCompiled = compileCoreSpirit(loweredLive, 'model-lifecycle-live-contract', { layer: 'model' });
+assert(Boolean(liveCompiled.ir) && !liveCompiled.diagnostics.some(item => item.severity === 'error'),
+  'lowered live model prediction syntax should compile: ' +
+  liveCompiled.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
+
 const sameDay = parseCoreSpiritModelLifecycleSurface(
   source.replace('from "2018-01-01"', 'from "2025-01-01"').replace('to "2025-12-31"', 'to "2025-01-01"'),
 );

@@ -114,23 +114,27 @@ function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirty
   return {dirtyFrom:0,dirtyTo:bars.length};
 }
 
-function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpiritHMMArtifactBinding[]):void {
+function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpiritHMMArtifactBinding[]):void{
   const next=new Map<string,CoreSpiritGaussianHMM>();
   for(const binding of bindings){
     if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
       typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
-      !Number.isFinite(binding.trainingEndTimestampMs)){
+      !Number.isFinite(binding.trainingEndTimestampMs) ||
+      (binding.artifactName !== undefined && (typeof binding.artifactName !== 'string' || !binding.artifactName.trim()))){
       throw new Error('Invalid CoreSpirit HMM artifact binding');
     }
-    if(next.has(binding.modelAlias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+binding.modelAlias);
     const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+    model.setStateLabels(binding.stateLabels ?? Array.from({length:model.states},(_value,index)=>'state_'+index));
     model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
-    next.set(binding.modelAlias,model);
+    const keys=[...new Set([binding.modelAlias,binding.artifactName,binding.artifactHash].filter((value):value is string=>Boolean(value)))];
+    for(const key of keys){
+      if(next.has(key))throw new Error('Duplicate CoreSpirit HMM artifact lookup key: '+key);
+      next.set(key,model);
+    }
   }
   context.hmmModels.clear();
   for(const [alias,model] of next)context.hmmModels.set(alias,model);
 }
-
 function installArtifact(message:LoadArtifactMessage):void{
   if(!validateExecutableArtifact(message.artifact))throw new Error('Invalid CoreSpirit executable artifact');
   const current=contexts.get(message.contextKey);
