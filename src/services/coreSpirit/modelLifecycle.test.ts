@@ -126,6 +126,13 @@ async function main(): Promise<void> {
   const clientRuntimeModel = runtimeResolver('regime');
   assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
   assert(!clientRuntimeModel!.canPredictAt(Math.floor(Date.UTC(2025, 0, 1) / 1000)), 'chart-loaded artifacts must reject bars inside the training range');
+  let missingTimestampRejected = false;
+  try {
+    clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames);
+  } catch {
+    missingTimestampRejected = true;
+  }
+  assert(missingTimestampRejected, 'a boundary-protected artifact must require timestamps on every inference call');
   const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Math.floor(Date.UTC(2026, 0, 1) / 1000));
   assert(Number.isInteger(clientPrediction.state), 'the client-loaded artifact must provide an inference-ready HMM instance');
   assert(inference.artifactHash === artifact.hash, 'live inference must remain pinned to the exact immutable artifact hash');
