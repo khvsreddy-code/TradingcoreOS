@@ -267,8 +267,11 @@ export class InMemoryModelArtifactStore<TWeights = unknown> implements ModelArti
 
   async put(artifact: ModelArtifact<TWeights>): Promise<void> {
     const existing = this.byHash.get(artifact.hash);
-    if (existing && canonical(modelArtifactHashPayload(existing)) !== canonical(modelArtifactHashPayload(artifact))) {
-      throw new Error('Model artifact hash collision or inconsistent artifact payload');
+    if (existing) {
+      if (canonical(modelArtifactHashPayload(existing)) !== canonical(modelArtifactHashPayload(artifact))) {
+        throw new Error('Model artifact hash collision or inconsistent artifact payload');
+      }
+      return;
     }
     const namedHash = this.nameToHash.get(artifact.name);
     if (namedHash && namedHash !== artifact.hash) {
