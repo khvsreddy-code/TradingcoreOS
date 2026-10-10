@@ -951,13 +951,17 @@ export class CoreSpiritRuntime {
         if (!row || row.kind !== 'dataset') {
           throw new Error('Loaded HMM artifacts require a dataset<float> feature row for inference.');
         }
+        const inferenceTimestamp = this.toEpoch(bar.timestamp);
+        // Bars inside the model's fit range are deliberately blanked to avoid
+        // leaking an in-sample model into historical chart/backtest results.
+        if (!artifactModel.canPredictAt(inferenceTimestamp)) return finish(null);
         // predict() is timestamp-aware: repeated calls for the same developing bar
         // roll back to the prior posterior before recomputing, so a revised candle
         // never gets counted twice and no stale feature-value memo can leak state.
         const prediction = artifactModel.predict(
           row.values as readonly number[],
           row.fields,
-          this.toEpoch(bar.timestamp),
+          inferenceTimestamp,
         );
         if (name === 'hmmDecode') return finish(prediction.state);
         if (name === 'hmmProbability') return finish(prediction.confidence);
