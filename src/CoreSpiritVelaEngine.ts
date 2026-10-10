@@ -153,6 +153,9 @@ export class CoreSpiritVelaEngine {
     let secondaryLastRefreshAt=0;
     let secondaryDegraded=false;
     let stopped = false;
+    // Keep async settings updates latest-wins too: older update callbacks must
+    // not rebuild the runtime or emit a scene after a newer update takes over.
+    let updateVersion = 0;
     const secondaryFailed = new Set<string>();
     const secondaryWarnings:string[]=[];
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
@@ -406,6 +409,7 @@ export class CoreSpiritVelaEngine {
         : bars;
 
     const initialBars = getCurrentBars();
+    const initialUpdateVersion = updateVersion;
     let secondaryReady = secondaryDependencies.length
       ? loadSecondaryData(true).then(() => true)
       : Promise.resolve(true);
@@ -415,7 +419,7 @@ export class CoreSpiritVelaEngine {
         initializeFromBars(initialBars);
       } else {
         void secondaryReady.then(() => {
-          if (!stopped) initializeFromBars(getCurrentBars());
+          if (!stopped && initialUpdateVersion === updateVersion) initializeFromBars(getCurrentBars());
         });
       }
     }
@@ -442,13 +446,16 @@ export class CoreSpiritVelaEngine {
       stop() {
         stopped = true;
         secondaryRequestVersion += 1;
+        updateVersion += 1;
         secondaryRefreshPromise = undefined;
       },
       update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
         if (stopped) return;
+        const updateGeneration = ++updateVersion;
         currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
 
         const runUpdate = (): void => {
+          if (stopped || updateGeneration !== updateVersion) return;
           const currentBars = getCurrentBars();
           runtime = createRuntime();
           runtime.loadIr(token.ir);
