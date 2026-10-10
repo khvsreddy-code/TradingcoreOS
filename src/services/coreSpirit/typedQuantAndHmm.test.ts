@@ -19,6 +19,7 @@ const valid = compileCoreSpirit([
   'let fast: series<float> = ema(close, 3);',
   'let blended = close + ema(close, 20);',
   'let isReady: bool = true;',
+  'let trendUp: series<bool> = close > ema(close, 3);',
   'model testHMM: HMM<float> {',
   '  states = 3',
   '}',
