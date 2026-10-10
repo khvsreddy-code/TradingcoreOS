@@ -95,6 +95,18 @@ try {
 }
 assert(shapeMismatchRejected, 'matrix runtime must reject incompatible multiplication shapes');
 
+const invalidHMMConfig = compileCoreSpirit([
+  'model invalidHMM: HMM<float> {',
+  '  states = 1',
+  '  emission = gaussian',
+  '}',
+  'features = dataset("return", 0.1);',
+  'fit invalidHMM on features',
+].join('\n'), 'typed-hmm-invalid-config', { layer: 'model' });
+assert(!invalidHMMConfig.ir, 'invalid HMM state counts must fail during compilation, not only at runtime');
+assert(invalidHMMConfig.diagnostics.some(item => item.code === 'TYPE_HMM_STATES'),
+  'invalid HMM state count should have a dedicated diagnostic');
+
 const hmm = new CoreSpiritGaussianHMM({ states: 3, emission: 'gaussian', covariance: 'full', fitEvery: 4, fitIterations: 2 });
 let state: number | null = null;
 for (let i = 0; i < 72; i += 1) {
