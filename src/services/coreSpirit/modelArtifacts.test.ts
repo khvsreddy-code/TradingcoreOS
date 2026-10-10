@@ -1,5 +1,6 @@
 import {
   createResearchArtifact,
+  coreSpiritDatasetVersion,
   InMemoryModelArtifactStore,
   loadModelForInference,
   sealModelArtifact,
@@ -20,6 +21,31 @@ async function main(): Promise<void> {
     ir: { kind: 'research-ir', version: 1 },
     createdAt: '2026-01-01T00:00:00.000Z',
   });
+  const datasetRows = Array.from({ length: 12 }, (_, index) => ({
+    timestamp: Date.parse('2025-01-01T09:15:00.000Z') + index * 300_000,
+    values: [index / 100, Math.sin(index / 4)],
+  }));
+  const datasetIdentity = {
+    datasetName: 'NIFTY_5M',
+    datasetSource: 'fyers-history' as const,
+    featureNames: ['ret1', 'momentum'],
+    rows: datasetRows,
+    trainingRange: { from: '2025-01-01', to: '2025-01-02' },
+  };
+  const datasetHash = await coreSpiritDatasetVersion(datasetIdentity);
+  assert(/^[a-f0-9]{64}$/.test(datasetHash), 'dataset snapshots must have a SHA-256 content identity');
+  assert(datasetHash !== await coreSpiritDatasetVersion({ ...datasetIdentity, datasetName: 'BANKNIFTY_5M' }),
+    'dataset identity must bind the logical market dataset name');
+  assert(datasetHash !== await coreSpiritDatasetVersion({ ...datasetIdentity, datasetSource: 'provided-ohlcv' }),
+    'dataset identity must distinguish broker history from caller-provided data');
+  let unorderedDatasetRejected = false;
+  try {
+    await coreSpiritDatasetVersion({ ...datasetIdentity, rows: [...datasetRows].reverse() });
+  } catch (error) {
+    unorderedDatasetRejected = error instanceof Error && /strictly chronological/.test(error.message);
+  }
+  assert(unorderedDatasetRejected, 'dataset identity must reject unordered observations before hashing');
+
   const provenance: ModelProvenance = {
     sourceHash: research.sourceHash,
     compilerVersion: research.compilerVersion,
