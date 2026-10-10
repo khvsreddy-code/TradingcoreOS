@@ -3,6 +3,7 @@ import { compileCoreSpirit } from '../../services/coreSpirit/coreSpiritPipeline.
 import {
   createResearchArtifact,
   coreSpiritSha256,
+  coreSpiritDatasetVersion,
   loadModelForInference,
   verifyModelArtifactIntegrity,
   type ResearchArtifact,
@@ -427,7 +428,7 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
         rows.length < Math.max(12, graph.states * 4)) {
       return fail(res, 422, 'This HMM configuration needs at least max(12, states × 4) historical rows.');
     }
-    const datasetVersion = await coreSpiritSha256({ datasetName, datasetSource, featureNames, rows, trainingRange: range });
+    const datasetVersion = await coreSpiritDatasetVersion({ datasetName, datasetSource, featureNames, rows, trainingRange: range });
     const snapshot = await repository.putDatasetSnapshot({
       datasetVersion,
       featureNames,
