@@ -1,13 +1,13 @@
-import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
-import { extractCoreSpiritSurfaceMetadata } from './services/coreSpirit/languageConcepts.ts';
-import { CoreSpiritGaussianHMM } from './services/coreSpirit/quantMath.ts';
+import { compileCoreSpirit } from './coreSpiritPipeline.ts';
+import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
+import { CoreSpiritGaussianHMM } from './quantMath.ts';
 import {
   createResearchArtifact,
   InMemoryModelArtifactStore,
   loadModelForInference,
   sealModelArtifact,
   type ModelProvenance,
-} from './services/coreSpirit/modelArtifacts.ts';
+} from './modelArtifacts.ts';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
