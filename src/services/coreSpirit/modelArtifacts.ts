@@ -1,0 +1,248 @@
+/**
+ * Immutable CoreSpirit research/model artifact contracts.
+ *
+ * Training is intentionally outside CoreSpiritRuntime and the chart update loop.
+ * Storage/training backends are injected by the application; this module provides
+ * deterministic provenance, artifact validation, and hash-pinned inference handles.
+ */
+
+export const CORESPIRIT_RESEARCH_ARTIFACT_VERSION = '1';
+export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '1';
+
+export type TrainingRange = Readonly<{ from: string; to: string }>;
+export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
+
+export type ModelProvenance = Readonly<{
+  sourceHash: string;
+  compilerVersion: string;
+  irVersion: string;
+  featureGraphHash: string;
+  datasetVersion: string;
+  trainingRange: TrainingRange;
+  trainingParameters: Readonly<Record<string, string | number | boolean | null>>;
+  randomSeed: number;
+  modelImplementation: string;
+  backend: ArtifactBackend;
+  dependencyVersions: Readonly<Record<string, string>>;
+}>;
+
+export type ResearchArtifact = Readonly<{
+  kind: 'corespirit-research';
+  schemaVersion: typeof CORESPIRIT_RESEARCH_ARTIFACT_VERSION;
+  name: string;
+  source: string;
+  sourceHash: string;
+  compilerVersion: string;
+  irVersion: string;
+  featureGraphHash: string;
+  ir: unknown;
+  createdAt: string;
+}>;
+
+export type ModelArtifact<TWeights = unknown> = Readonly<{
+  kind: 'corespirit-model';
+  schemaVersion: typeof CORESPIRIT_MODEL_ARTIFACT_VERSION;
+  name: string;
+  hash: string;
+  provenance: ModelProvenance;
+  weights: TWeights;
+  metrics: Readonly<Record<string, number>>;
+  createdAt: string;
+}>;
+
+export type ResearchCompileInput = Readonly<{
+  name: string;
+  source: string;
+  compilerVersion: string;
+  irVersion: string;
+  featureGraph: unknown;
+  ir: unknown;
+  createdAt?: string;
+}>;
+
+export type TrainModelInput<TWeights = unknown> = Readonly<{
+  research: ResearchArtifact;
+  provenance: ModelProvenance;
+  weights: TWeights;
+  metrics?: Readonly<Record<string, number>>;
+  createdAt?: string;
+}>;
+
+export type ModelArtifactStore<TWeights = unknown> = {
+  put(artifact: ModelArtifact<TWeights>): Promise<void>;
+  getByName(name: string): Promise<ModelArtifact<TWeights> | null>;
+  getByHash(hash: string): Promise<ModelArtifact<TWeights> | null>;
+};
+
+export type ModelInference<TFeatures, TPrediction> = {
+  predict(features: TFeatures): Promise<TPrediction>;
+};
+
+export type ModelInferenceFactory<TWeights, TFeatures, TPrediction> = (
+  artifact: ModelArtifact<TWeights>,
+) => ModelInference<TFeatures, TPrediction>;
+
+const encoder = new TextEncoder();
+
+function canonical(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Artifact provenance cannot contain non-finite numbers');
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return '{' + Object.keys(record).sort().map(key => JSON.stringify(key) + ':' + canonical(record[key])).join(',') + '}';
+  }
+  throw new Error('Artifact provenance cannot contain ' + typeof value);
+}
+
+/** Stable SHA-256 of canonical JSON; fails closed where WebCrypto is unavailable. */
+export async function coreSpiritSha256(value: unknown): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error('SHA-256 requires WebCrypto; refusing to create an unhashed model artifact');
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', encoder.encode(canonical(value)));
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function validateDateRange(range: TrainingRange): void {
+  const from = Date.parse(range.from);
+  const to = Date.parse(range.to);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+    throw new Error('Training range must contain valid dates with from < to');
+  }
+}
+
+function validateProvenance(provenance: ModelProvenance): void {
+  validateDateRange(provenance.trainingRange);
+  if (!provenance.sourceHash || !provenance.compilerVersion || !provenance.irVersion ||
+      !provenance.featureGraphHash || !provenance.datasetVersion || !provenance.modelImplementation) {
+    throw new Error('Model provenance is incomplete: source, compiler, IR, feature graph, dataset and implementation are required');
+  }
+  if (!Number.isSafeInteger(provenance.randomSeed) || provenance.randomSeed < 0) {
+    throw new Error('Model randomSeed must be a non-negative safe integer');
+  }
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+  }
+  return value;
+}
+
+/** Produces a deterministic research artifact from compiler output, not from a live chart session. */
+export async function createResearchArtifact(input: ResearchCompileInput): Promise<ResearchArtifact> {
+  if (!input.name.trim()) throw new Error('Research artifact name is required');
+  const sourceHash = await coreSpiritSha256(input.source);
+  const featureGraphHash = await coreSpiritSha256(input.featureGraph);
+  return deepFreeze({
+    kind: 'corespirit-research',
+    schemaVersion: CORESPIRIT_RESEARCH_ARTIFACT_VERSION,
+    name: input.name,
+    source: input.source,
+    sourceHash,
+    compilerVersion: input.compilerVersion,
+    irVersion: input.irVersion,
+    featureGraphHash,
+    ir: input.ir,
+    createdAt: input.createdAt ?? new Date().toISOString(),
+  });
+}
+
+/** Seals trained weights together with every declared reproducibility input. */
+export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeights>): Promise<ModelArtifact<TWeights>> {
+  validateProvenance(input.provenance);
+  if (input.provenance.sourceHash !== input.research.sourceHash) {
+    throw new Error('Model sourceHash does not match the compiled research artifact');
+  }
+  if (input.provenance.compilerVersion !== input.research.compilerVersion ||
+      input.provenance.irVersion !== input.research.irVersion ||
+      input.provenance.featureGraphHash !== input.research.featureGraphHash) {
+    throw new Error('Model provenance does not match research compiler/IR/feature graph metadata');
+  }
+  const metrics = input.metrics ?? {};
+  for (const [key, value] of Object.entries(metrics)) {
+    if (!Number.isFinite(value)) throw new Error('Model metric "' + key + '" must be finite');
+  }
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  const hash = await coreSpiritSha256({
+    schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
+    name: input.research.name,
+    provenance: input.provenance,
+    weights: input.weights,
+    metrics,
+    createdAt,
+  });
+  return deepFreeze({
+    kind: 'corespirit-model',
+    schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
+    name: input.research.name,
+    hash,
+    provenance: input.provenance,
+    weights: input.weights,
+    metrics,
+    createdAt,
+  });
+}
+
+/**
+ * Immutable-by-hash store useful for local development/tests. Production adapters
+ * should persist artifacts durably and enforce uniqueness by hash server-side.
+ */
+export class InMemoryModelArtifactStore<TWeights = unknown> implements ModelArtifactStore<TWeights> {
+  private readonly byHash = new Map<string, ModelArtifact<TWeights>>();
+  private readonly nameToHash = new Map<string, string>();
+
+  async put(artifact: ModelArtifact<TWeights>): Promise<void> {
+    const existing = this.byHash.get(artifact.hash);
+    if (existing && canonical(existing) !== canonical(artifact)) {
+      throw new Error('Model artifact hash collision or inconsistent artifact payload');
+    }
+    const namedHash = this.nameToHash.get(artifact.name);
+    if (namedHash && namedHash !== artifact.hash) {
+      throw new Error('Model name "' + artifact.name + '" already points to a different immutable hash; publish a new versioned name');
+    }
+    this.byHash.set(artifact.hash, artifact);
+    this.nameToHash.set(artifact.name, artifact.hash);
+  }
+
+  async getByName(name: string): Promise<ModelArtifact<TWeights> | null> {
+    const hash = this.nameToHash.get(name);
+    return hash ? this.getByHash(hash) : null;
+  }
+
+  async getByHash(hash: string): Promise<ModelArtifact<TWeights> | null> {
+    return this.byHash.get(hash) ?? null;
+  }
+}
+
+/** Pins inference to one immutable artifact; it never invokes training. */
+export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
+  store: ModelArtifactStore<TWeights>,
+  nameOrHash: string,
+  createInference: ModelInferenceFactory<TWeights, TFeatures, TPrediction>,
+): Promise<ModelInference<TFeatures, TPrediction> & { readonly artifactHash: string; readonly artifactName: string }> {
+  const artifact = /^[a-f0-9]{64}$/i.test(nameOrHash)
+    ? await store.getByHash(nameOrHash)
+    : await store.getByName(nameOrHash);
+  if (!artifact) throw new Error('Model artifact "' + nameOrHash + '" was not found');
+  const expectedHash = await coreSpiritSha256({
+    schemaVersion: artifact.schemaVersion,
+    name: artifact.name,
+    provenance: artifact.provenance,
+    weights: artifact.weights,
+    metrics: artifact.metrics,
+    createdAt: artifact.createdAt,
+  });
+  if (expectedHash !== artifact.hash) throw new Error('Model artifact integrity check failed for "' + artifact.name + '"');
+  const inference = createInference(artifact);
+  return Object.freeze({
+    artifactHash: artifact.hash,
+    artifactName: artifact.name,
+    predict: (features: TFeatures) => inference.predict(features),
+  });
+}
