@@ -119,13 +119,23 @@ function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpirit
   for(const binding of bindings){
     if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
       typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
+      binding.artifactName !== undefined && (typeof binding.artifactName !== 'string' || !binding.artifactName.trim() || binding.artifactName.length > 120) ||
       !Number.isFinite(binding.trainingEndTimestampMs)){
       throw new Error('Invalid CoreSpirit HMM artifact binding');
     }
-    if(next.has(binding.modelAlias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+binding.modelAlias);
     const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
     model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
-    next.set(binding.modelAlias,model);
+    // The VM may resolve the same sealed model by its internal model alias,
+    // immutable artifact name, or SHA-256. Register all identities to the
+    // same per-runtime posterior so loadModel("name") actually works in the
+    // persistent chart worker, not only in the one-shot resolver.
+    const aliases = new Set([binding.modelAlias, binding.artifactName, binding.artifactHash].filter(
+      (alias): alias is string => typeof alias === 'string' && Boolean(alias.trim()),
+    ));
+    for (const alias of aliases) {
+      if (next.has(alias)) throw new Error('Duplicate CoreSpirit HMM artifact alias: ' + alias);
+      next.set(alias, model);
+    }
   }
   context.hmmModels.clear();
   for(const [alias,model] of next)context.hmmModels.set(alias,model);
