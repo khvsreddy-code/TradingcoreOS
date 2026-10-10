@@ -1143,6 +1143,14 @@ export class CoreSpiritRuntime {
       const previous=this.loadSeries(seriesName,period,bar,bars,index);
       return finish(Number.isFinite(current) && previous !== null && Number.isFinite(Number(previous)) && Number(previous)!==0 ? (current/Number(previous)-1)*100 : null);
     }
+    if (name==='logreturn') {
+      const period = Math.max(1, Math.floor(Number(args[1] ?? 1)));
+      const current = Number(args[0]);
+      const previous = this.loadSeries(seriesArgs[0] || 'close', period, bar, bars, index);
+      if (!Number.isFinite(current) || previous == null || !Number.isFinite(Number(previous)) ||
+          current <= 0 || Number(previous) <= 0) return finish(null);
+      return finish(Math.log(current / Number(previous)));
+    }
     if (name==='exp') return finish(Math.exp(Number(args[0])));
     if(name==='returns'){
       const ref=args[0];
