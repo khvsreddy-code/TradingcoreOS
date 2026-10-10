@@ -59,7 +59,7 @@ export function coreSpiritMatrix(rowsValue: unknown, columnsValue: unknown, ...v
   if (size > MAX_MATRIX_CELLS) throw new Error('matrix exceeds the supported element limit');
   const flat = flattenNumbers(values);
   if (!flat.length) flat.push(...new Array<number>(size).fill(0));
-  if (flat.length !== size) throw new Error(\`matrix(${rows}, ${columns}) requires ${size} values; received ${flat.length}\`);
+  if (flat.length !== size) throw new Error(`matrix(${rows}, ${columns}) requires ${size} values; received ${flat.length}`);
   return Object.freeze({ kind: 'matrix' as const, rows, columns, data: Float64Array.from(flat) });
 }
 
@@ -98,7 +98,7 @@ export function coreSpiritMatrixScale(value: unknown, factorValue: unknown): Cor
 export function coreSpiritMatrixMultiply(left: unknown, right: unknown): CoreSpiritDenseMatrix {
   const a = requireMatrix(left, 'matmul left operand');
   const b = requireMatrix(right, 'matmul right operand');
-  if (a.columns !== b.rows) throw new Error(\`matmul shape mismatch: ${a.rows}x${a.columns} cannot multiply ${b.rows}x${b.columns}\`);
+  if (a.columns !== b.rows) throw new Error(`matmul shape mismatch: ${a.rows}x${a.columns} cannot multiply ${b.rows}x${b.columns}`);
   const data = new Float64Array(a.rows * b.columns);
   for (let row = 0; row < a.rows; row += 1) {
     for (let inner = 0; inner < a.columns; inner += 1) {
@@ -137,7 +137,7 @@ export function coreSpiritTensor(shapeValue: unknown, ...values: unknown[]): Cor
   const size = shape.reduce((product, dimension) => product * dimension, 1);
   if (size > MAX_TENSOR_CELLS) throw new Error('tensor exceeds the supported element limit');
   const flat = flattenNumbers(values);
-  if (flat.length !== size) throw new Error(\`tensor shape [${shape.join(', ')}] requires ${size} values; received ${flat.length}\`);
+  if (flat.length !== size) throw new Error(`tensor shape [${shape.join(', ')}] requires ${size} values; received ${flat.length}`);
   return Object.freeze({ kind: 'tensor' as const, shape: Object.freeze(shape), data: Float64Array.from(flat) });
 }
 
@@ -162,12 +162,12 @@ export function coreSpiritDataset(...values: unknown[]): CoreSpiritDatasetRow {
 
 function requireMatrix(value: unknown, label: string): CoreSpiritDenseMatrix {
   if (!value || typeof value !== 'object' || (value as CoreSpiritDenseMatrix).kind !== 'matrix') {
-    throw new Error(\`${label} requires matrix<float>; received ${describeQuantValue(value)}\`);
+    throw new Error(`${label} requires matrix<float>; received ${describeQuantValue(value)}`);
   }
   const matrix = value as CoreSpiritDenseMatrix;
   if (!Number.isInteger(matrix.rows) || !Number.isInteger(matrix.columns) || matrix.rows < 1 || matrix.columns < 1 ||
       matrix.rows * matrix.columns !== matrix.data.length || matrix.data.length > MAX_MATRIX_CELLS) {
-    throw new Error(\`${label} received an invalid matrix shape\`);
+    throw new Error(`${label} received an invalid matrix shape`);
   }
   return matrix;
 }
@@ -176,10 +176,10 @@ function requireVector(value: unknown, label: string): CoreSpiritVector {
   if (Array.isArray(value) && value.every(item => Number.isFinite(Number(item)))) return coreSpiritVector(value);
   if (ArrayBuffer.isView(value) && !(value instanceof DataView)) return coreSpiritVector(value);
   if (!value || typeof value !== 'object' || (value as CoreSpiritVector).kind !== 'vector') {
-    throw new Error(\`${label} requires vector<float>; received ${describeQuantValue(value)}\`);
+    throw new Error(`${label} requires vector<float>; received ${describeQuantValue(value)}`);
   }
   const vector = value as CoreSpiritVector;
-  if (vector.length !== vector.data.length || vector.length < 1 || vector.length > MAX_VECTOR_LENGTH) throw new Error(\`${label} received an invalid vector length\`);
+  if (vector.length !== vector.data.length || vector.length < 1 || vector.length > MAX_VECTOR_LENGTH) throw new Error(`${label} received an invalid vector length`);
   return vector;
 }
 
