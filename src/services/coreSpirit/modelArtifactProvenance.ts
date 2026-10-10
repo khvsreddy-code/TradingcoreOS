@@ -102,8 +102,9 @@ export type CoreSpiritModelTrainingResult = Readonly<{
 
 export interface CoreSpiritModelArtifactRepository {
   beginTrainingRun(input: Readonly<{
-    ownerUserId: string; modelName: string; alias: string; researchArtifactHash: string;
+    ownerUserId: string; modelName: string; alias: string; sourceHash: string; researchArtifactHash: string; featureGraphHash: string;
     datasetId: string; requestedFrom: string; requestedTo: string; randomSeed: string;
+    implementation: CoreSpiritModelImplementation; backend: CoreSpiritModelBackend;
     trainingParameters: Readonly<Record<string, unknown>>;
   }>): Promise<string>;
   markTrainingRunRunning(runId: string, dataset: CoreSpiritDatasetSnapshot): Promise<void>;
@@ -353,8 +354,10 @@ export class CoreSpiritModelTrainingService {
     }
     const runId = await this.repository.beginTrainingRun({
       ownerUserId: input.ownerUserId, modelName: input.plan.modelName, alias: input.plan.saveAs,
-      researchArtifactHash: input.researchArtifact.researchArtifactHash, datasetId: input.plan.datasetId,
+      sourceHash: input.researchArtifact.sourceHash, researchArtifactHash: input.researchArtifact.researchArtifactHash,
+      featureGraphHash: input.researchArtifact.featureGraphHash, datasetId: input.plan.datasetId,
       requestedFrom: input.plan.trainStart, requestedTo: input.plan.trainEnd, randomSeed: input.plan.randomSeed,
+      implementation: input.plan.implementation, backend: input.plan.backend,
       trainingParameters: input.plan.trainingParameters,
     });
     try {
