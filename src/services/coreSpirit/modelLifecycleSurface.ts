@@ -72,9 +72,13 @@ export function parseCoreSpiritModelLifecycleSurface(source: string): CoreSpirit
     const trainMatch = line.match(/^train\s+([A-Za-z_][A-Za-z0-9_]*)\s+using\s+dataset\s*\(\s*("[^"]+"|'[^']+')\s*\)(?:\s+from\s+("[^"]+"|'[^']+'))?(?:\s+to\s+("[^"]+"|'[^']+'))?\s*;?$/i);
     if (trainMatch) {
       if (training) throw new Error('Only one training declaration is supported per research artifact.');
+      const datasetName = unquote(trainMatch[2]!);
+      if (!datasetName.trim() || datasetName.length > 120) {
+        throw new Error('CoreScript dataset name must be 1–120 characters.');
+      }
       training = {
         modelName: validName(trainMatch[1]!, 'Training model name'),
-        datasetName: unquote(trainMatch[2]!),
+        datasetName,
         ...(trainMatch[3] ? { from: unquote(trainMatch[3]) } : {}),
         ...(trainMatch[4] ? { to: unquote(trainMatch[4]) } : {}),
       };
