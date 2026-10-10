@@ -1,7 +1,7 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { CoreSpiritGaussianHMM } from './quantMath.ts';
-import { fetchCoreSpiritHMMArtifact } from './modelArtifactClient.ts';
+import { fetchCoreSpiritHMMArtifact, fetchCoreSpiritHMMArtifactByName } from './modelArtifactClient.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
 import {
@@ -120,6 +120,19 @@ async function main(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
     }),
   );
+  const loadedByName = await fetchCoreSpiritHMMArtifactByName(
+    artifact.name,
+    'contract-access-token',
+    async (input) => {
+      assert(String(input).includes('/api/corespirit/models/by-name/'), 'name-based loading must use the dedicated authenticated name route');
+      return new Response(JSON.stringify({ success: true, data: { artifact, artifactHash: artifact.hash } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  );
+  assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name,
+    'name-based model loading must verify the artifact and pin to its immutable hash');
   const workerBinding = loadedClientArtifact.toWorkerBinding();
   assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs), 'the client loader must produce a hash-pinned, cutoff-aware binding for the persistent chart worker');
   const runtimeResolver = loadedClientArtifact.createRuntimeResolver();

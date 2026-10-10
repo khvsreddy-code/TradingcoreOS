@@ -64,5 +64,10 @@ try {
   invalidRange = error instanceof Error && /from < to/.test(error.message);
 }
 assert(invalidRange, 'training date range must be validated before enqueue');
+const sameDay = parseCoreSpiritModelLifecycleSurface(
+  source.replace('from "2018-01-01"', 'from "2025-01-01"').replace('to "2025-12-31"', 'to "2025-01-01"'),
+);
+assert(sameDay.training?.from === '2025-01-01' && sameDay.training.to === '2025-01-01',
+  'a date-only training range should include the full end date and allow a single-day window');
 
 console.log('CORESPIRIT_MODEL_LIFECYCLE_SURFACE_OK');
