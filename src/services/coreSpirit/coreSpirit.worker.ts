@@ -118,11 +118,14 @@ function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpirit
   const next=new Map<string,CoreSpiritGaussianHMM>();
   for(const binding of bindings){
     if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
-      typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash)){
+      typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
+      !Number.isFinite(binding.trainingEndTimestampMs)){
       throw new Error('Invalid CoreSpirit HMM artifact binding');
     }
     if(next.has(binding.modelAlias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+binding.modelAlias);
-    next.set(binding.modelAlias,CoreSpiritGaussianHMM.fromTrainedState(binding.state));
+    const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+    model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
+    next.set(binding.modelAlias,model);
   }
   context.hmmModels.clear();
   for(const [alias,model] of next)context.hmmModels.set(alias,model);
