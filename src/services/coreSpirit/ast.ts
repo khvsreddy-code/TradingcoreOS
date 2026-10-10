@@ -17,7 +17,9 @@ export type CoreSpiritAstNode =
   | CoreSpiritMemberCallNode
   | CoreSpiritIndexNode
   | CoreSpiritMemberNode
-  | CoreSpiritTypeDeclarationNode;
+  | CoreSpiritTypeDeclarationNode
+  | CoreSpiritFunctionDeclarationNode
+  | CoreSpiritReturnNode;
 
 export type CoreSpiritProgramNode = { type: 'program'; body: CoreSpiritAstNode[]; span?: CoreSpiritSpan };
 export type CoreSpiritLetNode = { type: 'let'; name: string; declaredType?: string; expression: CoreSpiritAstNode; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
@@ -35,6 +37,9 @@ export type CoreSpiritIndexNode = { type: 'index'; target: CoreSpiritAstNode; in
 export type CoreSpiritMemberNode = { type: 'member'; target: CoreSpiritAstNode; member: string; span?: CoreSpiritSpan };
 export type CoreSpiritTypeField = { name: string; typeName: string; span?: CoreSpiritSpan };
 export type CoreSpiritTypeDeclarationNode = { type: 'typeDeclaration'; name: string; fields: CoreSpiritTypeField[]; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
+export type CoreSpiritFunctionParameter = { name: string; typeName: string; span?: CoreSpiritSpan };
+export type CoreSpiritFunctionDeclarationNode = { type: 'functionDeclaration'; name: string; parameters: CoreSpiritFunctionParameter[]; returnType: string; body: CoreSpiritAstNode[]; annotations?: CoreSpiritAnnotation[]; span?: CoreSpiritSpan };
+export type CoreSpiritReturnNode = { type: 'return'; expression: CoreSpiritAstNode; span?: CoreSpiritSpan };
 
 export type CoreSpiritSpan = { start: number; end: number; line: number; column: number };
 
