@@ -3,6 +3,9 @@ import type { CoreSpiritHMMArtifactBinding } from './quantMath';
 import { coreSpiritWorkerPool, type CoreSpiritWorkerRunResult } from './coreSpiritWorkerPool';
 import { loadOrCompileCoreSpiritArtifact } from './artifactCache';
 import { marketDataGraph, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
+import { sessionService } from '../auth/sessionService';
+import { prepareCoreSpiritLiveInference } from './modelArtifactClient';
+import { parseCoreSpiritModelLifecycleSurface } from './modelLifecycleSurface';
 
 export type WorkerResult = CoreSpiritWorkerRunResult;
 
@@ -29,7 +32,28 @@ export async function runCoreSpiritInWorker(
   sourceId: string,
   options: CoreSpiritWorkerRunOptions = {},
 ): Promise<WorkerResult> {
-  const artifact = await loadOrCompileCoreSpiritArtifact(source, sourceId, {
+  let executableSource = source;
+  let hmmArtifacts = options.hmmArtifacts;
+  const lifecyclePlan = parseCoreSpiritModelLifecycleSurface(source);
+  if (lifecyclePlan.artifactSymbol || lifecyclePlan.training || lifecyclePlan.saveAs || lifecyclePlan.loadModelName) {
+    if (!lifecyclePlan.loadModelName) {
+      throw new Error('CoreScript research/training source cannot be deployed to a chart without loadModel("artifact-name"). Train and save the model first, then bind the sealed artifact for inference.');
+    }
+    const { session, error } = await sessionService.getSession();
+    if (error || !session?.access_token) {
+      throw new Error(error?.message || 'Sign in to TradingCoreOS to load the sealed CoreSpirit model artifact.');
+    }
+    const prepared = await prepareCoreSpiritLiveInference(source, session.access_token);
+    executableSource = prepared.source;
+    // Keep any explicitly supplied bindings for other models, but never let a
+    // caller-supplied binding replace the verified artifact selected by name.
+    hmmArtifacts = [
+      ...(options.hmmArtifacts ?? []).filter(binding => binding.artifactHash !== prepared.artifactHash),
+      ...prepared.hmmArtifacts,
+    ];
+  }
+
+  const artifact = await loadOrCompileCoreSpiritArtifact(executableSource, sourceId, {
     backend:'worker-vm',
   });
 
@@ -57,7 +81,7 @@ export async function runCoreSpiritInWorker(
       graphSnapshot,
       graphBaseSymbol:options.baseSymbol,
       graphBaseTimeframe:options.baseTimeframe,
-      hmmArtifacts:options.hmmArtifacts,
+      hmmArtifacts,
     },
   );
 }
