@@ -54,7 +54,8 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='na') return 'null';
         if(n.name==='bar_index') return 'number';
         if(n.name==='bar') return 'udt:bar:context';
-        return scope.get(n.name) || 'unknown';
+        const resolved = scope.get(n.name) || 'unknown';
+        return isStateType(resolved) ? elementType(resolved) : resolved;
 
       case 'member': {
         if(n.target.type==='identifier' && n.target.name==='bar' && ['confirmed','developing','realtime','historical','forecast'].includes(n.member)) return 'boolean';
