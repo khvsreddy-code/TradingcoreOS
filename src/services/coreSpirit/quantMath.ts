@@ -289,6 +289,8 @@ export class CoreSpiritGaussianHMM {
   private fitted = false;
   private updatesSinceFit = 0;
   private latestPosterior: number[] = [];
+  private lastInferenceTimestamp?: number;
+  private posteriorBeforeLastInference?: number[];
 
   constructor(options: CoreSpiritGaussianHMMOptions) {
     if (options.emission && options.emission !== 'gaussian') throw new Error('Only Gaussian HMM emissions are supported by the built-in HMM runtime');
@@ -433,7 +435,7 @@ export class CoreSpiritGaussianHMM {
    * One-step posterior update using frozen fitted parameters. This path never
    * calls fitBounded() and is safe for a loaded model in a live chart loop.
    */
-  predict(row: readonly number[], fields?: readonly string[]): Readonly<{ state: number; probabilities: readonly number[]; confidence: number }> {
+  predict(row: readonly number[], fields?: readonly string[], timestamp?: number): Readonly<{ state: number; probabilities: readonly number[]; confidence: number }> {
     if (!this.fitted || !this.latestPosterior.length) {
       throw new Error('HMM inference requires a previously trained model artifact');
     }
@@ -444,6 +446,18 @@ export class CoreSpiritGaussianHMM {
         (this.fields.length !== fields.length || this.fields.some((name, index) => name !== fields[index]))) {
       throw new Error('HMM inference feature names do not match the trained feature schema');
     }
+    if (timestamp !== undefined) {
+      if (!Number.isFinite(timestamp)) throw new Error('HMM inference timestamp must be finite');
+      if (this.lastInferenceTimestamp !== undefined && timestamp < this.lastInferenceTimestamp) {
+        throw new Error('HMM inference observations must be chronological');
+      }
+      if (this.lastInferenceTimestamp === timestamp) {
+        if (!this.posteriorBeforeLastInference) throw new Error('HMM developing-bar rollback state is unavailable');
+        this.latestPosterior = [...this.posteriorBeforeLastInference];
+      } else {
+        this.posteriorBeforeLastInference = [...this.latestPosterior];
+      }
+    }
     const logScores = this.emissions.map((emission, to) => {
       const prior = this.latestPosterior.reduce((sum, probability, from) =>
         sum + probability * this.transition[from]![to]!, 0);
@@ -452,6 +466,7 @@ export class CoreSpiritGaussianHMM {
     const normalizer = logSumExp(logScores);
     const probabilities = normalizeProbabilities(logScores.map(value => Math.exp(value - normalizer)));
     this.latestPosterior = probabilities;
+    if (timestamp !== undefined) this.lastInferenceTimestamp = timestamp;
     let state = 0;
     for (let index = 1; index < probabilities.length; index += 1) {
       if (probabilities[index]! > probabilities[state]!) state = index;
