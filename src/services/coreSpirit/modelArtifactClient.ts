@@ -21,34 +21,13 @@ export type LoadedCoreSpiritHMMArtifact = Readonly<{
   createRuntimeResolver: () => CoreSpiritHMMArtifactResolver;
 }>;
 
-/**
- * Fetches an owner-scoped, server-verified artifact and prepares an isolated
- * inference instance for one CoreSpiritRuntime. Never fetch this per candle.
- */
-export async function fetchCoreSpiritHMMArtifact(
-  artifactHash: string,
-  accessToken: string,
-  fetcher: typeof fetch = fetch,
+async function hydrateCoreSpiritHMMArtifact(
+  artifact: ModelArtifact<unknown>,
+  expectedHash?: string,
 ): Promise<LoadedCoreSpiritHMMArtifact> {
-  const hash = artifactHash.toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Model artifact hash must be a SHA-256 hex digest');
-  if (!accessToken.trim()) throw new Error('A signed-in access token is required to load a private model artifact');
-
-  const response = await fetcher('/api/corespirit/models/' + hash, {
-    method: 'GET',
-    headers: {
-      Authorization: 'Bearer ' + accessToken,
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: string } | null;
-    throw new Error(body?.error || 'Unable to load CoreSpirit model artifact (HTTP ' + response.status + ')');
-  }
-  const body = await response.json() as { success?: boolean; data?: { artifact?: ModelArtifact<unknown> } };
-  const artifact = body?.data?.artifact;
-  if (!body?.success || !artifact || artifact.hash !== hash || !(await verifyModelArtifactIntegrity(artifact))) {
+  const hash = artifact.hash.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(hash) || (expectedHash && hash !== expectedHash.toLowerCase()) ||
+      !(await verifyModelArtifactIntegrity(artifact))) {
     throw new Error('Loaded CoreSpirit model artifact failed its content hash or integrity check');
   }
   const weights = artifact.weights as Partial<GaussianHMMWeights>;
@@ -87,4 +66,65 @@ export async function fetchCoreSpiritHMMArtifact(
           : undefined;
     },
   });
+}
+
+/**
+ * Fetches an owner-scoped, server-verified artifact and prepares an isolated
+ * inference instance for one CoreSpiritRuntime. Never fetch this per candle.
+ */
+export async function fetchCoreSpiritHMMArtifact(
+  artifactHash: string,
+  accessToken: string,
+  fetcher: typeof fetch = fetch,
+): Promise<LoadedCoreSpiritHMMArtifact> {
+  const hash = artifactHash.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Model artifact hash must be a SHA-256 hex digest');
+  if (!accessToken.trim()) throw new Error('A signed-in access token is required to load a private model artifact');
+
+  const response = await fetcher('/api/corespirit/models/' + hash, {
+    method: 'GET',
+    headers: {
+      Authorization: 'Bearer ' + accessToken,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error || 'Unable to load CoreSpirit model artifact (HTTP ' + response.status + ')');
+  }
+  const body = await response.json() as { success?: boolean; data?: { artifact?: ModelArtifact<unknown> } };
+  const artifact = body?.data?.artifact;
+  if (!body?.success || !artifact || artifact.hash !== hash || !(await verifyModelArtifactIntegrity(artifact))) {
+    throw new Error('Loaded CoreSpirit model artifact failed its content hash or integrity check');
+  }
+  if (!body?.success || !artifact) throw new Error('Model artifact lookup returned no artifact');
+  return hydrateCoreSpiritHMMArtifact(artifact, hash);
+
+}
+
+/** Resolve a human-readable immutable model name once, then pin the runtime to its SHA-256. */
+export async function fetchCoreSpiritHMMArtifactByName(
+  artifactName: string,
+  accessToken: string,
+  fetcher: typeof fetch = fetch,
+): Promise<LoadedCoreSpiritHMMArtifact> {
+  const name = artifactName.trim();
+  if (!name || name.length > 120) throw new Error('Model artifact name must be 1–120 characters');
+  if (!accessToken.trim()) throw new Error('A signed-in access token is required to load a private model artifact');
+  const response = await fetcher('/api/corespirit/models/by-name/' + encodeURIComponent(name), {
+    method: 'GET',
+    headers: { Authorization: 'Bearer ' + accessToken, Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error || 'Unable to load CoreSpirit model artifact (HTTP ' + response.status + ')');
+  }
+  const body = await response.json() as { success?: boolean; data?: { artifact?: ModelArtifact<unknown> } };
+  const artifact = body?.data?.artifact;
+  if (!body?.success || !artifact || artifact.name !== name) {
+    throw new Error('Model name lookup returned an unexpected artifact');
+  }
+  return hydrateCoreSpiritHMMArtifact(artifact);
 }
