@@ -22,6 +22,7 @@ export type CoreSpiritType =
   | `developing<${string}>`
   | `forecast<${string}>`
   | `array<${string}>`
+  | `vector<${string}>`
   | `matrix<${string}>`
   | `tensor<${string}>`
   | `market<${string}>`
@@ -199,7 +200,8 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   if (name === 'null' || name === 'na') return 'null';
   if (name === 'price' || name === 'volume' || name === 'time' || name === 'duration' || name === 'currency') return name as CoreSpiritType;
   if (isCoreSpiritTemporalType(name)) return name as CoreSpiritType;
-  if (/^(array|matrix|tensor|market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
+  if (/^(array|vector|matrix|tensor|market|bar|tick|orderbook|footprint|portfolio|position|order|fill|probability|model|prediction|forecast|distribution|feature|featureSet|experiment|trainingData|dataset|modelArtifact)<.+>$/i.test(name)) return name as CoreSpiritType;
+  if (name.startsWith('vector<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('matrix<') && name.endsWith('>')) return name as CoreSpiritType;
   if (name.startsWith('tensor<') && name.endsWith('>')) return name as CoreSpiritType;
   if (['trade','orderbook','footprint','portfolio','position','order','fill','signal-intent','order-intent'].includes(name)) return name as CoreSpiritType;
@@ -207,9 +209,31 @@ export function normalizeDeclaredType(typeName: string): CoreSpiritType {
   return `udt:${name}`;
 }
 
+export function isVectorType(type: CoreSpiritType): boolean { return type.startsWith('vector<') && type.endsWith('>'); }
+export function isMatrixType(type: CoreSpiritType): boolean { return type.startsWith('matrix<') && type.endsWith('>'); }
+export function isTensorType(type: CoreSpiritType): boolean { return type.startsWith('tensor<') && type.endsWith('>'); }
+export function isNumericContainerType(type: CoreSpiritType): boolean { return isVectorType(type) || isMatrixType(type) || isTensorType(type); }
+
 export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): boolean {
   if (expected === 'unknown' || actual === 'unknown') return true;
   if (expected === actual) return true;
+  // Shapes are first-class: never treat a numeric container as a scalar, series,
+  // or a different container kind. Element widening is permitted only in-kind.
+  const container = (type: CoreSpiritType): { kind: 'vector'|'matrix'|'tensor'; element: string } | undefined => {
+    const match = type.match(/^(vector|matrix|tensor)<(.+)>$/);
+    if (!match) return undefined;
+    return { kind: match[1] as 'vector'|'matrix'|'tensor', element: match[2]! };
+  };
+  const expectedContainer = container(expected);
+  const actualContainer = container(actual);
+  if (expectedContainer || actualContainer) {
+    if (!expectedContainer || !actualContainer || expectedContainer.kind !== actualContainer.kind) return false;
+    const numeric = new Set(['int','float','number']);
+    return expectedContainer.element === actualContainer.element ||
+      (numeric.has(expectedContainer.element) && numeric.has(actualContainer.element) &&
+        (expectedContainer.element === 'number' || actualContainer.element === 'number' ||
+         expectedContainer.element === 'float' && actualContainer.element === 'int'));
+  }
   if (actual === 'null') return true;
   if (temporalAssignmentCompatible(expected, actual)) return true;
   if (isModelType(expected) && actual === 'model:ref') return true;
@@ -220,12 +244,12 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'number') return isNumericType(actual);
   if (expected === 'probability') return actual === 'probability' || actual === 'number';
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
-  if (expected === 'series<number>') return isSeriesType(actual);
+  if (expected === 'series<number>') return isSeriesType(actual) && ['int','float','number'].includes(elementType(actual));
   if (isPredictionType(expected) && isPredictionType(actual)) return expected === actual || expected === 'prediction<number>' || actual === 'prediction<number>';
   if (isForecastType(expected) && isForecastType(actual)) return expected === actual || expected === 'forecast<number>' || actual === 'forecast<number>'; 
   if (isFeatureType(expected) && isFeatureType(actual)) return expected === actual || expected === 'feature<number>' || actual === 'feature<number>';
   if (isFeatureSetType(expected) && isFeatureSetType(actual)) return expected === actual || expected === 'featureSet<number>' || actual === 'featureSet<number>';
-  if (expected === 'series<float>') return isSeriesType(actual);
+  if (expected === 'series<float>') return isSeriesType(actual) && ['int','float','number'].includes(elementType(actual));
   if (expected === 'boolean') return actual === 'series<boolean>' || actual === 'boolean';
   if (expected === 'string') return actual === 'series<string>' || actual === 'string';
   if (expected === 'series<boolean>') return actual === 'boolean';
