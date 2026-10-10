@@ -508,9 +508,9 @@ export function extractCoreSpiritSurfaceMetadata(source: string): CoreSpiritSurf
       }
       if (current.kind === 'model') {
         if (current.declaration.modelType && /^HMM(?:<.*>)?$/i.test(current.declaration.modelType)) {
-          const states = trimmed.match(/^states\s*=\s*(\d+)\s*;?$/i);?$/i);
-          const emission = trimmed.match(/^emission\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);?$/i);
-          const covariance = trimmed.match(/^covariance = trimmed.match(/^covariance\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);?$/i);
+          const states = trimmed.match(/^states\s*=\s*(\d+)\s*;?$/i);
+          const emission = trimmed.match(/^emission\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
+          const covariance = trimmed.match(/^covariance\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*;?$/i);
           if (states) { current.declaration.states = Number(states[1]); offset += raw.length + 1; continue; }
           if (emission) {
             if (emission[1]!.toLowerCase() === 'gaussian') current.declaration.emission = 'gaussian';
