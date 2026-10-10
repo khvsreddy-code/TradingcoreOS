@@ -120,6 +120,8 @@ async function main(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
     }),
   );
+  const workerBinding = loadedClientArtifact.toWorkerBinding();
+  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime', 'the client loader must produce a hash-pinned binding for the persistent chart worker');
   const runtimeResolver = loadedClientArtifact.createRuntimeResolver();
   const clientRuntimeModel = runtimeResolver('regime');
   assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
