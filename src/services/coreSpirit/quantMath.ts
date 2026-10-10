@@ -471,6 +471,9 @@ export class CoreSpiritGaussianHMM {
         (this.fields.length !== fields.length || this.fields.some((name, index) => name !== fields[index]))) {
       throw new Error('HMM inference feature names do not match the trained feature schema');
     }
+    if (this.minimumInferenceTimestampExclusive !== undefined && timestamp === undefined) {
+      throw new Error('Timestamped inference is required to enforce the model training boundary');
+    }
     if (timestamp !== undefined) {
       if (!Number.isFinite(timestamp)) throw new Error('HMM inference timestamp must be finite');
       if (!this.canPredictAt(timestamp)) throw new Error('HMM inference timestamp is inside the model training range');
