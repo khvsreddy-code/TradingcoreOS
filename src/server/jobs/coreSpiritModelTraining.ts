@@ -35,7 +35,8 @@ function parsePayload(value: unknown): TrainingPayload {
     throw new Error('CoreSpirit training range is required');
   }
   const from = Date.parse(trainingRange.from);
-  const to = Date.parse(trainingRange.to);
+  const dateOnlyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(trainingRange.to);
+  const to = Date.parse(trainingRange.to) + (dateOnlyTo ? 86_399_999 : 0);
   if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error('Invalid CoreSpirit training date range');
   if (!isRecord(trainingParameters)) throw new Error('CoreSpirit training parameters must be an object');
   if (typeof value.trainingRunId !== 'string' || typeof value.researchArtifactId !== 'string' ||
@@ -77,6 +78,10 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     const research = await repository.getResearchArtifact(payload.researchArtifactId);
     if (!research) throw new Error('Research artifact not found for this owner');
     if (research.kind !== 'corespirit-research') throw new Error('Unsupported CoreSpirit research artifact kind');
+    if (await coreSpiritSha256(research.source) !== research.sourceHash ||
+        await coreSpiritSha256(research.featureGraph) !== research.featureGraphHash) {
+      throw new Error('Research artifact source or feature-graph integrity check failed');
+    }
 
     const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown };
     if (!Array.isArray(featureGraph?.featureNames) ||
@@ -150,6 +155,8 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         fitIterations,
         fitEvery,
         maxObservations: payload.rows.length,
+        initializer: 'deterministic-quantile-v1',
+        seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
       },
       randomSeed: payload.randomSeed,
       modelImplementation: 'corespirit-gaussian-hmm-v1',
