@@ -147,8 +147,15 @@ export class CoreSpiritVelaEngine {
     const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryRefreshPromise: Promise<void>|undefined;
+    // Forced refreshes may overlap. Only the newest generation is allowed to
+    // mutate the shared secondary-data snapshot used by live execution.
+    let secondaryRequestVersion = 0;
     let secondaryLastRefreshAt=0;
     let secondaryDegraded=false;
+    let stopped = false;
+    // Keep async settings updates latest-wins too: older update callbacks must
+    // not rebuild the runtime or emit a scene after a newer update takes over.
+    let updateVersion = 0;
     const secondaryFailed = new Set<string>();
     const secondaryWarnings:string[]=[];
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
@@ -210,10 +217,11 @@ export class CoreSpiritVelaEngine {
     };
 
     const loadSecondaryData = async (force=false): Promise<void> => {
-      if (!req.fetchSeries || !secondaryDependencies.length) return;
+      if (stopped || !req.fetchSeries || !secondaryDependencies.length) return;
       const now=Date.now();
       if (!force && secondaryRefreshPromise) return secondaryRefreshPromise;
       if (!force && now-secondaryLastRefreshAt<1500) return;
+      const requestVersion = ++secondaryRequestVersion;
       const latestBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
       const endTime=latestBars.length?barTimeMillis(latestBars[latestBars.length-1]?.timestamp):undefined;
       const limit=Math.min(50000,Math.max(5000,latestBars.length+token.ir.maxLookback+64));
@@ -221,6 +229,8 @@ export class CoreSpiritVelaEngine {
         const key=dependencyKey(dep.symbol,dep.timeframe);
         try{
           const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{to:Number.isFinite(endTime)?endTime:undefined,limit});
+          // A slower request must never overwrite a newer symbol/timeframe snapshot.
+          if (stopped || requestVersion !== secondaryRequestVersion) return;
           if(rows?.length){
             secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
             secondaryFailed.delete(key);
@@ -235,6 +245,7 @@ export class CoreSpiritVelaEngine {
             }
           }
         }catch(error){
+          if (stopped || requestVersion !== secondaryRequestVersion) return;
           secondaryFailed.add(key);
           if(req.mode==='live'){
             const warning=`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`;
@@ -246,10 +257,20 @@ export class CoreSpiritVelaEngine {
             });
           }
         }
-      })).then(()=>{
+      })).then(async ()=>{
+        if (stopped) return;
+        if (requestVersion !== secondaryRequestVersion) {
+          // Keep a superseded caller (for example startup) from proceeding with a
+          // partially populated cache while the latest forced refresh is still running.
+          await secondaryRefreshPromise;
+          return;
+        }
         secondaryLastRefreshAt=Date.now();
         secondaryDegraded=secondaryFailed.size>0;
-      }).finally(()=>{secondaryRefreshPromise=undefined;});
+      }).finally(()=>{
+        // An older task's finally must not clear the current task's in-flight handle.
+        if (requestVersion === secondaryRequestVersion) secondaryRefreshPromise=undefined;
+      });
       secondaryRefreshPromise=task;
       return task;
     };
@@ -278,7 +299,6 @@ export class CoreSpiritVelaEngine {
     runtime.loadIr(token.ir);
 
     const scene = new CoreSpiritSceneDiff(token.sourceId);
-    let stopped = false;
     let liveStarted = false;
     let historyInitialized = false;
     let firstSeriesTime = Number.NaN;
@@ -389,6 +409,7 @@ export class CoreSpiritVelaEngine {
         : bars;
 
     const initialBars = getCurrentBars();
+    const initialUpdateVersion = updateVersion;
     let secondaryReady = secondaryDependencies.length
       ? loadSecondaryData(true).then(() => true)
       : Promise.resolve(true);
@@ -398,7 +419,7 @@ export class CoreSpiritVelaEngine {
         initializeFromBars(initialBars);
       } else {
         void secondaryReady.then(() => {
-          if (!stopped) initializeFromBars(getCurrentBars());
+          if (!stopped && initialUpdateVersion === updateVersion) initializeFromBars(getCurrentBars());
         });
       }
     }
@@ -424,12 +445,17 @@ export class CoreSpiritVelaEngine {
       },
       stop() {
         stopped = true;
+        secondaryRequestVersion += 1;
+        updateVersion += 1;
+        secondaryRefreshPromise = undefined;
       },
       update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
         if (stopped) return;
+        const updateGeneration = ++updateVersion;
         currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
 
         const runUpdate = (): void => {
+          if (stopped || updateGeneration !== updateVersion) return;
           const currentBars = getCurrentBars();
           runtime = createRuntime();
           runtime.loadIr(token.ir);
