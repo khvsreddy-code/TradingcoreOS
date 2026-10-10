@@ -33,22 +33,25 @@ export class CoreSpiritDatasetProviderError extends Error {
 
 const DAY_MS = 86_400_000;
 const MAX_INPUT_BARS = 10_000;
+const MAX_PROVIDER_CANDLES_PER_WINDOW = 1_000;
 // The feature materializer supports at most 512 bars of lookback and the
 // current HMM trainer accepts at most 1,024 usable observations.
 const MAX_IN_RANGE_BARS_BEFORE_WARMUP = 1_535;
 const MAX_HISTORY_WINDOWS = 64;
 
 const TIMEFRAMES: Record<string, Omit<CoreSpiritMarketDataset, 'name' | 'symbol'>> = {
-  '1M': { resolution: '1', intervalMinutes: 1, chunkDays: 7 },
-  '3M': { resolution: '3', intervalMinutes: 3, chunkDays: 21 },
-  '5M': { resolution: '5', intervalMinutes: 5, chunkDays: 35 },
-  '10M': { resolution: '10', intervalMinutes: 10, chunkDays: 70 },
-  '15M': { resolution: '15', intervalMinutes: 15, chunkDays: 90 },
-  '30M': { resolution: '30', intervalMinutes: 30, chunkDays: 90 },
-  '60M': { resolution: '60', intervalMinutes: 60, chunkDays: 90 },
-  '120M': { resolution: '120', intervalMinutes: 120, chunkDays: 180 },
-  '240M': { resolution: '240', intervalMinutes: 240, chunkDays: 365 },
-  '1D': { resolution: 'D', intervalMinutes: null, chunkDays: 3_650 },
+  // Keep each provider request comfortably below FYERS' common 1,000-candle
+  // history response ceiling, including long MCX sessions.
+  '1M': { resolution: '1', intervalMinutes: 1, chunkDays: 1 },
+  '3M': { resolution: '3', intervalMinutes: 3, chunkDays: 3 },
+  '5M': { resolution: '5', intervalMinutes: 5, chunkDays: 5 },
+  '10M': { resolution: '10', intervalMinutes: 10, chunkDays: 10 },
+  '15M': { resolution: '15', intervalMinutes: 15, chunkDays: 15 },
+  '30M': { resolution: '30', intervalMinutes: 30, chunkDays: 30 },
+  '60M': { resolution: '60', intervalMinutes: 60, chunkDays: 60 },
+  '120M': { resolution: '120', intervalMinutes: 120, chunkDays: 120 },
+  '240M': { resolution: '240', intervalMinutes: 240, chunkDays: 240 },
+  '1D': { resolution: 'D', intervalMinutes: null, chunkDays: 1_000 },
   '1W': { resolution: '1W', intervalMinutes: null, chunkDays: 3_650 },
   '1MO': { resolution: '1M', intervalMinutes: null, chunkDays: 3_650 },
 };
@@ -181,6 +184,11 @@ export async function fetchCoreSpiritDatasetBars(
     const chunkEnd = Math.min(cursor + chunkMs - DAY_MS, endDay);
     const payload = await fetchHistory(dataset, dateKey(cursor), dateKey(chunkEnd));
     const candles = readCandles(payload);
+    if (candles.length >= MAX_PROVIDER_CANDLES_PER_WINDOW) {
+      throw new CoreSpiritDatasetProviderError(
+        'FYERS returned the per-request candle ceiling for one history window. The result may be truncated; retry with a smaller date range.',
+      );
+    }
     for (const rawCandle of candles) {
       const bar = normalizeCandle(rawCandle);
       if (!bar || bar.timestamp < warmupStart || bar.timestamp > to) continue;
