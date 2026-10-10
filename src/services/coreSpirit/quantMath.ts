@@ -393,10 +393,15 @@ export class CoreSpiritGaussianHMM {
       throw new Error('HMM snapshot has an invalid state count');
     }
     const states = snapshot.states;
+    if (snapshot.covarianceMode !== 'full' && snapshot.covarianceMode !== 'diagonal') throw new Error('HMM snapshot covariance mode is invalid');
+    if (!Number.isInteger(snapshot.maxObservations) || snapshot.maxObservations < states * 4 || snapshot.maxObservations > 1024) {
+      throw new Error('HMM snapshot observation limit is invalid');
+    }
     const finite = (values: readonly number[]) => values.every(Number.isFinite);
     if (snapshot.transition.length !== states || snapshot.startProbability.length !== states ||
         snapshot.emissions.length !== states || snapshot.latestPosterior.length !== states ||
-        !finite(snapshot.startProbability) || !finite(snapshot.latestPosterior)) {
+        !finite(snapshot.startProbability) || !finite(snapshot.latestPosterior) ||
+        snapshot.startProbability.some(value => value < 0) || snapshot.latestPosterior.some(value => value < 0)) {
       throw new Error('HMM snapshot dimensions or probabilities are invalid');
     }
     for (const row of snapshot.transition) {
@@ -410,7 +415,8 @@ export class CoreSpiritGaussianHMM {
       throw new Error('HMM snapshot probabilities must sum to one');
     }
     const dimensions = snapshot.emissions[0]?.mean.length ?? 0;
-    if (dimensions < 1 || dimensions > 16 || snapshot.fields.length && snapshot.fields.length !== dimensions) {
+    if (dimensions < 1 || dimensions > 16 || snapshot.fields.length && snapshot.fields.length !== dimensions ||
+        snapshot.fields.some(name => typeof name !== 'string' || !name.trim()) || new Set(snapshot.fields).size !== snapshot.fields.length) {
       throw new Error('HMM snapshot feature dimensions are invalid');
     }
     for (const emission of snapshot.emissions) {
