@@ -279,6 +279,12 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     const plannedRange = lifecyclePlan?.training?.from && lifecyclePlan.training.to
       ? { from: lifecyclePlan.training.from, to: lifecyclePlan.training.to }
       : undefined;
+    if (plannedRange && req.body?.trainingRange !== undefined) {
+      const requestedRange = parseRange(req.body.trainingRange);
+      if (requestedRange.from !== plannedRange.from || requestedRange.to !== plannedRange.to) {
+        throw new Error('trainingRange must match the immutable from/to dates declared in the CoreScript train directive.');
+      }
+    }
     range = parseRange(req.body?.trainingRange ?? plannedRange);
     featureNames = req.body?.featureNames === undefined
       ? [...graph.featureNames]
