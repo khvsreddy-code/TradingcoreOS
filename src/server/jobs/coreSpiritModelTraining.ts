@@ -35,7 +35,7 @@ function parsePayload(value: unknown): TrainingPayload {
     throw new Error('CoreSpirit training range is required');
   }
   const from = Date.parse(trainingRange.from);
-  const dateOnlyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(trainingRange.to);
+  const dateOnlyTo = /^\d{4}-\d{2}-\d{2}$/.test(trainingRange.to);
   const to = Date.parse(trainingRange.to) + (dateOnlyTo ? 86_399_999 : 0);
   if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error('Invalid CoreSpirit training date range');
   if (!isRecord(trainingParameters)) throw new Error('CoreSpirit training parameters must be an object');
