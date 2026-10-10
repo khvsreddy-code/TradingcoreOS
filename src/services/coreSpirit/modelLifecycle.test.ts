@@ -80,14 +80,14 @@ async function main(): Promise<void> {
   const artifact = await sealModelArtifact({
     research,
     provenance,
-    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, hmm: snapshot },
+    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, stateLabels: ['bear', 'flat', 'bull'], hmm: snapshot },
     metrics: { observations: 64, featureCount: 2, stateCount: 3 },
     createdAt: '2026-01-02T00:00:00.000Z',
   });
   const republished = await sealModelArtifact({
     research,
     provenance,
-    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, hmm: snapshot },
+    weights: { modelType: 'gaussian-hmm', modelAlias: 'regime', featureNames: featureGraph.featureNames, stateLabels: ['bear', 'flat', 'bull'], hmm: snapshot },
     metrics: { observations: 64, featureCount: 2, stateCount: 3 },
     createdAt: '2026-02-02T00:00:00.000Z',
   });
@@ -131,14 +131,14 @@ async function main(): Promise<void> {
       });
     },
   );
-  assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name,
+  assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name && loadedByName.stateLabels[2] === 'bull',
     'name-based model loading must verify the artifact and pin to its immutable hash');
 
   const lifecycleChartSource = [
     'features = dataset("returns", 0.2, "volatility", 0.1)',
     'model = loadModel("nifty-regime-v7")',
     'prediction = model.predict(features)',
-    'confidence = model.probability(features, "state_0")',
+    'confidence = model.probability(features, "bull")',
     'plot confidence',
   ].join('\\n');
   const preparedLiveSource = await prepareCoreSpiritLiveInference(
@@ -237,6 +237,24 @@ async function main(): Promise<void> {
     'a loaded model artifact must run inference without training inside the chart runtime');
   assert(chartExecution.outputs.some(output => output.kind === 'series'),
     'inference-only model outputs should remain available to chart rendering');
+
+  const liveCompile = compileCoreSpirit(preparedLiveSource.source, 'model-lifecycle-live-loaded-artifact', { layer: 'model' });
+  assert(Boolean(liveCompile.ir) && !liveCompile.diagnostics.some(item => item.severity === 'error'),
+    'prepared loadModel source should compile for chart execution: ' +
+    liveCompile.diagnostics.filter(item => item.severity === 'error').map(item => item.message).join('; '));
+  const liveRuntime = new CoreSpiritRuntime({
+    layer: 'model',
+    symbol: 'NIFTY',
+    timeframe: '5m',
+    hmmArtifactResolver: loadedClientArtifact.createRuntimeResolver(),
+  });
+  liveRuntime.loadProgram(makeCoreSpiritProgram(preparedLiveSource.source, 'model-lifecycle-live-loaded-artifact'));
+  const liveExecution = liveRuntime.executeIr(liveCompile.ir!, chartBars);
+  assert(!liveExecution.diagnostics.some(message => /Unknown model state label|No immutable HMM artifact|model.predict expects/.test(message)),
+    'named model predictions should run against the hash-verified artifact and declared state labels');
+  assert(liveExecution.outputs.some(output => output.kind === 'series'),
+    'named model probabilities should emit chart series');
+
 
   const revisedTimestamp = Date.UTC(2025, 0, 3);
   const rollbackModel = CoreSpiritGaussianHMM.fromTrainedState(snapshot);
