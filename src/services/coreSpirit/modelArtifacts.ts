@@ -35,6 +35,7 @@ export type ResearchArtifact = Readonly<{
   compilerVersion: string;
   irVersion: string;
   featureGraphHash: string;
+  featureGraph: unknown;
   ir: unknown;
   createdAt: string;
 }>;
@@ -148,6 +149,7 @@ export async function createResearchArtifact(input: ResearchCompileInput): Promi
     compilerVersion: input.compilerVersion,
     irVersion: input.irVersion,
     featureGraphHash,
+    featureGraph: input.featureGraph,
     ir: input.ir,
     createdAt: input.createdAt ?? new Date().toISOString(),
   });
