@@ -117,7 +117,7 @@ export const CORE_SPIRIT_EXTENSION_LIBRARY: readonly CoreSpiritBuiltin[] = [
   { name:'dot', minArgs:2, maxArgs:2, returnType:'number', pure:true, category:'extension' },
   { name:'dataset', minArgs:2, returnType:'dataset<float>', pure:true, category:'extension' },
   { name:'hmmFit', minArgs:2, maxArgs:2, returnType:'number', pure:false, category:'extension' },
-  { name:'hmmDecode', minArgs:1, maxArgs:2, returnType:'number', pure:false, category:'extension' },
+  { name:'hmmDecode', minArgs:1, maxArgs:2, returnType:'prediction<float>', pure:false, category:'extension' },
   { name:'hmmProbability', minArgs:1, maxArgs:2, returnType:'probability', pure:false, category:'extension' },
   { name:'hmmPosterior', minArgs:1, maxArgs:2, returnType:'distribution<float>', pure:false, category:'extension' },
   { name:'__input', minArgs:2, maxArgs:2, returnType:'unknown', pure:true, category:'extension' },
