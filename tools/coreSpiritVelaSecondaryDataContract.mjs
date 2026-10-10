@@ -17,6 +17,10 @@ assert.match(source, /secondaryRequestVersion/);
 assert.match(source, /requestVersion !== secondaryRequestVersion/);
 assert.match(source, /requestVersion === secondaryRequestVersion/);
 assert.match(source, /secondaryRequestVersion \+= 1/);
+assert.match(source, /let updateVersion = 0/);
+assert.match(source, /initialUpdateVersion === updateVersion/);
+assert.match(source, /updateGeneration !== updateVersion/);
+assert.match(source, /updateVersion \+= 1/);
 assert.match(source, /Secondary market data unavailable/);
 assert.match(source, /Secondary market data refresh failed/);
 
