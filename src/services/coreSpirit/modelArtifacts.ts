@@ -157,9 +157,23 @@ function validateDateRange(range: TrainingRange): void {
 
 function validateProvenance(provenance: ModelProvenance): void {
   validateDateRange(provenance.trainingRange);
-  if (!provenance.sourceHash || !provenance.compilerVersion || !provenance.irVersion ||
-      !provenance.featureGraphHash || !provenance.datasetVersion || !provenance.modelImplementation) {
-    throw new Error('Model provenance is incomplete: source, compiler, IR, feature graph, dataset and implementation are required');
+  if (!/^[a-f0-9]{64}$/.test(provenance.sourceHash) ||
+      !/^[a-f0-9]{64}$/.test(provenance.featureGraphHash) ||
+      !/^[a-f0-9]{64}$/.test(provenance.datasetVersion) ||
+      !provenance.compilerVersion || !provenance.irVersion || !provenance.modelImplementation) {
+    throw new Error('Model provenance is incomplete or contains an invalid SHA-256 identity');
+  }
+  if (!['cpu', 'wasm', 'webgpu', 'remote'].includes(provenance.backend)) {
+    throw new Error('Model provenance backend is unsupported');
+  }
+  if (!provenance.dependencyVersions || typeof provenance.dependencyVersions !== 'object' ||
+      !Object.keys(provenance.dependencyVersions).length ||
+      Object.values(provenance.dependencyVersions).some(version => typeof version !== 'string' || !version.trim())) {
+    throw new Error('Model provenance must record at least one dependency version');
+  }
+  if (!provenance.trainingParameters || typeof provenance.trainingParameters !== 'object' ||
+      Array.isArray(provenance.trainingParameters)) {
+    throw new Error('Model provenance trainingParameters must be an object');
   }
   if (!Number.isSafeInteger(provenance.randomSeed) || provenance.randomSeed < 0) {
     throw new Error('Model randomSeed must be a non-negative safe integer');
