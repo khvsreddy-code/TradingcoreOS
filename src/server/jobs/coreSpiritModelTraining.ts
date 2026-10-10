@@ -109,7 +109,15 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     if (featureGraph.modelType !== 'HMM<float>' && featureGraph.modelType !== 'HMM') {
       throw new Error('The built-in background trainer currently supports Gaussian HMM artifacts; other model families need a registered training backend');
     }
+    const datasetName = String(payload.trainingParameters.datasetName ?? 'uploaded-feature-snapshot');
+    const datasetSource = String(payload.trainingParameters.datasetSource ?? 'precomputed-features');
+    if (!datasetName.trim() || datasetName.length > 120 ||
+        !['fyers-history', 'provided-ohlcv', 'precomputed-features'].includes(datasetSource)) {
+      throw new Error('Dataset provenance is missing or invalid; refusing to train on an unidentified snapshot');
+    }
     const expectedDatasetVersion = await coreSpiritSha256({
+      datasetName,
+      datasetSource,
       featureNames: payload.featureNames,
       rows: payload.rows,
       trainingRange: payload.trainingRange,
