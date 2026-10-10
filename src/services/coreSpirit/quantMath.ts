@@ -397,15 +397,18 @@ export class CoreSpiritGaussianHMM {
     if (!Number.isInteger(snapshot.maxObservations) || snapshot.maxObservations < states * 4 || snapshot.maxObservations > 1024) {
       throw new Error('HMM snapshot observation limit is invalid');
     }
-    const finite = (values: readonly number[]) => values.every(Number.isFinite);
-    if (snapshot.transition.length !== states || snapshot.startProbability.length !== states ||
+    const finite = (values: readonly number[]) => Array.isArray(values) && values.every(Number.isFinite);
+    if (!Array.isArray(snapshot.fields) || !Array.isArray(snapshot.transition) ||
+        !Array.isArray(snapshot.startProbability) || !Array.isArray(snapshot.emissions) ||
+        !Array.isArray(snapshot.latestPosterior) ||
+        snapshot.transition.length !== states || snapshot.startProbability.length !== states ||
         snapshot.emissions.length !== states || snapshot.latestPosterior.length !== states ||
         !finite(snapshot.startProbability) || !finite(snapshot.latestPosterior) ||
         snapshot.startProbability.some(value => value < 0) || snapshot.latestPosterior.some(value => value < 0)) {
       throw new Error('HMM snapshot dimensions or probabilities are invalid');
     }
     for (const row of snapshot.transition) {
-      if (row.length !== states || !finite(row) || row.some(value => value < 0) ||
+      if (!Array.isArray(row) || row.length !== states || !finite(row) || row.some(value => value < 0) ||
           Math.abs(row.reduce((sum, value) => sum + value, 0) - 1) > 1e-5) {
         throw new Error('HMM snapshot transition matrix is invalid');
       }
@@ -420,7 +423,8 @@ export class CoreSpiritGaussianHMM {
       throw new Error('HMM snapshot feature dimensions are invalid');
     }
     for (const emission of snapshot.emissions) {
-      if (emission.mean.length !== dimensions || !finite(emission.mean) ||
+      if (!emission || !Array.isArray(emission.mean) || !Array.isArray(emission.covariance) ||
+          emission.mean.length !== dimensions || !finite(emission.mean) ||
           emission.covariance.length !== dimensions ||
           emission.covariance.some(row => row.length !== dimensions || !finite(row))) {
         throw new Error('HMM snapshot emission dimensions are invalid');
