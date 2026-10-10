@@ -160,6 +160,7 @@ async function main(): Promise<void> {
     'features = dataset("returns", 0.2, "volatility", 0.1)',
     'state = hmmDecode("regime", features)',
     'confidence = hmmProbability("regime", features)',
+    'plot state',
   ].join('\\n');
   const chartCompile = compileCoreSpirit(chartSource, 'model-lifecycle-chart-inference', { layer: 'model' });
   assert(Boolean(chartCompile.ir), 'inference-only chart source must compile: ' + chartCompile.diagnostics.map(item => item.message).join('; '));
