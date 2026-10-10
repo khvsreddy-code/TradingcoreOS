@@ -180,6 +180,19 @@ function parseOperation(definition: CoreSpiritFeatureDefinition): FeatureOperati
   throw new Error('Unsupported CoreSpirit feature function: ' + name);
 }
 
+/**
+ * Normalize the same allowlisted feature grammar to expressions the live CoreSpirit
+ * VM can evaluate. This keeps train-time and chart-time feature names/order aligned.
+ */
+export function lowerCoreSpiritFeatureExpressionForRuntime(expression: string): string {
+  const operation = parseOperation({ name: 'liveFeature', expression });
+  if (operation.kind === 'field') return operation.field;
+  if (operation.kind === 'pctchange') return 'pctchange(close, ' + operation.period + ')';
+  if (operation.kind === 'logreturn') return 'logreturn(close, ' + operation.period + ')';
+  if (operation.kind === 'atr') return 'atr(close, ' + operation.period + ')';
+  return operation.kind + '(' + operation.field + ', ' + operation.period + ')';
+}
+
 function valuesForField(bars: readonly CoreSpiritResearchBar[], field: string): number[] {
   return bars.map(bar => bar[field as keyof CoreSpiritResearchBar] as number);
 }
