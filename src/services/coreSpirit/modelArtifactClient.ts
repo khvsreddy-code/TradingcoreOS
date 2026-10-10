@@ -66,7 +66,7 @@ export async function fetchCoreSpiritHMMArtifact(
   const featureNames = Object.freeze([...weights.featureNames]);
   const hmmState = weights.hmm;
   const trainingEndText = artifact.provenance.trainingRange.to;
-  const trainingEndDateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(trainingEndText);
+  const trainingEndDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trainingEndText);
   const trainingEndMs = Date.parse(trainingEndText) + (trainingEndDateOnly ? 86_399_999 : 0);
   if (!Number.isFinite(trainingEndMs)) throw new Error('Model artifact has an invalid training-range boundary');
   // CoreSpiritRuntime timestamps are epoch seconds, whereas the public API uses milliseconds.
