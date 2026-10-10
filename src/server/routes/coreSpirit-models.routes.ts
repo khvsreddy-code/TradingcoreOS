@@ -378,7 +378,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     if (!storedArtifact) return fail(res, 404, 'Model artifact not found.');
     if (!(await verifyModelArtifactIntegrity(storedArtifact))) return fail(res, 409, 'Model artifact integrity check failed.');
     const rangeEnd = storedArtifact.provenance.trainingRange.to;
-    const rangeEndIsDateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(rangeEnd);
+    const rangeEndIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(rangeEnd);
     const trainedThrough = Date.parse(rangeEnd) + (rangeEndIsDateOnly ? 86_399_999 : 0);
     if (!Number.isFinite(trainedThrough) || timestamp <= trainedThrough) {
       return fail(res, 422, 'Inference timestamp must be after the model training range to prevent in-sample leakage.');
