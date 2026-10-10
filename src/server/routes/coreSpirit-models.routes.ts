@@ -4,6 +4,7 @@ import {
   createResearchArtifact,
   coreSpiritSha256,
   loadModelForInference,
+  verifyModelArtifactIntegrity,
   type ResearchArtifact,
 } from '../../services/coreSpirit/modelArtifacts.js';
 import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION } from '../../services/coreSpirit/VERSION.js';
@@ -344,9 +345,28 @@ coreSpiritModelRoutes.get('/training-runs/:runId', async (req: AuthenticatedRequ
   }
 });
 
+coreSpiritModelRoutes.get('/models/:hash', async (req: AuthenticatedRequest, res: Response) => {
+  const hash = String(req.params.hash ?? '').toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(hash)) return fail(res, 400, 'Model hash must be a SHA-256 hex digest.');
+  try {
+    const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
+    const artifact = await repository.getByHash(hash);
+    if (!artifact) return fail(res, 404, 'Model artifact not found.');
+    if (!(await verifyModelArtifactIntegrity(artifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ success: true, data: { artifact } });
+  } catch (error) {
+    fail(res, 503, error instanceof Error ? error.message : 'Unable to load model artifact.');
+  }
+});
+
 coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedRequest, res: Response) => {
   const hash = String(req.params.hash ?? '').toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(hash)) return fail(res, 400, 'Model hash must be a SHA-256 hex digest.');
+  const timestamp = req.body?.timestamp;
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+    return fail(res, 400, 'timestamp must be an epoch-millisecond number for forward-only inference.');
+  }
   const values = req.body?.features;
   if (!Array.isArray(values) || values.length < 1 || values.length > MAX_FEATURES ||
       values.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
@@ -354,6 +374,15 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
   }
   try {
     const store = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
+    const storedArtifact = await store.getByHash(hash);
+    if (!storedArtifact) return fail(res, 404, 'Model artifact not found.');
+    if (!(await verifyModelArtifactIntegrity(storedArtifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    const rangeEnd = storedArtifact.provenance.trainingRange.to;
+    const rangeEndIsDateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(rangeEnd);
+    const trainedThrough = Date.parse(rangeEnd) + (rangeEndIsDateOnly ? 86_399_999 : 0);
+    if (!Number.isFinite(trainedThrough) || timestamp <= trainedThrough) {
+      return fail(res, 422, 'Inference timestamp must be after the model training range to prevent in-sample leakage.');
+    }
     const inference = await loadModelForInference<
       unknown,
       readonly number[],
@@ -361,6 +390,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     >(store, hash, artifact => {
       const weights = artifact.weights as {
         modelType?: string;
+        modelAlias?: string;
         featureNames?: string[];
         hmm?: CoreSpiritGaussianHMMState;
       };
@@ -369,7 +399,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
       }
       if (weights.featureNames.length !== values.length) throw new Error('Feature count does not match the trained model schema.');
       const hmm = CoreSpiritGaussianHMM.fromTrainedState(weights.hmm);
-      return { predict: async (features: readonly number[]) => hmm.predict(features, weights.featureNames) };
+      return { predict: async (features: readonly number[]) => hmm.predict(features, weights.featureNames, timestamp) };
     });
     const prediction = await inference.predict(values as number[]);
     res.setHeader('Cache-Control', 'no-store');
