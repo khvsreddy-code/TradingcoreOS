@@ -373,7 +373,7 @@ function splitModelBindingList(value: string): string[] {
   return out;
 }
 function parseModelField(value: string): { name: string; type: CoreSpiritModelSurfaceFieldType } | undefined {
-  const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>|prediction<number>|forecast<number>|probability|feature<number>))?$/i);
+  const match = value.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(number|string|boolean|series<number>|prediction<number>|forecast<number>|probability|feature<number>|vector<float>|matrix<float>|tensor<float>|distribution<float>))?$/i);
   if (!match) return undefined;
   return {
     name: match[1],
