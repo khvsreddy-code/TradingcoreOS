@@ -65,6 +65,12 @@ export async function fetchCoreSpiritHMMArtifact(
   const modelAlias = weights.modelAlias;
   const featureNames = Object.freeze([...weights.featureNames]);
   const hmmState = weights.hmm;
+  const trainingEndText = artifact.provenance.trainingRange.to;
+  const trainingEndDateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(trainingEndText);
+  const trainingEndMs = Date.parse(trainingEndText) + (trainingEndDateOnly ? 86_399_999 : 0);
+  if (!Number.isFinite(trainingEndMs)) throw new Error('Model artifact has an invalid training-range boundary');
+  // CoreSpiritRuntime timestamps are epoch seconds, whereas the public API uses milliseconds.
+  const runtimeTrainingBoundary = Math.floor(trainingEndMs / 1000);
   return Object.freeze({
     artifactHash: artifact.hash,
     artifactName: artifact.name,
@@ -74,6 +80,7 @@ export async function fetchCoreSpiritHMMArtifact(
     createRuntimeResolver: () => {
       // A new mutable posterior state per runtime; learned parameters remain sealed.
       const model = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
+      model.setInferenceBoundaryExclusive(runtimeTrainingBoundary);
       return (requestedName: string) =>
         requestedName === modelAlias || requestedName === artifact.name || requestedName === artifact.hash
           ? model
