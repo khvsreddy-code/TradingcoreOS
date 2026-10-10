@@ -189,7 +189,7 @@ export function lowerCoreSpiritFeatureExpressionForRuntime(expression: string): 
   if (operation.kind === 'field') return operation.field;
   if (operation.kind === 'pctchange') return 'pctchange(close, ' + operation.period + ')';
   if (operation.kind === 'logreturn') return 'logreturn(close, ' + operation.period + ')';
-  if (operation.kind === 'atr') return 'atr(close, ' + operation.period + ')';
+  if (operation.kind === 'atr') return 'atr(' + operation.period + ')';
   return operation.kind + '(' + operation.field + ', ' + operation.period + ')';
 }
 
