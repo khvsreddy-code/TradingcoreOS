@@ -1032,8 +1032,46 @@ export class CoreSpiritRuntime {
         ?? null;
       return finish(typeof resolved === 'number' || typeof resolved === 'boolean' || typeof resolved === 'string' ? resolved : (resolved == null ? null : (resolved as any).value ?? resolved));
     }
+    if(name==='prediction.probability') {
+      const prediction=args[0] as { kind?: unknown; probabilities?: unknown; stateLabels?: unknown } | null | undefined;
+      const label=String(args[1]??'');
+      if(!prediction || prediction.kind!=='model-prediction' || !Array.isArray(prediction.probabilities) ||
+          !Array.isArray(prediction.stateLabels)) {
+        throw new Error('prediction.probability expects the result of model.predict(features).');
+      }
+      const index=prediction.stateLabels.indexOf(label);
+      if(index<0) throw new Error('Unknown model state label "'+label+'"; available labels: '+prediction.stateLabels.join(', '));
+      const probability=prediction.probabilities[index];
+      if(typeof probability!=='number' || !Number.isFinite(probability)) throw new Error('Model prediction probability is invalid.');
+      return finish(probability);
+    }
     if(name==='model.predict' || name==='model.probability') {
       const modelName=String(args[0]??'');
+      const artifactModel=this.hmmArtifactResolver?.(modelName);
+      if(artifactModel) {
+        const row=args[1] as CoreSpiritDatasetRow | null | undefined;
+        if(!row || row.kind!=='dataset') throw new Error('Loaded HMM model.predict expects a dataset<float> feature row.');
+        const timestamp=this.toEpoch(bar.timestamp);
+        if(!artifactModel.canPredictAt(timestamp)) return finish(null);
+        const prediction=artifactModel.predict(row.values as readonly number[],row.fields,timestamp);
+        const labels=artifactModel.getStateLabels();
+        if(name==='model.probability') {
+          const label=args.length>2 ? String(args[2]??'') : '';
+          if(!label) return finish(prediction.confidence);
+          const labelIndex=labels.indexOf(label);
+          if(labelIndex<0) throw new Error('Unknown model state label "'+label+'"; available labels: '+labels.join(', '));
+          return finish(prediction.probabilities[labelIndex] ?? null);
+        }
+        return finish(Object.freeze({
+          kind:'model-prediction' as const,
+          state:prediction.state,
+          stateLabel:labels[prediction.state] ?? ('state_'+prediction.state),
+          confidence:prediction.confidence,
+          probabilities:Array.from(prediction.probabilities),
+          stateLabels:[...labels],
+          timestamp,
+        }));
+      }
       const inputs:Record<string,unknown>={};
       for(let i=1;i+1<args.length;i+=2) inputs[String(args[i])]=args[i+1];
       const field=name==='model.probability' ? 'probability' : 'prediction';

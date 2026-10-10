@@ -172,3 +172,46 @@ export function lowerCoreSpiritResearchSource(source: string, plan = parseCoreSp
   }
   return kept.join('\n').trim();
 }
+
+/**
+ * Lower declarative loadModel bindings for the live chart VM. Training/save
+ * directives are control-plane operations and are never executed in a chart
+ * callback. Calls are rewritten to the existing model(name).predict ABI.
+ */
+export function lowerCoreSpiritLiveInferenceSource(
+  source: string,
+  plan = parseCoreSpiritModelLifecycleSurface(source),
+): string {
+  if ((plan.training || plan.saveAs || plan.artifactSymbol) && !plan.loadModelName) {
+    throw new Error('Research/training source cannot be deployed to a chart until it loads a sealed artifact with loadModel("name").');
+  }
+  const lines = String(source ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const kept: string[] = [];
+  let skipTrainContinuationAtIndent: number | null = null;
+  const trainedModel = plan.training?.modelName;
+  const escapedModel = trainedModel?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const raw of lines) {
+    const line = raw.trim();
+    const indent = raw.match(/^[ \t]*/)?.[0].replace(/\t/g, '  ').length ?? 0;
+    if (skipTrainContinuationAtIndent !== null) {
+      if (!line || (indent > skipTrainContinuationAtIndent && /^(?:from|to)\s+["']/i.test(line))) continue;
+      skipTrainContinuationAtIndent = null;
+    }
+    if (/^model\s+artifact\s+[A-Za-z_][A-Za-z0-9_]*\s*;?$/i.test(line)) continue;
+    if (/^train\s+[A-Za-z_][A-Za-z0-9_]*\s+using\s+dataset\s*\(/i.test(line)) {
+      skipTrainContinuationAtIndent = indent;
+      continue;
+    }
+    if (/^save\s+[A-Za-z_][A-Za-z0-9_]*\s+as\s+["']/i.test(line)) continue;
+    if (/^(?:let\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*loadModel\s*\(/i.test(line)) continue;
+    if (escapedModel && new RegExp('^fit\\s+' + escapedModel + '\\s+on\\s+', 'i').test(line)) continue;
+    kept.push(raw);
+  }
+  let lowered = kept.join('\n').trim();
+  if (plan.loadModelName && plan.loadBinding) {
+    const escapedBinding = plan.loadBinding.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const target = 'model(' + JSON.stringify(plan.loadModelName) + ').$1(';
+    lowered = lowered.replace(new RegExp('\\b' + escapedBinding + '\\.(predict|probability)\\s*\\(', 'g'), target);
+  }
+  return lowered;
+}

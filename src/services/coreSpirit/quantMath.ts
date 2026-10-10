@@ -214,7 +214,9 @@ export type CoreSpiritGaussianHMMState = Readonly<{
 
 export type CoreSpiritHMMArtifactBinding = Readonly<{
   artifactHash: string;
+  artifactName?: string;
   modelAlias: string;
+  stateLabels?: readonly string[];
   trainingEndTimestampMs: number;
   state: CoreSpiritGaussianHMMState;
 }>;
@@ -299,6 +301,7 @@ export class CoreSpiritGaussianHMM {
   private lastInferenceTimestamp?: number;
   private posteriorBeforeLastInference?: number[];
   private minimumInferenceTimestampExclusive?: number;
+  private stateLabels: string[] = [];
 
   constructor(options: CoreSpiritGaussianHMMOptions) {
     if (options.emission && options.emission !== 'gaussian') throw new Error('Only Gaussian HMM emissions are supported by the built-in HMM runtime');
@@ -450,6 +453,20 @@ export class CoreSpiritGaussianHMM {
   }
 
   /** Prevents accidental in-sample predictions when a model is loaded for a backtest or chart. */
+  setStateLabels(labels: readonly string[]): void {
+    if (labels.length !== this.states || labels.some(label => typeof label !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(label)) ||
+        new Set(labels).size !== labels.length) {
+      throw new Error('HMM state labels must be unique identifiers matching the trained state count');
+    }
+    this.stateLabels = [...labels];
+  }
+
+  getStateLabels(): readonly string[] {
+    return this.stateLabels.length === this.states
+      ? [...this.stateLabels]
+      : Array.from({ length: this.states }, (_value, index) => 'state_' + index);
+  }
+
   setInferenceBoundaryExclusive(timestamp: number): void {
     if (!Number.isFinite(timestamp)) throw new Error('HMM inference boundary must be finite');
     this.minimumInferenceTimestampExclusive = timestamp;
