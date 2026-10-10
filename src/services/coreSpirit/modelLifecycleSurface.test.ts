@@ -70,4 +70,12 @@ const sameDay = parseCoreSpiritModelLifecycleSurface(
 assert(sameDay.training?.from === '2025-01-01' && sameDay.training.to === '2025-01-01',
   'a date-only training range should include the full end date and allow a single-day window');
 
+let invalidDatasetName = false;
+try {
+  parseCoreSpiritModelLifecycleSurface(source.replace('NIFTY_5M', 'D'.repeat(121)));
+} catch (error) {
+  invalidDatasetName = error instanceof Error && /dataset name must be 1–120 characters/.test(error.message);
+}
+assert(invalidDatasetName, 'named datasets must be length-bounded before any provider call');
+
 console.log('CORESPIRIT_MODEL_LIFECYCLE_SURFACE_OK');
