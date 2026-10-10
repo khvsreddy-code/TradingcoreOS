@@ -1,7 +1,7 @@
 import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { CoreSpiritGaussianHMM } from './quantMath.ts';
-import { fetchCoreSpiritHMMArtifact, fetchCoreSpiritHMMArtifactByName } from './modelArtifactClient.ts';
+import { fetchCoreSpiritHMMArtifact, fetchCoreSpiritHMMArtifactByName, prepareCoreSpiritLiveInference } from './modelArtifactClient.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
 import {
@@ -133,8 +133,41 @@ async function main(): Promise<void> {
   );
   assert(loadedByName.artifactHash === artifact.hash && loadedByName.artifactName === artifact.name,
     'name-based model loading must verify the artifact and pin to its immutable hash');
+
+  const lifecycleChartSource = [
+    'features = dataset("returns", 0.2, "volatility", 0.1)',
+    'model = loadModel("nifty-regime-v7")',
+    'prediction = model.predict(features)',
+    'confidence = model.probability(features, "state_0")',
+    'plot confidence',
+  ].join('\\n');
+  const preparedLiveSource = await prepareCoreSpiritLiveInference(
+    lifecycleChartSource,
+    'contract-access-token',
+    async (input) => {
+      assert(String(input).includes('/api/corespirit/models/by-name/'),
+        'live loadModel preparation must resolve the artifact by its immutable name');
+      return new Response(JSON.stringify({ success: true, data: { artifact } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  );
+  assert(preparedLiveSource.artifactHash === artifact.hash &&
+      preparedLiveSource.source.includes('model("nifty-regime-v7").predict(features)') &&
+      !preparedLiveSource.source.includes('loadModel'),
+    'loadModel should lower to the existing model(name).predict ABI and pin the verified hash');
+  assert(preparedLiveSource.hmmArtifacts[0]?.artifactName === artifact.name &&
+      preparedLiveSource.hmmArtifacts[0]?.artifactHash === artifact.hash,
+    'persistent-worker bindings must carry both immutable name and SHA-256 identities');
+  const preparedCompile = compileCoreSpirit(preparedLiveSource.source, 'prepared-live-model-source', { layer: 'model' });
+  assert(Boolean(preparedCompile.ir) && !preparedCompile.diagnostics.some(item => item.severity === 'error'),
+    'the lowered loadModel source must compile through the existing CoreSpirit compiler');
+
   const workerBinding = loadedClientArtifact.toWorkerBinding();
-  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs), 'the client loader must produce a hash-pinned, cutoff-aware binding for the persistent chart worker');
+  assert(workerBinding.artifactHash === artifact.hash && workerBinding.artifactName === artifact.name &&
+      workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs),
+    'the client loader must produce a hash-pinned, name-resolvable, cutoff-aware binding for the persistent chart worker');
   const runtimeResolver = loadedClientArtifact.createRuntimeResolver();
   const clientRuntimeModel = runtimeResolver('regime');
   assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
