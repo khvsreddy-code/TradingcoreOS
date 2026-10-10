@@ -1,4 +1,5 @@
 import type { CoreSpiritMarketBar } from './marketData';
+import { CoreSpiritGaussianHMM, type CoreSpiritHMMArtifactBinding } from './quantMath';
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
@@ -33,6 +34,7 @@ type WorkerJob = {
   graphSnapshot?:CoreSpiritGraphSnapshot;
   graphBaseSymbol?:string;
   graphBaseTimeframe?:string;
+  hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
 };
 
 type WorkerSlot = {
@@ -90,6 +92,7 @@ export class CoreSpiritWorkerPool {
   private readonly sharedBuffers = new Map<string,CoreSpiritSharedMarketBuffer>();
   private readonly contextArtifacts = new Map<string,string>();
   private readonly contextGraphRevisions = new Map<string,number>();
+  private readonly contextHMMArtifacts = new Map<string,string>();
 
   constructor(maxWorkers?:number) {
     const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
@@ -102,7 +105,7 @@ export class CoreSpiritWorkerPool {
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[]},
   ):Promise<CoreSpiritWorkerRunResult> {
     const { compileCoreSpirit } = await import('./coreSpiritPipeline');
     const compiled = compileCoreSpirit(source, sourceId);
@@ -122,7 +125,7 @@ export class CoreSpiritWorkerPool {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
       if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
-      return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe);
+      return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,options?.hmmArtifacts);
     }
 
     return new Promise((resolve,reject)=>{
@@ -140,6 +143,7 @@ export class CoreSpiritWorkerPool {
         graphSnapshot:options?.graphSnapshot,
         graphBaseSymbol:options?.graphBaseSymbol,
         graphBaseTimeframe:options?.graphBaseTimeframe,
+        hmmArtifacts:options?.hmmArtifacts,
       });
       this.queue.sort((a,b)=>a.priority-b.priority);
       this.dispatch();
@@ -159,6 +163,7 @@ export class CoreSpiritWorkerPool {
     this.sharedBuffers.clear();
     this.contextArtifacts.clear();
     this.contextGraphRevisions.clear();
+    this.contextHMMArtifacts.clear();
   }
 
   private dispatch():void {
@@ -214,6 +219,8 @@ export class CoreSpiritWorkerPool {
     const artifactId=artifactIdFor(job.artifact);
     const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId;
     const graphChanged=!!job.graphSnapshot && this.contextGraphRevisions.get(job.contextKey)!==job.graphSnapshot.revision;
+    const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias).sort().join('|');
+    const hmmArtifactsChanged=job.hmmArtifacts!==undefined && this.contextHMMArtifacts.get(job.contextKey)!==hmmSignature;
     const sendArtifact=artifactChanged ? {
       type:'loadArtifact' as const,
       requestId,
@@ -223,6 +230,14 @@ export class CoreSpiritWorkerPool {
       graphSnapshot:job.graphSnapshot,
       graphBaseSymbol:job.graphBaseSymbol,
       graphBaseTimeframe:job.graphBaseTimeframe,
+      hmmArtifacts:job.hmmArtifacts ?? [],
+      replaceHMMArtifacts:true,
+    } : null;
+    const sendHMMArtifacts=(!artifactChanged&&hmmArtifactsChanged) ? {
+      type:'updateHMMArtifacts' as const,
+      requestId,
+      contextKey:job.contextKey,
+      hmmArtifacts:job.hmmArtifacts!,
     } : null;
     const sendGraph=(!artifactChanged&&graphChanged&&job.graphSnapshot) ? {
       type:'updateGraph' as const,
@@ -245,6 +260,7 @@ export class CoreSpiritWorkerPool {
       try{
         if(message.type==='result'){
           if(artifactChanged)this.contextArtifacts.set(job.contextKey,artifactId);
+          if(artifactChanged||hmmArtifactsChanged)this.contextHMMArtifacts.set(job.contextKey,hmmSignature);
           if(job.graphSnapshot&&graphChanged)this.contextGraphRevisions.set(job.contextKey,job.graphSnapshot.revision);
           job.resolve(normalizeResult(message));
         }
@@ -259,7 +275,7 @@ export class CoreSpiritWorkerPool {
       try{slot.worker.terminate();}catch{}
       const index=this.slots.indexOf(slot);
       if(index>=0)this.slots.splice(index,1);
-      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);this.sharedBuffers.delete(key);}}
+      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);this.contextHMMArtifacts.delete(key);this.sharedBuffers.delete(key);}}
       cleanup();
     };
 
@@ -285,7 +301,8 @@ export class CoreSpiritWorkerPool {
 
     try{
       if(sendArtifact)slot.worker.postMessage(sendArtifact, job.graphSnapshot ? graphSnapshotTransferables(job.graphSnapshot) : []);
-      else if(sendGraph)slot.worker.postMessage(sendGraph, graphSnapshotTransferables(job.graphSnapshot!));
+      else if(sendHMMArtifacts)slot.worker.postMessage(sendHMMArtifacts);
+      if(!sendArtifact&&sendGraph)slot.worker.postMessage(sendGraph, graphSnapshotTransferables(job.graphSnapshot!));
       slot.worker.postMessage(
         envelope,
         sharedMarket && !sharedMarket.shared ? [sharedMarket.buffer] : [],
@@ -314,11 +331,15 @@ export class CoreSpiritWorkerPool {
     graphSnapshot?:CoreSpiritGraphSnapshot,
     graphBaseSymbol='current',
     graphBaseTimeframe='chart',
+    hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[],
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
+    const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
+    for(const binding of hmmArtifacts ?? [])hmmModels.set(binding.modelAlias,CoreSpiritGaussianHMM.fromTrainedState(binding.state));
     const runtime=new CoreSpiritRuntime({
       sourceId,
       dataResolver:graphSnapshot?createGraphResolver(graphSnapshot,graphBaseSymbol,graphBaseTimeframe):undefined,
+      hmmArtifactResolver:modelName=>hmmModels.get(modelName),
     });
     runtime.loadIr(artifact.ir);
     const result=runtime.executeIr(artifact.ir,bars);
