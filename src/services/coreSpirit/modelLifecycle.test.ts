@@ -163,6 +163,18 @@ async function main(): Promise<void> {
   const preparedCompile = compileCoreSpirit(preparedLiveSource.source, 'prepared-live-model-source', { layer: 'model' });
   assert(Boolean(preparedCompile.ir) && !preparedCompile.diagnostics.some(item => item.severity === 'error'),
     'the lowered loadModel source must compile through the existing CoreSpirit compiler');
+  const preparedRuntime = new CoreSpiritRuntime({
+    layer: 'model',
+    symbol: 'NIFTY',
+    timeframe: '5m',
+    hmmArtifactResolver: loadedByName.createRuntimeResolver(),
+  });
+  preparedRuntime.loadProgram(makeCoreSpiritProgram(preparedLiveSource.source, 'prepared-live-model-runtime'));
+  const preparedExecution = preparedRuntime.executeIr(preparedCompile.ir!, chartBars);
+  assert(!preparedExecution.diagnostics.some(message => /No immutable HMM artifact|HMM fitting is disabled/.test(message)),
+    'a live loadModel binding must resolve by artifact name without fitting inside the chart runtime');
+  assert(preparedExecution.outputs.some(output => output.kind === 'series'),
+    'loadModel inference outputs must remain available to the existing chart renderer');
 
   const workerBinding = loadedClientArtifact.toWorkerBinding();
   assert(workerBinding.artifactHash === artifact.hash && workerBinding.artifactName === artifact.name &&
