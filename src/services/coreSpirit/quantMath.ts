@@ -297,6 +297,7 @@ export class CoreSpiritGaussianHMM {
   private latestPosterior: number[] = [];
   private lastInferenceTimestamp?: number;
   private posteriorBeforeLastInference?: number[];
+  private minimumInferenceTimestampExclusive?: number;
 
   constructor(options: CoreSpiritGaussianHMMOptions) {
     if (options.emission && options.emission !== 'gaussian') throw new Error('Only Gaussian HMM emissions are supported by the built-in HMM runtime');
@@ -437,6 +438,17 @@ export class CoreSpiritGaussianHMM {
     return model;
   }
 
+  /** Prevents accidental in-sample predictions when a model is loaded for a backtest or chart. */
+  setInferenceBoundaryExclusive(timestamp: number): void {
+    if (!Number.isFinite(timestamp)) throw new Error('HMM inference boundary must be finite');
+    this.minimumInferenceTimestampExclusive = timestamp;
+  }
+
+  canPredictAt(timestamp: number): boolean {
+    return Number.isFinite(timestamp) &&
+      (this.minimumInferenceTimestampExclusive === undefined || timestamp > this.minimumInferenceTimestampExclusive);
+  }
+
   /**
    * One-step posterior update using frozen fitted parameters. This path never
    * calls fitBounded() and is safe for a loaded model in a live chart loop.
@@ -454,6 +466,7 @@ export class CoreSpiritGaussianHMM {
     }
     if (timestamp !== undefined) {
       if (!Number.isFinite(timestamp)) throw new Error('HMM inference timestamp must be finite');
+      if (!this.canPredictAt(timestamp)) throw new Error('HMM inference timestamp is inside the model training range');
       if (this.lastInferenceTimestamp !== undefined && timestamp < this.lastInferenceTimestamp) {
         throw new Error('HMM inference observations must be chronological');
       }
