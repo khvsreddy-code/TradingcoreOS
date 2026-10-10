@@ -335,7 +335,12 @@ export class CoreSpiritWorkerPool {
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
     const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
-    for(const binding of hmmArtifacts ?? [])hmmModels.set(binding.modelAlias,CoreSpiritGaussianHMM.fromTrainedState(binding.state));
+    for(const binding of hmmArtifacts ?? []){
+      if(!Number.isFinite(binding.trainingEndTimestampMs))throw new Error('Invalid CoreSpirit HMM training cutoff');
+      const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+      model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
+      hmmModels.set(binding.modelAlias,model);
+    }
     const runtime=new CoreSpiritRuntime({
       sourceId,
       dataResolver:graphSnapshot?createGraphResolver(graphSnapshot,graphBaseSymbol,graphBaseTimeframe):undefined,
