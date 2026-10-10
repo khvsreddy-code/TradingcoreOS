@@ -268,6 +268,16 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     return fail(res, 400, 'trainingParameters must be an object.');
   }
   const trainingParameters = (rawParameters ?? {}) as Record<string, string | number | boolean | null>;
+  if (trainingParameters.fitIterations !== undefined &&
+      (typeof trainingParameters.fitIterations !== 'number' || !Number.isInteger(trainingParameters.fitIterations) ||
+       trainingParameters.fitIterations < 1 || trainingParameters.fitIterations > 6)) {
+    return fail(res, 400, 'fitIterations must be an integer from 1 to 6.');
+  }
+  if (trainingParameters.fitEvery !== undefined &&
+      (typeof trainingParameters.fitEvery !== 'number' || !Number.isInteger(trainingParameters.fitEvery) ||
+       trainingParameters.fitEvery < 1 || trainingParameters.fitEvery > 64)) {
+    return fail(res, 400, 'fitEvery must be an integer from 1 to 64.');
+  }
   for (const [key, value] of Object.entries(trainingParameters)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) ||
         !(value === null || typeof value === 'string' || typeof value === 'boolean' ||
@@ -287,6 +297,10 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     }
     if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
       return fail(res, 422, 'No training backend is registered for this model family.');
+    }
+    if (!Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12 ||
+        rows.length < Math.max(12, graph.states * 4)) {
+      return fail(res, 422, 'This HMM configuration needs at least max(12, states × 4) historical rows.');
     }
     const datasetVersion = await coreSpiritSha256({ featureNames, rows, trainingRange: range });
     const snapshot = await repository.putDatasetSnapshot({
