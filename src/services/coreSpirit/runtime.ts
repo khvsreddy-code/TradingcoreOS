@@ -907,10 +907,11 @@ export class CoreSpiritRuntime {
       emission: declaration.emission ?? 'gaussian' as const,
       covariance: declaration.covariance ?? 'full' as const,
     };
-    const signature = JSON.stringify(options);
+    const signature = JSON.stringify({ ...options, stateLabels: declaration.stateLabels ?? null });
     const cached = this.hmmModels.get(modelName);
     if (cached?.signature === signature) return cached.model;
     const model = new CoreSpiritGaussianHMM(options);
+    if (declaration.stateLabels) model.setStateLabels(declaration.stateLabels);
     this.hmmModels.set(modelName, { signature, model });
     return model;
   }
