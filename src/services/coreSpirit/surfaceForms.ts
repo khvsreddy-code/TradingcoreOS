@@ -278,6 +278,7 @@ function lowerCoreSpiritInlineFunctions(source: string): string {
     const header = headerLines.join('\n').match(/^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([\s\S]*)\)\s*(?:->\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?))?\s*\{\s*$/);
     if (!header) throw new Error('Invalid CoreScript fn declaration; expected fn name(arguments) -> type {');
     const name = header[1]!;
+    if (!header[3]) throw new Error("CoreScript function '" + name + "' must declare a return type after ->");
     if (functions.has(name)) throw new Error("Duplicate CoreScript function '" + name + "'");
     const params = splitTopLevel(header[2] ?? '').filter(item => item.trim()).map(item => {
       const part = item.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)$/);
@@ -407,7 +408,7 @@ function lowerCoreSpiritInlineFunctions(source: string): string {
           if (close < 0) throw new Error("Unclosed call to CoreScript function '" + identifier + "'");
           const args = splitTopLevel(text.slice(open + 1, close));
           if (args.length !== definition.params.length) throw new Error("Function '" + identifier + "' expects " + definition.params.length + ' arguments; received ' + args.length);
-          const bindings = new Map(definition.params.map((param, index) => [param, args[index]!.trim()]));
+          const bindings = new Map<string, string>(definition.params.map((param, index) => [param, args[index]!.trim()] as const));
           const expandedBody = substitute(definition.body, bindings);
           result += '(' + expandCalls(expandedBody, [...stack, identifier], depth + 1) + ')';
           i = close + 1;
