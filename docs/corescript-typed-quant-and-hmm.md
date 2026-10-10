@@ -8,7 +8,7 @@ CoreScript's quant layer keeps the distinction between a scalar, a bar-aligned s
 let scalarValue: float = 1.25;
 let closingPrices: series<float> = close;
 let longCondition: series<bool> = close > ema(close, 20);
-let modelState: state<float> = 0.0;
+let modelState: state<float> = 0.0; // persistent scalar cell, distinct from a series
 let covariance: matrix<float> = identity(3);
 let featureVector: vector<float> = vector(0.2, 0.4, 1.1);
 let weights: tensor<float> = tensor(vector(2, 2), 1.0, 0.0, 0.0, 1.0);
