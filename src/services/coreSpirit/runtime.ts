@@ -951,13 +951,14 @@ export class CoreSpiritRuntime {
         if (!row || row.kind !== 'dataset') {
           throw new Error('Loaded HMM artifacts require a dataset<float> feature row for inference.');
         }
-        const predictionKey = 'hmm-artifact-prediction|' + modelName + '|' +
-          this.toEpoch(bar.timestamp) + '|' + JSON.stringify(row.fields) + '|' + JSON.stringify(row.values);
-        let prediction = this.indicatorMemo.get(predictionKey) as ReturnType<CoreSpiritGaussianHMM['predict']> | undefined;
-        if (!prediction) {
-          prediction = artifactModel.predict(row.values as readonly number[], row.fields, this.toEpoch(bar.timestamp));
-          this.indicatorMemo.set(predictionKey, prediction);
-        }
+        // predict() is timestamp-aware: repeated calls for the same developing bar
+        // roll back to the prior posterior before recomputing, so a revised candle
+        // never gets counted twice and no stale feature-value memo can leak state.
+        const prediction = artifactModel.predict(
+          row.values as readonly number[],
+          row.fields,
+          this.toEpoch(bar.timestamp),
+        );
         if (name === 'hmmDecode') return finish(prediction.state);
         if (name === 'hmmProbability') return finish(prediction.confidence);
         return finish(Object.freeze({
