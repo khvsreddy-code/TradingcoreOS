@@ -64,7 +64,18 @@ The single-step inference API takes a model SHA-256, a feature vector and an epo
 { "timestamp": 1767225900000, "features": [-0.003, 0.014] }
 ~~~
 
-The inference handle exposes only prediction, verifies the stored artifact hash before execution and does not expose training methods. For chart use, fetch the artifact once with GET /api/corespirit/models/:hash, then use fetchCoreSpiritHMMArtifact from src/services/coreSpirit/modelArtifactClient.ts to verify and hydrate a per-runtime HMM instance. Pass its createRuntimeResolver() result as hmmArtifactResolver when constructing CoreSpiritRuntime. Do not fetch the artifact or call the single-step API for every candle; that would add network latency to the hot path. Developing-bar revisions are handled by rolling the HMM posterior back to the state before that timestamp and recomputing the prediction, rather than conditioning twice on a revised candle.
+The inference handle exposes only prediction, verifies the stored artifact hash before execution and does not expose training methods. For chart use, fetch the artifact once with GET /api/corespirit/models/:hash, then use fetchCoreSpiritHMMArtifact from src/services/coreSpirit/modelArtifactClient.ts to verify and hydrate a per-runtime HMM instance. For the persistent web-worker chart path, pass the binding once when the model is selected:
+
+~~~ts
+const loaded = await fetchCoreSpiritHMMArtifact(modelHash, session.access_token);
+await runCoreSpiritInWorker(source, bars, sourceId, {
+  contextKey: chartContextKey,
+  datasetVersion,
+  hmmArtifacts: [loaded.toWorkerBinding()],
+});
+~~~
+
+The worker installs the immutable model snapshot in its existing runtime and updates it only when the model binding changes. It does not fetch an artifact or call the single-step API for every candle; that would add network latency to the hot path. Developing-bar revisions are handled by rolling the HMM posterior back to the state before that timestamp and recomputing the prediction, rather than conditioning twice on a revised candle.
 
 ## Operational requirements
 
