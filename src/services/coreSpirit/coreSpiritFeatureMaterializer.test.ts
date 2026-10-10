@@ -28,7 +28,7 @@ const shorthandSource = [
   '  atr20',
   '  volumeZ',
   '}',
-].join('\\n');
+].join('\n');
 const shorthandDefinitions = extractCoreSpiritFeatureDefinitions(shorthandSource);
 assert(shorthandDefinitions.length === 4 &&
   shorthandDefinitions.every((definition, index) => definition.name === ['ret1', 'ret5', 'atr20', 'volumeZ'][index] &&
