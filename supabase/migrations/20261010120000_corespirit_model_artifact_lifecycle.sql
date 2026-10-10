@@ -51,7 +51,8 @@ create table if not exists public.corespirit_training_runs (
   metrics jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   started_at timestamptz,
-  completed_at timestamptz
+  completed_at timestamptz,
+  updated_at timestamptz not null default now()
 );
 create index if not exists corespirit_training_owner_created_idx
   on public.corespirit_training_runs(owner_user_id, created_at desc);
