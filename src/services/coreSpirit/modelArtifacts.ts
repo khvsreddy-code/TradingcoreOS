@@ -10,6 +10,8 @@ export const CORESPIRIT_RESEARCH_ARTIFACT_VERSION = '1';
 export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '1';
 
 export type TrainingRange = Readonly<{ from: string; to: string }>;
+export type CoreSpiritDatasetSource = 'fyers-history' | 'provided-ohlcv' | 'precomputed-features';
+export type CoreSpiritDatasetRow = Readonly<{ timestamp: number; values: readonly number[] }>;
 export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
 
 export type ModelProvenance = Readonly<{
@@ -165,6 +167,54 @@ function validateDateRange(range: TrainingRange): void {
   if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
     throw new Error('Training range must contain valid dates with from < to');
   }
+}
+
+/**
+ * Canonical content identity for an immutable research dataset. Keep this in
+ * one place so API enqueue and worker verification cannot drift apart.
+ */
+export async function coreSpiritDatasetVersion(input: Readonly<{
+  datasetName: string;
+  datasetSource: CoreSpiritDatasetSource;
+  featureNames: readonly string[];
+  rows: readonly CoreSpiritDatasetRow[];
+  trainingRange: TrainingRange;
+}>): Promise<string> {
+  const datasetName = input.datasetName.trim();
+  const sources: readonly CoreSpiritDatasetSource[] = ['fyers-history', 'provided-ohlcv', 'precomputed-features'];
+  if (!datasetName || datasetName.length > 120 || !sources.includes(input.datasetSource)) {
+    throw new Error('Dataset identity requires a name and a supported source');
+  }
+  if (input.featureNames.length < 1 || input.featureNames.length > 16 ||
+      input.featureNames.some(name => typeof name !== 'string' || !name.trim()) ||
+      new Set(input.featureNames).size !== input.featureNames.length) {
+    throw new Error('Dataset identity requires 1–16 unique named features');
+  }
+  if (input.rows.length < 12 || input.rows.length > 1024) {
+    throw new Error('Dataset identity requires 12–1,024 observations');
+  }
+  validateDateRange(input.trainingRange);
+  const from = Date.parse(input.trainingRange.from);
+  const dateOnlyTo = /^\d{4}-\d{2}-\d{2}$/.test(input.trainingRange.to);
+  const to = Date.parse(input.trainingRange.to) + (dateOnlyTo ? 86_399_999 : 0);
+  let previous = Number.NEGATIVE_INFINITY;
+  const rows = input.rows.map((row, index) => {
+    if (!Number.isFinite(row.timestamp) || row.timestamp < from || row.timestamp > to ||
+        row.values.length !== input.featureNames.length ||
+        row.values.some(value => !Number.isFinite(value))) {
+      throw new Error('Dataset row ' + index + ' is outside the range or does not match the finite feature schema');
+    }
+    if (row.timestamp <= previous) throw new Error('Dataset rows must be strictly chronological with no duplicate timestamps');
+    previous = row.timestamp;
+    return { timestamp: row.timestamp, values: [...row.values] };
+  });
+  return coreSpiritSha256({
+    datasetName,
+    datasetSource: input.datasetSource,
+    featureNames: [...input.featureNames],
+    rows,
+    trainingRange: { from: input.trainingRange.from, to: input.trainingRange.to },
+  });
 }
 
 function validateProvenance(provenance: ModelProvenance): void {
