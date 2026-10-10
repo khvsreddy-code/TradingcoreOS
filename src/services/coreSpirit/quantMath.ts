@@ -8,7 +8,7 @@
 export type CoreSpiritVector = Readonly<{ kind: 'vector'; length: number; data: Float64Array }>;
 export type CoreSpiritDenseMatrix = Readonly<{ kind: 'matrix'; rows: number; columns: number; data: Float64Array }>;
 export type CoreSpiritDenseTensor = Readonly<{ kind: 'tensor'; shape: readonly number[]; data: Float64Array }>;
-export type CoreSpiritDatasetRow = Readonly<{ kind: 'dataset'; fields: readonly string[]; values: readonly number[] }>;
+export type CoreSpiritDatasetRow = Readonly<{ kind: 'dataset'; fields: readonly string[]; values: readonly (number | null)[] }>;
 
 const MAX_MATRIX_CELLS = 65_536;
 const MAX_VECTOR_LENGTH = 16_384;
@@ -147,10 +147,11 @@ export function coreSpiritDataset(...values: unknown[]): CoreSpiritDatasetRow {
   const seen = new Set<string>();
   for (let i = 0; i < values.length; i += 2) {
     const field = String(values[i] ?? '').trim();
-    const value = Number(values[i + 1]);
+    const rawValue = values[i + 1];
+    const value = rawValue == null ? null : Number(rawValue);
     if (!field) throw new Error('dataset field names cannot be empty');
-    if (seen.has(field)) throw new Error(\`dataset contains duplicate field '${field}'\`);
-    if (!Number.isFinite(value)) throw new Error(\`dataset field '${field}' must be a finite number\`);
+    if (seen.has(field)) throw new Error(\`dataset contains duplicate field '\${field}'\`);
+    if (value !== null && !Number.isFinite(value)) throw new Error(\`dataset field '\${field}' must be numeric or missing during warm-up\`);
     seen.add(field);
     fields.push(field);
     row.push(value);
