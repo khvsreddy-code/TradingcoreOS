@@ -85,12 +85,50 @@ export type ModelInferenceFactory<TWeights, TFeatures, TPrediction> = (
 
 const encoder = new TextEncoder();
 
-function canonical(value: unknown): string {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
-    return JSON.stringify(value);
-  }
+/** Convert supported values to an acyclic, JSON-safe tree before hashing/publishing. */
+function normalizeArtifactValue(value: unknown, ancestors = new WeakSet<object>()): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error('Artifact provenance cannot contain non-finite numbers');
+    if (!Number.isFinite(value)) throw new Error('Artifact payload cannot contain non-finite numbers');
+    return value;
+  }
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+    return Array.from(value as unknown as ArrayLike<unknown>, item => normalizeArtifactValue(item, ancestors));
+  }
+  if (Array.isArray(value)) {
+    if (ancestors.has(value)) throw new Error('Artifact payload cannot contain circular references');
+    ancestors.add(value);
+    const result = value.map(item => normalizeArtifactValue(item, ancestors));
+    ancestors.delete(value);
+    return result;
+  }
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) throw new Error('Artifact payload contains an invalid Date');
+    return value.toISOString();
+  }
+  if (typeof value === 'object' && value !== null) {
+    const object = value as Record<string, unknown>;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error('Artifact payload only supports plain objects, arrays and numeric typed arrays');
+    }
+    if (ancestors.has(value)) throw new Error('Artifact payload cannot contain circular references');
+    ancestors.add(value);
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(object).sort()) {
+      if (object[key] === undefined) throw new Error('Artifact payload cannot contain undefined values');
+      result[key] = normalizeArtifactValue(object[key], ancestors);
+    }
+    ancestors.delete(value);
+    return result;
+  }
+  throw new Error('Artifact payload cannot contain ' + typeof value);
+}
+
+function canonical(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Artifact payload cannot contain non-finite numbers');
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
@@ -98,13 +136,13 @@ function canonical(value: unknown): string {
     const record = value as Record<string, unknown>;
     return '{' + Object.keys(record).sort().map(key => JSON.stringify(key) + ':' + canonical(record[key])).join(',') + '}';
   }
-  throw new Error('Artifact provenance cannot contain ' + typeof value);
+  throw new Error('Artifact payload cannot contain ' + typeof value);
 }
 
 /** Stable SHA-256 of canonical JSON; fails closed where WebCrypto is unavailable. */
 export async function coreSpiritSha256(value: unknown): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error('SHA-256 requires WebCrypto; refusing to create an unhashed model artifact');
-  const bytes = await globalThis.crypto.subtle.digest('SHA-256', encoder.encode(canonical(value)));
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', encoder.encode(canonical(normalizeArtifactValue(value))));
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -129,8 +167,8 @@ function validateProvenance(provenance: ModelProvenance): void {
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    Object.freeze(value);
     for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    Object.freeze(value);
   }
   return value;
 }
@@ -138,8 +176,10 @@ function deepFreeze<T>(value: T): T {
 /** Produces a deterministic research artifact from compiler output, not from a live chart session. */
 export async function createResearchArtifact(input: ResearchCompileInput): Promise<ResearchArtifact> {
   if (!input.name.trim()) throw new Error('Research artifact name is required');
+  const normalizedFeatureGraph = normalizeArtifactValue(input.featureGraph);
+  const normalizedIr = normalizeArtifactValue(input.ir);
   const sourceHash = await coreSpiritSha256(input.source);
-  const featureGraphHash = await coreSpiritSha256(input.featureGraph);
+  const featureGraphHash = await coreSpiritSha256(normalizedFeatureGraph);
   return deepFreeze({
     kind: 'corespirit-research',
     schemaVersion: CORESPIRIT_RESEARCH_ARTIFACT_VERSION,
@@ -149,8 +189,8 @@ export async function createResearchArtifact(input: ResearchCompileInput): Promi
     compilerVersion: input.compilerVersion,
     irVersion: input.irVersion,
     featureGraphHash,
-    featureGraph: input.featureGraph,
-    ir: input.ir,
+    featureGraph: normalizedFeatureGraph,
+    ir: normalizedIr,
     createdAt: input.createdAt ?? new Date().toISOString(),
   });
 }
@@ -166,7 +206,9 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
       input.provenance.featureGraphHash !== input.research.featureGraphHash) {
     throw new Error('Model provenance does not match research compiler/IR/feature graph metadata');
   }
-  const metrics = input.metrics ?? {};
+  const provenance = normalizeArtifactValue(input.provenance) as ModelProvenance;
+  const weights = normalizeArtifactValue(input.weights) as TWeights;
+  const metrics = normalizeArtifactValue(input.metrics ?? {}) as Readonly<Record<string, number>>;
   for (const [key, value] of Object.entries(metrics)) {
     if (!Number.isFinite(value)) throw new Error('Model metric "' + key + '" must be finite');
   }
@@ -174,18 +216,17 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
   const hash = await coreSpiritSha256({
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
     name: input.research.name,
-    provenance: input.provenance,
-    weights: input.weights,
+    provenance,
+    weights,
     metrics,
-    createdAt,
   });
   return deepFreeze({
     kind: 'corespirit-model',
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
     name: input.research.name,
     hash,
-    provenance: input.provenance,
-    weights: input.weights,
+    provenance,
+    weights,
     metrics,
     createdAt,
   });
@@ -233,7 +274,6 @@ export async function verifyModelArtifactIntegrity<TWeights>(artifact: ModelArti
     provenance: artifact.provenance,
     weights: artifact.weights,
     metrics: artifact.metrics,
-    createdAt: artifact.createdAt,
   });
   return expectedHash === artifact.hash;
 }
@@ -248,15 +288,9 @@ export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
     ? await store.getByHash(nameOrHash)
     : await store.getByName(nameOrHash);
   if (!artifact) throw new Error('Model artifact "' + nameOrHash + '" was not found');
-  const expectedHash = await coreSpiritSha256({
-    schemaVersion: artifact.schemaVersion,
-    name: artifact.name,
-    provenance: artifact.provenance,
-    weights: artifact.weights,
-    metrics: artifact.metrics,
-    createdAt: artifact.createdAt,
-  });
-  if (expectedHash !== artifact.hash) throw new Error('Model artifact integrity check failed for "' + artifact.name + '"');
+  if (!(await verifyModelArtifactIntegrity(artifact))) {
+    throw new Error('Model artifact integrity check failed for "' + artifact.name + '"');
+  }
   const inference = createInference(artifact);
   return Object.freeze({
     artifactHash: artifact.hash,
