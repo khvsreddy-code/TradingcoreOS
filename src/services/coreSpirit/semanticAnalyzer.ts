@@ -165,7 +165,6 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         const builtin=CORE_SPIRIT_BUILTINS.get(n.name);
         const isMatrix = (type:CoreSpiritType) => type.startsWith('matrix<');
         const isVector = (type:CoreSpiritType) => type.startsWith('vector<');
-        const isTensor = (type:CoreSpiritType) => type.startsWith('tensor<');
         if (['matmul','matrixAdd'].includes(n.name) && argTypes.some(type => !isMatrix(type))) {
           report(n, `${n.name} expects two matrix<float> operands; use vector/matrix constructors before linear algebra`, 'TYPE_MATRIX_OPERAND');
         }
@@ -370,7 +369,7 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
         if(n.name==='hmmFit') return semanticScalar('number',{valueKind:'observed'});
         if(n.name==='hmmDecode') return semanticScalar('number',{valueKind:'prediction'});
         if(n.name==='hmmProbability') return semanticScalar('number',{unit:'probability',scale:'percent',valueKind:'probability'});
-        if(n.name==='hmmPosterior') return semanticScalar('number',{valueKind:'distribution'});
+        if(n.name==='hmmPosterior') return semanticScalar('number',{container:'distribution',valueKind:'distribution'});
         if(n.name==='market') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:n.args[0]?.type==='string'?String(n.args[0].value):'current',timeframe:'chart'});
         if(n.name==='timeframe' || n.name==='series') return semanticScalar('market',{valueKind:'observed',phase:'developing',causal:true,lookahead:false,lookback:0,symbol:'current',timeframe:n.args[0]?.type==='string'?String(n.args[0].value):'requested'});
         if(n.name==='bar_index') return semanticScalar('number',{phase:'developing',causal:true,lookahead:false,lookback:0});
