@@ -224,6 +224,10 @@ export function compatible(expected: CoreSpiritType, actual: CoreSpiritType): bo
   if (expected === 'signal-intent' && actual === 'signal-intent') return true;
   if (expected === 'order-intent' && actual === 'order-intent') return true;
   if (expected.startsWith('order<') && actual.startsWith('order<')) return expected === actual || expected === 'order<number>' || actual === 'order<number>';
+  // A state cell is stored as its element value, but its variable type remains state<T>.
+  if (isStateType(expected) && !isStateType(actual) && !isSeriesType(actual) && !isWindowType(actual)) {
+    return compatible(elementType(expected), actual);
+  }
   if (expected === 'number') return isNumericScalarType(actual) || actual === 'probability';
   if (expected === 'probability') return actual === 'probability' || actual === 'number';
   if (expected === 'float') return actual === 'int' || actual === 'float' || actual === 'number';
