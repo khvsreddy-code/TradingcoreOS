@@ -128,7 +128,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   const states = Number(declaration.states ?? 3);
   if (!Number.isInteger(states) || states < 2 || states > 12) return fail(res, 422, 'HMM states must be between 2 and 12.');
 
-  const featureGraph = {
+  const featureGraphBase = {
     version: 1,
     featureNames,
     modelName: declaration.name,
@@ -137,7 +137,7 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     covariance: declaration.covariance ?? 'full',
   };
   try {
-    featureGraph.executionPlanHash = await coreSpiritSha256(compiled.ir);
+    const featureGraph = { ...featureGraphBase, executionPlanHash: await coreSpiritSha256(compiled.ir) };
     const research = await createResearchArtifact({
       name,
       source,
