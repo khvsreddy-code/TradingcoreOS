@@ -74,7 +74,6 @@ export function parseCoreSpiritModelLifecycleSurface(source: string): CoreSpirit
       training = {
         modelName: validName(trainMatch[1]!, 'Training model name'),
         datasetName: unquote(trainMatch[2]!),
-        
         ...(trainMatch[3] ? { from: unquote(trainMatch[3]) } : {}),
         ...(trainMatch[4] ? { to: unquote(trainMatch[4]) } : {}),
       };
