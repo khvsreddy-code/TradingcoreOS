@@ -219,7 +219,7 @@ export class CoreSpiritWorkerPool {
     const artifactId=artifactIdFor(job.artifact);
     const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId;
     const graphChanged=!!job.graphSnapshot && this.contextGraphRevisions.get(job.contextKey)!==job.graphSnapshot.revision;
-    const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias).sort().join('|');
+    const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias+':'+(binding.artifactName ?? '')).sort().join('|');
     const hmmArtifactsChanged=job.hmmArtifacts!==undefined && this.contextHMMArtifacts.get(job.contextKey)!==hmmSignature;
     const sendArtifact=artifactChanged ? {
       type:'loadArtifact' as const,
