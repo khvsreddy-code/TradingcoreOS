@@ -33,11 +33,24 @@ assert(Boolean(valid.ir), 'scalar, series, model-output and probability declarat
 const explicitAlgebra = compileCoreSpirit([
   'let a: matrix<float> = matrix(2, 2, 1, 0, 0, 1);',
   'let b: matrix<float> = identity(2);',
-  'let product: matrix<float> = matmul(a, b);',
+  'fn multiply(',
+  '  left: matrix<float>,',
+  '  right: matrix<float>',
+  ') -> matrix<float> {',
+  '  return matmul(left, right);',
+  '}',
+  'let product: matrix<float> = multiply(a, b);',
   'let vectorA: vector<float> = vector(1, 2, 3);',
   'let normSquared: float = dot(vectorA, vectorA);',
 ].join('\n'), 'typed-quant-algebra-valid', { layer: 'model' });
 assert(Boolean(explicitAlgebra.ir), 'explicit shaped constructors and linear algebra should compile: ' + explicitAlgebra.diagnostics.map(item => item.message).join('; '));
+
+const invalidSeriesAssignment = compileCoreSpirit([
+  'let notASeries: series<float> = 2;',
+].join('\n'), 'typed-quant-no-scalar-to-series', { layer: 'model' });
+assert(!invalidSeriesAssignment.ir, 'a scalar must not be assigned to series<float>');
+assert(invalidSeriesAssignment.diagnostics.some(item => item.code === 'TYPE_DECLARATION' || item.code === 'TYPE_ASSIGNMENT' || /series/.test(item.message)),
+  'scalar-to-series mismatch should produce a declaration diagnostic');
 
 const invalidBroadcast = compileCoreSpirit([
   'let a: matrix<float> = identity(2);',
