@@ -62,8 +62,66 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     return data ? data.artifact as ResearchArtifact : null;
   }
 
+  async putDatasetSnapshot(input: {
+    datasetVersion: string;
+    featureNames: readonly string[];
+    trainingRange: Readonly<{ from: string; to: string }>;
+    rows: readonly Readonly<{ timestamp: number; values: readonly number[] }>[];
+  }): Promise<{ id: string; datasetVersion: string; rowCount: number }> {
+    const { data, error } = await this.db.from('corespirit_dataset_snapshots')
+      .upsert({
+        owner_user_id: this.ownerUserId,
+        dataset_hash: input.datasetVersion,
+        feature_names: input.featureNames,
+        training_range: input.trainingRange,
+        row_count: input.rows.length,
+        rows: input.rows,
+      }, { onConflict: 'owner_user_id,dataset_hash', ignoreDuplicates: true })
+      .select('id,dataset_hash,row_count')
+      .maybeSingle();
+    if (error) throw new Error('Unable to persist immutable CoreSpirit dataset snapshot: ' + error.message);
+    if (data) return { id: String(data.id), datasetVersion: String(data.dataset_hash), rowCount: Number(data.row_count) };
+
+    const existing = await this.db.from('corespirit_dataset_snapshots')
+      .select('id,dataset_hash,row_count')
+      .eq('owner_user_id', this.ownerUserId)
+      .eq('dataset_hash', input.datasetVersion)
+      .maybeSingle();
+    if (existing.error || !existing.data) {
+      throw new Error('Dataset snapshot insert was not confirmed' + (existing.error ? ': ' + existing.error.message : ''));
+    }
+    return { id: String(existing.data.id), datasetVersion: String(existing.data.dataset_hash), rowCount: Number(existing.data.row_count) };
+  }
+
+  async getDatasetSnapshot(id: string): Promise<{
+    id: string;
+    datasetVersion: string;
+    featureNames: string[];
+    trainingRange: { from: string; to: string };
+    rows: Array<{ timestamp: number; values: number[] }>;
+  } | null> {
+    const { data, error } = await this.db.from('corespirit_dataset_snapshots')
+      .select('id,dataset_hash,feature_names,training_range,rows,row_count')
+      .eq('id', id)
+      .eq('owner_user_id', this.ownerUserId)
+      .maybeSingle();
+    if (error) throw new Error('Unable to load immutable CoreSpirit dataset snapshot: ' + error.message);
+    if (!data) return null;
+    if (!Array.isArray(data.rows) || data.rows.length !== Number(data.row_count)) {
+      throw new Error('Stored CoreSpirit dataset snapshot failed its row-count integrity check');
+    }
+    return {
+      id: String(data.id),
+      datasetVersion: String(data.dataset_hash),
+      featureNames: data.feature_names as string[],
+      trainingRange: data.training_range as { from: string; to: string },
+      rows: data.rows as Array<{ timestamp: number; values: number[] }>,
+    };
+  }
+
   async createTrainingRun(input: {
     researchArtifactId: string;
+    datasetSnapshotId: string;
     datasetVersion: string;
     datasetRowCount: number;
     featureNames: readonly string[];
@@ -74,6 +132,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     const { data, error } = await this.db.from('corespirit_training_runs').insert({
       owner_user_id: this.ownerUserId,
       research_artifact_id: input.researchArtifactId,
+      dataset_snapshot_id: input.datasetSnapshotId,
       dataset_version: input.datasetVersion,
       dataset_row_count: input.datasetRowCount,
       feature_names: input.featureNames,
