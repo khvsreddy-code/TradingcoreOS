@@ -40,6 +40,19 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
   const report=(n:CoreSpiritAstNode,message:string,code:string)=>diagnostics.push({
     severity:'error',message,line:n.span?.line,column:n.span?.column,start:n.span?.start,end:n.span?.end,code
   });
+  for (const declaration of modelDeclarations) {
+    if (declaration.kind !== 'model' || !declaration.modelType || !/^HMM(?:<.*>)?$/i.test(declaration.modelType)) continue;
+    if (declaration.states !== undefined &&
+        (!Number.isInteger(declaration.states) || declaration.states < 2 || declaration.states > 12)) {
+      diagnostics.push({ severity:'error', message:'HMM states must be an integer between 2 and 12', code:'TYPE_HMM_STATES' });
+    }
+    if (declaration.unsupportedEmission) {
+      diagnostics.push({ severity:'error', message:"Unsupported HMM emission '" + declaration.unsupportedEmission + "'; currently use emission = gaussian", code:'TYPE_HMM_EMISSION' });
+    }
+    if (declaration.unsupportedCovariance) {
+      diagnostics.push({ severity:'error', message:"Unsupported HMM covariance '" + declaration.unsupportedCovariance + "'; use full or diagonal", code:'TYPE_HMM_COVARIANCE' });
+    }
+  }
 
   const mapDeclaredType=(name:string):CoreSpiritType=> normalizeDeclaredType(name);
 
