@@ -178,6 +178,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       dependencyVersions: {
         corespiritCompiler: research.compilerVersion,
         corespiritIr: research.irVersion,
+        node: process.version,
       },
     };
     const artifact = await sealModelArtifact({
