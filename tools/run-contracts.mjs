@@ -34,6 +34,7 @@ const contracts = [
   ['semantic-series-type', ['src/coreSpiritSemanticSeriesTypeContract.test.mjs', false]],
   ['semantic-series-type-runtime', ['src/services/coreSpirit/semanticSeriesTypeRuntime.test.ts', true]],
   ['corescript-typed-quant-values-and-hmm', ['src/services/coreSpirit/typedQuantAndHmm.test.ts', true]],
+  ['corespirit-model-artifact-provenance', ['src/services/coreSpirit/modelArtifacts.test.ts', true]],
   ['artifact-hygiene', ['src/generatedArtifactHygieneContract.test.mjs', false]],
   ['routes', ['src/routeContract.test.mjs', false]],
   ['indicator-dependency-graph', ['src/indicatorDependencyGraphContract.test.mjs', false]],
