@@ -2,7 +2,7 @@ import {
   verifyModelArtifactIntegrity,
   type ModelArtifact,
 } from './modelArtifacts.js';
-import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from './quantMath.js';
+import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState, type CoreSpiritHMMArtifactBinding } from './quantMath.js';
 import type { CoreSpiritHMMArtifactResolver } from './runtime.js';
 
 type GaussianHMMWeights = Readonly<{
@@ -17,6 +17,7 @@ export type LoadedCoreSpiritHMMArtifact = Readonly<{
   artifactName: string;
   modelAlias: string;
   featureNames: readonly string[];
+  toWorkerBinding: () => CoreSpiritHMMArtifactBinding;
   createRuntimeResolver: () => CoreSpiritHMMArtifactResolver;
 }>;
 
@@ -69,6 +70,7 @@ export async function fetchCoreSpiritHMMArtifact(
     artifactName: artifact.name,
     modelAlias,
     featureNames,
+    toWorkerBinding: () => Object.freeze({ artifactHash: artifact.hash, modelAlias, state: hmmState }),
     createRuntimeResolver: () => {
       // A new mutable posterior state per runtime; learned parameters remain sealed.
       const model = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
