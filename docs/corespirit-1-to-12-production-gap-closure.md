@@ -36,7 +36,7 @@ Research compilation:
 ~~~json
 {
   "name": "nifty-regime-v7",
-  "source": "model regime: HMM<float> {\n  states = 3\n  emission = gaussian\n  covariance = diagonal\n}\nfeatures = dataset(\"returns\", 0.1, \"volatility\", 0.2)\nstate = hmmDecode(\"regime\", features)",
+  "source": "model regime: HMM<float> {\n  states = 3\n  emission = gaussian\n  covariance = diagonal\n}\nfeatures = dataset(\"returns\", pctchange(close), \"volatility\", atr(20))\nstate = hmmDecode(\"regime\", features)",
   "featureNames": ["returns", "volatility"]
 }
 ~~~
