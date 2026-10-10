@@ -35,7 +35,7 @@ const DAY_MS = 86_400_000;
 const MAX_INPUT_BARS = 10_000;
 // The feature materializer supports at most 512 bars of lookback and the
 // current HMM trainer accepts at most 1,024 usable observations.
-const MAX_IN_RANGE_BARS_BEFORE_WARMUP = 1_536;
+const MAX_IN_RANGE_BARS_BEFORE_WARMUP = 1_535;
 const MAX_HISTORY_WINDOWS = 64;
 
 const TIMEFRAMES: Record<string, Omit<CoreSpiritMarketDataset, 'name' | 'symbol'>> = {
