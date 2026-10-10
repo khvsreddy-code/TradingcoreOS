@@ -212,6 +212,12 @@ export type CoreSpiritGaussianHMMState = Readonly<{
   latestPosterior: readonly number[];
 }>;
 
+export type CoreSpiritHMMArtifactBinding = Readonly<{
+  artifactHash: string;
+  modelAlias: string;
+  state: CoreSpiritGaussianHMMState;
+}>;
+
 const EPSILON = 1e-8;
 
 function logSumExp(values: readonly number[]): number {
