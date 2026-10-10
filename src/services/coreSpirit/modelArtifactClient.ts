@@ -125,7 +125,9 @@ export async function prepareCoreSpiritLiveInference(
     throw new Error('Live model inference source must declare model = loadModel("artifact-name").');
   }
   const featureNames = extractCoreSpiritFeatureDefinitions(source).map(definition => definition.name);
-  const loaded = await fetchCoreSpiritHMMArtifactByName(plan.loadModelName, accessToken, fetcher);
+  const loaded = /^[a-f0-9]{64}$/i.test(plan.loadModelName)
+    ? await fetchCoreSpiritHMMArtifact(plan.loadModelName, accessToken, fetcher)
+    : await fetchCoreSpiritHMMArtifactByName(plan.loadModelName, accessToken, fetcher);
   if (featureNames.length !== loaded.featureNames.length ||
       featureNames.some((name, index) => name !== loaded.featureNames[index])) {
     throw new Error('CoreScript feature names/order do not match the sealed model artifact schema.');
