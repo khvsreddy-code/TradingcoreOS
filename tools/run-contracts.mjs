@@ -36,6 +36,7 @@ const contracts = [
   ['corescript-typed-quant-values-and-hmm', ['src/services/coreSpirit/typedQuantAndHmm.test.ts', true]],
   ['corespirit-model-artifact-provenance', ['src/services/coreSpirit/modelArtifacts.test.ts', true]],
   ['corespirit-numerical-kernels', ['src/services/coreSpirit/numericalKernelsContract.test.mjs', true]],
+  ['corespirit-multibackend-kernel-executor', ['src/services/coreSpirit/multiBackendKernelExecutorContract.test.mjs', true]],
   ['corespirit-multibackend-capabilities', ['src/services/coreSpirit/backendRegistryContract.test.mjs', true]],
   ['corespirit-multibackend-execution-planner', ['src/services/coreSpirit/backendPlannerIntegrationContract.test.mjs', true]],
   ['corespirit-model-lifecycle-training-inference', ['src/services/coreSpirit/modelLifecycle.test.ts', true]],
