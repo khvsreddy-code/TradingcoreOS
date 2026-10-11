@@ -913,6 +913,23 @@ export class CoreSpiritRuntime {
     if (!Number.isInteger(offset) || offset < 0) throw new Error(`future indexing is not allowed for ${name}[${offset}]`);
     if (offset > barIndex) return null;
     const sourceIndex = barIndex - offset;
+
+    // Persistent worker contexts read series directly from shared MarketFrame
+    // columns, avoiding a second object/column lookup for every quant feature.
+    const frame=this.marketFrameResolver?.();
+    if(frame && sourceIndex<frame.length){
+      const column=name==='time'?frame.time:
+        name==='open'?frame.open:
+        name==='high'?frame.high:
+        name==='low'?frame.low:
+        name==='close'?frame.close:
+        name==='volume'?frame.volume:undefined;
+      if(column){
+        const value=column[sourceIndex];
+        return value!=null && Number.isFinite(value)?value:null;
+      }
+    }
+
     const columnar = this.columnarHistory.valueAt(name, sourceIndex);
     if (columnar != null) return columnar;
     const source = bars[sourceIndex]; if (!source) return null;
