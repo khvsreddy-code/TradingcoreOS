@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict';
-import { compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { planCoreSpiritExecution } from './executionPlanner.ts';
 import { createCoreSpiritBackendRegistry } from './backendRegistry.ts';
 
-const source = `
-indicator "Historical SMA"
-average = sma(close, 20)
-plot average
-`;
-const compiled = compileCoreSpirit(source, 'backend-planner-integration', { layer: 'indicator' });
-assert.ok(compiled.ir, compiled.diagnostics.map(item => item.message).join('; '));
+// Exercise the actual Core IR planner boundary directly. The frontend/compiler
+// already produces this same call instruction shape; avoiding a full parser here
+// keeps this contract focused on backend planning rather than grammar fixtures.
+const program = {
+  version: 1,
+  sourceId: 'backend-planner-integration',
+  entry: { instructions: [{ op: 'call', dest: 'average', name: 'sma', args: ['close', 'period'] }] },
+  locals: ['average'],
+  maxLookback: 20,
+  diagnostics: [],
+  sourceMap: { version: 1, sourceId: 'backend-planner-integration', entries: [] },
+};
 
-assert.throws(() => planCoreSpiritExecution(compiled.ir!, { maxBatchSize: 0 }), /maxBatchSize must be positive/);
-assert.throws(() => planCoreSpiritExecution(compiled.ir!, { minWasmWorkUnits: 2.5 }), /minWasmWorkUnits must be positive/);
+assert.throws(() => planCoreSpiritExecution(program, { maxBatchSize: 0 }), /maxBatchSize must be positive/);
+assert.throws(() => planCoreSpiritExecution(program, { minWasmWorkUnits: 2.5 }), /minWasmWorkUnits must be positive/);
 
-const live = planCoreSpiritExecution(compiled.ir!, { barCount: 20_000 });
+const live = planCoreSpiritExecution(program, { barCount: 20_000 });
 assert.ok(live.backendCapabilityPlans.some(item => item.operation === 'rollingMean'));
 assert.equal(live.backendCapabilityPlans.find(item => item.operation === 'rollingMean')?.backend, 'cpu-optimized',
   'live defaults remain local even with a large historical-looking bar count');
@@ -22,10 +26,10 @@ assert.equal(live.backendCapabilityPlans.find(item => item.operation === 'rollin
 const wasm = {
   isLoaded: () => true,
   profile: () => ({ backend: 'wasm', available: true, deterministic: true, vectorized: true }),
-  hasKernel: (name: string) => name === 'rollingMean',
-  kernelVariant: (name: string) => name === 'rollingMean' ? 'simd' as const : undefined,
+  hasKernel: (name) => name === 'rollingMean',
+  kernelVariant: (name) => name === 'rollingMean' ? 'simd' : undefined,
 };
-const historical = planCoreSpiritExecution(compiled.ir!, {
+const historical = planCoreSpiritExecution(program, {
   barCount: 20_000,
   backendPurpose: 'historical',
   backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
@@ -35,7 +39,7 @@ assert.equal(smaPlan?.backend, 'wasm-simd', 'historical plans use a registered e
 assert.ok(historical.explanation.some(line => line.includes('kernel rollingMean: planned wasm-simd')));
 assert.notEqual(historical.cacheKey, live.cacheKey, 'cache identity includes execution purpose and backend capability plan');
 
-const boundedBatch = planCoreSpiritExecution(compiled.ir!, {
+const boundedBatch = planCoreSpiritExecution(program, {
   barCount: 5_000_000,
   maxBatchSize: 32_768,
   backendPurpose: 'historical',
@@ -57,7 +61,7 @@ const statelessWithGpu = createCoreSpiritBackendRegistry({
     execute: () => ({ executed: true }),
   },
 });
-const deterministic = planCoreSpiritExecution(compiled.ir!, {
+const deterministic = planCoreSpiritExecution(program, {
   barCount: 2_000_000,
   backendPurpose: 'historical',
   backendRegistry: statelessWithGpu,
