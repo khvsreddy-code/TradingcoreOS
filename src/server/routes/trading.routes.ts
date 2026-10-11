@@ -316,6 +316,30 @@ tradingRoutes.put('/:brokerId/order/:orderId', injectBrokerSession, async (req: 
 });
 
 tradingRoutes.delete('/:brokerId/order/:orderId', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
-  try { const data = await req.brokerAdapter.cancelOrder(req.accessToken, req.params.orderId); res.json({ success: true, data }); }
-  catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Broker rejected order cancellation') }); }
+  const userId = req.tradingCoreUserId!;
+  const brokerId = req.params.brokerId.toLowerCase();
+  const orderId = req.params.orderId;
+  if (brokerId === 'fyers') {
+    try {
+      // Record the cancellation intent before the broker side effect. A 2xx
+      // cancel response means accepted for processing, not necessarily terminal.
+      await FyersOrderStateEngine.recordLifecycle(userId, '', 'CANCEL_PENDING', { brokerOrderId: orderId });
+    } catch (error: unknown) {
+      res.status(503).json({ success: false, error: getErrorMessage(error, 'Unable to persist cancellation intent; cancellation was not submitted.') });
+      return;
+    }
+  }
+  try {
+    const data = await req.brokerAdapter.cancelOrder(req.accessToken, orderId);
+    res.json({ success: true, data });
+  } catch (err: unknown) {
+    if (brokerId === 'fyers') {
+      const status = getErrorStatus(err);
+      const isDefiniteReject = status >= 400 && status < 500 && status !== 408 && status !== 429;
+      await FyersOrderStateEngine.recordLifecycle(userId, '', isDefiniteReject ? 'OPEN' : 'UNKNOWN', {
+        brokerOrderId: orderId, message: getErrorMessage(err, 'Broker rejected order cancellation'),
+      }).catch(() => undefined);
+    }
+    res.status(502).json({ success: false, error: getErrorMessage(err, 'Broker rejected order cancellation') });
+  }
 });
