@@ -80,10 +80,11 @@ async function requestFyersHistory(
   from: string,
   to: string,
   capabilities: ReturnType<typeof resolveFyersCapabilities>,
+  rateLimitIdentity = accessToken,
 ): Promise<any[]> {
   // Use the canonical FYERS client so every History request is admitted by the
   // same plan-specific Data API rate budget as quotes/options/depth.
-  const client = new FyersApiClient(accessToken, undefined, capabilities);
+  const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
   const payload = await client.dataGet<any>('/history', {
     symbol,
     resolution,
@@ -107,6 +108,7 @@ async function fetchFyersHistoryTarget(
   interval: string,
   target: number,
   capabilities: ReturnType<typeof resolveFyersCapabilities>,
+  rateLimitIdentity = accessToken,
 ): Promise<any[]> {
   const secondsMatch = /^(\d+)\s*(?:s|sec|second|seconds)$/i.exec(interval) || /^(\d+)S$/i.exec(interval);
   const secondsInterval = Boolean(secondsMatch);
@@ -133,7 +135,7 @@ async function fetchFyersHistoryTarget(
   for (let lookedBack = 0; end.getTime() > earliest.getTime() && all.length < target && emptyWindows < 2; lookedBack += chunkDays) {
     const start = new Date(Math.max(earliest.getTime(), end.getTime() - chunkDays * 86_400_000));
     try {
-      const rows = await requestFyersHistory(accessToken, symbol, resolution, indiaDate(start), indiaDate(end), capabilities);
+      const rows = await requestFyersHistory(accessToken, symbol, resolution, indiaDate(start), indiaDate(end), capabilities, rateLimitIdentity);
       if (rows.length) {
         all = normalizeCandles([...rows, ...all], target);
         emptyWindows = 0;
@@ -293,7 +295,7 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {
-    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit, capabilities);
+    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit, capabilities, session.userId);
     if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
     res.setHeader('Cache-Control', 'private, max-age=15');
     return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
