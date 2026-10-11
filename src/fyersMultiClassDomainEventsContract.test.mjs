@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { normalizeFyersOrderPayload } from './server/fyers/trading/fyersOrderEventNormalizer.ts';
+import { MarketEventBus } from './server/marketData/MarketEventBus.ts';
 
 const orderFrame = normalizeFyersOrderPayload({
   type: 'orders',
@@ -47,12 +48,33 @@ assert.equal(funds[0].data.available, 12_000);
 assert.deepEqual(normalizeFyersOrderPayload({ type: 'futureUnknownFrame', payload: { anything: true } }, 5, 5_000), [],
   'unknown broker frames must not leak as arbitrary objects');
 
+const bus = new MarketEventBus();
+const quoteEvents = [];
+const chartEvents = [];
+const depthEvents = [];
+bus.subscribe(event => quoteEvents.push(event), { consumers: ['quote'] });
+bus.subscribe(event => chartEvents.push(event), { consumers: ['chart'] });
+bus.subscribe(event => depthEvents.push(event), { consumers: ['orderbook'] });
+const baseMeta = { sequence: 1, timestamp: 1000, receivedAt: 1100, symbol: 'NSE:SBIN-EQ', source: 'fyers', revision: 1 };
+bus.publish({ ...baseMeta, type: 'Quote', ltp: 100 });
+bus.publish({ ...baseMeta, type: 'MarketTick', ltp: 101 });
+bus.publish({ ...baseMeta, type: 'DepthSnapshot', bids: [{ price: 100, quantity: 10 }], asks: [] });
+bus.publish({ ...baseMeta, type: 'Fill', tradeId: 'TRD-2', orderId: 'ORD-2', price: 100, quantity: 1, side: 'buy' });
+assert.deepEqual(quoteEvents.map(event => event.type), ['Quote'], 'LTP-only consumers must not receive full ticks/depth');
+assert.deepEqual(chartEvents.map(event => event.type), ['MarketTick'], 'chart consumers must not receive quote/depth-only frames');
+assert.deepEqual(depthEvents.map(event => event.type), ['DepthSnapshot'], 'orderbook consumers must not receive full ticks or account fills');
+assert.equal(bus.subscriberCount, 3);
+bus.publish({ ...baseMeta, type: 'MarketTick', ltp: 102 });
+assert.equal(chartEvents.length, 2);
+assert.equal(bus.subscriberCount, 3, 'publishing must not create hidden retained subscriptions');
+
 const read = (path) => fs.readFileSync(path, 'utf8');
 const transport = read('src/server/marketData/FyersMarketDataTransport.ts');
 const marketTypes = read('src/types/market.ts');
 const domainTypes = read('src/types/market-events.ts');
 const orderTransport = read('src/server/fyers/trading/FyersOrderStreamTransport.ts');
 const orderNormalizer = read('src/server/fyers/trading/fyersOrderEventNormalizer.ts');
+const eventBus = read('src/server/marketData/MarketEventBus.ts');
 const streamRoute = read('src/server/routes/broker-market-data.routes.ts');
 const orderRoute = read('src/server/routes/fyers-order-stream.routes.ts');
 
