@@ -681,12 +681,18 @@ export class CoreSpiritVelaEngine {
 
         if(reason==='backfill'){
           // The runtime's rolling state was built against the pre-backfill history.
-          // Force a full read-only warm-up on the next live bar instead of letting
-          // the worker treat that tick as a safe incremental continuation.
-          workerDatasetVersions.delete(mainContextKey);
-          liveRunGeneration+=1;
+          // Invalidate the active baseline so the next live run performs the
+          // explicit read-only warm-up + forming-bar pass, even without dirty bounds.
+          if(historyInitialized){
+            workerDatasetVersions.delete(mainContextKey);
+            mainRunGeneration+=1;
+            liveRunGeneration+=1;
+            historyInitialized=false;
+            liveStarted=false;
+            initializationInFlight=false;
+          }
           // Vela may backfill older pages before the initial complete snapshot.
-          if(!historyInitialized||!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
+          if(!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
           const start=lowerBoundBarTime(currentBars,dirtyRange.from);
           const end=Math.min(currentBars.length,upperBoundBarTime(currentBars,dirtyRange.to));
           const maxLookback=Math.max(0,Number(token.ir.maxLookback)||0);
