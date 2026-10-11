@@ -58,7 +58,7 @@ if(developing?.value!==null&&developing?.state==='confirmed') {
   throw new Error('forming MTF bar must not be exposed as confirmed before its boundary');
 }
 
-if(timeframeSeconds('15m')!==900||timeframeSeconds('1H')!==3600||timeframeSeconds('1D')!==86400) {
+if(timeframeSeconds('5')!==300||timeframeSeconds('15')!==900||timeframeSeconds('5m')!==300||timeframeSeconds('15m')!==900||timeframeSeconds('1H')!==3600||timeframeSeconds('1D')!==86400) {
   throw new Error('CoreSpirit graph timeframe normalization is incomplete');
 }
 
