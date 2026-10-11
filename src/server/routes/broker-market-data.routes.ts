@@ -4,6 +4,7 @@ import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
+import type { MarketFeedEvent } from '../../types/market.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 import { FyersAdapter } from '../brokers/adapters/BrokerAdapters.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
@@ -393,7 +394,7 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
   res.setHeader('X-Accel-Buffering', 'no');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.flushHeaders();
-  const write = (event: any) => {
+  const write = (event: MarketFeedEvent) => {
     try {
       res.write(`${JSON.stringify(event)}\n`);
       const flush = (res as any).flush;
