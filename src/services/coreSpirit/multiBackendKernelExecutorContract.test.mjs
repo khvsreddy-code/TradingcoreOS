@@ -27,6 +27,18 @@ const acceleratedMean = await executeCoreSpiritNumericalKernelPlanned('rollingMe
 assert.equal(acceleratedMean.backend, 'wasm-simd',
   'large historical rolling mean should execute the bundled SIMD kernel when explicitly supplied');
 assert.ok(Math.abs(acceleratedMean.result[63] - 5059.5) < 1e-8);
+const previousFetch = globalThis.fetch;
+globalThis.fetch = async () => new Response(bundledWasmBytes, { status: 200 });
+try {
+  const autoLoadedMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
+    purpose: 'historical', minWasmWorkUnits: 1,
+  });
+  assert.equal(autoLoadedMean.backend, 'wasm-simd',
+    'large historical rollingMean should lazy-load and dispatch to the bundled SIMD module');
+  assert.ok(Math.abs(autoLoadedMean.result[63] - 5059.5) < 1e-8);
+} finally {
+  globalThis.fetch = previousFetch;
+}
 const gapMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [[1, 2, Number.NaN, 4, 5, 6]], [2], {
   purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
 });
