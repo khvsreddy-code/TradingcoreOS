@@ -329,7 +329,7 @@ function buildOptimizationPlan(
     outputs:Object.freeze(outputs),
     barriers:Object.freeze(barriers),
     cost:Object.freeze({
-      estimatedBarWork,pureBarWork,effectBarWork,statefulBarWork,historyReadOps,sourceReadReuse,cseEliminated:eliminated,peakLiveRegisters,
+      estimatedBarWork,pureBarWork,effectBarWork,statefulBarWork,historyReadOps,sourceReadReuse,cseEliminated:eliminated,deadPureInstructionsRemoved:deadRemoved,peakLiveRegisters,
       chronologicalPasses:1 as const,estimatedSavedBarWork,
     }),
     explanation:Object.freeze([
