@@ -27,7 +27,7 @@ import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisual
 import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
-import { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
+import { buildCoreSpiritSemanticFingerprint as fingerprintCoreSpiritSemantics } from './artifactLookupIdentity';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
@@ -449,6 +449,6 @@ export class CoreSpiritCompiler {
     }
   }
   private semanticFingerprint(options: CoreSpiritCompilerOptions): string {
-    return buildCoreSpiritSemanticFingerprint(options);
+    return fingerprintCoreSpiritSemantics(options);
   }
 }

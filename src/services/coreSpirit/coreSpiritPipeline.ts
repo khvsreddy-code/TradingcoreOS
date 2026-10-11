@@ -2,7 +2,7 @@ import { CoreSpiritProgram } from './types';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
 import { CoreSpiritCompiler } from './compiler';
-import { buildCoreSpiritArtifactLookupIdentity, buildCoreSpiritSemanticFingerprint, coreSpiritComponentFingerprint } from './artifactLookupIdentity';
+import { buildCoreSpiritSemanticFingerprint, coreSpiritComponentFingerprint } from './artifactLookupIdentity';
 export { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
 import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
