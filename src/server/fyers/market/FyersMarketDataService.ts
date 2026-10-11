@@ -1,8 +1,12 @@
 import { FyersApiClient } from '../core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS } from '../../latency/budgets.js';
+import { assertFyersQuoteBatch, DEFAULT_FYERS_CAPABILITIES, type FyersCapabilities } from '../core/FyersCapabilities.js';
 
 export class FyersMarketDataService {
-  constructor(private readonly client: FyersApiClient) {}
+  constructor(
+    private readonly client: FyersApiClient,
+    private readonly capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
+  ) {}
 
   history(symbol: string, resolution: string, rangeFrom: string, rangeTo: string, options: { oi?: boolean; continuous?: boolean; dateFormat?: '0' | '1'; signal?: AbortSignal } = {}) {
     return this.client.dataGet('/history', {
@@ -17,7 +21,11 @@ export class FyersMarketDataService {
   }
 
   quotes(symbols: string[], signal?: AbortSignal) {
-    return this.client.dataGet('/quotes', { symbols: symbols.join(',') }, signal);
+    // The capability boundary is enforced here too, so another route/caller
+    // cannot accidentally bypass the plan's provider batch limit.
+    const uniqueSymbols = [...new Set(symbols.map(symbol => String(symbol || '').trim()).filter(Boolean))];
+    assertFyersQuoteBatch(uniqueSymbols, this.capabilities);
+    return this.client.dataGet('/quotes', { symbols: uniqueSymbols.join(',') }, signal);
   }
 
   depth(symbol: string, signal?: AbortSignal) {
