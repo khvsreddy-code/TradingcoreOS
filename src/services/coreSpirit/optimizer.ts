@@ -82,6 +82,10 @@ export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIr
 function constantFold(instructions: readonly CoreSpiritIrInstruction[]): CoreSpiritIrInstruction[] {
   const constants = new Map<string, number|string|boolean|null>();
   return instructions.map((instruction): CoreSpiritIrInstruction => {
+    const dest = 'dest' in instruction ? instruction.dest : undefined;
+    // Register names can be reused by non-constant definitions. Drop the previous
+    // constant before inspecting operands, then re-add only if this instruction folds.
+    if (dest) constants.delete(dest);
     if (instruction.op === 'const') {
       constants.set(instruction.dest, instruction.value);
       return instruction;
