@@ -200,6 +200,10 @@ export class CoreSpiritVelaEngine {
             secondaryGraphDirty=true;
             secondaryFailed.delete(key);
           }else{
+            // Do not leave an old cross-symbol snapshot addressable after a
+            // refresh reports no data. Signals/order intents are already gated,
+            // and the new worker graph must not expose stale values either.
+            if(secondaryData.delete(key))secondaryGraphDirty=true;
             secondaryFailed.add(key);
             secondaryDegraded = true;
             if(req.mode==='live'){
@@ -211,6 +215,7 @@ export class CoreSpiritVelaEngine {
           }
         }catch(error){
           if (stopped || requestVersion !== secondaryRequestVersion) return;
+          if(secondaryData.delete(key))secondaryGraphDirty=true;
           secondaryFailed.add(key);
           if(req.mode==='live'){
             const warning=`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`;
