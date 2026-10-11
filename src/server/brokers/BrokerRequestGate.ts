@@ -165,7 +165,7 @@ export async function withBrokerRequestGate<T>(
           const dayCountKey = 'tco:broker:day:' + budgetName + ':' + identityHash + ':' + dayKey;
           const dayCount = await distributed.incrementWindow(dayCountKey, 48 * 60 * 60 * 1000, effectiveSignal);
           if (dayCount > limit.maxPerDay) {
-            throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429 });
+            throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
           }
         }
 
@@ -182,7 +182,7 @@ export async function withBrokerRequestGate<T>(
       } finally {
         if (acquired) await distributed.releaseLock(lockKey, owner).catch(() => undefined);
       }
-    } else if (distributedEnabled() && process.env.NODE_ENV === 'production') {
+    } else if (process.env.NODE_ENV === 'production' && (distributedEnabled() || process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true')) {
       if (process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true') {
         throw Object.assign(
           new Error('Shared Redis coordination is required before broker API calls can be admitted.'),
