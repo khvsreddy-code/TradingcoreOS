@@ -101,8 +101,12 @@ private async request<T>(base: string, path: string, params: Record<string, stri
           await sleep(delay, requestSignal);
         } catch (error: unknown) {
           if (error instanceof Error && error.name === 'AbortError') throw error;
-          lastError = error;
           const errorRecord = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+          // Rate-gate denials and fail-closed coordination errors are local
+          // admission decisions, not provider failures. Retrying them would
+          // burn more quota and cannot make the denied request eligible.
+          if (typeof errorRecord.code === 'string' && errorRecord.code.startsWith('BROKER_')) throw error;
+          lastError = error;
           const status = Number(errorRecord.status || 0);
           if ((!isRetryableStatus(status)) || attempt === 2) throw error;
           await sleep(Math.min(15000, Math.max(Number(errorRecord.retryAfterMs || 0), 500 * 2 ** attempt)), requestSignal);
