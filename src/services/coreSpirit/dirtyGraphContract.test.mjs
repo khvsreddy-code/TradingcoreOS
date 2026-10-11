@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CoreSpiritDirtyGraph } from './dirtyGraph.ts';
+import { CoreSpiritDirtyGraph, dirtySourcesForBar } from './dirtyGraph.ts';
 
 const node=(id,instruction,inputs,dependencies,dependents,extra={})=>({
   id,instruction,inputs,output:'t'+instruction,lookback:0,stateful:false,incremental:true,viewportDependent:false,realtimeSafe:true,
@@ -34,5 +34,32 @@ const openPlan=graph.planTail(['open'],500);
 assert.equal(openPlan.nodes.has('i:vwap'),false);
 assert.equal(openPlan.nodes.has('i:plot'),true);
 assert.equal(openPlan.instructions.size,1);
+
+const boundedNodes = [
+  node('source:close', 10, ['close'], [], ['window:sma']),
+  node('window:sma', 11, ['t10'], ['source:close'], ['window:signal'], { stateful: true, lookback: 4 }),
+  node('window:signal', 12, ['t11'], ['window:sma'], [], { lookback: 0 }),
+];
+const boundedReactive = {
+  ...reactive,
+  sourceDependents: { close: ['source:close'], open: [], volume: [] },
+  dependencies: Object.fromEntries(boundedNodes.map(n => [n.id, n.dependencies])),
+  dependents: Object.fromEntries(boundedNodes.map(n => [n.id, n.dependents])),
+  alwaysRecompute: [],
+};
+const boundedPlan = new CoreSpiritDirtyGraph(boundedNodes, boundedReactive).planTail(['close'], 500, 520);
+assert.deepEqual(boundedPlan.ranges.get('window:sma'), { from: 500, to: 504 });
+assert.deepEqual(boundedPlan.ranges.get('window:signal'), { from: 500, to: 504 });
+assert.equal(boundedPlan.latest, 504);
+
+const recursivePlan = graph.planTail(['close'], 500, 520);
+assert.deepEqual(recursivePlan.ranges.get('i:ema'), { from: 500, to: 520 });
+assert.deepEqual(recursivePlan.ranges.get('i:rsi'), { from: 500, to: 520 });
+assert.equal(recursivePlan.latest, 520);
+
+const sameBar = { time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 20 };
+assert.deepEqual(dirtySourcesForBar(sameBar, { ...sameBar }), []);
+assert.deepEqual(dirtySourcesForBar(sameBar, { ...sameBar, time: 1001 }), ['time']);
+assert.deepEqual(dirtySourcesForBar(undefined, sameBar), ['time', 'open', 'high', 'low', 'close', 'volume', 'bar_index']);
 
 console.log('CORESPIRIT_DIRTY_GRAPH_CONTRACT_OK');
