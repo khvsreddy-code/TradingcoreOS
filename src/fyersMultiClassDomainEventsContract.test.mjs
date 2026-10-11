@@ -77,6 +77,7 @@ const orderNormalizer = read('src/server/fyers/trading/fyersOrderEventNormalizer
 const eventBus = read('src/server/marketData/MarketEventBus.ts');
 const streamRoute = read('src/server/routes/broker-market-data.routes.ts');
 const orderRoute = read('src/server/routes/fyers-order-stream.routes.ts');
+const gateway = read('realtime-gateway/server.ts');
 
 assert.match(transport, /FyersDataFeedClass = 'lite' \| 'full' \| 'depth'/);
 assert.match(transport, /sessionKey\(userId: string, feedClass: FyersDataFeedClass\)/);
@@ -107,5 +108,9 @@ assert.match(streamRoute, /feed_class/);
 assert.match(streamRoute, /\['lite', 'full', 'depth'\]/);
 assert.match(orderRoute, /event: FyersOrderStreamEvent/);
 assert.doesNotMatch(orderRoute, /event:any/);
+assert.match(gateway, /marketListener=\(event:MarketFeedEvent\)/);
+assert.match(gateway, /orderListener=\(event:FyersOrderStreamEvent\)/);
+assert.doesNotMatch(gateway, /marketListener=\(event:any\)/);
+assert.doesNotMatch(gateway, /orderListener=\(event:any\)/);
 
 console.log('FYERS_MULTI_CLASS_DOMAIN_EVENTS_CONTRACT_OK');
