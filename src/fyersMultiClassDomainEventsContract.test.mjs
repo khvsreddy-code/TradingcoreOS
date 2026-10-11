@@ -52,9 +52,11 @@ const bus = new MarketEventBus();
 const quoteEvents = [];
 const chartEvents = [];
 const depthEvents = [];
+const genericEvents = [];
 bus.subscribe(event => quoteEvents.push(event), { consumers: ['quote'] });
 bus.subscribe(event => chartEvents.push(event), { consumers: ['chart'] });
 bus.subscribe(event => depthEvents.push(event), { consumers: ['orderbook'] });
+bus.subscribe(event => genericEvents.push(event));
 const baseMeta = { sequence: 1, timestamp: 1000, receivedAt: 1100, symbol: 'NSE:SBIN-EQ', source: 'fyers', revision: 1 };
 bus.publish({ ...baseMeta, type: 'Quote', ltp: 100 });
 bus.publish({ ...baseMeta, type: 'MarketTick', ltp: 101 });
@@ -63,10 +65,12 @@ bus.publish({ ...baseMeta, type: 'Fill', tradeId: 'TRD-2', orderId: 'ORD-2', pri
 assert.deepEqual(quoteEvents.map(event => event.type), ['Quote'], 'LTP-only consumers must not receive full ticks/depth');
 assert.deepEqual(chartEvents.map(event => event.type), ['MarketTick'], 'chart consumers must not receive quote/depth-only frames');
 assert.deepEqual(depthEvents.map(event => event.type), ['DepthSnapshot'], 'orderbook consumers must not receive full ticks or account fills');
-assert.equal(bus.subscriberCount, 3);
+assert.deepEqual(genericEvents.map(event => event.type), ['Quote', 'MarketTick', 'Fill'],
+  'unfiltered consumers must not receive high-volume depth frames without explicit opt-in');
+assert.equal(bus.subscriberCount, 4);
 bus.publish({ ...baseMeta, type: 'MarketTick', ltp: 102 });
 assert.equal(chartEvents.length, 2);
-assert.equal(bus.subscriberCount, 3, 'publishing must not create hidden retained subscriptions');
+assert.equal(bus.subscriberCount, 4, 'publishing must not create hidden retained subscriptions');
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 const transport = read('src/server/marketData/FyersMarketDataTransport.ts');
@@ -85,11 +89,20 @@ assert.match(transport, /session\.feedClass === 'lite' \? 'lite'/);
 assert.match(transport, /session\.feedClass === 'depth' \? 'DepthUpdate'/);
 assert.match(transport, /session\.subscriptions\.get\(listener\)/,
   'each consumer must only receive symbols it subscribed to');
+assert.match(transport, /const tokenChanged = session\.accessToken !== accessToken/,
+  'rotated broker tokens must restart the shared socket');
+assert.match(transport, /if \(tokenChanged && session\.socket\) this\.restartSocket\(key, session\)/);
+assert.match(transport, /feedClass === 'depth' && !depthBids\.length && !depthAsks\.length/,
+  'depth sockets must drop empty/non-depth frames');
+assert.match(transport, /feedClass === 'full' && ltp === undefined/,
+  'full-tick sockets must not leak depth-only/informational frames');
 assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols\)/);
 assert.match(transport, /const domainEvent = buildDomainEvent\(tick, session\.feedClass\)/);
 assert.match(transport, /marketEventBus\.publish\(domainEvent\)/);
 assert.match(transport, /if \(feedClass === 'lite'\) \{[\s\S]*?type: 'Quote'/);
 assert.match(eventBus, /export class MarketEventBus/);
+assert.match(eventBus, /if \(!entry\.consumers \|\| !routesToConsumer\(event, entry\.consumers\)\) continue/,
+  'depth fanout must require an explicit eligible consumer class');
 assert.match(orderTransport, /marketEventBus\.publish\(event\.data as DomainMarketEvent\)/);
 assert.match(marketTypes, /domainEvent\?: DomainMarketEvent/);
 for (const type of ['MarketTick', 'Quote', 'DepthSnapshot', 'DepthDelta', 'Trade', 'OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']) {
