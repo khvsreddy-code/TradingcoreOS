@@ -28,4 +28,5 @@ if(!/export function buildCoreSpiritArtifactLookupIdentity/.test(identity)||/imp
   throw new Error('Artifact cache identity lookup must use the lightweight canonical identity module');
 }
 if(!/artifactLookupIdentity/.test(pipeline)) throw new Error('Compiler and artifact cache must share a single canonical identity function');
+if(!/validateExecutableArtifact\(result\.artifact\)/.test(client)) throw new Error('Compatibility compile fallback must validate artifacts before cache acceptance');
 console.log('CORESPIRIT_OFF_THREAD_COMPILER_CACHE_OK');

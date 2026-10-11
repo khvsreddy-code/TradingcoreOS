@@ -1,4 +1,4 @@
-import type { CoreSpiritExecutableArtifact } from './artifact';
+import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from './artifact';
 
 type CompilerWorkerOptions={layer?:string};
 type CompileWorkerResponse=
@@ -18,7 +18,14 @@ function rejectAll(error:Error):void{
 function getCompilerWorker():Worker|undefined{
   if(typeof Worker==='undefined')return undefined;
   if(compilerWorker)return compilerWorker;
-  const worker=new Worker(new URL('./coreSpiritCompiler.worker.ts',import.meta.url),{type:'module',name:'CoreSpiritCompiler'});
+  let worker:Worker;
+  try {
+    worker=new Worker(new URL('./coreSpiritCompiler.worker.ts',import.meta.url),{type:'module',name:'CoreSpiritCompiler'});
+  } catch {
+    // Some constrained browsers/SSR shells expose Worker but disallow module workers.
+    // Return undefined so the explicit compatibility path can still compile.
+    return undefined;
+  }
   worker.onmessage=(event:MessageEvent<CompileWorkerResponse>)=>{
     const message=event.data;
     if(!message || typeof message.requestId!=='string')return;
@@ -53,7 +60,7 @@ export async function compileCoreSpiritArtifactOffThread(
     const {compileCoreSpirit}=await import('./coreSpiritPipeline');
     const result=compileCoreSpirit(source,sourceId,{layer:options.layer as any});
     const diagnostic=result.diagnostics?.find(item=>item.severity==='error');
-    if(!result.artifact || diagnostic)throw new Error(diagnostic?.message || 'CoreSpirit compilation failed');
+    if(!result.artifact || diagnostic || !validateExecutableArtifact(result.artifact))throw new Error(diagnostic?.message || 'CoreSpirit compilation failed or produced an invalid artifact');
     return result.artifact;
   }
   const requestId=`cs-compile-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
