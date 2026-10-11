@@ -15,6 +15,7 @@ const contracts = [
   ['dirty-graph', ['src/services/coreSpirit/dirtyGraphContract.test.mjs', true]],
   ['corespirit-optimizer-production', ['src/services/coreSpirit/optimizerProductionContract.test.mjs', true]],
   ['corespirit-optimizer-register-version', ['src/services/coreSpirit/optimizerRegisterVersionContract.test.mjs', true]],
+  ['corespirit-optimizer-constant-register-version', ['src/services/coreSpirit/optimizerConstantRegisterVersionContract.test.mjs', true]],
   ['columnar-market-data', ['src/services/coreSpirit/columnarMarketDataContract.test.mjs', true]],
   ['market-frame-facade', ['src/services/coreSpirit/marketFrameFacade.test.ts', true]],
   ['corespirit-off-thread-compile-cache', ['src/coreSpiritOffThreadCompileContract.test.mjs', false]],
