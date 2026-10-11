@@ -66,7 +66,7 @@ assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols\
 assert.match(transport, /domainEvent: buildDomainEvent\(tick, session\.feedClass\)/);
 assert.match(marketTypes, /domainEvent\?: DomainMarketEvent/);
 for (const type of ['MarketTick', 'Quote', 'DepthSnapshot', 'DepthDelta', 'Trade', 'OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']) {
-  assert.match(domainTypes, new RegExp('type: \' ' + type + '\''));
+  assert.ok(domainTypes.includes(`type: '${type}'`), `missing domain event type ${type}`);
 }
 assert.match(domainTypes, /sequence: number/);
 assert.match(domainTypes, /receivedAt: number/);
