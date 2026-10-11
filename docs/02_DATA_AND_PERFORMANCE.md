@@ -557,3 +557,9 @@ CoreSpirit chart workers receive a graph snapshot once per graph revision and re
 - [x] Graph-aware CoreSpirit trading-native and execution plans.
 - [x] Persistent-worker graph snapshots with revision-based updates.
 - [x] Realtime aggregation limited to the current target bucket.
+
+### Retained visual movement invalidation
+
+A bounded update accounts for both an object's prior extent and its replacement extent. Stable-ID line, zone/box, label/shape, polyline and background updates union retained and new spans before deciding whether to skip a patch. Marker time relocation emits ordered removal and insertion deltas so it cannot overwrite an unrelated sorted marker slot. Time-bearing custom geometry contributes its full point-time envelope. Viewport-domain zones stay conservative because viewport coordinates are not canonical market times.
+
+Optimizer dependency cost diagnostics are analysis-only and use reductions rather than large argument spreads, avoiding JavaScript engine argument-count limits for large IR programs.

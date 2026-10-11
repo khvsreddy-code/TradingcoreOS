@@ -32,54 +32,70 @@ function isPriceOverlay(output: CoreSpiritObject): boolean {
     return pane(output) === 'price';
 }
 
-export function outputDirtySpan(output: CoreSpiritObject): { from:number; to:number } | null {
-    const n=(value:unknown)=>Number(value);
-    const pointTimes=(points:unknown): number[] => Array.isArray(points)
-        ? points.map((point:any)=>n(point?.time ?? point?.x)).filter(Number.isFinite)
-        : [];
-    const span=(from:unknown,to:unknown): {from:number;to:number}|null => {
-        const a=n(from),b=n(to);
-        if(Number.isFinite(a)&&Number.isFinite(b))return {from:Math.min(a,b),to:Math.max(a,b)};
-        if(Number.isFinite(a))return {from:a,to:a};
-        if(Number.isFinite(b))return {from:b,to:b};
-        return null;
-    };
-    const value=output as any;
+type DirtySpan = { from: number; to: number };
 
-    // Every time-bearing visual primitive gets an exact bar-time span.
-    if(Number.isFinite(n(value.time))){
-        const base=n(value.time);
-        const end=n(value.metadata?.endTime ?? value.metadata?.toTime);
-        return Number.isFinite(end) ? span(base,end) : {from:base,to:base};
+function finiteSpan(from: unknown, to: unknown = from): DirtySpan | null {
+    const a = Number(from), b = Number(to);
+    if (Number.isFinite(a) && Number.isFinite(b)) return { from: Math.min(a, b), to: Math.max(a, b) };
+    if (Number.isFinite(a)) return { from: a, to: a };
+    if (Number.isFinite(b)) return { from: b, to: b };
+    return null;
+}
+
+function unionDirtySpans(a: DirtySpan | null, b: DirtySpan | null): DirtySpan | null {
+    if (!a) return b;
+    if (!b) return a;
+    return { from: Math.min(a.from, b.from), to: Math.max(a.to, b.to) };
+}
+
+function pointTimeSpan(points: unknown): DirtySpan | null {
+    if (!Array.isArray(points)) return null;
+    let from = Number.POSITIVE_INFINITY, to = Number.NEGATIVE_INFINITY;
+    for (const point of points) {
+        const time = Number((point as any)?.time ?? (point as any)?.timestamp ?? (point as any)?.x);
+        if (!Number.isFinite(time)) continue;
+        from = Math.min(from, time);
+        to = Math.max(to, time);
+    }
+    return Number.isFinite(from) && Number.isFinite(to) ? { from, to } : null;
+}
+
+/** Return the causal-time envelope for every time-bearing CoreSpirit output. */
+export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
+    const value = output as any;
+
+    // Custom geometry can extend far beyond its anchor time.
+    if (output.kind === 'customVisual') {
+        return unionDirtySpans(pointTimeSpan(value.geometry?.points), finiteSpan(value.time));
     }
 
-    if(output.kind==='line'||output.kind==='arrow'){
-        return span(value.start?.time,value.end?.time);
+    if (Number.isFinite(Number(value.time))) {
+        const baseTime = Number(value.time);
+        const end = value.metadata?.endTime ?? value.metadata?.toTime;
+        const anchor = finiteSpan(baseTime, end);
+        const start = value.metadata?.startTime ?? value.metadata?.fromTime;
+        return unionDirtySpans(anchor, finiteSpan(start, end ?? baseTime));
     }
-    if(output.kind==='box'||output.kind==='zone'){
-        return span(value.left,value.right);
+
+    if (output.kind === 'line' || output.kind === 'arrow') {
+        return finiteSpan(value.start?.time, value.end?.time);
     }
-    if(output.kind==='polyline'||output.kind==='polygon'){
-        const times=pointTimes(value.points);
-        return times.length ? {from:Math.min(...times),to:Math.max(...times)} : null;
+    if (output.kind === 'box' || output.kind === 'zone') {
+        // Viewport coordinates are not canonical market time. Keep them conservative.
+        return value.domain === 'viewport' ? null : finiteSpan(value.left, value.right);
     }
-    if(output.kind==='band'){
-        const end=n(value.metadata?.endTime ?? value.metadata?.toTime);
-        return Number.isFinite(end) ? span(value.time,end) : null;
+    if (output.kind === 'polyline' || output.kind === 'polygon') {
+        return pointTimeSpan(value.points);
     }
-    if(output.kind==='background'){
-        return span(value.time,value.metadata?.endTime ?? value.metadata?.toTime ?? value.time);
+    if (output.kind === 'table') {
+        return finiteSpan(value.metadata?.fromTime ?? value.metadata?.time, value.metadata?.toTime ?? value.metadata?.endTime);
     }
-    if(output.kind==='table'){
-        return span(value.metadata?.fromTime ?? value.metadata?.time, value.metadata?.toTime ?? value.metadata?.endTime);
-    }
-    if(output.kind==='footprint'||output.kind==='customVisual'||output.kind==='event'||output.kind==='scanCandidate'||output.kind==='orderIntent'||output.kind==='barcolor'||output.kind==='marker'||output.kind==='signal'){
-        const times=pointTimes(value.points ?? value.geometry?.points);
-        if(times.length)return {from:Math.min(...times),to:Math.max(...times)};
-        if(Number.isFinite(n(value.time)))return {from:n(value.time),to:n(value.time)};
+    if (output.kind === 'footprint' || output.kind === 'event' || output.kind === 'scanCandidate' || output.kind === 'orderIntent') {
+        return pointTimeSpan(value.points ?? value.geometry?.points);
     }
     return null;
 }
+
 type SceneDiffEmission = any;
 function removed(output: CoreSpiritObject): boolean {
     return output.metadata?.removed === true;
@@ -212,18 +228,18 @@ export class CoreSpiritSceneDiff {
         let hasUnboundedValuePatch = false;
 
         for (const output of outputs) {
-            const span = outputDirtySpan(output);
+            const span = unionDirtySpans(outputDirtySpan(output), this.retainedDirtySpan(output));
+            // A stable-ID visual may move away from the requested range. Include its
+            // retained extent before filtering so old pixels/state are not orphaned.
             if (span && (span.to < dirty.from || span.from > dirty.to)) continue;
             const result = this.applyOutput(output, true);
             if (result?.schema) out.push(result.schema);
             if (result?.delta) series.push(result.delta);
+            if (result?.deltas) series.push(...result.deltas);
             if (result?.collection) collections.push(result.collection);
             if (result?.instanceDelta) instanceBatches.push(result.instanceDelta);
 
-            // Time-bounded objects contribute their complete visual extent: a line
-            // or zone can cross the changed bar. Non-time-bounded collection patches
-            // conservatively retain the caller's range rather than inventing a span.
-            if (result?.delta || result?.collection || result?.instanceDelta) {
+            if (result?.delta || result?.deltas || result?.collection || result?.instanceDelta) {
                 if (!span) {
                     hasUnboundedValuePatch = true;
                 } else {
@@ -261,6 +277,44 @@ export class CoreSpiritSceneDiff {
         return out;
     }
 
+    private retainedDirtySpan(output: CoreSpiritObject): DirtySpan | null {
+        const value = output as any;
+        const id = typeof value.id === 'string' ? value.id : undefined;
+        const timesOfLine = (item: TcoDrawingLine): DirtySpan | null => finiteSpan(item.x1, item.x2);
+        const timesOfPolyline = (item: TcoDrawingPolyline): DirtySpan | null => pointTimeSpan(item.points.map(point => ({ x: point.x })));
+
+        if (output.kind === 'marker' || output.kind === 'signal') {
+            const retained = this.markers.get(markerKey(output as Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>));
+            return retained ? finiteSpan(retained.time) : null;
+        }
+        if (!id) return null;
+        if (output.kind === 'line' || output.kind === 'arrow') {
+            const retained = this.collections.lines.find(item => item.id === id) as TcoDrawingLine | undefined;
+            return retained ? timesOfLine(retained) : null;
+        }
+        if (output.kind === 'box' || output.kind === 'zone') {
+            if (value.domain === 'viewport') return null;
+            for (const instances of this.rectBatches.values()) {
+                const retained = instances.find(item => item.id === id);
+                if (retained) return finiteSpan(retained.left, retained.right);
+            }
+            return null;
+        }
+        if (output.kind === 'label' || output.kind === 'shape') {
+            const retained = this.collections.labels.find(item => item.id === id) as TcoDrawingLabel | undefined;
+            return retained ? finiteSpan(retained.x) : null;
+        }
+        if (output.kind === 'polyline') {
+            const retained = this.collections.polylines.find(item => item.id === id) as TcoDrawingPolyline | undefined;
+            return retained ? timesOfPolyline(retained) : null;
+        }
+        if (output.kind === 'background') {
+            const retained = this.collections.backgrounds.find(item => item.id === id) as TcoBackground | undefined;
+            return retained ? finiteSpan(retained.from, retained.to) : null;
+        }
+        return null;
+    }
+
     private applySeries(output: Extract<CoreSpiritObject, { kind: 'series' }>, emit: boolean): SceneDiffEmission {
         const name = String(output.seriesId || output.name || 'series');
         const seriesId = `${this.indicatorId}:series:${name}`;
@@ -296,20 +350,27 @@ export class CoreSpiritSceneDiff {
     private applyMarker(output: Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>, emit: boolean): SceneDiffEmission {
         const key = markerKey(output);
         const before = [...this.markers.entries()].sort((a, b) => Number(a[1].time) - Number(b[1].time));
+        const previousIndex = before.findIndex(([candidate]) => candidate === key);
         if (removed(output)) {
-            const idx = before.findIndex(([candidate]) => candidate === key);
-            if (idx < 0) return null;
+            if (previousIndex < 0) return null;
             this.markers.delete(key);
-            return emit ? { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [], op: 'replace-range', start: idx, remove: 1 } } : null;
+            return emit ? { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [], op: 'replace-range', start: previousIndex, remove: 1 } } : null;
         }
         const value = marker(output);
-        const was = this.markers.has(key);
+        const was = previousIndex >= 0;
         this.markers.set(key, value);
         if (!emit) return null;
-        const after = [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time));
-        const idx = after.findIndex(candidate => candidate.time === value.time && candidate.shape === value.shape);
-        if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, idx), remove: 0 } };
-        return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, idx), remove: 1 } };
+        const after = [...this.markers.entries()].sort((a, b) => Number(a[1].time) - Number(b[1].time));
+        const nextIndex = after.findIndex(([candidate]) => candidate === key);
+        if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, nextIndex), remove: 0 } };
+        if (previousIndex === nextIndex) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, nextIndex), remove: 1 } };
+        const insertIndex = nextIndex - (previousIndex < nextIndex ? 1 : 0);
+        return {
+            deltas: [
+                { seriesId: this.markerSeriesId, kind: 'markers', markers: [], op: 'replace-range', start: previousIndex, remove: 1 },
+                { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, insertIndex), remove: 0 },
+            ],
+        };
     }
 
     private applyRect(output: Extract<CoreSpiritObject, { kind: 'box' | 'zone' }>, emit: boolean): SceneDiffEmission {

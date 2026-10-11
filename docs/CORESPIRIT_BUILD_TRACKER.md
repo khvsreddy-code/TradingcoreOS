@@ -294,3 +294,14 @@ The chart data plane established the zero-copy canonical chart data plane at the
 - [x] Optimized IR nodes and the optimization cost model expose data-dependency depth, estimated dependency critical path and fan-out for planner diagnostics.
 - [ ] This DAG metric is analysis only: CFG-aware scheduling/dominance, state-identity reuse and representative 5k/50k/500k runtime benchmarks remain open.
 - [ ] Authenticated 1/4/8-chart browser evidence, 5k history-load/prepend timing and live forming-bar measurements remain open until captured against a running environment.
+
+
+## v141 — retained-object dirty-span correctness and large-plan cost safety
+
+- [x] Dirty-span filtering unions retained and replacement extents for stable-ID lines, rectangles, labels, polylines and backgrounds before skipping a mutation.
+- [x] Custom visual polygon geometry contributes its full point-time extent even when the object also has an anchor time.
+- [x] Stable marker relocation emits a remove delta followed by an insert delta; the insert index accounts for removal shifting the sorted sequence.
+- [x] Optimizer dependency critical-path aggregation uses iterative reductions rather than large spread argument lists.
+- [x] Added contracts for moved retained geometry, stable marker relocation and 36k-instruction optimizer cost diagnostics.
+- [ ] All renderer-owned overlays still require verification with actual Vela RenderPacket/ScenePatch integration and authenticated live-browser telemetry.
+- [ ] Production deployment remains blocked by the Vercel deployment API quota (more than 100 deployments in 24 hours); no setting or plan changes were made.

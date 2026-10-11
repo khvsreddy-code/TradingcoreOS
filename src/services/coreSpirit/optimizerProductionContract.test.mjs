@@ -106,4 +106,19 @@ const seriesArgsProgram = {
 const seriesArgsOptimized = optimizeCoreSpiritIr(seriesArgsProgram);
 assert.equal(seriesArgsOptimized.entry.instructions.filter(instruction => instruction.op === 'call' && instruction.name === 'featurePure').length, 2, 'distinct series operands must not alias, while equivalent pure calls may be reused');
 assert.equal(seriesArgsOptimized.entry.instructions.filter(instruction => instruction.op === 'move').length, 1);
+
+const longInstructionProgram = {
+  ...program,
+  sourceId: 'optimizer-long-plan-diagnostics',
+  entry: {
+    instructions: [
+      ...Array.from({ length: 18000 }, (_, index) => ({ op: 'const', dest: `longValue${index}`, value: index })),
+      ...Array.from({ length: 18000 }, (_, index) => ({ op: 'emit', kind: 'plot', args: [`longValue${index}`], outputId: `long:${index}` })),
+    ],
+  },
+  sourceMap: { version: 1, sourceId: 'optimizer-long-plan-diagnostics', entries: [] },
+};
+const longOptimized = optimizeCoreSpiritIr(longInstructionProgram);
+assert.equal(longOptimized.optimizationPlan.nodes.length, longOptimized.entry.instructions.length, 'long optimization plans should produce cost diagnostics without spread argument limits');
+assert.ok(longOptimized.optimizationPlan.cost.dependencyCriticalPathBarWork > 0);
 console.log('CORESPIRIT_OPTIMIZER_PRODUCTION_CONTRACT_OK');

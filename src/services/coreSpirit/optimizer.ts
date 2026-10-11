@@ -329,7 +329,8 @@ function buildOptimizationPlan(
     const dependencyDepth = dependencies.length
       ? 1 + Math.max(...dependencies.map(dependency => dependencyDepthByInstruction[dependency] ?? 0))
       : 1;
-    const dependencyCriticalPathBarWork = x.work + Math.max(0, ...dependencies.map(dependency => dependencyCriticalPathByInstruction[dependency] ?? 0));
+    const longestDependencyWork = dependencies.reduce((longest, dependency) => Math.max(longest, dependencyCriticalPathByInstruction[dependency] ?? 0), 0);
+    const dependencyCriticalPathBarWork = x.work + longestDependencyWork;
     const fanOut = (userMap.get(index) ?? []).length;
     dependencyDepthByInstruction[index] = dependencyDepth;
     dependencyCriticalPathByInstruction[index] = dependencyCriticalPathBarWork;
@@ -349,6 +350,7 @@ function buildOptimizationPlan(
       estimatedBarWork:x.work,
     });
   });
+  const dependencyCriticalPathBarWork = dependencyCriticalPathByInstruction.reduce((longest, work) => Math.max(longest, work), 0);
   const historyReadOps=instructions.filter(i=>i.op==='loadSeries'||i.op==='index').length;
   const originalHistoryReadOps=original.filter(i=>i.op==='loadSeries'||i.op==='index').length;
   const afterCseHistoryReadOps=afterCse.filter(i=>i.op==='loadSeries'||i.op==='index').length;
@@ -387,7 +389,7 @@ function buildOptimizationPlan(
     cost:Object.freeze({
       estimatedBarWork,pureBarWork,effectBarWork,statefulBarWork,historyReadOps,sourceReadReuse,cseEliminated:eliminated,deadPureInstructionsRemoved:deadRemoved,peakLiveRegisters,
       chronologicalPasses:1 as const,estimatedSavedBarWork,
-      dependencyCriticalPathBarWork:Math.max(0,...dependencyCriticalPathByInstruction),
+      dependencyCriticalPathBarWork,
       maxDependencyDepth,
       maxFanOut,
     }),
@@ -398,7 +400,7 @@ function buildOptimizationPlan(
       deadSkipReason ?? (deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.'),
       'Stateful indicator calls remain ordered stream operators and are not aliased by generic CSE.',
       `Estimated peak temporary register pressure: ${peakLiveRegisters}.`,
-      `Data-dependency critical path estimate: ${Math.max(0,...dependencyCriticalPathByInstruction).toFixed(2)} work units across at most ${maxDependencyDepth} dependent instruction(s).`,
+      `Data-dependency critical path estimate: ${dependencyCriticalPathBarWork.toFixed(2)} work units across at most ${maxDependencyDepth} dependent instruction(s).`,
       `Maximum data-dependency fan-out: ${maxFanOut}; effect and branch order are preserved and are not rescheduled.`,
     ]),
   });
