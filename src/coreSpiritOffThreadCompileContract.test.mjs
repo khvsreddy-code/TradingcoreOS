@@ -29,4 +29,6 @@ if(!/export function buildCoreSpiritArtifactLookupIdentity/.test(identity)||/imp
 }
 if(!/artifactLookupIdentity/.test(pipeline)) throw new Error('Compiler and artifact cache must share a single canonical identity function');
 if(!/validateExecutableArtifact\(compiled\.artifact\)/.test(client)||!/validateExecutableArtifact\(artifact\)/.test(client)) throw new Error('No-Worker compatibility fallbacks must validate compiled/persisted artifacts before acceptance');
+if(!/typeof window!=='undefined'\)throw new Error\('CoreSpirit interactive compilation requires Web Worker support/.test(client)) throw new Error('Browser compiler calls must fail closed instead of compiling synchronously on the terminal thread');
+if(!/if\(typeof window!=='undefined'\)return false/.test(client)) throw new Error('Browser-side artifact validation must not synchronously hash large persisted IR when workers are unavailable');
 console.log('CORESPIRIT_OFF_THREAD_COMPILER_CACHE_OK');
