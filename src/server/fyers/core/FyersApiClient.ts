@@ -46,6 +46,10 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       cleanup();
       resolve();
     }, ms);
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
     signal?.addEventListener('abort', abort, { once: true });
   });
 }
