@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { loadCoreSpiritBundledWasmSimdBackend } from './wasmBackend.ts';
 import { executeCoreSpiritNumericalKernelPlanned } from './numericalKernelExecutor.ts';
 import { createCoreSpiritBackendRegistry } from './backendRegistry.ts';
 import { makeCoreSpiritCompilerPipelineTrace, validateCoreSpiritCompilerPipelineTrace, CORE_SPIRIT_COMPILER_STAGE_ORDER } from './compilerPipeline.ts';
@@ -15,6 +17,25 @@ assert.equal(CORE_SPIRIT_COMPILER_STAGE_ORDER.at(-2),'backend-planner');
 const values=Float64Array.from([1,2,3,4,5]);
 const live=await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{purpose:'live'});
 assert.equal(live.backend,'cpu-optimized');assert.equal(live.result[4],4.5);
+const bundledWasmBytes = await readFile(new URL('../../../public/coreSpirit/numerical-kernels-simd.wasm', import.meta.url));
+const bundledWasm = await loadCoreSpiritBundledWasmSimdBackend({ source: bundledWasmBytes });
+assert.equal(bundledWasm.profile()?.vectorized, true);
+const historicalValues = Float64Array.from({ length: 64 }, (_, i) => 5000 + i);
+const acceleratedMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
+  purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
+});
+assert.equal(acceleratedMean.backend, 'wasm-simd',
+  'large historical rolling mean should execute the bundled SIMD kernel when explicitly supplied');
+assert.ok(Math.abs(acceleratedMean.result[63] - 5059.5) < 1e-8);
+const gapMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [[1, 2, Number.NaN, 4, 5, 6]], [2], {
+  purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
+});
+assert.ok(Number.isNaN(gapMean.result[0]));
+assert.equal(gapMean.result[1], 1.5);
+assert.ok(Number.isNaN(gapMean.result[2]));
+assert.ok(Number.isNaN(gapMean.result[3]));
+assert.equal(gapMean.result[4], 4.5);
+assert.equal(gapMean.result[5], 5.5);
 
 let fallbackCount=0;
 const brokenWasm={isLoaded:()=>true,profile:()=>({backend:'wasm',available:true,deterministic:true,vectorized:true}),hasKernel:name=>name==='rollingMean',kernelVariant:name=>name==='rollingMean'?'simd':undefined,execute:async()=>{throw new Error('simulated WASM trap');}};
