@@ -5,6 +5,7 @@ import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { FyersAdapter } from '../brokers/adapters/BrokerAdapters.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 
@@ -307,12 +308,15 @@ brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: 
   const symbol = toFyersSymbol(String(req.query.instrument_key || '')); const expiryDate = String(req.query.expiry_date || 'current_week');
   if (!symbol) return res.status(400).json({ success: false, error: 'instrument_key is required' });
   try {
-    const adapter = BrokerRegistry.getAdapter('fyers');
-    const data = await adapter.getOptionChain(session.token, symbol, expiryDate);
+    const capabilities = resolveFyersCapabilities(session.userId);
+    const adapter = BrokerRegistry.getAdapter('fyers') as FyersAdapter;
+    const data = await adapter.getOptionChain(session.token, symbol, expiryDate, capabilities);
     res.setHeader('Cache-Control', 'private, max-age=5');
-    return res.json({ success: true, data });
+    return res.json({ success: true, data, capabilities: { plan:capabilities.plan, dataApiRateLimits:capabilities.dataApiRateLimits } });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Unable to load Fyers option chain' });
+    const status = Number(err?.status) === 429 ? 429 : Number(err?.status) === 403 ? 403 : 502;
+    if (status === 429) res.setHeader('Retry-After','1');
+    return res.status(status).json({ success: false, error: err?.message || 'Unable to load Fyers option chain', code:err?.code, brokerCode:err?.brokerCode });
   }
 });
 
