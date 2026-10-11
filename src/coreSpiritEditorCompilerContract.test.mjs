@@ -40,6 +40,8 @@ assert.match(editor,/createCoreSpiritSandbox/,'editor compilation must apply cha
 assert.match(editor,/validateCoreScriptCapabilitiesAgainstSandbox/,'editor must reject ungranted CoreScript capabilities');
 assert.match(editor,/copilotValidationPassRef\.current!==true/,'Copilot Run must fail closed unless server compiler/security validation passed');
 assert.match(editor,/copilotReplayPassRef\.current!==true/,'Copilot Run must also require successful replay of the exact artifact');
+assert.match(editor,/targetIdentityAtStart=\{chartId:targetAtStart\.chartId,symbol:targetAtStart\.symbol,timeframe:targetAtStart\.timeframe\}/,'Run must snapshot chart identity before asynchronous compilation');
+assert.match(editor,/replayGateMatches\(latestReplayGate,source,copilotServerArtifactHashRef\.current,activeImmediatelyBeforeRun\)/,'Copilot must revalidate the exact approved history after compilation and immediately before Run');
 assert.match(chartRunner,/compileInWorker:/,'chart artifacts must compile off the UI thread on cache miss');
 assert.match(chartRunner,/runCoreSpiritArtifactInWorker/,'Run must accept a previously compiled artifact');
 assert.match(cache,/validateCoreSpiritExecutableArtifactOffThread/,'persistent artifacts must be integrity-checked off the UI thread');
