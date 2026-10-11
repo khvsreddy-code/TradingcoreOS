@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 const { CoreSpiritSceneDiff, outputDirtySpan } = await import('./services/core/chart/coreSpiritSceneDiff.ts');
+const { applyScenePatch } = await import('../vendor/vela/src/core/model/scenePatch.ts');
 
 const diff = new CoreSpiritSceneDiff('dirty-span-contract');
 
@@ -78,6 +79,22 @@ assert.equal(movedMarkerPatch.series[0].remove, 1);
 assert.equal(movedMarkerPatch.series[0].start, 1);
 assert.equal(movedMarkerPatch.series[1].remove, 0);
 assert.equal(movedMarkerPatch.series[1].start, 2, 'insert index is computed against the final sorted sequence after removing the old marker');
+
+const velaMarkerModel = {
+  series: [{
+    id: movedMarkerDiff.markerSeriesId,
+    kind: 'markers',
+    markers: [{ time: 10, position: 'aboveBar', shape: 'circle', color: '#fff' }, { time: 20, position: 'aboveBar', shape: 'circle', color: '#fff' }, { time: 30, position: 'aboveBar', shape: 'circle', color: '#fff' }],
+  }],
+  fills: [],
+  instanceBatches: [],
+};
+applyScenePatch(velaMarkerModel, movedMarkerPatch);
+assert.deepEqual(
+  velaMarkerModel.series[0].markers.map(marker => marker.time),
+  [10, 30, 40],
+  'Vela must apply marker move deltas in order without overwriting a neighboring marker',
+);
 
 assert.deepEqual(outputDirtySpan({
   kind: 'customVisual',
