@@ -259,7 +259,7 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
-    const client = new FyersApiClient(accessToken, undefined, capabilities);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, userId);
     const requestSignal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
     const task = (async (): Promise<FyersHistoryData> => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
