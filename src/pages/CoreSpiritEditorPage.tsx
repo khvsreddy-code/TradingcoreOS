@@ -41,6 +41,25 @@ const EXAMPLES: Array<[string, string]> = [
   ['Interactive UI', `let panel = ui.panel("Market Structure")\npanel.number("ATR", atr(14))\npanel.button("Recalculate", recalibrate)\npanel.toggle("Show Liquidity", true, toggle_liquidity)\npanel.slider("Sensitivity", 1, 10, 5, set_sensitivity)`],
 ];
 
+type CopilotMode = 'generate'|'explain-error'|'fix'|'optimize'|'convert-to-quant'|'generate-tests'|'generate-backtest'|'generate-features'|'generate-model'|'generate-docs'|'explain-lookback'|'find-lookahead'|'find-repainting'|'find-unused-computation';
+const COPILOT_MODE_OPTIONS:ReadonlyArray<{value:CopilotMode;label:string}> = [
+  {value:'generate',label:'Generate script'},
+  {value:'explain-error',label:'Explain compiler errors'},
+  {value:'fix',label:'Repair current script'},
+  {value:'optimize',label:'Optimize current script'},
+  {value:'convert-to-quant',label:'Beginner → quant'},
+  {value:'generate-tests',label:'Generate tests'},
+  {value:'generate-backtest',label:'Generate backtest'},
+  {value:'generate-features',label:'Generate feature set'},
+  {value:'generate-model',label:'Generate model'},
+  {value:'generate-docs',label:'Generate documentation'},
+  {value:'explain-lookback',label:'Explain lookback'},
+  {value:'find-lookahead',label:'Find lookahead bias'},
+  {value:'find-repainting',label:'Find repainting'},
+  {value:'find-unused-computation',label:'Find unused computation'},
+];
+const ANALYSIS_ONLY_COPILOT_MODES=new Set<CopilotMode>(['explain-error','generate-tests','generate-docs','explain-lookback','find-lookahead','find-repainting','find-unused-computation']);
+
 type CopilotReplayGate = Readonly<{
   source:string;
   artifactHash:string;
@@ -122,6 +141,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const copilotGenerationRef = useRef(0);
   const [compilePending,setCompilePending]=useState(false);
   const [copilotPrompt,setCopilotPrompt]=useState('');
+  const [copilotMode,setCopilotMode]=useState<CopilotMode>('generate');
   const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'replaying'|'ready'|'needs-fixes'|'blocked'|'error'>('idle');
   const [copilotSummary,setCopilotSummary]=useState('');
   const [copilotAssumptions,setCopilotAssumptions]=useState<string[]>([]);
@@ -390,12 +410,12 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       const response=await fetch('/api/corespirit/copilot/generate',{
         method:'POST',
         headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},
-        body:JSON.stringify({prompt,currentSource:source,symbol:target?.symbol,timeframe:target?.timeframe}),
+        body:JSON.stringify({prompt,mode:copilotMode,currentSource:source,symbol:target?.symbol,timeframe:target?.timeframe}),
         cache:'no-store',
       });
       const payload=await response.json().catch(()=>null) as {
         success?:boolean;error?:string;source?:string;summary?:string;assumptions?:string[];
-        validation?:{valid?:boolean;artifactHash?:string|null;diagnostics?:Array<{severity:string;message:string;line?:number;start?:number;end?:number;code?:string}>};
+        analysisOnly?:boolean;validation?:{valid?:boolean;analysisOnly?:boolean;artifactHash?:string|null;diagnostics?:Array<{severity:string;message:string;line?:number;column?:number;start?:number;end?:number;code?:string}>};
       }|null;
       if(generationRequest!==copilotGenerationRef.current)return;
       if(!response.ok||!payload?.success||typeof payload.source!=='string')throw new Error(payload?.error||'CoreSpirit Copilot request failed.');
@@ -405,13 +425,29 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         return;
       }
       const activeAfterGeneration=coreSpiritChartRegistry.getActive();
-      if((target?.chartId??null)!==(activeAfterGeneration?.chartId??null)||target?.symbol!==activeAfterGeneration?.symbol||target?.timeframe!==activeAfterGeneration?.timeframe){
+      if(!payload.analysisOnly&&((target?.chartId??null)!==(activeAfterGeneration?.chartId??null)||target?.symbol!==activeAfterGeneration?.symbol||target?.timeframe!==activeAfterGeneration?.timeframe)){
         setCopilotStatus('blocked');
         setCopilotError('The active chart changed while Copilot was generating. Your editor was not replaced; select the intended chart and generate again.');
         return;
       }
-      setCopilotSummary(payload.summary||'Draft generated. Review its source and validation results.');
+      setCopilotSummary(payload.summary||'Copilot task completed. Review the findings before acting.');
       setCopilotAssumptions(payload.assumptions||[]);
+      if(payload.analysisOnly){
+        // Reports, generated tests and documentation are read-only Copilot
+        // outputs. Never replace the editor or grant a replay/run gate.
+        copilotSourceRef.current=null;
+        copilotValidationPassRef.current=false;
+        copilotServerArtifactHashRef.current=null;
+        copilotReplayPassRef.current=false;
+        copilotReplayGateRef.current=null;
+        setCopilotArtifactHash(null);
+        setDiagnostics((payload.validation?.diagnostics||[]).map(d=>({
+          severity:d.severity==='warning'?'warning' as const:'error' as const,
+          message:d.message,line:d.line,column:d.column,start:d.start,end:d.end,code:d.code,
+        })));
+        setCopilotStatus('analysis-complete');
+        return;
+      }
       copilotSourceRef.current=payload.source;
       copilotValidationPassRef.current=payload.validation?.valid===true;
       copilotServerArtifactHashRef.current=payload.validation?.artifactHash??null;
@@ -548,13 +584,18 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       <div className="space-y-4">
         <Panel title="CORESPIRIT COPILOT" subtitle="AI drafts code; the CoreScript compiler decides whether it is valid">
           <div className="space-y-3">
-            <textarea value={copilotPrompt} onChange={e=>setCopilotPrompt(e.target.value)} rows={4} maxLength={4000} placeholder='Example: Build a 3-state HMM for NIFTY 5m using returns, ATR, volume z-score and RSI.' className="w-full resize-y rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-[10px] leading-5 text-[var(--tco-text-2)] outline-none focus:border-[#3b82f6]/50" />
-            <button onClick={()=>void generateCopilotDraft()} disabled={copilotStatus==='generating'||copilotStatus==='validating'||copilotStatus==='replaying'} className="premium-button premium-button-primary w-full justify-center disabled:opacity-50"><Sparkles className="h-4 w-4"/>{copilotStatus==='generating'?'Generating draft…':copilotStatus==='replaying'?'Running read-only replay…':'Generate CoreScript draft'}</button>
+            <label className="block text-[9px] uppercase tracking-wider text-[var(--tco-dim)]">Copilot task
+              <select value={copilotMode} onChange={e=>setCopilotMode(e.target.value as CopilotMode)} className="mt-1 w-full rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] text-[var(--tco-text-2)]">
+                {COPILOT_MODE_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <textarea value={copilotPrompt} onChange={e=>setCopilotPrompt(e.target.value)} rows={4} maxLength={4000} placeholder={ANALYSIS_ONLY_COPILOT_MODES.has(copilotMode)?'Optional: focus the analysis on a particular error, dependency or behavior.':'Describe the strategy, model or improvement. Existing compiler diagnostics are supplied automatically for repair/optimization tasks.'} className="w-full resize-y rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-[10px] leading-5 text-[var(--tco-text-2)] outline-none focus:border-[#3b82f6]/50" />
+            <button onClick={()=>void generateCopilotDraft()} disabled={copilotStatus==='generating'||copilotStatus==='validating'||copilotStatus==='replaying'} className="premium-button premium-button-primary w-full justify-center disabled:opacity-50"><Sparkles className="h-4 w-4"/>{copilotStatus==='generating'?'Working…':copilotStatus==='replaying'?'Running read-only replay…':ANALYSIS_ONLY_COPILOT_MODES.has(copilotMode)?'Analyze current script':copilotMode==='fix'?'Repair current script':copilotMode==='optimize'?'Optimize current script':'Generate CoreScript draft'}</button>
             <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-[var(--tco-dim)]">
-              <span className={copilotStatus==='ready'?'text-[#3b82f6]':copilotStatus==='needs-fixes'||copilotStatus==='blocked'||copilotStatus==='error'?'text-[#f59e0b]':'text-[var(--tco-dim)]'}>{copilotStatus==='ready'?'VALIDATED · REPLAY CHECKED':copilotStatus==='needs-fixes'?'NEEDS FIXES':copilotStatus==='blocked'?'REPLAY REQUIRED':copilotStatus==='replaying'?'HISTORICAL REPLAY':copilotStatus==='validating'?'VALIDATING CORE SCRIPT':copilotStatus==='generating'?'GENERATING':copilotStatus==='error'?'COPILOT ERROR':'DRAFT ONLY'}</span>
+              <span className={copilotStatus==='ready'?'text-[#3b82f6]':copilotStatus==='needs-fixes'||copilotStatus==='blocked'||copilotStatus==='error'?'text-[#f59e0b]':'text-[var(--tco-dim)]'}>{copilotStatus==='ready'?'VALIDATED · REPLAY CHECKED':copilotStatus==='needs-fixes'?'NEEDS FIXES':copilotStatus==='blocked'?'REPLAY REQUIRED':copilotStatus==='replaying'?'HISTORICAL REPLAY':copilotStatus==='validating'?'VALIDATING CORE SCRIPT':copilotStatus==='generating'?'GENERATING':copilotStatus==='error'?'COPILOT ERROR':copilotStatus==='analysis-complete'?'ANALYSIS COMPLETE':'DRAFT ONLY'}</span>
               {copilotArtifactHash&&<span className="ml-auto truncate" title={copilotArtifactHash}>ARTIFACT · {copilotArtifactHash.slice(0,12)}</span>}
             </div>
-            {copilotSummary&&<div className="rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] leading-5 text-[var(--tco-text-2)]">{copilotSummary}</div>}
+            {copilotSummary&&<div className="whitespace-pre-wrap break-words rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] leading-5 text-[var(--tco-text-2)]">{copilotSummary</div>}
             {copilotAssumptions.length>0&&<div className="space-y-1 text-[9px] leading-4 text-[var(--tco-dim)]">{copilotAssumptions.map((item,i)=><div key={i}>• {item}</div>)}</div>}
             {copilotError&&<div className="text-[10px] leading-4 text-[#f59e0b]">{copilotError}</div>}
             <div className="text-[9px] leading-4 text-[var(--tco-dim)]">Copilot generates CoreScript only. The compiler, type checker and capability/security gate validate the artifact; the exact artifact must then pass a bounded read-only historical replay before Run. Replay does not update the chart or send orders. Review the source and explicitly use Run on chart yourself.</div>

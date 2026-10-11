@@ -23,6 +23,7 @@ import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritTradingNativePlan } from './tradingNativePlan';
 import { isStateType } from './typeSystem';
 import { analyzeCoreSpiritRepaintSafety } from './repaintSafety';
+import { analyzeCoreSpiritCausality } from './causalityAnalysis';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
@@ -444,8 +445,12 @@ export class CoreSpiritCompiler {
         ...repaintSafety.warnings.map(message => ({severity:'warning' as const,message,code:'REPAINT_SAFETY'})),
         ...repaintSafety.errors.map(message => ({severity:'error' as const,message,code:'REPAINT_SAFETY_ASSERTION'})),
       ];
+      // Causality is a compiler property, not an advisory Copilot-only heuristic.
+      // Strict mode fails compilation before an artifact can be produced.
+      const causalityReport = analyzeCoreSpiritCausality(ast);
+      const causalityDiagnostics = causalityReport.diagnostics;
       const capabilityDiagnostics = capabilityCheck.errors.map(message => ({ severity:'error' as const, message, code:'CAPABILITY_REQUIRED' }));
-      const allDiagnostics = [...stageDiagnostics,...capabilityDiagnostics,...repaintDiagnostics];
+      const allDiagnostics = [...stageDiagnostics,...capabilityDiagnostics,...repaintDiagnostics,...causalityDiagnostics];
       if (allDiagnostics.some(d => d.severity === 'error')) return { diagnostics: allDiagnostics };
       const executionPlan = planCoreSpiritExecution({ ...graphInput, graphs, specializedPlan, tradingNativePlan });
       const executionPlanVisualization = buildCoreSpiritExecutionPlanVisualization({ ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, repaintSafety } as CoreSpiritIrProgram);
