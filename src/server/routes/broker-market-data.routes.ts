@@ -4,6 +4,7 @@ import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
+import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 
 export const brokerMarketDataRoutes = Router();
 brokerMarketDataRoutes.use(requireUser);
@@ -20,7 +21,8 @@ async function getFyersSession(req: AuthenticatedRequest, res: Response) {
 
 
 function toFyersSymbol(symbol: string): string {
-  const value = decodeURIComponent(String(symbol || '')).trim();
+  let value = '';
+  try { value = decodeURIComponent(String(symbol || '')).trim(); } catch { return ''; }
   const normalized = value.toLowerCase().replace(/\s+/g, '');
   const aliases: Record<string, string> = {
     'nse_index|nifty50': 'NSE:NIFTY50-INDEX', 'nse_index|nifty50index': 'NSE:NIFTY50-INDEX',
@@ -284,15 +286,54 @@ brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: 
   }
 });
 
-brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: AuthenticatedRequest, res: Response, next) => {
+async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response, next: (error?: unknown) => void) {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
   const session = await getFyersSession(req, res); if (!session) return;
-  const symbols = String(req.query.instrument_keys || '').split(',').map(x => toFyersSymbol(x.trim())).filter(Boolean);
-  if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys is required' });
-  if (symbols.length > 100) return res.status(400).json({ success: false, error: 'Too many market symbols requested' });
+  const supplied = req.method === 'POST'
+    ? (req.body?.instrument_keys ?? req.body?.symbols)
+    : req.query.instrument_keys;
+  let rawSymbols: string[];
+  if (typeof supplied === 'string') rawSymbols = supplied.split(',');
+  else if (Array.isArray(supplied) && supplied.every(value => typeof value === 'string')) rawSymbols = supplied as string[];
+  else return res.status(400).json({ success: false, error: 'instrument_keys is required as a comma-separated string or string array.' });
+  if (rawSymbols.length > 5_000) return res.status(413).json({ success: false, error: 'Too many symbol entries in one request.' });
+  const symbols = [...new Set(rawSymbols.map(x => toFyersSymbol(x.trim())).map(x => x.trim()).filter(Boolean))];
+  if (!symbols.length) return res.status(400).json({ success: false, error: 'instrument_keys must include at least one valid symbol.' });
+  const capabilities = resolveFyersCapabilities(session.userId);
+  if (symbols.length > capabilities.maxStreamSymbols) {
+    return res.status(400).json({
+      success: false,
+      error: `FYERS ${capabilities.plan} Data WebSocket supports at most ${capabilities.maxStreamSymbols} unique symbols for this subscription.`,
+      code: 'FYERS_STREAM_SYMBOL_LIMIT',
+      limit: capabilities.maxStreamSymbols,
+      requested: symbols.length,
+      plan: capabilities.plan,
+    });
+  }
+  const depthSymbol = toFyersSymbol(String(req.method === 'POST' ? (req.body?.depth_symbol ?? '') : (req.query.depth_symbol || '')));
+  const includeDepth = Boolean(depthSymbol);
+  const depthSymbols = includeDepth ? [depthSymbol] : symbols;
+  const capacity = FyersMarketDataTransport.checkSubscriptionCapacity(
+    session.userId,
+    symbols,
+    capabilities.maxStreamSymbols,
+    includeDepth ? depthSymbols : [],
+  );
+  if (!capacity.allowed) {
+    return res.status(400).json({
+      success: false,
+      error: `FYERS ${capabilities.plan} Data WebSocket limit is ${capacity.limit} unique active symbols across this user's shared stream.`,
+      code: 'FYERS_STREAM_SYMBOL_LIMIT',
+      limit: capacity.limit,
+      active: capacity.activeSymbols,
+      requested: capacity.projectedSymbols,
+      plan: capabilities.plan,
+    });
+  }
+
   res.status(200);
   // Low-latency streaming: never let an intermediary buffer live ticks.
-  // FYERS ticks must reach the chart as soon as they arrive.
+  // POST is available for Prime symbol lists that would exceed practical URL lengths.
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -302,15 +343,20 @@ brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: Authenticated
   const write = (event: any) => {
     try {
       res.write(`${JSON.stringify(event)}\n`);
-      // Express compression/proxy stacks may expose flush(). Flush every tick.
       const flush = (res as any).flush;
       if (typeof flush === 'function') flush.call(res);
     } catch {}
   };
-  const depthSymbol = toFyersSymbol(String(req.query.depth_symbol || ''));
-  const includeDepth = Boolean(depthSymbol);
-  const depthSymbols = includeDepth ? [depthSymbol] : symbols;
-  const unsubscribe = FyersMarketDataTransport.subscribe(session.userId, session.token, symbols, write, includeDepth, depthSymbols);
+  let unsubscribe: (() => void);
+  try {
+    unsubscribe = FyersMarketDataTransport.subscribe(
+      session.userId, session.token, symbols, write, includeDepth, depthSymbols, capabilities.maxStreamSymbols,
+    );
+  } catch (error: any) {
+    write({ type: 'error', error: error?.message || 'Unable to subscribe to FYERS market data', code: error?.code });
+    res.end();
+    return;
+  }
   const heartbeat = setInterval(() => write({ type: 'status', status: 'connected' }), 10_000);
   let cleanedUp = false;
   const cleanup = () => {
@@ -319,8 +365,13 @@ brokerMarketDataRoutes.get('/:brokerId/market-stream', async (req: Authenticated
     clearInterval(heartbeat);
     unsubscribe();
   };
-  // The response is the actual streamed resource. Cleaning up from response
-  // close prevents orphaned FYERS subscriptions when Vercel ends a function.
   res.on('close', cleanup);
   req.on('close', cleanup);
+}
+
+brokerMarketDataRoutes.get('/:brokerId/market-stream', (req: AuthenticatedRequest, res: Response, next) => {
+  void handleFyersMarketStream(req, res, next);
+});
+brokerMarketDataRoutes.post('/:brokerId/market-stream', (req: AuthenticatedRequest, res: Response, next) => {
+  void handleFyersMarketStream(req, res, next);
 });
