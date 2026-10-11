@@ -1292,15 +1292,34 @@ export class CoreSpiritRuntime {
       return finish(null);
     }
     if(name==='request') {
-      const symbol=String(args[0] ?? this.executionContext.symbol), timeframe=String(args[1] ?? this.executionContext.timeframe), field=String(args[2] ?? 'close') as any, offset=Math.max(0,Math.floor(Number(args[3] ?? 0)));
-      const resolver=this.dataResolver?.request;
-      if(!resolver) return finish(null);
-      const key=`request:${index}:${symbol}:${timeframe}:${field}:${offset}`;
-      if (this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
-      const value=resolver({symbol,timeframe,field,offset});
-      // Synchronous resolvers are intentionally supported in the VM; async hosts must prefetch into a snapshot.
+      const symbol=String(args[0] ?? this.executionContext.symbol);
+      const timeframe=String(args[1] ?? this.executionContext.timeframe);
+      const field=String(args[2] ?? 'close') as CoreSpiritDataRequest['field'];
+      const offset=Math.max(0,Math.floor(Number(args[3] ?? 0)));
+      const phase=String(args[4] ?? 'confirmed').toLowerCase();
+      if(!['confirmed','historical','developing','realtime'].includes(phase)) return finish(null);
+      const alignment:CoreSpiritDataAlignment=phase==='developing'||phase==='realtime'?'developing':'last-confirmed';
+      // Completed historical higher-TF candles cannot stand in for a developing snapshot.
+      if(alignment==='developing' && this.executionContext.mode!=='realtime') return finish(null);
+      const requestAt=this.dataResolver?.requestAt;
+      const requestCurrent=this.dataResolver?.request;
+      if(!requestAt&&!requestCurrent) return finish(null);
+      const key=`request:${index}:${symbol}:${timeframe}:${field}:${offset}:${alignment}`;
+      if(this.dataMemo.has(key)) return finish(this.dataMemo.get(key));
+      const asOfTimestamp=this.toEpoch(bar.timestamp);
+      const ctx:CoreSpiritDataResolutionContext={
+        asOfTimestamp,baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,
+        executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment,
+      };
+      const request:CoreSpiritDataRequest={symbol,timeframe,field,offset};
+      const value=requestAt?requestAt(request,ctx):(alignment==='developing'?null:requestCurrent!(request));
+      // Async providers must prefetch into the host-owned snapshot before VM execution.
       if(value && typeof (value as any).then==='function') return finish(null);
-      const resolved=(value as any)?.value ?? null; this.dataMemo.set(key,resolved); return finish(resolved);
+      const snapshot=value as CoreSpiritDataSnapshot|undefined;
+      if(snapshot?.timestamp!=null && Number(snapshot.timestamp)>asOfTimestamp) return finish(null);
+      const resolved=snapshot?.value ?? null;
+      this.dataMemo.set(key,resolved);
+      return finish(resolved);
     }
     if(name==='lowerTf') {
       const timeframe=String(args[0] ?? ''), field=String(args[1] ?? 'close') as any;
