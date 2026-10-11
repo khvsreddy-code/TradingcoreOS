@@ -86,4 +86,15 @@ assert.match(dataResolver,/this\.context\(\)\.mode!=='realtime'/,'series-based r
 assert.match(dataResolver,/this\.resolutionContext\(index, alignment\)/,'series-based requests must preserve temporal alignment');
 assert.match(editor,/modeDefaults:Partial<Record<CopilotMode,string>>/,'repair and analysis tasks should have mode-specific defaults');
 
+
+const standardLibrary=read('src/services/coreSpirit/standardLibrary.ts');
+assert.match(standardLibrary,/name:'request', minArgs:3, maxArgs:5/,'request should expose an optional explicit temporal alignment argument');
+const semantic=read('src/services/coreSpirit/semanticAnalyzer.ts');
+assert.match(semantic,/TYPE_REQUEST_ALIGNMENT/,'dynamic or invalid request alignments must fail type checking');
+assert.match(semantic,/allowedAlignments=\['confirmed','historical','developing','realtime'\]/,'request alignment must use a closed set of supported modes');
+assert.match(runtime,/const requestAt=this\.dataResolver\?\.requestAt/,'request should use contextual as-of data resolution when available');
+assert.match(runtime,/const asOfTimestamp=this\.toEpoch\(bar\.timestamp\)/,'request must use the current bar time as its causal boundary');
+const causalitySource=read('src/services/coreSpirit/causalityAnalysis.ts');
+assert.match(causalitySource,/CAUSALITY_UNQUALIFIED_REQUEST/,'implicit request alignment must be visible to compiler diagnostics');
+assert.match(causalitySource,/CAUSALITY_DEVELOPING_REQUEST/,'developing request alignment must be visible to compiler diagnostics');
 console.log('CORESPIRIT_COPILOT_COMPILE_BEFORE_RUN_OK');
