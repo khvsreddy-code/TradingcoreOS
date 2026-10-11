@@ -325,6 +325,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     try{
       const targetAtStart=coreSpiritChartRegistry.getActive();
       if(!targetAtStart)throw new Error('No active TradingCoreOS chart. Open a live chart and click it once.');
+      const targetIdentityAtStart={chartId:targetAtStart.chartId,symbol:targetAtStart.symbol,timeframe:targetAtStart.timeframe};
       if(copilotSourceRef.current===source){
         if(copilotValidationPassRef.current!==true){
           setRunStatus('Copilot security validation has not passed. Fix the diagnostics before Run.');
@@ -347,9 +348,22 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         setRunStatus('The compiled artifact no longer matches the artifact approved by Copilot replay. Revalidate before Run.');
         return;
       }
-      if(coreSpiritChartRegistry.getActive()?.chartId!==targetAtStart.chartId)throw new Error('The active chart changed during compilation. Select the intended chart and run again.');
+      const activeImmediatelyBeforeRun=coreSpiritChartRegistry.getActive();
+      if(!activeImmediatelyBeforeRun||activeImmediatelyBeforeRun.chartId!==targetIdentityAtStart.chartId||
+        activeImmediatelyBeforeRun.symbol!==targetIdentityAtStart.symbol||activeImmediatelyBeforeRun.timeframe!==targetIdentityAtStart.timeframe){
+        throw new Error('The active chart, symbol, or timeframe changed during compilation. Select the intended chart and run again.');
+      }
+      if(copilotSourceRef.current===source){
+        const latestReplayGate=copilotReplayGateRef.current;
+        if(copilotReplayPassRef.current!==true||!latestReplayGate||
+          !replayGateMatches(latestReplayGate,source,copilotServerArtifactHashRef.current,activeImmediatelyBeforeRun)){
+          copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;setCopilotStatus('blocked');
+          setRunStatus('Copilot replay approval became stale while compiling. Revalidate and replay the current chart history before Run.');
+          return;
+        }
+      }
       setLastCompile(result);setCompiled(true);setRunStatus('Running on active chart…');
-      const target=targetAtStart;
+      const target=activeImmediatelyBeforeRun;
       const snapshot=await ideBridge.runActiveChart(source,'coreSpirit-editor',result);
       const run=snapshot.run;
       if(!run)throw new Error(snapshot.error||'CoreSpirit run failed');
