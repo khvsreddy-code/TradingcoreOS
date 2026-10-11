@@ -58,6 +58,57 @@ if(developing?.value!==null&&developing?.state==='confirmed') {
   throw new Error('forming MTF bar must not be exposed as confirmed before its boundary');
 }
 
+const exact=resolver.requestAt?.({
+  symbol:'current',timeframe:'5m',field:'close',offset:0,
+},{
+  asOfTimestamp:Date.parse('2026-10-06T03:45:00.000Z')/1000,
+  baseSymbol:'NIFTY',baseTimeframe:'1m',executionMode:'historical',
+  revision:snapshot.revision,alignment:'exact',
+});
+if(exact?.value!==104.5||exact.state!=='developing'){
+  throw new Error('exact alignment must select only the exact candle timestamp and preserve its developing state');
+}
+const unaligned=resolver.requestAt?.({
+  symbol:'current',timeframe:'5m',field:'close',offset:0,
+},{
+  asOfTimestamp:Date.parse('2026-10-06T03:46:00.000Z')/1000,
+  baseSymbol:'NIFTY',baseTimeframe:'1m',executionMode:'historical',
+  revision:snapshot.revision,alignment:'exact',
+});
+if(unaligned?.value!==null||unaligned?.source!=='data-graph:unaligned'){
+  throw new Error('exact alignment must not silently return an earlier candle timestamp');
+}
+const nearest=resolver.requestAt?.({
+  symbol:'current',timeframe:'5m',field:'close',offset:0,
+},{
+  asOfTimestamp:Date.parse('2026-10-06T03:49:30.000Z')/1000,
+  baseSymbol:'NIFTY',baseTimeframe:'1m',executionMode:'realtime',
+  revision:snapshot.revision,alignment:'nearest-confirmed',
+});
+if(nearest?.value!==null){
+  throw new Error('nearest-confirmed alignment must not leak a still-forming higher-timeframe candle');
+}
+const freshAtClose=resolver.requestAt?.({
+  symbol:'current',timeframe:'5m',field:'close',offset:0,
+},{
+  asOfTimestamp:Date.parse('2026-10-06T03:50:00.000Z')/1000,
+  baseSymbol:'NIFTY',baseTimeframe:'1m',executionMode:'realtime',
+  revision:snapshot.revision,alignment:'last-confirmed',maxStalenessMs:60_000,
+});
+if(freshAtClose?.value!==104.5){
+  throw new Error('staleness must be measured from the higher-timeframe candle close boundary');
+}
+const stale=resolver.requestAt?.({
+  symbol:'current',timeframe:'5m',field:'close',offset:0,
+},{
+  asOfTimestamp:Date.parse('2026-10-06T04:00:00.000Z')/1000,
+  baseSymbol:'NIFTY',baseTimeframe:'1m',executionMode:'realtime',
+  revision:snapshot.revision,alignment:'last-confirmed',maxStalenessMs:60_000,
+});
+if(stale?.value!==null||stale?.source!=='data-graph:stale'){
+  throw new Error('market graph should return a missing value for a candle beyond its allowed staleness');
+}
+
 if(timeframeSeconds('5')!==300||timeframeSeconds('15')!==900||timeframeSeconds('5m')!==300||timeframeSeconds('15m')!==900||timeframeSeconds('1H')!==3600||timeframeSeconds('1D')!==86400) {
   throw new Error('CoreSpirit graph timeframe normalization is incomplete');
 }
