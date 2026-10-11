@@ -5,61 +5,81 @@ import {
 } from './seriesBackendDispatcher.ts';
 
 const group = {
-  id: 'g',
-  nodeIds: ['a', 'b'],
-  instructions: [1, 2],
-  inputRegister: 'src',
-  outputRegister: 'out',
+  id: 'g', nodeIds: ['a', 'b'], instructions: [1, 2],
+  inputRegister: 'src', outputRegister: 'out',
   operations: [{ name: 'sma', length: 20 }, { name: 'highest', length: 20 }],
-  maxLookback: 39,
-  strategy: 'single-pass-streaming',
-  eligibleBackends: ['cpu', 'wasm', 'gpu'],
-  intermediateSeriesAllocations: 0,
+  maxLookback: 39, strategy: 'single-pass-streaming',
+  eligibleBackends: ['cpu', 'wasm', 'gpu'], intermediateSeriesAllocations: 0,
 };
 
-assert.equal(
-  selectCoreSpiritSeriesBackend(group, { realtime: true, bars: 100_000 }).requested,
-  'cpu',
-);
+assert.equal(selectCoreSpiritSeriesBackend(group, { realtime: true, bars: 100_000 }).requested, 'cpu');
 
-const longHistorical = selectCoreSpiritSeriesBackend(group, {
-  realtime: false,
-  bars: 20_000,
+const deterministic = selectCoreSpiritSeriesBackend(group, {
+  realtime: false, bars: 2_000_000, deterministic: true,
   backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
-    { backend: 'gpu', available: false, deterministic: false, vectorized: true },
-  ],
-});
-assert.equal(longHistorical.requested, 'wasm');
-
-const hugeStateless = selectCoreSpiritSeriesBackend(group, {
-  realtime: false,
-  bars: 2_000_000,
-  deterministic: false,
-  backends: [
-    { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: false, vectorized: true },
     { backend: 'gpu', available: true, deterministic: false, vectorized: true },
   ],
 });
-assert.equal(hugeStateless.requested, 'gpu');
+assert.equal(deterministic.requested, 'cpu', 'a nondeterministic WASM kernel must not pass deterministic mode');
 
-const output = new Float64Array(2);
+const ineligible = { ...group, eligibleBackends: ['cpu'] };
+assert.equal(selectCoreSpiritSeriesBackend(ineligible, {
+  realtime: false, bars: 100_000,
+  backends: [
+    { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'gpu', available: true, deterministic: true, vectorized: true },
+  ],
+}).requested, 'cpu', 'group backend eligibility must be respected');
+
 let called = false;
-const backend = executeCoreSpiritSeriesFusionGroupDispatched(
-  group,
-  { register: 'src', values: new Float64Array([1, 2]) },
-  output,
+const output = new Float64Array(2);
+const actual = executeCoreSpiritSeriesFusionGroupDispatched(
+  group, { register: 'src', values: Float64Array.from([1, 2]) }, output,
   { realtime: false, bars: 20_000, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
     { backend: 'wasm', available: true, deterministic: true, vectorized: true },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
   ] },
-  { wasm: (_group, _input, target) => { called = true; target.set([9, 9]); } },
 );
-assert.equal(backend, 'wasm');
-assert.equal(called, true);
-assert.deepEqual(Array.from(output), [9, 9]);
+assert.equal(actual, 'cpu', 'the dispatcher must report the executed fallback, not the unavailable requested backend');
+assert.equal(called, false);
 
-console.log('CoreSpirit series backend dispatcher contract: OK');
+
+let executorCalled = false;
+const acceleratedOutput = new Float64Array(2);
+const acceleratedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
+  group, { register: 'src', values: Float64Array.from([1, 2]) }, acceleratedOutput,
+  { realtime: false, bars: 20_000, backends: [
+    { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'gpu', available: false, deterministic: false, vectorized: true },
+  ] },
+  { wasm: (_group, _input, target) => { executorCalled = true; target.set([9, 9]); } },
+);
+assert.equal(acceleratedBackend, 'wasm');
+assert.equal(executorCalled, true);
+assert.deepEqual(Array.from(acceleratedOutput), [9, 9], 'successful WASM execution publishes staged results');
+
+let fallbackObserved = false;
+const fallbackOutput = new Float64Array(2);
+const failedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
+  group, { register: 'src', values: Float64Array.from([1, 2]) }, fallbackOutput,
+  { realtime: false, bars: 20_000, onBackendFallback: (backend, error) => {
+    assert.equal(backend, 'wasm');
+    assert.ok(error instanceof Error);
+    fallbackObserved = true;
+  }, backends: [
+    { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'gpu', available: false, deterministic: false, vectorized: true },
+  ] },
+  { wasm: (_group, _input, target) => { target[0] = 999; throw new Error('simulated WASM trap'); } },
+);
+assert.equal(failedBackend, 'cpu');
+assert.equal(fallbackObserved, true, 'accelerator failure must be observable');
+assert.notEqual(fallbackOutput[0], 999, 'partial accelerator writes must not leak into the published output');
+
+console.log('CoreSpirit series backend dispatcher safety contract: OK');

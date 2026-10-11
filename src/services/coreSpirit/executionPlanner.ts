@@ -19,6 +19,18 @@ import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './s
 import type { CoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
 import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
+import {
+  coreSpiritKernelOperationForBuiltin,
+  createCoreSpiritBackendRegistry,
+  isCoreSpiritStatefulKernelOperation,
+  planCoreSpiritBackend,
+} from './backendRegistry';
+import type {
+  CoreSpiritBackendPlan,
+  CoreSpiritBackendPurpose,
+  CoreSpiritBackendRegistry,
+  CoreSpiritBackendWorkload,
+} from './backendRegistry';
 
 export type CoreSpiritComputeBackend = 'cpu' | 'wasm' | 'gpu';
 
@@ -43,6 +55,10 @@ export interface CoreSpiritExecutionPlannerOptions {
   barCount?: number;
   sandbox?: { requireComputeBackend(backend: CoreSpiritComputeBackend): void };
   tradingNativePlan?: CoreSpiritTradingNativePlan;
+  /** Runtime context for per-kernel planning; omitted means safe live/local planning. */
+  backendPurpose?: CoreSpiritBackendPurpose;
+  backendRegistry?: CoreSpiritBackendRegistry;
+  allowRemoteResearchBackend?: boolean;
 }
 
 export interface CoreSpiritWorkloadEstimate {
@@ -97,6 +113,8 @@ export interface CoreSpiritExecutionPlan {
   chronologicalPasses: 1;
   sourceReadReuse: number;
   estimatedSavedWorkUnits: number;
+  /** Per-kernel capability decisions; these are plans, not claims that an adapter ran. */
+  backendCapabilityPlans: readonly CoreSpiritBackendPlan[];
 }
 
 export const CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS: readonly CoreSpiritComputeBackendProfile[] = Object.freeze([
@@ -125,6 +143,32 @@ export function estimateCoreSpiritWorkload(
   dimensions: { symbolCount?: number; timeframeCount?: number; barCount?: number } = {},
 ): CoreSpiritWorkloadEstimate {
   const nodes = nodesFrom(program);
+  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
+  const backendPurpose = options.backendPurpose ?? 'live';
+  const kernelCalls = program.entry.instructions.flatMap((instruction, index) => {
+    if (instruction.op !== 'call') return [];
+    const operation = coreSpiritKernelOperationForBuiltin(instruction.name);
+    if (!operation) return [];
+    const matrixOperation = operation === 'matrixMultiply' || operation === 'matrixDecomposition';
+    const workloadKind: CoreSpiritBackendWorkload = matrixOperation ? 'matrix'
+      : operation === 'dotProduct' || operation === 'logSumExp' || operation === 'softmax' ? 'scalar'
+      : 'series';
+    return [{ operation, workloadKind, stateful: isCoreSpiritStatefulKernelOperation(operation), nodeId: `i:${index}` }];
+  });
+  const perKernelWork = Math.max(1, workload.workUnits / Math.max(1, kernelCalls.length));
+  const inputElements = Math.max(1, workload.bars * workload.symbols * workload.timeframes);
+  const backendCapabilityPlans: readonly CoreSpiritBackendPlan[] = Object.freeze(kernelCalls.map(call =>
+    planCoreSpiritBackend({
+      operation: call.operation,
+      purpose: backendPurpose,
+      workload: call.workloadKind,
+      workUnits: perKernelWork,
+      inputElements,
+      stateful: call.stateful,
+      deterministic: requireDeterministic,
+      allowRemoteResearch: options.allowRemoteResearchBackend === true,
+    }, backendRegistry),
+  ));
   const symbols = Math.max(1, Math.floor(dimensions.symbolCount ?? 1));
   const timeframes = Math.max(1, Math.floor(dimensions.timeframeCount ?? 1));
   const bars = Math.max(1, Math.floor(dimensions.barCount ?? 1));
@@ -293,6 +337,8 @@ export function planCoreSpiritExecution(
     semanticGraph: program.graphs?.semantic.checksum ?? '',
     dimensions: { symbols: workload.symbols, timeframes: workload.timeframes, bars: workload.bars },
     strategy,
+    backendPurpose,
+    backendCapabilities: backendCapabilityPlans.map(plan => ({ operation: plan.operation, backend: plan.backend, deterministic: plan.deterministic, fallback: plan.fallback })),
     tradingNative: {
       multiSymbol: tradingNativePlan.multiSymbol,
       multiTimeframe: tradingNativePlan.multiTimeframe,
@@ -307,6 +353,7 @@ export function planCoreSpiritExecution(
   explanation.push(`specialized plan: ${specializedPlan.strategy}, ${specializedPlan.slotCount} slots, ${specializedPlan.seriesFanouts.length} shared-input fanout group(s)`);
   explanation.push(`trading-native plan: symbols=${tradingNativePlan.multiSymbol ? 'multi' : 'single'}, timeframes=${tradingNativePlan.multiTimeframe ? 'multi' : 'single'}, dataDeps=${tradingNativePlan.dataDependencies.length}, events=${tradingNativePlan.eventTriggers.length}`);
   explanation.push(`data graph: nodes=${tradingNativePlan.dataGraph.nodes.length}, roots=${tradingNativePlan.dataGraph.roots.length}, minimumSources=${tradingNativePlan.dataGraph.minimumTimeframes.length}`);
+  for (const capabilityPlan of backendCapabilityPlans) explanation.push(`kernel ${capabilityPlan.operation}: planned ${capabilityPlan.backend} (${capabilityPlan.reason})`);
   return {
     version: 1,
     strategy,
@@ -326,6 +373,7 @@ export function planCoreSpiritExecution(
     chronologicalPasses:1,
     sourceReadReuse: program.optimizationPlan?.cost.sourceReadReuse ?? 0,
     estimatedSavedWorkUnits: workload.estimatedSavedBarWork * workload.symbols * workload.timeframes * workload.bars,
+    backendCapabilityPlans,
   };
 }
 
