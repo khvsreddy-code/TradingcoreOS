@@ -24,6 +24,7 @@ const engine = read('src/server/fyers/trading/FyersOrderStateEngine.ts');
 const transport = read('src/server/fyers/trading/FyersOrderStreamTransport.ts');
 const normalizer = read('src/server/fyers/trading/fyersOrderEventNormalizer.ts');
 const route = read('src/server/routes/trading.routes.ts');
+const streamRoute = read('src/server/routes/fyers-order-stream.routes.ts');
 const migration = read('supabase/migrations/20261011100000_fyers_order_state_reconciliation.sql');
 
 assert.match(transport, /FyersOrderStateEngine\.reconcile\(/,
@@ -32,6 +33,12 @@ assert.match(transport, /session\.reconciliationBlocked = true/);
 assert.match(transport, /session\.pendingFrames/);
 assert.match(transport, /session\.reconciliationOverflowed/,
   'overflow must force a new snapshot rather than silently lose order events');
+assert.match(transport, /static getStatus\(userId: string\)/,
+  'late subscribers need the actual reconciliation state');
+assert.match(transport, /if \(session\.reconciling \|\| session\.reconciliationBlocked\)/);
+assert.match(streamRoute, /FyersOrderStreamTransport\.getStatus\(userId\)/,
+  'HTTP heartbeats must not claim connected while the REST snapshot is incomplete');
+assert.doesNotMatch(streamRoute, /setInterval\(\(\)=>write\(\{type:'status',status:'connected'\}\)/);
 assert.match(engine, /Promise\.all\(\[/,
   'orders, trades and positions must all fetch successfully before snapshot apply');
 assert.match(engine, /MAX_RECONCILIATION_SNAPSHOT_ROWS/);
