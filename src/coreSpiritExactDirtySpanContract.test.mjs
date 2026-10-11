@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-const { CoreSpiritSceneDiff, outputDirtySpan } = await import('./src/services/core/chart/coreSpiritSceneDiff.ts');
+const { CoreSpiritSceneDiff, outputDirtySpan } = await import('./services/core/chart/coreSpiritSceneDiff.ts');
 
 const diff = new CoreSpiritSceneDiff('dirty-span-contract');
 
