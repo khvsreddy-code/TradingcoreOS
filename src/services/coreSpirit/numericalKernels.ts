@@ -305,85 +305,60 @@ export function rsi(values: CoreSpiritNumericSeries, periodValue: number): Float
 }
 
 export function linearRegression(values: CoreSpiritNumericSeries, periodValue: number): CoreSpiritLinearRegressionResult {
-  const length = validateSeries(values);
-  const period = validatePeriod(periodValue);
-  const slope = output(length);
-  const intercept = output(length);
-  const fitted = output(length);
-  const rSquared = output(length);
-  if (period > length) return Object.freeze({ slope, intercept, fitted, rSquared });
-
-  const sumX = period * (period - 1) / 2;
-  const sumXX = period * (period - 1) * (2 * period - 1) / 6;
-  const denominatorX = period * sumXX - sumX * sumX;
-  let sumY = 0; let sumYY = 0; let sumXY = 0; let invalid = 0;
-  for (let i = 0; i < length; i += 1) {
-    const value = Number(values[i]);
-    if (i < period) {
-      if (Number.isFinite(value)) { sumY += value; sumYY += value * value; sumXY += i * value; }
-      else invalid += 1;
-    } else {
-      const leaving = Number(values[i - period]);
-      if (Number.isFinite(leaving)) {
-        const survivingSumY = sumY - leaving;
-        // Remove x=0 and shift all surviving x coordinates left by one.
-        sumXY -= survivingSumY;
-        sumY = survivingSumY;
-        sumYY -= leaving * leaving;
-      } else invalid -= 1;
-      if (Number.isFinite(value)) {
-        sumY += value; sumYY += value * value; sumXY += (period - 1) * value;
-      } else invalid += 1;
+  const length=validateSeries(values),period=validatePeriod(periodValue);
+  const slope=output(length),intercept=output(length),fitted=output(length),rSquared=output(length);
+  if(period>length)return Object.freeze({slope,intercept,fitted,rSquared});
+  const sumX=period*(period-1)/2,sumXX=period*(period-1)*(2*period-1)/6;
+  const denominatorX=period*sumXX-sumX*sumX;
+  // Center y around a stable anchor so large price levels cannot swamp small moves.
+  let anchor=0;
+  for(let i=0;i<length;i++){const v=Number(values[i]);if(Number.isFinite(v)){anchor=v;break;}}
+  let sumY=0,sumYY=0,sumXY=0,invalid=0;
+  for(let i=0;i<length;i++){
+    const raw=Number(values[i]),v=Number.isFinite(raw)?raw-anchor:Number.NaN;
+    if(i<period){if(Number.isFinite(v)){sumY+=v;sumYY+=v*v;sumXY+=i*v;}else invalid++;}
+    else{
+      const oldRaw=Number(values[i-period]),old=Number.isFinite(oldRaw)?oldRaw-anchor:Number.NaN;
+      if(Number.isFinite(old)){const surviving=sumY-old;sumXY-=surviving;sumY=surviving;sumYY-=old*old;}else invalid--;
+      if(Number.isFinite(v)){sumY+=v;sumYY+=v*v;sumXY+=(period-1)*v;}else invalid++;
     }
-    if (i >= period - 1 && invalid === 0 && denominatorX > 0) {
-      const meanY = sumY / period;
-      const numerator = period * sumXY - sumX * sumY;
-      const m = numerator / denominatorX;
-      const b = meanY - m * (period - 1) / 2;
-      const centeredY = Math.max(0, sumYY - sumY * sumY / period);
-      const denominatorY = period * centeredY;
-      const r2 = denominatorY <= 1e-20 ? 0 : Math.min(1, Math.max(0, (numerator * numerator) / (denominatorX * denominatorY)));
-      slope[i] = m;
-      intercept[i] = b;
-      fitted[i] = b + m * (period - 1);
-      rSquared[i] = r2;
+    if(i>=period-1&&invalid===0&&denominatorX>0){
+      const meanY=sumY/period,numerator=period*sumXY-sumX*sumY;
+      const m=numerator/denominatorX,b=meanY-m*(period-1)/2;
+      const centeredY=Math.max(0,sumYY-sumY*sumY/period),denominatorY=period*centeredY;
+      const r2=denominatorY<=1e-20?0:Math.min(1,Math.max(0,(numerator*numerator)/(denominatorX*denominatorY)));
+      slope[i]=m;intercept[i]=b+anchor;fitted[i]=b+anchor+m*(period-1);rSquared[i]=r2;
     }
   }
-  return Object.freeze({ slope, intercept, fitted, rSquared });
+  return Object.freeze({slope,intercept,fitted,rSquared});
 }
 
-function rollingPair(left: CoreSpiritNumericSeries, right: CoreSpiritNumericSeries, periodValue: number, ddofValue = 0): { covariance: Float64Array; correlation: Float64Array } {
-  const length = checkSameLength(left, right, 'rolling pair');
-  const period = validatePeriod(periodValue);
-  const ddof = Number(ddofValue);
-  if (!Number.isInteger(ddof) || ddof < 0 || ddof >= period) throw new Error('ddof must be an integer in [0, period)');
-  const covariance = output(length);
-  const correlation = output(length);
-  let sx = 0; let sy = 0; let sxx = 0; let syy = 0; let sxy = 0; let invalid = 0;
-  for (let i = 0; i < length; i += 1) {
-    const x = Number(left[i]); const y = Number(right[i]);
-    if (Number.isFinite(x) && Number.isFinite(y)) { sx += x; sy += y; sxx += x*x; syy += y*y; sxy += x*y; }
-    else invalid += 1;
-    if (i >= period) {
-      const oldX = Number(left[i-period]); const oldY = Number(right[i-period]);
-      if (Number.isFinite(oldX) && Number.isFinite(oldY)) { sx -= oldX; sy -= oldY; sxx -= oldX*oldX; syy -= oldY*oldY; sxy -= oldX*oldY; }
-      else invalid -= 1;
-    }
-    if (i < period-1 || invalid !== 0) continue;
-    const covNumerator = sxy - sx*sy/period;
-    const varX = sxx - sx*sx/period;
-    const varY = syy - sy*sy/period;
-    const scaleX = Math.max(1, Math.abs(sxx), Math.abs(sx*sx/period));
-    const scaleY = Math.max(1, Math.abs(syy), Math.abs(sy*sy/period));
-    const stableX = varX < 0 && Math.abs(varX) <= Number.EPSILON*scaleX*16 ? 0 : varX;
-    const stableY = varY < 0 && Math.abs(varY) <= Number.EPSILON*scaleY*16 ? 0 : varY;
-    covariance[i] = covNumerator / (period-ddof);
-    if (stableX > 0 && stableY > 0) correlation[i] = Math.max(-1, Math.min(1, covNumerator / Math.sqrt(stableX*stableY)));
-    if (stableX < 0 || stableY < 0) covariance[i] = Number.NaN;
+function rollingPair(left:CoreSpiritNumericSeries,right:CoreSpiritNumericSeries,periodValue:number,ddofValue=0):{covariance:Float64Array;correlation:Float64Array}{
+  const length=checkSameLength(left,right,'rolling pair'),period=validatePeriod(periodValue),ddof=Number(ddofValue);
+  if(!Number.isInteger(ddof)||ddof<0||ddof>=period)throw new Error('ddof must be an integer in [0, period)');
+  const covariance=output(length),correlation=output(length);
+  // Reversible centered moments avoid cancellation in raw second moments.
+  let count=0,meanX=0,meanY=0,cxx=0,cyy=0,cxy=0,invalid=0;
+  const add=(x:number,y:number):void=>{count++;const dx=x-meanX,dy=y-meanY;meanX+=dx/count;meanY+=dy/count;cxx+=dx*(x-meanX);cyy+=dy*(y-meanY);cxy+=dx*(y-meanY);};
+  const remove=(x:number,y:number):void=>{
+    if(count<=1){count=0;meanX=0;meanY=0;cxx=0;cyy=0;cxy=0;return;}
+    const n=count-1,nmx=(count*meanX-x)/n,nmy=(count*meanY-y)/n;
+    cxx-=(x-meanX)*(x-nmx);cyy-=(y-meanY)*(y-nmy);cxy-=(x-meanX)*(y-nmy);
+    meanX=nmx;meanY=nmy;count=n;
+  };
+  for(let i=0;i<length;i++){
+    const x=Number(left[i]),y=Number(right[i]);
+    if(Number.isFinite(x)&&Number.isFinite(y))add(x,y);else invalid++;
+    if(i>=period){const ox=Number(left[i-period]),oy=Number(right[i-period]);if(Number.isFinite(ox)&&Number.isFinite(oy))remove(ox,oy);else invalid--;}
+    if(i<period-1||invalid!==0||count!==period)continue;
+    const tx=Number.EPSILON*Math.max(1,Math.abs(cxx))*period*32,ty=Number.EPSILON*Math.max(1,Math.abs(cyy))*period*32;
+    const vx=cxx<0&&Math.abs(cxx)<=tx?0:cxx,vy=cyy<0&&Math.abs(cyy)<=ty?0:cyy;
+    if(vx<0||vy<0)continue;
+    covariance[i]=cxy/(period-ddof);
+    if(vx>0&&vy>0)correlation[i]=Math.max(-1,Math.min(1,cxy/Math.sqrt(vx*vy)));
   }
-  return { covariance, correlation };
+  return {covariance,correlation};
 }
-
 export function covariance(left: CoreSpiritNumericSeries, right: CoreSpiritNumericSeries, period: number, ddof = 0): Float64Array {
   return rollingPair(left, right, period, ddof).covariance;
 }
