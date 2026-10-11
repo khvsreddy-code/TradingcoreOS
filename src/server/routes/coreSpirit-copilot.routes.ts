@@ -49,14 +49,14 @@ const copilotRateLimit=createRateLimiter({
 function boundedText(value:unknown,max:number):string {
   return typeof value==='string'?value.trim().slice(0,max):'';
 }
-function parseGeneratedPayload(raw:string):{source:string;summary:string;assumptions:string[]} {
+function parseGeneratedPayload(raw:string, options:{allowEmptySource?:boolean} = {}):{source:string;summary:string;assumptions:string[]} {
   const clean=raw.trim().replace(/^\uFEFF/,'');
   const json=clean.startsWith('```')?clean.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''):clean;
   const parsed=JSON.parse(json) as Record<string,unknown>;
   const source=typeof parsed.source==='string'?parsed.source.trim():'';
   const summary=typeof parsed.summary==='string'?parsed.summary.slice(0,12000):'';
   const assumptions=Array.isArray(parsed.assumptions)?parsed.assumptions.filter((x):x is string=>typeof x==='string').slice(0,8).map(x=>x.slice(0,300)):[];
-  if(!source||new TextEncoder().encode(source).byteLength>MAX_SOURCE_BYTES)throw new Error('Copilot returned empty code or code larger than 64 KiB.');
+  if((!source&&!options.allowEmptySource)||new TextEncoder().encode(source).byteLength>MAX_SOURCE_BYTES)throw new Error('Copilot returned empty code or code larger than 64 KiB.');
   return {source,summary,assumptions};
 }
 
@@ -140,7 +140,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
         maxOutputTokens:4096,
       },
     });
-    const generated=parseGeneratedPayload(String(generation.text||''));
+    const generated=parseGeneratedPayload(String(generation.text||''),{allowEmptySource:analysisOnly});
     if(analysisOnly){
       const diagnostics=(currentCompile?.diagnostics??[]).slice(0,80);
       res.setHeader('Cache-Control','no-store');
