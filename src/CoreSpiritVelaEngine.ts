@@ -706,6 +706,10 @@ export class CoreSpiritVelaEngine {
 
         if(req.mode!=='live')return;
         if(!currentBars.length)return;
+        // Initialization and semantic-input updates own the main runtime context.
+        // They sample the latest candle after each worker await, so don't enqueue
+        // a competing tick that could supersede their required history warm-up.
+        if(initializationInFlight)return;
         if(!historyInitialized||!liveStarted){
           initializeFromBars(currentBars);
           return;
