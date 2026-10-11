@@ -176,8 +176,17 @@ export class CoreSpiritVelaEngine {
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
       dataDependencies
-        .filter(dep => dep.symbol !== 'current' && !(dep.symbol === req.market.symbol && (dep.timeframe === 'chart' || dep.timeframe === req.market.timeframe)))
-        .map(dep => [dependencyKey(dep.symbol, dep.timeframe), { symbol: dep.symbol, timeframe: dep.timeframe }]),
+        .filter(dep => !(
+          (dep.symbol === 'current' || dep.symbol === req.market.symbol) &&
+          (dep.timeframe === 'chart' || dep.timeframe === req.market.timeframe)
+        ))
+        .map(dep => {
+          // current is a symbol alias, not a statement that the dependency is
+          // always the chart's primary timeframe. A current/15m request on a
+          // 5m chart must fetch the selected symbol's 15m series explicitly.
+          const symbol=dep.symbol==='current'?req.market.symbol:dep.symbol;
+          return [dependencyKey(symbol,dep.timeframe),{symbol,timeframe:dep.timeframe}] as const;
+        }),
     ).values()];
 
     if(secondaryDependencies.length&&!req.fetchSeries){
