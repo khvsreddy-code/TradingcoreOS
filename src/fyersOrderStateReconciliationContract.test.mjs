@@ -14,8 +14,8 @@ const event = {
   status: 'PARTIAL', quantity: 10, filledQuantity: 3, averagePrice: 100,
   sequence: 10, timestamp: 1000, receivedAt: 1100, symbol: 'NSE:SBIN-EQ', source: 'fyers', revision: 10,
 };
-assert.equal(fyersOrderEventKey(event), fyersOrderEventKey({ ...event, sequence: 99, revision: 99, receivedAt: 9999 }),
-  'replayed order updates with the same broker state must have stable idempotency keys');
+assert.equal(fyersOrderEventKey(event), fyersOrderEventKey({ ...event, sequence: 99, revision: 99, receivedAt: 9999, clientOrderId: null, message: 'duplicate delivery' }),
+  'replayed order updates with the same broker state must have stable idempotency keys even if volatile metadata differs');
 assert.notEqual(fyersOrderEventKey(event), fyersOrderEventKey({ ...event, filledQuantity: 4 }),
   'a genuine cumulative fill change must be treated as a new state event');
 
