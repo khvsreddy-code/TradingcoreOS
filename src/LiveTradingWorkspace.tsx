@@ -61,11 +61,13 @@ export function LiveTradingWorkspace() {
     (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [];
 
     const mount = async () => {
+      // Start session restoration immediately, but don't block Vela's first
+      // mount on broker/network retries. The TCO provider's async bars/subscription
+      // paths attach to the broker when this shared restore promise resolves.
       const brokerReady = tradingCoreRuntime.hasConnectedBroker()
         ? Promise.resolve()
         : tradingCoreRuntime.restoreBrokerConnections().catch(() => undefined);
       const defaultsPromise = loadTcoVelaDefaults();
-      await Promise.all([brokerReady, defaultsPromise]);
       const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
@@ -82,16 +84,20 @@ export function LiveTradingWorkspace() {
       }));
       workspaceRef.current = workspace;
 
-      // Background warm-up for common Indian index symbols. This runs only after the
-      // workspace is mounted and never blocks first paint or live LTP subscription.
-      prewarmTcoVelaHistory(
-        ['NSE:NIFTY50-INDEX', 'NSE:NIFTYBANK-INDEX', 'BSE:SENSEX-INDEX', 'NSE:FINNIFTY-INDEX', 'NSE:MIDCPNIFTY-INDEX'],
-        defaults.timeframe || '5',
-        1200,
-      );
-      prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '1', 600);
-      prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '15', 600);
-      prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '60', 600);
+      // Warm common index history in the background once the broker is ready.
+      // The workspace itself is already mounted, and its own getBars call is
+      // allowed to drive first-candle loading concurrently.
+      void brokerReady.then(() => {
+        if (cancelled) return;
+        prewarmTcoVelaHistory(
+          ['NSE:NIFTY50-INDEX', 'NSE:NIFTYBANK-INDEX', 'BSE:SENSEX-INDEX', 'NSE:FINNIFTY-INDEX', 'NSE:MIDCPNIFTY-INDEX'],
+          defaults.timeframe || '5',
+          1200,
+        );
+        prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '1', 600);
+        prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '15', 600);
+        prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '60', 600);
+      });
 
       if (typeof window !== 'undefined') {
         (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__ = {
