@@ -38,6 +38,8 @@ export type CoreSpiritBackendRequest = Readonly<{
   minWasmWorkUnits?: number;
   minWebGpuWorkUnits?: number;
   maxStatefulWasmElements?: number;
+  /** Backends excluded by a kernel's concrete ABI/shape constraints. */
+  excludedBackends?: readonly CoreSpiritBackendKind[];
   /** Adapter-owned inputs/artifacts; never execute this payload in the chart hot path. */
   payload?: unknown;
 }>;
@@ -199,8 +201,8 @@ function eligible(
   request: CoreSpiritBackendRequest,
   deterministicRequired: boolean,
 ): profile is CoreSpiritBackendProfile {
-  return Boolean(profile && profile.available && profile.maxInputElements >= request.inputElements &&
-    supportsOperation(profile, request.operation) &&
+  return Boolean(profile && profile.available && !(request.excludedBackends ?? []).includes(profile.backend) &&
+    profile.maxInputElements >= request.inputElements && supportsOperation(profile, request.operation) &&
     (!deterministicRequired || profile.deterministic));
 }
 
