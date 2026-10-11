@@ -352,6 +352,9 @@ export class FyersAdapter extends BaseBroker {
       offlineOrder: Boolean(orderData.offlineOrder),
       stopLoss: Number(orderData.stopLoss || 0),
       takeProfit: Number(orderData.takeProfit || 0),
+      ...(typeof orderData.orderTag === 'string' && /^[A-Za-z0-9]{1,30}$/.test(orderData.orderTag)
+        ? { orderTag: orderData.orderTag }
+        : {}),
     };
   }
 
