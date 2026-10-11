@@ -23,6 +23,7 @@ export type ChartPerformanceSnapshot = {
   longFrames: number;
   backend: 'webgl2' | 'canvas2d' | 'unknown';
   marketUpdatesPerSec: number;
+  lastMarketUpdateAgeMs: number;
   computeUpdatesPerSec: number;
   renderUpdatesPerSec: number;
   computeCoalescingRate: number;
@@ -283,6 +284,7 @@ class ChartPerformanceTelemetry {
       longFrames: m.longFrames,
       backend: m.backend,
       marketUpdatesPerSec: elapsedSeconds > 0 ? m.packets / elapsedSeconds : 0,
+      lastMarketUpdateAgeMs: m.lastPacketAt ? Math.max(0, now() - m.lastPacketAt) : Number.MAX_SAFE_INTEGER,
       computeUpdatesPerSec: elapsedSeconds > 0 ? m.computeUpdates / elapsedSeconds : 0,
       renderUpdatesPerSec: elapsedSeconds > 0 ? m.renderUpdates / elapsedSeconds : 0,
       computeCoalescingRate: m.packets ? m.computeCoalescedTicks / m.packets : 0,
