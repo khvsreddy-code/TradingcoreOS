@@ -271,6 +271,11 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           }
         }
         const targetType = infer(n.target, scope);
+        if (['confirmed','developing','historical','realtime'].includes(n.member) &&
+            ['market:ref','timeframe:ref','series:ref'].includes(targetType)) {
+          if(n.args.length!==0) report(n,`market-data temporal selector .${n.member}() does not accept arguments`,'TYPE_MARKET_TEMPORAL_SELECTOR');
+          return targetType;
+        }
         if (targetType === 'model:ref' || targetType.startsWith('model<')) {
           if (n.member === 'predict' || n.member === 'prediction') {
             n.args.forEach(arg => { if (!isNumericType(infer(arg,scope))) report(n,'model.predict feature arguments must be numeric','TYPE_MODEL_FEATURE'); });

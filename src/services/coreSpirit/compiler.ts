@@ -103,11 +103,12 @@ export class CoreSpiritCompiler {
     const componentRefRegisters = new Map<string, string>();
     const dataMemberSources = new Map<CoreSpiritAstNode, { ref: string; field: 'open'|'high'|'low'|'close'|'volume'|'time' }>();
     const isDataRefExpression = (node: CoreSpiritAstNode): boolean =>
-      (node.type === 'call' && (node.name === 'market' || node.name === 'timeframe' || node.name === 'series')) ||
-      (node.type === 'memberCall' && node.member === 'timeframe' && (
-        node.target.type === 'call' && node.target.name === 'market' ||
-        (node.target.type === 'identifier' && dataRefRegisters.has(node.target.name))
-      ));
+      (node.type === 'call' && ['market','timeframe','series'].includes(node.name)) ||
+      (node.type === 'memberCall' &&
+        ['timeframe','tf','confirmed','developing','historical','realtime'].includes(node.member) &&
+        ((node.target.type === 'call' && ['market','timeframe','series'].includes(node.target.name)) ||
+         (node.target.type === 'identifier' && dataRefRegisters.has(node.target.name)) ||
+         (node.target.type === 'memberCall' && ['timeframe','tf','confirmed','developing','historical','realtime'].includes(node.target.member))));
     let temp = 0;
 
     const expr = (n: CoreSpiritAstNode): string => {
@@ -157,6 +158,19 @@ export class CoreSpiritCompiler {
           return dest;
         }
         case 'memberCall': {
+          const isTemporalDataReference =
+            (n.target.type === 'call' && ['market','timeframe','series'].includes(n.target.name)) ||
+            (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name)) ||
+            (n.target.type === 'memberCall' && ['timeframe','tf','confirmed','developing','historical','realtime'].includes(n.target.member));
+          if (['confirmed','developing','historical','realtime'].includes(n.member) && isTemporalDataReference) {
+            if (n.args.length !== 0) throw new Error(`market-data temporal selector .${n.member}() does not accept arguments.`);
+            const target=expr(n.target);
+            const phase=`t${temp++}`;
+            emitInstruction(n,{op:'const',dest:phase,value:n.member});
+            const dest=`t${temp++}`;
+            emitInstruction(n,{op:'call',dest,name:'__market_alignment',args:[target,phase],callId:`market.alignment:${n.member}:${n.span?.start ?? temp}`});
+            return dest;
+          }
           const targetSemanticType = n.target.type === 'identifier' ? semantic.symbols.get(n.target.name) : undefined;
           const isModelTarget = targetSemanticType === 'model:ref' || targetSemanticType?.startsWith('model<') || (n.target.type === 'call' && n.target.name === 'model');
           if (isModelTarget && ['predict','prediction','probability','confidence'].includes(n.member)) {
@@ -310,7 +324,7 @@ export class CoreSpiritCompiler {
           const isDataRef =
             (n.target.type === 'identifier' && dataRefRegisters.has(n.target.name)) ||
             (n.target.type === 'call' && (n.target.name === 'market' || n.target.name === 'timeframe' || n.target.name === 'series')) ||
-            (n.target.type === 'memberCall' && n.target.member === 'timeframe');
+            (n.target.type === 'memberCall' && ['timeframe','tf','confirmed','developing','historical','realtime'].includes(n.target.member));
           if (!isDataRef) throw new Error(`Member access '${n.member}' is only executable for market()/timeframe() references or chart areas.`);
           const memberDest=`t${temp++}`; const memberName=`t${temp++}`;
           emitInstruction(n, {op:'const',dest:memberName,value:n.member});
@@ -461,7 +475,7 @@ export class CoreSpiritCompiler {
         requiredCapabilities,
         capabilityRequirements:capabilityCheck.requirements,
       });
-      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements:capabilityCheck.requirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
+      const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements:capabilityCheck.requirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, causalityAnalysis:causalityReport, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
       if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
       return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
     } catch(error) {

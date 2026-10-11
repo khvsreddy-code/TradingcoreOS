@@ -8,6 +8,7 @@ import type { CoreSpiritIrEmitKind } from './callContract';
 import type { CoreSpiritSpecializedPlan } from './specializedPlan';
 import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 import type { CoreSpiritRepaintSafetyReport } from './repaintSafety';
+import type { CoreSpiritCausalityReport } from './causalityAnalysis';
 import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import type { CoreSpiritResearchPlan } from './researchSurface';
 import type { CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
@@ -83,6 +84,8 @@ export type CoreSpiritIrProgram = {
   specializedPlan?:CoreSpiritSpecializedPlan;
   tradingNativePlan?:CoreSpiritTradingNativePlan;
   repaintSafety?:CoreSpiritRepaintSafetyReport;
+  /** Static source-level temporal evidence; diagnostic metadata, never runtime authority. */
+  causalityAnalysis?:CoreSpiritCausalityReport;
   executionPlanVisualization?:CoreSpiritExecutionPlanVisualization;
   researchPlan?:CoreSpiritResearchPlan;
   authoringLevel?:CoreSpiritAuthoringLevel;

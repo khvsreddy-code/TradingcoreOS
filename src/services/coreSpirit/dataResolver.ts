@@ -68,12 +68,15 @@ export class CoreSpiritDataResolverService {
   }
 
   resolveSeries(ref: any, field: any, index: number, length: number): number[] | null {
-    const symbol = ref.__coreSpiritDataRef === 'market' ? String(ref.symbol) : this.context().symbol;
-    const timeframe = ref.__coreSpiritDataRef === 'timeframe' ? String(ref.timeframe) : this.context().timeframe;
+    const kind = String(ref?.kind ?? ref?.__coreSpiritDataRef ?? '');
+    const symbol = kind === 'market' ? String(ref.symbol ?? this.context().symbol) : this.context().symbol;
+    const timeframe = String(ref?.timeframe ?? this.context().timeframe);
+    const alignment:CoreSpiritDataAlignment = ref && typeof ref==='object' && ref.alignment==='developing' ? 'developing' : 'last-confirmed';
+    if(alignment==='developing' && this.context().mode!=='realtime') return null;
     const resolver = this.resolver?.series;
     if (resolver) {
       const request: CoreSpiritDataRequest = { symbol, timeframe, field, offset: 0 };
-      const values = resolver(request, this.resolutionContext(index, 'last-confirmed'));
+      const values = resolver(request, this.resolutionContext(index, alignment));
       if (values && typeof (values as any).then === 'function') return null;
       const series = (values as number[]).filter(Number.isFinite);
       return series.length ? series : null;
@@ -86,7 +89,7 @@ export class CoreSpiritDataResolverService {
       const resolverCurrent = this.resolver?.request;
       if (!resolverAt && !resolverCurrent) break;
       const snapshot = resolverAt
-        ? resolverAt(request, this.resolutionContext(index, 'last-confirmed'))
+        ? resolverAt(request, this.resolutionContext(index, alignment))
         : resolverCurrent!(request);
       if (snapshot && typeof (snapshot as any).then === 'function') return null;
       const resolved = snapshot as CoreSpiritDataSnapshot | undefined;
@@ -98,14 +101,16 @@ export class CoreSpiritDataResolverService {
   }
 
   seriesKey(ref: any, field: string): string {
-    if (ref?.__coreSpiritDataRef === 'market') return `market:${String(ref.symbol)}:${this.context().timeframe}:${field}`;
-    if (ref?.__coreSpiritDataRef === 'timeframe') return `timeframe:${this.context().symbol}:${String(ref.timeframe)}:${field}`;
+    const kind=String(ref?.kind ?? ref?.__coreSpiritDataRef ?? '');
+    const alignment=String(ref?.alignment ?? 'last-confirmed');
+    if (kind === 'market') return `market:${String(ref.symbol)}:${String(ref.timeframe ?? this.context().timeframe)}:${field}:${alignment}`;
+    if (kind === 'timeframe' || kind === 'series') return `timeframe:${this.context().symbol}:${String(ref.timeframe)}:${field}:${alignment}`;
     return `data:${field}`;
   }
 
   getRuntimeRefFromCallArg(refRegister: string, locals: Record<string, unknown>, lastRuntimeCallRefs: Map<string, any>): any {
     const local = locals[refRegister];
-    if ((local as any)?.__coreSpiritDataRef) return local;
+    if ((local as any)?.__coreSpiritDataRef || ['market','timeframe','series'].includes(String((local as any)?.kind ?? ''))) return local;
     return lastRuntimeCallRefs.get(refRegister);
   }
 }

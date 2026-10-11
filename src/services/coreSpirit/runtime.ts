@@ -1117,6 +1117,14 @@ export class CoreSpiritRuntime {
         : this.executionContext.symbol;
       return finish({ kind:'market', symbol, timeframe });
     }
+    if(name==='__market_alignment') {
+      const ref=args[0] as Record<string, unknown> | null | undefined;
+      const phase=String(args[1] ?? 'confirmed');
+      if(!ref||!['market','timeframe','series'].includes(String(ref.kind??''))||
+        !['confirmed','developing','historical','realtime'].includes(phase)) return finish(null);
+      const alignment=phase==='developing'||phase==='realtime'?'developing':'last-confirmed';
+      return finish({...ref,alignment,temporalPhase:phase});
+    }
     if(name==='ui.panel') return finish(this.uiRuntime.panel(String(args[0]??'panel'),String(args[0]??'Panel')));
     if(name==='ui.panel.number') return finish(this.uiRuntime.number(args[0],String(args[1]??''),args[2],typeof args[3]==='string'?args[3]:undefined));
     if(name==='ui.panel.button') return finish(this.uiRuntime.button(args[0],String(args[1]??''),typeof args[2]==='string'?args[2]:undefined));
@@ -1264,10 +1272,14 @@ export class CoreSpiritRuntime {
           if(field==='footprint') return finish(this.dataResolver?.footprint?.(symbol,timeframe) ?? null);
           if(field==='volumeProfile') return finish(this.dataResolver?.volumeProfile?.(symbol,timeframe) ?? null);
           if(['open','high','low','close','volume','time'].includes(field)) {
+            const alignment = r.alignment === 'developing' ? 'developing' : 'last-confirmed';
+            // Historical higher-timeframe rows may already contain final values;
+            // only a realtime host can supply a trustworthy developing snapshot.
+            if(alignment==='developing' && this.executionContext.mode!=='realtime') return finish(null);
             const req={symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0};
-            const memoKey=`request:${index}:${symbol}:${timeframe}:${field}:0`;
+            const memoKey=`request:${index}:${symbol}:${timeframe}:${field}:0:${alignment}`;
             if(this.dataMemo.has(memoKey)) return finish(this.dataMemo.get(memoKey));
-            const ctx: CoreSpiritDataResolutionContext={asOfTimestamp:this.toEpoch(bar.timestamp),baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment:'last-confirmed'};
+            const ctx: CoreSpiritDataResolutionContext={asOfTimestamp:this.toEpoch(bar.timestamp),baseSymbol:this.executionContext.symbol,baseTimeframe:this.executionContext.timeframe,executionMode:this.executionContext.mode,revision:this.state.barState.revision,alignment};
             const resolver=this.dataResolver;
             const value=resolver?.requestAt ? resolver.requestAt(req,ctx) : resolver?.request?.(req);
             if(value && typeof (value as any).then==='function') return finish(null);
