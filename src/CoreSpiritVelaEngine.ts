@@ -370,7 +370,7 @@ export class CoreSpiritVelaEngine {
 
     const initializeStatic = (currentBars: CoreSpiritMarketBar[]): void => {
       if (stopped || historyInitialized) return;
-      const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
+      const result = safeOutputs(runtime.executeIrReadOnly(token.ir, currentBars).outputs);
       scene.reset();
       scene.seed(result);
       firstSeriesTime = currentBars.length ? barTimeMillis(currentBars[0]?.timestamp) : Number.NaN;
@@ -398,7 +398,7 @@ export class CoreSpiritVelaEngine {
       if (historical.length) {
         // One confirmed-history pass establishes the runtime's stable baseline.
         // The same runtime then evaluates the forming bar without rehydrating history.
-        const warm = safeOutputs(runtime.executeIr(token.ir, historical).outputs);
+        const warm = safeOutputs(runtime.executeIrReadOnly(token.ir, historical).outputs);
         scene.seed(warm);
       }
 
@@ -526,7 +526,7 @@ export class CoreSpiritVelaEngine {
 
           if (req.mode === 'live') {
             const historical = currentBars.slice(0, -1);
-            if (historical.length) scene.seed(safeOutputs(runtime.executeIr(token.ir, historical).outputs));
+            if (historical.length) scene.seed(safeOutputs(runtime.executeIrReadOnly(token.ir, historical).outputs));
 
             const latest = currentBars.at(-1);
             if (latest) {
@@ -540,7 +540,7 @@ export class CoreSpiritVelaEngine {
             historyInitialized = true;
             liveStarted = true;
           } else {
-            const result = safeOutputs(runtime.executeIr(token.ir, currentBars).outputs);
+            const result = safeOutputs(runtime.executeIrReadOnly(token.ir, currentBars).outputs);
             scene.seed(result);
             firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
             lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
@@ -591,7 +591,7 @@ export class CoreSpiritVelaEngine {
 
         const rangeRuntime = createRuntime({ suppressExternalEffects:true });
         rangeRuntime.loadIr(token.ir);
-        const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
+        const rangeResult = safeOutputs(rangeRuntime.executeIrReadOnly(token.ir, rangeBars).outputs);
         emitScenePatches(rangeResult, { from: viewportFrom, to: viewportTo });
         lastViewportComputationKey = viewportKey;
       },
@@ -616,7 +616,7 @@ export class CoreSpiritVelaEngine {
             if (rangeBars.length) {
               const rangeRuntime = createRuntime({ suppressExternalEffects:true });
               rangeRuntime.loadIr(token.ir);
-              const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
+              const rangeResult = safeOutputs(rangeRuntime.executeIrReadOnly(token.ir, rangeBars).outputs);
               emitScenePatches(rangeResult, dirtyRange);
             }
           }
