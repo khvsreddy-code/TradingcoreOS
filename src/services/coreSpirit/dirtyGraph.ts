@@ -158,13 +158,23 @@ export class CoreSpiritDirtyGraph {
   }
 }
 
-export function dirtySourcesForBar(previous:{open:number;high:number;low:number;close:number;volume:number}|undefined,current:{open:number;high:number;low:number;close:number;volume:number}): CoreSpiritDirtySource[] {
-  if(!previous) return ['time','open','high','low','close','volume','bar_index'];
-  const out:CoreSpiritDirtySource[]=[];
-  if(previous.open!==current.open)out.push('open');
-  if(previous.high!==current.high)out.push('high');
-  if(previous.low!==current.low)out.push('low');
-  if(previous.close!==current.close)out.push('close');
-  if(previous.volume!==current.volume)out.push('volume');
+export type CoreSpiritDirtyBar = {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  time?: number;
+};
+
+export function dirtySourcesForBar(previous: CoreSpiritDirtyBar | undefined, current: CoreSpiritDirtyBar): CoreSpiritDirtySource[] {
+  if (!previous) return ['time', 'open', 'high', 'low', 'close', 'volume', 'bar_index'];
+  const out: CoreSpiritDirtySource[] = [];
+  if (previous.time !== current.time && (previous.time !== undefined || current.time !== undefined)) out.push('time');
+  if (previous.open !== current.open) out.push('open');
+  if (previous.high !== current.high) out.push('high');
+  if (previous.low !== current.low) out.push('low');
+  if (previous.close !== current.close) out.push('close');
+  if (previous.volume !== current.volume) out.push('volume');
   return out;
 }
