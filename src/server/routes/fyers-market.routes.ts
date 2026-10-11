@@ -18,7 +18,7 @@ async function clientFor(req: AuthenticatedRequest, res: Response): Promise<Fyer
   }
   try {
     const capabilities = resolveFyersCapabilities(userId);
-    return new FyersApiClient(EncryptionService.decrypt(session.accessTokenEncrypted), undefined, capabilities);
+    return new FyersApiClient(EncryptionService.decrypt(session.accessTokenEncrypted), undefined, capabilities, userId);
   } catch {
     res.status(500).json({ success: false, error: 'Unable to decrypt the Fyers session.' });
     return null;
