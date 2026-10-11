@@ -4,7 +4,7 @@
  */
 
 import { coreSpiritChecksum } from './artifact';
-import type { CoreSpiritSceneNode, CoreSpiritSceneStyle } from './visualScene';
+import type { CoreSpiritSceneNode } from './visualScene';
 
 export type CoreSpiritVisualHandle = Readonly<{
   id: string;
@@ -36,6 +36,10 @@ export class CoreSpiritVisualObjectStore {
 
   upsert(node: CoreSpiritSceneNode): CoreSpiritVisualHandle {
     if (node.sourceId !== this.sourceId) throw new Error(`visual '${node.id}' belongs to '${node.sourceId}', expected '${this.sourceId}'`);
+    const current = this.nodes.get(node.id);
+    if (current && current.kind !== node.kind) {
+      throw new Error(`visual '${node.id}' cannot change kind from '${current.kind}' to '${node.kind}'`);
+    }
     this.nodes.set(node.id, cloneNode(node));
     return { id: node.id, sourceId: this.sourceId, kind: node.kind };
   }
@@ -50,16 +54,18 @@ export class CoreSpiritVisualObjectStore {
       sourceId: current.sourceId,
       kind: current.kind,
       layer: current.layer,
-      payload: patch.payload ? { ...patch.payload } : current.payload,
-      style: patch.style ? { ...(patch.style as CoreSpiritSceneStyle) } : current.style,
-      metadata: patch.metadata ? { ...patch.metadata } : current.metadata,
     };
     this.nodes.set(id, cloneNode(next));
     return { id, sourceId: this.sourceId, kind: current.kind };
   }
 
   remove(id: string): boolean {
-    return this.nodes.delete(id);
+    if (!this.nodes.delete(id)) return false;
+    // Removing a group root must not leave dangling parent references in the retained scene.
+    for (const [childId, child] of this.nodes) {
+      if (child.parentId === id) this.nodes.set(childId, cloneNode({ ...child, parentId: undefined }));
+    }
+    return true;
   }
 
   get(id: string): CoreSpiritSceneNode | undefined {
@@ -92,14 +98,31 @@ export class CoreSpiritVisualObjectStore {
 }
 
 function cloneNode(node: CoreSpiritSceneNode): CoreSpiritSceneNode {
-  return {
-    ...node,
-    anchor: node.anchor ? { ...node.anchor } : undefined,
-    anchors: node.anchors ? node.anchors.map(anchor => ({ ...anchor })) : undefined,
-    timeRange: node.timeRange ? { ...node.timeRange } : undefined,
-    style: node.style ? { ...node.style } : undefined,
-    payload: { ...node.payload },
-  };
+  // Scene payloads can contain nested grids, matrices, metadata, and interaction parameters.
+  // A shallow copy would let producer mutations change retained output without a scene revision.
+  if (typeof globalThis.structuredClone === 'function') return globalThis.structuredClone(node);
+  return clonePlainValue(node, new WeakSet<object>()) as CoreSpiritSceneNode;
+}
+
+function clonePlainValue<T>(value: T, ancestors: WeakSet<object>): T {
+  if (value === null || typeof value !== 'object') return value;
+  const source = value as object;
+  if (ancestors.has(source)) throw new Error('visual scene data cannot contain circular references');
+  if (!Array.isArray(value)) {
+    const prototype = Object.getPrototypeOf(source);
+    if (prototype !== Object.prototype && prototype !== null) return value;
+  }
+  ancestors.add(source);
+  let result: unknown;
+  if (Array.isArray(value)) {
+    result = value.map(item => clonePlainValue(item, ancestors));
+  } else {
+    const output: Record<string, unknown> = Object.create(Object.getPrototypeOf(source));
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) output[key] = clonePlainValue(child, ancestors);
+    result = output;
+  }
+  ancestors.delete(source);
+  return result as T;
 }
 
 /** Future language lowering target for reactive assignment syntax. */
@@ -123,7 +146,9 @@ export function updateVisualProperty(
   }
 
   if (property === 'text') {
-    return store.update(id, { payload: { ...store.get(id)!.payload, text: String(value) } });
+    const current = store.get(id);
+    if (!current) throw new Error(`visual '${id}' does not exist`);
+    return store.update(id, { payload: { ...current.payload, text: String(value) } });
   }
   if (property === 'visible' || property === 'zIndex') {
     return store.update(id, property === 'visible' ? { visible: Boolean(value) } : { zIndex: Number(value) });
