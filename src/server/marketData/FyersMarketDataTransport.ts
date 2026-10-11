@@ -1,55 +1,53 @@
 import WebSocket from 'ws';
-import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market.js';
+import type { DomainMarketEvent } from '../../types/market-events.js';
+import type { MarketFeedEvent, NormalizedMarketTick } from '../../types/market.js';
 import { DEFAULT_FYERS_CAPABILITIES } from '../fyers/core/FyersCapabilities.js';
 
+export type FyersDataFeedClass = 'lite' | 'full' | 'depth';
 type Listener = (event: MarketFeedEvent) => void;
 
 interface Session {
+  userId: string;
+  feedClass: FyersDataFeedClass;
   socket?: WebSocket;
   instruments: Set<string>;
   listeners: Set<Listener>;
   subscriptions: Map<Listener, Set<string>>;
-  depthSubscriptions: Map<Listener, Set<string>>;
   accessToken: string;
   closing: boolean;
   reconnectAttempt: number;
-  includeDepth: boolean;
   connectGeneration: number;
-  depthSymbols: Set<string>;
   reconnectTimer?: ReturnType<typeof setTimeout>;
   pingTimer?: ReturnType<typeof setInterval>;
   lastTickAt: number;
+  sequence: number;
 }
 
 /**
- * One shared FYERS data socket per TradingCore user. FYERS v3 authenticates the
- * socket with the same appId:accessToken credential used by REST calls.
+ * A user may own three isolated broker data sockets: LTP-only, full symbol
+ * updates, and depth. Keeping them separate prevents depth frames from sharing
+ * the chart/quote hot path. The account-level symbol union is still capped
+ * centrally, so opening additional classes cannot bypass FYERS entitlements.
  */
 export class FyersMarketDataTransport {
   private static sessions = new Map<string, Session>();
+
+  private static sessionKey(userId: string, feedClass: FyersDataFeedClass): string {
+    return userId + '::' + feedClass;
+  }
 
   static checkSubscriptionCapacity(
     userId: string,
     instrumentKeys: readonly string[],
     maxSymbols: number,
     depthSymbols: readonly string[] = [],
-  ): { allowed:boolean; activeSymbols:number; projectedSymbols:number; limit:number } {
-    const session = this.sessions.get(userId);
-    const active = new Set<string>([
-      ...(session?.instruments ?? []),
-      ...(session?.depthSymbols ?? []),
-    ]);
-    const projected = new Set<string>([
-      ...active,
-      ...instrumentKeys,
-      ...depthSymbols,
-    ]);
-    return {
-      allowed: projected.size <= maxSymbols,
-      activeSymbols: active.size,
-      projectedSymbols: projected.size,
-      limit: maxSymbols,
-    };
+  ): { allowed: boolean; activeSymbols: number; projectedSymbols: number; limit: number } {
+    const active = new Set<string>();
+    for (const session of this.sessions.values()) {
+      if (session.userId === userId) session.instruments.forEach(symbol => active.add(symbol));
+    }
+    const projected = new Set<string>([...active, ...instrumentKeys, ...depthSymbols]);
+    return { allowed: projected.size <= maxSymbols, activeSymbols: active.size, projectedSymbols: projected.size, limit: maxSymbols };
   }
 
   static subscribe(
@@ -60,101 +58,107 @@ export class FyersMarketDataTransport {
     includeDepth = false,
     depthSymbols: string[] = instrumentKeys,
     maxSymbols = DEFAULT_FYERS_CAPABILITIES.maxStreamSymbols,
+    feedClass: FyersDataFeedClass = 'full',
   ): () => void {
-    const capacity = this.checkSubscriptionCapacity(
-      userId,
-      instrumentKeys,
-      maxSymbols,
-      includeDepth ? depthSymbols : [],
-    );
-    if (!capacity.allowed) {
-      const error = new Error(`FYERS stream symbol limit exceeded: ${capacity.projectedSymbols} unique symbols requested; ${capacity.limit} allowed for this account's plan.`);
-      Object.assign(error, { status:400, code:'FYERS_STREAM_SYMBOL_LIMIT', limit:capacity.limit, requested:capacity.projectedSymbols });
-      throw error;
+    // Backward compatibility: a legacy combined request is fulfilled by two
+    // physically distinct sockets rather than subscribing to depth on the chart socket.
+    if (feedClass === 'full' && includeDepth) {
+      const stopFull = this.subscribeSingle(userId, accessToken, instrumentKeys, listener, maxSymbols, 'full');
+      try {
+        const stopDepth = this.subscribeSingle(userId, accessToken, depthSymbols, listener, maxSymbols, 'depth');
+        let stopped = false;
+        return () => {
+          if (stopped) return;
+          stopped = true;
+          stopDepth();
+          stopFull();
+        };
+      } catch (error) {
+        stopFull();
+        throw error;
+      }
     }
-    let session = this.sessions.get(userId);
-    if (!session) {
-      session = {
-        instruments: new Set(),
-        listeners: new Set(),
-        subscriptions: new Map(),
-        depthSubscriptions: new Map(),
-        accessToken,
-        closing: false,
-        reconnectAttempt: 0,
-        includeDepth: false,
-        connectGeneration: 0,
-        depthSymbols: new Set(),
-        lastTickAt: 0,
-      };
-      this.sessions.set(userId, session);
-    }
-
-    session.accessToken = accessToken;
-    session.closing = false;
-    session.includeDepth = session.includeDepth || includeDepth;
-    if (includeDepth) depthSymbols.forEach(symbol => session!.depthSymbols.add(symbol));
-    session.listeners.add(listener);
-    session.subscriptions.set(listener, new Set(instrumentKeys));
-    if (includeDepth) session.depthSubscriptions.set(listener, new Set(depthSymbols));
-    const newSymbols = instrumentKeys.filter((key) => !session!.instruments.has(key));
-    newSymbols.forEach((key) => session!.instruments.add(key));
-
-    const stale = session.socket?.readyState === WebSocket.OPEN && session.lastTickAt > 0 && Date.now() - session.lastTickAt > 5_000;
-    if (stale) {
-      // A TCP/WebSocket connection can stay OPEN while the broker stops
-      // delivering market frames. A new HTTP subscriber must not simply
-      // attach to that dead socket; force a genuinely fresh broker socket.
-      this.restartSocket(userId, session);
-    } else if (!session.socket || session.socket.readyState !== WebSocket.OPEN) {
-      void this.connect(userId, session, session.includeDepth, [...session.depthSymbols]);
-    } else if (newSymbols.length) {
-      this.sendSubscribe(session, newSymbols, session.includeDepth, [...session.depthSymbols]);
-    }
-
-    listener({ type: 'status', status: session.socket?.readyState === WebSocket.OPEN ? 'connected' : 'connecting' });
-    return () => this.unsubscribe(userId, instrumentKeys, listener);
+    return this.subscribeSingle(userId, accessToken, instrumentKeys, listener, maxSymbols, feedClass);
   }
 
   static disconnect(userId: string): void {
-    const session = this.sessions.get(userId);
-    if (!session) return;
-    session.closing = true;
-    clearTimeout(session.reconnectTimer);
-    if (session.pingTimer) clearInterval(session.pingTimer);
-    session.pingTimer = undefined;
-    session.socket?.close();
-    this.sessions.delete(userId);
+    for (const [key, session] of this.sessions) {
+      if (session.userId !== userId) continue;
+      session.closing = true;
+      clearTimeout(session.reconnectTimer);
+      if (session.pingTimer) clearInterval(session.pingTimer);
+      session.pingTimer = undefined;
+      try { session.socket?.close(); } catch {}
+      this.sessions.delete(key);
+    }
   }
 
-  private static unsubscribe(userId: string, symbols: string[], listener: Listener): void {
-    const session = this.sessions.get(userId);
+  private static subscribeSingle(
+    userId: string,
+    accessToken: string,
+    instrumentKeys: string[],
+    listener: Listener,
+    maxSymbols: number,
+    feedClass: FyersDataFeedClass,
+  ): () => void {
+    const symbols = [...new Set(instrumentKeys.map(value => String(value || '').trim()).filter(Boolean))];
+    if (!symbols.length) throw Object.assign(new Error('At least one valid FYERS symbol is required.'), { status: 400, code: 'FYERS_EMPTY_SUBSCRIPTION' });
+    const capacity = this.checkSubscriptionCapacity(userId, symbols, maxSymbols);
+    if (!capacity.allowed) {
+      throw Object.assign(
+        new Error(`FYERS stream symbol limit exceeded: ${capacity.projectedSymbols} unique symbols requested; ${capacity.limit} allowed for this account's plan.`),
+        { status: 400, code: 'FYERS_STREAM_SYMBOL_LIMIT', limit: capacity.limit, requested: capacity.projectedSymbols },
+      );
+    }
+
+    const key = this.sessionKey(userId, feedClass);
+    let session = this.sessions.get(key);
+    if (!session) {
+      session = {
+        userId, feedClass, instruments: new Set(), listeners: new Set(), subscriptions: new Map(),
+        accessToken, closing: false, reconnectAttempt: 0, connectGeneration: 0, lastTickAt: 0, sequence: 0,
+      };
+      this.sessions.set(key, session);
+    }
+    session.accessToken = accessToken;
+    session.closing = false;
+    session.listeners.add(listener);
+    session.subscriptions.set(listener, new Set(symbols));
+    const newSymbols = symbols.filter(symbol => !session!.instruments.has(symbol));
+    newSymbols.forEach(symbol => session!.instruments.add(symbol));
+
+    const stale = session.socket?.readyState === WebSocket.OPEN && session.lastTickAt > 0 && Date.now() - session.lastTickAt > 5_000;
+    if (stale) this.restartSocket(key, session);
+    else if (!session.socket || session.socket.readyState !== WebSocket.OPEN) void this.connect(key, session);
+    else if (newSymbols.length) this.sendSubscribe(session, newSymbols);
+
+    listener({ type: 'status', status: session.socket?.readyState === WebSocket.OPEN ? 'connected' : 'connecting' });
+    return () => this.unsubscribe(key, listener);
+  }
+
+  private static unsubscribe(key: string, listener: Listener): void {
+    const session = this.sessions.get(key);
     if (!session) return;
     session.listeners.delete(listener);
     session.subscriptions.delete(listener);
-    session.depthSubscriptions.delete(listener);
     if (!session.listeners.size) {
-      this.disconnect(userId);
+      session.closing = true;
+      clearTimeout(session.reconnectTimer);
+      if (session.pingTimer) clearInterval(session.pingTimer);
+      try { session.socket?.close(); } catch {}
+      this.sessions.delete(key);
       return;
     }
-
-    // Recompute the broker-level symbol union from the remaining consumers.
-    // A symbol is removed from FYERS only when no active consumer still needs it.
-    const nextInstruments = new Set<string>();
-    session.subscriptions.forEach((ownedSymbols) => ownedSymbols.forEach((symbol) => nextInstruments.add(symbol)));
-    const removable = [...session.instruments].filter((symbol) => !nextInstruments.has(symbol));
-    session.instruments = nextInstruments;
-    if (removable.length && session.socket?.readyState === WebSocket.OPEN) {
-      try { session.socket.send(JSON.stringify({ symbol: removable, type: 'unsubscribe' })); } catch { /* reconnect path */ }
+    const next = new Set<string>();
+    session.subscriptions.forEach(symbols => symbols.forEach(symbol => next.add(symbol)));
+    const removed = [...session.instruments].filter(symbol => !next.has(symbol));
+    session.instruments = next;
+    if (removed.length && session.socket?.readyState === WebSocket.OPEN) {
+      try { session.socket.send(JSON.stringify({ symbol: removed, type: 'unsubscribe' })); } catch { /* reconnect will restore remaining symbols */ }
     }
-
-    const nextDepthSymbols = new Set<string>();
-    session.depthSubscriptions.forEach((ownedSymbols) => ownedSymbols.forEach((symbol) => nextDepthSymbols.add(symbol)));
-    session.depthSymbols = nextDepthSymbols;
-    session.includeDepth = session.depthSymbols.size > 0;
   }
 
-  private static async connect(userId: string, session: Session, includeDepth = false, depthSymbols: string[] = [...session.depthSymbols]): Promise<void> {
+  private static async connect(key: string, session: Session): Promise<void> {
     if (session.closing || !session.instruments.size) return;
     const appId = process.env.FYERS_CLIENT_ID;
     if (!appId) {
@@ -162,45 +166,45 @@ export class FyersMarketDataTransport {
       return;
     }
 
-    const authorization = `${appId}:${session.accessToken}`;
     const generation = ++session.connectGeneration;
     const socket = new WebSocket('wss://api.fyers.in/socket/v2/data/', {
-      headers: { authorization },
+      headers: { authorization: `${appId}:${session.accessToken}` },
       handshakeTimeout: 10_000,
     });
     session.socket = socket;
-
     socket.on('open', () => {
       if (generation !== session.connectGeneration || session.closing) {
         try { socket.close(); } catch {}
         return;
       }
       session.reconnectAttempt = 0;
-      // Do not treat the connection handshake itself as market activity.
-      // lastTickAt is updated only by actual symbol updates below.
       this.emit(session, { type: 'status', status: 'connected' });
-      this.sendSubscribe(session, [...session.instruments], session.includeDepth, depthSymbols);
+      this.sendSubscribe(session, [...session.instruments]);
       if (session.pingTimer) clearInterval(session.pingTimer);
       session.pingTimer = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) { try { socket.send('ping'); } catch {} }
       }, 10_000);
     });
 
-    socket.on('message', (message) => {
+    socket.on('message', message => {
+      if (generation !== session.connectGeneration || session.closing) return;
       try {
-        const payload = JSON.parse(Buffer.isBuffer(message) ? message.toString('utf8') : String(message));
-        const tick = normalizeFyersTick(payload);
-        if (tick?.ltp != null) session.lastTickAt = Date.now();
-        if (tick) this.emit(session, { type: 'tick', tick });
+        const text = Buffer.isBuffer(message) ? message.toString('utf8') : String(message);
+        if (text === 'ping' || text === 'pong') return;
+        const payload: unknown = JSON.parse(text);
+        const sequence = ++session.sequence;
+        const tick = normalizeFyersTick(payload, session.feedClass, sequence);
+        if (!tick) return;
+        session.lastTickAt = Date.now();
+        this.emit(session, { type: 'tick', tick, domainEvent: buildDomainEvent(tick, session.feedClass) });
       } catch {
-        // FYERS may emit non-market informational frames. Ignore malformed/non-JSON frames.
+        // Non-market informational frames and malformed provider frames are ignored.
       }
     });
 
-    socket.on('error', (error) => {
+    socket.on('error', error => {
       if (generation !== session.connectGeneration || session.closing) return;
-      const message = error instanceof Error ? error.message : 'FYERS market socket error';
-      this.emit(session, { type: 'error', error: message });
+      this.emit(session, { type: 'error', error: error instanceof Error ? error.message : 'FYERS market socket error' });
     });
 
     socket.on('close', (code, reason) => {
@@ -215,11 +219,11 @@ export class FyersMarketDataTransport {
         this.emit(session, { type: 'status', status: 'authentication_failed' });
         return;
       }
-      this.scheduleReconnect(userId, session, session.includeDepth);
+      this.scheduleReconnect(key, session);
     });
   }
 
-  private static restartSocket(userId: string, session: Session): void {
+  private static restartSocket(key: string, session: Session): void {
     if (session.closing) return;
     clearTimeout(session.reconnectTimer);
     if (session.pingTimer) clearInterval(session.pingTimer);
@@ -230,54 +234,139 @@ export class FyersMarketDataTransport {
     try { socket?.close(); } catch {}
     session.reconnectAttempt = 0;
     this.emit(session, { type: 'status', status: 'reconnecting' });
-    void this.connect(userId, session, session.includeDepth, [...session.depthSymbols]);
+    void this.connect(key, session);
   }
 
-  private static scheduleReconnect(userId: string, session: Session, includeDepth = false): void {
+  private static scheduleReconnect(key: string, session: Session): void {
     if (session.closing) return;
     session.reconnectAttempt += 1;
     const delay = Math.min(15_000, 500 * 2 ** Math.min(session.reconnectAttempt, 5));
     this.emit(session, { type: 'status', status: 'reconnecting' });
     clearTimeout(session.reconnectTimer);
-    session.reconnectTimer = setTimeout(() => void this.connect(userId, session, session.includeDepth, [...session.depthSymbols]), delay);
+    session.reconnectTimer = setTimeout(() => void this.connect(key, session), delay);
   }
 
-  private static sendSubscribe(session: Session, symbols: string[], includeDepth = false, depthSymbols: string[] = symbols): void {
+  private static sendSubscribe(session: Session, symbols: string[]): void {
     if (!symbols.length || session.socket?.readyState !== WebSocket.OPEN) return;
-    session.socket.send(JSON.stringify({ symbol: symbols, type: 'symbolUpdate' }));
-    if (includeDepth && depthSymbols.length) session.socket.send(JSON.stringify({ symbol: depthSymbols, type: 'DepthUpdate' }));
+    const type = session.feedClass === 'lite' ? 'lite' : session.feedClass === 'depth' ? 'DepthUpdate' : 'symbolUpdate';
+    session.socket.send(JSON.stringify({ symbol: symbols, type }));
   }
 
   private static emit(session: Session, event: MarketFeedEvent): void {
-    session.listeners.forEach((listener) => listener(event));
+    session.listeners.forEach(listener => {
+      if (event.type === 'tick') {
+        const symbols = session.subscriptions.get(listener);
+        if (!symbols?.has(event.tick.instrumentKey)) return;
+      }
+      try { listener(event); } catch { /* one consumer must not break shared fanout */ }
+    });
   }
 }
 
-function normalizeFyersTick(payload: any): NormalizedMarketTick | null {
-  if (!payload || typeof payload !== 'object' || !payload.symbol) return null;
-  const depthBids = [1,2,3,4,5].map(i => ({price:Number(payload[`bid_price${i}`]), quantity:Number(payload[`bid_size${i}`]), orders:Number(payload[`bid_order${i}`])})).filter(x => Number.isFinite(x.price) && Number.isFinite(x.quantity));
-  const depthAsks = [1,2,3,4,5].map(i => ({price:Number(payload[`ask_price${i}`]), quantity:Number(payload[`ask_size${i}`]), orders:Number(payload[`ask_order${i}`])})).filter(x => Number.isFinite(x.price) && Number.isFinite(x.quantity));
-  const ltp = Number(payload.ltp);
-  const isDepth = payload.type === 'dp' || payload.type === 'DepthUpdate';
-  if (!Number.isFinite(ltp) && !isDepth && !depthBids.length && !depthAsks.length) return null;
-  const prevClose = Number(payload.prev_close_price);
-  const timestamp = Number(payload.last_traded_time || payload.exch_feed_time);
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+function finite(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return undefined;
+}
+function eventTime(value: unknown, fallback: number): number {
+  const raw = finite(value);
+  if (raw !== undefined && raw > 0) return raw > 1e12 ? raw : raw * 1000;
+  return fallback;
+}
+
+function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, sequence: number): NormalizedMarketTick | null {
+  const payload = asRecord(value);
+  if (!payload || typeof payload.symbol !== 'string' || !payload.symbol.trim()) return null;
+  const now = Date.now();
+  const receivedAt = now;
+  const ltp = finite(payload.ltp);
+  const depthBids = [1, 2, 3, 4, 5].map(i => ({
+    price: finite(payload[`bid_price${i}`]),
+    quantity: finite(payload[`bid_size${i}`]),
+    orders: finite(payload[`bid_order${i}`]),
+  })).filter((level): level is { price: number; quantity: number; orders?: number } => level.price !== undefined && level.quantity !== undefined)
+    .map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) }));
+  const depthAsks = [1, 2, 3, 4, 5].map(i => ({
+    price: finite(payload[`ask_price${i}`]),
+    quantity: finite(payload[`ask_size${i}`]),
+    orders: finite(payload[`ask_order${i}`]),
+  })).filter((level): level is { price: number; quantity: number; orders?: number } => level.price !== undefined && level.quantity !== undefined)
+    .map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) }));
+  const isDepth = feedClass === 'depth' || String(payload.type || '').toLowerCase() === 'dp' || String(payload.type || '').toLowerCase() === 'depthupdate';
+
+  if (feedClass === 'lite') {
+    if (ltp === undefined) return null;
+    const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
+    return {
+      instrumentKey: payload.symbol, ltp,
+      receivedAt: new Date(receivedAt).toISOString(),
+      sequence, timestamp: eventTime(brokerTimestamp, receivedAt), receivedAtEpoch: receivedAt,
+      brokerTimestamp: brokerTimestamp !== undefined ? eventTime(brokerTimestamp, receivedAt) : undefined,
+      source: 'fyers', revision: sequence, feedClass,
+    };
+  }
+  if (ltp === undefined && !isDepth && !depthBids.length && !depthAsks.length) return null;
+  const prevClose = finite(payload.prev_close_price);
+  const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
+  const tick: NormalizedMarketTick = {
+    instrumentKey: payload.symbol,
+    ...(ltp !== undefined ? { ltp } : {}),
+    ...(finite(payload.open_price) !== undefined ? { open: finite(payload.open_price) } : {}),
+    ...(finite(payload.high_price) !== undefined ? { high: finite(payload.high_price) } : {}),
+    ...(finite(payload.low_price) !== undefined ? { low: finite(payload.low_price) } : {}),
+    ...(prevClose !== undefined ? { close: prevClose } : {}),
+    ...(finite(payload.ch) !== undefined ? { change: finite(payload.ch) } : (ltp !== undefined && prevClose !== undefined ? { change: ltp - prevClose } : {})),
+    ...(finite(payload.chp) !== undefined ? { changePercent: finite(payload.chp) } : {}),
+    ...(finite(payload.vol_traded_today) !== undefined ? { volume: finite(payload.vol_traded_today) } : {}),
+    ...(Number.isFinite(eventTime(brokerTimestamp, receivedAt)) ? { lastTradeTimestamp: new Date(eventTime(brokerTimestamp, receivedAt)).toISOString() } : {}),
+    ...(depthBids.length ? { bid: depthBids } : (finite(payload.bid_price) !== undefined ? { bid: [{ price: finite(payload.bid_price)!, quantity: finite(payload.bid_size) ?? 0 }] } : {})),
+    ...(depthAsks.length ? { ask: depthAsks } : (finite(payload.ask_price) !== undefined ? { ask: [{ price: finite(payload.ask_price)!, quantity: finite(payload.ask_size) ?? 0 }] } : {})),
+    ...(finite(payload.oi) !== undefined ? { oi: finite(payload.oi) } : {}),
+    ...(finite(payload.tot_buy_qty) !== undefined ? { totalBuyQuantity: finite(payload.tot_buy_qty) } : {}),
+    ...(finite(payload.tot_sell_qty) !== undefined ? { totalSellQuantity: finite(payload.tot_sell_qty) } : {}),
+    receivedAt: new Date(receivedAt).toISOString(),
+    sequence, timestamp: eventTime(brokerTimestamp, receivedAt), receivedAtEpoch: receivedAt,
+    ...(brokerTimestamp !== undefined ? { brokerTimestamp: eventTime(brokerTimestamp, receivedAt) } : {}),
+    source: 'fyers', revision: sequence, feedClass,
+  };
+  return tick;
+}
+
+function buildDomainEvent(tick: NormalizedMarketTick, feedClass: FyersDataFeedClass): DomainMarketEvent {
+  const sequence = tick.sequence ?? 0;
+  const receivedAt = tick.receivedAtEpoch ?? Date.now();
+  const symbol = tick.instrumentKey;
+  const timestamp = tick.timestamp ?? receivedAt;
+  const base = {
+    sequence, timestamp, receivedAt,
+    ...(tick.brokerTimestamp !== undefined ? { brokerTimestamp: tick.brokerTimestamp } : {}),
+    symbol, source: 'fyers' as const, revision: tick.revision ?? sequence,
+  };
+  if (feedClass === 'depth') {
+    return {
+      ...base, type: 'DepthSnapshot',
+      bids: (tick.bid || []).map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) })),
+      asks: (tick.ask || []).map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) })),
+    };
+  }
+  if (ltpMissing(tick.ltp)) {
+    return { ...base, type: 'DepthSnapshot', bids: [], asks: [] };
+  }
   return {
-    instrumentKey: String(payload.symbol),
-    ltp: Number.isFinite(ltp) ? ltp : undefined,
-    open: Number.isFinite(Number(payload.open_price)) ? Number(payload.open_price) : undefined,
-    high: Number.isFinite(Number(payload.high_price)) ? Number(payload.high_price) : undefined,
-    low: Number.isFinite(Number(payload.low_price)) ? Number(payload.low_price) : undefined,
-    close: Number.isFinite(prevClose) ? prevClose : undefined,
-    change: Number.isFinite(Number(payload.ch)) ? Number(payload.ch) : (Number.isFinite(ltp) && Number.isFinite(prevClose) ? ltp - prevClose : undefined),
-    changePercent: Number.isFinite(Number(payload.chp)) ? Number(payload.chp) : undefined,
-    lastTradeTimestamp: Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp * 1000).toISOString() : undefined,
-    volume: Number(payload.vol_traded_today || 0),
-    bid: depthBids.length ? depthBids : (Number.isFinite(Number(payload.bid_price)) ? [{ price: Number(payload.bid_price), quantity: Number(payload.bid_size || 0) }] : undefined),
-    ask: depthAsks.length ? depthAsks : (Number.isFinite(Number(payload.ask_price)) ? [{ price: Number(payload.ask_price), quantity: Number(payload.ask_size || 0) }] : undefined),
-    oi: Number.isFinite(Number(payload.oi)) ? Number(payload.oi) : undefined,
-    totalBuyQuantity: Number.isFinite(Number(payload.tot_buy_qty)) ? Number(payload.tot_buy_qty) : undefined,
-    totalSellQuantity: Number.isFinite(Number(payload.tot_sell_qty)) ? Number(payload.tot_sell_qty) : undefined,
-    receivedAt: new Date().toISOString(),
+    ...base, type: 'MarketTick', ltp: tick.ltp,
+    ...(tick.open !== undefined ? { open: tick.open } : {}),
+    ...(tick.high !== undefined ? { high: tick.high } : {}),
+    ...(tick.low !== undefined ? { low: tick.low } : {}),
+    ...(tick.close !== undefined ? { previousClose: tick.close } : {}),
+    ...(tick.change !== undefined ? { change: tick.change } : {}),
+    ...(tick.changePercent !== undefined ? { changePercent: tick.changePercent } : {}),
+    ...(tick.volume !== undefined ? { volume: tick.volume } : {}),
+    ...(tick.oi !== undefined ? { oi: tick.oi } : {}),
+    ...(tick.bid?.[0] ? { bidPrice: tick.bid[0].price, bidQuantity: tick.bid[0].quantity } : {}),
+    ...(tick.ask?.[0] ? { askPrice: tick.ask[0].price, askQuantity: tick.ask[0].quantity } : {}),
   };
 }
+function ltpMissing(value: number | undefined): value is undefined { return value === undefined || !Number.isFinite(value); }
