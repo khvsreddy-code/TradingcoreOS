@@ -13,6 +13,7 @@ const contracts = [
   ['series-registry', ['src/services/coreSpirit/seriesRegistryContract.test.mjs', true]],
   ['series-backend-dispatcher', ['src/services/coreSpirit/seriesBackendDispatcherContract.test.mjs', true]],
   ['dirty-graph', ['src/services/coreSpirit/dirtyGraphContract.test.mjs', true]],
+  ['corespirit-optimizer-production', ['src/services/coreSpirit/optimizerProductionContract.test.mjs', true]],
   ['columnar-market-data', ['src/services/coreSpirit/columnarMarketDataContract.test.mjs', true]],
   ['market-frame-facade', ['src/services/coreSpirit/marketFrameFacade.test.ts', true]],
   ['corespirit-off-thread-compile-cache', ['src/coreSpiritOffThreadCompileContract.test.mjs', false]],
