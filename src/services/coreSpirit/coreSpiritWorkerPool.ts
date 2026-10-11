@@ -2,6 +2,8 @@ import type { CoreSpiritMarketBar } from './marketData';
 import { CoreSpiritGaussianHMM, type CoreSpiritHMMArtifactBinding } from './quantMath';
 import type { CoreSpiritObject } from './types';
 import type { CoreSpiritExecutableArtifact } from './artifact';
+import type { CoreSpiritRuntime } from './runtime';
+import type { CoreSpiritRuntimeOptions } from './runtime';
 import { validateExecutableArtifact } from './artifact';
 import { artifactIdFor } from './artifactAbi';
 import { isRecord } from '../boundary/brokerApiValidation';
@@ -12,6 +14,28 @@ import {
   type CoreSpiritSharedMarketDescriptor,
 } from './sharedMarketBuffer';
 import { createGraphResolver, graphSnapshotTransferables, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
+
+export type CoreSpiritWorkerRuntimeOptions = Pick<CoreSpiritRuntimeOptions,
+  'symbol'|'timeframe'|'executionMode'|'layer'|'executionTarget'|'executionTier'|'inputValues'|'propValues'|'visibleRange'|'suppressExternalEffects'|'modelTrainingMode'>;
+
+type FallbackRuntimeContext={
+  artifactId:string;
+  runtimeOptionsSignature:string;
+  datasetVersion:number;
+  initialized:boolean;
+  runtime:CoreSpiritRuntime;
+  graphResolver?:ReturnType<typeof createGraphResolver>;
+  graphRevision?:number;
+  hmmSignature:string;
+  hmmModels:Map<string,CoreSpiritGaussianHMM>;
+};
+
+function stableSignature(value:unknown):string {
+  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(Array.isArray(value))return `[${value.map(stableSignature).join(',')}]`;
+  const record=value as Record<string,unknown>;
+  return `{${Object.keys(record).sort().map(key=>`${JSON.stringify(key)}:${stableSignature(record[key])}`).join(',')}}`;
+}
 
 export type CoreSpiritWorkerRunResult = {
   outputs: CoreSpiritObject[];
@@ -35,6 +59,8 @@ type WorkerJob = {
   graphBaseSymbol?:string;
   graphBaseTimeframe?:string;
   hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
+  readOnly:boolean;
+  runtimeOptions?:CoreSpiritWorkerRuntimeOptions;
 };
 
 type WorkerSlot = {
@@ -54,6 +80,7 @@ type WorkerRunEnvelope = {
   dirtyFrom:number;
   dirtyTo:number;
   mode:'historical'|'incremental';
+  readOnly:boolean;
   sharedMarket?:CoreSpiritSharedMarketDescriptor;
   bars?:CoreSpiritMarketBar[];
   graphSnapshot?:CoreSpiritGraphSnapshot;
@@ -93,6 +120,8 @@ export class CoreSpiritWorkerPool {
   private readonly contextArtifacts = new Map<string,string>();
   private readonly contextGraphRevisions = new Map<string,number>();
   private readonly contextHMMArtifacts = new Map<string,string>();
+  private readonly contextRuntimeOptions = new Map<string,string>();
+  private readonly fallbackContexts = new Map<string,FallbackRuntimeContext>();
 
   constructor(maxWorkers?:number) {
     const hardware = typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency)
@@ -105,7 +134,7 @@ export class CoreSpiritWorkerPool {
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[]},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
   ):Promise<CoreSpiritWorkerRunResult> {
     const [{loadOrCompileCoreSpiritArtifact},{compileCoreSpiritArtifactOffThread}]=await Promise.all([
       import('./artifactCache'),
@@ -128,12 +157,17 @@ export class CoreSpiritWorkerPool {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
       // A browser must never fall back to interpreting a full history on the UI
-      // thread. Keep the compatibility runtime only for Node/SSR/test execution.
+      // thread. Keep a persistent compatibility runtime only for Node/SSR/tests.
       if(typeof window!=='undefined'){
         return Promise.reject(new Error('CoreSpirit chart execution requires Web Worker support; inline browser-thread execution is disabled.'));
       }
       if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
-      return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,options?.hmmArtifacts);
+      return this.runFallback(
+        artifact,bars,sourceId,options?.contextKey||sourceId,
+        Math.max(1,Math.floor(options?.datasetVersion||1)),options?.dirtyRange,
+        options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,
+        options?.hmmArtifacts,options?.runtimeOptions,options?.readOnly===true,
+      );
     }
 
     return new Promise((resolve,reject)=>{
@@ -152,6 +186,8 @@ export class CoreSpiritWorkerPool {
         graphBaseSymbol:options?.graphBaseSymbol,
         graphBaseTimeframe:options?.graphBaseTimeframe,
         hmmArtifacts:options?.hmmArtifacts,
+        readOnly:options?.readOnly===true,
+        runtimeOptions:options?.runtimeOptions,
       });
       this.queue.sort((a,b)=>a.priority-b.priority);
       this.dispatch();
@@ -172,6 +208,8 @@ export class CoreSpiritWorkerPool {
     this.contextArtifacts.clear();
     this.contextGraphRevisions.clear();
     this.contextHMMArtifacts.clear();
+    this.contextRuntimeOptions.clear();
+    this.fallbackContexts.clear();
   }
 
   private dispatch():void {
@@ -228,7 +266,8 @@ export class CoreSpiritWorkerPool {
     }
 
     const artifactId=artifactIdFor(job.artifact);
-    const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId;
+    const runtimeOptionsSignature=stableSignature(job.runtimeOptions??{});
+    const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId || this.contextRuntimeOptions.get(job.contextKey)!==runtimeOptionsSignature;
     const graphChanged=!!job.graphSnapshot && this.contextGraphRevisions.get(job.contextKey)!==job.graphSnapshot.revision;
     const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias).sort().join('|');
     const hmmArtifactsChanged=job.hmmArtifacts!==undefined && this.contextHMMArtifacts.get(job.contextKey)!==hmmSignature;
@@ -243,6 +282,7 @@ export class CoreSpiritWorkerPool {
       graphBaseTimeframe:job.graphBaseTimeframe,
       hmmArtifacts:job.hmmArtifacts ?? [],
       replaceHMMArtifacts:true,
+      runtimeOptions:job.runtimeOptions,
     } : null;
     const sendHMMArtifacts=(!artifactChanged&&hmmArtifactsChanged) ? {
       type:'updateHMMArtifacts' as const,
@@ -270,7 +310,10 @@ export class CoreSpiritWorkerPool {
       if(!isRecord(message)||message.requestId!==requestId)return;
       try{
         if(message.type==='result'){
-          if(artifactChanged)this.contextArtifacts.set(job.contextKey,artifactId);
+          if(artifactChanged){
+            this.contextArtifacts.set(job.contextKey,artifactId);
+            this.contextRuntimeOptions.set(job.contextKey,runtimeOptionsSignature);
+          }
           if(artifactChanged||hmmArtifactsChanged)this.contextHMMArtifacts.set(job.contextKey,hmmSignature);
           if(job.graphSnapshot&&graphChanged)this.contextGraphRevisions.set(job.contextKey,job.graphSnapshot.revision);
           job.resolve(normalizeResult(message));
@@ -286,7 +329,7 @@ export class CoreSpiritWorkerPool {
       try{slot.worker.terminate();}catch{}
       const index=this.slots.indexOf(slot);
       if(index>=0)this.slots.splice(index,1);
-      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);this.contextHMMArtifacts.delete(key);this.sharedBuffers.delete(key);}}
+      for(const [key,value] of this.contextSlots){if(value===slot){this.contextSlots.delete(key);this.contextArtifacts.delete(key);this.contextGraphRevisions.delete(key);this.contextHMMArtifacts.delete(key);this.contextRuntimeOptions.delete(key);this.sharedBuffers.delete(key);}}
       cleanup();
     };
 
@@ -307,6 +350,7 @@ export class CoreSpiritWorkerPool {
       dirtyFrom:job.dirtyRange?.from ?? 0,
       dirtyTo:job.dirtyRange?.to ?? job.bars.length,
       mode,
+      readOnly:job.readOnly,
       ...(sharedMarket?{sharedMarket}:{bars:job.bars}),
     };
 
@@ -339,26 +383,74 @@ export class CoreSpiritWorkerPool {
     artifact:CoreSpiritExecutableArtifact,
     bars:CoreSpiritMarketBar[],
     sourceId:string,
+    contextKey:string,
+    datasetVersion:number,
+    dirtyRange:DirtyRange|undefined,
     graphSnapshot?:CoreSpiritGraphSnapshot,
     graphBaseSymbol='current',
     graphBaseTimeframe='chart',
     hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[],
+    runtimeOptions?:CoreSpiritWorkerRuntimeOptions,
+    readOnly=false,
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
-    const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
-    for(const binding of hmmArtifacts ?? []){
-      if(!Number.isFinite(binding.trainingEndTimestampMs))throw new Error('Invalid CoreSpirit HMM training cutoff');
-      const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
-      model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
-      hmmModels.set(binding.modelAlias,model);
+    const artifactId=artifactIdFor(artifact);
+    const runtimeOptionsSignature=stableSignature(runtimeOptions??{});
+    const hmmSignature=(hmmArtifacts??[]).map(binding=>binding.artifactHash+':'+binding.modelAlias).sort().join('|');
+    let context=this.fallbackContexts.get(contextKey);
+
+    const installHMMArtifacts=(models:Map<string,CoreSpiritGaussianHMM>)=>{
+      models.clear();
+      for(const binding of hmmArtifacts??[]){
+        if(!Number.isFinite(binding.trainingEndTimestampMs))throw new Error('Invalid CoreSpirit HMM training cutoff');
+        const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
+        model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
+        models.set(binding.modelAlias,model);
+      }
+    };
+
+    if(!context||context.artifactId!==artifactId||context.runtimeOptionsSignature!==runtimeOptionsSignature){
+      const graphResolver=graphSnapshot?createGraphResolver(graphSnapshot,graphBaseSymbol,graphBaseTimeframe):undefined;
+      const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
+      installHMMArtifacts(hmmModels);
+      const runtime=new CoreSpiritRuntime({
+        ...(runtimeOptions??{}),
+        sourceId,
+        dataResolver:graphResolver,
+        hmmArtifactResolver:modelName=>hmmModels.get(modelName),
+      });
+      runtime.loadIr(artifact.ir);
+      context={artifactId,runtimeOptionsSignature,datasetVersion:0,initialized:false,runtime,graphResolver,graphRevision:graphSnapshot?.revision,hmmSignature,hmmModels};
+      this.fallbackContexts.set(contextKey,context);
+    }else{
+      if(graphSnapshot&&context.graphResolver&&context.graphRevision!==graphSnapshot.revision){
+        context.graphResolver.replaceSnapshot(graphSnapshot);
+        context.graphRevision=graphSnapshot.revision;
+      }else if(graphSnapshot&&!context.graphResolver){
+        // A data resolver cannot be bolted onto an already-loaded VM safely;
+        // reinstall via a fresh context on the next request instead.
+        const graphResolver=createGraphResolver(graphSnapshot,graphBaseSymbol,graphBaseTimeframe);
+        const hmmModels=context.hmmModels;
+        const runtime=new CoreSpiritRuntime({...(runtimeOptions??{}),sourceId,dataResolver:graphResolver,hmmArtifactResolver:modelName=>hmmModels.get(modelName)});
+        runtime.loadIr(artifact.ir);
+        context={...context,runtime,graphResolver,graphRevision:graphSnapshot.revision,datasetVersion:0,initialized:false};
+        this.fallbackContexts.set(contextKey,context);
+      }
+      if(context.hmmSignature!==hmmSignature){installHMMArtifacts(context.hmmModels);context.hmmSignature=hmmSignature;}
     }
-    const runtime=new CoreSpiritRuntime({
-      sourceId,
-      dataResolver:graphSnapshot?createGraphResolver(graphSnapshot,graphBaseSymbol,graphBaseTimeframe):undefined,
-      hmmArtifactResolver:modelName=>hmmModels.get(modelName),
-    });
-    runtime.loadIr(artifact.ir);
-    const result=runtime.executeIr(artifact.ir,bars);
+
+    const incremental=datasetVersion>context.datasetVersion&&datasetVersion>1&&!!dirtyRange&&
+      dirtyRange.to>=bars.length&&dirtyRange.from>=Math.max(0,bars.length-2)&&context.initialized;
+    let result;
+    if(incremental){
+      const latest=bars.at(-1);
+      if(!latest)throw new Error('CoreSpirit worker received an empty market dataset');
+      result=context.runtime.executeBar(latest,'realtime');
+    }else{
+      result=readOnly?context.runtime.executeIrReadOnly(artifact.ir,bars):context.runtime.executeIr(artifact.ir,bars);
+      context.initialized=true;
+    }
+    context.datasetVersion=datasetVersion;
     return {outputs:result.outputs,diagnostics:result.diagnostics,state:result.state};
   }
 }
