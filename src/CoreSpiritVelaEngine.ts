@@ -394,19 +394,23 @@ export class CoreSpiritVelaEngine {
         if(!currentBars.length)return {currentBars,baseline,tail:undefined};
 
         let stableTail=false;
+        let historyBoundaryChanged=false;
+        let tailBars=currentBars;
         for(let tailAttempt=0;tailAttempt<4;tailAttempt+=1){
-          tail=await executeInWorker(currentBars,mainContextKey,false,{
-            from:Math.max(0,currentBars.length-1),to:currentBars.length,
+          tailBars=currentBars;
+          tail=await executeInWorker(tailBars,mainContextKey,false,{
+            from:Math.max(0,tailBars.length-1),to:tailBars.length,
           });
           if(stopped||generation!==mainRunGeneration)return undefined;
           const afterTail=getCurrentBars();
-          if(afterTail.length!==currentBars.length||afterTail.at(-2)?.timestamp!==currentBars.at(-2)?.timestamp){
+          if(afterTail.length!==tailBars.length||afterTail.at(-2)?.timestamp!==tailBars.at(-2)?.timestamp){
             // A new confirmed candle arrived while the tail ran. Warm that
             // newly confirmed history before retrying the forming bar.
             currentBars=afterTail;
+            historyBoundaryChanged=true;
             break;
           }
-          if(barValueSignature(afterTail.at(-1))!==barValueSignature(currentBars.at(-1))){
+          if(barValueSignature(afterTail.at(-1))!==barValueSignature(tailBars.at(-1))){
             // Same candle, newer OHLCV revision: re-run only that tail. Continue
             // checking after every asynchronous reply so we never commit a stale
             // single retry if another tick landed while it was executing.
@@ -417,7 +421,11 @@ export class CoreSpiritVelaEngine {
           stableTail=true;
           break;
         }
-        if(stableTail)return {currentBars,baseline,tail};
+        if(historyBoundaryChanged)continue;
+        // Under a continuously updating feed the bar may change for every retry.
+        // Return the newest completed *snapshot result* rather than repeatedly
+        // replaying all history; the next tick will advance the forming candle.
+        if(stableTail||tail)return {currentBars:tailBars,baseline,tail};
       }
       throw new Error('CoreSpirit chart history changed repeatedly during worker initialization; retry after the candle update settles.');
     };
