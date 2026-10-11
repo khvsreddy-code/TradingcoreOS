@@ -75,4 +75,15 @@ assert.match(causality,/CAUSALITY_FUTURE_INDEX/,'future-bar indexing must be a c
 const compiler=read('src/services/coreSpirit/compiler.ts');
 assert.match(compiler,/analyzeCoreSpiritCausality/,'causality analysis must run inside the compiler');
 assert.match(compiler,/\.\.\.causalityDiagnostics/,'causality diagnostics must be part of the compile result');
+assert.match(compiler,/causalityAnalysis:causalityReport/,'the compiled IR should expose structured temporal evidence');
+assert.match(compiler,/__market_alignment/,'explicit temporal selectors must lower into the runtime');
+const runtime=read('src/services/coreSpirit/runtime.ts');
+assert.match(runtime,/name==='__market_alignment'/,'the VM must interpret temporal selectors');
+assert.match(runtime,/this\.executionContext\.mode!=='realtime'/,'developing values must be blocked outside realtime execution');
+assert.match(runtime,/r\.alignment === 'developing' \? 'developing' : 'last-confirmed'/,'scalar market reads must preserve the selected alignment');
+const dataResolver=read('src/services/coreSpirit/dataResolver.ts');
+assert.match(dataResolver,/this\.context\(\)\.mode!=='realtime'/,'series-based requests must block historical developing data');
+assert.match(dataResolver,/this\.resolutionContext\(index, alignment\)/,'series-based requests must preserve temporal alignment');
+assert.match(editor,/modeDefaults:Partial<Record<CopilotMode,string>>/,'repair and analysis tasks should have mode-specific defaults');
+
 console.log('CORESPIRIT_COPILOT_COMPILE_BEFORE_RUN_OK');
