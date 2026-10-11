@@ -130,13 +130,15 @@ export class FyersCapabilityError extends Error {
   readonly code: string;
   readonly limit: number;
   readonly plan: FyersApiPlan;
+  readonly requested: number;
 
-  constructor(message: string, code: string, limit: number, plan: FyersApiPlan) {
+  constructor(message: string, code: string, limit: number, plan: FyersApiPlan, requested = 0) {
     super(message);
     this.name = 'FyersCapabilityError';
     this.code = code;
     this.limit = limit;
     this.plan = plan;
+    this.requested = requested;
   }
 }
 
@@ -145,7 +147,7 @@ export function assertFyersQuoteBatch(
   capabilities: FyersCapabilities,
 ): void {
   if (symbols.length === 0) {
-    throw new FyersCapabilityError('At least one FYERS symbol is required.', 'FYERS_QUOTES_EMPTY', 0, capabilities.plan);
+    throw new FyersCapabilityError('At least one FYERS symbol is required.', 'FYERS_QUOTES_EMPTY', capabilities.maxQuoteBatch, capabilities.plan, 0);
   }
   if (symbols.length > capabilities.maxQuoteBatch) {
     throw new FyersCapabilityError(
@@ -153,6 +155,7 @@ export function assertFyersQuoteBatch(
       'FYERS_QUOTE_BATCH_LIMIT',
       capabilities.maxQuoteBatch,
       capabilities.plan,
+      symbols.length,
     );
   }
 }
