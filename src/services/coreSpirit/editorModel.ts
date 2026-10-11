@@ -44,6 +44,7 @@ export class CoreSpiritEditorModel {
   private profilerSnapshot?: CoreSpiritProfilerSnapshot;
   private readonly incrementalAst = new CoreSpiritIncrementalAst();
   private readonly incrementalCompiler = new CoreSpiritIncrementalCompiler();
+  private compiledSymbols:NonNullable<CoreSpiritCompileResult['symbols']>=[];
 
   constructor(source = '') {
     this.source = source;
@@ -61,6 +62,7 @@ export class CoreSpiritEditorModel {
     this.undoStack.push(this.source); if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack = [];
     const old=this.source; this.source = source;
+    this.compiledSymbols=[];
     this.version += 1;
     const change={start:0,end:old.length,text:source};
     if(!options.deferSemanticAnalysis)this.incrementalAst.update(source,change);
@@ -71,6 +73,7 @@ export class CoreSpiritEditorModel {
   /** Accepts only a worker result for the exact current source; never runs compiler work in the UI thread. */
   applyWorkerCompileResult(result: CoreSpiritCompileResult, source=this.source) {
     if(source!==this.source)return this.snapshot;
+    this.compiledSymbols=[...(result.symbols??[])];
     this.snapshot = {
       ...this.snapshot,
       executionPlanVisualization:result.ir?.executionPlanVisualization,
@@ -89,7 +92,18 @@ export class CoreSpiritEditorModel {
 
   redo() { const next=this.redoStack.pop(); if(next===undefined) return this.snapshot; this.undoStack.push(this.source); this.source=next; this.version+=1; this.lastCompileSource=''; this.snapshot=this.compute('',true); return this.snapshot; }
 
-  completionAt(cursor:number) { const ctx=getCoreSpiritCompletionContext(this.source,cursor); return { ...ctx, completions:getCoreSpiritEditorPreviewSnapshot(this.source,ctx.prefix).completions }; }
+  completionAt(cursor:number) {
+    const ctx=getCoreSpiritCompletionContext(this.source,cursor);
+    const completions=getCoreSpiritEditorPreviewSnapshot(this.source,ctx.prefix).completions.slice();
+    const seen=new Set(completions.map(item=>item.label));
+    for(const symbol of this.compiledSymbols){
+      if(ctx.prefix&&!symbol.name.toLowerCase().startsWith(ctx.prefix.toLowerCase()))continue;
+      if(seen.has(symbol.name))continue;
+      completions.push({label:symbol.name,kind:symbol.kind==='type'?'type':'property',detail:symbol.type,insertText:symbol.name});
+      seen.add(symbol.name);
+    }
+    return {...ctx,completions};
+  }
   definitionAt(cursor:number) { return getCoreSpiritDefinitionAt(this.source,cursor); }
   codeActions(diagnostic:CoreSpiritEditorDiagnostic): CoreSpiritCodeAction[] { return getCoreSpiritCodeActions(this.source,diagnostic); }
 

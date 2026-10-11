@@ -98,7 +98,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const lines = useMemo(() => Array.from({ length: lineCount(source) }, (_, i) => i + 1), [source]);
   const editorSnapshot = editorModel.getSnapshot();
   const highlighted = useMemo(() => highlightedLines(source, editorSnapshot.tokens), [source, editorSnapshot.tokens]);
-  const completionState = useMemo(() => editorModel.completionAt(cursor), [editorVersion, cursor, source]);
+  const completionState = useMemo(() => editorModel.completionAt(cursor), [editorVersion, cursor, source, lastCompile]);
   const completionItems = completionState.completions.slice(0, 12);
   const lineHeight = 20;
   useEffect(() => ideBridge.subscribe(setRuntimeInspector), [ideBridge]);

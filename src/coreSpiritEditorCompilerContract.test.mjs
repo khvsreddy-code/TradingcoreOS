@@ -30,6 +30,8 @@ assert.match(editor,/monacoAdapterRef\.current\?\.setDiagnostics/,'compiler diag
 assert.match(editor,/monacoAdapterRef\.current\?\.setSymbolInfo/,'compiler symbols must feed IDE intelligence');
 assert.match(monaco,/setModelMarkers/,'Monaco must receive compiler red-squiggle markers');
 assert.match(monaco,/registerDefinitionProvider/,'IDE must expose definition navigation');
+assert.match(model,/compiledSymbols/,'classic editor fallback must consume worker symbols');
+assert.match(model,/kind:symbol.kind==='type'\?'type':'property'/,'classic fallback completions must preserve type/variable categories');
 assert.match(model,/deferSemanticAnalysis/,'typing preview must skip synchronous semantic/repaint work');
 assert.match(model,/getCoreSpiritEditorPreviewSnapshot/,'typing preview must avoid full compiler diagnostics');
 assert.match(editor,/createCoreSpiritSandbox/,'editor compilation must apply chart sandbox policy');
