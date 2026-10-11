@@ -4,6 +4,7 @@ import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
+import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 
 /**
  * Safe FYERS historical-data route.
@@ -186,9 +187,25 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     return;
   }
 
+  const capabilities = resolveFyersCapabilities(userId);
   const instrumentKey = canonicalFyersSymbol(String(req.query.instrument_key || '').trim());
   const interval = String(req.query.interval || '').trim();
-  const resolution = resolutionMap[interval] || interval;
+  const secondsMatch = /^(\d+)\s*(?:s|sec|second|seconds)$/i.exec(interval);
+  const resolution = resolutionMap[interval] || (secondsMatch ? `${Number(secondsMatch[1])}S` : interval);
+  const secondsInterval = Boolean(secondsMatch || /^\d+S$/i.test(interval));
+  if (secondsInterval && !capabilities.secondData) {
+    res.status(403).json({
+      success: false,
+      error: 'Seconds-level historical data requires a verified FYERS Prime entitlement.',
+      code: 'FYERS_SECONDS_DATA_REQUIRES_PRIME',
+      plan: capabilities.plan,
+    });
+    return;
+  }
+  const dailyResolution = ['D','1D','1W','1M','W','M'].includes(resolution.toUpperCase());
+  const allowedYears = dailyResolution ? capabilities.historyDepth.dailyYears : capabilities.historyDepth.intradayYears;
+  const entitlementCutoff = allowedYears == null ? null : new Date(Date.now() - allowedYears * 365.25 * 86_400_000);
+
   const beforeRaw = String(req.query.before || '').trim();
   const columnar = String(req.query.format || '').toLowerCase() === 'columns';
   const beforeDate = beforeRaw ? new Date(beforeRaw) : null;
@@ -205,9 +222,19 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
     res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
     return;
   }
+  const requestedEnd = beforeDate ?? new Date();
+  if (entitlementCutoff && requestedEnd.getTime() < entitlementCutoff.getTime()) {
+    return res.status(403).json({
+      success: false,
+      error: `FYERS ${capabilities.plan} historical ${dailyResolution ? 'daily' : 'intraday'} data is limited to the latest ${allowedYears} year(s) on this plan.`,
+      code: 'FYERS_HISTORY_DEPTH_LIMIT',
+      plan: capabilities.plan,
+      earliestAllowed: entitlementCutoff.toISOString(),
+    });
+  }
 
   const beforeKey = beforeDate ? beforeDate.toISOString() : 'latest';
-  const key = `${userId}:fyers:${instrumentKey}:${resolution}:${limit}:${beforeKey}:${columnar ? 'columns' : 'rows'}`;
+  const key = `${userId}:fyers:${capabilities.plan}:${instrumentKey}:${resolution}:${limit}:${beforeKey}:${columnar ? 'columns' : 'rows'}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader('Cache-Control', 'private, max-age=20');
@@ -240,7 +267,10 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       const lookbackDays = resolution === 'D'
         ? Math.max(3650, limit)
         : Math.min(3650, Math.max(7, estimatedCalendarDays));
-      const from = new Date(end.getTime() - lookbackDays * 86_400_000);
+      let from = new Date(end.getTime() - lookbackDays * 86_400_000);
+      // Clamp a page's start to the Standard plan's documented depth; a
+      // 'before' cursor older than that cutoff is rejected above.
+      if (entitlementCutoff && from.getTime() < entitlementCutoff.getTime()) from = entitlementCutoff;
       const params = new URLSearchParams({
         symbol: instrumentKey,
         resolution,
@@ -271,7 +301,12 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
       if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    }, requestSignal);
+    }, requestSignal, {
+      budgetKey: 'data',
+      minIntervalMs: Math.ceil(1000 / capabilities.dataApiRateLimits.requestsPerSecond),
+      maxPerMinute: capabilities.dataApiRateLimits.requestsPerMinute,
+      maxPerDay: capabilities.dataApiRateLimits.requestsPerDay,
+    });
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
