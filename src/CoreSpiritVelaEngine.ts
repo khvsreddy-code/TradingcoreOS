@@ -680,6 +680,11 @@ export class CoreSpiritVelaEngine {
         const currentBars=getCurrentBars(reason==='backfill');
 
         if(reason==='backfill'){
+          // The runtime's rolling state was built against the pre-backfill history.
+          // Force a full read-only warm-up on the next live bar instead of letting
+          // the worker treat that tick as a safe incremental continuation.
+          workerDatasetVersions.delete(mainContextKey);
+          liveRunGeneration+=1;
           // Vela may backfill older pages before the initial complete snapshot.
           if(!historyInitialized||!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
           const start=lowerBoundBarTime(currentBars,dirtyRange.from);
