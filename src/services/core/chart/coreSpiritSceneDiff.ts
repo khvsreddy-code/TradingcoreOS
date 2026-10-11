@@ -198,6 +198,11 @@ export class CoreSpiritSceneDiff {
     private readonly points = new Map<string, TcoSeriesPoint[]>();
     private readonly seriesMounted = new Set<string>();
     private readonly markers = new Map<string, TcoMarkerPoint>();
+    /** Time-sorted marker keys plus indexes avoid sorting the whole marker scene per event. */
+    private readonly markerOrder: string[] = [];
+    private readonly markerIndexes = new Map<string, number>();
+    private readonly markerOrdinal = new Map<string, number>();
+    private nextMarkerOrdinal = 0;
     /** O(1) previous-time lookup for stable visual identities on incremental updates. */
     private readonly retainedSpans = new Map<string, DirtySpan>();
     private readonly rectBatches = new Map<string, TcoRectInstance[]>;
@@ -215,6 +220,10 @@ export class CoreSpiritSceneDiff {
         this.points.clear();
         this.seriesMounted.clear();
         this.markers.clear();
+        this.markerOrder.length = 0;
+        this.markerIndexes.clear();
+        this.markerOrdinal.clear();
+        this.nextMarkerOrdinal = 0;
         this.retainedSpans.clear();
         this.rectBatches.clear();
         this.rectBatchMeta.clear();
@@ -236,7 +245,7 @@ export class CoreSpiritSceneDiff {
     snapshot(): CoreSpiritSceneSnapshot {
         return {
             points: this.points,
-            markers: [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time)),
+            markers: this.orderedMarkers(),
             priceLines: this.collections.priceLines as TcoPriceLine[],
             rectBatches: [...this.rectBatches.entries()].map(([id, instances]) => ({
                 id,
@@ -288,7 +297,7 @@ export class CoreSpiritSceneDiff {
                 indicatorId: this.indicatorId,
                 added: [{
                     id: this.markerSeriesId, title: 'Signals', paneId: 'price', kind: 'markers',
-                    markers: [...this.markers.values()].sort((a, b) => Number(a.time) - Number(b.time)),
+                    markers: this.orderedMarkers(),
                     visible: true, overlay: true,
                 } as any],
                 removed: [], changed: [],
@@ -372,28 +381,78 @@ export class CoreSpiritSceneDiff {
         return { ...schema, delta: { seriesId, kind: 'points', points: [point], op: 'replace-range', start: lo, remove: exists ? 1 : 0 } };
     }
 
+    private orderedMarkers(): TcoMarkerPoint[] {
+        return this.markerOrder.flatMap(key => {
+            const value = this.markers.get(key);
+            return value ? [value] : [];
+        });
+    }
+
+    private reindexMarkers(from: number): void {
+        for (let index = from; index < this.markerOrder.length; index += 1) {
+            this.markerIndexes.set(this.markerOrder[index]!, index);
+        }
+    }
+
+    private markerInsertionIndex(key: string): number {
+        const value = this.markers.get(key)!;
+        const time = Number(value.time);
+        const ordinal = this.markerOrdinal.get(key) ?? 0;
+        let low = 0, high = this.markerOrder.length;
+        while (low < high) {
+            const middle = (low + high) >>> 1;
+            const middleKey = this.markerOrder[middle]!;
+            const middleTime = Number(this.markers.get(middleKey)?.time);
+            const middleOrdinal = this.markerOrdinal.get(middleKey) ?? 0;
+            if (middleTime < time || (middleTime === time && middleOrdinal <= ordinal)) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    }
+
     private applyMarker(output: Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>, emit: boolean): SceneDiffEmission {
         const key = markerKey(output);
-        const before = [...this.markers.entries()].sort((a, b) => Number(a[1].time) - Number(b[1].time));
-        const previousIndex = before.findIndex(([candidate]) => candidate === key);
+        const previousIndex = this.markerIndexes.get(key);
+        const previousValue = this.markers.get(key);
         if (removed(output)) {
-            if (previousIndex < 0) return null;
+            if (previousIndex === undefined) return null;
             this.markers.delete(key);
+            this.markerIndexes.delete(key);
+            this.markerOrdinal.delete(key);
+            this.markerOrder.splice(previousIndex, 1);
+            this.reindexMarkers(previousIndex);
             return emit ? { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [], op: 'replace-range', start: previousIndex, remove: 1 } } : null;
         }
+
         const value = marker(output);
-        const was = previousIndex >= 0;
+        const was = previousIndex !== undefined;
+        const sameTime = was && previousValue && Number(previousValue.time) === Number(value.time);
+        if (sameTime) {
+            // The hot path for a developing signal updates one array slot in O(1).
+            this.markers.set(key, value);
+            return emit ? { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: previousIndex, remove: 1 } } : null;
+        }
+
+        if (previousIndex !== undefined) {
+            this.markerOrder.splice(previousIndex, 1);
+            this.markerIndexes.delete(key);
+            this.reindexMarkers(previousIndex);
+        } else {
+            this.markerOrdinal.set(key, this.nextMarkerOrdinal++);
+        }
         this.markers.set(key, value);
+        const nextIndex = this.markerInsertionIndex(key);
+        this.markerOrder.splice(nextIndex, 0, key);
+        this.reindexMarkers(nextIndex);
+
         if (!emit) return null;
-        const after = [...this.markers.entries()].sort((a, b) => Number(a[1].time) - Number(b[1].time));
-        const nextIndex = after.findIndex(([candidate]) => candidate === key);
-        if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, nextIndex), remove: 0 } };
-        if (previousIndex === nextIndex) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, nextIndex), remove: 1 } };
-        const insertIndex = nextIndex;
+        if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: nextIndex, remove: 0 } };
+        if (previousIndex === nextIndex) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: nextIndex, remove: 1 } };
+        // Vela applies series deltas in order. Insert at the final sorted index after removal.
         return {
             deltas: [
                 { seriesId: this.markerSeriesId, kind: 'markers', markers: [], op: 'replace-range', start: previousIndex, remove: 1 },
-                { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, insertIndex), remove: 0 },
+                { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: nextIndex, remove: 0 },
             ],
         };
     }
