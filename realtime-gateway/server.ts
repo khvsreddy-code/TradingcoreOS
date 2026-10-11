@@ -7,7 +7,8 @@ import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import { BrokerRepository } from '../src/server/storage/BrokerRepository.js';
 import { EncryptionService } from '../src/server/encryption/EncryptionService.js';
 import { FyersMarketDataTransport } from '../src/server/marketData/FyersMarketDataTransport.js';
-import { FyersOrderStreamTransport } from '../src/server/fyers/trading/FyersOrderStreamTransport.js';
+import { FyersOrderStreamTransport, type FyersOrderStreamEvent } from '../src/server/fyers/trading/FyersOrderStreamTransport.js';
+import type { MarketFeedEvent } from '../src/types/market.js';
 import { verifyRealtimeTicket } from '../src/server/realtime/ticket.js';
 
 const PORT = Number(process.env.REALTIME_GATEWAY_PORT || process.env.PORT || 8080);
@@ -38,8 +39,8 @@ type LocalConnection = ConnectionRecord & {
 type OwnedUser = {
   ownerValue: string;
   renewTimer: NodeJS.Timeout;
-  marketListener: (event:any)=>void;
-  orderListener: (event:any)=>void;
+  marketListener: (event:MarketFeedEvent)=>void;
+  orderListener: (event:FyersOrderStreamEvent)=>void;
 };
 
 if(!SUPABASE_URL||!SUPABASE_SERVICE_ROLE_KEY)throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for the realtime gateway.');
@@ -58,6 +59,11 @@ function ownerValue(userId:string):string{return `${INSTANCE_ID}:${userId}`;}
 function subscriptionKey(record:ConnectionRecord):string{return `tco:realtime:sub:${record.userId}:${INSTANCE_ID}:${record.connectionId}`;}
 function parseKind(value:string):RealtimeKind{const kind=value.toLowerCase();return kind==='orders'||kind==='both'?kind:'market';}
 function parseSymbols(value:string):string[]{return[...new Set(String(value||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,100))];}
+
+type GatewayBroadcastEnvelope =
+  | { type: 'market'; userId: string; event: MarketFeedEvent }
+  | { type: 'order'; userId: string; event: FyersOrderStreamEvent }
+  | { type: 'system'; userId: string; event: { type: 'error'; error: string } };
 
 async function broadcast(event:'market'|'order'|'control',payload:unknown):Promise<void>{
   if(!coordinationChannel)return;
@@ -93,8 +99,8 @@ async function acquireOwnership(userId:string):Promise<boolean>{
   const {data,error}=await supabase.rpc('claim_realtime_gateway_owner',{p_user_id:userId,p_owner_value:value,p_ttl_ms:OWNER_TTL_MS});
   if(error||data!==true)return false;
 
-  const marketListener=(event:any)=>{void broadcast('market',{type:'market',userId,event}).catch(err=>console.error('[TradingCore realtime broadcast]',err));};
-  const orderListener=(event:any)=>{void broadcast('order',{type:'order',userId,event}).catch(err=>console.error('[TradingCore realtime broadcast]',err));};
+  const marketListener=(event:MarketFeedEvent)=>{void broadcast('market',{type:'market',userId,event}).catch(err=>console.error('[TradingCore realtime broadcast]',err));};
+  const orderListener=(event:FyersOrderStreamEvent)=>{void broadcast('order',{type:'order',userId,event}).catch(err=>console.error('[TradingCore realtime broadcast]',err));};
   const renewTimer=setInterval(()=>{void renewOwnership(userId).catch(err=>console.error('[TradingCore realtime owner renew]',err));},OWNER_RENEW_MS);
   ownedUsers.set(userId,{ownerValue:value,renewTimer,marketListener,orderListener});
   await syncOwnedUser(userId);
@@ -159,7 +165,7 @@ async function syncOwnedUser(userId:string):Promise<void>{
       FyersOrderStreamTransport.subscribe(userId,token,owned.orderListener);
     }else FyersOrderStreamTransport.disconnect(userId);
   }catch(error){
-    await broadcast('order',{type:'system',userId,event:{type:'error',error:error instanceof Error?error.message:'Unable to initialize broker realtime session'}}).catch(()=>undefined);
+    await broadcast('order',{type:'order',userId,event:{type:'error',error:error instanceof Error?error.message:'Unable to initialize broker realtime session'}}).catch(()=>undefined);
   }
 }
 
@@ -168,7 +174,7 @@ async function ensureOwnership(userId:string):Promise<void>{
   await acquireOwnership(userId);
 }
 
-function broadcastEvent(payload:any):void{
+function broadcastEvent(payload:GatewayBroadcastEnvelope):void{
   const userId=String(payload?.userId||'');if(!userId)return;
   const ids=connectionsByUser.get(userId);if(!ids?.size)return;
   for(const connectionId of ids){
