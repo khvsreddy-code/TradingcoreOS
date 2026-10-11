@@ -1,0 +1,39 @@
+name: CI with 2-Hour History Wipe
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  cleanup-old-runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete runs older than 2 hours
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 1. Calculate the ISO 8601 timestamp for exactly 2 hours ago
+          CUTOFF_TIME=$(date -u -d '2 hours ago' +'%Y-%m-%dT%H:%M:%SZ')
+          echo "Deleting all workflow runs created before: $CUTOFF_TIME"
+          
+          # 2. Fetch completed runs for this specific workflow
+          RUNS=$(gh api repos/${{ github.repository }}/actions/workflows/${{ github.workflow }}/runs \
+            --paginate \
+            -F status=completed \
+            --jq ".workflow_runs[] | select(.created_at < \"$CUTOFF_TIME\") | .id")
+          
+          # 3. Loop through and delete each matching run
+          for RUN_ID in $RUNS; do
+            echo "Deleting run ID: $RUN_ID"
+            gh api repos/${{ github.repository }}/actions/runs/$RUN_ID -X DELETE
+          done
+
+  build-and-test:
+    needs: cleanup-old-runs # 👈 Ensures the wipe finishes before your new build starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Build
+        run: echo "Running the new workflow..."
