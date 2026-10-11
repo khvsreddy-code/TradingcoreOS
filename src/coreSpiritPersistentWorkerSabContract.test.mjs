@@ -23,6 +23,7 @@ if(!/SharedArrayBuffer/.test(buffer)||!/Float64Array/.test(buffer)||!/header/.te
 if(!/SharedArrayBuffer/.test(output)||!/materializeSharedSeriesOutput/.test(output)||!/createSharedSeriesOutput/.test(output))throw new Error('Numeric CoreSpirit series output must have a shared typed-buffer boundary');
 if(!/crossOriginIsolated/.test(buffer))throw new Error('SAB capability must respect cross-origin isolation');
 if(!/const\s+contexts\s*=\s*new Map/.test(worker)||!/artifactIdFor/.test(worker)||!/executeBar/.test(worker))throw new Error('Worker must retain runtime contexts/artifacts and support incremental execution');
+if(!/if\(typeof window!=='undefined'\)\s*\{\s*return Promise\.reject\(new Error\('CoreSpirit chart execution requires Web Worker support/.test(pool))throw new Error('Browser chart execution must fail closed rather than interpret history on the UI thread when Worker is unavailable');
 if(!/readCoreSpiritSharedMarketDescriptor/.test(worker)||!/sharedSeries/.test(worker))throw new Error('Worker must read shared market input and emit shared numeric series output');
 if(!/marketFrame:CoreSpiritMarketFrame/.test(worker)||!/coreSpiritMarketFrameFromColumns/.test(worker)||!/coreSpiritMarketFrameArrayFacade/.test(worker))throw new Error('Worker market inputs must stay columnar with an on-demand compatibility facade');
 if(/function ensureBarArray/.test(worker)||/bar\.timestamp=new Date/.test(worker))throw new Error('Worker must not maintain/rewrite one object for every shared row');
