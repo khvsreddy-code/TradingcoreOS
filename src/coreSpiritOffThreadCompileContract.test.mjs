@@ -12,7 +12,7 @@ if(!/loadOrCompileCoreSpiritArtifact\(/.test(engine)||!/backend:'worker-vm'/.tes
   throw new Error('Vela prepare must resolve the worker-vm executable artifact through the persistent cache and worker compiler');
 }
 if(/compileCoreSpirit\(source,\s*instanceId\)/.test(engine)) throw new Error('Vela prepare must not compile directly on the UI thread');
-if(!/compileInWorker/.test(cache)||!/await options\.compileInWorker/.test(cache)||!/await import\('\.\/coreSpiritPipeline'\)/.test(cache)) {
+if(!/compileInWorker/.test(cache)||!/await compileWorker\(source,sourceId/.test(cache)||!/compileCoreSpiritArtifactOffThread/.test(cache)||!/await import\('\.\/coreSpiritPipeline'\)/.test(cache)) {
   throw new Error('Artifact cache misses must support an async worker compiler and lazy compatibility fallback');
 }
 if(/import\s*\{[^}]*compileCoreSpirit[^}]*\}\s*from\s*['"]\.\/coreSpiritPipeline['"]/.test(cache)) {
@@ -28,5 +28,5 @@ if(!/export function buildCoreSpiritArtifactLookupIdentity/.test(identity)||/imp
   throw new Error('Artifact cache identity lookup must use the lightweight canonical identity module');
 }
 if(!/artifactLookupIdentity/.test(pipeline)) throw new Error('Compiler and artifact cache must share a single canonical identity function');
-if(!/validateExecutableArtifact\(result\.artifact\)/.test(client)) throw new Error('Compatibility compile fallback must validate artifacts before cache acceptance');
+if(!/validateExecutableArtifact\(compiled\.artifact\)/.test(client)||!/validateExecutableArtifact\(artifact\)/.test(client)) throw new Error('No-Worker compatibility fallbacks must validate compiled/persisted artifacts before acceptance');
 console.log('CORESPIRIT_OFF_THREAD_COMPILER_CACHE_OK');

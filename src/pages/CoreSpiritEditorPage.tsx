@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, Play, Save, RotateCcw, CheckCircle2, AlertTriangle, BookOpen, Zap, Activity, ShieldCheck, GitBranch, Eye } from 'lucide-react';
+import { Code2, Play, Save, RotateCcw, CheckCircle2, AlertTriangle, BookOpen, Zap, Activity, ShieldCheck, GitBranch, Eye, Sparkles } from 'lucide-react';
 import { WorkspaceModuleShell, ModuleHeader, Panel, WorkspaceRoute } from '../components/workspace/WorkspaceModuleShell';
 import { CoreSpiritEditorModel } from '../services/coreSpirit/editorModel';
 import { mountCoreSpiritMonaco, type CoreSpiritMonacoAdapter } from '../services/coreSpirit/monacoAdapter';
 import { CoreSpiritIdeRuntimeBridge, type CoreSpiritIdeRuntimeSnapshot } from '../services/coreSpirit/ideRuntimeBridge';
-import { inspectCoreSpiritSource, type CoreSpiritSourceInspection } from '../services/coreSpirit/sourceInspector';
+import type { CoreSpiritSourceInspection } from '../services/coreSpirit/sourceInspector';
 import type { CoreSpiritCompileResult } from '../services/coreSpirit/compiler';
+import { compileCoreSpiritSourceOffThread } from '../services/coreSpirit/coreSpiritCompilerClient';
+import { getSupabaseClient } from '../services/auth/supabaseClient';
+import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from '../services/coreSpirit/capabilitySandbox';
 import { coreSpiritChartRegistry } from '../services/coreSpirit/chartRegistry';
 import { loadEditorScript, saveEditorScript, saveExecutionRun } from '../services/coreSpirit/cloudPersistence';
 import { versionedStorageKey } from '../services/coreSpirit/storageSchema';
+import { normalizeCoreSpiritSource } from '../services/coreSpirit/syntax';
 
 const DEFAULT_SOURCE = `indicator("CoreSpirit Trend") {
     overlay: true
@@ -75,11 +79,22 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [runtimeInspector, setRuntimeInspector] = useState<CoreSpiritIdeRuntimeSnapshot>(() => ideBridge.getSnapshot());
   const [selectedExplanation, setSelectedExplanation] = useState<string | null>(null);
   const [debugBarInput, setDebugBarInput] = useState('0');
-  const [sourceInspection, setSourceInspection] = useState<CoreSpiritSourceInspection>(() => inspectCoreSpiritSource(source, 'corespirit-editor'));
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSourceInspection(inspectCoreSpiritSource(source, 'corespirit-editor')), 150);
-    return () => window.clearTimeout(timer);
-  }, [source]);
+  const [sourceInspection, setSourceInspection] = useState<CoreSpiritSourceInspection>(() => ({
+    source,normalizedSource:source,diagnostics:[],effectAnnotations:[],instructionCount:0,maxLookback:0,
+  }));
+  const compileRequestRef = useRef(0);
+  const lastCompileRef = useRef<{source:string;result:CoreSpiritCompileResult}|null>(null);
+  const compilePromiseRef = useRef<{source:string;promise:Promise<CoreSpiritCompileResult|null>}|null>(null);
+  const copilotSourceRef = useRef<string|null>(null);
+  const copilotValidationPassRef = useRef<boolean|null>(null);
+  const copilotValidationDiagnosticsRef = useRef<CoreSpiritCompileResult['diagnostics']>([]);
+  const [compilePending,setCompilePending]=useState(false);
+  const [copilotPrompt,setCopilotPrompt]=useState('');
+  const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'ready'|'needs-fixes'|'error'>('idle');
+  const [copilotSummary,setCopilotSummary]=useState('');
+  const [copilotAssumptions,setCopilotAssumptions]=useState<string[]>([]);
+  const [copilotArtifactHash,setCopilotArtifactHash]=useState<string|null>(null);
+  const [copilotError,setCopilotError]=useState('');
   const lines = useMemo(() => Array.from({ length: lineCount(source) }, (_, i) => i + 1), [source]);
   const editorSnapshot = editorModel.getSnapshot();
   const highlighted = useMemo(() => highlightedLines(source, editorSnapshot.tokens), [source, editorSnapshot.tokens]);
@@ -106,56 +121,214 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
     loadEditorScript().then((script) => {
       if (!active || !script) return;
       const nextSource = script.source || DEFAULT_SOURCE;
-      editorModel.updateSource(nextSource);
+      compileRequestRef.current+=1;
+      compilePromiseRef.current=null;
+      lastCompileRef.current=null;
+      editorModel.updateSource(nextSource,'',{deferSemanticAnalysis:true});
       setSource(nextSource);
-      setEditorVersion(v => v + 1);
+      setLastCompile(null);
+      setCompiled(false);
+      setCompilePending(true);
+      setEditorVersion(v=>v+1);
+      monacoAdapterRef.current?.setSource(nextSource);
+      monacoAdapterRef.current?.setDiagnostics([],nextSource);
       setCloudScriptId(script.id);
       setCloudStatus('saved');
     }).catch(() => { if (active) setCloudStatus('local'); });
     return () => { active = false; };
   }, []);
 
+  const setEditorSource=(next:string,options:{completionPrefix?:string;cursor?:number;showCompletions?:boolean;modelAlreadyUpdated?:boolean;keepDiagnostics?:boolean}={})=>{
+    compileRequestRef.current+=1;
+    compilePromiseRef.current=null;
+    lastCompileRef.current=null;
+    setLastCompile(null);
+    setCompilePending(true);
+    if(!options.modelAlreadyUpdated)editorModel.updateSource(next,options.completionPrefix||'',{deferSemanticAnalysis:true});
+    setSource(next);
+    setCompiled(false);
+    setEditorVersion(v=>v+1);
+    if(options.cursor!=null)setCursor(options.cursor);
+    setShowCompletions(options.showCompletions===true);
+    if(!options.keepDiagnostics){
+      setDiagnostics([]);
+      monacoAdapterRef.current?.setDiagnostics([],next);
+    }
+    if(copilotSourceRef.current&&copilotSourceRef.current!==next){
+      copilotSourceRef.current=null;
+      copilotValidationPassRef.current=null;
+      copilotValidationDiagnosticsRef.current=[];
+      setCopilotStatus('idle');
+      setCopilotArtifactHash(null);
+    }
+    if(monacoAdapterRef.current)monacoAdapterRef.current.setSource(next);
+  };
+
+  const compileSource=(sourceSnapshot:string):Promise<CoreSpiritCompileResult|null>=>{
+    const current=compilePromiseRef.current;
+    if(current?.source===sourceSnapshot)return current.promise;
+    const sourceVersion=editorModel.getVersion();
+    const request=++compileRequestRef.current;
+    setCompilePending(true);
+    let promise:Promise<CoreSpiritCompileResult|null>;
+    promise=(async()=>{
+      try{
+        const workerResult=await compileCoreSpiritSourceOffThread(sourceSnapshot,sourceVersion,'corespirit-editor',{layer:'script'});
+        if(request!==compileRequestRef.current||workerResult.sourceVersion!==sourceVersion||editorModel.getSource()!==sourceSnapshot||editorModel.getVersion()!==sourceVersion)return null;
+        // The compiler and capability gate form one blocking validation result.
+        // Generated source receives exactly the same chart policy as handwritten source.
+        const sandbox=createCoreSpiritSandbox({layer:'script',target:'chart'});
+        const policyDiagnostics=[
+          ...validateCoreSpiritSandboxArchitecture().map(message=>({severity:'error' as const,message,code:'EDITOR_SANDBOX_ARCHITECTURE'})),
+          ...(workerResult.ir?validateCoreScriptCapabilitiesAgainstSandbox(sandbox,workerResult.ir.requiredCapabilities??[]):[]).map(message=>({severity:'error' as const,message,code:'EDITOR_CAPABILITY_DENIED'})),
+        ];
+        const copilotDiagnostics=copilotSourceRef.current===sourceSnapshot?copilotValidationDiagnosticsRef.current:[];
+        const result:CoreSpiritCompileResult={
+          ...workerResult,
+          diagnostics:[...(workerResult.diagnostics||[]),...policyDiagnostics,...copilotDiagnostics],
+        };
+        editorModel.applyWorkerCompileResult(result,sourceSnapshot);
+        const next=result.diagnostics.map((d:any)=>({severity:String(d.severity||'error'),message:String(d.message||d),line:d.line}));
+        const semanticNodes=result.ir?.graphs?.semantic.nodes??[];
+        setSourceInspection({
+          source:sourceSnapshot,
+          normalizedSource:normalizeCoreSpiritSource(sourceSnapshot),
+          diagnostics:result.diagnostics,
+          effectAnnotations:semanticNodes.filter((node:any)=>node.source).map((node:any)=>({
+            sourceNodeId:node.id,line:node.source.line,column:node.source.column,end:node.source.end,kind:node.kind,name:node.name,
+            effectful:node.effectful,estimatedCost:node.estimatedCost,latencyClass:node.latencyClass,
+            stateful:node.stateful,deterministic:node.deterministic,parallelizable:node.parallelizable,
+          })),
+          instructionCount:result.ir?.entry.instructions.length??0,
+          maxLookback:result.ir?.maxLookback??0,
+          executionPlanVisualization:result.ir?.executionPlanVisualization,
+        });
+        setDiagnostics(next);
+        setLastCompile(result);
+        lastCompileRef.current={source:sourceSnapshot,result};
+        const localValid=Boolean(result.artifact&&result.ir&&!next.some(x=>x.severity==='error'));
+        setCompiled(localValid&&copilotValidationPassRef.current!==false);
+        monacoAdapterRef.current?.setDiagnostics(result.diagnostics,sourceSnapshot);
+        monacoAdapterRef.current?.setSymbolInfo(workerResult.symbols||[]);
+        if(copilotSourceRef.current===sourceSnapshot){
+          const copilotValid=localValid&&copilotValidationPassRef.current===true;
+          setCopilotStatus(copilotValid?'ready':'needs-fixes');
+          setCopilotArtifactHash(copilotValid?(workerResult.artifact?.abi?.artifactHash??null):null);
+        }
+        return result;
+      }catch(error:unknown){
+        if(request===compileRequestRef.current&&editorModel.getSource()===sourceSnapshot){
+          const message=error instanceof Error?error.message:String(error);
+          setDiagnostics([{severity:'error',message}]);
+          setCompiled(false);
+          monacoAdapterRef.current?.setDiagnostics([{severity:'error',message}],sourceSnapshot);
+          if(copilotSourceRef.current===sourceSnapshot){setCopilotStatus('needs-fixes');setCopilotArtifactHash(null);}
+        }
+        return null;
+      }finally{
+        if(request===compileRequestRef.current)setCompilePending(false);
+        if(compilePromiseRef.current?.promise===promise)compilePromiseRef.current=null;
+      }
+    })();
+    compilePromiseRef.current={source:sourceSnapshot,promise};
+    return promise;
+  };
+
+  // Compile with a 150 ms debounce in the dedicated worker. Older responses are
+  // discarded by request ID + source version so red squiggles never lag behind edits.
+  useEffect(()=>{
+    let active=true;
+    const sourceVersion=editorModel.getVersion();
+    const timer=window.setTimeout(()=>{
+      if(lastCompileRef.current?.source===source&&editorModel.getVersion()===sourceVersion)return;
+      void compileSource(source).then(result=>{
+        if(!active||!result)return;
+      });
+    },150);
+    return ()=>{active=false;window.clearTimeout(timer);};
+  },[source,editorVersion,editorModel]);
+
   useEffect(() => {
     let active=true;
     if (!useMonaco || !monacoRef.current) { monacoAdapterRef.current?.dispose(); monacoAdapterRef.current=null; if(active) setMonacoStatus('fallback'); return; }
     setMonacoStatus('loading');
-    mountCoreSpiritMonaco(monacoRef.current, editorModel, (next)=>{ if(!active)return; editorModel.updateSource(next); setSource(next); setCompiled(false); setEditorVersion(v=>v+1); })
-      .then(adapter=>{ if(!active){adapter.dispose();return;} monacoAdapterRef.current=adapter; setMonacoStatus('ready'); })
+    mountCoreSpiritMonaco(monacoRef.current, editorModel, (next)=>{ if(!active)return; setEditorSource(next); })
+      .then(adapter=>{ if(!active){adapter.dispose();return;} monacoAdapterRef.current=adapter; setMonacoStatus('ready');
+        const last=lastCompileRef.current;
+        if(last?.source===editorModel.getSource()){
+          adapter.setDiagnostics(last.result.diagnostics||[],last.source);
+          adapter.setSymbolInfo(last.result.symbols||[]);
+        }
+      })
       .catch(()=>{ if(active)setMonacoStatus('fallback'); });
     return ()=>{active=false;monacoAdapterRef.current?.dispose();monacoAdapterRef.current=null;};
   }, [useMonaco, editorModel]);
 
-  const compile = () => {
-    try {
-      const result = editorModel.compile();
-      const next = (result.diagnostics || []).map((d: any) => ({ severity: String(d.severity || 'error'), message: String(d.message || d), line: d.line }));
-      setDiagnostics(next);
-      setLastCompile(result);
-      setCompiled(Boolean(result.ir && !next.some(x => x.severity === 'error')));
-    } catch (error: unknown) {
-      setDiagnostics([{ severity: 'error', message: error instanceof Error ? error.message : String(error) }]);
-      setCompiled(false);
+  const compile=async()=>{
+    const existing=lastCompileRef.current;
+    const result=existing?.source===source?existing.result:await compileSource(source);
+    if(!result)return;
+    setCompiled(Boolean(result.artifact&&result.ir&&!result.diagnostics.some(d=>d.severity==='error')));
+  };
+
+  const runOnChart=async()=>{
+    try{
+      if(copilotSourceRef.current===source&&copilotValidationPassRef.current===false){
+        setRunStatus('Copilot validation failed · fix capability/security diagnostics before Run');
+        return;
+      }
+      const existing=lastCompileRef.current;
+      const result=existing?.source===source?existing.result:await compileSource(source);
+      if(!result)return;
+      const errors=(result.diagnostics||[]).filter(d=>d.severity==='error');
+      if(errors.length||!result.ir||!result.artifact){setCompiled(false);return;}
+      setLastCompile(result);setCompiled(true);setRunStatus('Running on active chart…');
+      const target=coreSpiritChartRegistry.getActive();
+      if(!target)throw new Error('No active TradingCoreOS chart. Open a live chart and click it once.');
+      const snapshot=await ideBridge.runActiveChart(source,'coreSpirit-editor',result);
+      const run=snapshot.run;
+      if(!run)throw new Error(snapshot.error||'CoreSpirit run failed');
+      setRunStatus(`${run.barsProcessed.toLocaleString()} bars · ${run.plotsEmitted} plots · ${run.signalsEmitted} signals`);
+      if(cloudScriptId){try{await saveExecutionRun({scriptId:cloudScriptId,executionType:'chart',symbol:target.symbol,timeframe:target.timeframe,status:run.diagnostics.length?'error':'success',barsProcessed:run.barsProcessed,plotsEmitted:run.plotsEmitted,signalsEmitted:run.signalsEmitted,metrics:{source:'CoreSpirit Coder',runtimeStatus:snapshot.status,signalExplainability:snapshot.explanations.length,artifactHash:result.artifact.abi?.artifactHash}});}catch{}}
+      setDiagnostics(run.diagnostics.length?run.diagnostics.map(message=>({severity:'warning',message})): [{severity:'info',message:`CoreSpirit rendered on ${target.symbol} · ${target.timeframe}.`}]);
+    }catch(error:unknown){
+      setRunStatus('Run failed');
+      setDiagnostics([{severity:'error',message:error instanceof Error?error.message:String(error)}]);
     }
   };
 
-  const runOnChart = async () => {
-    try {
-      const result = editorModel.compile();
-      const errors = (result.diagnostics || []).filter((d: any) => d.severity === 'error');
-      setDiagnostics((result.diagnostics || []).map((d: any) => ({ severity: String(d.severity || 'error'), message: String(d.message || d), line: d.line })));
-      if (errors.length || !result.ir) { setCompiled(false); return; }
-      setLastCompile(result); setCompiled(true); setRunStatus('Running on active chart…');
-      const target = coreSpiritChartRegistry.getActive();
-      if (!target) throw new Error('No active TradingCoreOS chart. Open a live chart and click it once.');
-      const snapshot = await ideBridge.runActiveChart(source, 'coreSpirit-editor');
-      const run = snapshot.run;
-      if (!run) throw new Error(snapshot.error || 'CoreSpirit run failed');
-      setRunStatus(`${run.barsProcessed.toLocaleString()} bars · ${run.plotsEmitted} plots · ${run.signalsEmitted} signals`);
-      if (cloudScriptId) { try { await saveExecutionRun({ scriptId: cloudScriptId, executionType: 'chart', symbol: target.symbol, timeframe: target.timeframe, status: run.diagnostics.length ? 'error' : 'success', barsProcessed: run.barsProcessed, plotsEmitted: run.plotsEmitted, signalsEmitted: run.signalsEmitted, metrics: { source: 'CoreSpirit Coder', runtimeStatus: snapshot.status, signalExplainability: snapshot.explanations.length } }); } catch {} }
-      setDiagnostics(run.diagnostics.length ? run.diagnostics.map(message => ({ severity: 'warning', message })) : [{ severity: 'info', message: `CoreSpirit rendered on ${target.symbol} · ${target.timeframe}.` }]);
-    } catch (error: unknown) {
-      setRunStatus('Run failed');
-      setDiagnostics([{ severity: 'error', message: error instanceof Error ? error.message : String(error) }]);
+  const generateCopilotDraft=async()=>{
+    const prompt=copilotPrompt.trim();
+    if(!prompt){setCopilotStatus('error');setCopilotError('Describe what you want the script to do first.');return;}
+    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotValidationDiagnosticsRef.current=[];
+    try{
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to TradingCore before using Copilot.');
+      const target=coreSpiritChartRegistry.getActive();
+      const response=await fetch('/api/corespirit/copilot/generate',{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},
+        body:JSON.stringify({prompt,currentSource:source,symbol:target?.symbol,timeframe:target?.timeframe}),
+        cache:'no-store',
+      });
+      const payload=await response.json().catch(()=>null) as {
+        success?:boolean;error?:string;source?:string;summary?:string;assumptions?:string[];
+        validation?:{valid?:boolean;artifactHash?:string|null;diagnostics?:Array<{severity:string;message:string;line?:number;start?:number;end?:number;code?:string}>};
+      }|null;
+      if(!response.ok||!payload?.success||typeof payload.source!=='string')throw new Error(payload?.error||'CoreSpirit Copilot request failed.');
+      setCopilotSummary(payload.summary||'Draft generated. Review its source and validation results.');
+      setCopilotAssumptions(payload.assumptions||[]);
+      copilotSourceRef.current=payload.source;
+      copilotValidationPassRef.current=payload.validation?.valid===true;
+      copilotValidationDiagnosticsRef.current=(payload.validation?.diagnostics||[]).map(d=>({
+        severity:d.severity==='warning'?'warning' as const:'error' as const,
+        message:d.message,line:d.line,start:d.start,end:d.end,code:d.code,
+      }));
+      setCopilotStatus('validating');
+      setEditorSource(payload.source);
+    }catch(error){
+      setCopilotStatus('error');
+      setCopilotError(error instanceof Error?error.message:String(error));
     }
   };
 
@@ -185,15 +358,15 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
             <textarea
               ref={editorRef}
               value={source}
-              onChange={e => { editorModel.updateSource(e.target.value, completionState.prefix); setSource(e.target.value); setCompiled(false); setEditorVersion(v=>v+1); setCursor(e.target.selectionStart); setShowCompletions(true); }}
+              onChange={e => setEditorSource(e.target.value,{completionPrefix:completionState.prefix,cursor:e.target.selectionStart,showCompletions:true})}
               onKeyDown={e => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); void save(); return; }
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); void runOnChart(); return; }
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); const snap=editorModel.undo(); setSource(snap.source); setEditorVersion(v=>v+1); return; }
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); const snap=editorModel.redo(); setSource(snap.source); setEditorVersion(v=>v+1); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); const snap=editorModel.undo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); const snap=editorModel.redo(); setEditorSource(snap.source,{modelAlreadyUpdated:true}); return; }
                 if (showCompletions && e.key === 'ArrowDown') { e.preventDefault(); setCompletionIndex(i=>Math.min(i+1,Math.max(0,completionItems.length-1))); return; }
                 if (showCompletions && e.key === 'ArrowUp') { e.preventDefault(); setCompletionIndex(i=>Math.max(0,i-1)); return; }
-                if (showCompletions && e.key === 'Enter' && completionItems[completionIndex]) { e.preventDefault(); const item=completionItems[completionIndex]; const start=e.currentTarget.selectionStart-(completionState.prefix?.length||0); const next=editorModel.applyEdit({start,end:e.currentTarget.selectionStart,text:item.label}); setSource(next.source); setEditorVersion(v=>v+1); setShowCompletions(false); requestAnimationFrame(()=>{ const pos=start+item.label.length; editorRef.current?.setSelectionRange(pos,pos); }); return; }
+                if (showCompletions && e.key === 'Enter' && completionItems[completionIndex]) { e.preventDefault(); const item=completionItems[completionIndex]; const start=e.currentTarget.selectionStart-(completionState.prefix?.length||0); const next=editorModel.applyEdit({start,end:e.currentTarget.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(next.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{ const pos=start+item.label.length; editorRef.current?.setSelectionRange(pos,pos); }); return; }
                 if (e.key === 'Escape') setShowCompletions(false);
               }}
               onKeyUp={e => { setCursor(e.currentTarget.selectionStart); if (/[A-Za-z_.]/.test(e.key) || e.key === 'Backspace') { setShowCompletions(true); setCompletionIndex(0); } }}
@@ -203,15 +376,29 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
               className="relative z-10 h-full w-full resize-none overflow-auto bg-transparent p-3 leading-[20px] text-transparent caret-[#f8fafc] outline-none selection:bg-[#3b82f6]/20"
               aria-label="CoreSpirit source editor"
             />
-            {showCompletions && completionItems.length > 0 && <div className="absolute left-4 top-14 z-20 w-72 overflow-hidden rounded-lg border border-[var(--tco-control)] bg-[#0b0f17]/95 shadow-2xl backdrop-blur">{completionItems.map((item,i)=><button key={item.label} onMouseDown={e=>{e.preventDefault(); const ta=editorRef.current; if(!ta)return; const start=ta.selectionStart-(completionState.prefix?.length||0); const snap=editorModel.applyEdit({start,end:ta.selectionStart,text:item.label}); setSource(snap.source); setEditorVersion(v=>v+1); setShowCompletions(false); requestAnimationFrame(()=>{const pos=start+item.label.length; ta.focus(); ta.setSelectionRange(pos,pos);});}} className={`block w-full px-3 py-2 text-left text-[10px] ${i===completionIndex?'bg-[#3b82f6]/15 text-[#f8fafc]':'text-[var(--tco-code-muted)]'} hover:bg-[#3b82f6]/10`}><span className="mr-2 text-[#60a5fa]">{item.kind}</span>{item.label}<span className="ml-2 text-[var(--tco-slate)]">{item.detail}</span></button>)}</div>}
+            {showCompletions && completionItems.length > 0 && <div className="absolute left-4 top-14 z-20 w-72 overflow-hidden rounded-lg border border-[var(--tco-control)] bg-[#0b0f17]/95 shadow-2xl backdrop-blur">{completionItems.map((item,i)=><button key={item.label} onMouseDown={e=>{e.preventDefault(); const ta=editorRef.current; if(!ta)return; const start=ta.selectionStart-(completionState.prefix?.length||0); const snap=editorModel.applyEdit({start,end:ta.selectionStart,text:item.label},'',{deferSemanticAnalysis:true}); setEditorSource(snap.source,{modelAlreadyUpdated:true,showCompletions:false}); requestAnimationFrame(()=>{const pos=start+item.label.length; ta.focus(); ta.setSelectionRange(pos,pos);});}} className={`block w-full px-3 py-2 text-left text-[10px] ${i===completionIndex?'bg-[#3b82f6]/15 text-[#f8fafc]':'text-[var(--tco-code-muted)]'} hover:bg-[#3b82f6]/10`}><span className="mr-2 text-[#60a5fa]">{item.kind}</span>{item.label}<span className="ml-2 text-[var(--tco-slate)]">{item.detail}</span></button>)}</div>}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#3b82f6]/30 text-[#3b82f6]' : 'border-[var(--tco-control)] text-[var(--tco-dim)]'}`}>{compiled ? 'COMPILED' : 'EDITING'}</span><span className="text-[var(--tco-slate)]">CoreSpirit compiler / IR</span><span className="text-[var(--tco-dim)]">{useMonaco ? `Monaco ${monacoStatus}` : 'Classic editor'}</span><span className="ml-2 text-[var(--tco-code-muted)]">{runStatus}</span><span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#3b82f6]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[var(--tco-dim)]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
-        {diagnostics.length > 0 && <div className="mt-3 space-y-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3">{diagnostics.map((d, i) => { const actions=editorModel.codeActions({message:d.message,line:d.line||1,column:1,severity:d.severity==='error'?'error':'warning'}); return <div key={i} className="rounded-md border border-transparent px-1 py-1 hover:border-[var(--tco-border)]"><div className="flex gap-2 text-[10px] leading-5"><span className={d.severity === 'error' ? 'text-[#ef4444]' : 'text-[#3b82f6]'}>{d.severity === 'error' ? <AlertTriangle className="mt-0.5 h-3 w-3"/> : <CheckCircle2 className="mt-0.5 h-3 w-3"/>}</span><span className="text-[var(--tco-code-muted)]">{d.line ? `Line ${d.line}: ` : ''}{d.message}</span></div>{actions.map(a=><button key={a.title} onClick={()=>{ if(!a.edit)return; const snap=editorModel.applyEdit(a.edit); setSource(snap.source); setEditorVersion(v=>v+1); setCompiled(false); }} className="ml-5 mt-1 text-[9px] text-[#60a5fa] hover:text-[#93c5fd]">{a.title}</button>)}</div>})}</div>}
+        <div className="mt-3 flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider"><span className={`rounded border px-2 py-1 ${compiled ? 'border-[#3b82f6]/30 text-[#3b82f6]' : 'border-[var(--tco-control)] text-[var(--tco-dim)]'}`}>{compilePending?'COMPILING…':compiled?'COMPILED':'EDITING'}</span><span className="text-[var(--tco-slate)]">CoreSpirit compiler / IR</span><span className="text-[var(--tco-dim)]">{useMonaco ? `Monaco ${monacoStatus}` : 'Classic editor'}</span><span className="ml-2 text-[var(--tco-code-muted)]">{runStatus}</span><span className={`ml-auto ${cloudStatus === 'saved' ? 'text-[#3b82f6]' : cloudStatus === 'error' ? 'text-[#f59e0b]' : 'text-[var(--tco-dim)]'}`}>{cloudStatus === 'saved' ? `CLOUD${cloudScriptId ? ' • SYNCED' : ''}` : cloudStatus === 'loading' ? 'CLOUD • SAVING…' : cloudStatus === 'error' ? 'CLOUD • LOCAL FALLBACK' : 'LOCAL'}</span></div>
+        {diagnostics.length > 0 && <div className="mt-3 space-y-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3">{diagnostics.map((d, i) => { const actions=editorModel.codeActions({message:d.message,line:d.line||1,column:1,severity:d.severity==='error'?'error':'warning'}); return <div key={i} className="rounded-md border border-transparent px-1 py-1 hover:border-[var(--tco-border)]"><div className="flex gap-2 text-[10px] leading-5"><span className={d.severity === 'error' ? 'text-[#ef4444]' : 'text-[#3b82f6]'}>{d.severity === 'error' ? <AlertTriangle className="mt-0.5 h-3 w-3"/> : <CheckCircle2 className="mt-0.5 h-3 w-3"/>}</span><span className="text-[var(--tco-code-muted)]">{d.line ? `Line ${d.line}: ` : ''}{d.message}</span></div>{actions.map(a=><button key={a.title} onClick={()=>{ if(!a.edit)return; const snap=editorModel.applyEdit(a.edit,'',{deferSemanticAnalysis:true}); setEditorSource(snap.source,{modelAlreadyUpdated:true}); }} className="ml-5 mt-1 text-[9px] text-[#60a5fa] hover:text-[#93c5fd]">{a.title}</button>)}</div>})}</div>}
       </Panel>
 
       <div className="space-y-4">
-        <Panel title="EXAMPLES" subtitle="Starter CoreSpirit scripts"><div className="space-y-2">{EXAMPLES.map(([name, code]) => <button key={name} onClick={() => { setSource(code); setDiagnostics([]); setCompiled(false); }} className="flex w-full items-center gap-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-left hover:border-[#3b82f6]/40"><BookOpen className="h-4 w-4 text-[#3b82f6]"/><span className="text-[10px] font-mono text-[var(--tco-text-2)]">{name}</span></button>)}</div></Panel>
+        <Panel title="CORESPIRIT COPILOT" subtitle="AI drafts code; the CoreScript compiler decides whether it is valid">
+          <div className="space-y-3">
+            <textarea value={copilotPrompt} onChange={e=>setCopilotPrompt(e.target.value)} rows={4} maxLength={4000} placeholder='Example: Build a 3-state HMM for NIFTY 5m using returns, ATR, volume z-score and RSI.' className="w-full resize-y rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-[10px] leading-5 text-[var(--tco-text-2)] outline-none focus:border-[#3b82f6]/50" />
+            <button onClick={()=>void generateCopilotDraft()} disabled={copilotStatus==='generating'} className="premium-button premium-button-primary w-full justify-center disabled:opacity-50"><Sparkles className="h-4 w-4"/>{copilotStatus==='generating'?'Generating draft…':'Generate CoreScript draft'}</button>
+            <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-[var(--tco-dim)]">
+              <span className={copilotStatus==='ready'?'text-[#3b82f6]':copilotStatus==='needs-fixes'||copilotStatus==='error'?'text-[#f59e0b]':'text-[var(--tco-dim)]'}>{copilotStatus==='ready'?'COMPILER VALIDATED':copilotStatus==='needs-fixes'?'NEEDS FIXES':copilotStatus==='validating'?'VALIDATING CORE SCRIPT':copilotStatus==='generating'?'GENERATING':copilotStatus==='error'?'COPILOT ERROR':'DRAFT ONLY'}</span>
+              {copilotArtifactHash&&<span className="ml-auto truncate" title={copilotArtifactHash}>ARTIFACT · {copilotArtifactHash.slice(0,12)}</span>}
+            </div>
+            {copilotSummary&&<div className="rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] leading-5 text-[var(--tco-text-2)]">{copilotSummary}</div>}
+            {copilotAssumptions.length>0&&<div className="space-y-1 text-[9px] leading-4 text-[var(--tco-dim)]">{copilotAssumptions.map((item,i)=><div key={i}>• {item}</div>)}</div>}
+            {copilotError&&<div className="text-[10px] leading-4 text-[#f59e0b]">{copilotError}</div>}
+            <div className="text-[9px] leading-4 text-[var(--tco-dim)]">Copilot sends your prompt and current source to the configured AI provider. Its output is only a draft: source is compiled, type-checked and capability-validated. Nothing runs automatically; review it and use Run on chart yourself.</div>
+          </div>
+        </Panel>
+        <Panel title="EXAMPLES" subtitle="Starter CoreSpirit scripts"><div className="space-y-2">{EXAMPLES.map(([name, code]) => <button key={name} onClick={() => setEditorSource(code)} className="flex w-full items-center gap-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-left hover:border-[#3b82f6]/40"><BookOpen className="h-4 w-4 text-[#3b82f6]"/><span className="text-[10px] font-mono text-[var(--tco-text-2)]">{name}</span></button>)}</div></Panel>
         <Panel title="CORESPIRIT SYNTAX" subtitle="The concise surface language lowers to the deterministic core"><div className="mb-3 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 font-mono text-[9px] leading-4 text-[var(--tco-code-muted)]">fast = ema(close, 20)<br/>plot fast<br/>if fast crossesAbove slow {'{'} ... {'}'}<br/>input length = int(20, min: 1)</div></Panel>
         <Panel title="SEMANTIC CONTRACT" subtitle="Compiler-normalized view • effects and execution cost come from the same IR graph"><div className="space-y-2"><div className="grid grid-cols-3 gap-1"><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] text-[var(--tco-dim)]">IR</div><div className="text-[11px] font-bold text-white">{sourceInspection.instructionCount}</div></div><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] text-[var(--tco-dim)]">LOOKBACK</div><div className="text-[11px] font-bold text-white">{sourceInspection.maxLookback}</div></div><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] text-[var(--tco-dim)]">EFFECTS</div><div className="text-[11px] font-bold text-[#c084fc]">{sourceInspection.effectAnnotations.filter(x => x.effectful).length}</div></div></div>{sourceInspection.effectAnnotations.length ? <div className="max-h-56 space-y-1 overflow-auto">{sourceInspection.effectAnnotations.slice(0, 30).map(annotation=><div key={`${annotation.sourceNodeId}-${annotation.line}-${annotation.column}`} className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2 py-1.5"><div className="flex items-center justify-between"><span className="text-[8px] font-mono text-[var(--tco-text-2)]">L{annotation.line}:{annotation.column} · {annotation.name || annotation.kind}</span><span className={`text-[8px] ${annotation.effectful ? 'text-[#f59e0b]' : 'text-[#3b82f6]'}`}>{annotation.effectful ? 'EFFECT' : 'PURE'}</span></div><div className="mt-0.5 text-[8px] text-[var(--tco-dim)]">cost {annotation.estimatedCost} · {annotation.latencyClass} · {annotation.stateful ? 'stateful' : 'stateless'} · {annotation.deterministic ? 'deterministic' : 'nondeterministic'} · {annotation.parallelizable ? 'parallel' : 'serial'}</div></div>)}</div> : <div className="rounded border border-dashed border-[var(--tco-border)] p-2 text-[8px] text-[var(--tco-dim)]">No semantic nodes resolved yet.</div>}{sourceInspection.normalizedSource !== source && <details className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2"><summary className="cursor-pointer text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Normalized source</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[8px] leading-4 text-[var(--tco-code-muted)]">{sourceInspection.normalizedSource}</pre></details>}</div></Panel>        <Panel title="EXECUTION PLAN" subtitle="Compiled dependency graph • fused kernels • traversal and allocation accounting">
           <div className="space-y-3">
@@ -243,7 +430,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
 <Panel title="LANGUAGE UI" subtitle="Runtime-owned controls declared by CoreSpirit"><div className="space-y-2">{runtimeInspector.uiState?.panels?.length ? runtimeInspector.uiState.panels.map(panel=><div key={panel.id} className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold text-white">{panel.title}</span><span className="text-[8px] text-[var(--tco-dim)]">{panel.controls.length} controls</span></div><div className="mt-2 space-y-1">{panel.controls.map(control=><div key={control.id} className="flex items-center justify-between text-[8px]"><span className="text-[var(--tco-code-muted)]">{control.label}</span><span className="font-mono text-[#c084fc]">{String(control.value)}{control.actionId ? ` · ${control.actionId}` : ''}</span></div>)}</div></div>) : <div className="rounded border border-dashed border-[var(--tco-border)] p-3 text-[9px] text-[var(--tco-dim)]">Run a script using ui.panel(...) to populate runtime UI state.</div>}</div></Panel>
 <Panel title="SCENE GRAPH" subtitle="Same runtime outputs, persistent visual objects"><div className="space-y-2"><div className="grid grid-cols-3 gap-2"><div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] uppercase text-[var(--tco-dim)]">Nodes</div><div className="mt-1 text-[11px] font-bold text-white">{runtimeInspector.scene?.nodes.length ?? 0}</div></div><div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] uppercase text-[var(--tco-dim)]">Interactive</div><div className="mt-1 text-[11px] font-bold text-[#c084fc]">{runtimeInspector.scene?.nodes.filter(n=>n.interactive).length ?? 0}</div></div><div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] uppercase text-[var(--tco-dim)]">Revision</div><div className="mt-1 text-[11px] font-bold text-[#3b82f6]">{runtimeInspector.scene?.revision ?? 0}</div></div></div>{runtimeInspector.scene?.nodes.length ? <div className="space-y-1">{runtimeInspector.scene.nodes.slice(-8).reverse().map(node=><div key={node.id} className="flex items-center justify-between rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2 py-1.5"><div className="min-w-0"><div className="truncate text-[9px] font-mono text-white">{node.id}</div><div className="text-[8px] text-[var(--tco-dim)]">{node.kind} · {node.layer}{node.semanticRole ? ` · ${node.semanticRole}` : ''}</div></div><div className="ml-2 text-[8px] text-[var(--tco-dim)]">{node.interaction?.onClick?.actionId ? 'CLICK' : ''}</div></div>)}</div> : <div className="rounded border border-dashed border-[var(--tco-border)] p-3 text-[9px] text-[var(--tco-dim)]">Run the script to populate the renderer-neutral scene graph.</div>}</div></Panel>
         <Panel title="CORESPIRIT ROADMAP" subtitle="The editor will grow with the runtime"><div className="space-y-2 text-[10px] leading-5 text-[var(--tco-muted)]"><div><Zap className="mr-2 inline h-3 w-3 text-[#3b82f6]"/>Compile + diagnostics <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Run on active chart <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Runtime inspector / explainability <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Syntax highlighting / autocomplete <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Hover / outline / quick fixes <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Inputs with instant hot reload <b className="text-[#f59e0b]">NEXT</b></div><div>• Plot / line / box / zone controls</div><div>• Webhooks + event handlers</div><div>• Models / feature calls</div><div>• Multi-symbol / multi-timeframe requests</div><div>• Replay / backtest / live execution modes</div><div>• Language-driven panels + controls <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Data-rich visual metadata + inspect <b className="text-[#3b82f6]">ACTIVE</b></div></div></Panel>
-        <Panel title="RESET"><button onClick={() => { setSource(DEFAULT_SOURCE); setDiagnostics([]); setCompiled(false); }} className="premium-button w-full"><RotateCcw className="h-4 w-4"/> Reset starter script</button></Panel>
+        <Panel title="RESET"><button onClick={() => setEditorSource(DEFAULT_SOURCE)} className="premium-button w-full"><RotateCcw className="h-4 w-4"/> Reset starter script</button></Panel>
       </div>
     </main>
   </WorkspaceModuleShell>;

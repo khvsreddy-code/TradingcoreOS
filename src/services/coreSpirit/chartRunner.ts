@@ -2,6 +2,8 @@ import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritHMMArtifactBinding } from './quantMath';
 import { coreSpiritWorkerPool, type CoreSpiritWorkerRunResult } from './coreSpiritWorkerPool';
 import { loadOrCompileCoreSpiritArtifact } from './artifactCache';
+import { compileCoreSpiritArtifactOffThread } from './coreSpiritCompilerClient';
+import type { CoreSpiritExecutableArtifact } from './artifact';
 import { marketDataGraph, type CoreSpiritGraphSnapshot } from '../core/data/marketDataGraph';
 
 export type WorkerResult = CoreSpiritWorkerRunResult;
@@ -23,41 +25,52 @@ export type CoreSpiritWorkerRunOptions = {
  * context using artifactId + datasetVersion. Source parsing/semantic analysis
  * is therefore removed from the normal reopen path.
  */
-export async function runCoreSpiritInWorker(
-  source: string,
-  bars: CoreSpiritMarketBar[],
-  sourceId: string,
-  options: CoreSpiritWorkerRunOptions = {},
-): Promise<WorkerResult> {
-  const artifact = await loadOrCompileCoreSpiritArtifact(source, sourceId, {
-    backend:'worker-vm',
-  });
-
+function artifactGraphSnapshot(
+  artifact:CoreSpiritExecutableArtifact,
+  sourceId:string,
+  options:CoreSpiritWorkerRunOptions,
+):CoreSpiritGraphSnapshot|undefined {
   const plan=artifact.ir.tradingNativePlan;
   const requests=plan?.dataDependencies?.map(dependency=>({
-    symbol:dependency.symbol,
-    timeframe:dependency.timeframe,
-    fields:dependency.fields,
+    symbol:dependency.symbol,timeframe:dependency.timeframe,fields:dependency.fields,
   })) ?? [];
-  const graphSnapshot=options.graphSnapshot ?? (
+  return options.graphSnapshot ?? (
     requests.length
-      ? marketDataGraph.snapshot(requests, options.baseSymbol ?? 'current', options.baseTimeframe ?? 'chart')
+      ? marketDataGraph.snapshot(requests,options.baseSymbol ?? 'current',options.baseTimeframe ?? 'chart')
       : undefined
   );
+}
 
-  return coreSpiritWorkerPool.runArtifact(
-    artifact,
-    undefined,
-    bars,
-    sourceId,
-    {
-      contextKey: options.contextKey || sourceId,
-      datasetVersion: options.datasetVersion || 1,
-      dirtyRange: options.dirtyRange,
-      graphSnapshot,
-      graphBaseSymbol:options.baseSymbol,
-      graphBaseTimeframe:options.baseTimeframe,
-      hmmArtifacts:options.hmmArtifacts,
-    },
-  );
+/** Executes a compiler-validated artifact without reparsing or recompiling the editor source. */
+export async function runCoreSpiritArtifactInWorker(
+  artifact:CoreSpiritExecutableArtifact,
+  bars:CoreSpiritMarketBar[],
+  sourceId:string,
+  options:CoreSpiritWorkerRunOptions={},
+):Promise<WorkerResult>{
+  if(!artifact?.abi?.artifactHash || !artifact.ir) throw new Error('CoreSpirit Run requires a validated executable artifact.');
+  const graphSnapshot=artifactGraphSnapshot(artifact,sourceId,options);
+  return coreSpiritWorkerPool.runArtifact(artifact,undefined,bars,sourceId,{
+    contextKey:options.contextKey || sourceId,
+    datasetVersion:options.datasetVersion || 1,
+    dirtyRange:options.dirtyRange,
+    graphSnapshot,
+    graphBaseSymbol:options.baseSymbol,
+    graphBaseTimeframe:options.baseTimeframe,
+    hmmArtifacts:options.hmmArtifacts,
+  });
+}
+
+/** Resolve/cache an artifact off-thread, then dispatch it to the persistent runtime worker. */
+export async function runCoreSpiritInWorker(
+  source:string,
+  bars:CoreSpiritMarketBar[],
+  sourceId:string,
+  options:CoreSpiritWorkerRunOptions={},
+):Promise<WorkerResult>{
+  const artifact=await loadOrCompileCoreSpiritArtifact(source,sourceId,{
+    backend:'worker-vm',
+    compileInWorker:(input,id,compileOptions)=>compileCoreSpiritArtifactOffThread(input,id,compileOptions),
+  });
+  return runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options);
 }

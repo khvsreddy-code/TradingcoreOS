@@ -4,6 +4,7 @@ import { validateExecutableArtifact } from './artifact';
 import { artifactBackendKey, type CoreSpiritExecutionBackend } from './artifactAbi';
 import { sha256HexSync, type CoreSpiritArtifactIdentity } from './artifactIdentity';
 import { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
+import { validateCoreSpiritExecutableArtifactOffThread } from './coreSpiritCompilerClient';
 
 const DB_NAME='tradingcoreos-corespirit-artifacts';
 const DB_VERSION=1;
@@ -39,6 +40,9 @@ type PersistedAliasRecord = {
 };
 
 const memoryArtifacts=new Map<string,CoreSpiritExecutableArtifact>();
+// Only artifacts admitted by a compiler/validation path enter this weak trust set.
+// Persisted artifacts must pass worker-side integrity validation before promotion.
+const knownGoodArtifacts=new WeakSet<object>();
 const sourceToNormalized=new Map<string,string>();
 const normalizedToSemantic=new Map<string,string>();
 const semanticToArtifact=new Map<string,string>();
@@ -49,6 +53,7 @@ let persistenceDisabled=false;
 function memoryPut(key:string,artifact:CoreSpiritExecutableArtifact,identity:CoreSpiritArtifactIdentity):void{
   memoryArtifacts.delete(key);
   memoryArtifacts.set(key,artifact);
+  knownGoodArtifacts.add(artifact);
   sourceToNormalized.set(identity.sourceHash,identity.normalizedHash);
   normalizedToSemantic.set(identity.normalizedHash,identity.semanticHash);
   semanticToArtifact.set(identity.semanticHash,identity.artifactHash);
@@ -245,7 +250,9 @@ async function loadPersistentArtifact(
   if(!alias || alias.backend!==backend || alias.semanticHash!==expectedSemanticHash) return undefined;
 
   const artifact=await getPersistentArtifact(alias.artifactHash);
-  if(!artifact || !validateExecutableArtifact(artifact) || !artifact.abi) return undefined;
+  // Keep the main thread off large IR serialization/checksum work. The candidate
+  // gets a full integrity check in the dedicated compiler worker before promotion.
+  if(!artifact || !artifact.abi) return undefined;
   if(artifact.abi.semanticHash!==expectedSemanticHash || artifact.abi.artifactHash!==alias.artifactHash) return undefined;
 
   void touchPersistentAlias(alias);
@@ -262,26 +269,36 @@ export async function loadOrCompileCoreSpiritArtifact(
   const aliasKey=artifactBackendKey(lookup.key,backend);
 
   const existing=memoryArtifacts.get(aliasKey);
-  if(existing && validateExecutableArtifact(existing) && existing.abi?.semanticHash===lookup.semanticHash) return existing;
+  if(existing && knownGoodArtifacts.has(existing) && existing.abi?.semanticHash===lookup.semanticHash) return existing;
 
   const active=inFlight.get(aliasKey);
   if(active) return active;
 
   const task=(async()=>{
     const persisted=await loadPersistentArtifact(aliasKey,lookup.semanticHash,backend);
+    let persistedValid=false;
     if(persisted){
+      try{persistedValid=await validateCoreSpiritExecutableArtifactOffThread(persisted);}catch{persistedValid=false;}
+    }
+    if(persisted&&persistedValid){
       memoryPut(aliasKey,persisted,identityFromArtifact(persisted));
       return persisted;
     }
 
     let artifact:CoreSpiritExecutableArtifact|undefined;
     let validatedOffThread=false;
-    if(options.compileInWorker && !options.components){
-      artifact=await options.compileInWorker(source,sourceId,{layer:options.layer});
-      // The compiler worker validates the full artifact before transferring it,
-      // avoiding a second expensive IR serialization/hash pass on the UI thread.
+    if(!options.components){
+      const compileWorker=options.compileInWorker ?? (async(input:string,id:string,compileOptions:{layer?:string})=>{
+        const {compileCoreSpiritArtifactOffThread}=await import('./coreSpiritCompilerClient');
+        return compileCoreSpiritArtifactOffThread(input,id,compileOptions);
+      });
+      artifact=await compileWorker(source,sourceId,{layer:options.layer});
+      // In normal browser hosts, the dedicated worker validates before transfer.
+      // The client uses an explicit main-thread compatibility fallback only when
+      // Worker is unavailable.
       validatedOffThread=true;
     }else{
+      // Custom component executors cannot be structured-cloned to a worker.
       const {compileCoreSpirit}=await import('./coreSpiritPipeline');
       const compiled=compileCoreSpirit(source,sourceId,{
         components:options.components,

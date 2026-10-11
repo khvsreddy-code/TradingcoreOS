@@ -84,6 +84,8 @@ const contracts = [
   ['realtime-three-rate-ring-buffer', ['src/realtimeThreeRateArchitectureContract.test.mjs', false]],
   ['corespirit-persistent-worker-sab', ['src/coreSpiritPersistentWorkerSabContract.test.mjs', false]],
   ['corespirit-artifact-cache-abi', ['src/coreSpiritArtifactCacheAbiContract.test.mjs', false]],
+  ['corespirit-editor-off-thread-pipeline', ['src/coreSpiritEditorCompilerContract.test.mjs', false]],
+  ['corespirit-copilot-compile-before-run', ['src/coreSpiritCopilotContract.test.mjs', false]],
   ['market-data-graph', ['src/services/core/data/marketDataGraphContract.test.ts', true]],
   ['frontend-performance', ['src/frontendPerformanceContract.test.mjs', false]],
   ['fyers-order-latency', ['src/fyersOrderLatencyContract.test.mjs', false]],

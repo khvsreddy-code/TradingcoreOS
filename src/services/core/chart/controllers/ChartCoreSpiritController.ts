@@ -2,8 +2,9 @@ import type { HistoricalCandle } from '../../../brokers/BrokerAdapter';
 import { coreEventBus } from '../../../core/event/eventBus';
 import { coreSpiritChartRegistry } from '../../../coreSpirit/chartRegistry';
 import { CoreSpiritChartOutputController } from '../../../coreSpirit/chartOutputController';
-import { runCoreSpiritInWorker } from '../../../coreSpirit/chartRunner';
-import { compileCoreSpirit } from '../../../coreSpirit/coreSpiritCompilerLoader';
+import { runCoreSpiritInWorker, runCoreSpiritArtifactInWorker } from '../../../coreSpirit/chartRunner';
+import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../../coreSpirit/coreSpiritCompilerClient';
+import type { CoreSpiritExecutableArtifact } from '../../../coreSpirit/artifact';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
 
@@ -26,6 +27,8 @@ export type ChartCoreSpiritControllerDeps={
 export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDeps){
   const {chartId,chart,candle,host,candles,coreSpiritOutput,coreSpiritRunId,resolvedInstrumentKey,timeframe,store,publishLifecycle}=deps;
   let datasetVersion=0;
+  let compileGeneration=0;
+  let lastValidated:{source:string;result:CoreSpiritOffThreadCompileResult}|undefined;
 
   const ensureOutput=()=>{
     if(!chart.current||!host.current)return null;
@@ -34,45 +37,60 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
     return coreSpiritOutput.current;
   };
 
+  const executeCode=async(source:string,sourceId='coreSpirit-editor',artifact?:CoreSpiritExecutableArtifact)=>{
+    const runId=++coreSpiritRunId.current;
+    const bars=[...candles.current];
+    if(!bars.length)throw new Error('Chart has no candles yet; wait for the first history paint.');
+    publishLifecycle('updating');
+    try{
+      datasetVersion+=1;
+      const options={contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe};
+      const result=artifact
+        ? await runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options)
+        : await runCoreSpiritInWorker(source,bars,sourceId,options);
+      if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
+      // Transactional chart replacement: don't clear the currently running
+      // script's visuals until the replacement has completed successfully.
+      const output=ensureOutput();
+      output?.reset();
+      output?.applyObjects(result.outputs);
+      coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:Date.now(),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
+      publishLifecycle('ready');
+      return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,runId:`${sourceId}:${runId}`,outputs:result.outputs};
+    }catch(error){
+      publishLifecycle('error');
+      throw error;
+    }
+  };
+
   const register=()=>{
     const unregister=coreSpiritChartRegistry.register({
       chartId,
       symbol:resolvedInstrumentKey,
       timeframe,
       getBars:()=>[...candles.current] as any,
-      run:async(source:string,sourceId='coreSpirit-editor')=>{
-        const runId=++coreSpiritRunId.current;
-        const bars=[...candles.current];
-        if(!bars.length)throw new Error('Chart has no candles yet; wait for the first history paint.');
-        publishLifecycle('updating');
-        try{
-          datasetVersion += 1;
-          const result=await runCoreSpiritInWorker(source,bars,sourceId,{contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe});
-          if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
-          ensureOutput()?.reset();
-          ensureOutput()?.applyObjects(result.outputs);
-          coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:Date.now(),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
-          publishLifecycle('ready');
-          return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,runId:`${sourceId}:${runId}`,outputs:result.outputs};
-        }catch(error){
-          publishLifecycle('error');
-          throw error;
-        }
-      },
+      run:(source,sourceId='coreSpirit-editor')=>executeCode(source,sourceId),
+      updateCode:(source,artifact,sourceId='coreSpirit-editor')=>executeCode(source,sourceId,artifact),
     });
     return unregister;
   };
 
   const open=()=>{store.setOpen(true);store.resetStatus();coreSpiritChartRegistry.activate(chartId);};
   const compile=async()=>{
+    const source=store.getSnapshot().source;
+    const generation=++compileGeneration;
+    store.setStatus('Compiling in worker…');
     try{
-      const result=await compileCoreSpirit(store.getSnapshot().source);
+      const result=await compileCoreSpiritSourceOffThread(source,generation,'chart-indicator');
+      if(generation!==compileGeneration||store.getSnapshot().source!==source)return false;
       const diagnostics=(result.diagnostics||[]).map((d:any)=>`${d.line?`Line ${d.line}: `:''}${d.message}`);
       const errors=(result.diagnostics||[]).filter((d:any)=>d.severity==='error');
+      lastValidated={source,result};
       store.setDiagnostics(diagnostics);
-      store.setStatus(errors.length?'Compile failed':'Compiled');
-      return !errors.length;
+      store.setStatus(errors.length||!result.artifact?'Compile failed':'Compiled');
+      return !errors.length&&Boolean(result.artifact);
     }catch(error){
+      if(generation!==compileGeneration)return false;
       store.setDiagnostics([String((error as any)?.message||error)]);
       store.setStatus('Compile failed');
       return false;
@@ -80,14 +98,26 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
   };
 
   const deploy=async()=>{
-    if(!(await compile()))return;
+    const source=store.getSnapshot().source;
+    const cached=lastValidated?.source===source&&lastValidated.result.artifact&&
+      !lastValidated.result.diagnostics.some(d=>d.severity==='error')?lastValidated:undefined;
+    if(!cached&&!(await compile()))return;
+    const validated=lastValidated;
+    if(!validated||validated.source!==source||!validated.result.artifact)return;
     try{
       store.persistSource();
       coreSpiritChartRegistry.activate(chartId);
       store.setStatus('Deploying…');
       const target=coreSpiritChartRegistry.getActive();
       if(!target)throw new Error('No active chart');
-      const run=await target.run(store.getSnapshot().source,'chart-indicator');
+      const run=target.updateCode
+        ? await target.updateCode(source,validated.result.artifact,'chart-indicator')
+        : await target.run(source,'chart-indicator');
+      if(run.diagnostics.some(d=>/failed|invalid|denied/i.test(d))) {
+        store.setDiagnostics(run.diagnostics);
+        store.setStatus('Deploy needs attention');
+        return;
+      }
       store.setStatus(`${run.barsProcessed.toLocaleString()} bars · ${run.plotsEmitted} plots · ${run.signalsEmitted} signals`);
       store.setDiagnostics(run.diagnostics);
       store.setOpen(false);

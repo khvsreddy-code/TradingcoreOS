@@ -1,12 +1,20 @@
 import type { CoreSpiritUiState } from './uiRuntime';
 import type { CoreSpiritWorkspaceState } from './workspaceRuntime';
 import type { CoreSpiritMarketBar } from './marketData';
+import type { CoreSpiritExecutableArtifact } from './artifact';
+export type CoreSpiritChartRunResult = {
+  barsProcessed:number;plotsEmitted:number;signalsEmitted:number;diagnostics:string[];
+  runId?:string;outputs?:readonly import('./types').CoreSpiritObject[];
+  state?:{uiState?:CoreSpiritUiState;workspaceState?:CoreSpiritWorkspaceState};
+};
 export type CoreSpiritChartTarget = {
-  chartId: string;
-  symbol: string;
-  timeframe: string;
-  getBars?: () => readonly CoreSpiritMarketBar[];
-  run: (source: string, sourceId?: string) => Promise<{ barsProcessed: number; plotsEmitted: number; signalsEmitted: number; diagnostics: string[]; runId?: string; outputs?: readonly import('./types').CoreSpiritObject[]; state?: { uiState?: CoreSpiritUiState; workspaceState?: CoreSpiritWorkspaceState } }>;
+  chartId:string;
+  symbol:string;
+  timeframe:string;
+  getBars?:()=>readonly CoreSpiritMarketBar[];
+  run:(source:string,sourceId?:string)=>Promise<CoreSpiritChartRunResult>;
+  /** Transactional source replacement: preserve current visuals unless the compiled artifact completes successfully. */
+  updateCode?:(source:string,artifact:CoreSpiritExecutableArtifact,sourceId?:string)=>Promise<CoreSpiritChartRunResult>;
 };
 
 class CoreSpiritChartRegistry {

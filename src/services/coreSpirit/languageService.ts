@@ -178,7 +178,7 @@ export function getCoreSpiritCompletionContext(source: string, cursor = source.l
   return { prefix: word, mode: 'global' };
 }
 
-export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiritCompletionContext> = {}, source = ''): CoreSpiritCompletion[] {
+export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiritCompletionContext> = {}, source = '', options:{resolveSemanticTypes?:boolean} = {}): CoreSpiritCompletion[] {
   const all = [...allCompletions(), ...getCoreSpiritUdtInfos(source).map(u=>({label:u.name,kind:'type' as const,detail:`CoreSpirit type • ${u.fields.length} fields`}))];
   const needle = (prefix || context.prefix || '').trim().toLowerCase();
   if (context.mode === 'member') {
@@ -223,7 +223,7 @@ export function getCoreSpiritCompletions(prefix = '', context: Partial<CoreSpiri
       if (modelFiltered.length) return modelFiltered;
     }
 
-    const typeInfo=target ? getCoreSpiritTypeInfo(source, Math.max(0,before.lastIndexOf(target)+target.length)) : null;
+    const typeInfo=options.resolveSemanticTypes===false?null:(target ? getCoreSpiritTypeInfo(source, Math.max(0,before.lastIndexOf(target)+target.length)) : null);
     if (typeInfo?.type === 'ui:panel') return getCoreSpiritMemberContracts('panel').map(contract => ({label:contract.member,kind:'property' as const,detail:`${contract.callName}(${contract.minArgs}${contract.maxArgs !== undefined && contract.maxArgs !== contract.minArgs ? `-${contract.maxArgs}` : ''} args)`})).filter(x=>!needle||x.label.toLowerCase().startsWith(needle));
     if (typeInfo?.type === 'market:ref' || typeInfo?.type === 'timeframe:ref') {
       const fields: CoreSpiritCompletion[] = ['open','high','low','close','volume','time'].map(label => ({ label, kind:'property' as const, detail:`${target}.${label} • market series field`, insertText:label }));
@@ -353,6 +353,25 @@ export function getCoreSpiritCodeActions(source: string, diagnostic: CoreSpiritE
   }
   if (/Expected variable name/.test(diagnostic.message)) actions.push({title:'Insert variable name',kind:'quickfix',edit:{start:offset+line.indexOf('let')+3,end:offset+line.indexOf('let')+3,text:' value'}});
   return actions;
+}
+
+/** Lightweight interactive preview: no parser/semantic diagnostic pass. The compiler worker owns those checks. */
+export function getCoreSpiritEditorPreviewSnapshot(source:string,prefix=''):CoreSpiritEditorSnapshot {
+  const context=getCoreSpiritCompletionContext(source,source.length);
+  const key=`preview:${source}\u0000${prefix}\u0000${context.mode}`;
+  const cached=SNAPSHOT_CACHE.get(key);
+  if(cached)return cached;
+  const snapshot={
+    diagnostics:[],
+    completions:getCoreSpiritCompletions(prefix||context.prefix,{...context,cursor:source.length},source,{resolveSemanticTypes:false}),
+    formatted:formatCoreSpiritSource(source),
+    tokens:getCoreSpiritSemanticTokens(source),
+    definitions:getCoreSpiritDefinitions(source),
+    folds:getCoreSpiritFoldingRanges(source),
+  };
+  SNAPSHOT_CACHE.set(key,snapshot);
+  if(SNAPSHOT_CACHE.size>200)SNAPSHOT_CACHE.delete(SNAPSHOT_CACHE.keys().next().value as string);
+  return snapshot;
 }
 
 export function getCoreSpiritEditorSnapshot(source: string, prefix=''): CoreSpiritEditorSnapshot {

@@ -107,12 +107,15 @@ export class CoreSpiritWorkerPool {
     sourceId='coreSpirit',
     options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[]},
   ):Promise<CoreSpiritWorkerRunResult> {
-    const { compileCoreSpirit } = await import('./coreSpiritPipeline');
-    const compiled = compileCoreSpirit(source, sourceId);
-    if (!compiled.artifact || compiled.diagnostics.some(d => d.severity === 'error')) {
-      throw new Error(compiled.diagnostics.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
-    }
-    return this.runArtifact(compiled.artifact, source, bars, sourceId, options);
+    const [{loadOrCompileCoreSpiritArtifact},{compileCoreSpiritArtifactOffThread}]=await Promise.all([
+      import('./artifactCache'),
+      import('./coreSpiritCompilerClient'),
+    ]);
+    const artifact=await loadOrCompileCoreSpiritArtifact(source,sourceId,{
+      backend:'worker-vm',
+      compileInWorker:(input,id,compileOptions)=>compileCoreSpiritArtifactOffThread(input,id,compileOptions),
+    });
+    return this.runArtifact(artifact,undefined,bars,sourceId,options);
   }
 
   runArtifact(
@@ -208,8 +211,11 @@ export class CoreSpiritWorkerPool {
       ? sharedBuffer.writeBars(job.bars,job.datasetVersion,job.dirtyRange?.from ?? 0,job.dirtyRange?.to ?? job.bars.length)
       : undefined;
 
-    if (!job.artifact || !validateExecutableArtifact(job.artifact)) {
-      job.reject(new Error('CoreSpirit worker job requires a valid executable artifact'));
+    // Avoid hashing/serializing a potentially large IR on the UI thread. A new
+    // artifact is fully verified by installArtifact() inside the execution worker;
+    // an already loaded context has already passed that same verification.
+    if (!job.artifact?.abi?.artifactHash || !job.artifact.ir) {
+      job.reject(new Error('CoreSpirit worker job requires a valid executable artifact envelope'));
       slot.busy=false;
       slot.job=undefined;
       this.dispatch();

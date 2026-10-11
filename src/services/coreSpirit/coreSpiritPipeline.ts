@@ -45,11 +45,13 @@ export function parseCoreSpiritDetailed(source: string) {
  */
 const artifactCache = new Map<string, CoreSpiritExecutableArtifact>();
 const diagnosticsCache = new Map<string, CoreSpiritCompileResult['diagnostics']>();
+const symbolsCache = new Map<string, CoreSpiritCompileResult['symbols']>();
 const COMPILE_CACHE_MAX = 64;
 
 export function clearCoreSpiritCompileCache(): void {
   artifactCache.clear();
   diagnosticsCache.clear();
+  symbolsCache.clear();
 }
 
 export function compileCoreSpirit(
@@ -66,6 +68,7 @@ export function compileCoreSpirit(
       ir:cached.ir,
       artifact:cached,
       diagnostics:diagnosticsCache.get(identity.key) ?? [],
+      symbols:symbolsCache.get(identity.key) ?? [],
     };
   }
 
@@ -94,11 +97,13 @@ export function compileCoreSpirit(
   if(result.artifact){
     artifactCache.set(identity.key,result.artifact);
     diagnosticsCache.set(identity.key,result.diagnostics);
+    symbolsCache.set(identity.key,result.symbols ?? []);
     while(artifactCache.size>COMPILE_CACHE_MAX){
       const oldest=artifactCache.keys().next().value as string|undefined;
       if(oldest===undefined) break;
       artifactCache.delete(oldest);
       diagnosticsCache.delete(oldest);
+      symbolsCache.delete(oldest);
     }
   }
 

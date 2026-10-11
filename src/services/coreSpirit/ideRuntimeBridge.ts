@@ -1,4 +1,5 @@
 import type { CoreSpiritDiagnostic } from './semanticAnalyzer';
+import type { CoreSpiritCompileResult } from './compiler';
 import type { CoreSpiritObject } from './types';
 import { CoreSpiritEditorModel } from './editorModel';
 import { coreSpiritChartRegistry } from './chartRegistry';
@@ -74,8 +75,8 @@ export class CoreSpiritIdeRuntimeBridge {
     return this.getSnapshot();
   }
 
-  async runActiveChart(source: string, sourceId = 'coreSpirit-ide'): Promise<CoreSpiritIdeRuntimeSnapshot> {
-    const compiled = this.editor.compile();
+  async runActiveChart(source:string,sourceId='coreSpirit-ide',prepared?:CoreSpiritCompileResult):Promise<CoreSpiritIdeRuntimeSnapshot>{
+    const compiled=prepared ?? this.editor.compile();
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (errors.length || !compiled.ir) {
       this.patch({ status: 'error', compile: { irVersion: compiled.ir?.version ?? 1, diagnostics: compiled.diagnostics }, error: 'Fix compile errors before running.' });
@@ -92,7 +93,9 @@ export class CoreSpiritIdeRuntimeBridge {
     this.debuggerSession = compiled.artifact && chartBars.length ? new CoreSpiritVisualDebuggerSession({ artifact: compiled.artifact, bars: chartBars, symbol: target.symbol, timeframe: target.timeframe, sourceText: source, sourceId }) : undefined;
     this.patch({ status: 'running', target: { chartId: target.chartId, symbol: target.symbol, timeframe: target.timeframe }, error: undefined });
     try {
-      const result = await target.run(source, sourceId);
+      const result = target.updateCode && compiled.artifact
+        ? await target.updateCode(source,compiled.artifact,sourceId)
+        : await target.run(source, sourceId);
       if (generation !== this.runGeneration) return this.getSnapshot();
       const outputs = [...(result.outputs ?? [])];
       const identity = { chartId: target.chartId, symbol: target.symbol, timeframe: target.timeframe, pane: 'main' as const };

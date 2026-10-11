@@ -30,7 +30,15 @@ import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, buildCo
 import { buildCoreSpiritSemanticFingerprint as fingerprintCoreSpiritSemantics } from './artifactLookupIdentity';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
-export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
+export type CoreSpiritCompileDiagnostic = CoreSpiritDiagnostic;
+export type CoreSpiritCompileSymbol = Readonly<{name:string;type:string;kind:'variable'|'type'}>;
+export type CoreSpiritCompileResult = {
+  ir?: CoreSpiritIrProgram;
+  diagnostics: CoreSpiritDiagnostic[];
+  artifact?: CoreSpiritExecutableArtifact;
+  /** Serializable semantic names for IDE completion/hover, never runtime authority. */
+  symbols?: readonly CoreSpiritCompileSymbol[];
+};
 export type CoreSpiritCompilerOptions = {
   layer?: CoreSpiritProgramLayer;
   surface?: CoreSpiritSurfaceMetadata;
@@ -55,9 +63,16 @@ export class CoreSpiritCompiler {
     options: CoreSpiritCompilerOptions = {},
   ): CoreSpiritCompileResult {
     const unit = createCoreSpiritCompilationUnit(source, options);
-    if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) return { diagnostics: unit.diagnostics };
+    const symbols:CoreSpiritCompileSymbol[] = unit.semantic ? [
+      ...[...unit.semantic.symbols.entries()].map(([name,type])=>({name,type:String(type),kind:'variable' as const})),
+      ...[...unit.semantic.udts.keys()].map(name=>({name,type:`type ${name}`,kind:'type' as const})),
+    ] : [];
+    if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) {
+      return { diagnostics:unit.diagnostics, symbols };
+    }
     const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(source);
-    return this.compile(unit.ast, sourceId, { ...options, surface, researchSource:source, artifactContext:{ source:unit.source, normalizedSource:unit.normalizedSource, semanticFingerprint:this.semanticFingerprint(options) } });
+    const result=this.compile(unit.ast, sourceId, { ...options, surface, researchSource:source, artifactContext:{ source:unit.source, normalizedSource:unit.normalizedSource, semanticFingerprint:this.semanticFingerprint(options) } });
+    return { ...result, symbols };
   }
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {

@@ -4,7 +4,8 @@ import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpiritRepaintSafety, type CoreSpiritRepaintSafetyReport } from './repaintSafety';
 import type { CoreSpiritProfilerSnapshot } from './profiler';
 import type { CoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
-import { getCoreSpiritEditorSnapshot, getCoreSpiritHover, getCoreSpiritCompletionContext, getCoreSpiritDefinitionAt, getCoreSpiritCodeActions, type CoreSpiritCompletion, type CoreSpiritEditorDiagnostic, type CoreSpiritSemanticToken, type CoreSpiritDefinition, type CoreSpiritCodeAction, type CoreSpiritFoldingRange } from './languageService';
+import { getCoreSpiritEditorSnapshot, getCoreSpiritEditorPreviewSnapshot, getCoreSpiritHover, getCoreSpiritCompletionContext, getCoreSpiritDefinitionAt, getCoreSpiritCodeActions, type CoreSpiritCompletion, type CoreSpiritEditorDiagnostic, type CoreSpiritSemanticToken, type CoreSpiritDefinition, type CoreSpiritCodeAction, type CoreSpiritFoldingRange } from './languageService';
+import type { CoreSpiritCompileResult } from './compiler';
 
 export type CoreSpiritSymbol = {
   name: string;
@@ -46,7 +47,7 @@ export class CoreSpiritEditorModel {
 
   constructor(source = '') {
     this.source = source;
-    this.snapshot = this.compute('');
+    this.snapshot = this.compute('',true);
   }
 
   getSnapshot() { return this.snapshot; }
@@ -55,28 +56,40 @@ export class CoreSpiritEditorModel {
   getProfilerSnapshot() { return this.profilerSnapshot; }
   setProfilerSnapshot(snapshot: CoreSpiritProfilerSnapshot | undefined) { this.profilerSnapshot = snapshot; this.snapshot = { ...this.snapshot, profiler:snapshot }; return this.snapshot; }
 
-  updateSource(source: string, completionPrefix = '') {
+  updateSource(source: string, completionPrefix = '', options: {deferSemanticAnalysis?:boolean} = {}) {
     if (source === this.source && !completionPrefix) return this.snapshot;
     this.undoStack.push(this.source); if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack = [];
     const old=this.source; this.source = source;
     this.version += 1;
-    const change={start:0,end:old.length,text:source}; this.incrementalAst.update(source,change);
-    this.snapshot = this.compute(completionPrefix);
+    const change={start:0,end:old.length,text:source};
+    if(!options.deferSemanticAnalysis)this.incrementalAst.update(source,change);
+    this.snapshot = this.compute(completionPrefix,options.deferSemanticAnalysis===true);
     return this.snapshot;
   }
 
-  applyEdit(edit: CoreSpiritEditorEdit, completionPrefix = '') {
-    const start = Math.max(0, Math.min(edit.start, this.source.length));
-    const end = Math.max(start, Math.min(edit.end, this.source.length));
-    return this.updateSource(this.source.slice(0, start) + edit.text + this.source.slice(end), completionPrefix);
+  /** Accepts only a worker result for the exact current source; never runs compiler work in the UI thread. */
+  applyWorkerCompileResult(result: CoreSpiritCompileResult, source=this.source) {
+    if(source!==this.source)return this.snapshot;
+    this.snapshot = {
+      ...this.snapshot,
+      executionPlanVisualization:result.ir?.executionPlanVisualization,
+      ...(result.ir?.repaintSafety ? {repaintSafety:result.ir.repaintSafety as CoreSpiritRepaintSafetyReport} : {}),
+    };
+    return this.snapshot;
   }
 
-  undo() { const previous=this.undoStack.pop(); if(previous===undefined) return this.snapshot; this.redoStack.push(this.source); this.source=previous; this.version+=1; this.lastCompileSource=''; this.snapshot=this.compute(''); return this.snapshot; }
+  applyEdit(edit: CoreSpiritEditorEdit, completionPrefix = '', options:{deferSemanticAnalysis?:boolean} = {}) {
+    const start = Math.max(0, Math.min(edit.start, this.source.length));
+    const end = Math.max(start, Math.min(edit.end, this.source.length));
+    return this.updateSource(this.source.slice(0, start) + edit.text + this.source.slice(end), completionPrefix,options);
+  }
 
-  redo() { const next=this.redoStack.pop(); if(next===undefined) return this.snapshot; this.undoStack.push(this.source); this.source=next; this.version+=1; this.lastCompileSource=''; this.snapshot=this.compute(''); return this.snapshot; }
+  undo() { const previous=this.undoStack.pop(); if(previous===undefined) return this.snapshot; this.redoStack.push(this.source); this.source=previous; this.version+=1; this.lastCompileSource=''; this.snapshot=this.compute('',true); return this.snapshot; }
 
-  completionAt(cursor:number) { const ctx=getCoreSpiritCompletionContext(this.source,cursor); return { ...ctx, completions:getCoreSpiritEditorSnapshot(this.source,ctx.prefix).completions }; }
+  redo() { const next=this.redoStack.pop(); if(next===undefined) return this.snapshot; this.undoStack.push(this.source); this.source=next; this.version+=1; this.lastCompileSource=''; this.snapshot=this.compute('',true); return this.snapshot; }
+
+  completionAt(cursor:number) { const ctx=getCoreSpiritCompletionContext(this.source,cursor); return { ...ctx, completions:getCoreSpiritEditorPreviewSnapshot(this.source,ctx.prefix).completions }; }
   definitionAt(cursor:number) { return getCoreSpiritDefinitionAt(this.source,cursor); }
   codeActions(diagnostic:CoreSpiritEditorDiagnostic): CoreSpiritCodeAction[] { return getCoreSpiritCodeActions(this.source,diagnostic); }
 
@@ -92,10 +105,17 @@ export class CoreSpiritEditorModel {
 
   hover(name: string) { return getCoreSpiritHover(name); }
 
-  private compute(prefix: string): CoreSpiritEditorModelSnapshot {
-    const base = getCoreSpiritEditorSnapshot(this.source, prefix);
+  private compute(prefix: string, deferSemanticAnalysis=false): CoreSpiritEditorModelSnapshot {
+    const base = deferSemanticAnalysis
+      ? getCoreSpiritEditorPreviewSnapshot(this.source,prefix)
+      : getCoreSpiritEditorSnapshot(this.source,prefix);
     let repaintSafety: CoreSpiritRepaintSafetyReport;
-    try {
+    if(deferSemanticAnalysis){
+      repaintSafety=Object.freeze({
+        version:1,causality:'unknown',lookahead:'unknown',realtimeSafe:'unknown',backtestLiveEquivalent:'unknown',
+        nodes:[],warnings:['Semantic and repaint checks are running in the CoreSpirit compiler worker.'],errors:[],
+      });
+    }else try {
       const parsed = new CoreSpiritParser(this.source).parseDetailed();
       repaintSafety = parsed.diagnostics.length
         ? Object.freeze({version:1,causality:'unknown',lookahead:'unknown',realtimeSafe:'unknown',backtestLiveEquivalent:'unknown',nodes:[],warnings:['Repaint analysis unavailable while source contains syntax errors.'],errors:[]})

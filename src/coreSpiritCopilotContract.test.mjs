@@ -1,0 +1,38 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+
+const root=process.cwd();
+const read=file=>fs.readFileSync(path.join(root,file),'utf8');
+const route=read('src/server/routes/coreSpirit-copilot.routes.ts');
+const server=read('server.ts');
+const env=read('.env.example');
+const editor=read('src/pages/CoreSpiritEditorPage.tsx');
+
+assert.match(route,/coreSpiritCopilotRoutes\.use\(requireUser\)/,'Copilot API must authenticate');
+assert.match(route,/MAX_PROMPT_CHARS=4_000/,'Copilot prompts must be bounded');
+assert.match(route,/MAX_SOURCE_BYTES=64\*1024/,'source sent to the model must be bounded');
+assert.match(route,/createRateLimiter\(\{/,'Copilot must use the shared API rate limiter');
+assert.match(route,/windowMs:60_000/,'Copilot limiter must use a one-minute window');
+assert.match(route,/max:10/,'Copilot needs a 10-request per-minute limit');
+assert.match(route,/tradingCoreUserId/,'Copilot rate limit keys must be user-scoped');
+assert.match(route,/process\.env\.GEMINI_API_KEY/,'provider secret must remain server-side');
+assert.doesNotMatch(route,/VITE_[A-Z_]*GEMINI|VITE_[A-Z_]*GOOGLE/,'provider key must never be read from a browser-visible environment variable');
+assert.match(route,/compileCoreSpirit\(generated\.source/,'generated source must go through the canonical CoreScript compiler');
+assert.match(route,/validateExecutableArtifact\(compiled\.artifact\)/,'generated artifact must pass integrity validation');
+assert.match(route,/createCoreSpiritSandbox\(\{layer:'script',target:'chart'\}\)/,'generated code must be checked against chart-layer grants');
+assert.match(route,/validateCoreScriptCapabilitiesAgainstSandbox/,'required capabilities must be checked against sandbox grants');
+assert.match(route,/validateCoreSpiritSandboxArchitecture\(\)/,'forbidden capabilities must be checked');
+assert.doesNotMatch(route,/runCoreSpiritInWorker|coreSpiritWorkerPool|executeCoreSpirit\(|\.executeIr\(/,'Copilot endpoint must never execute generated source');
+assert.match(route,/nextStep:'Review the draft/,'response must tell the user the draft is never auto-run');
+assert.match(server,/app\.use\('\/api\/corespirit\/copilot', coreSpiritCopilotRoutes\)/,'server must mount Copilot endpoint');
+assert.match(env,/^GEMINI_API_KEY=/m,'server configuration must document the private provider key');
+assert.match(editor,/\/api\/corespirit\/copilot\/generate/,'editor must use the authenticated server endpoint');
+assert.match(editor,/Authorization:/,'editor must send an authorization header');
+assert.match(editor,/session\.access_token/,'editor must send the signed-in access token');
+assert.match(editor,/Nothing runs automatically/,'UI must state that AI output is not executed automatically');
+const start=editor.indexOf('const generateCopilotDraft=async()=>{');
+const end=editor.indexOf('const save = async () =>',start);
+assert.ok(start>=0&&end>start,'Copilot handler must be present');
+assert.doesNotMatch(editor.slice(start,end),/runOnChart\(|runActiveChart\(/,'Copilot generation must not auto-run generated code');
+console.log('CORESPIRIT_COPILOT_COMPILE_BEFORE_RUN_OK');

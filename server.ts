@@ -16,6 +16,7 @@ import { productionPredictionRoutes } from './src/server/routes/production-predi
 import { newsRoutes } from './src/server/routes/news.routes.js';
 import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
 import { coreSpiritModelRoutes } from './src/server/routes/coreSpirit-models.routes.js';
+import { coreSpiritCopilotRoutes } from './src/server/routes/coreSpirit-copilot.routes.js';
 import { realtimeTicketRoutes } from './src/server/routes/realtime-ticket.routes.js';
 import { requestDeadline } from './src/server/middleware/requestDeadline.js';
 import { sharedRedisConfigured } from './src/server/coordination/UpstashRedisRest.js';
@@ -165,6 +166,7 @@ app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
 app.use('/api/jobs', backgroundJobRoutes);
+app.use('/api/corespirit/copilot', coreSpiritCopilotRoutes);
 app.use('/api/corespirit', coreSpiritModelRoutes);
 app.use('/api/realtime/ticket', realtimeTicketRoutes);
 app.use('/api', newsRoutes);
