@@ -29,6 +29,7 @@ export type CoreSpiritOffThreadCompileResult = CoreSpiritCompileResult & Readonl
 }>;
 
 let compilerWorker:Worker|undefined;
+let compilerWorkerBootError:Error|undefined;
 let sequence=0;
 const pending=new Map<string,PendingCompile>();
 const pendingValidation=new Map<string,PendingValidation>();
@@ -46,9 +47,11 @@ function getCompilerWorker():Worker|undefined{
   let worker:Worker;
   try{
     worker=new Worker(new URL('./coreSpiritCompiler.worker.ts',import.meta.url),{type:'module',name:'CoreSpiritCompiler'});
-  }catch{
+  }catch(error){
+    compilerWorkerBootError=error instanceof Error?error:new Error(String(error));
     return undefined;
   }
+  compilerWorkerBootError=undefined;
   worker.onmessage=(event:MessageEvent<CompileWorkerResponse>)=>{
     const message=event.data;
     if(!message || typeof message.requestId!=='string')return;
@@ -100,6 +103,7 @@ export async function compileCoreSpiritSourceOffThread(
 ):Promise<CoreSpiritOffThreadCompileResult>{
   const worker=getCompilerWorker();
   if(!worker){
+    if(typeof Worker!=='undefined')throw new Error(`CoreSpirit compiler worker could not start: ${compilerWorkerBootError?.message || 'worker unavailable'}`);
     const {compileCoreSpirit}=await import('./coreSpiritPipeline');
     const compiled=compileCoreSpirit(source,sourceId,{layer:options.layer as any});
     if(compiled.artifact && !validateExecutableArtifact(compiled.artifact)){
@@ -151,7 +155,7 @@ export async function validateCoreSpiritExecutableArtifactOffThread(
 ):Promise<boolean>{
   if(!artifact||!artifact.abi?.artifactHash||!artifact.ir)return false;
   const worker=getCompilerWorker();
-  if(!worker)return validateExecutableArtifact(artifact);
+  if(!worker)return typeof Worker==='undefined'?validateExecutableArtifact(artifact):false;
   const requestId=`cs-validate-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
   return new Promise((resolve,reject)=>{
     const timeout=setTimeout(()=>{

@@ -22,6 +22,7 @@ assert.match(worker,/symbols/,'compiler worker must return serializable symbols 
 assert.match(worker,/artifactHash/,'compiler worker must return an artifact hash when valid');
 assert.match(client,/compileCoreSpiritSourceOffThread/,'editor must have a diagnostic-first worker compile API');
 assert.match(client,/compileCoreSpiritArtifactOffThread/,'Vela/cache must retain artifact-only compile compatibility');
+assert.match(client,/if\(typeof Worker!=='undefined'\)throw new Error/,'a blocked module worker must fail closed instead of running a long compile on the UI thread');
 assert.match(editor,/setTimeout\(\(\)=>\{/,'editor compiler requests must debounce typing');
 assert.match(editor,/void compileSource\(source\)/,'debounced typing must submit an immutable source snapshot to the worker');
 assert.match(editor,/compileRequestRef\.current/,'editor must reject stale worker generations');
