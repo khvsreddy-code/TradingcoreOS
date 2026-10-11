@@ -173,7 +173,9 @@ export class CoreSpiritSceneDiff {
     private readonly points = new Map<string, TcoSeriesPoint[]>();
     private readonly seriesMounted = new Set<string>();
     private readonly markers = new Map<string, TcoMarkerPoint>();
-    private readonly rectBatches = new Map<string, TcoRectInstance[]>();
+    /** O(1) previous-time lookup for stable visual identities on incremental updates. */
+    private readonly retainedSpans = new Map<string, DirtySpan>();
+    private readonly rectBatches = new Map<string, TcoRectInstance[]>;
     private readonly rectBatchMeta = new Map<string, { paneId: string; overlay?: boolean; indexOffset?: number }>();
     private readonly collections: Record<CollectionName, Identified[]> = {
         lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [],
@@ -188,6 +190,7 @@ export class CoreSpiritSceneDiff {
         this.points.clear();
         this.seriesMounted.clear();
         this.markers.clear();
+        this.retainedSpans.clear();
         this.rectBatches.clear();
         this.rectBatchMeta.clear();
         for (const values of Object.values(this.collections)) values.splice(0, values.length);
@@ -195,7 +198,11 @@ export class CoreSpiritSceneDiff {
     }
 
     seed(outputs: CoreSpiritObject[]): void {
-        for (const output of outputs) this.applyOutput(output, false);
+        this.retainedSpans.clear();
+        for (const output of outputs) {
+            this.applyOutput(output, false);
+            this.updateRetainedDirtySpan(output);
+        }
         this.seriesMounted.clear();
         for (const id of this.points.keys()) this.seriesMounted.add(id);
         this.markerSeriesMounted = this.markers.size > 0;
@@ -233,6 +240,7 @@ export class CoreSpiritSceneDiff {
             // retained extent before filtering so old pixels/state are not orphaned.
             if (span && (span.to < dirty.from || span.from > dirty.to)) continue;
             const result = this.applyOutput(output, true);
+            this.updateRetainedDirtySpan(output);
             if (result?.schema) out.push(result.schema);
             if (result?.delta) series.push(result.delta);
             if (result?.deltas) series.push(...result.deltas);
@@ -277,42 +285,34 @@ export class CoreSpiritSceneDiff {
         return out;
     }
 
-    private retainedDirtySpan(output: CoreSpiritObject): DirtySpan | null {
+    private retainedSpanKey(output: CoreSpiritObject): string | null {
         const value = output as any;
-        const id = typeof value.id === 'string' ? value.id : undefined;
-        const timesOfLine = (item: TcoDrawingLine): DirtySpan | null => finiteSpan(item.x1, item.x2);
-        const timesOfPolyline = (item: TcoDrawingPolyline): DirtySpan | null => pointTimeSpan(item.points.map(point => ({ x: point.x })));
-
-        if (output.kind === 'marker' || output.kind === 'signal') {
-            const retained = this.markers.get(markerKey(output as Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>));
-            return retained ? finiteSpan(retained.time) : null;
-        }
+        const id = typeof value.id === 'string' && value.id.length ? value.id : undefined;
+        if (output.kind === 'marker' || output.kind === 'signal') return `markers:${markerKey(output as Extract<CoreSpiritObject, { kind: 'marker' | 'signal' }>)}`;
         if (!id) return null;
-        if (output.kind === 'line' || output.kind === 'arrow') {
-            const retained = this.collections.lines.find(item => item.id === id) as TcoDrawingLine | undefined;
-            return retained ? timesOfLine(retained) : null;
-        }
-        if (output.kind === 'box' || output.kind === 'zone') {
-            if (value.domain === 'viewport') return null;
-            for (const instances of this.rectBatches.values()) {
-                const retained = instances.find(item => item.id === id);
-                if (retained) return finiteSpan(retained.left, retained.right);
-            }
-            return null;
-        }
-        if (output.kind === 'label' || output.kind === 'shape') {
-            const retained = this.collections.labels.find(item => item.id === id) as TcoDrawingLabel | undefined;
-            return retained ? finiteSpan(retained.x) : null;
-        }
-        if (output.kind === 'polyline') {
-            const retained = this.collections.polylines.find(item => item.id === id) as TcoDrawingPolyline | undefined;
-            return retained ? timesOfPolyline(retained) : null;
-        }
-        if (output.kind === 'background') {
-            const retained = this.collections.backgrounds.find(item => item.id === id) as TcoBackground | undefined;
-            return retained ? finiteSpan(retained.from, retained.to) : null;
-        }
+        if (output.kind === 'line' || output.kind === 'arrow') return `lines:${id}`;
+        if (output.kind === 'box' || output.kind === 'zone') return `rectangles:${id}`;
+        if (output.kind === 'label' || output.kind === 'shape') return `labels:${id}`;
+        if (output.kind === 'polyline') return `polylines:${id}`;
+        if (output.kind === 'background') return `backgrounds:${id}`;
         return null;
+    }
+
+    private retainedDirtySpan(output: CoreSpiritObject): DirtySpan | null {
+        const key = this.retainedSpanKey(output);
+        return key ? this.retainedSpans.get(key) ?? null : null;
+    }
+
+    private updateRetainedDirtySpan(output: CoreSpiritObject): void {
+        const key = this.retainedSpanKey(output);
+        if (!key) return;
+        if (removed(output)) {
+            this.retainedSpans.delete(key);
+            return;
+        }
+        const span = outputDirtySpan(output);
+        if (span) this.retainedSpans.set(key, span);
+        else this.retainedSpans.delete(key);
     }
 
     private applySeries(output: Extract<CoreSpiritObject, { kind: 'series' }>, emit: boolean): SceneDiffEmission {
