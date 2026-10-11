@@ -467,10 +467,32 @@ export class CoreSpiritVelaEngine {
       else void initializeStatic(currentBars);
     };
 
-    const getCurrentBars = (): CoreSpiritMarketBar[] =>
-      req.getBars
-        ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[])
-        : bars;
+    // Normalize closed candles once. Live notifications normally revise only
+    // the forming candle; backfills explicitly request a full refresh. Return an
+    // array snapshot so queued worker jobs never observe later cache mutations.
+    const normalizedBarsCache:CoreSpiritMarketBar[]=[];
+    let normalizedInputLength=-1;
+    const getCurrentBars=(forceFullNormalization=false):CoreSpiritMarketBar[]=>{
+      if(!req.getBars)return bars;
+      const rows=req.getBars() as unknown as readonly VelaOhlcv[];
+      if(!Array.isArray(rows))return bars;
+      const length=rows.length;
+      let start=0;
+      if(forceFullNormalization||normalizedInputLength<0||length<normalizedInputLength||normalizedBarsCache.length!==normalizedInputLength){
+        normalizedBarsCache.length=0;
+      }else if(length===normalizedInputLength){
+        start=Math.max(0,length-1);
+        normalizedBarsCache.length=start;
+      }else{
+        // The previous forming candle is now confirmed; normalize it again and
+        // append only the new rows rather than rebuilding all history objects.
+        start=Math.max(0,normalizedInputLength-1);
+        normalizedBarsCache.length=start;
+      }
+      for(let i=start;i<length;i+=1)normalizedBarsCache.push(normalizeVelaBar(rows[i]!,i));
+      normalizedInputLength=length;
+      return normalizedBarsCache.slice();
+    };
 
     const initialBars = getCurrentBars();
     const initialUpdateVersion = updateVersion;
@@ -626,7 +648,7 @@ export class CoreSpiritVelaEngine {
       notifyBars(reason,dirtyRange) {
         if(stopped)return;
         lastViewportComputationKey=undefined;
-        const currentBars=getCurrentBars();
+        const currentBars=getCurrentBars(reason==='backfill');
 
         if(reason==='backfill'){
           // Vela may backfill older pages before the initial complete snapshot.
