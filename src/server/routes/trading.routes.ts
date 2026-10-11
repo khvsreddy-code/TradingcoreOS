@@ -214,14 +214,24 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       orderPayload = { ...orderPayload, orderTag: clientOrderId };
       // Persist before the broker side effect. In production this deliberately
       // fails closed if the reconciliation migration/service credentials are absent.
-      await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'INTENT', {
-        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
-        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
-      });
-      await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'SUBMITTED', {
-        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
-        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
-      });
+      try {
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'INTENT', {
+          symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        });
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'SUBMITTED', {
+          symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        });
+      } catch (lifecycleError: unknown) {
+        // No broker request has been made yet, so this attempt is safe to close
+        // as failed rather than leaving an unresolvable in-flight idempotency key.
+        const message = getErrorMessage(lifecycleError, 'Unable to persist FYERS order intent');
+        const failure = { success: false, error: message, requestId: requestId || null };
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, failure).catch(() => undefined);
+        res.status(503).json({ ...failure, orderSubmitted: false });
+        return;
+      }
     }
     let data: unknown;
     try {
