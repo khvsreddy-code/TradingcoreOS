@@ -467,15 +467,19 @@ export class CoreSpiritWorkerPool {
       if(context.hmmSignature!==hmmSignature){installHMMArtifacts(context.hmmModels);context.hmmSignature=hmmSignature;}
     }
 
-    const incremental=!readOnly&&datasetVersion>context.datasetVersion&&datasetVersion>1&&!!dirtyRange&&
-      dirtyRange.to>=bars.length&&dirtyRange.from>=Math.max(0,bars.length-2)&&context.initialized;
+    const tailSnapshot=!readOnly&&datasetVersion>context.datasetVersion&&datasetVersion>1&&!!dirtyRange&&
+      dirtyRange.to>=bars.length&&dirtyRange.from>=Math.max(0,bars.length-2);
+    const incremental=tailSnapshot&&context.initialized;
     let result;
     if(incremental){
       const latest=bars.at(-1);
       if(!latest)throw new Error('CoreSpirit worker received an empty market dataset');
       result=context.runtime.executeBar(latest,'realtime');
     }else{
-      result=readOnly?context.runtime.executeIrReadOnly(artifact.ir,bars):context.runtime.executeIr(artifact.ir,bars);
+      // An incremental tick can be the first request after a runtime-settings
+      // change. Its full-history reconstruction is a baseline, not a live run.
+      const warmReadOnly=readOnly||(tailSnapshot&&!context.initialized);
+      result=warmReadOnly?context.runtime.executeIrReadOnly(artifact.ir,bars):context.runtime.executeIr(artifact.ir,bars);
       context.initialized=true;
     }
     context.datasetVersion=datasetVersion;
