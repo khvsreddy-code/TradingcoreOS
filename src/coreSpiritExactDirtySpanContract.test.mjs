@@ -107,12 +107,12 @@ assert.deepEqual(
   [0, 1, 2],
 );
 const sameTimeMarkerPatch = indexedMarkerDiff.apply([
-  { kind: 'marker', id: 'marker-999', time: 999, price: 9999 },
+  { kind: 'marker', id: 'marker-999', time: 999, price: 9999, metadata: { color: '#0f0' } },
 ], { from: 999, to: 999 }).find(patch => patch.kind === 'value');
 assert.equal(sameTimeMarkerPatch.series.length, 1, 'forming-marker updates should emit one replacement, not reorder the marker list');
 assert.equal(sameTimeMarkerPatch.series[0].start, 999);
 assert.equal(sameTimeMarkerPatch.series[0].op, 'replace-range');
-assert.equal(indexedMarkerDiff.snapshot().markers[999].price, 9999);
+assert.equal(indexedMarkerDiff.snapshot().markers[999].color, '#0f0');
 
 assert.deepEqual(outputDirtySpan({
   kind: 'customVisual',
