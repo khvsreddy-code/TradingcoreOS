@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { withBrokerRequestGate } from '../brokers/BrokerRequestGate.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 
@@ -129,31 +129,31 @@ function normalize(rows: any[], limit: number): any[] {
  * not presented as historical data; subsequent websocket ticks build the live
  * candle normally in the browser.
  */
-async function fallbackQuoteCandle(accessToken: string, symbol: string, signal: AbortSignal): Promise<any[]> {
-  const params = new URLSearchParams({ symbols: symbol });
-  const response = await fetch(`https://api-t1.fyers.in/data/quotes?${params.toString()}`, {
-    headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-    signal,
-  });
-  const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch { return []; }
-  if (!response.ok || payload?.s === 'error') return [];
-  const quote = Array.isArray(payload?.d) ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0] : undefined;
-  const value = quote?.v || {};
-  const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
-  if (!Number.isFinite(ltp) || ltp <= 0) return [];
-  const now = new Date();
-  const volume = Number(value.volume ?? value.vol ?? 0);
-  return [{
-    timestamp: now.toISOString(),
-    open: ltp,
-    high: ltp,
-    low: ltp,
-    close: ltp,
-    volume: Number.isFinite(volume) ? volume : 0,
-    liveSeed: true,
-  }];
+async function fallbackQuoteCandle(client: FyersApiClient, symbol: string, signal: AbortSignal): Promise<any[]> {
+  try {
+    // Use the same per-user capability-aware Data API gate; fallback quotes are
+    // a second upstream request and must consume a second unit of quota.
+    const payload = await client.dataGet<any>('/quotes', { symbols: symbol }, signal, API_LATENCY_BUDGET_MS.quote);
+    const quote = Array.isArray(payload?.d)
+      ? payload.d.find((x: any) => String(x?.s || '').toUpperCase() === symbol.toUpperCase()) || payload.d[0]
+      : undefined;
+    const value = quote?.v || {};
+    const ltp = Number(value.lp ?? value.ltp ?? value.last_price);
+    if (!Number.isFinite(ltp) || ltp <= 0) return [];
+    const now = new Date();
+    const volume = Number(value.volume ?? value.vol ?? 0);
+    return [{
+      timestamp: now.toISOString(),
+      open: ltp,
+      high: ltp,
+      low: ltp,
+      close: ltp,
+      volume: Number.isFinite(volume) ? volume : 0,
+      liveSeed: true,
+    }];
+  } catch {
+    return [];
+  }
 }
 
 const cache = new Map<string, { expiresAt: number; data: any }>();
@@ -256,57 +256,50 @@ fyersHistoryRoutes.get('/:brokerId/historical', async (req: AuthenticatedRequest
 
   try {
     const accessToken = EncryptionService.decrypt(session.accessTokenEncrypted);
+    const client = new FyersApiClient(accessToken, undefined, capabilities);
     const requestSignal = timeoutSignal(API_LATENCY_BUDGET_MS.history);
-    const task = withBrokerRequestGate('fyers', accessToken, async (signal) => {
+    const task = (async (): Promise<FyersHistoryData> => {
       const end = beforeDate ? new Date(beforeDate.getTime() - 1_000) : new Date();
+      const secondsMatch = /^(\d+)S$/i.exec(resolution);
+      const secondsInterval = secondsMatch ? Number(secondsMatch[1]) : 0;
       const minuteResolution = Number(resolution);
-      const barsPerDay = Number.isFinite(minuteResolution) && minuteResolution > 0 ? (6.25 * 60) / minuteResolution : 1;
-      const estimatedCalendarDays = Number.isFinite(minuteResolution)
-        ? Math.ceil((limit / Math.max(1, barsPerDay)) * 1.65)
-        : 3650;
-      const lookbackDays = resolution === 'D'
-        ? Math.max(3650, limit)
-        : Math.min(3650, Math.max(7, estimatedCalendarDays));
+      const dailyResolution = ['D','1D','1W','1M','W','M'].includes(resolution.toUpperCase());
+      const barsPerDay = secondsInterval > 0
+        ? (6.25 * 60 * 60) / secondsInterval
+        : Number.isFinite(minuteResolution) && minuteResolution > 0
+          ? (6.25 * 60) / minuteResolution
+          : resolution.toUpperCase() === '1W' || resolution.toUpperCase() === 'W'
+            ? 1 / 5
+            : resolution.toUpperCase() === '1M' || resolution.toUpperCase() === 'M'
+              ? 1 / 21
+              : dailyResolution ? 1 : 1;
+      const estimatedCalendarDays = Math.ceil((limit / Math.max(1 / 30, barsPerDay)) * 1.65);
+      const operationalMaxYears = secondsInterval > 0 ? 2 : dailyResolution ? 30 : 15;
+      const planMaxYears = dailyResolution ? capabilities.historyDepth.dailyYears : capabilities.historyDepth.intradayYears;
+      const maxLookbackDays = Math.min(operationalMaxYears, planMaxYears ?? operationalMaxYears) * 365;
+      const lookbackDays = Math.min(maxLookbackDays, Math.max(secondsInterval > 0 ? 1 : 7, estimatedCalendarDays));
       let from = new Date(end.getTime() - lookbackDays * 86_400_000);
-      // Clamp a page's start to the Standard plan's documented depth; a
-      // 'before' cursor older than that cutoff is rejected above.
+      // Clamp each request's start to the plan's documented history entitlement.
       if (entitlementCutoff && from.getTime() < entitlementCutoff.getTime()) from = entitlementCutoff;
-      const params = new URLSearchParams({
+      const payload = await client.dataGet<any>('/history', {
         symbol: instrumentKey,
         resolution,
-        // Use epoch timestamps for paged history so `before` maps to an exact
-        // candle boundary instead of being truncated to an India calendar date.
         date_format: '0',
         range_from: String(Math.floor(from.getTime() / 1000)),
         range_to: String(Math.floor(end.getTime() / 1000)),
         cont_flag: '1',
-      });
-      const response = await fetch(`https://api-t1.fyers.in/data/history?${params.toString()}`, {
-        headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` },
-        signal,
-      });
-      const text = await response.text();
-      let payload: any;
-      try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-      if (!response.ok || payload?.s === 'error' || Number(payload?.code) === 429) {
-        throw new Error(payload?.message || `Fyers history failed (${response.status})`);
-      }
+      }, requestSignal, API_LATENCY_BUDGET_MS.history);
       let data: FyersHistoryData = columnar ? normalizeColumns(payload?.candles || [], limit) : normalize(payload?.candles || [], limit);
       const dataLength = isColumnarData(data) ? data.time.length : data.length;
       if (!beforeDate && dataLength < 2) {
-        const seed = await fallbackQuoteCandle(accessToken, instrumentKey, requestSignal);
+        const seed = await fallbackQuoteCandle(client, instrumentKey, requestSignal);
         if (seed.length) data = columnar ? columnsFromCandleRows(seed) : seed;
       }
       const finalLength = isColumnarData(data) ? data.time.length : data.length;
       if (!finalLength) throw new Error(`Fyers returned no historical candles or live quote for ${instrumentKey}.`);
       cache.set(key, { data, expiresAt: Date.now() + 120_000 });
       return data;
-    }, requestSignal, {
-      budgetKey: 'data',
-      minIntervalMs: Math.ceil(1000 / capabilities.dataApiRateLimits.requestsPerSecond),
-      maxPerMinute: capabilities.dataApiRateLimits.requestsPerMinute,
-      maxPerDay: capabilities.dataApiRateLimits.requestsPerDay,
-    });
+    })();
     inflight.set(key, task);
     const data = await task;
     res.setHeader('Cache-Control', 'private, max-age=20');
