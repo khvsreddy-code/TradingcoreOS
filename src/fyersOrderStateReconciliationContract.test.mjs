@@ -64,5 +64,7 @@ assert.match(route, /recordLifecycle\(userId, clientOrderId, 'SUBMITTED'/);
 assert.match(route, /recordLifecycle\(userId, clientOrderId, 'ACKNOWLEDGED'/);
 assert.match(route, /markRecoveryRequired\(userId, brokerId, idempotencyKey, recoveryResponse/);
 assert.match(route, /FYERS accepted the request but returned no broker order id/);
+assert.match(route, /recordLifecycle\(userId, '', 'CANCEL_PENDING', \{ brokerOrderId: orderId \}\)/,
+  'cancel intent must be durable before issuing the broker cancellation request');
 
 console.log('FYERS_ORDER_RECONCILIATION_STATE_MACHINE_CONTRACT_OK');
