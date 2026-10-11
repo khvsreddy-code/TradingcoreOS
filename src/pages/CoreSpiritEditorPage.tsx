@@ -232,7 +232,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         if(copilotSourceRef.current===sourceSnapshot){
           const copilotValid=localValid&&copilotValidationPassRef.current===true&&
             Boolean(expectedServerHash)&&workerResult.artifact?.abi?.artifactHash===expectedServerHash;
-          setCopilotStatus(copilotValid?'ready':'needs-fixes');
+          setCopilotStatus(copilotValid?(copilotReplayPassRef.current===true?'ready':'validating'):'needs-fixes');
           setCopilotArtifactHash(copilotValid?(workerResult.artifact?.abi?.artifactHash??null):null);
         }
         return result;
