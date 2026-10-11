@@ -43,6 +43,25 @@ assert.equal(historical.assignments[0]?.backend, 'wasm',
 assert.ok(historical.explanation.some(line => line.includes('kernel rollingMean: planned wasm-simd')));
 assert.notEqual(historical.cacheKey, live.cacheKey, 'cache identity includes execution purpose and backend capability plan');
 
+const mixedProgram = {
+  ...program,
+  sourceId: 'backend-planner-mixed-ir',
+  entry: { instructions: [
+    { op: 'const', dest: 'period', value: 20 },
+    { op: 'call', dest: 'average', name: 'sma', args: ['close', 'period'] },
+  ] },
+};
+const mixedPlan = planCoreSpiritExecution(mixedProgram, {
+  barCount: 20_000,
+  backendPurpose: 'historical',
+  backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
+});
+assert.equal(mixedPlan.strategy, 'hybrid-pure-offload');
+assert.deepEqual(mixedPlan.assignments.find(item => item.backend === 'wasm')?.nodeIds, ['i:1'],
+  'only the explicitly registered numerical kernel call may be assigned to WASM');
+assert.deepEqual(mixedPlan.assignments.find(item => item.backend === 'cpu')?.nodeIds, ['i:0'],
+  'constants and other Core IR instructions stay on CPU until a full IR backend exists');
+
 const boundedBatch = planCoreSpiritExecution(program, {
   barCount: 5_000_000,
   maxBatchSize: 32_768,
