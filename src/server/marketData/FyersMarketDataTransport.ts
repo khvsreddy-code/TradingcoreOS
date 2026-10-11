@@ -27,7 +27,50 @@ interface Session {
 export class FyersMarketDataTransport {
   private static sessions = new Map<string, Session>();
 
-  static subscribe(userId: string, accessToken: string, instrumentKeys: string[], listener: Listener, includeDepth = false, depthSymbols: string[] = instrumentKeys): () => void {
+  static checkSubscriptionCapacity(
+    userId: string,
+    instrumentKeys: readonly string[],
+    maxSymbols: number,
+    depthSymbols: readonly string[] = [],
+  ): { allowed:boolean; activeSymbols:number; projectedSymbols:number; limit:number } {
+    const session = this.sessions.get(userId);
+    const active = new Set<string>([
+      ...(session?.instruments ?? []),
+      ...(session?.depthSymbols ?? []),
+    ]);
+    const projected = new Set<string>([
+      ...active,
+      ...instrumentKeys,
+      ...depthSymbols,
+    ]);
+    return {
+      allowed: projected.size <= maxSymbols,
+      activeSymbols: active.size,
+      projectedSymbols: projected.size,
+      limit: maxSymbols,
+    };
+  }
+
+  static subscribe(
+    userId: string,
+    accessToken: string,
+    instrumentKeys: string[],
+    listener: Listener,
+    includeDepth = false,
+    depthSymbols: string[] = instrumentKeys,
+    maxSymbols = 50,
+  ): () => void {
+    const capacity = this.checkSubscriptionCapacity(
+      userId,
+      instrumentKeys,
+      maxSymbols,
+      includeDepth ? depthSymbols : [],
+    );
+    if (!capacity.allowed) {
+      const error = new Error(`FYERS stream symbol limit exceeded: ${capacity.projectedSymbols} unique symbols requested; ${capacity.limit} allowed for this account's plan.`);
+      Object.assign(error, { status:400, code:'FYERS_STREAM_SYMBOL_LIMIT', limit:capacity.limit, requested:capacity.projectedSymbols });
+      throw error;
+    }
     let session = this.sessions.get(userId);
     if (!session) {
       session = {
