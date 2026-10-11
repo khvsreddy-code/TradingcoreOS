@@ -37,6 +37,14 @@ const WASM_SERIES_LAYOUT: Readonly<Partial<Record<CoreSpiritNumericalKernelOpera
   softmax: { inputs: 1, outputs: 1 },
 });
 const STATEFUL_SERIES_OPERATIONS = new Set<CoreSpiritNumericalKernelOperation>(['ema', 'rma', 'atr', 'rsi']);
+function isWasmNumericalExecutor(value: unknown): value is CoreSpiritWasmNumericalExecutor {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<CoreSpiritWasmNumericalExecutor>;
+  return typeof candidate.isLoaded === 'function' &&
+    typeof candidate.hasKernel === 'function' &&
+    typeof candidate.kernelVariant === 'function' &&
+    typeof candidate.execute === 'function';
+}
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 
 function validateInputs(inputs: readonly CoreSpiritNumericSeries[]): CoreSpiritNumericSeries[] {
@@ -115,6 +123,10 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   const registry = options.registry ?? createCoreSpiritBackendRegistry({
     wasm: options.wasm, wasmKernelNames: options.wasmKernelNames, webgpu: options.webgpu, remoteResearch: options.remoteResearch,
   });
+  // Dispatch through the exact adapter snapshot used by the planner. When callers
+  // inject a registry directly, they need not pass the same adapter twice.
+  const registeredWasmAdapter = registry.getAdapter('wasm-simd');
+  const wasmExecutor = isWasmNumericalExecutor(registeredWasmAdapter) ? registeredWasmAdapter : undefined;
   const maxElements = Math.max(0, ...inputs.map(input => input.length));
   const request = {
     operation, purpose,
@@ -129,9 +141,9 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   const plan = planCoreSpiritBackend(request, registry);
   if (plan.backend === 'wasm-simd') {
     try {
-      if (!options.wasm || !wasmOutputs) throw new Error('WASM execution requires a loaded executor and compatible equal-length series ABI');
+      if (!wasmExecutor || !wasmExecutor.isLoaded() || !wasmOutputs) throw new Error('WASM execution requires the registered loaded executor and compatible equal-length series ABI');
       const kernel = options.wasmKernelNames?.[operation] ?? operation;
-      await options.wasm.execute({ kernel, inputs: toFloat64(inputs), outputs: wasmOutputs, params: parameters });
+      await wasmExecutor.execute({ kernel, inputs: toFloat64(inputs), outputs: wasmOutputs, params: parameters });
       const result = wasmResult(operation, wasmOutputs);
       if (!validExternalResult(operation, result, maxElements, parameters)) throw new Error(`WASM kernel '${kernel}' returned an invalid result shape`);
       return Object.freeze({ operation, backend: plan.backend, result, plan, elapsedMs: now() - started });
