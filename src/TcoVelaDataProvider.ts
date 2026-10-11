@@ -411,11 +411,8 @@ export class TcoVelaDataProvider implements DataProvider {
       fingerprint = nextKey;
       const patchStartedAt = performanceNow();
       const lastPacketAt = chartPerformanceTelemetry.getLastPacketAt(performanceKey);
-      try {
-        onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
-      } finally {
-        recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
-      }
+      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
+      recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
     };
 
     const schedule = () => {
@@ -512,11 +509,8 @@ export class TcoVelaDataProvider implements DataProvider {
       fingerprint = nextKey;
       const patchStartedAt = performanceNow();
       const lastPacketAt = chartPerformanceTelemetry.getLastPacketAt(performanceKey);
-      try {
-        onBar(next);
-      } finally {
-        recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
-      }
+      onBar(next);
+      recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
     };
 
     const schedule = () => {
