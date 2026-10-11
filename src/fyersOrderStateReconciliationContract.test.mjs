@@ -18,6 +18,9 @@ assert.equal(fyersOrderEventKey(event), fyersOrderEventKey({ ...event, sequence:
   'replayed order updates with the same broker state must have stable idempotency keys even if volatile metadata differs');
 assert.notEqual(fyersOrderEventKey(event), fyersOrderEventKey({ ...event, filledQuantity: 4 }),
   'a genuine cumulative fill change must be treated as a new state event');
+const preAck = { ...event, orderId: '', brokerOrderId: null, clientOrderId: 'TCO-INTENT-1', status: 'INTENT' };
+assert.notEqual(fyersOrderEventKey(preAck), fyersOrderEventKey({ ...preAck, clientOrderId: 'TCO-INTENT-2' }),
+  'pre-ack intents must remain unique before the broker assigns an order id');
 
 const read = path => fs.readFileSync(path, 'utf8');
 const engine = read('src/server/fyers/trading/FyersOrderStateEngine.ts');
