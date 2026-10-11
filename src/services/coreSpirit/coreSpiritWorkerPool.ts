@@ -349,6 +349,7 @@ export class CoreSpiritWorkerPool {
     };
 
     const mode:WorkerRunEnvelope['mode'] =
+      !job.readOnly &&
       job.datasetVersion>1 &&
       !!job.dirtyRange &&
       job.dirtyRange.to>=job.bars.length &&
@@ -454,7 +455,7 @@ export class CoreSpiritWorkerPool {
       if(context.hmmSignature!==hmmSignature){installHMMArtifacts(context.hmmModels);context.hmmSignature=hmmSignature;}
     }
 
-    const incremental=datasetVersion>context.datasetVersion&&datasetVersion>1&&!!dirtyRange&&
+    const incremental=!readOnly&&datasetVersion>context.datasetVersion&&datasetVersion>1&&!!dirtyRange&&
       dirtyRange.to>=bars.length&&dirtyRange.from>=Math.max(0,bars.length-2)&&context.initialized;
     let result;
     if(incremental){
