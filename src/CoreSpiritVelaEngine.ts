@@ -328,11 +328,10 @@ export class CoreSpiritVelaEngine {
       props: req.props,
     });
 
-    let activeVisibleRange = req.visibleRange ? { left:Number(req.visibleRange.left), right:Number(req.visibleRange.right) } : undefined;
-
     const scene = new CoreSpiritSceneDiff(token.sourceId);
     const mainContextKey=`vela:${token.sourceId}:${req.market.symbol}:${req.market.timeframe}:main`;
     const rangeContextKey=`${mainContextKey}:range`;
+    const backfillContextKey=`${mainContextKey}:backfill`;
     const workerDatasetVersions=new Map<string,number>();
     type RuntimeSnapshot={barIndex?:number;locals?:Record<string,unknown>};
     let lastExecutionState:RuntimeSnapshot|undefined;
@@ -493,6 +492,7 @@ export class CoreSpiritVelaEngine {
       if(stopped||historyInitialized||initializationInFlight)return;
       initializationInFlight=true;
       const generation=++mainRunGeneration;
+      initializationOwnerGeneration=generation;
       try{
         const result=await executeInWorker(currentBars,mainContextKey,true,{from:0,to:currentBars.length});
         if(stopped||generation!==mainRunGeneration)return;
@@ -508,7 +508,7 @@ export class CoreSpiritVelaEngine {
       }catch(error){
         if(!stopped&&generation===mainRunGeneration)handlers.onError?.(error instanceof Error?error:new Error(String(error)));
       }finally{
-        initializationInFlight=false;
+        if(initializationOwnerGeneration===generation)initializationInFlight=false;
       }
     };
 
@@ -517,6 +517,7 @@ export class CoreSpiritVelaEngine {
       if(!currentBars.length){historyInitialized=false;liveStarted=false;return;}
       initializationInFlight=true;
       const generation=++mainRunGeneration;
+      initializationOwnerGeneration=generation;
       try{
         const execution=await evaluateLiveSnapshot(currentBars,generation);
         if(!execution||stopped||generation!==mainRunGeneration)return;
@@ -539,7 +540,7 @@ export class CoreSpiritVelaEngine {
       }catch(error){
         if(!stopped&&generation===mainRunGeneration)handlers.onError?.(error instanceof Error?error:new Error(String(error)));
       }finally{
-        initializationInFlight=false;
+        if(initializationOwnerGeneration===generation)initializationInFlight=false;
       }
     };
 
@@ -672,96 +673,100 @@ export class CoreSpiritVelaEngine {
         });
       },
       setVisibleRange(range) {
-        if (stopped || !currentMetadata.reactsToViewport) return;
-        const left = Number(range.left);
-        const right = Number(range.right);
-        if (!Number.isFinite(left) || !Number.isFinite(right)) return;
-        const viewportFrom = Math.min(left, right);
-        const viewportTo = Math.max(left, right);
-        activeVisibleRange = { left:viewportFrom, right:viewportTo };
-        const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
-        if (!currentBars.length) return;
-        const viewportKey = [
-          viewportFrom,
-          viewportTo,
-          currentBars.length,
-          barTimeMillis(currentBars[0]?.timestamp),
-          barTimeMillis(currentBars.at(-1)?.timestamp),
-          updateVersion,
-        ].join('|');
-        if (viewportKey === lastViewportComputationKey) return;
-        const start = lowerBoundBarTime(currentBars, viewportFrom);
-        const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, viewportTo));
-        const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
-        const executionStart = Math.max(0, start - maxLookback);
-        const rangeBars = currentBars.slice(executionStart, end);
-        if (!rangeBars.length) return;
-
-        const rangeRuntime = createRuntime({ suppressExternalEffects:true });
-        rangeRuntime.loadIr(token.ir);
-        const rangeResult = safeOutputs(rangeRuntime.executeIrReadOnly(token.ir, rangeBars).outputs);
-        emitScenePatches(rangeResult, { from: viewportFrom, to: viewportTo });
-        lastViewportComputationKey = viewportKey;
+        if(stopped||!currentMetadata.reactsToViewport)return;
+        const left=Number(range.left),right=Number(range.right);
+        if(!Number.isFinite(left)||!Number.isFinite(right))return;
+        const viewportFrom=Math.min(left,right);
+        const viewportTo=Math.max(left,right);
+        const currentBars=getCurrentBars();
+        if(!currentBars.length)return;
+        const viewportKey=[viewportFrom,viewportTo,currentBars.length,
+          barTimeMillis(currentBars[0]?.timestamp),barTimeMillis(currentBars.at(-1)?.timestamp),updateVersion].join('|');
+        if(viewportKey===lastViewportComputationKey)return;
+        const start=lowerBoundBarTime(currentBars,viewportFrom);
+        const end=Math.min(currentBars.length,upperBoundBarTime(currentBars,viewportTo));
+        const maxLookback=Math.max(0,Number(token.ir.maxLookback)||0);
+        const executionStart=Math.max(0,start-maxLookback);
+        const rangeBars=currentBars.slice(executionStart,end);
+        if(!rangeBars.length)return;
+        const generation=++viewportRunGeneration;
+        const updateGeneration=updateVersion;
+        void executeInWorker(rangeBars,rangeContextKey,true,{from:0,to:rangeBars.length},{from:viewportFrom,to:viewportTo})
+          .then(result=>{
+            if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
+            emitScenePatches(safeOutputs(result.outputs),{from:viewportFrom,to:viewportTo});
+            lastViewportComputationKey=viewportKey;
+          })
+          .catch(error=>{
+            if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion)
+              handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+          });
       },
-      notifyBars(reason, dirtyRange) {
-        if (stopped) return;
-        // Data revisions/backfills invalidate a viewport result even when bar count and endpoints stay the same.
-        lastViewportComputationKey = undefined;
-        const currentBars = getCurrentBars();
-        if (!currentBars.length) return;
+      notifyBars(reason,dirtyRange) {
+        if(stopped)return;
+        lastViewportComputationKey=undefined;
+        const currentBars=getCurrentBars();
 
-        if (reason === 'backfill') {
-          // Older pages may arrive while Vela is still building the initial dataset.
-          // Do not execute partial history; wait for the single complete snapshot.
-          if (!historyInitialized) return;
+        if(reason==='backfill'){
+          // Vela may backfill older pages before the initial complete snapshot.
+          if(!historyInitialized||!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
+          const start=lowerBoundBarTime(currentBars,dirtyRange.from);
+          const end=Math.min(currentBars.length,upperBoundBarTime(currentBars,dirtyRange.to));
+          const maxLookback=Math.max(0,Number(token.ir.maxLookback)||0);
+          const executionStart=Math.max(0,start-maxLookback);
+          const rangeBars=currentBars.slice(executionStart,end);
+          if(!rangeBars.length)return;
+          const generation=++viewportRunGeneration;
+          const updateGeneration=updateVersion;
+          void executeInWorker(rangeBars,backfillContextKey,true,{from:0,to:rangeBars.length},{from:dirtyRange.from,to:dirtyRange.to})
+            .then(result=>{
+              if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
+              emitScenePatches(safeOutputs(result.outputs),dirtyRange);
+            })
+            .catch(error=>{
+              if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion)
+                handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+            });
+          return;
+        }
 
-          if (dirtyRange && Number.isFinite(dirtyRange.from) && Number.isFinite(dirtyRange.to)) {
-            const start = lowerBoundBarTime(currentBars, dirtyRange.from);
-            const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, dirtyRange.to));
-            const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
-            const executionStart = Math.max(0, start - maxLookback);
-            const rangeBars = currentBars.slice(executionStart, end);
-            if (rangeBars.length) {
-              const rangeRuntime = createRuntime({ suppressExternalEffects:true });
-              rangeRuntime.loadIr(token.ir);
-              const rangeResult = safeOutputs(rangeRuntime.executeIrReadOnly(token.ir, rangeBars).outputs);
-              emitScenePatches(rangeResult, dirtyRange);
-            }
+        if(reason==='complete'){
+          if(!historyInitialized&&currentBars.length){
+            if(secondaryDependencies.length){
+              void loadSecondaryData(true).then(()=>initializeFromBars(getCurrentBars()))
+                .catch(error=>handlers.onError?.(error instanceof Error?error:new Error(String(error))));
+            }else initializeFromBars(currentBars);
           }
           return;
         }
 
-        if (reason === 'complete') {
-          if (!historyInitialized) {
-            if (secondaryDependencies.length) {
-              void loadSecondaryData(true)
-                .then(() => initializeFromBars(getCurrentBars()))
-                .catch(error => handlers.onError?.(error instanceof Error ? error : new Error(String(error))));
-            } else {
-              initializeFromBars(currentBars);
-            }
-          }
+        if(req.mode!=='live')return;
+        if(!currentBars.length)return;
+        if(!historyInitialized||!liveStarted){
+          initializeFromBars(currentBars);
           return;
         }
-
-        if (!historyInitialized || req.mode !== 'live') return;
-        if (secondaryDependencies.length) void loadSecondaryData();
-
-        const latest = currentBars.at(-1);
-        if (!latest) return;
-
-        const latestTime = barTimeMillis(latest.timestamp);
-        try {
-          const result = safeOutputs(runtime.executeBar(latest).outputs);
-          if (Number.isFinite(latestTime)) {
-            emitScenePatches(result, { from:latestTime, to:latestTime });
-            lastTime = latestTime;
+        if(secondaryDependencies.length)void loadSecondaryData();
+        const latest=currentBars.at(-1);
+        if(!latest)return;
+        const latestTime=barTimeMillis(latest.timestamp);
+        const generation=++liveRunGeneration;
+        const sessionGeneration=mainRunGeneration;
+        void executeInWorker(currentBars,mainContextKey,false,{
+          from:Math.max(0,currentBars.length-1),to:currentBars.length,
+        }).then(result=>{
+          if(stopped||generation!==liveRunGeneration||sessionGeneration!==mainRunGeneration)return;
+          const latestOutputs=safeOutputs(result.outputs);
+          if(Number.isFinite(latestTime)){
+            emitScenePatches(latestOutputs,{from:latestTime,to:latestTime});
+            lastTime=latestTime;
           }
-        } catch (error) {
-          handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
-        }
-      },
-    };
+          rememberWorkerState(result.state);
+        }).catch(error=>{
+          if(!stopped&&generation===liveRunGeneration&&sessionGeneration===mainRunGeneration)
+            handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+        });
+      },    };
   }
 }
 
