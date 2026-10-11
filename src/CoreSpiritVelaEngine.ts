@@ -10,6 +10,7 @@ import type { CoreSpiritGraphSnapshot } from './services/core/data/marketDataGra
 import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreSpiritWorkerPool.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
+import { normalizeCoreSpiritTimeframe } from './services/core/data/marketDataGraph.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
@@ -120,7 +121,7 @@ function presentationProps(values: Readonly<Record<string, unknown>>): Record<st
 }
 
 function dependencyKey(symbol:string,timeframe:string):string {
-  return `${symbol.toUpperCase()}|${timeframe.toLowerCase()}`;
+  return `${symbol.trim().toUpperCase()}|${normalizeCoreSpiritTimeframe(timeframe).toLowerCase()}`;
 }
 
 export class CoreSpiritVelaEngine {
@@ -177,8 +178,9 @@ export class CoreSpiritVelaEngine {
     const secondaryDependencies = [...new Map(
       dataDependencies
         .filter(dep => !(
-          (dep.symbol === 'current' || dep.symbol === req.market.symbol) &&
-          (dep.timeframe === 'chart' || dep.timeframe === req.market.timeframe)
+          (dep.symbol === 'current' || dep.symbol.trim().toUpperCase() === req.market.symbol.trim().toUpperCase()) &&
+          (normalizeCoreSpiritTimeframe(dep.timeframe) === 'chart' ||
+            dependencyKey('timeframe',dep.timeframe) === dependencyKey('timeframe',req.market.timeframe))
         ))
         .map(dep => {
           // current is a symbol alias, not a statement that the dependency is
