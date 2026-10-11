@@ -373,7 +373,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       const recentBars=Array.from(replayTarget?.getBars?.()??[]).slice(-3000);
       if(!recentBars.length){
         copilotReplayPassRef.current=false;
-        setCopilotSummary(prev=>`${prev}\\n\\nRun is blocked: no chart history was available for the required replay preflight. Open a chart with candle history, then generate/revalidate the draft again.`);
+        setCopilotSummary(prev=>`${prev}\n\nRun is blocked: no chart history was available for the required replay preflight. Open a chart with candle history, then generate/revalidate the draft again.`);
         setCopilotStatus('blocked');
         return;
       }
@@ -388,16 +388,16 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         });
         if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
         const replayDiagnostics=replay.diagnostics.length
-          ? `\\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
+          ? `\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
           : '';
         const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum);
         copilotReplayPassRef.current=replayPassed;
-        setCopilotSummary(prev=>`${prev}\\n\\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\\nReplay gate passed.':'\\nRun is blocked until replay diagnostics are resolved and the draft passes again.'}`);
+        setCopilotSummary(prev=>`${prev}\n\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\nReplay gate passed.':'\nRun is blocked until replay diagnostics are resolved and the draft passes again.'}`);
         setCopilotStatus(replayPassed?'ready':'needs-fixes');
       }catch(replayError){
         if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
         copilotReplayPassRef.current=false;
-        setCopilotSummary(prev=>`${prev}\\n\\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
+        setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
         // A missing replay result is not evidence of correctness: fail closed.
         setCopilotStatus('blocked');
       }
