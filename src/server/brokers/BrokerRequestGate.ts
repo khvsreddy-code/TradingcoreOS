@@ -10,7 +10,21 @@ type QueueState = {
   nextAvailableAt: number;
   timestamps: number[];
   tail: Promise<void>;
+  dayKey: string;
+  dailyCount: number;
 };
+
+export type BrokerRequestGatePolicy = Readonly<{
+  /** Separate documented API categories when their limits differ. */
+  budgetKey?: string;
+  minIntervalMs?: number;
+  maxPerMinute?: number;
+  maxPerDay?: number;
+}>;
+
+function indiaDayKey(now = Date.now()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(now));
+}
 
 const LIMITS: Record<string, BrokerLimit> = {
   // FYERS currently documents 10 req/s and 200 req/min on Standard,
@@ -29,7 +43,7 @@ const queues = new Map<string, QueueState>();
 function getState(key: string): QueueState {
   let state = queues.get(key);
   if (!state) {
-    state = { nextAvailableAt: 0, timestamps: [], tail: Promise.resolve() };
+    state = { nextAvailableAt: 0, timestamps: [], tail: Promise.resolve(), dayKey: indiaDayKey(), dailyCount: 0 };
     queues.set(key, state);
   }
   return state;
@@ -106,11 +120,18 @@ export async function withBrokerRequestGate<T>(
   identity: string,
   task: (signal?: AbortSignal) => Promise<T>,
   signal?: AbortSignal,
+  policy: BrokerRequestGatePolicy = {},
 ): Promise<T> {
   const effectiveSignal = signal || AbortSignal.timeout(15_000);
-  const key = broker + ':' + identity;
+  const budgetName = policy.budgetKey ? `${broker}:${policy.budgetKey}` : broker;
+  const key = budgetName + ':' + identity;
   const localState = getState(key);
-  const limit = LIMITS[broker];
+  const limit: BrokerLimit & { maxPerDay?: number } = {
+    ...LIMITS[broker],
+    ...(policy.minIntervalMs != null ? { minIntervalMs: Math.max(0, Math.floor(policy.minIntervalMs)) } : {}),
+    ...(policy.maxPerMinute != null ? { maxPerMinute: Math.max(1, Math.floor(policy.maxPerMinute)) } : {}),
+    ...(policy.maxPerDay != null ? { maxPerDay: Math.max(1, Math.floor(policy.maxPerDay)) } : {}),
+  };
 
   let localRelease!: () => void;
   let localReleased = false;
@@ -128,7 +149,7 @@ export async function withBrokerRequestGate<T>(
     const identityHash = crypto.createHash('sha256').update(identity).digest('hex');
 
     if (distributedEnabled() && distributed.configured) {
-      const lockKey = 'tco:broker:admit:' + broker + ':' + identityHash;
+      const lockKey = 'tco:broker:admit:' + budgetName + ':' + identityHash;
       const owner = crypto.randomUUID();
       let acquired = false;
       try {
@@ -138,13 +159,22 @@ export async function withBrokerRequestGate<T>(
 
         const now = Date.now();
         const window = Math.floor(now / 60_000);
-        const countKey = 'tco:broker:minute:' + broker + ':' + identityHash + ':' + window;
+        const countKey = 'tco:broker:minute:' + budgetName + ':' + identityHash + ':' + window;
+        if (limit.maxPerDay != null) {
+          const dayKey = indiaDayKey(now);
+          const dayCountKey = 'tco:broker:day:' + budgetName + ':' + identityHash + ':' + dayKey;
+          const dayCount = await distributed.incrementWindow(dayCountKey, 48 * 60 * 60 * 1000, effectiveSignal);
+          if (dayCount > limit.maxPerDay) {
+            throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429 });
+          }
+        }
+
         const count = await distributed.incrementWindow(countKey, 61_000, effectiveSignal);
         if (count > limit.maxPerMinute) {
           throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429 });
         }
 
-        const lastKey = 'tco:broker:last:' + broker + ':' + identityHash;
+        const lastKey = 'tco:broker:last:' + budgetName + ':' + identityHash;
         const last = Number(await distributed.get<string | number>(lastKey, effectiveSignal) || 0);
         const spacing = Math.max(0, limit.minIntervalMs - (Date.now() - last));
         if (spacing) await sleepWithSignal(spacing, effectiveSignal);
@@ -161,6 +191,14 @@ export async function withBrokerRequestGate<T>(
     }
 
     const now = Date.now();
+    const currentDayKey = indiaDayKey(now);
+    if (localState.dayKey !== currentDayKey) {
+      localState.dayKey = currentDayKey;
+      localState.dailyCount = 0;
+    }
+    if (limit.maxPerDay != null && localState.dailyCount >= limit.maxPerDay) {
+      throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429 });
+    }
     localState.timestamps = localState.timestamps.filter((ts) => now - ts < 60_000);
     const oldest = localState.timestamps[0];
     const minuteWait = localState.timestamps.length >= limit.maxPerMinute && oldest
@@ -170,6 +208,15 @@ export async function withBrokerRequestGate<T>(
     await sleep(Math.max(minuteWait, spacingWait), effectiveSignal);
 
     const startedAt = Date.now();
+    const startedDayKey = indiaDayKey(startedAt);
+    if (localState.dayKey !== startedDayKey) {
+      localState.dayKey = startedDayKey;
+      localState.dailyCount = 0;
+    }
+    if (limit.maxPerDay != null && localState.dailyCount >= limit.maxPerDay) {
+      throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429 });
+    }
+    if (limit.maxPerDay != null) localState.dailyCount += 1;
     localState.timestamps.push(startedAt);
     localState.nextAvailableAt = startedAt + limit.minIntervalMs;
 
