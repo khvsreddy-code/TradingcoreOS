@@ -1,6 +1,6 @@
 import { CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH, executeCoreSpiritNumericalKernel, type CoreSpiritNumericSeries, type CoreSpiritNumericalKernelOperation, type CoreSpiritNumericalKernelResult } from './numericalKernels';
 import { createCoreSpiritBackendRegistry, executePlannedExternalCoreSpiritBackend, planCoreSpiritBackend, type CoreSpiritBackendKind, type CoreSpiritBackendPlan, type CoreSpiritBackendPurpose, type CoreSpiritBackendRegistry, type CoreSpiritExternalBackendAdapter, type CoreSpiritWasmBackendHandle } from './backendRegistry';
-import type { CoreSpiritWasmExecutionRequest, CoreSpiritWasmExecutionResult } from './wasmBackend';
+import { loadCoreSpiritBundledWasmSimdBackend, type CoreSpiritWasmExecutionRequest, type CoreSpiritWasmExecutionResult } from './wasmBackend';
 
 export type CoreSpiritWasmNumericalExecutor = CoreSpiritWasmBackendHandle & Readonly<{
   execute(request: CoreSpiritWasmExecutionRequest): Promise<CoreSpiritWasmExecutionResult>;
@@ -120,8 +120,25 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   if (!parameters.every(Number.isFinite)) throw new Error('kernel parameters must be finite numbers');
   const inputs = validateInputs(inputSeries), started = now(), purpose = options.purpose ?? 'historical';
   const wasmOutputs = wasmOutputBuffers(operation, inputs);
+  const workUnits = estimateWorkUnits(operation, inputs, parameters);
+  let wasmAdapter = options.wasm;
+  let wasmLoadError: unknown;
+
+  // The built-in SIMD asset currently accelerates rollingMean only. Load it on
+  // demand for sufficiently large non-live history, never on the chart hot path.
+  if (!options.registry && !wasmAdapter && purpose !== 'live' &&
+      operation === 'rollingMean' && wasmOutputs &&
+      workUnits >= Math.max(1, Math.floor(options.minWasmWorkUnits ?? 10_000))) {
+    try {
+      wasmAdapter = await loadCoreSpiritBundledWasmSimdBackend();
+    } catch (error) {
+      wasmLoadError = error;
+      notifyFallback(options, 'wasm-simd', error);
+    }
+  }
+
   const registry = options.registry ?? createCoreSpiritBackendRegistry({
-    wasm: options.wasm, wasmKernelNames: options.wasmKernelNames, webgpu: options.webgpu, remoteResearch: options.remoteResearch,
+    wasm: wasmAdapter, wasmKernelNames: options.wasmKernelNames, webgpu: options.webgpu, remoteResearch: options.remoteResearch,
   });
   // Dispatch through the exact adapter snapshot used by the planner. When callers
   // inject a registry directly, they need not pass the same adapter twice.
@@ -131,7 +148,7 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   const request = {
     operation, purpose,
     workload: operation === 'matrixMultiply' || operation === 'matrixDecomposition' ? 'matrix' as const : 'series' as const,
-    workUnits: estimateWorkUnits(operation, inputs, parameters), inputElements: maxElements,
+    workUnits, inputElements: maxElements,
     stateful: STATEFUL_SERIES_OPERATIONS.has(operation), deterministic: options.deterministic,
     minWasmWorkUnits: options.minWasmWorkUnits, minWebGpuWorkUnits: options.minWebGpuWorkUnits,
     allowStatefulWasm: options.allowStatefulWasm, maxStatefulWasmElements: options.maxStatefulWasmElements,
@@ -166,5 +183,8 @@ export async function executeCoreSpiritNumericalKernelPlanned(
     }
   }
   const result = executeCoreSpiritNumericalKernel(operation, inputs, parameters);
-  return Object.freeze({ operation, backend: plan.backend, result, plan, elapsedMs: now() - started });
+  return Object.freeze({
+    operation, backend: plan.backend, result, plan, elapsedMs: now() - started,
+    ...(wasmLoadError === undefined ? {} : { fallbackReason: wasmLoadError instanceof Error ? wasmLoadError.message : String(wasmLoadError) }),
+  });
 }
