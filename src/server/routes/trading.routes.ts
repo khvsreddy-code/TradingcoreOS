@@ -13,6 +13,7 @@ import { createHmac, createHash, randomUUID } from 'node:crypto';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
+import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 
 export const tradingRoutes = Router();
 
@@ -204,6 +205,24 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       res.status(claim.record?.state === 'completed' ? 200 : 502).json(claim.record?.response ?? { success: false, error: 'Previous order result is unavailable.' }); return;
     }
     const requestId = req.get('x-request-id');
+    // A deterministic broker-visible client tag ties REST acknowledgements,
+    // reconnect snapshots and WS updates back to this idempotent TCO request.
+    const clientOrderId = brokerId === 'fyers'
+      ? createHash('sha256').update(`tco:fyers:${userId}:${idempotencyKey}`).digest('hex').slice(0, 30)
+      : undefined;
+    if (clientOrderId) {
+      orderPayload = { ...orderPayload, orderTag: clientOrderId };
+      // Persist before the broker side effect. In production this deliberately
+      // fails closed if the reconciliation migration/service credentials are absent.
+      await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'INTENT', {
+        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+      });
+      await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'SUBMITTED', {
+        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+      });
+    }
     let data: unknown;
     try {
       data = brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL
@@ -213,6 +232,13 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       const message = getErrorMessage(err, 'Broker order request failed');
       const status = getErrorStatus(err);
       const response = { success: false, error: message, requestId: requestId || null };
+      if (clientOrderId) {
+        const isDefiniteReject = status >= 400 && status < 500 && status !== 408 && status !== 429;
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, isDefiniteReject ? 'REJECTED' : 'UNKNOWN', {
+          symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+        }).catch(() => undefined);
+      }
       // Transport failures leave broker acceptance ambiguous. Keep the ledger in UNKNOWN
       // rather than marking the request as safely failed and risking a duplicate retry.
       const isClientReject = status >= 400 && status < 500 && status !== 408 && status !== 429;
@@ -228,6 +254,24 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     }
 
     const orderId = isRecord(data) ? (data.orderId ?? data.order_id ?? data.id ?? null) : null;
+    if (clientOrderId) {
+      try {
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'ACKNOWLEDGED', {
+          brokerOrderId: orderId == null ? null : String(orderId),
+          symbol: orderPayload.symbol,
+          quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+          message: isRecord(data) && typeof data.message === 'string' ? data.message : undefined,
+        });
+      } catch (lifecycleError: unknown) {
+        const message = getErrorMessage(lifecycleError, 'Order accepted but reconciliation state could not be persisted');
+        const recoveryResponse = { success: false, error: 'FYERS accepted the order but its canonical lifecycle could not be persisted. Reconciliation is required; do not retry this order.', recoveryRequired: true, brokerOrderId: orderId, requestId: requestId || null };
+        await OrderIdempotencyRepository.markRecoveryRequired(userId, brokerId, idempotencyKey, recoveryResponse, message).catch(() => undefined);
+        await AuditLogRepository.append({ userId, actorType: 'system', eventType: 'order.recovery_required', requestId, correlationId: idempotencyKey, payload: { brokerId, idempotencyKey, orderId, clientOrderId, error: message } }).catch(() => undefined);
+        res.status(503).json(recoveryResponse);
+        return;
+      }
+    }
     const response = { success: true, data };
     try {
       await OrderIdempotencyRepository.complete(userId, brokerId, idempotencyKey, response);
