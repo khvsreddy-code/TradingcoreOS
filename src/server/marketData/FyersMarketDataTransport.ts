@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import type { DomainMarketEvent } from '../../types/market-events.js';
 import type { MarketFeedEvent, NormalizedMarketTick } from '../../types/market.js';
 import { DEFAULT_FYERS_CAPABILITIES } from '../fyers/core/FyersCapabilities.js';
+import { marketEventBus } from './MarketEventBus.js';
 
 export type FyersDataFeedClass = 'lite' | 'full' | 'depth';
 type Listener = (event: MarketFeedEvent) => void;
@@ -199,7 +200,11 @@ export class FyersMarketDataTransport {
         const tick = normalizeFyersTick(payload, session.feedClass, sequence);
         if (!tick) return;
         session.lastTickAt = Date.now();
-        this.emit(session, { type: 'tick', tick, domainEvent: buildDomainEvent(tick, session.feedClass) });
+        const domainEvent = buildDomainEvent(tick, session.feedClass);
+        // Publish only normalized domain data to internal chart/indicator/orderbook/CoreSpirit/ML consumers.
+        // Depth stays on its own socket and is routed only to subscribers requesting depth-oriented consumers.
+        marketEventBus.publish(domainEvent);
+        this.emit(session, { type: 'tick', tick, domainEvent });
       } catch {
         // Non-market informational frames and malformed provider frames are ignored.
       }
@@ -357,6 +362,15 @@ function buildDomainEvent(tick: NormalizedMarketTick, feedClass: FyersDataFeedCl
   }
   if (ltpMissing(tick.ltp)) {
     return { ...base, type: 'DepthSnapshot', bids: [], asks: [] };
+  }
+  if (feedClass === 'lite') {
+    return {
+      ...base, type: 'Quote', ltp: tick.ltp,
+      ...(tick.close !== undefined ? { previousClose: tick.close } : {}),
+      ...(tick.change !== undefined ? { change: tick.change } : {}),
+      ...(tick.changePercent !== undefined ? { changePercent: tick.changePercent } : {}),
+      ...(tick.volume !== undefined ? { volume: tick.volume } : {}),
+    };
   }
   return {
     ...base, type: 'MarketTick', ltp: tick.ltp,
