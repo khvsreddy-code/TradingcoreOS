@@ -62,8 +62,8 @@ export class FyersApiClient {
 
 private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs: number = API_LATENCY_BUDGET_MS.quote, budget: 'data' | 'general' = 'general'): Promise<T> {
     const deadlineSignal = timeoutSignal(timeoutMs, signal);
-    const execute = async (gateSignal?: AbortSignal): Promise<T> => {
-      const requestSignal = gateSignal || deadlineSignal;
+    const execute = async (): Promise<T> => {
+      const requestSignal = deadlineSignal;
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value));
       const url = `${base}${path}${query.toString() ? `?${query.toString()}` : ''}`;
@@ -71,12 +71,19 @@ private async request<T>(base: string, path: string, params: Record<string, stri
       for (let attempt = 0; attempt < 3; attempt += 1) {
         if (requestSignal.aborted) throw Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' });
         try {
-          const response = await fetch(url, {
-            method,
-            signal: requestSignal,
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
-            body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
-          });
+          // Admit each actual HTTP attempt, not just the logical operation.
+          // Otherwise one operation's automatic retries could bypass per-minute
+          // or per-day quotas during broker errors/rate-limit responses.
+          const response = await this.withRequestBudget(
+            budget,
+            (requestSignal) => fetch(url, {
+              method,
+              signal: requestSignal || deadlineSignal,
+              headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `${this.appId}:${this.accessToken}` },
+              body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
+            }),
+            deadlineSignal,
+          );
           const text = await response.text();
           let payload: unknown = null;
           try { payload = text ? JSON.parse(text) : null; } catch {
@@ -104,18 +111,23 @@ private async request<T>(base: string, path: string, params: Record<string, stri
       throw lastError || new Error('FYERS request failed');
     };
 
-    // Every FYERS REST call shares the authenticated-user scheduler. This keeps
-    // history, quotes, option chain, depth and account calls from independently
-    // consuming the same broker quota.
+    return execute();
+  }
+
+  private withRequestBudget<T>(
+    budget: 'data' | 'general',
+    task: (signal?: AbortSignal) => Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T> {
     if (budget === 'data') {
       const limits = this.capabilities.dataApiRateLimits;
-      return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal, {
+      return withBrokerRequestGate('fyers', this.accessToken, task, signal, {
         budgetKey: 'data',
         minIntervalMs: Math.ceil(1000 / limits.requestsPerSecond),
         maxPerMinute: limits.requestsPerMinute,
         maxPerDay: limits.requestsPerDay,
       });
     }
-    return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal);
+    return withBrokerRequestGate('fyers', this.accessToken, task, signal);
   }
 }
