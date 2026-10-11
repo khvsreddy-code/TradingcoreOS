@@ -160,19 +160,27 @@ export async function withBrokerRequestGate<T>(
         const now = Date.now();
         const window = Math.floor(now / 60_000);
         const countKey = 'tco:broker:minute:' + budgetName + ':' + identityHash + ':' + window;
+        const dayKey = indiaDayKey(now);
+        const dayCountKey = 'tco:broker:day:' + budgetName + ':' + identityHash + ':' + dayKey;
+
+        // The per-identity Redis admission lock serializes this read/check/
+        // increment sequence. Check both counters before consuming either so
+        // a request denied by one quota doesn't unnecessarily burn the other.
         if (limit.maxPerDay != null) {
-          const dayKey = indiaDayKey(now);
-          const dayCountKey = 'tco:broker:day:' + budgetName + ':' + identityHash + ':' + dayKey;
-          const dayCount = await distributed.incrementWindow(dayCountKey, 48 * 60 * 60 * 1000, effectiveSignal);
-          if (dayCount > limit.maxPerDay) {
-            throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
+          const currentDayCount = Number(await distributed.get<string | number>(dayCountKey, effectiveSignal) || 0);
+          if (currentDayCount >= limit.maxPerDay) {
+            throw Object.assign(new Error('Broker daily request budget exhausted'), { status:429, brokerCode:429, code:'BROKER_RATE_BUDGET_EXHAUSTED' });
           }
         }
-
-        const count = await distributed.incrementWindow(countKey, 61_000, effectiveSignal);
-        if (count > limit.maxPerMinute) {
-          throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
+        const currentMinuteCount = Number(await distributed.get<string | number>(countKey, effectiveSignal) || 0);
+        if (currentMinuteCount >= limit.maxPerMinute) {
+          throw Object.assign(new Error('Broker request rate budget exhausted'), { status:429, brokerCode:429, code:'BROKER_RATE_BUDGET_EXHAUSTED' });
         }
+
+        if (limit.maxPerDay != null) {
+          await distributed.incrementWindow(dayCountKey, 48 * 60 * 60 * 1000, effectiveSignal);
+        }
+        await distributed.incrementWindow(countKey, 61_000, effectiveSignal);
 
         const lastKey = 'tco:broker:last:' + budgetName + ':' + identityHash;
         const last = Number(await distributed.get<string | number>(lastKey, effectiveSignal) || 0);
