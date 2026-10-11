@@ -80,6 +80,13 @@ assert.match(brokerAdapter,/FYERS_SECONDS_DATA_REQUIRES_PRIME/,'legacy adapter m
 assert.match(brokerAdapter,/dataGet<any>\(\s*'\/options-chain-v3'/,'legacy option-chain requests must use the Data API gate');
 assert.match(streamRoute,/getOptionChain\(session\.token, symbol, expiryDate, capabilities\)/,'option-chain route must pass authenticated user capabilities');
 assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must not be retried as provider errors');
+assert.match(apiClient,/this\.rateLimitIdentity = String\(rateLimitIdentity \|\| accessToken\)/,'quota counters must use a stable account identity when supplied');
+assert.match(apiClient,/withBrokerRequestGate\('fyers', this\.rateLimitIdentity/,'all Data API attempts must share the stable per-user quota bucket');
+assert.match(quoteRoute,/capabilities, userId\)/,'the canonical quote client must be keyed by authenticated user, not rotating token');
+assert.match(historyRoute,/new FyersApiClient\(accessToken, undefined, capabilities, userId\)/,'history requests must share the same stable quota identity');
+assert.match(brokerAdapter,/rateLimitIdentity = accessToken/,'legacy adapter methods must support explicit stable quota identity');
+assert.match(streamRoute,/capabilities, session\.userId\)/,'legacy history requests must pass authenticated user identity');
+
 assert.match(requestGate,/TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED/,'production can fail closed if shared quota coordination is required');
 
 
