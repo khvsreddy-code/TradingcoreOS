@@ -83,28 +83,35 @@ function constantFold(instructions: readonly CoreSpiritIrInstruction[]): CoreSpi
   const constants = new Map<string, number|string|boolean|null>();
   return instructions.map((instruction): CoreSpiritIrInstruction => {
     const dest = 'dest' in instruction ? instruction.dest : undefined;
-    // Register names can be reused by non-constant definitions. Drop the previous
-    // constant before inspecting operands, then re-add only if this instruction folds.
+    // Capture operands before invalidating the destination: IR permits an assignment
+    // to reuse its input register, so x = -x must still fold when the old x is constant.
+    const unaryKnown = instruction.op === 'unary' && constants.has(instruction.operand);
+    const unaryValue = instruction.op === 'unary' ? constants.get(instruction.operand) : undefined;
+    const binaryKnown = instruction.op === 'binary' && constants.has(instruction.left) && constants.has(instruction.right);
+    const binaryLeft = instruction.op === 'binary' ? constants.get(instruction.left) : undefined;
+    const binaryRight = instruction.op === 'binary' ? constants.get(instruction.right) : undefined;
+    const moveKnown = instruction.op === 'move' && constants.has(instruction.source);
+    const moveValue = instruction.op === 'move' ? constants.get(instruction.source) : undefined;
+    // Register names can be reused by non-constant definitions. Drop any previous
+    // constant before considering the new destination value.
     if (dest) constants.delete(dest);
     if (instruction.op === 'const') {
       constants.set(instruction.dest, instruction.value);
       return instruction;
     }
-    if (instruction.op === 'unary' && constants.has(instruction.operand)) {
-      const value = constants.get(instruction.operand)!;
-      const folded = foldUnary(instruction.operator, value);
+    if (instruction.op === 'unary' && unaryKnown) {
+      const folded = foldUnary(instruction.operator, unaryValue);
       constants.set(instruction.dest, folded);
       return { op:'const', dest:instruction.dest, value:folded, origin:instruction.origin };
     }
-    if (instruction.op === 'binary' && constants.has(instruction.left) && constants.has(instruction.right)) {
-      const folded = foldBinary(instruction.operator, constants.get(instruction.left)!, constants.get(instruction.right)!);
+    if (instruction.op === 'binary' && binaryKnown) {
+      const folded = foldBinary(instruction.operator, binaryLeft, binaryRight);
       constants.set(instruction.dest, folded);
       return { op:'const', dest:instruction.dest, value:folded, origin:instruction.origin };
     }
-    if (instruction.op === 'move' && constants.has(instruction.source)) {
-      const value = constants.get(instruction.source)!;
-      constants.set(instruction.dest, value);
-      return { op:'const', dest:instruction.dest, value, origin:instruction.origin };
+    if (instruction.op === 'move' && moveKnown) {
+      constants.set(instruction.dest, moveValue!);
+      return { op:'const', dest:instruction.dest, value:moveValue!, origin:instruction.origin };
     }
     return instruction;
   });
