@@ -182,9 +182,10 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     }
     let index=lo-1;
     if(index<0)return -1;
-    if(alignment==='last-confirmed'){
+    if(alignment==='exact')return node.time[index]===asOf?index:-1;
+    if(alignment==='last-confirmed'||alignment==='nearest-confirmed'){
       const seconds=timeframeSeconds(node.timeframe);
-      if(seconds>0&&node.time[index]!+seconds>asOf)index-=1;
+      while(index>=0&&seconds>0&&node.time[index]!+seconds>asOf)index-=1;
     }
     return index;
   }
@@ -196,11 +197,14 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     const asOf=ctx?.asOfTimestamp??Number.POSITIVE_INFINITY;
     let index=this.indexAt(node,asOf,alignment);
     index-=Math.max(0,Math.floor(request.offset||0));
-    if(index<0||index>=node.time.length)return {value:null,source:'data-graph:empty',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
+    if(index<0||index>=node.time.length)return {value:null,source:alignment==='exact'?'data-graph:unaligned':'data-graph:empty',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
+    const timestamp=Number(node.time[index]);
+    if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&Math.abs(asOf-timestamp)*1000>ctx.maxStalenessMs){
+      return {value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,timestamp,state:'historical'};
+    }
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
     const value=columns[request.field]?.[index];
     if(value==null||!Number.isFinite(Number(value)))return {value:null,source:'data-graph',symbol:node.symbol,timeframe:node.timeframe,timestamp:Number(node.time[index]),state:'historical'};
-    const timestamp=Number(node.time[index]);
     const seconds=timeframeSeconds(node.timeframe);
     const confirmed=seconds<=0||timestamp+seconds<=asOf;
     return {value:Number(value),source:'data-graph',symbol:node.symbol,timeframe:node.timeframe,timestamp,state:confirmed?'confirmed':'developing'};
