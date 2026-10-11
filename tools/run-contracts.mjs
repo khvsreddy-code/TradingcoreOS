@@ -67,6 +67,7 @@ const contracts = [
   ['corespirit-exact-dirty-span', ['src/coreSpiritExactDirtySpanContract.test.mjs', true]],
   ['corespirit-visual-object-lifecycle', ['src/services/coreSpirit/visualIdentityProductionContract.test.mjs', true]],
   ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
+  ['tco-vela-performance-telemetry', ['src/tcoVelaPerformanceTelemetryContract.test.mjs', false]],
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
   ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
   ['fyers-order-reconciliation-state-machine', ['src/fyersOrderStateReconciliationContract.test.mjs', true]],
