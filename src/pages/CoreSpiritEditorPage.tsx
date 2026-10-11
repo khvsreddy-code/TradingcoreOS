@@ -47,22 +47,30 @@ type CopilotReplayGate = Readonly<{
   symbol:string;
   timeframe:string;
   barsProcessed:number;
-  firstBarSignature:string;
-  lastBarSignature:string;
+  datasetSignature:string;
 }>;
 
-// Use stable bar identity rather than mutable OHLCV: a live tick must not invalidate
-// a valid replay approval every few milliseconds. A chart/timeframe or range rollover does.
-function replayBarSignature(bar:unknown):string {
-  if(!bar||typeof bar!=='object')return '';
-  const value=bar as Record<string,unknown>;
-  return JSON.stringify([value.timestamp??value.time??null]);
+// The replay approval is bound to every bar in the bounded history, not just its
+// endpoints. This detects corrected/backfilled middle candles without a crypto
+// dependency or any cost on the live market-data hot path.
+function replayDatasetSignature(bars:readonly unknown[]):string {
+  let hash=2166136261;
+  const feed=(value:unknown)=>{
+    const encoded=JSON.stringify(value);
+    for(let i=0;i<encoded.length;i+=1){hash^=encoded.charCodeAt(i);hash=Math.imul(hash,16777619);}
+    hash^=10;hash=Math.imul(hash,16777619);
+  };
+  for(const bar of bars){
+    const value=bar&&typeof bar==='object'?bar as Record<string,unknown>:{};
+    feed([value.timestamp??value.time??null,value.open??null,value.high??null,value.low??null,value.close??null,value.volume??null]);
+  }
+  return `${bars.length}:${(hash>>>0).toString(16).padStart(8,'0')}`;
 }
 
 function replayGateMatches(gate:CopilotReplayGate,source:string,artifactHash:string|null,target:NonNullable<ReturnType<typeof coreSpiritChartRegistry.getActive>>):boolean {
   if(gate.source!==source||!artifactHash||gate.artifactHash!==artifactHash||gate.chartId!==target.chartId||gate.symbol!==target.symbol||gate.timeframe!==target.timeframe)return false;
   const bars=Array.from(target.getBars?.()??[]).slice(-3000);
-  return bars.length===gate.barsProcessed&&replayBarSignature(bars[0])===gate.firstBarSignature&&replayBarSignature(bars[bars.length-1])===gate.lastBarSignature;
+  return bars.length===gate.barsProcessed&&replayDatasetSignature(bars)===gate.datasetSignature;
 }
 
 function lineCount(source: string) { return Math.max(1, source.split('\n').length); }
@@ -440,8 +448,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         symbol:replayTarget.symbol,
         timeframe:replayTarget.timeframe,
         barsProcessed:recentBars.length,
-        firstBarSignature:replayBarSignature(recentBars[0]),
-        lastBarSignature:replayBarSignature(recentBars[recentBars.length-1]),
+        datasetSignature:replayDatasetSignature(recentBars),
       };
       setCopilotStatus('replaying');
       setCopilotSummary(prev=>`${prev}\n\nChecking the compiled artifact against the latest ${recentBars.length.toLocaleString()} chart bars in an isolated read-only replay…`);
@@ -459,8 +466,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         const latestBars=Array.from(activeAfterReplay?.getBars?.()??[]).slice(-3000);
         const replayContextStillCurrent=Boolean(activeAfterReplay&&activeAfterReplay.chartId===replayContext.chartId&&
           activeAfterReplay.symbol===replayContext.symbol&&activeAfterReplay.timeframe===replayContext.timeframe&&
-          latestBars.length===replayContext.barsProcessed&&replayBarSignature(latestBars[0])===replayContext.firstBarSignature&&
-          replayBarSignature(latestBars[latestBars.length-1])===replayContext.lastBarSignature);
+          latestBars.length===replayContext.barsProcessed&&replayDatasetSignature(latestBars)===replayContext.datasetSignature);
         const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum)&&replayContextStillCurrent;
         copilotReplayPassRef.current=replayPassed;
         copilotReplayGateRef.current=replayPassed?{source:payload.source,artifactHash:compiled.artifact.abi?.artifactHash??'',...replayContext}:null;
