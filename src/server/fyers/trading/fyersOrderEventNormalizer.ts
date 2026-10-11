@@ -1,4 +1,4 @@
-import type { DomainEventMetadata, Fill, FundsUpdate, OrderUpdate, PositionUpdate, Trade } from '../../../types/market-events.js';
+import type { DomainEventMetadata, Fill, FundsUpdate, OrderUpdate, PositionUpdate } from '../../../types/market-events.js';
 
 type Row = Record<string, unknown>;
 export type FyersNormalizedOrderEvent =
