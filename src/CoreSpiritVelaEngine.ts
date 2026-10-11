@@ -680,6 +680,7 @@ export class CoreSpiritVelaEngine {
         const currentBars=getCurrentBars(reason==='backfill');
 
         if(reason==='backfill'){
+          const wasHistoryInitialized=historyInitialized;
           // The runtime's rolling state was built against the pre-backfill history.
           // Invalidate the active baseline so the next live run performs the
           // explicit read-only warm-up + forming-bar pass, even without dirty bounds.
@@ -692,7 +693,7 @@ export class CoreSpiritVelaEngine {
             initializationInFlight=false;
           }
           // Vela may backfill older pages before the initial complete snapshot.
-          if(!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
+          if(!wasHistoryInitialized||!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
           const start=lowerBoundBarTime(currentBars,dirtyRange.from);
           const end=Math.min(currentBars.length,upperBoundBarTime(currentBars,dirtyRange.to));
           const maxLookback=Math.max(0,Number(token.ir.maxLookback)||0);
