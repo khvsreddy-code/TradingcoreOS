@@ -42,11 +42,16 @@ function sourceFields(node:CoreSpiritAstNode) {
 function negativeIndex(node:CoreSpiritAstNode):boolean {
   return node.type==='unary'&&node.operator==='-'&&node.operand.type==='number'&&Number(node.operand.value)>0;
 }
-function isDataReference(node:CoreSpiritAstNode):boolean {
+function isDataReference(node:CoreSpiritAstNode,dataRefs:ReadonlySet<string>):boolean {
   if(node.type==='call')return ['market','timeframe','series'].includes(node.name);
-  // The name/type passes validate that this alias really is a data reference.
-  if(node.type==='identifier')return true;
-  return node.type==='memberCall'&&['timeframe','tf','confirmed','developing','historical','realtime'].includes(node.member);
+  if(node.type==='identifier')return dataRefs.has(node.name);
+  if(node.type==='memberCall'){
+    const isSelector=['confirmed','developing','historical','realtime'].includes(node.member);
+    return (['timeframe','tf'].includes(node.member)&&
+      (node.target.type==='call'&&node.target.name==='market'||node.target.type==='identifier'&&dataRefs.has(node.target.name))) ||
+      (isSelector&&isDataReference(node.target,dataRefs));
+  }
+  return false;
 }
 function selectorLabel(node:CoreSpiritAstNode):string {
   if(node.type==='call'&&node.name==='timeframe')return node.args[0]?.type==='string'?String(node.args[0].value):'dynamic timeframe';
@@ -64,9 +69,36 @@ function selectorLabel(node:CoreSpiritAstNode):string {
 export function analyzeCoreSpiritCausality(ast:CoreSpiritAst):CoreSpiritCausalityReport {
   const diagnostics:CoreSpiritCausalityDiagnostic[]=[];
   const dependencies:CoreSpiritCausalityDependency[]=[];
+  const dataRefs=new Set<string>();
   let strictCausality=false;
+  const isDataExpression=(node:CoreSpiritAstNode):boolean=>{
+    if(node.type==='call')return ['market','timeframe','series'].includes(node.name);
+    if(node.type==='identifier')return dataRefs.has(node.name);
+    if(node.type==='memberCall'){
+      if(['timeframe','tf'].includes(node.member))
+        return (node.target.type==='call'&&node.target.name==='market') ||
+          (node.target.type==='identifier'&&dataRefs.has(node.target.name));
+      if(['confirmed','historical','developing','realtime'].includes(node.member))
+        return isDataExpression(node.target);
+    }
+    return false;
+  };
   const gather=(node:CoreSpiritAstNode):void=>{
     if(annotations(node).some(a=>a.name.toLowerCase()==='strictcausality'))strictCausality=true;
+    // Resolve simple source aliases in lexical order, so a regular indicator
+    // series is not mistaken for a market-data handle by .confirmed().
+    if(node.type==='program'){for(const child of node.body)gather(child);return;}
+    if(node.type==='let'){
+      gather(node.expression);
+      if(isDataExpression(node.expression))dataRefs.add(node.name);
+      return;
+    }
+    if(node.type==='assignment'){
+      gather(node.expression);
+      if(isDataExpression(node.expression))dataRefs.add(node.name);
+      else dataRefs.delete(node.name);
+      return;
+    }
     for(const child of children(node))gather(child);
   };
   gather(ast);
@@ -103,7 +135,7 @@ export function analyzeCoreSpiritCausality(ast:CoreSpiritAst):CoreSpiritCausalit
       }
     }
 
-    if(node.type==='memberCall'&&Object.prototype.hasOwnProperty.call(TEMPORAL_SELECTORS,node.member)&&node.args.length===0&&isDataReference(node.target)){
+    if(node.type==='memberCall'&&Object.prototype.hasOwnProperty.call(TEMPORAL_SELECTORS,node.member)&&node.args.length===0&&isDataReference(node.target,dataRefs)){
       const phase=TEMPORAL_SELECTORS[node.member]!;
       if((phase==='developing'||phase==='realtime')&&(node.target.type==='identifier'||(node.target.type==='memberCall'&&node.target.member!=='timeframe'))){
         const label=selectorLabel(node.target);
