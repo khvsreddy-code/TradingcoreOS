@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import type { Fill, FundsUpdate, OrderUpdate, PositionUpdate } from '../../../types/market-events.js';
+import type { DomainMarketEvent, Fill, FundsUpdate, OrderUpdate, PositionUpdate } from '../../../types/market-events.js';
 import { marketEventBus } from '../../marketData/MarketEventBus.js';
 import { normalizeFyersOrderPayload, type FyersNormalizedOrderEvent } from './fyersOrderEventNormalizer.js';
 import { FyersOrderStateEngine } from './FyersOrderStateEngine.js';
