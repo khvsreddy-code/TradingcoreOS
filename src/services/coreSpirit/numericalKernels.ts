@@ -111,7 +111,7 @@ export function rollingVariance(values: CoreSpiritNumericSeries, periodValue: nu
           m2 -= (leaving - mean) * (leaving - nextMean);
           mean = nextMean;
           count = nextCount;
-          if (m2 < 0 && Math.abs(m2) <= Number.EPSILON * Math.max(1, Math.abs(mean) ** 2) * count * 32) m2 = 0;
+          if (m2 < 0 && Math.abs(m2) <= Number.EPSILON * Math.max(1, Math.abs(m2)) * count * 32) m2 = 0;
         }
       } else {
         invalid -= 1;
