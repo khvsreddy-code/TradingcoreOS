@@ -4,7 +4,7 @@ import { normalizeFyersOrderPayload, type FyersNormalizedOrderEvent } from './fy
 
 type Listener = (event: FyersOrderStreamEvent) => void;
 export type FyersOrderStreamEvent =
-  | { type: 'status'; status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'authentication_failed' }
+  | { type: 'status'; status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'authentication_failed'; reason?: string }
   | { type: 'order'; data: OrderUpdate }
   | { type: 'trade'; data: Fill }
   | { type: 'position'; data: PositionUpdate }
@@ -38,7 +38,7 @@ export class FyersOrderStreamTransport {
     session.listeners.add(listener);
     if (tokenChanged && session.socket) {
       this.restartSocket(userId, session);
-    } else if (!session.socket || session.socket.readyState !== WebSocket.OPEN) {
+    } else if (!session.socket || session.socket.readyState === WebSocket.CLOSED || session.socket.readyState === WebSocket.CLOSING) {
       this.connect(userId, session);
     }
     listener({ type: 'status', status: session.socket?.readyState === WebSocket.OPEN ? 'connected' : 'connecting' });
