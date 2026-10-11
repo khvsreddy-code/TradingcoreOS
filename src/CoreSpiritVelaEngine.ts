@@ -414,6 +414,8 @@ export class CoreSpiritVelaEngine {
         const result=await executeInWorker(currentBars,mainContextKey,true,{from:0,to:currentBars.length});
         if(stopped||generation!==mainRunGeneration)return;
         const outputs=safeOutputs(result.outputs);
+        viewportRunGeneration+=1;
+        lastViewportComputationKey=undefined;
         scene.reset();
         scene.seed(outputs);
         rememberWorkerState(result.state);
@@ -443,6 +445,8 @@ export class CoreSpiritVelaEngine {
         const tailOutputs=safeOutputs(execution.tail.outputs);
         // Commit visuals only after both the confirmed-history baseline and the
         // forming-bar run succeeded; a worker failure leaves the current scene intact.
+        viewportRunGeneration+=1;
+        lastViewportComputationKey=undefined;
         scene.reset();
         scene.seed(warmOutputs);
         const latest=execution.currentBars.at(-1)!;
