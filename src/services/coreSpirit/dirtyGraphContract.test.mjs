@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CoreSpiritDirtyGraph, dirtySourcesForBar } from './dirtyGraph.ts';
+import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar } from './dirtyGraph.ts';
 
 const node=(id,instruction,inputs,dependencies,dependents,extra={})=>({
   id,instruction,inputs,output:'t'+instruction,lookback:0,stateful:false,incremental:true,viewportDependent:false,realtimeSafe:true,
@@ -62,4 +62,28 @@ assert.deepEqual(dirtySourcesForBar(sameBar, { ...sameBar }), []);
 assert.deepEqual(dirtySourcesForBar(sameBar, { ...sameBar, time: 1001 }), ['time']);
 assert.deepEqual(dirtySourcesForBar(undefined, sameBar), ['time', 'open', 'high', 'low', 'close', 'volume', 'bar_index']);
 
+const inferenceInstructions = [
+  { op: 'const', dest: 'len20', value: 20 },
+  { op: 'call', dest: 'smaOut', name: 'sma', args: ['close', 'len20'] },
+  { op: 'const', dest: 'lenRise', value: 3 },
+  { op: 'call', dest: 'risingOut', name: 'rising', args: ['close', 'lenRise'] },
+  { op: 'const', dest: 'dynamicLen', value: 10 },
+  { op: 'binary', dest: 'dynamicLen', operator: '+', left: 'runtimeValue', right: 'one' },
+  { op: 'call', dest: 'dynamicOut', name: 'sma', args: ['close', 'dynamicLen'] },
+];
+const inferenceNodes = [
+  { id: 'sma', instruction: 1, name: 'sma', dest: 'smaOut', sourceInputs: ['close'], stateful: true, deterministic: true, effectful: false, dependencies: [] },
+  { id: 'rising', instruction: 3, name: 'rising', dest: 'risingOut', sourceInputs: ['close'], stateful: false, deterministic: true, effectful: false, dependencies: [] },
+  { id: 'dynamic-sma', instruction: 6, name: 'sma', dest: 'dynamicOut', sourceInputs: ['close'], stateful: true, deterministic: true, effectful: false, dependencies: [] },
+];
+const inferenceReactive = {
+  version: 1, nodeByInstruction: {}, sourceInputs: {}, sourceDependents: {},
+  dependencies: Object.fromEntries(inferenceNodes.map(n => [n.id, n.dependencies])),
+  dependents: Object.fromEntries(inferenceNodes.map(n => [n.id, []])),
+  alwaysRecompute: [], effectNodes: [],
+};
+const inferred = buildCoreSpiritDirtyGraph({ version: 1, sourceId: 'lookback-inference', nodes: inferenceNodes, roots: [], outputs: [], checksum: '' }, inferenceReactive, inferenceInstructions);
+assert.equal(inferred.find(n => n.id === 'sma').lookback, 19, '20-bar rolling window should invalidate 19 future bars');
+assert.equal(inferred.find(n => n.id === 'rising').lookback, 3, 'rising(length) examines that many previous bars');
+assert.equal(inferred.find(n => n.id === 'dynamic-sma').lookback, Number.POSITIVE_INFINITY, 'a non-constant window length must conservatively invalidate the tail');
 console.log('CORESPIRIT_DIRTY_GRAPH_CONTRACT_OK');
