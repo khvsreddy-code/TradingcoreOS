@@ -178,7 +178,7 @@ export class CoreSpiritVelaEngine {
     const secondaryDependencies = [...new Map(
       dataDependencies
         .filter(dep => !(
-          (dep.symbol === 'current' || dep.symbol.trim().toUpperCase() === req.market.symbol.trim().toUpperCase()) &&
+          (dep.symbol.trim().toUpperCase() === 'CURRENT' || dep.symbol.trim().toUpperCase() === req.market.symbol.trim().toUpperCase()) &&
           (normalizeCoreSpiritTimeframe(dep.timeframe) === 'chart' ||
             dependencyKey('timeframe',dep.timeframe) === dependencyKey('timeframe',req.market.timeframe))
         ))
@@ -186,7 +186,7 @@ export class CoreSpiritVelaEngine {
           // current is a symbol alias, not a statement that the dependency is
           // always the chart's primary timeframe. A current/15m request on a
           // 5m chart must fetch the selected symbol's 15m series explicitly.
-          const symbol=dep.symbol==='current'?req.market.symbol:dep.symbol;
+          const symbol=dep.symbol.trim().toUpperCase()==='CURRENT'?req.market.symbol:dep.symbol;
           return [dependencyKey(symbol,dep.timeframe),{symbol,timeframe:dep.timeframe}] as const;
         }),
     ).values()];
