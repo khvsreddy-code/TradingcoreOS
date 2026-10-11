@@ -5,6 +5,8 @@ import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersMarketDataTransport } from '../marketData/FyersMarketDataTransport.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
+import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 
 export const brokerMarketDataRoutes = Router();
 brokerMarketDataRoutes.use(requireUser);
@@ -70,19 +72,24 @@ function normalizeCandles(rows: any[], limit: number): any[] {
   return [...unique.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-limit);
 }
 
-async function requestFyersHistory(accessToken: string, symbol: string, resolution: string, from: string, to: string): Promise<any[]> {
-  const query = new URLSearchParams({ date_format: '1', range_from: from, range_to: to });
-  const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(symbol)}&resolution=${encodeURIComponent(resolution)}&${query.toString()}`;
-  const response = await fetch(url, { headers: { Accept: 'application/json', Authorization: `${process.env.FYERS_CLIENT_ID}:${accessToken}` } });
-  const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch { throw new Error(`Fyers history returned a non-JSON response (${response.status})`); }
-  if (!response.ok || payload?.s === 'error') {
-    const error: any = new Error(payload?.message || `Fyers history failed (${response.status})`);
-    error.status = Number(payload?.code) === 429 || response.status === 429 ? 429 : response.status;
-    error.brokerCode = Number(payload?.code);
-    throw error;
-  }
+async function requestFyersHistory(
+  accessToken: string,
+  symbol: string,
+  resolution: string,
+  from: string,
+  to: string,
+  capabilities: ReturnType<typeof resolveFyersCapabilities>,
+): Promise<any[]> {
+  // Use the canonical FYERS client so every History request is admitted by the
+  // same plan-specific Data API rate budget as quotes/options/depth.
+  const client = new FyersApiClient(accessToken, undefined, capabilities);
+  const payload = await client.dataGet<any>('/history', {
+    symbol,
+    resolution,
+    date_format: '1',
+    range_from: from,
+    range_to: to,
+  }, undefined, API_LATENCY_BUDGET_MS.history);
   return mapFyersCandles(payload?.candles || []);
 }
 
@@ -93,19 +100,39 @@ async function requestFyersHistory(accessToken: string, symbol: string, resoluti
  * impossible. FYERS history is date-range based, so requests are chunked and
  * merged until the target is reached or the broker has no older data.
  */
-async function fetchFyersHistoryTarget(accessToken: string, symbol: string, interval: string, target: number): Promise<any[]> {
-  const resolution = fyersResolution[interval] || interval;
-  const chunkDays = intradayIntervals.has(interval) ? 90 : 3650;
-  const maxLookbackDays = intradayIntervals.has(interval) ? 365 * 5 : 365 * 25;
+async function fetchFyersHistoryTarget(
+  accessToken: string,
+  symbol: string,
+  interval: string,
+  target: number,
+  capabilities: ReturnType<typeof resolveFyersCapabilities>,
+): Promise<any[]> {
+  const secondsMatch = /^(\d+)\s*(?:s|sec|second|seconds)$/i.exec(interval) || /^(\d+)S$/i.exec(interval);
+  const secondsInterval = Boolean(secondsMatch);
+  if (secondsInterval && !capabilities.secondData) {
+    const error: any = new Error('Seconds-level historical data requires a verified FYERS Prime entitlement.');
+    error.status = 403;
+    error.code = 'FYERS_SECONDS_DATA_REQUIRES_PRIME';
+    throw error;
+  }
+  const resolution = secondsMatch ? `${Number(secondsMatch[1])}S` : (fyersResolution[interval] || interval);
+  const intraday = intradayIntervals.has(interval) || secondsInterval;
+  // Provider entitlement is the first boundary; a separate operational ceiling
+  // prevents an unexpectedly large Prime request from spawning hundreds of calls.
+  const allowedYears = intraday ? capabilities.historyDepth.intradayYears : capabilities.historyDepth.dailyYears;
+  const operationalCeilingYears = secondsInterval ? 2 : intraday ? 15 : 30;
+  const maxLookbackDays = Math.min(operationalCeilingYears, allowedYears ?? operationalCeilingYears) * 365;
+  const chunkDays = secondsInterval ? 1 : intraday ? 90 : 3650;
   const now = new Date();
+  const earliest = new Date(now.getTime() - maxLookbackDays * 86_400_000);
   let end = new Date(now);
   let all: any[] = [];
   let emptyWindows = 0;
 
-  for (let lookedBack = 0; lookedBack < maxLookbackDays && all.length < target && emptyWindows < 2; lookedBack += chunkDays) {
-    const start = new Date(end.getTime() - chunkDays * 86_400_000);
+  for (let lookedBack = 0; end.getTime() > earliest.getTime() && all.length < target && emptyWindows < 2; lookedBack += chunkDays) {
+    const start = new Date(Math.max(earliest.getTime(), end.getTime() - chunkDays * 86_400_000));
     try {
-      const rows = await requestFyersHistory(accessToken, symbol, resolution, indiaDate(start), indiaDate(end));
+      const rows = await requestFyersHistory(accessToken, symbol, resolution, indiaDate(start), indiaDate(end), capabilities);
       if (rows.length) {
         all = normalizeCandles([...rows, ...all], target);
         emptyWindows = 0;
@@ -113,8 +140,6 @@ async function fetchFyersHistoryTarget(accessToken: string, symbol: string, inte
         emptyWindows += 1;
       }
     } catch (error: any) {
-      // Keep trying older windows; a single date-range rejection should not
-      // collapse the chart to one live candle.
       if (all.length === 0) throw error;
       emptyWindows += 1;
     }
@@ -255,14 +280,19 @@ brokerMarketDataRoutes.get('/:brokerId/instruments/search', async (req: Authenti
 brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Response, next) => {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
   const session = await getFyersSession(req as AuthenticatedRequest, res); if (!session) return;
+  const capabilities = resolveFyersCapabilities(session.userId);
   const symbol = toFyersSymbol(String(req.query.instrument_key || ''));
-  const interval = String(req.query.interval || '');
+  const interval = String(req.query.interval || '').trim();
+  const secondsRequest = /^\d+\s*(?:s|sec|second|seconds)$/i.test(interval) || /^\d+S$/i.test(interval);
+  if (secondsRequest && !capabilities.secondData) {
+    return res.status(403).json({ success:false, error:'Seconds-level historical data requires a verified FYERS Prime entitlement.', code:'FYERS_SECONDS_DATA_REQUIRES_PRIME', plan:capabilities.plan });
+  }
   const requestedLimit = Number(req.query.limit || 10_000);
   const limit = Number.isFinite(requestedLimit) ? Math.max(2, Math.min(30_000, Math.floor(requestedLimit))) : 10_000;
   if (!symbol || !interval) return res.status(400).json({ success: false, error: 'instrument_key and interval are required' });
 
   try {
-    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit);
+    const candles = await fetchFyersHistoryTarget(session.token, symbol, interval, limit, capabilities);
     if (candles.length < 2) return res.status(502).json({ success: false, error: `Fyers returned only ${candles.length} candle(s) for ${symbol}.` });
     res.setHeader('Cache-Control', 'private, max-age=15');
     return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
