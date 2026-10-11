@@ -171,7 +171,7 @@ export async function withBrokerRequestGate<T>(
 
         const count = await distributed.incrementWindow(countKey, 61_000, effectiveSignal);
         if (count > limit.maxPerMinute) {
-          throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429 });
+          throw Object.assign(new Error('Broker request rate budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
         }
 
         const lastKey = 'tco:broker:last:' + budgetName + ':' + identityHash;
@@ -203,7 +203,7 @@ export async function withBrokerRequestGate<T>(
       localState.dailyCount = 0;
     }
     if (limit.maxPerDay != null && localState.dailyCount >= limit.maxPerDay) {
-      throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429 });
+      throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
     }
     localState.timestamps = localState.timestamps.filter((ts) => now - ts < 60_000);
     const oldest = localState.timestamps[0];
@@ -220,7 +220,7 @@ export async function withBrokerRequestGate<T>(
       localState.dailyCount = 0;
     }
     if (limit.maxPerDay != null && localState.dailyCount >= limit.maxPerDay) {
-      throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429 });
+      throw Object.assign(new Error('Broker daily request budget exhausted'), { status: 429, brokerCode: 429, code: 'BROKER_RATE_BUDGET_EXHAUSTED' });
     }
     if (limit.maxPerDay != null) localState.dailyCount += 1;
     localState.timestamps.push(startedAt);
