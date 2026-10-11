@@ -51,10 +51,12 @@ type CopilotReplayGate = Readonly<{
   lastBarSignature:string;
 }>;
 
+// Use stable bar identity rather than mutable OHLCV: a live tick must not invalidate
+// a valid replay approval every few milliseconds. A chart/timeframe or range rollover does.
 function replayBarSignature(bar:unknown):string {
   if(!bar||typeof bar!=='object')return '';
   const value=bar as Record<string,unknown>;
-  return JSON.stringify([value.timestamp??value.time??null,value.open??null,value.high??null,value.low??null,value.close??null,value.volume??null]);
+  return JSON.stringify([value.timestamp??value.time??null]);
 }
 
 function replayGateMatches(gate:CopilotReplayGate,source:string,artifactHash:string|null,target:NonNullable<ReturnType<typeof coreSpiritChartRegistry.getActive>>):boolean {
@@ -465,7 +467,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         setCopilotSummary(prev=>`${prev}\n\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\nReplay gate passed for this artifact and chart-history boundary.':replayContextStillCurrent?'\nRun is blocked until replay diagnostics are resolved and the draft passes again.':'\nThe active chart or its history changed during replay. Run is blocked; replay the current chart context again.'}`);
         setCopilotStatus(replayPassed?'ready':replayContextStillCurrent?'needs-fixes':'blocked');
       }catch(replayError){
-        if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
+        if(generationRequest!==copilotGenerationRef.current||copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
         copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;
         setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
         // A missing replay result is not evidence of correctness: fail closed.
