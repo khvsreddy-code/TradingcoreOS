@@ -11,6 +11,10 @@ import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
 
 type Ref<T>={current:T};
 
+function isFatalCoreSpiritDiagnostic(message:string):boolean {
+  return /\\b(?:error|failed|failure|invalid|denied|exception|unsupported|unknown (?:identifier|function|variable)|not found)\\b/i.test(message);
+}
+
 export type ChartCoreSpiritControllerDeps={
   chartId:string;
   chart:Ref<IChartApi|null>;
@@ -50,8 +54,11 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
         ? await runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options)
         : await runCoreSpiritInWorker(source,bars,sourceId,options);
       if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
-      // Transactional chart replacement: don't clear the currently running
-      // script's visuals until the replacement has completed successfully.
+      // A resolved worker promise can still carry runtime diagnostics. Do not
+      // commit partial output when the replacement failed semantically/runtime-wise.
+      const fatalDiagnostic=result.diagnostics.find(isFatalCoreSpiritDiagnostic);
+      if(fatalDiagnostic)throw new Error(`CoreSpirit replacement failed; existing chart output was preserved. ${fatalDiagnostic}`);
+      // Commit only after the complete worker result passes the diagnostics gate.
       const output=ensureOutput();
       output?.reset();
       output?.applyObjects(result.outputs);
