@@ -58,7 +58,7 @@ function rawQuoteSymbols(req: AuthenticatedRequest): { values: string[]; error?:
   return { values: [], error: 'symbols is required as a comma-separated string or string array.', status: 400 };
 }
 
-async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next: () => void) {
+async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next: (error?: unknown) => void) {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
   const client = await clientFor(req, res); if (!client) return;
   const capabilities = resolveFyersCapabilities(req.tradingCoreUserId!);
