@@ -58,7 +58,7 @@ const historyRoute = read('./server/routes/fyers-history.routes.ts');
 
 assert.match(quoteRoute, /resolveFyersCapabilities/);
 assert.match(quoteRoute, /post\('\/:brokerId\/quotes'/, 'POST quotes must support large symbol batches without URL-length pressure');
-assert.match(quoteRoute, /capabilities\.maxQuoteBatch/);
+assert.match(quoteRoute, /assertFyersQuoteBatch\(symbols, capabilities\)/, 'the route must defer quote batch validation to the capability layer');
 assert.doesNotMatch(quoteRoute, /symbols\.length\s*>\s*50/, 'route code must not duplicate the old fixed quote limit');
 assert.match(quoteService, /assertFyersQuoteBatch/, 'the service layer must enforce capability limits too');
 assert.match(streamRoute, /capabilities\.maxStreamSymbols/);
