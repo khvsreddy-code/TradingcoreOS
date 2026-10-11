@@ -845,6 +845,8 @@ export class VelaWorkspace {
     /** Aggregate renderer performance counters across the currently mounted cells. */
     getPerformanceStats(): ReadonlyArray<{
         cellId: string;
+        symbol: string;
+        timeframe: string;
         frames: number;
         totalFrameMs: number;
         averageFrameMs: number;
@@ -869,7 +871,7 @@ export class VelaWorkspace {
                 };
             };
             const stats = renderer.getPerformanceStats?.();
-            return stats ? [{ cellId: cell.id, ...stats }] : [];
+            return stats ? [{ cellId: cell.id, symbol: cell.chart.market.symbol, timeframe: cell.chart.market.timeframe, ...stats }] : [];
         });
     }
 
