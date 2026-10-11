@@ -116,6 +116,33 @@ export function analyzeCoreSpiritCausality(ast:CoreSpiritAst):CoreSpiritCausalit
     if(node.type==='index'&&negativeIndex(node.index)){
       add(node,'future-index','unknown','negative series offset','Future-bar indexing is non-causal. Replace the negative index with a current or historical offset; CoreSpirit will not treat future data as valid history.','CAUSALITY_FUTURE_INDEX','error');
     }
+    if(node.type==='call'&&node.name==='request'){
+      const rawAlignment=node.args[4];
+      const label=[
+        node.args[0]?.type==='string'?String(node.args[0].value):'symbol',
+        node.args[1]?.type==='string'?String(node.args[1].value):'timeframe',
+      ].join(' / ');
+      if(!rawAlignment){
+        add(node,'timeframe','confirmed',label,
+          "request(...) currently defaults to last-confirmed alignment, but the temporal contract is implicit. Add the fifth argument 'confirmed' or 'historical' to make backtest/live assumptions reviewable.",
+          'CAUSALITY_UNQUALIFIED_REQUEST','warning');
+      }else if(rawAlignment.type!=='string'){
+        add(node,'timeframe','unknown',label,
+          "request(...) alignment must be a static string: 'confirmed', 'historical', 'developing' or 'realtime'. A dynamic alignment cannot be verified by the compiler.",
+          'CAUSALITY_DYNAMIC_REQUEST_ALIGNMENT','warning');
+      }else{
+        const phase=String(rawAlignment.value).toLowerCase();
+        if(phase==='developing'||phase==='realtime'){
+          add(node,'timeframe',phase,label,
+            "request(...) explicitly consumes "+phase+" data. This can change before its candle closes and is blocked during historical execution; use 'confirmed' or 'historical' for reproducible backtests.",
+            'CAUSALITY_DEVELOPING_REQUEST','warning');
+        }else if(phase!=='confirmed'&&phase!=='historical'){
+          add(node,'timeframe','unknown',label,
+            "Unsupported request(...) alignment '"+phase+"'. Use 'confirmed', 'historical', 'developing' or 'realtime'.",
+            'CAUSALITY_INVALID_REQUEST_ALIGNMENT','error');
+        }
+      }
+    }
     if(node.type==='call'&&/(?:future|forward|lookahead|offset_future)/i.test(node.name)){
       add(node,'future-call','forecast',node.name,"Call '"+node.name+"' appears to request future-dependent data; verify that it is a forecast output rather than an observed market input.",'CAUSALITY_FUTURE_CALL','warning');
     }
