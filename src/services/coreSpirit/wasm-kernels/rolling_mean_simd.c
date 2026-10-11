@@ -1,50 +1,207 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <wasm_simd128.h>
+
 #define MAX_ELEMENTS 4194304u
-#define PAGE_BYTES 65536u
-#define UP(v,a) (((v)+(a)-1u)&~((a)-1u))
-typedef struct Block { uint32_t size, free, prev, next; } Block;
+#define WASM_PAGE_BYTES 65536u
+#define ALIGN_UP(value, alignment) (((value) + (alignment) - 1u) & ~((alignment) - 1u))
+
+typedef struct HeapBlock {
+  uint32_t size;
+  uint32_t is_free;
+  uint32_t prev;
+  uint32_t next;
+} HeapBlock;
+
 extern unsigned char __heap_base;
-static uint32_t first=0,last=0,top=0;
-static Block *at(uint32_t p){return (Block*)(uintptr_t)p;}
-static int ensure(uint32_t end){uint32_t pages=(uint32_t)__builtin_wasm_memory_size(0);uint32_t need=(end+PAGE_BYTES-1u)/PAGE_BYTES;if(need<=pages)return 1;return __builtin_wasm_memory_grow(0,need-pages)>=0;}
-__attribute__((export_name("alloc"))) uint32_t core_alloc(uint32_t n){
- uint32_t size=UP(n?n:8u,8u);if(size>0x7ffffff0u)return 0;if(!top)top=UP((uint32_t)(uintptr_t)&__heap_base,16u);
- for(uint32_t p=first;p;){Block*b=at(p);if(b->free&&b->size>=size){uint32_t remain=b->size-size;if(remain>=sizeof(Block)+16u){uint32_t q=p+sizeof(Block)+size;Block*z=at(q);z->size=remain-sizeof(Block);z->free=1;z->prev=p;z->next=b->next;if(b->next)at(b->next)->prev=q;else last=q;b->next=q;b->size=size;}b->free=0;return p+sizeof(Block);}p=b->next;}
- uint32_t p=top,end=p+sizeof(Block)+size;if(end<p||!ensure(end))return 0;Block*b=at(p);b->size=size;b->free=0;b->prev=last;b->next=0;if(last)at(last)->next=p;else first=p;last=p;top=end;return p+sizeof(Block);
+
+static uint32_t heap_head = 0;
+static uint32_t heap_tail = 0;
+static uint32_t heap_top = 0;
+
+static HeapBlock *block_at(uint32_t offset) {
+  return (HeapBlock *)(uintptr_t)offset;
 }
-__attribute__((export_name("free"))) void core_free(uint32_t ptr,uint32_t ignored){
- (void)ignored;if(!ptr||ptr<sizeof(Block))return;uint32_t p=ptr-sizeof(Block);Block*b=at(p);b->free=1;
- if(b->next){Block*n=at(b->next);if(n->free&&p+sizeof(Block)+b->size==b->next){b->size+=sizeof(Block)+n->size;b->next=n->next;if(n->next)at(n->next)->prev=p;else last=p;}}
- if(b->prev){uint32_t q=b->prev;Block*prev=at(q);if(prev->free&&q+sizeof(Block)+prev->size==p){prev->size+=sizeof(Block)+b->size;prev->next=b->next;if(b->next)at(b->next)->prev=q;else last=q;}}
+
+static int ensure_memory(uint32_t required_bytes) {
+  const uint32_t current_pages = (uint32_t)__builtin_wasm_memory_size(0);
+  const uint32_t required_pages = (required_bytes + WASM_PAGE_BYTES - 1u) / WASM_PAGE_BYTES;
+  if (required_pages <= current_pages) return 1;
+  return __builtin_wasm_memory_grow(0, required_pages - current_pages) >= 0;
 }
-static int valid(uint32_t p,uint32_t bytes){uint32_t total=(uint32_t)__builtin_wasm_memory_size(0)*PAGE_BYTES;return p<=total&&bytes<=total-p;}
-static double qnan(void){union{uint64_t u;double d;}x;x.u=UINT64_C(0x7ff8000000000000);return x.d;}
-/* ABI: input pointer table, input count, output pointer table, output count,
-   output length, float64 params pointer and parameter count. */
-__attribute__((export_name("runKernel"))) int32_t run_kernel(uint32_t in_table,uint32_t in_count,uint32_t out_table,uint32_t out_count,uint32_t n,uint32_t params,uint32_t param_count){
- if(in_count!=1u||out_count!=1u||param_count<1u||n>MAX_ELEMENTS)return 1;
- if(!valid(in_table,in_count*4u)||!valid(out_table,out_count*4u)||!valid(params,param_count*8u))return 2;
- uint32_t ip=((uint32_t*)(uintptr_t)in_table)[0],op=((uint32_t*)(uintptr_t)out_table)[0];
- if(!valid(ip,n*8u)||!valid(op,n*8u))return 3;
- double pv=((double*)(uintptr_t)params)[0];if(!(pv>=1.0)||pv>(double)MAX_ELEMENTS||pv!=(double)(uint32_t)pv)return 4;
- uint32_t period=(uint32_t)pv;double*input=(double*)(uintptr_t)ip;double*output=(double*)(uintptr_t)op;double nan=qnan();
- for(uint32_t i=0;i<n;i++)output[i]=nan;
- if(n==0u||period>n)return 0;
- double anchor=0.0;for(uint32_t i=0;i<n;i++){if(__builtin_isfinite(input[i])){anchor=input[i];break;}}
- uint32_t sum_bytes=(n+1u)*8u,bad_bytes=(n+1u)*4u;
- uint32_t sum_ptr=core_alloc(sum_bytes),bad_ptr=core_alloc(bad_bytes);
- if(!sum_ptr||!bad_ptr){if(sum_ptr)core_free(sum_ptr,sum_bytes);if(bad_ptr)core_free(bad_ptr,bad_bytes);return 5;}
- double*prefix=(double*)(uintptr_t)sum_ptr;uint32_t*bad=(uint32_t*)(uintptr_t)bad_ptr;prefix[0]=0.0;bad[0]=0u;
- for(uint32_t i=0;i<n;i++){double x=input[i];int finite=__builtin_isfinite(x);prefix[i+1u]=prefix[i]+(finite?x-anchor:0.0);bad[i+1u]=bad[i]+(finite?0u:1u);}
- const v128_t divisor=wasm_f64x2_splat(pv),base=wasm_f64x2_splat(anchor);uint32_t i=period-1u;
- for(;i+1u<n;i+=2u){
-  v128_t right=wasm_v128_load(&prefix[i+1u]);v128_t left=wasm_v128_load(&prefix[i+1u-period]);
-  v128_t average=wasm_f64x2_add(wasm_f64x2_div(wasm_f64x2_sub(right,left),divisor),base);wasm_v128_store(&output[i],average);
-  if(bad[i+1u]!=bad[i+1u-period])output[i]=nan;
-  if(bad[i+2u]!=bad[i+2u-period])output[i+1u]=nan;
- }
- for(;i<n;i++){if(i+1u<period)continue;if(bad[i+1u]!=bad[i+1u-period])continue;output[i]=(prefix[i+1u]-prefix[i+1u-period])/pv+anchor;}
- core_free(sum_ptr,sum_bytes);core_free(bad_ptr,bad_bytes);return 0;
+
+/* A small coalescing allocator keeps repeated historical kernel calls bounded. */
+__attribute__((export_name("alloc"))) uint32_t core_spirit_alloc(uint32_t requested_bytes) {
+  const uint32_t size = ALIGN_UP(requested_bytes ? requested_bytes : 8u, 8u);
+  if (size > 0x7ffffff0u) return 0;
+  if (heap_top == 0) {
+    heap_top = ALIGN_UP((uint32_t)(uintptr_t)&__heap_base, 16u);
+  }
+
+  for (uint32_t offset = heap_head; offset != 0;) {
+    HeapBlock *block = block_at(offset);
+    if (block->is_free && block->size >= size) {
+      const uint32_t remainder = block->size - size;
+      if (remainder >= sizeof(HeapBlock) + 16u) {
+        const uint32_t split_offset = offset + (uint32_t)sizeof(HeapBlock) + size;
+        HeapBlock *split = block_at(split_offset);
+        split->size = remainder - (uint32_t)sizeof(HeapBlock);
+        split->is_free = 1;
+        split->prev = offset;
+        split->next = block->next;
+        if (block->next != 0) block_at(block->next)->prev = split_offset;
+        else heap_tail = split_offset;
+        block->next = split_offset;
+        block->size = size;
+      }
+      block->is_free = 0;
+      return offset + (uint32_t)sizeof(HeapBlock);
+    }
+    offset = block->next;
+  }
+
+  const uint32_t block_offset = heap_top;
+  const uint32_t end_offset = block_offset + (uint32_t)sizeof(HeapBlock) + size;
+  if (end_offset < block_offset || !ensure_memory(end_offset)) return 0;
+
+  HeapBlock *block = block_at(block_offset);
+  block->size = size;
+  block->is_free = 0;
+  block->prev = heap_tail;
+  block->next = 0;
+  if (heap_tail != 0) block_at(heap_tail)->next = block_offset;
+  else heap_head = block_offset;
+  heap_tail = block_offset;
+  heap_top = end_offset;
+  return block_offset + (uint32_t)sizeof(HeapBlock);
+}
+
+__attribute__((export_name("free"))) void core_spirit_free(uint32_t pointer, uint32_t ignored_size) {
+  (void)ignored_size;
+  if (pointer == 0 || pointer < sizeof(HeapBlock)) return;
+
+  const uint32_t offset = pointer - (uint32_t)sizeof(HeapBlock);
+  HeapBlock *block = block_at(offset);
+  block->is_free = 1;
+
+  if (block->next != 0) {
+    HeapBlock *next = block_at(block->next);
+    if (next->is_free && offset + sizeof(HeapBlock) + block->size == block->next) {
+      block->size += (uint32_t)sizeof(HeapBlock) + next->size;
+      block->next = next->next;
+      if (next->next != 0) block_at(next->next)->prev = offset;
+      else heap_tail = offset;
+    }
+  }
+
+  if (block->prev != 0) {
+    const uint32_t previous_offset = block->prev;
+    HeapBlock *previous = block_at(previous_offset);
+    if (previous->is_free && previous_offset + sizeof(HeapBlock) + previous->size == offset) {
+      previous->size += (uint32_t)sizeof(HeapBlock) + block->size;
+      previous->next = block->next;
+      if (block->next != 0) block_at(block->next)->prev = previous_offset;
+      else heap_tail = previous_offset;
+    }
+  }
+}
+
+static int valid_memory_range(uint32_t pointer, uint32_t bytes) {
+  const uint32_t total_bytes = (uint32_t)__builtin_wasm_memory_size(0) * WASM_PAGE_BYTES;
+  return pointer <= total_bytes && bytes <= total_bytes - pointer;
+}
+
+static double quiet_nan(void) {
+  union {
+    uint64_t bits;
+    double value;
+  } number;
+  number.bits = UINT64_C(0x7ff8000000000000);
+  return number.value;
+}
+
+/* ABI: input pointer table/count, output pointer table/count, bar count,
+   float64 parameter pointer/count. Current bundled module exports rollingMean. */
+__attribute__((export_name("runKernel"))) int32_t core_spirit_run_kernel(
+    uint32_t input_table_pointer,
+    uint32_t input_count,
+    uint32_t output_table_pointer,
+    uint32_t output_count,
+    uint32_t length,
+    uint32_t parameters_pointer,
+    uint32_t parameters_count) {
+  if (input_count != 1u || output_count != 1u || parameters_count < 1u || length > MAX_ELEMENTS) return 1;
+  if (!valid_memory_range(input_table_pointer, input_count * 4u) ||
+      !valid_memory_range(output_table_pointer, output_count * 4u) ||
+      !valid_memory_range(parameters_pointer, parameters_count * 8u)) return 2;
+
+  const uint32_t input_pointer = ((uint32_t *)(uintptr_t)input_table_pointer)[0];
+  const uint32_t output_pointer = ((uint32_t *)(uintptr_t)output_table_pointer)[0];
+  if (!valid_memory_range(input_pointer, length * 8u) ||
+      !valid_memory_range(output_pointer, length * 8u)) return 3;
+
+  const double period_value = ((double *)(uintptr_t)parameters_pointer)[0];
+  if (!(period_value >= 1.0) || period_value > (double)MAX_ELEMENTS ||
+      period_value != (double)(uint32_t)period_value) return 4;
+
+  const uint32_t period = (uint32_t)period_value;
+  double *input = (double *)(uintptr_t)input_pointer;
+  double *output = (double *)(uintptr_t)output_pointer;
+  const double nan = quiet_nan();
+  for (uint32_t index = 0; index < length; ++index) output[index] = nan;
+  if (length == 0u || period > length) return 0;
+
+  /* Center prefix sums to preserve precision for high price-level instruments. */
+  double anchor = 0.0;
+  for (uint32_t index = 0; index < length; ++index) {
+    if (__builtin_isfinite(input[index])) {
+      anchor = input[index];
+      break;
+    }
+  }
+
+  const uint32_t prefix_sum_bytes = (length + 1u) * 8u;
+  const uint32_t invalid_count_bytes = (length + 1u) * 4u;
+  const uint32_t prefix_pointer = core_spirit_alloc(prefix_sum_bytes);
+  const uint32_t invalid_pointer = core_spirit_alloc(invalid_count_bytes);
+  if (prefix_pointer == 0 || invalid_pointer == 0) {
+    if (prefix_pointer != 0) core_spirit_free(prefix_pointer, prefix_sum_bytes);
+    if (invalid_pointer != 0) core_spirit_free(invalid_pointer, invalid_count_bytes);
+    return 5;
+  }
+
+  double *prefix = (double *)(uintptr_t)prefix_pointer;
+  uint32_t *invalid = (uint32_t *)(uintptr_t)invalid_pointer;
+  prefix[0] = 0.0;
+  invalid[0] = 0u;
+  for (uint32_t index = 0; index < length; ++index) {
+    const double value = input[index];
+    const int finite = __builtin_isfinite(value);
+    prefix[index + 1u] = prefix[index] + (finite ? value - anchor : 0.0);
+    invalid[index + 1u] = invalid[index] + (finite ? 0u : 1u);
+  }
+
+  /* SIMD calculates two adjacent moving means per iteration. Invalid windows
+     are overwritten with NaN to match CoreSpirit's CPU semantic reference. */
+  const v128_t divisor = wasm_f64x2_splat(period_value);
+  const v128_t base = wasm_f64x2_splat(anchor);
+  uint32_t index = period - 1u;
+  for (; index + 1u < length; index += 2u) {
+    const v128_t right = wasm_v128_load(&prefix[index + 1u]);
+    const v128_t left = wasm_v128_load(&prefix[index + 1u - period]);
+    const v128_t averages = wasm_f64x2_add(wasm_f64x2_div(wasm_f64x2_sub(right, left), divisor), base);
+    wasm_v128_store(&output[index], averages);
+    if (invalid[index + 1u] != invalid[index + 1u - period]) output[index] = nan;
+    if (invalid[index + 2u] != invalid[index + 2u - period]) output[index + 1u] = nan;
+  }
+
+  for (; index < length; ++index) {
+    if (index + 1u < period) continue;
+    if (invalid[index + 1u] != invalid[index + 1u - period]) continue;
+    output[index] = (prefix[index + 1u] - prefix[index + 1u - period]) / period_value + anchor;
+  }
+
+  core_spirit_free(prefix_pointer, prefix_sum_bytes);
+  core_spirit_free(invalid_pointer, invalid_count_bytes);
+  return 0;
 }
