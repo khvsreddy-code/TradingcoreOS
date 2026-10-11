@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { extractCoreSpiritSurfaceMetadata } from './services/coreSpirit/languageConcepts.ts';
 import { normalizeCoreSpiritSource } from './services/coreSpirit/surfaceForms.ts';
+
+async function waitFor(predicate,label){
+  const deadline=Date.now()+5_000;
+  while(!predicate()){
+    if(Date.now()>deadline)throw new Error(`Timed out waiting for ${label}`);
+    await new Promise(resolve=>setTimeout(resolve,0));
+  }
+}
 
 const source = `
 indicator "Trend"
@@ -80,17 +89,23 @@ try {
     onError: error => { throw error; },
     onDone: () => undefined,
   });
+  await waitFor(()=>viewportExecuteIrCalls===1,'worker-backed initial viewport history');
   assert.equal(viewportExecuteIrCalls, 1, 'viewport indicator initial history should execute once');
   const visibleRange = { left: viewportBars[5].time, right: viewportBars[20].time };
   viewportSession.setVisibleRange(visibleRange);
-  assert.equal(viewportExecuteIrCalls, 2, 'first viewport change should execute its bounded range once');
   viewportSession.setVisibleRange(visibleRange);
+  await waitFor(()=>viewportExecuteIrCalls===2,'deduplicated viewport worker run');
   assert.equal(viewportExecuteIrCalls, 2, 'identical viewport notifications must not rebuild the range runtime');
 
   viewportSession.notifyBars('backfill', { from: viewportBars[5].time, to: viewportBars[20].time });
+  await waitFor(()=>viewportExecuteIrCalls===3,'backfill worker run');
   assert.equal(viewportExecuteIrCalls, 3, 'backfill must refresh the changed range');
   viewportSession.setVisibleRange(visibleRange);
+  await waitFor(()=>viewportExecuteIrCalls===4,'viewport rerun after backfill');
   assert.equal(viewportExecuteIrCalls, 4, 'data backfill must invalidate the viewport-result cache');
+  const engineSource=await readFile(new URL('./CoreSpiritVelaEngine.ts',import.meta.url),'utf8');
+  assert.match(engineSource,/runCoreSpiritArtifactInWorker/,'Vela engine must route compiled artifacts to persistent workers');
+  assert.doesNotMatch(engineSource,/runtime\\.executeIr|runtime\\.executeBar|createRuntime\\(/,'Vela engine must not execute CoreSpirit historical/live workloads on the UI thread');
   viewportSession.stop();
 } finally {
   if (viewportSession) viewportSession.stop();
