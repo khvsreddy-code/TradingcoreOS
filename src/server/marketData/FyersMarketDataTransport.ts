@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { MarketFeedEvent, NormalizedMarketTick } from '../../types/market.js';
+import { DEFAULT_FYERS_CAPABILITIES } from '../fyers/core/FyersCapabilities.js';
 
 type Listener = (event: MarketFeedEvent) => void;
 
@@ -58,7 +59,7 @@ export class FyersMarketDataTransport {
     listener: Listener,
     includeDepth = false,
     depthSymbols: string[] = instrumentKeys,
-    maxSymbols = 50,
+    maxSymbols = DEFAULT_FYERS_CAPABILITIES.maxStreamSymbols,
   ): () => void {
     const capacity = this.checkSubscriptionCapacity(
       userId,
