@@ -4,7 +4,7 @@ import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
-import { resolveFyersCapabilities, toPublicFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { assertFyersQuoteBatch, FyersCapabilityError, resolveFyersCapabilities, toPublicFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 
 export const fyersMarketRoutes = Router();
 fyersMarketRoutes.use(requireUser);
@@ -61,16 +61,22 @@ async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next:
   const parsed = rawQuoteSymbols(req);
   if (parsed.error) return res.status(parsed.status ?? 400).json({ success: false, error: parsed.error });
   const symbols = [...new Set(parsed.values.map(fyersSymbol).map(symbol => symbol.trim()).filter(Boolean))];
-  if (!symbols.length) return res.status(400).json({ success: false, error: 'symbols must include at least one valid symbol.' });
-  if (symbols.length > capabilities.maxQuoteBatch) {
-    return res.status(400).json({
-      success: false,
-      error: `FYERS ${capabilities.plan} Quotes supports at most ${capabilities.maxQuoteBatch} unique symbols per request.`,
-      code: 'FYERS_QUOTE_BATCH_LIMIT',
-      limit: capabilities.maxQuoteBatch,
-      requested: symbols.length,
-      plan: capabilities.plan,
-    });
+  try {
+    // The broker capability layer owns batch validation; this route maps the
+    // domain error to HTTP without duplicating Standard/Prime limit logic.
+    assertFyersQuoteBatch(symbols, capabilities);
+  } catch (error: unknown) {
+    if (error instanceof FyersCapabilityError) {
+      return res.status(error.status).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+        limit: error.limit,
+        requested: error.requested,
+        plan: error.plan,
+      });
+    }
+    throw error;
   }
   try {
     const data = await new FyersMarketDataService(client, capabilities).quotes(symbols);
