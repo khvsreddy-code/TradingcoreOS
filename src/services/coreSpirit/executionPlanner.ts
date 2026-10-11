@@ -22,6 +22,7 @@ import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 import {
   createCoreSpiritBackendRegistry,
   planCoreSpiritBackend,
+  toLegacyCoreSpiritBackendProfiles,
 } from './backendRegistry';
 import { coreSpiritKernelOperationForBuiltin, isCoreSpiritStatefulKernelOperation } from './kernelOperationMap';
 import type {
@@ -40,6 +41,9 @@ export interface CoreSpiritComputeBackendProfile {
   vectorized: boolean;
   maxBatchSize: number;
   sharedMemoryBytes: number;
+  /** Exact operations supported by the registered adapter; absent means no offload eligibility. */
+  supportedOperations?: readonly string[];
+  supportsStatefulSeries?: boolean;
 }
 
 export interface CoreSpiritExecutionPlannerOptions {
@@ -196,18 +200,28 @@ function pickBackend(
   profiles: readonly CoreSpiritComputeBackendProfile[],
   workload: CoreSpiritWorkloadEstimate,
   options: Required<Pick<CoreSpiritExecutionPlannerOptions, 'requireDeterministic'|'allowSplitPureWork'|'minGpuWorkUnits'|'minWasmWorkUnits'>>,
+  capabilityPlans: readonly CoreSpiritBackendPlan[],
 ): CoreSpiritComputeBackendProfile {
-  const eligible = profiles.filter(profile =>
-    profile.available &&
-    profile.vectorized &&
-    workload.vectorizableInstructionCount > 0 &&
-    (!options.requireDeterministic || profile.deterministic),
-  );
-  const gpu = eligible.find(profile => profile.backend === 'gpu');
-  if (gpu && workload.workUnits >= options.minGpuWorkUnits) return gpu;
-  const wasm = eligible.find(profile => profile.backend === 'wasm');
-  if (wasm && workload.workUnits >= options.minWasmWorkUnits) return wasm;
-  return profiles.find(profile => profile.backend === 'cpu') ?? { backend: 'cpu', available: true, deterministic: true, vectorized: false, maxBatchSize: 1_000_000, sharedMemoryBytes: 0 };
+  const cpu = profiles.find(profile => profile.backend === 'cpu') ??
+    { backend: 'cpu' as const, available: true, deterministic: true, vectorized: false, maxBatchSize: 1_000_000, sharedMemoryBytes: 0 };
+  // The legacy whole-program planner must never advertise an accelerator just
+  // because a caller supplied an optimistic profile. Its per-kernel registry
+  // is the source of truth, and every recognized kernel in the program must
+  // have a non-fallback plan for the same executable backend.
+  const accelerated = capabilityPlans.length > 0 &&
+    capabilityPlans.every(plan => !plan.fallback && plan.backend === capabilityPlans[0]!.backend);
+  if (!accelerated || !workload.vectorizableInstructionCount) return cpu;
+  const actualBackend = capabilityPlans[0]!.backend;
+  const legacyBackend: CoreSpiritComputeBackend | undefined =
+    actualBackend === 'wasm-simd' ? 'wasm' : actualBackend === 'webgpu' ? 'gpu' : undefined;
+  if (!legacyBackend) return cpu;
+  const profile = profiles.find(candidate => candidate.backend === legacyBackend);
+  if (!profile?.available || !profile.vectorized ||
+      (options.requireDeterministic && !profile.deterministic)) return cpu;
+  const requiredThreshold = legacyBackend === 'gpu' ? options.minGpuWorkUnits : options.minWasmWorkUnits;
+  if (workload.workUnits < requiredThreshold) return cpu;
+  if (legacyBackend === 'gpu' && capabilityPlans.some(plan => plan.operation === 'ema' || plan.operation === 'rma' || plan.operation === 'atr' || plan.operation === 'rsi')) return cpu;
+  return profile;
 }
 
 export function planCoreSpiritExecution(
@@ -216,7 +230,26 @@ export function planCoreSpiritExecution(
 ): CoreSpiritExecutionPlan {
   const inputErrors = validateCoreSpiritExecutionPlannerInputs(options);
   if (inputErrors.length) throw new Error(`Invalid CoreSpirit execution planner options: ${inputErrors.join('; ')}`);
-  const profiles = options.backends?.length ? [...options.backends] : [...CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS];
+  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
+  const registeredProfiles = toLegacyCoreSpiritBackendProfiles(backendRegistry);
+  const requestedProfiles = options.backends?.length ? [...options.backends] : registeredProfiles;
+  // Caller-supplied profiles may tune limits, but may not manufacture adapter
+  // availability. Intersect them with the live registry before any whole-plan
+  // strategy or batch sizing decision is made.
+  const profiles: CoreSpiritComputeBackendProfile[] = requestedProfiles.map(profile => {
+    const registryBackend = backendRegistry.get(
+      profile.backend === 'wasm' ? 'wasm-simd' : profile.backend === 'gpu' ? 'webgpu' : 'cpu-optimized',
+    );
+    return {
+      ...profile,
+      available: profile.available && registryBackend?.available === true,
+      deterministic: profile.deterministic && registryBackend?.deterministic === true,
+      vectorized: profile.vectorized && registryBackend?.vectorized === true,
+      maxBatchSize: Math.max(1, Math.min(profile.maxBatchSize, registryBackend?.maxInputElements ?? 1)),
+      supportedOperations: registryBackend?.supportedOperations ?? [],
+      supportsStatefulSeries: registryBackend?.supportsStatefulSeries ?? false,
+    };
+  });
   const requireDeterministic = options.requireDeterministic ?? true;
   const allowSplitPureWork = options.allowSplitPureWork ?? true;
   const minGpuWorkUnits = Math.max(1, Math.floor(options.minGpuWorkUnits ?? 1_000_000));
@@ -229,7 +262,6 @@ export function planCoreSpiritExecution(
     barCount: options.barCount,
   });
   const nodes = nodesFrom(program);
-  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
   const backendPurpose = options.backendPurpose ?? 'live';
   const kernelCalls = program.entry.instructions.flatMap((instruction, index) => {
     if (instruction.op !== 'call') return [];
@@ -258,7 +290,7 @@ export function planCoreSpiritExecution(
   ));
   const effectNodes = nodes.filter(node => node.effectful);
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
-  const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits });
+  const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits }, backendCapabilityPlans);
   const seriesFusion = planCoreSpiritSeriesFusion(program);
   const specializedPlan = program.specializedPlan ?? buildCoreSpiritSpecializedPlan(program.entry.instructions);
   const tradingNativePlan = options.tradingNativePlan ?? program.tradingNativePlan ?? {
