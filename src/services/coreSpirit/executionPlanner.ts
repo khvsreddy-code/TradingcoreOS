@@ -19,6 +19,17 @@ import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './s
 import type { CoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
 import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
+import {
+  createCoreSpiritBackendRegistry,
+  planCoreSpiritBackend,
+} from './backendRegistry';
+import { coreSpiritKernelOperationForBuiltin, isCoreSpiritStatefulKernelOperation } from './kernelOperationMap';
+import type {
+  CoreSpiritBackendPlan,
+  CoreSpiritBackendPurpose,
+  CoreSpiritBackendRegistry,
+  CoreSpiritBackendWorkload,
+} from './backendRegistry';
 
 export type CoreSpiritComputeBackend = 'cpu' | 'wasm' | 'gpu';
 
@@ -43,6 +54,10 @@ export interface CoreSpiritExecutionPlannerOptions {
   barCount?: number;
   sandbox?: { requireComputeBackend(backend: CoreSpiritComputeBackend): void };
   tradingNativePlan?: CoreSpiritTradingNativePlan;
+  /** Runtime context for per-kernel planning; omitted means safe live/local planning. */
+  backendPurpose?: CoreSpiritBackendPurpose;
+  backendRegistry?: CoreSpiritBackendRegistry;
+  allowRemoteResearchBackend?: boolean;
 }
 
 export interface CoreSpiritWorkloadEstimate {
@@ -97,6 +112,8 @@ export interface CoreSpiritExecutionPlan {
   chronologicalPasses: 1;
   sourceReadReuse: number;
   estimatedSavedWorkUnits: number;
+  /** Per-kernel capability decisions; these are plans, not claims that an adapter ran. */
+  backendCapabilityPlans: readonly CoreSpiritBackendPlan[];
 }
 
 export const CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS: readonly CoreSpiritComputeBackendProfile[] = Object.freeze([
@@ -197,18 +214,48 @@ export function planCoreSpiritExecution(
   program: CoreSpiritIrProgram,
   options: CoreSpiritExecutionPlannerOptions = {},
 ): CoreSpiritExecutionPlan {
+  const inputErrors = validateCoreSpiritExecutionPlannerInputs(options);
+  if (inputErrors.length) throw new Error(`Invalid CoreSpirit execution planner options: ${inputErrors.join('; ')}`);
   const profiles = options.backends?.length ? [...options.backends] : [...CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS];
   const requireDeterministic = options.requireDeterministic ?? true;
   const allowSplitPureWork = options.allowSplitPureWork ?? true;
   const minGpuWorkUnits = Math.max(1, Math.floor(options.minGpuWorkUnits ?? 1_000_000));
   const minWasmWorkUnits = Math.max(1, Math.floor(options.minWasmWorkUnits ?? 10_000));
-  const maxBatchSize = Math.max(1, Math.floor(options.maxBatchSize ?? 65_536));
+  // Keep every planned batch inside the CPU kernel library's hard input bound.
+  const maxBatchSize = Math.max(1, Math.min(4_194_304, Math.floor(options.maxBatchSize ?? 65_536)));
   const workload = estimateCoreSpiritWorkload(program, {
     symbolCount: options.symbolCount,
     timeframeCount: options.timeframeCount,
     barCount: options.barCount,
   });
   const nodes = nodesFrom(program);
+  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
+  const backendPurpose = options.backendPurpose ?? 'live';
+  const kernelCalls = program.entry.instructions.flatMap((instruction, index) => {
+    if (instruction.op !== 'call') return [];
+    const operation = coreSpiritKernelOperationForBuiltin(instruction.name);
+    if (!operation) return [];
+    const matrixOperation = operation === 'matrixMultiply' || operation === 'matrixDecomposition';
+    const workloadKind: CoreSpiritBackendWorkload = matrixOperation ? 'matrix'
+      : operation === 'dotProduct' || operation === 'logSumExp' || operation === 'softmax' ? 'scalar'
+      : 'series';
+    return [{ operation, workloadKind, stateful: isCoreSpiritStatefulKernelOperation(operation), nodeId: `i:${index}` }];
+  });
+  const perKernelWork = Math.max(1, workload.workUnits / Math.max(1, kernelCalls.length));
+  // Per-dispatch size is bounded by the compiler's actual batch limit; workUnits below still reflect total workload for threshold selection.
+  const inputElements = Math.max(1, Math.min(workload.bars * workload.symbols * workload.timeframes, maxBatchSize));
+  const backendCapabilityPlans: readonly CoreSpiritBackendPlan[] = Object.freeze(kernelCalls.map(call =>
+    planCoreSpiritBackend({
+      operation: call.operation,
+      purpose: backendPurpose,
+      workload: call.workloadKind,
+      workUnits: perKernelWork,
+      inputElements,
+      stateful: call.stateful,
+      deterministic: requireDeterministic,
+      allowRemoteResearch: options.allowRemoteResearchBackend === true,
+    }, backendRegistry),
+  ));
   const effectNodes = nodes.filter(node => node.effectful);
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
   const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits });
@@ -293,6 +340,23 @@ export function planCoreSpiritExecution(
     semanticGraph: program.graphs?.semantic.checksum ?? '',
     dimensions: { symbols: workload.symbols, timeframes: workload.timeframes, bars: workload.bars },
     strategy,
+    backendPurpose,
+    requireDeterministic,
+    backendCapabilityRegistry: backendCapabilityPlans[0]?.registrySnapshot ?? backendRegistry.profiles.map(profile => ({
+      backend: profile.backend,
+      available: profile.available,
+      deterministic: profile.deterministic,
+      vectorized: profile.vectorized,
+      supportedOperations: profile.supportedOperations,
+    })),
+    backendCapabilities: backendCapabilityPlans.map(plan => ({
+      operation: plan.operation,
+      backend: plan.backend,
+      deterministic: plan.deterministic,
+      fallback: plan.fallback,
+      workUnits: plan.workUnits,
+      inputElements: plan.inputElements,
+    })),
     tradingNative: {
       multiSymbol: tradingNativePlan.multiSymbol,
       multiTimeframe: tradingNativePlan.multiTimeframe,
@@ -307,6 +371,7 @@ export function planCoreSpiritExecution(
   explanation.push(`specialized plan: ${specializedPlan.strategy}, ${specializedPlan.slotCount} slots, ${specializedPlan.seriesFanouts.length} shared-input fanout group(s)`);
   explanation.push(`trading-native plan: symbols=${tradingNativePlan.multiSymbol ? 'multi' : 'single'}, timeframes=${tradingNativePlan.multiTimeframe ? 'multi' : 'single'}, dataDeps=${tradingNativePlan.dataDependencies.length}, events=${tradingNativePlan.eventTriggers.length}`);
   explanation.push(`data graph: nodes=${tradingNativePlan.dataGraph.nodes.length}, roots=${tradingNativePlan.dataGraph.roots.length}, minimumSources=${tradingNativePlan.dataGraph.minimumTimeframes.length}`);
+  for (const capabilityPlan of backendCapabilityPlans) explanation.push(`kernel ${capabilityPlan.operation}: planned ${capabilityPlan.backend} (${capabilityPlan.reason})`);
   return {
     version: 1,
     strategy,
@@ -326,6 +391,7 @@ export function planCoreSpiritExecution(
     chronologicalPasses:1,
     sourceReadReuse: program.optimizationPlan?.cost.sourceReadReuse ?? 0,
     estimatedSavedWorkUnits: workload.estimatedSavedBarWork * workload.symbols * workload.timeframes * workload.bars,
+    backendCapabilityPlans,
   };
 }
 
