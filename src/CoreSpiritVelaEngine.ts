@@ -184,6 +184,8 @@ export class CoreSpiritVelaEngine {
     const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryGraphRevision=0;
+    let secondaryGraphDirty=false;
+    let cachedSecondaryGraphSnapshot:CoreSpiritGraphSnapshot|undefined;
     let secondaryRefreshPromise: Promise<void>|undefined;
     // Forced refreshes may overlap. Only the newest generation is allowed to
     // mutate the shared secondary-data snapshot used by live execution.
@@ -277,7 +279,7 @@ export class CoreSpiritVelaEngine {
           if (stopped || requestVersion !== secondaryRequestVersion) return;
           if(rows?.length){
             secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
-            secondaryGraphRevision+=1;
+            secondaryGraphDirty=true;
             secondaryFailed.delete(key);
           }else{
             secondaryFailed.add(key);
@@ -312,6 +314,7 @@ export class CoreSpiritVelaEngine {
         }
         secondaryLastRefreshAt=Date.now();
         secondaryDegraded=secondaryFailed.size>0;
+        if(secondaryGraphDirty){secondaryGraphRevision+=1;cachedSecondaryGraphSnapshot=undefined;secondaryGraphDirty=false;}
       }).finally(()=>{
         // An older task's finally must not clear the current task's in-flight handle.
         if (requestVersion === secondaryRequestVersion) secondaryRefreshPromise=undefined;
@@ -345,7 +348,8 @@ export class CoreSpiritVelaEngine {
 
     const makeSecondaryGraphSnapshot=():CoreSpiritGraphSnapshot|undefined=>{
       if(!secondaryDependencies.length)return undefined;
-      return {
+      if(cachedSecondaryGraphSnapshot?.revision===secondaryGraphRevision)return cachedSecondaryGraphSnapshot;
+      cachedSecondaryGraphSnapshot={
         version:1,
         revision:secondaryGraphRevision,
         nodes:secondaryDependencies.map(dep=>{
@@ -364,6 +368,7 @@ export class CoreSpiritVelaEngine {
           };
         }),
       };
+      return cachedSecondaryGraphSnapshot;
     };
 
     const executeInWorker=async(
