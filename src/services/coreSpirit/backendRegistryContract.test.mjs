@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createCoreSpiritBackendRegistry, planCoreSpiritBackend, executePlannedExternalCoreSpiritBackend } from './backendRegistry.ts';
+import { createCoreSpiritBackendRegistry, planCoreSpiritBackend, executePlannedExternalCoreSpiritBackend, toLegacyCoreSpiritBackendProfiles } from './backendRegistry.ts';
 
 const defaults = createCoreSpiritBackendRegistry();
 assert.equal(defaults.get('js-scalar')?.available, true);
@@ -37,6 +37,12 @@ const accelerated = createCoreSpiritBackendRegistry({
 });
 assert.equal(accelerated.get('wasm-simd')?.available, true);
 assert.equal(accelerated.get('webgpu')?.available, true);
+const legacyProfiles = toLegacyCoreSpiritBackendProfiles(accelerated);
+assert.deepEqual(
+  [...(legacyProfiles.find(profile => profile.backend === 'wasm')?.supportedOperations ?? [])].sort(),
+  ['matrixMultiply', 'rollingMean'],
+  'legacy dispatcher bridge must preserve exact per-kernel capabilities',
+);
 const medium = planCoreSpiritBackend({
   operation: 'rollingMean', purpose: 'historical', workload: 'series',
   workUnits: 30_000, inputElements: 20_000,

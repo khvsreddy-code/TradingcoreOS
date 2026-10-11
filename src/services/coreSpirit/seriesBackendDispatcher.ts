@@ -1,5 +1,6 @@
 import type { CoreSpiritSeriesFusionGroup, CoreSpiritFusedSeriesInput } from './seriesFusion';
 import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion';
+import { coreSpiritKernelOperationForBuiltin } from './kernelOperationMap';
 
 export type CoreSpiritSeriesBackend = 'cpu' | 'wasm' | 'gpu';
 export type CoreSpiritSeriesBackendProfile = Readonly<{
@@ -7,6 +8,10 @@ export type CoreSpiritSeriesBackendProfile = Readonly<{
   available: boolean;
   deterministic: boolean;
   vectorized: boolean;
+  /** Canonical numerical-kernel operation names this exact adapter can execute. */
+  supportedOperations?: readonly string[];
+  /** Stateful recurrent execution is opt-in and bounded even for WASM. */
+  supportsStatefulSeries?: boolean;
 }>;
 export type CoreSpiritSeriesDispatchContext = Readonly<{
   realtime: boolean;
@@ -19,6 +24,8 @@ export type CoreSpiritSeriesDispatchContext = Readonly<{
   backends?: readonly CoreSpiritSeriesBackendProfile[];
   /** Optional telemetry hook when an accelerator is rejected or fails. */
   onBackendFallback?: (backend: 'wasm' | 'gpu', error?: unknown) => void;
+  allowStatefulWasm?: boolean;
+  maxStatefulWasmBars?: number;
 }>;
 export type CoreSpiritSeriesBackendExecutor = (
   group: CoreSpiritSeriesFusionGroup,
@@ -39,6 +46,19 @@ function hasRecurrence(g: CoreSpiritSeriesFusionGroup): boolean {
   return g.operations.some((x) => ['ema', 'rma', 'change', 'pctchange', 'persistence', 'rsi', 'atr', 'vwap'].includes(x.name));
 }
 
+function supportsGroup(profile: CoreSpiritSeriesBackendProfile | undefined, group: CoreSpiritSeriesFusionGroup): boolean {
+  if (!profile?.available || !profile.vectorized) return false;
+  // CPU is the semantic reference; accelerators must explicitly advertise every
+  // canonical operation in a fused group. Missing capability lists fail closed.
+  if (profile.backend === 'cpu') return true;
+  const supported = profile.supportedOperations;
+  if (!supported?.length) return false;
+  return group.operations.every(operation => {
+    const canonical = coreSpiritKernelOperationForBuiltin(operation.name);
+    return canonical !== undefined && supported.includes(canonical);
+  });
+}
+
 export function selectCoreSpiritSeriesBackend(
   group: CoreSpiritSeriesFusionGroup,
   context: CoreSpiritSeriesDispatchContext,
@@ -48,11 +68,13 @@ export function selectCoreSpiritSeriesBackend(
   if (context.realtime) return { requested: 'cpu', workUnits: units, reason: 'realtime work stays on fused CPU' };
   const deterministic = context.deterministic !== false;
   const gpu = profiles.find((x) => x.backend === 'gpu');
-  if (gpu?.available && gpu.vectorized && (group.eligibleBackends?.includes('gpu') ?? true) && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
+  if (supportsGroup(gpu, group) && (group.eligibleBackends?.includes('gpu') ?? true) && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
     return { requested: 'gpu', workUnits: units, reason: 'large stateless historical workload' };
   }
   const wasm = profiles.find((x) => x.backend === 'wasm');
-  if (wasm?.available && wasm.vectorized && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 10_000))) {
+  const recurrence = hasRecurrence(group);
+  const statefulWasmEligible = !recurrence || (context.allowStatefulWasm === true && wasm?.supportsStatefulSeries === true && context.bars <= Math.max(1, Math.floor(context.maxStatefulWasmBars ?? 16_384)));
+  if (supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 10_000))) {
     return { requested: 'wasm', workUnits: units, reason: 'long historical workload' };
   }
   return { requested: 'cpu', workUnits: units, reason: hasRecurrence(group) ? 'chronological recurrence stays on fused CPU' : 'CPU threshold/availability fallback' };

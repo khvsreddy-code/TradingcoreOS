@@ -59,6 +59,8 @@ export type CoreSpiritWasmBackendHandle = Readonly<{
   profile: () => { backend: 'wasm'; available: boolean; deterministic: boolean; vectorized: boolean } | undefined;
   hasKernel: (name: string) => boolean;
   kernelVariant: (name: string) => 'scalar' | 'simd' | undefined;
+  /** Defaults false; only validated bounded recurrence kernels may opt in. */
+  supportsStatefulSeries?: boolean;
 }>;
 
 export type CoreSpiritBackendRegistryOptions = Readonly<{
@@ -74,49 +76,6 @@ export type CoreSpiritBackendRegistry = Readonly<{
   get: (backend: CoreSpiritBackendKind) => CoreSpiritBackendProfile | undefined;
   getAdapter: (backend: CoreSpiritBackendKind) => CoreSpiritExternalBackendAdapter | CoreSpiritWasmBackendHandle | undefined;
 }>;
-
-/** Canonical IR/builtin lowering map; only these explicitly supported ops may offload. */
-const BUILTIN_KERNEL_MAP: Readonly<Record<string, CoreSpiritNumericalKernelOperation>> = Object.freeze({
-  sma: 'rollingMean',
-  mean: 'rollingMean',
-  rollingMean: 'rollingMean',
-  variance: 'rollingVariance',
-  rollingVariance: 'rollingVariance',
-  stdev: 'rollingStd',
-  stddev: 'rollingStd',
-  standardDeviation: 'rollingStd',
-  rollingStd: 'rollingStd',
-  highest: 'rollingMax',
-  rollingMax: 'rollingMax',
-  lowest: 'rollingMin',
-  rollingMin: 'rollingMin',
-  ema: 'ema',
-  rma: 'rma',
-  wma: 'wma',
-  atr: 'atr',
-  rsi: 'rsi',
-  linearRegression: 'linearRegression',
-  linreg: 'linearRegression',
-  correlation: 'correlation',
-  covariance: 'covariance',
-  zscore: 'zScore',
-  zScore: 'zScore',
-  dot: 'dotProduct',
-  dotProduct: 'dotProduct',
-  matmul: 'matrixMultiply',
-  matrixMultiply: 'matrixMultiply',
-  matrixDecomposition: 'matrixDecomposition',
-  softmax: 'softmax',
-  logSumExp: 'logSumExp',
-});
-
-export function coreSpiritKernelOperationForBuiltin(name: string): CoreSpiritNumericalKernelOperation | undefined {
-  return BUILTIN_KERNEL_MAP[name];
-}
-
-export function isCoreSpiritStatefulKernelOperation(operation: string): boolean {
-  return ['ema', 'rma', 'atr', 'rsi'].includes(operation);
-}
 
 const ALL_NUMERICAL_OPERATIONS: readonly string[] = CORE_SPIRIT_NUMERICAL_KERNEL_OPERATIONS;
 const DEFAULT_MAX_ELEMENTS = 4_194_304;
@@ -181,9 +140,9 @@ export function createCoreSpiritBackendRegistry(options: CoreSpiritBackendRegist
     deterministic: wasmProfile?.deterministic ?? true,
     vectorized: wasmOperations.length > 0,
     realtimeSafe: false,
-    // Deliberately false by default: only a future validated manifest+planner
-    // policy may opt bounded recurrent kernels into SIMD.
-    supportsStatefulSeries: false,
+    // Deliberately false unless the adapter explicitly advertises validated,
+    // bounded recurrence support.
+    supportsStatefulSeries: options.wasm?.supportsStatefulSeries === true,
     maxInputElements: wasmOperations.length ? DEFAULT_MAX_ELEMENTS : 0,
     supportedOperations: Object.freeze(wasmOperations),
     reason: wasmOperations.length ? 'loaded WASM module exports registered SIMD kernels' : 'no loaded WASM SIMD kernels are registered',
@@ -326,6 +285,13 @@ export async function executePlannedExternalCoreSpiritBackend(
   if (plan.operation !== request.operation || plan.backend === 'js-scalar' || plan.backend === 'cpu-optimized') {
     throw new Error('execution plan does not target a registered external backend for this operation');
   }
+  if (plan.backend === 'wasm-simd') {
+    throw new Error('WASM SIMD plans must be dispatched through the registered WASM kernel runner, not a generic external adapter');
+  }
+  const currentPlan = planCoreSpiritBackend(request, registry);
+  if (currentPlan.backend !== plan.backend) {
+    throw new Error(`stale backend plan: expected '${currentPlan.backend}', received '${plan.backend}'`);
+  }
   if (request.purpose === 'live') throw new Error('external compute backends are not permitted on the live chart path');
   if (plan.backend === 'remote-research' &&
       (request.purpose !== 'research-training' || request.allowRemoteResearch !== true || request.workload !== 'model-training')) {
@@ -359,8 +325,8 @@ export function toLegacyCoreSpiritBackendProfiles(registry: CoreSpiritBackendReg
   const wasm = registry.get('wasm-simd');
   const gpu = registry.get('webgpu');
   return [
-    { backend: 'cpu' as const, available: cpu?.available === true, deterministic: cpu?.deterministic === true, vectorized: cpu?.vectorized === true, maxBatchSize: cpu?.maxInputElements ?? 1, sharedMemoryBytes: 0 },
-    { backend: 'wasm' as const, available: wasm?.available === true, deterministic: wasm?.deterministic === true, vectorized: wasm?.vectorized === true, maxBatchSize: wasm?.maxInputElements ?? 1, sharedMemoryBytes: 64 * 1024 * 1024 },
-    { backend: 'gpu' as const, available: gpu?.available === true, deterministic: gpu?.deterministic === true, vectorized: gpu?.vectorized === true, maxBatchSize: gpu?.maxInputElements ?? 1, sharedMemoryBytes: 512 * 1024 * 1024 },
+    { backend: 'cpu' as const, available: cpu?.available === true, deterministic: cpu?.deterministic === true, vectorized: cpu?.vectorized === true, supportedOperations: cpu?.supportedOperations ?? [], maxBatchSize: cpu?.maxInputElements ?? 1, sharedMemoryBytes: 0 },
+    { backend: 'wasm' as const, available: wasm?.available === true, deterministic: wasm?.deterministic === true, vectorized: wasm?.vectorized === true, supportedOperations: wasm?.supportedOperations ?? [], supportsStatefulSeries: wasm?.supportsStatefulSeries === true, maxBatchSize: wasm?.maxInputElements ?? 1, sharedMemoryBytes: 64 * 1024 * 1024 },
+    { backend: 'gpu' as const, available: gpu?.available === true, deterministic: gpu?.deterministic === true, vectorized: gpu?.vectorized === true, supportedOperations: gpu?.supportedOperations ?? [], maxBatchSize: gpu?.maxInputElements ?? 1, sharedMemoryBytes: 512 * 1024 * 1024 },
   ];
 }

@@ -18,21 +18,52 @@ const deterministic = selectCoreSpiritSeriesBackend(group, {
   realtime: false, bars: 2_000_000, deterministic: true,
   backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: false, vectorized: true },
-    { backend: 'gpu', available: true, deterministic: false, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: false, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
+    { backend: 'gpu', available: true, deterministic: false, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
   ],
 });
 assert.equal(deterministic.requested, 'cpu', 'a nondeterministic WASM kernel must not pass deterministic mode');
+
+const partialWasm = selectCoreSpiritSeriesBackend(group, {
+  realtime: false, bars: 20_000,
+  backends: [
+    { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean'] },
+    { backend: 'gpu', available: false, deterministic: false, vectorized: true },
+  ],
+});
+assert.equal(partialWasm.requested, 'cpu', 'WASM must advertise both rollingMean and rollingMax before accepting the fused group');
 
 const ineligible = { ...group, eligibleBackends: ['cpu'] };
 assert.equal(selectCoreSpiritSeriesBackend(ineligible, {
   realtime: false, bars: 100_000,
   backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
-    { backend: 'gpu', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
+    { backend: 'gpu', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
   ],
 }).requested, 'cpu', 'group backend eligibility must be respected');
+
+const recurrenceGroup = {
+  ...group,
+  operations: [{ name: 'ema', length: 20 }, { name: 'sma', length: 20 }],
+};
+const recurrenceProfiles = [
+  { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+  { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['ema', 'rollingMean'], supportsStatefulSeries: true },
+  { backend: 'gpu', available: true, deterministic: true, vectorized: true, supportedOperations: ['ema', 'rollingMean'] },
+];
+assert.equal(selectCoreSpiritSeriesBackend(recurrenceGroup, {
+  realtime: false, bars: 500, minWasmWorkUnits: 1_000, backends: recurrenceProfiles,
+}).requested, 'cpu', 'historical recurrence stays on CPU unless bounded SIMD is explicitly enabled');
+assert.equal(selectCoreSpiritSeriesBackend(recurrenceGroup, {
+  realtime: false, bars: 500, minWasmWorkUnits: 1_000,
+  allowStatefulWasm: true, maxStatefulWasmBars: 1_000, backends: recurrenceProfiles,
+}).requested, 'wasm', 'explicitly validated stateful SIMD may run only within the configured bound');
+assert.equal(selectCoreSpiritSeriesBackend(recurrenceGroup, {
+  realtime: false, bars: 1_500, minWasmWorkUnits: 1_000,
+  allowStatefulWasm: true, maxStatefulWasmBars: 1_000, backends: recurrenceProfiles,
+}).requested, 'cpu', 'stateful SIMD must fall back when input exceeds the configured bound');
 
 let called = false;
 const output = new Float64Array(2);

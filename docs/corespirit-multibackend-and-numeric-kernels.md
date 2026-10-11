@@ -23,6 +23,10 @@ The library uses typed arrays, one-pass rolling accumulators for linear-time ker
 - **Very large stateless workloads:** WebGPU may be planned only with a real adapter. Since GPU results may vary by implementation, deterministic mode rejects a non-deterministic profile.
 - **Training:** remains a research-job responsibility, never chart inference. Remote research execution is disabled unless both a real adapter is registered and the caller explicitly opts in. Model inference stays pinned to a model artifact hash and is not a training entry point.
 
+## Live-bundle boundary
+
+The series dispatcher imports only the tiny `kernelOperationMap.ts` ABI map. It does not import the numerical implementation or backend registry into the chart hot path just to check operation support. The fuller kernel library and capability planner stay on the compiler/research planning path, and the existing series-fusion implementation remains the runtime correctness reference until operation-by-operation parity is approved.
+
 ## Current implementation boundary
 
 CPU kernels and capability planning are implemented. The WASM loader already accepts host-provided compiled modules, but this change does not add/ship a production SIMD binary. No WebGPU compute adapter or remote research executor is shipped; their registry slots therefore stay unavailable by default. The planner must not be read as claiming GPU acceleration is deployed. A future WebGPU/remote adapter must pass correctness parity, memory/size limits, timeout/cancellation, deterministic-mode and profiling tests before being enabled.

@@ -20,11 +20,10 @@ import type { CoreSpiritSpecializedPlan } from './specializedPlan';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
 import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 import {
-  coreSpiritKernelOperationForBuiltin,
   createCoreSpiritBackendRegistry,
-  isCoreSpiritStatefulKernelOperation,
   planCoreSpiritBackend,
 } from './backendRegistry';
+import { coreSpiritKernelOperationForBuiltin, isCoreSpiritStatefulKernelOperation } from './kernelOperationMap';
 import type {
   CoreSpiritBackendPlan,
   CoreSpiritBackendPurpose,
