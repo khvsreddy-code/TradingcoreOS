@@ -272,6 +272,9 @@ export class InMemoryModelArtifactStore<TWeights = unknown> implements ModelArti
   private readonly nameToHash = new Map<string, string>();
 
   async put(artifact: ModelArtifact<TWeights>): Promise<void> {
+    if(!(await verifyModelArtifactIntegrity(artifact))){
+      throw new Error('Refusing to store an invalid CoreSpirit model artifact');
+    }
     const existing = this.byHash.get(artifact.hash);
     if (existing) {
       if (canonical(modelArtifactHashPayload(existing)) !== canonical(modelArtifactHashPayload(artifact))) {
