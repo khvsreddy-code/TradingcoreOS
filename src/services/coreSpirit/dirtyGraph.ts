@@ -52,16 +52,27 @@ function inferLookback(node: CoreSpiritDirtyNode, instructionName: string | unde
 
 export function buildCoreSpiritDirtyGraph(graph: CoreSpiritSemanticGraph, reactive: CoreSpiritReactivePlan, instructions: readonly CoreSpiritIrInstruction[] = []): readonly CoreSpiritDirtyNode[] {
   const dependents = reactive.dependents;
+  const constants = new Map<string, number>();
+  for (const instruction of instructions) {
+    if (instruction.op === 'const' && typeof instruction.value === 'number' && Number.isFinite(instruction.value)) constants.set(instruction.dest, instruction.value);
+  }
   const output = graph.nodes.map((node) => {
     const name = node.name;
     const viewportDependent = Boolean(name && /visible_(bar|range|time)|chart\.left|chart\.right/.test(name));
     const realtimeSafe = node.deterministic && !node.effectful && !viewportDependent;
     const incremental = realtimeSafe || (node.stateful && node.deterministic);
-    const constants = new Map<string, number>();
-    for (const instruction of instructions) if (instruction.op === 'const' && typeof instruction.value === 'number' && Number.isFinite(instruction.value)) constants.set(instruction.dest, instruction.value);
     const instruction = instructions[node.instruction];
-    const constantValue = instruction?.op === 'call' ? Number(constants.get(instruction.args[1] || '')) : instruction?.op === 'index' ? Number(constants.get(instruction.index)) : instruction?.op === 'loadSeries' ? instruction.offset : undefined;
-    const lookback = inferLookback({id:node.id,instruction:node.instruction,inputs:node.sourceInputs,output:node.dest,lookback:0,stateful:node.stateful,incremental,viewportDependent,realtimeSafe,dependents:dependents[node.id]||[],dependencies:node.dependencies,alwaysRecompute:reactive.alwaysRecompute.includes(node.id)}, name, Number.isFinite(constantValue) ? constantValue : undefined);
+    const callName = instruction?.op === 'call' ? instruction.name : name;
+    const normalizedName = normalizedCallName(callName);
+    const lengthArgIndex = normalizedName === 'beta' ? 2 : 1;
+    const constantValue = instruction?.op === 'call'
+      ? Number(constants.get(instruction.args[lengthArgIndex] || ''))
+      : instruction?.op === 'index'
+        ? Number(constants.get(instruction.index))
+        : instruction?.op === 'loadSeries'
+          ? instruction.offset
+          : undefined;
+    const lookback = inferLookback({id:node.id,instruction:node.instruction,inputs:node.sourceInputs,output:node.dest,lookback:0,stateful:node.stateful,incremental,viewportDependent,realtimeSafe,dependents:dependents[node.id]||[],dependencies:node.dependencies,alwaysRecompute:reactive.alwaysRecompute.includes(node.id)}, callName, Number.isFinite(constantValue) ? constantValue : undefined);
     return Object.freeze({ id:node.id, instruction:node.instruction, inputs:Object.freeze([...(node.sourceInputs||[])]), output:node.dest, lookback, stateful:node.stateful, incremental, viewportDependent, realtimeSafe, dependents:Object.freeze([...(dependents[node.id]||[])]), dependencies:Object.freeze([...node.dependencies]), alwaysRecompute:reactive.alwaysRecompute.includes(node.id) });
   });
   return Object.freeze(output);
