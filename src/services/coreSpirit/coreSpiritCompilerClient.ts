@@ -130,7 +130,11 @@ export async function compileCoreSpiritSourceOffThread(
 ):Promise<CoreSpiritOffThreadCompileResult>{
   const worker=getCompilerWorker();
   if(!worker){
+    // Never run an expensive compiler pass on the browser main thread: the
+    // trading terminal, live quotes and chart interactions must remain responsive.
+    if(typeof window!=='undefined')throw new Error('CoreSpirit interactive compilation requires Web Worker support; inline browser-thread compilation is disabled.');
     if(typeof Worker!=='undefined')throw new Error(`CoreSpirit compiler worker could not start: ${compilerWorkerBootError?.message || 'worker unavailable'}`);
+    // Node/SSR compatibility only. Browser callers fail closed above.
     const {compileCoreSpirit}=await import('./coreSpiritPipeline');
     const compiled=compileCoreSpirit(source,sourceId,{layer:options.layer as any});
     if(compiled.artifact && !validateExecutableArtifact(compiled.artifact)){
@@ -182,7 +186,10 @@ export async function validateCoreSpiritExecutableArtifactOffThread(
 ):Promise<boolean>{
   if(!artifact||!artifact.abi?.artifactHash||!artifact.ir)return false;
   const worker=getCompilerWorker();
-  if(!worker)return typeof Worker==='undefined'?validateExecutableArtifact(artifact):false;
+  if(!worker){
+    if(typeof window!=='undefined')return false;
+    return typeof Worker==='undefined'?validateExecutableArtifact(artifact):false;
+  }
   const requestId=`cs-validate-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
   return new Promise((resolve,reject)=>{
     const timeout=setTimeout(()=>{
