@@ -97,4 +97,8 @@ assert.match(runtime,/const asOfTimestamp=this\.toEpoch\(bar\.timestamp\)/,'requ
 const causalitySource=read('src/services/coreSpirit/causalityAnalysis.ts');
 assert.match(causalitySource,/CAUSALITY_UNQUALIFIED_REQUEST/,'implicit request alignment must be visible to compiler diagnostics');
 assert.match(causalitySource,/CAUSALITY_DEVELOPING_REQUEST/,'developing request alignment must be visible to compiler diagnostics');
+assert.match(route,/allowEmptySource:analysisOnly/,'read-only analysis may return findings without generated replacement code');
+assert.match(route,/ANALYSIS_ONLY_MODES/,'analysis-only tasks must remain isolated from generated source and run permissions');
+assert.match(runtime,/const timeframe=String\(r\.timeframe \?\? this\.executionContext\.timeframe\)/,'market references must retain an explicit selected timeframe');
+
 console.log('CORESPIRIT_COPILOT_COMPILE_BEFORE_RUN_OK');
