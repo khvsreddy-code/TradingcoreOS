@@ -136,8 +136,10 @@ function nodesFrom(program: CoreSpiritIrProgram): CoreSpiritGraphNode[] {
     dest: 'dest' in instruction ? instruction.dest : undefined,
     dependencies: [],
     sourceInputs: [],
-    pure: ['const','loadSeries','move','unary','binary','index'].includes(instruction.op),
-    effectful: !['const','loadSeries','move','unary','binary','index'].includes(instruction.op),
+    pure: ['const','loadSeries','move','unary','binary','index'].includes(instruction.op) ||
+      (instruction.op === 'call' && coreSpiritKernelOperationForBuiltin(instruction.name) !== undefined),
+    effectful: !(['const','loadSeries','move','unary','binary','index'].includes(instruction.op) ||
+      (instruction.op === 'call' && coreSpiritKernelOperationForBuiltin(instruction.name) !== undefined)),
   } as unknown as CoreSpiritGraphNode));
 }
 
@@ -290,7 +292,18 @@ export function planCoreSpiritExecution(
   ));
   const effectNodes = nodes.filter(node => node.effectful);
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
-  const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits }, backendCapabilityPlans);
+  const kernelNodeIds = new Set(kernelCalls.map(call => call.nodeId));
+  const offloadableNodes = pureNodes.filter(node => kernelNodeIds.has(`i:${node.instruction}`));
+  let backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits }, backendCapabilityPlans);
+  // This registry describes numerical-kernel executors, not a general Core IR
+  // machine. Keep unsupported IR instructions on CPU and make the split explicit.
+  if (backend.backend !== 'cpu' && offloadableNodes.length === 0) {
+    backend = profiles.find(profile => profile.backend === 'cpu')!;
+  }
+  const cpuNodes = nodes.filter(node => !offloadableNodes.includes(node));
+  if (backend.backend !== 'cpu' && cpuNodes.length > 0 && !allowSplitPureWork) {
+    backend = profiles.find(profile => profile.backend === 'cpu')!;
+  }
   const seriesFusion = planCoreSpiritSeriesFusion(program);
   const specializedPlan = program.specializedPlan ?? buildCoreSpiritSpecializedPlan(program.entry.instructions);
   const tradingNativePlan = options.tradingNativePlan ?? program.tradingNativePlan ?? {
@@ -323,33 +336,33 @@ export function planCoreSpiritExecution(
       reason: effectNodes.length ? 'effectful/stateful operations require the ordered CPU runtime' : 'GPU/WASM thresholds or availability did not qualify an alternate backend',
     });
     explanation.push('CPU is the deterministic baseline and remains the semantic fallback.');
-  } else if (effectNodes.length && allowSplitPureWork) {
+  } else if (backend.backend !== 'cpu' && cpuNodes.length > 0) {
     strategy = 'hybrid-pure-offload';
     assignments.push({
       backend: backend.backend,
-      nodeIds: pureNodes.map(node => node.id),
-      workUnits: workload.workUnits,
+      nodeIds: offloadableNodes.map(node => node.id),
+      workUnits: Math.max(1, backendCapabilityPlans.reduce((sum, plan) => sum + plan.workUnits, 0)),
       deterministic: backend.deterministic,
-      reason: `${backend.backend.toUpperCase()} receives only pure numerical nodes; effect/state nodes remain in the CPU runtime`,
+      reason: \`registered \${backend.backend.toUpperCase()} kernels receive only explicitly mapped numerical builtin nodes\`,
     });
     assignments.push({
       backend: 'cpu',
-      nodeIds: effectNodes.map(node => node.id),
+      nodeIds: cpuNodes.map(node => node.id),
       workUnits: 0,
       deterministic: true,
-      reason: 'side effects, state transitions and output emission stay ordered on CPU',
+      reason: 'non-kernel IR, effects and unsupported operations remain ordered on CPU',
     });
-    explanation.push(`hybrid plan selected: ${backend.backend} may accelerate pure work while CPU retains ${effectNodes.length} effect/state nodes.`);
+    explanation.push(\`hybrid plan selected: \${backend.backend} may execute \${offloadableNodes.length} registered numerical kernel node(s); CPU retains \${cpuNodes.length} other node(s).\`);
   } else {
     strategy = backend.backend === 'gpu' ? 'gpu-vectorized' : 'wasm-portable';
     assignments.push({
       backend: backend.backend,
-      nodeIds: pureNodes.map(node => node.id),
-      workUnits: workload.workUnits,
+      nodeIds: offloadableNodes.map(node => node.id),
+      workUnits: Math.max(1, backendCapabilityPlans.reduce((sum, plan) => sum + plan.workUnits, 0)),
       deterministic: backend.deterministic,
-      reason: `${backend.backend.toUpperCase()} profile is available and eligible for the pure numerical workload`,
+      reason: \`\${backend.backend.toUpperCase()} is registered for the exact numerical kernel operation(s) in this plan\`,
     });
-    explanation.push(`${backend.backend.toUpperCase()} is selected for pure vectorizable work.`);
+    explanation.push(\`\${backend.backend.toUpperCase()} is selected for registered numerical kernels only.\`);
   }
 
   const computeAssignment = assignments.find(a => a.backend !== 'cpu');
