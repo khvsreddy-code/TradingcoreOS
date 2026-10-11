@@ -30,6 +30,10 @@ if(!/!readOnly&&datasetVersion>context\.datasetVersion/.test(pool))throw new Err
 if(!/message\.readOnly\s*\|\|/.test(worker))throw new Error('Execution worker must enforce read-only requests as full replays even if an envelope requests incremental mode');
 if(!/runCoreSpiritArtifactInWorker/.test(velaEngine)||/runtime\.executeIr|runtime\.executeBar|createRuntime\(/.test(velaEngine))throw new Error('Vela scripting sessions must evaluate prepared CoreSpirit artifacts through persistent workers, not the terminal thread');
 if(!/cloneGraphSnapshot/.test(pool)||!/graphSnapshotForTransfer/.test(pool))throw new Error('Worker graph transfer must clone transferables so cached secondary-market arrays are not detached');
+if(!/queued\.contextKey!==contextKey/.test(pool)||!/queued\.reject\(new Error\('CoreSpirit worker request superseded/.test(pool))throw new Error('The worker pool must coalesce queued snapshots per context instead of building an unbounded tick backlog');
+if(pool.includes('queueCursor'))throw new Error('Worker scheduling must not retain a fragile cursor into a queue that is resorted');
+if(!/if\(slot\?\.busy\)continue/.test(pool))throw new Error('A busy chart must not head-of-line block runnable jobs for other contexts');
+
 if(!/readCoreSpiritSharedMarketDescriptor/.test(worker)||!/sharedSeries/.test(worker))throw new Error('Worker must read shared market input and emit shared numeric series output');
 if(!/marketFrame:CoreSpiritMarketFrame/.test(worker)||!/coreSpiritMarketFrameFromColumns/.test(worker)||!/coreSpiritMarketFrameArrayFacade/.test(worker))throw new Error('Worker market inputs must stay columnar with an on-demand compatibility facade');
 if(/function ensureBarArray/.test(worker)||/bar\.timestamp=new Date/.test(worker))throw new Error('Worker must not maintain/rewrite one object for every shared row');
