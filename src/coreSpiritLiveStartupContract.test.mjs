@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { CoreSpiritVelaEngine } from './CoreSpiritVelaEngine.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 
+async function waitFor(predicate:()=>boolean,label:string):Promise<void>{
+  const deadline=Date.now()+5_000;
+  while(!predicate()){
+    if(Date.now()>deadline)throw new Error(`Timed out waiting for ${label}`);
+    await new Promise(resolve=>setTimeout(resolve,0));
+  }
+}
+
 function makeBars(count: number) {
   return Array.from({ length: count }, (_, index) => {
     const close = 100 + index;
@@ -63,6 +71,7 @@ try {
     },
   );
 
+  await waitFor(()=>executeIrCalls===1&&executeBarCalls===1&&modelCount>=1,'worker-backed live startup');
   assert.equal(executeIrCalls, 1, 'live startup must execute historical state exactly once');
   assert.equal(executeBarCalls, 1, 'live startup must evaluate the forming bar exactly once');
   assert.ok(modelCount >= 1);
@@ -84,10 +93,12 @@ try {
     high: 122,
   };
   session.notifyBars(undefined);
+  await waitFor(()=>executeBarCalls>=2,'forming-bar worker update');
   assert.equal(executeIrCalls, 1, 'intrabar updates must not rebuild historical runtime state');
   assert.equal(executeBarCalls, 2, 'intrabar update should advance only the forming-bar execution');
 
   session.update({ length: 4 }, { precision: 4 });
+  await waitFor(()=>executeIrCalls>=2&&executeBarCalls>=3&&modelCount>=beforeDisplayUpdateModels+2,'semantic input worker update');
   assert.equal(executeIrCalls, 2, 'semantic input changes must rebuild the history-dependent runtime once');
   assert.equal(executeBarCalls, 3, 'semantic input changes must reevaluate the latest forming bar once');
   assert.equal(latestModel.precision, 4, 'semantic input changes must preserve display settings');
@@ -126,6 +137,7 @@ assert.equal(executeIrCalls, 0);
 assert.equal(executeBarCalls, 0);
 
 deferred.notifyBars('complete');
+await waitFor(()=>executeIrCalls===1&&executeBarCalls===1,'backfill completion worker startup');
 assert.equal(executeIrCalls, 1, 'history must execute once when the initial backfill completes');
 assert.equal(executeBarCalls, 1, 'the forming bar must execute once after history initialization');
 deferred.stop();
