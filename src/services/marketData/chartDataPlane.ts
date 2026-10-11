@@ -308,6 +308,10 @@ export class ChartDataPlane {
     this.state.latestTick = tick;
     const price = Number(tick.ltp);
     if (!Number.isFinite(price)) return;
+    const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    // The global transport is instrument-only; this per-plane counter joins the
+    // packet to the timeframe-specific history, compute, and Vela update metrics.
+    chartPerformanceTelemetry.recordPacket(this.key);
 
     // Preserve the columnar render path after live updates. The previous implementation
     // reconciled against the entire compatibility candle array and then replaced the
@@ -315,7 +319,9 @@ export class ChartDataPlane {
     // also delay first paint when history was temporarily empty.
     if (this.state.columns && this.state.candles.length === 0) {
       const result = this.onColumnarTick(tick, price);
+      chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
       if (!result.latest || !result.changed) return;
+      if (!result.bucketChanged) chartPerformanceTelemetry.recordFormingBarReplaceLast(this.key);
 
       this.state.revision += 1;
       this.state.compatibilityRevision = this.state.revision;
@@ -343,6 +349,7 @@ export class ChartDataPlane {
       MAX_HISTORY_CANDLES,
       true,
     );
+    chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
     if (!result.candles.length) return;
     const previousLength = this.state.candles.length;
     const previousClose = this.state.candles[previousLength - 1]?.close;
@@ -367,6 +374,7 @@ export class ChartDataPlane {
       historyStore.upsertLatest(this.brokerId, this.instrumentKey, CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, result.candles[result.candles.length - 1]);
     }
     if (result.bucketChanged || Number(previousClose) !== Number(result.candles[result.candles.length - 1]?.close)) {
+      if (!result.bucketChanged) chartPerformanceTelemetry.recordFormingBarReplaceLast(this.key);
       this.emit({ type: 'tick', bucketChanged: result.bucketChanged, snapshot: this.snapshot() });
     }
   };
