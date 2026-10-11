@@ -59,4 +59,45 @@ assert.deepEqual(loopOptimized.entry.instructions, loopProgram.entry.instruction
 assert.equal(loopOptimized.optimizationPlan.cost.deadPureInstructionsRemoved, 0);
 assert.ok(loopOptimized.optimizationPlan.explanation.some(line => line.includes('backward control-flow edge')));
 
+const branchProgram = {
+  ...program,
+  sourceId: 'optimizer-branch-cse-safety',
+  entry: {
+    instructions: [
+      { op: 'const', dest: 'branchInput', value: 2 },
+      { op: 'const', dest: 'branchCondition', value: true },
+      { op: 'call', dest: 'beforeBranch', name: 'customPure', args: ['branchInput'], componentPure: true, componentStateful: false, componentDeterministic: true },
+      { op: 'jumpIfFalse', condition: 'branchCondition', target: 6 },
+      { op: 'call', dest: 'fallthroughValue', name: 'customPure', args: ['branchInput'], componentPure: true, componentStateful: false, componentDeterministic: true },
+      { op: 'jump', target: 7 },
+      { op: 'call', dest: 'branchTargetValue', name: 'customPure', args: ['branchInput'], componentPure: true, componentStateful: false, componentDeterministic: true },
+      { op: 'emit', kind: 'plot', args: ['beforeBranch'], outputId: 'branch:before' },
+      { op: 'emit', kind: 'plot', args: ['fallthroughValue'], outputId: 'branch:fallthrough' },
+      { op: 'emit', kind: 'plot', args: ['branchTargetValue'], outputId: 'branch:target' },
+    ],
+  },
+  sourceMap: { version: 1, sourceId: 'optimizer-branch-cse-safety', entries: [] },
+};
+const branchOptimized = optimizeCoreSpiritIr(branchProgram);
+assert.equal(branchOptimized.entry.instructions.filter(instruction => instruction.op === 'call' && instruction.name === 'customPure').length, 3, 'CSE must not reuse values across control-flow blocks');
+
+const seriesArgsProgram = {
+  ...program,
+  sourceId: 'optimizer-series-args-cse-safety',
+  entry: {
+    instructions: [
+      { op: 'const', dest: 'seriesInput', value: 2 },
+      { op: 'call', dest: 'closeFeatureA', name: 'featurePure', args: ['seriesInput'], seriesArgs: ['close'], componentPure: true, componentStateful: false, componentDeterministic: true },
+      { op: 'call', dest: 'highFeature', name: 'featurePure', args: ['seriesInput'], seriesArgs: ['high'], componentPure: true, componentStateful: false, componentDeterministic: true },
+      { op: 'call', dest: 'closeFeatureB', name: 'featurePure', args: ['seriesInput'], seriesArgs: ['close'], componentPure: true, componentStateful: false, componentDeterministic: true },
+      { op: 'emit', kind: 'plot', args: ['closeFeatureA'], outputId: 'series:close-a' },
+      { op: 'emit', kind: 'plot', args: ['highFeature'], outputId: 'series:high' },
+      { op: 'emit', kind: 'plot', args: ['closeFeatureB'], outputId: 'series:close-b' },
+    ],
+  },
+  sourceMap: { version: 1, sourceId: 'optimizer-series-args-cse-safety', entries: [] },
+};
+const seriesArgsOptimized = optimizeCoreSpiritIr(seriesArgsProgram);
+assert.equal(seriesArgsOptimized.entry.instructions.filter(instruction => instruction.op === 'call' && instruction.name === 'featurePure').length, 2, 'distinct series operands must not alias, while equivalent pure calls may be reused');
+assert.equal(seriesArgsOptimized.entry.instructions.filter(instruction => instruction.op === 'move').length, 1);
 console.log('CORESPIRIT_OPTIMIZER_PRODUCTION_CONTRACT_OK');
