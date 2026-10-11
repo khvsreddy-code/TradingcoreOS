@@ -160,6 +160,16 @@ begin
     if not found then
       v_applied := true;
     else
+      -- Snapshot rows can lag a just-received fill. Never regress cumulative
+      -- execution fields when reconciling a stale REST response.
+      v_quantity := coalesce(v_quantity, v_state.quantity);
+      v_filled := greatest(coalesce(v_filled, 0), coalesce(v_state.filled_quantity, 0));
+      v_average := coalesce(v_average, v_state.average_price);
+      if v_quantity is not null and v_quantity > 0 and v_filled >= v_quantity then
+        v_status := 'FILLED';
+      elsif v_filled > 0 and v_status in ('OPEN','ACKNOWLEDGED','SUBMITTED') then
+        v_status := 'PARTIAL';
+      end if;
       v_current_status := v_state.status;
       if v_status = v_current_status then
         v_applied := true;
@@ -217,7 +227,8 @@ begin
       v_quantity := nullif(p_event->>'quantity','')::numeric;
       v_filled := coalesce(v_state.filled_quantity,0) + coalesce(v_quantity,0);
       v_status := case
-        when v_state.quantity is not null and v_filled >= v_state.quantity then 'FILLED'
+        when v_state.quantity is not null and v_state.quantity > 0 and v_filled >= v_state.quantity then 'FILLED'
+        when v_state.status in ('FILLED','CANCELLED','REJECTED','EXPIRED') then v_state.status
         when v_filled > 0 then 'PARTIAL'
         else v_state.status
       end;
