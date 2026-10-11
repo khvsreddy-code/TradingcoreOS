@@ -12,7 +12,7 @@ import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
 type Ref<T>={current:T};
 
 function isFatalCoreSpiritDiagnostic(message:string):boolean {
-  return /\\b(?:error|failed|failure|invalid|denied|exception|unsupported|unknown (?:identifier|function|variable)|not found)\\b/i.test(message);
+  return /\b(?:error|failed|failure|invalid|denied|exception|unsupported|unknown (?:identifier|function|variable)|not found)\b/i.test(message);
 }
 
 export type ChartCoreSpiritControllerDeps={
