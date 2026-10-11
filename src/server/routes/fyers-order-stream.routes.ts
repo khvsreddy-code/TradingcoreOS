@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { BrokerRepository } from '../storage/BrokerRepository.js';
 import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { FyersOrderStreamTransport } from '../fyers/trading/FyersOrderStreamTransport.js';
+import { FyersOrderStreamTransport, type FyersOrderStreamEvent } from '../fyers/trading/FyersOrderStreamTransport.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 
 export const fyersOrderStreamRoutes = Router();
@@ -20,7 +20,7 @@ fyersOrderStreamRoutes.get('/:brokerId/order-stream', async (req: AuthenticatedR
   if (process.env.REALTIME_GATEWAY_URL) res.setHeader('X-TradingCore-Realtime-Migration','/api/realtime/ticket');
   res.setHeader('X-TradingCore-Stream-Lease-Ms', String(API_LATENCY_BUDGET_MS.streamLease));
   res.flushHeaders();
-  const write=(event:any)=>{try{res.write(JSON.stringify(event)+'\n')}catch{}};
+  const write=(event: FyersOrderStreamEvent)=>{try{res.write(JSON.stringify(event)+'\n')}catch{}};
   const unsubscribe=FyersOrderStreamTransport.subscribe(userId,token,write);
   const heartbeat=setInterval(()=>write({type:'status',status:'connected'}),5000);
   const leaseTimer=setTimeout(()=>{
