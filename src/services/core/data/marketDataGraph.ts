@@ -74,6 +74,9 @@ function normalizeTimeframe(value:string):string{
   return `${count}m`;
 }
 
+/** Canonical timeframe spelling shared by CoreSpirit data adapters and Vela requests. */
+export function normalizeCoreSpiritTimeframe(value:string):string{return normalizeTimeframe(value);}
+
 export function timeframeSeconds(value:string):number{
   const normalized=normalizeTimeframe(value);
   if(TIMEFRAME_SECONDS[normalized])return TIMEFRAME_SECONDS[normalized]!;
