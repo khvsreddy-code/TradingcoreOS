@@ -92,12 +92,15 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       'The generated code will be independently compiled, type checked and capability-validated before the user may run it. Invalid source is acceptable as a draft but must not be presented as validated.',
     ].join('\n');
     const currentCompile = currentSource ? compileCoreSpirit(currentSource,'corespirit-editor',{layer:'script'}) : null;
-    const currentIr = currentCompile?.ir as (typeof currentCompile.ir & {maxLookback?:number;repaintSafety?:unknown})|undefined;
+    const currentIr = currentCompile?.ir as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;semanticDependencyGraph?:{nodes?:unknown[];edges?:unknown[]}}|undefined;
     const compilerContext = JSON.stringify({
       diagnostics:(currentCompile?.diagnostics??[]).slice(0,80).map(d=>({severity:d.severity,code:d.code,message:d.message,line:d.line,column:d.column})),
       maxLookback:currentIr?.maxLookback??null,
       repaintSafety:currentIr?.repaintSafety??null,
-    }).slice(0,16000);
+      causalityAnalysis:currentIr?.causalityAnalysis??null,
+      semanticNodes:(currentIr?.semanticDependencyGraph?.nodes??[]).slice(0,180),
+      semanticEdges:(currentIr?.semanticDependencyGraph?.edges??[]).slice(0,240),
+    }).slice(0,22000);
     const userContent=[
       `Selected Copilot mode: ${mode}`,
       'Current compiler and temporal-safety evidence (source-derived; treat diagnostics as higher-confidence than guesses):',
