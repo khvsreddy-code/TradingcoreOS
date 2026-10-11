@@ -129,8 +129,11 @@ export class FyersMarketDataTransport {
 
     const stale = session.socket?.readyState === WebSocket.OPEN && session.lastTickAt > 0 && Date.now() - session.lastTickAt > 5_000;
     if (stale) this.restartSocket(key, session);
-    else if (!session.socket || session.socket.readyState !== WebSocket.OPEN) void this.connect(key, session);
-    else if (newSymbols.length) this.sendSubscribe(session, newSymbols);
+    else if (!session.socket || session.socket.readyState === WebSocket.CLOSED || session.socket.readyState === WebSocket.CLOSING) {
+      void this.connect(key, session);
+    } else if (newSymbols.length && session.socket.readyState === WebSocket.OPEN) {
+      this.sendSubscribe(session, newSymbols);
+    }
 
     listener({ type: 'status', status: session.socket?.readyState === WebSocket.OPEN ? 'connected' : 'connecting' });
     return () => this.unsubscribe(key, listener);
