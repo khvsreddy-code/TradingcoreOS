@@ -13,6 +13,7 @@ import {
   type CoreSpiritSharedMarketDescriptor,
 } from './sharedMarketBuffer';
 import type { CoreSpiritExecutableArtifact } from './artifact';
+import type { CoreSpiritWorkerRuntimeOptions } from './coreSpiritWorkerPool';
 import { validateExecutableArtifact } from './artifact';
 import { artifactIdFor } from './artifactAbi';
 import { createSharedSeriesOutput } from './sharedOutputBuffer';
@@ -32,6 +33,7 @@ type WorkerContext={
   initialized:boolean;
   graphResolver:CoreSpiritDataGraphResolver;
   hmmModels:Map<string,CoreSpiritGaussianHMM>;
+  runtimeOptionsSignature:string;
 };
 
 type LoadArtifactMessage={
@@ -45,6 +47,7 @@ type LoadArtifactMessage={
   graphBaseTimeframe?:string;
   hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
   replaceHMMArtifacts?:boolean;
+  runtimeOptions?:CoreSpiritWorkerRuntimeOptions;
 };
 
 type UpdateHMMArtifactsMessage={
@@ -72,6 +75,7 @@ type RunMessage={
   dirtyFrom:number;
   dirtyTo:number;
   mode:'historical'|'incremental';
+  readOnly:boolean;
   sharedMarket?:CoreSpiritSharedMarketDescriptor;
   bars?:CoreSpiritMarketBar[];
 };
@@ -117,12 +121,21 @@ function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpirit
   for(const [alias,model] of next)context.hmmModels.set(alias,model);
 }
 
+function stableRuntimeSignature(value:unknown):string {
+  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(Array.isArray(value))return `[${value.map(stableRuntimeSignature).join(',')}]`;
+  const record=value as Record<string,unknown>;
+  return `{${Object.keys(record).sort().map(key=>`${JSON.stringify(key)}:${stableRuntimeSignature(record[key])}`).join(',')}}`;
+}
+
 function installArtifact(message:LoadArtifactMessage):void{
   if(!validateExecutableArtifact(message.artifact))throw new Error('Invalid CoreSpirit executable artifact');
   const current=contexts.get(message.contextKey);
-  if(current && artifactIdFor(current.artifact)===artifactIdFor(message.artifact)){
-    if(message.graphSnapshot)current.graphResolver.replaceSnapshot(message.graphSnapshot);
-    if(message.replaceHMMArtifacts)replaceHMMArtifacts(current,message.hmmArtifacts ?? []);
+  const sameArtifact=Boolean(current&&artifactIdFor(current.artifact)===artifactIdFor(message.artifact));
+  const runtimeOptionsSignature=stableRuntimeSignature(message.runtimeOptions??{});
+  if(sameArtifact&&current!.runtimeOptionsSignature===runtimeOptionsSignature){
+    if(message.graphSnapshot)current!.graphResolver.replaceSnapshot(message.graphSnapshot);
+    if(message.replaceHMMArtifacts)replaceHMMArtifacts(current!,message.hmmArtifacts ?? []);
     return;
   }
 
@@ -131,8 +144,8 @@ function installArtifact(message:LoadArtifactMessage):void{
     message.graphBaseSymbol ?? message.sourceId,
     message.graphBaseTimeframe ?? 'chart',
   );
-  const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
-  const context:WorkerContext={
+  const hmmModels=sameArtifact?current!.hmmModels:new Map<string,CoreSpiritGaussianHMM>();
+  const context:WorkerContext=sameArtifact?current!:{
     artifact:message.artifact,
     sourceId:message.sourceId,
     runtime:undefined as unknown as CoreSpiritRuntime,
@@ -142,13 +155,19 @@ function installArtifact(message:LoadArtifactMessage):void{
     initialized:false,
     graphResolver,
     hmmModels,
+    runtimeOptionsSignature,
   };
-  context.bars=coreSpiritMarketFrameArrayFacade(()=>context.marketFrame);
+  context.artifact=message.artifact;
+  context.sourceId=message.sourceId;
+  context.graphResolver=graphResolver;
+  context.hmmModels=hmmModels;
+  context.runtimeOptionsSignature=runtimeOptionsSignature;
+  context.datasetVersion=0;
+  context.initialized=false;
+  if(!sameArtifact)context.bars=coreSpiritMarketFrameArrayFacade(()=>context.marketFrame);
   const runtime=new CoreSpiritRuntime({
+    ...(message.runtimeOptions??{}),
     sourceId:message.sourceId,
-    executionMode:'historical',
-    executionTarget:'chart',
-    executionTier:'optimized',
     dataResolver:graphResolver,
     hmmArtifactResolver:modelName=>hmmModels.get(modelName),
     marketFrame:()=>context.marketFrame,
@@ -156,7 +175,7 @@ function installArtifact(message:LoadArtifactMessage):void{
   runtime.loadIr(message.artifact.ir);
   context.runtime=runtime;
   contexts.set(message.contextKey,context);
-  replaceHMMArtifacts(context,message.hmmArtifacts ?? []);
+  if(message.replaceHMMArtifacts||!sameArtifact)replaceHMMArtifacts(context,message.hmmArtifacts ?? []);
 }
 function getContext(message:RunMessage):WorkerContext{
   const context=contexts.get(message.contextKey);
@@ -221,7 +240,9 @@ self.onmessage=(event:MessageEvent<Message>)=>{
     if(fullReset){
       context.runtime.reset();
       context.runtime.loadIr(context.artifact.ir);
-      result=context.runtime.executeIr(context.artifact.ir,context.bars);
+      result=message.readOnly
+        ? context.runtime.executeIrReadOnly(context.artifact.ir,context.bars)
+        : context.runtime.executeIr(context.artifact.ir,context.bars);
       context.initialized=true;
     }else{
       const latest=context.bars.at(-1);
