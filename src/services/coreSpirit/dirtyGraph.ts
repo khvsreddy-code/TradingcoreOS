@@ -30,12 +30,24 @@ export interface CoreSpiritDirtyExecutionPlan {
   readonly allHistory: boolean;
 }
 
+const RECURSIVE_TAIL_CALLS = new Set(['ema', 'rma', 'wilder', 'rsi', 'atr', 'vwap']);
+const FINITE_WINDOW_CALLS = new Set(['sma', 'wma', 'vwma', 'highest', 'lowest', 'stdev', 'variance', 'median', 'percentile', 'mad', 'beta', 'trendstrength']);
+const ONE_BAR_CHANGE_CALLS = new Set(['change', 'pctchange', 'cross', 'crossover', 'crossunder']);
+
+function normalizedCallName(name: string | undefined): string {
+  return String(name || '').split('.').at(-1)?.toLowerCase() || '';
+}
+
+/** Forward invalidation horizon for a changed input: N-bar windows have N-1 bars of impact; recursive accumulators extend to the execution end. */
 function inferLookback(node: CoreSpiritDirtyNode, instructionName: string | undefined, constantValue?: number): number {
-  if (node.stateful && /^(ema|rma|rsi|atr|vwap|cross|crossover|crossunder|bar_index)$/.test(instructionName || '')) return -1;
-  if (instructionName === 'change' || instructionName === 'pctchange' || instructionName === 'cross' || instructionName === 'crossover' || instructionName === 'crossunder') return 1;
-  if (instructionName === 'rising' || instructionName === 'falling') return Math.max(1, Math.floor(constantValue || 1));
+  const name = normalizedCallName(instructionName);
+  if (RECURSIVE_TAIL_CALLS.has(name)) return -1;
+  if (ONE_BAR_CHANGE_CALLS.has(name)) return 1;
+  if (name === 'rising' || name === 'falling' || FINITE_WINDOW_CALLS.has(name)) {
+    return Number.isFinite(constantValue) ? Math.max(0, Math.floor(constantValue as number) - 1) : Number.POSITIVE_INFINITY;
+  }
   if (node.stateful) return Number.POSITIVE_INFINITY;
-  return Math.max(0, Math.floor(constantValue || 0));
+  return 0;
 }
 
 export function buildCoreSpiritDirtyGraph(graph: CoreSpiritSemanticGraph, reactive: CoreSpiritReactivePlan, instructions: readonly CoreSpiritIrInstruction[] = []): readonly CoreSpiritDirtyNode[] {
