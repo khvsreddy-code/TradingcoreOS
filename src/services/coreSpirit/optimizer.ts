@@ -141,22 +141,29 @@ function commonSubexpressionEliminate(instructions: readonly CoreSpiritIrInstruc
     if (index + 1 < instructions.length) blockStarts.add(index + 1);
   }
 
-  let canonical = new Map<string, string>();
+  let canonical = new Map<string, { dest: string; inputs: readonly string[] }>();
   const out: CoreSpiritIrInstruction[] = [];
   let eliminated = 0;
   for (let index = 0; index < instructions.length; index += 1) {
-    if (blockStarts.has(index)) canonical = new Map<string, string>();
+    if (blockStarts.has(index)) canonical = new Map<string, { dest: string; inputs: readonly string[] }>();
     const instruction = instructions[index]!;
     const dest = 'dest' in instruction ? instruction.dest : undefined;
+    if (dest) {
+      // Register names may be reused by assignments. Invalidate expressions that
+      // depended on the old value before considering the new instruction.
+      for (const [cachedKey, cached] of canonical) {
+        if (cached.dest === dest || cached.inputs.includes(dest)) canonical.delete(cachedKey);
+      }
+    }
     const key = dest ? cseKey(instruction) : undefined;
-    const existing = key ? canonical.get(key) : undefined;
-    if (key && dest && existing && existing !== dest) {
-      out.push({ op:'move', dest, source:existing, origin:instruction.origin });
+    const cached = key ? canonical.get(key) : undefined;
+    if (key && dest && cached && cached.dest !== dest) {
+      out.push({ op:'move', dest, source:cached.dest, origin:instruction.origin });
       eliminated += 1;
       continue;
     }
     out.push(instruction);
-    if (key && dest) canonical.set(key, dest);
+    if (key && dest) canonical.set(key, { dest, inputs: deps(instruction) });
   }
   return { instructions:out, eliminated };
 }
