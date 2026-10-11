@@ -300,7 +300,7 @@ The chart data plane established the zero-copy canonical chart data plane at the
 
 - [x] Dirty-span filtering unions retained and replacement extents for stable-ID lines, rectangles, labels, polylines and backgrounds before skipping a mutation.
 - [x] Custom visual polygon geometry contributes its full point-time extent even when the object also has an anchor time.
-- [x] Stable marker relocation emits a remove delta followed by an insert delta; the insert index accounts for removal shifting the sorted sequence.
+- [x] Stable marker relocation emits a remove delta followed by an insert delta; the insertion uses the final sorted index after removing the old marker.
 - [x] Optimizer dependency critical-path aggregation uses iterative reductions rather than large spread argument lists.
 - [x] Added contracts for moved retained geometry, stable marker relocation and 36k-instruction optimizer cost diagnostics.
 - [ ] All renderer-owned overlays still require verification with actual Vela RenderPacket/ScenePatch integration and authenticated live-browser telemetry.

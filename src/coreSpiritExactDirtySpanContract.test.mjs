@@ -77,7 +77,7 @@ assert.equal(movedMarkerPatch.series.length, 2, 'relocating an identified marker
 assert.equal(movedMarkerPatch.series[0].remove, 1);
 assert.equal(movedMarkerPatch.series[0].start, 1);
 assert.equal(movedMarkerPatch.series[1].remove, 0);
-assert.equal(movedMarkerPatch.series[1].start, 1);
+assert.equal(movedMarkerPatch.series[1].start, 2, 'insert index is computed against the final sorted sequence after removing the old marker');
 
 assert.deepEqual(outputDirtySpan({
   kind: 'customVisual',

@@ -364,7 +364,7 @@ export class CoreSpiritSceneDiff {
         const nextIndex = after.findIndex(([candidate]) => candidate === key);
         if (!was) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, nextIndex), remove: 0 } };
         if (previousIndex === nextIndex) return { delta: { seriesId: this.markerSeriesId, kind: 'markers', markers: [value], op: 'replace-range', start: Math.max(0, nextIndex), remove: 1 } };
-        const insertIndex = nextIndex - (previousIndex < nextIndex ? 1 : 0);
+        const insertIndex = nextIndex;
         return {
             deltas: [
                 { seriesId: this.markerSeriesId, kind: 'markers', markers: [], op: 'replace-range', start: previousIndex, remove: 1 },
