@@ -8,6 +8,10 @@ const authMarker = String(process.env.TCO_AUTH_MARKER || 'TradingCoreOS').trim()
 const maxP95FrameMs = Number(process.env.TCO_MAX_P95_FRAME_MS || 25);
 const maxRenderRateHz = Number(process.env.TCO_MAX_RENDER_RATE_HZ || 150);
 const maxComputeRateHz = Number(process.env.TCO_MAX_COMPUTE_RATE_HZ || 60);
+const settleMs = Math.max(0, Math.min(60000, Number(process.env.TCO_BROWSER_SETTLE_MS || 5000)));
+const maxTickToComputeP95Ms = Number(process.env.TCO_MAX_TICK_TO_COMPUTE_P95_MS || 20);
+const maxTickToPatchP95Ms = Number(process.env.TCO_MAX_TICK_TO_PATCH_P95_MS || 25);
+const maxTickToRenderP95Ms = Number(process.env.TCO_MAX_TICK_TO_RENDER_P95_MS || 25);
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
 const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
 
@@ -25,6 +29,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const expectedCells = expectedCellsList[Math.min(caseIndex, expectedCellsList.length - 1)] || 1;
   run(['open', url]);
   run(['wait', '--load', 'networkidle']);
+  if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs));
 
   const content = run(['eval', 'document.body.innerText.trim().length > 0 ? "HAS_CONTENT" : "BLANK"']);
   if (content !== 'HAS_CONTENT') throw new Error(`Browser verification: blank page for ${url}`);
@@ -45,20 +50,39 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const perfJson = run(['eval', 'JSON.stringify(window.__TCO_PERF__ || null)']);
   const perf = JSON.parse(perfJson || 'null');
   if (!perf || !Array.isArray(perf.cells)) throw new Error(`Browser verification: __TCO_PERF__ missing for ${url}`);
-  if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);
+  if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);  if (!perf.capturedAt) throw new Error(`Browser verification: telemetry capture timestamp missing for ${url}`);
+  if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
+  if (perf.pipeline.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} realtime pipeline sample(s), got ${perf.pipeline.length}`);
+  for (const cell of perf.cells) {
+    if (!(Number(cell.frames) > 0)) throw new Error(`Browser verification: no rendered-frame samples for cell ${cell.cellId || 'unknown'}`);
+    if (!['webgl2', 'canvas2d'].includes(String(cell.backend))) throw new Error(`Browser verification: renderer backend not identified for cell ${cell.cellId || 'unknown'}`);
+    if (!Number.isFinite(Number(cell.p95FrameMs))) throw new Error(`Browser verification: invalid p95 frame sample for cell ${cell.cellId || 'unknown'}`);
+  }
   if (requireSharedMemory && (!perf.sharedMemory?.crossOriginIsolated || !perf.sharedMemory?.sharedArrayBuffer)) throw new Error(`Browser verification: SharedArrayBuffer isolation unavailable for ${url}`);
   for (const sample of perf.pipeline) {
     for (const field of requiredPipelineFields) {
       if (!(field in sample)) throw new Error(`Browser verification: pipeline telemetry field missing: ${field}`);
     }
+    for (const field of requiredPipelineFields) {
+      if (!Number.isFinite(Number(sample[field]))) throw new Error(`Browser verification: non-finite pipeline telemetry value: ${field}`);
+    }
+    const marketRate = Number(sample.marketUpdatesPerSec) || 0;
     const renderRate = Number(sample.renderUpdatesPerSec) || 0;
     const computeRate = Number(sample.computeUpdatesPerSec) || 0;
+    const tickToComputeP95Ms = Number(sample.tickToComputeP95Ms) || 0;
+    const tickToPatchP95Ms = Number(sample.tickToPatchP95Ms) || 0;
+    const tickToRenderP95Ms = Number(sample.tickToRenderP95Ms) || 0;
     const initialHistoryCandles = Number(sample.initialHistoryCandles) || 0;
+    if (marketRate <= 0 || computeRate <= 0 || renderRate <= 0) {
+      throw new Error(`Browser verification: no sustained market → compute → render activity for ${sample.key || url}; this run did not prove performance under live load.`);
+    }
+    if (tickToComputeP95Ms > maxTickToComputeP95Ms) throw new Error(`Browser verification: tick-to-compute p95 exceeded (${tickToComputeP95Ms.toFixed(2)}ms > ${maxTickToComputeP95Ms}ms)`);
+    if (tickToPatchP95Ms > maxTickToPatchP95Ms) throw new Error(`Browser verification: tick-to-patch p95 exceeded (${tickToPatchP95Ms.toFixed(2)}ms > ${maxTickToPatchP95Ms}ms)`);
+    if (tickToRenderP95Ms > maxTickToRenderP95Ms) throw new Error(`Browser verification: tick-to-render p95 exceeded (${tickToRenderP95Ms.toFixed(2)}ms > ${maxTickToRenderP95Ms}ms)`);
     if (initialHistoryCandles < 1 || initialHistoryCandles > 5000) throw new Error(`Browser verification: invalid initial history size (${initialHistoryCandles}); expected 1-5000 candles.`);
     if (renderRate > maxRenderRateHz) throw new Error(`Browser verification: render rate exceeded (${renderRate.toFixed(2)}Hz > ${maxRenderRateHz}Hz)`);
     if (computeRate > maxComputeRateHz) throw new Error(`Browser verification: compute rate exceeded (${computeRate.toFixed(2)}Hz > ${maxComputeRateHz}Hz)`);
   }
-  if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
   const slowestP95 = Math.max(0, ...perf.cells.map((cell) => Number(cell.p95FrameMs) || 0));
   if (slowestP95 > maxP95FrameMs) throw new Error(`Browser verification: p95 frame budget exceeded (${slowestP95.toFixed(2)}ms > ${maxP95FrameMs}ms)`);
 
@@ -71,6 +95,10 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxP95FrameMs,
     maxRenderRateHz,
     maxComputeRateHz,
+    settleMs,
+    maxTickToComputeP95Ms,
+    maxTickToPatchP95Ms,
+    maxTickToRenderP95Ms,
     requireSharedMemory,
     requireAuth,
     sharedMemory: perf.sharedMemory,
