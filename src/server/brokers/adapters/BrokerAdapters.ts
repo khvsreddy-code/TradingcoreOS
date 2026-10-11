@@ -194,11 +194,12 @@ export class FyersAdapter extends BaseBroker {
     accessToken: string,
     instrumentKeys: string[],
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
+    rateLimitIdentity = accessToken,
   ): Promise<BrokerMarketQuotes> {
     const symbols = [...new Set(instrumentKeys.map(value => String(value || '').trim()).filter(Boolean))];
     if (!symbols.length) return {};
     assertFyersQuoteBatch(symbols, capabilities);
-    const client = new FyersApiClient(accessToken, undefined, capabilities);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
     const data = await client.dataGet<any>(
       '/quotes',
       { symbols: symbols.join(',') },
@@ -226,6 +227,7 @@ export class FyersAdapter extends BaseBroker {
     interval: string,
     limit = 10_000,
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
+    rateLimitIdentity = accessToken,
   ): Promise<BrokerHistory> {
     const resolutionMap: Record<string, string> = {
       '1minute':'1','2minute':'2','3minute':'3','5minute':'5','10minute':'10',
@@ -263,7 +265,7 @@ export class FyersAdapter extends BaseBroker {
     const estimatedCalendarDays = Math.ceil((requestedLimit / Math.max(1 / 30, barsPerDay)) * 1.65);
     const lookbackDays = Math.min(maxLookbackDays, Math.max(secondsInterval ? 1 : 7, estimatedCalendarDays));
     const from = Math.floor((now.getTime() - lookbackDays * 86_400_000) / 1000);
-    const client = new FyersApiClient(accessToken, undefined, capabilities);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
     const payload = await client.dataGet<any>(
       '/history',
       {
@@ -292,12 +294,13 @@ export class FyersAdapter extends BaseBroker {
     instrumentKey: string,
     expiryDate: string,
     capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
+    rateLimitIdentity = accessToken,
   ): Promise<BrokerOptionChain> {
     // Keep this legacy adapter compatible with the same Data API quota gate as
     // the dedicated FYERS route. The newer route preserves the fuller chain.
     const params:Record<string,string|number|undefined> = { symbol:instrumentKey, strikecount:'7' };
     if (expiryDate && expiryDate !== 'current_week' && /^[0-9]+$/.test(expiryDate)) params.timestamp=expiryDate;
-    const client = new FyersApiClient(accessToken, undefined, capabilities);
+    const client = new FyersApiClient(accessToken, undefined, capabilities, rateLimitIdentity);
     const payload = await client.dataGet<any>(
       '/options-chain-v3',
       params,
