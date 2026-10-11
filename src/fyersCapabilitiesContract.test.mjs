@@ -55,6 +55,8 @@ const streamTransport = read('./server/marketData/FyersMarketDataTransport.ts');
 const apiClient = read('./server/fyers/core/FyersApiClient.ts');
 const requestGate = read('./server/brokers/BrokerRequestGate.ts');
 const historyRoute = read('./server/routes/fyers-history.routes.ts');
+const brokerAdapter = read('./server/brokers/adapters/BrokerAdapters.ts');
+
 
 assert.match(quoteRoute, /resolveFyersCapabilities/);
 assert.match(quoteRoute, /post\('\/:brokerId\/quotes'/, 'POST quotes must support large symbol batches without URL-length pressure');
@@ -69,5 +71,16 @@ assert.match(apiClient, /maxPerDay: limits\.requestsPerDay/);
 assert.match(requestGate, /tco:broker:day:/, 'daily quota must be enforced where shared coordination is configured');
 assert.match(historyRoute, /FYERS_HISTORY_DEPTH_LIMIT/);
 assert.match(historyRoute, /FYERS_SECONDS_DATA_REQUIRES_PRIME/);
+assert.match(historyRoute,/client\.dataGet<any>\('\/history'/,'dedicated history requests must use the capability-aware Data API client');
+assert.match(historyRoute,/fallbackQuoteCandle\(client/,'history fallback quotes must consume their own Data API quota unit');
+assert.match(brokerAdapter,/assertFyersQuoteBatch\(symbols, capabilities\)/,'legacy adapter quotes must share the capability boundary');
+assert.match(brokerAdapter,/dataGet<any>\(\s*'\/quotes'/,'legacy adapter quotes must use the shared Data API rate gate');
+assert.match(brokerAdapter,/capabilities\.historyDepth/,'legacy adapter history must honor the same depth capabilities');
+assert.match(brokerAdapter,/FYERS_SECONDS_DATA_REQUIRES_PRIME/,'legacy adapter must reject Standard seconds-data requests');
+assert.match(brokerAdapter,/dataGet<any>\(\s*'\/options-chain-v3'/,'legacy option-chain requests must use the Data API gate');
+assert.match(streamRoute,/getOptionChain\(session\.token, symbol, expiryDate, capabilities\)/,'option-chain route must pass authenticated user capabilities');
+assert.match(apiClient,/startsWith\('BROKER_'\)/,'local rate-gate denials must not be retried as provider errors');
+assert.match(requestGate,/TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED/,'production can fail closed if shared quota coordination is required');
+
 
 console.log('FYERS_PLAN_CAPABILITIES_CONTRACT_OK');
