@@ -328,7 +328,19 @@ export class FyersOrderStateEngine {
     if (event.type === 'OrderUpdate') {
       if (!brokerOrderId || canTransitionFyersOrderStatus(current?.status, event.status, source)) {
         if (brokerOrderId) {
-          const merged = { ...(current || {}), ...canonical } as OrderUpdate;
+          const incomingFilled = Number(canonical.filledQuantity || 0);
+          const currentFilled = Number(current?.filledQuantity || 0);
+          const merged = {
+            ...(current || {}),
+            ...canonical,
+            quantity: canonical.quantity ?? current?.quantity,
+            filledQuantity: Math.max(currentFilled, incomingFilled),
+          } as OrderUpdate;
+          if (merged.quantity && merged.quantity > 0 && (merged.filledQuantity || 0) >= merged.quantity) {
+            merged.status = 'FILLED';
+          } else if ((merged.filledQuantity || 0) > 0 && ['OPEN','ACKNOWLEDGED','SUBMITTED'].includes(merged.status)) {
+            merged.status = 'PARTIAL';
+          }
           this.memoryStates.set(stateKey, merged);
           return { duplicate: false, applied: true, sequence, events: [merged] };
         }
@@ -339,8 +351,12 @@ export class FyersOrderStateEngine {
     if (event.type === 'Fill' && source === 'websocket' && stateKey && current) {
       const increment = Number(event.quantity) || 0;
       const filled = (current.filledQuantity || 0) + increment;
-      const status: FyersOrderStateStatus = current.quantity && filled >= current.quantity ? 'FILLED' : filled > 0 ? 'PARTIAL' : current.status as FyersOrderStateStatus;
-      const next: OrderUpdate = { ...current, filledQuantity: filled, status, sequence, revision: sequence, timestamp: event.timestamp, receivedAt: event.receivedAt };
+      const status: FyersOrderStateStatus = current.quantity && current.quantity > 0 && filled >= current.quantity
+        ? 'FILLED'
+        : TERMINAL.has(current.status as FyersOrderStateStatus)
+          ? current.status as FyersOrderStateStatus
+          : filled > 0 ? 'PARTIAL' : current.status as FyersOrderStateStatus;
+      const next: OrderUpdate = { ...current, filledQuantity: Math.max(Number(current.filledQuantity || 0), filled), status, sequence, revision: sequence, timestamp: event.timestamp, receivedAt: event.receivedAt };
       this.memoryStates.set(stateKey, next);
       return { duplicate: false, applied: true, sequence, events: [canonical, next] };
     }
