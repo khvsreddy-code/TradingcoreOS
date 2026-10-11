@@ -298,7 +298,14 @@ brokerMarketDataRoutes.get('/:brokerId/historical', async (req: Request, res: Re
     res.setHeader('Cache-Control', 'private, max-age=15');
     return res.json({ success: true, data: candles, requested: limit, returned: candles.length });
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || `Unable to load Fyers historical candles for ${symbol}` });
+    const status = Number(err?.status) === 429 ? 429 : Number(err?.status) === 403 ? 403 : Number(err?.status) === 504 ? 504 : 502;
+    if (status === 429) res.setHeader('Retry-After','1');
+    return res.status(status).json({
+      success:false,
+      error:err?.message || `Unable to load Fyers historical candles for ${symbol}`,
+      code:err?.code,
+      brokerCode:err?.brokerCode,
+    });
   }
 });
 
