@@ -1,5 +1,5 @@
 import { compileCoreSpirit } from './coreSpiritPipeline';
-import { coreSpiritChecksum, validateExecutableArtifact, type CoreSpiritExecutableArtifact } from './artifact';
+import { validateExecutableArtifact, type CoreSpiritExecutableArtifact } from './artifact';
 import type { CoreSpiritCompileResult, CoreSpiritCompileSymbol } from './compiler';
 
 type CompileRequest={
