@@ -180,6 +180,14 @@ export class CoreSpiritVelaEngine {
         .map(dep => [dependencyKey(dep.symbol, dep.timeframe), { symbol: dep.symbol, timeframe: dep.timeframe }]),
     ).values()];
 
+    if(secondaryDependencies.length&&!req.fetchSeries){
+      secondaryDegraded=true;
+      for(const dependency of secondaryDependencies){
+        secondaryFailed.add(dependencyKey(dependency.symbol,dependency.timeframe));
+        secondaryWarnings.push(`Secondary market data provider unavailable for ${dependency.symbol} ${dependency.timeframe}`);
+      }
+    }
+
     const loadSecondaryData = async (force=false): Promise<void> => {
       if (stopped || !req.fetchSeries || !secondaryDependencies.length) return;
       const now=Date.now();
