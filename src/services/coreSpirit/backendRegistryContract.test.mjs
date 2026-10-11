@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import { createCoreSpiritBackendRegistry, planCoreSpiritBackend, executePlannedExternalCoreSpiritBackend, toLegacyCoreSpiritBackendProfiles } from './backendRegistry.ts';
 
+const failingWasmProbes = createCoreSpiritBackendRegistry({
+  wasm: {
+    isLoaded: () => { throw new Error('module detached'); },
+    profile: () => { throw new Error('module disposed'); },
+    hasKernel: () => { throw new Error('module disposed'); },
+    kernelVariant: () => { throw new Error('module disposed'); },
+  },
+});
+assert.equal(failingWasmProbes.get('wasm-simd')?.available, false,
+  'WASM capability probes that throw must fail closed instead of crashing the planner');
+assert.equal(planCoreSpiritBackend({
+  operation: 'rollingMean', purpose: 'historical', workload: 'series',
+  workUnits: 100_000, inputElements: 20_000,
+}, failingWasmProbes).backend, 'cpu-optimized',
+  'a detached WASM module must leave the CPU path eligible');
+
 const defaults = createCoreSpiritBackendRegistry();
 assert.equal(defaults.get('js-scalar')?.available, true);
 assert.equal(defaults.get('cpu-optimized')?.available, true);

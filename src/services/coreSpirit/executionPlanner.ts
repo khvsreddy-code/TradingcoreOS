@@ -214,12 +214,15 @@ export function planCoreSpiritExecution(
   program: CoreSpiritIrProgram,
   options: CoreSpiritExecutionPlannerOptions = {},
 ): CoreSpiritExecutionPlan {
+  const inputErrors = validateCoreSpiritExecutionPlannerInputs(options);
+  if (inputErrors.length) throw new Error(`Invalid CoreSpirit execution planner options: ${inputErrors.join('; ')}`);
   const profiles = options.backends?.length ? [...options.backends] : [...CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS];
   const requireDeterministic = options.requireDeterministic ?? true;
   const allowSplitPureWork = options.allowSplitPureWork ?? true;
   const minGpuWorkUnits = Math.max(1, Math.floor(options.minGpuWorkUnits ?? 1_000_000));
   const minWasmWorkUnits = Math.max(1, Math.floor(options.minWasmWorkUnits ?? 10_000));
-  const maxBatchSize = Math.max(1, Math.floor(options.maxBatchSize ?? 65_536));
+  // Keep every planned batch inside the CPU kernel library's hard input bound.
+  const maxBatchSize = Math.max(1, Math.min(4_194_304, Math.floor(options.maxBatchSize ?? 65_536)));
   const workload = estimateCoreSpiritWorkload(program, {
     symbolCount: options.symbolCount,
     timeframeCount: options.timeframeCount,

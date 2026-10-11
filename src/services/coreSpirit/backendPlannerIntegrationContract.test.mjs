@@ -11,6 +11,9 @@ plot average
 const compiled = compileCoreSpirit(source, 'backend-planner-integration', { layer: 'indicator' });
 assert.ok(compiled.ir, compiled.diagnostics.map(item => item.message).join('; '));
 
+assert.throws(() => planCoreSpiritExecution(compiled.ir!, { maxBatchSize: 0 }), /maxBatchSize must be positive/);
+assert.throws(() => planCoreSpiritExecution(compiled.ir!, { minWasmWorkUnits: 2.5 }), /minWasmWorkUnits must be positive/);
+
 const live = planCoreSpiritExecution(compiled.ir!, { barCount: 20_000 });
 assert.ok(live.backendCapabilityPlans.some(item => item.operation === 'rollingMean'));
 assert.equal(live.backendCapabilityPlans.find(item => item.operation === 'rollingMean')?.backend, 'cpu-optimized',

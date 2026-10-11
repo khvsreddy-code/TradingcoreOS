@@ -128,11 +128,22 @@ export function createCoreSpiritBackendRegistry(options: CoreSpiritBackendRegist
     reason: 'bounded typed-array numerical kernel library is available',
   });
 
-  const wasmProfile = options.wasm?.profile();
+  let wasmProfile: ReturnType<CoreSpiritWasmBackendHandle['profile']>;
+  try { wasmProfile = options.wasm?.profile(); } catch { wasmProfile = undefined; }
+  const wasmIsUsable = (): boolean => {
+    try { return options.wasm?.isLoaded() === true && wasmProfile?.available === true && wasmProfile.vectorized === true; }
+    catch { return false; }
+  };
   const wasmOperations = ALL_NUMERICAL_OPERATIONS.filter((operation) => {
     const kernel = options.wasmKernelNames?.[operation as CoreSpiritNumericalKernelOperation] ?? operation;
-    return Boolean(options.wasm?.isLoaded() && wasmProfile?.available && wasmProfile.vectorized &&
-      options.wasm.hasKernel(kernel) && options.wasm.kernelVariant(kernel) === 'simd');
+    try {
+      return Boolean(wasmIsUsable() && options.wasm?.hasKernel(kernel) &&
+        options.wasm.kernelVariant(kernel) === 'simd');
+    } catch {
+      // A module/device capability exception removes eligibility; it must not
+      // crash compilation or leak into the chart's planning hot path.
+      return false;
+    }
   });
   const wasm: CoreSpiritBackendProfile = Object.freeze({
     backend: 'wasm-simd',

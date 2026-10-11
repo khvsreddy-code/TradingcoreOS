@@ -113,4 +113,15 @@ assert.equal(failedBackend, 'cpu');
 assert.equal(fallbackObserved, true, 'accelerator failure must be observable');
 assert.notEqual(fallbackOutput[0], 999, 'partial accelerator writes must not leak into the published output');
 
+const callbackThrowsOutput = new Float64Array(2);
+const callbackThrowsResult = executeCoreSpiritSeriesFusionGroupDispatched(
+  group, { register: 'src', values: Float64Array.from([1, 2]) }, callbackThrowsOutput,
+  { realtime: false, bars: 20_000, onBackendFallback: () => { throw new Error('telemetry backend unavailable'); }, backends: [
+    { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
+    { backend: 'gpu', available: false, deterministic: false, vectorized: true },
+  ] },
+);
+assert.equal(callbackThrowsResult, 'cpu', 'telemetry failures must not prevent safe CPU fallback');
+
 console.log('CoreSpirit series backend dispatcher safety contract: OK');

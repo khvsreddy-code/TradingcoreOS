@@ -46,6 +46,18 @@ function hasRecurrence(g: CoreSpiritSeriesFusionGroup): boolean {
   return g.operations.some((x) => ['ema', 'rma', 'change', 'pctchange', 'persistence', 'rsi', 'atr', 'vwap'].includes(x.name));
 }
 
+function notifyBackendFallback(
+  context: CoreSpiritSeriesDispatchContext,
+  backend: 'wasm' | 'gpu',
+  error?: unknown,
+): void {
+  try {
+    context.onBackendFallback?.(backend, error);
+  } catch {
+    // Telemetry must never prevent the trading calculation's CPU fallback.
+  }
+}
+
 function supportsGroup(profile: CoreSpiritSeriesBackendProfile | undefined, group: CoreSpiritSeriesFusionGroup): boolean {
   if (!profile?.available || !profile.vectorized) return false;
   // CPU is the semantic reference; accelerators must explicitly advertise every
@@ -97,7 +109,7 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
   if (!executor) {
     // Availability metadata is not an executor. Never report acceleration that
     // did not happen, and never skip the CPU calculation because an adapter is absent.
-    context.onBackendFallback?.(choice.requested);
+    notifyBackendFallback(context, choice.requested);
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
     return 'cpu';
   }
@@ -110,7 +122,7 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
     output.set(stagedOutput);
     return choice.requested;
   } catch (error) {
-    context.onBackendFallback?.(choice.requested, error);
+    notifyBackendFallback(context, choice.requested, error);
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
     return 'cpu';
   }
