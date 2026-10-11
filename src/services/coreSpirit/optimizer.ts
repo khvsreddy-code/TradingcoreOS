@@ -32,6 +32,7 @@ export type CoreSpiritOptimizationCost = Readonly<{
   historyReadOps: number;
   sourceReadReuse: number;
   cseEliminated: number;
+  deadPureInstructionsRemoved: number;
   peakLiveRegisters: number;
   chronologicalPasses: 1;
   estimatedSavedBarWork: number;
@@ -64,9 +65,11 @@ function pureDeterministicCall(ins: Extract<CoreSpiritIrInstruction, { op:'call'
 export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIrProgram {
   const before = program.entry.instructions;
   const folded = constantFold(before);
+  const constantPassChanged = folded.some((instruction, index) => instruction !== before[index]);
   const cse = commonSubexpressionEliminate(folded);
-  const instructions = cse.instructions;
-  const plan = buildOptimizationPlan(before, instructions, folded !== before, cse.eliminated);
+  const dead = eliminateDeadPureValues(cse.instructions);
+  const instructions = dead.instructions;
+  const plan = buildOptimizationPlan(before, folded, cse.instructions, instructions, constantPassChanged, cse.eliminated, dead.removed);
   return {
     ...program,
     entry: { ...program.entry, instructions },
@@ -163,6 +166,51 @@ function info(instruction: CoreSpiritIrInstruction) {
   return { pure,deterministic,stateful,effectful:!deterministic || instruction.componentStateful === true,cacheable:pure && deterministic && !stateful,work:!deterministic ? 3 : stateful ? 2 : 1.5 };
 }
 
+function canDiscardPureValue(instruction: CoreSpiritIrInstruction): instruction is Extract<CoreSpiritIrInstruction, { dest: string }> {
+  if (!('dest' in instruction) || !instruction.dest) return false;
+  const metadata = info(instruction);
+  return metadata.pure && metadata.deterministic && !metadata.effectful && !metadata.stateful;
+}
+
+/**
+ * Remove only pure, deterministic, unused value-producing instructions.
+ * All effects, stateful calls, emits, and control-flow instructions remain.
+ * Branch targets are remapped so pruning does not change control-flow meaning.
+ */
+function eliminateDeadPureValues(instructions: readonly CoreSpiritIrInstruction[]): { instructions: CoreSpiritIrInstruction[]; removed: number } {
+  const keep = new Array<boolean>(instructions.length).fill(true);
+  const liveRegisters = new Set<string>();
+  for (let index = instructions.length - 1; index >= 0; index -= 1) {
+    const instruction = instructions[index]!;
+    const discardable = canDiscardPureValue(instruction);
+    if (discardable && !liveRegisters.has(instruction.dest)) {
+      keep[index] = false;
+      continue;
+    }
+    if ('dest' in instruction && instruction.dest) liveRegisters.delete(instruction.dest);
+    for (const register of deps(instruction)) liveRegisters.add(register);
+  }
+
+  const remap = new Array<number>(instructions.length + 1);
+  let retainedBefore = 0;
+  for (let index = 0; index <= instructions.length; index += 1) {
+    remap[index] = retainedBefore;
+    if (index < instructions.length && keep[index]) retainedBefore += 1;
+  }
+  const output: CoreSpiritIrInstruction[] = [];
+  for (let index = 0; index < instructions.length; index += 1) {
+    if (!keep[index]) continue;
+    const instruction = instructions[index]!;
+    if (instruction.op === 'jump' || instruction.op === 'jumpIfFalse' || instruction.op === 'eventGate') {
+      const rawTarget = Number.isFinite(instruction.target) ? Math.trunc(instruction.target) : instructions.length;
+      const target = Math.min(instructions.length, Math.max(0, rawTarget));
+      output.push({ ...instruction, target: remap[target]! });
+    } else {
+      output.push(instruction);
+    }
+  }
+  return { instructions: output, removed: instructions.length - output.length };
+}
 function deps(instruction: CoreSpiritIrInstruction): string[] {
   switch (instruction.op) {
     case 'move': return [instruction.source];
@@ -170,18 +218,22 @@ function deps(instruction: CoreSpiritIrInstruction): string[] {
     case 'binary': return [instruction.left,instruction.right];
     case 'call': return instruction.args;
     case 'index': return [instruction.target,instruction.index];
-    case 'setLocal': return [instruction.source];
+    case 'setLocal':
+    case 'setState': return [instruction.source];
     case 'jumpIfFalse': return [instruction.condition];
-    case 'emit': return instruction.args.slice(1);
+    case 'emit': return instruction.args;
     default: return [];
   }
 }
 
 function buildOptimizationPlan(
   original: readonly CoreSpiritIrInstruction[],
+  folded: readonly CoreSpiritIrInstruction[],
+  afterCse: readonly CoreSpiritIrInstruction[],
   instructions: readonly CoreSpiritIrInstruction[],
   constantPassChanged: boolean,
   eliminated: number,
+  deadRemoved: number,
 ): CoreSpiritOptimizationPlan {
   const producer = new Map<string,number>();
   const dependencyMap = new Map<number,number[]>();
@@ -213,7 +265,8 @@ function buildOptimizationPlan(
   });
   const historyReadOps=instructions.filter(i=>i.op==='loadSeries'||i.op==='index').length;
   const originalHistoryReadOps=original.filter(i=>i.op==='loadSeries'||i.op==='index').length;
-  const sourceReadReuse=Math.max(0,originalHistoryReadOps-historyReadOps);
+  const afterCseHistoryReadOps=afterCse.filter(i=>i.op==='loadSeries'||i.op==='index').length;
+  const sourceReadReuse=Math.max(0,originalHistoryReadOps-afterCseHistoryReadOps);
   const pureBarWork=nodes.filter(n=>n.pure&&!n.effectful).reduce((s,n)=>s+n.estimatedBarWork,0);
   const effectBarWork=nodes.filter(n=>n.effectful).reduce((s,n)=>s+n.estimatedBarWork,0);
   const statefulBarWork=nodes.filter(n=>n.stateful).reduce((s,n)=>s+n.estimatedBarWork,0);
@@ -237,8 +290,9 @@ function buildOptimizationPlan(
     version:1,
     strategy:'chronological-query-optimization',
     passes:Object.freeze([
-      Object.freeze({name:'constant-fold',changed:constantPassChanged,instructionsBefore:original.length,instructionsAfter:instructions.length}),
-      Object.freeze({name:'pure-cse-and-series-read-reuse',changed:eliminated>0,instructionsBefore:instructions.length,instructionsAfter:instructions.length}),
+      Object.freeze({name:'constant-fold',changed:constantPassChanged,instructionsBefore:original.length,instructionsAfter:folded.length}),
+      Object.freeze({name:'pure-cse-and-series-read-reuse',changed:eliminated>0,instructionsBefore:folded.length,instructionsAfter:afterCse.length}),
+      Object.freeze({name:'dead-pure-value-elimination',changed:deadRemoved>0,instructionsBefore:afterCse.length,instructionsAfter:instructions.length}),
     ]),
     nodes:Object.freeze(nodes),
     roots:Object.freeze(roots),
@@ -252,6 +306,7 @@ function buildOptimizationPlan(
       'All execution remains one chronological bar traversal; no second semantic runtime is introduced.',
       sourceReadReuse>0 ? `Reused ${sourceReadReuse} repeated series read(s).` : 'No repeated series reads required reuse.',
       eliminated>0 ? `Eliminated ${eliminated} safe pure duplicate expression(s).` : 'No additional safe pure expression duplicates were found.',
+      deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.',
       'Stateful indicator calls remain ordered stream operators and are not aliased by generic CSE.',
       `Estimated peak temporary register pressure: ${peakLiveRegisters}.`,
     ]),
