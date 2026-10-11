@@ -59,6 +59,9 @@ function eventIdentity(event: DomainMarketEvent): unknown {
     case 'OrderUpdate':
       return {
         v: EVENT_KEY_VERSION, type: event.type, brokerOrderId: event.brokerOrderId || event.orderId || null,
+        // Before broker acknowledgement, the stable client ID is the only
+        // identity separating concurrent order intents for the same account.
+        clientOrderId: (event.brokerOrderId || event.orderId) ? null : event.clientOrderId || null,
         status: event.status,
         quantity: event.quantity ?? null, filledQuantity: event.filledQuantity ?? null,
         averagePrice: event.averagePrice ?? null, side: event.side ?? null,
