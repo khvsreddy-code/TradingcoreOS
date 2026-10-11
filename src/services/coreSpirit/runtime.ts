@@ -220,7 +220,7 @@ export class CoreSpiritRuntime {
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
   private readonly propValues: Readonly<Record<string, CoreSpiritValue>>;
-  private readonly suppressExternalEffects: boolean;
+  private suppressExternalEffects: boolean;
   private visibleRange?: { from:number; to:number };
   private readonly viewportMemo = new Map<string, number | null>();
   private readonly stateStore = new CoreSpiritStateStore();
@@ -654,6 +654,22 @@ export class CoreSpiritRuntime {
       inputDependencies: Object.freeze([...snapshot.inputDependencies]),
       state: cloneCoreSpiritKernelState(snapshot.state),
     });
+  }
+
+  /**
+   * Replays confirmed history to reconstruct a chart's indicator state without
+   * dispatching order intents, alerts, webhooks or host events. The suppression
+   * scope is restored even if a bar fails, so the next forming-bar run keeps its
+   * normal live execution semantics.
+   */
+  executeIrReadOnly(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
+    const previous = this.suppressExternalEffects;
+    this.suppressExternalEffects = true;
+    try {
+      return this.executeIr(ir, bars);
+    } finally {
+      this.suppressExternalEffects = previous;
+    }
   }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
