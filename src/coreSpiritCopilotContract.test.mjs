@@ -35,11 +35,14 @@ assert.match(editor,/setCopilotStatus\('blocked'\)/,'missing history or replay i
 assert.doesNotMatch(editor,/copilotReplayPassRef\.current=false;[\s\S]{0,400}setCopilotStatus\('ready'\)/,'a missing replay result must never be represented as replay-ready');
 assert.match(editor,/COPILOT_ARTIFACT_HASH_MISMATCH/,'server/local artifact identity mismatches must block Copilot Run');
 const worker=read('src/services/coreSpirit/coreSpiritCompiler.worker.ts');
+const replayWorker=read('src/services/coreSpirit/coreSpiritReplay.worker.ts');
 const client=read('src/services/coreSpirit/coreSpiritCompilerClient.ts');
-assert.match(worker,/type==='replayPreview'/,'validated Copilot artifacts should get an isolated replay preflight');
-assert.match(worker,/executeIrReadOnly/,'Copilot replay must suppress external effects');
-assert.match(worker,/message\.bars\.length>3000/,'replay preflight must be bounded to 3,000 bars');
-assert.match(client,/previewCoreSpiritArtifactOffThread/,'replay must execute through the compiler worker client');
+assert.doesNotMatch(worker,/CoreSpiritRuntime|replayPreview/,'interactive compiler worker must not host historical replay execution');
+assert.match(client,/new Worker\(new URL\('\.\/coreSpiritReplay\.worker\.ts'/,'replay must use a worker separate from live compiler diagnostics');
+assert.match(replayWorker,/message\.type!=='replayPreview'/,'dedicated replay worker must own its replay protocol');
+assert.match(replayWorker,/executeIrReadOnly/,'Copilot replay must suppress external effects');
+assert.match(replayWorker,/message\.bars\.length>3000/,'replay preflight must be bounded to 3,000 bars');
+assert.match(client,/previewCoreSpiritArtifactOffThread/,'replay must execute through the worker client');
 assert.match(route,/validateExecutableArtifact\(compiled\.artifact\)/,'generated artifact must pass integrity validation');
 assert.match(route,/createCoreSpiritSandbox\(\{layer:'script',target:'chart'\}\)/,'generated code must be checked against chart-layer grants');
 assert.match(route,/validateCoreScriptCapabilitiesAgainstSandbox/,'required capabilities must be checked against sandbox grants');
