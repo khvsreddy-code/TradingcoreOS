@@ -4,14 +4,12 @@ import { loadOrCompileCoreSpiritArtifact } from './services/coreSpirit/artifactC
 import { compileCoreSpiritArtifactOffThread } from './services/coreSpirit/coreSpiritCompilerClient.ts';
 import { normalizeCoreSpiritSource as normalizeCoreSpirit } from './services/coreSpirit/syntax.ts';
 import type { CoreSpiritIrProgram } from './services/coreSpirit/ir.ts';
-import type { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { runCoreSpiritArtifactInWorker } from './services/coreSpirit/chartRunner.ts';
 import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact.ts';
 import type { CoreSpiritGraphSnapshot } from './services/core/data/marketDataGraph.ts';
 import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreSpiritWorkerPool.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
-import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
@@ -125,29 +123,6 @@ function dependencyKey(symbol:string,timeframe:string):string {
   return `${symbol.toUpperCase()}|${timeframe.toLowerCase()}`;
 }
 
-function upperBoundMarketTime(bars:readonly CoreSpiritMarketBar[], targetMs:number):number {
-  let lo=0,hi=bars.length;
-  while(lo<hi){
-    const mid=(lo+hi)>>>1;
-    if(barTimeMillis(bars[mid]?.timestamp)<=targetMs)lo=mid+1;
-    else hi=mid;
-  }
-  return lo;
-}
-
-function timeframeDurationMs(timeframe:string):number{
-  const match=String(timeframe||'').trim().match(/^(\d+)([smhdw]?)$/i);
-  if(!match)return 5*60_000;
-  const count=Math.max(1,Number(match[1]));
-  switch(String(match[2]||'m').toLowerCase()){
-    case 's':return count*1_000;
-    case 'h':return count*60*60_000;
-    case 'd':return count*24*60*60_000;
-    case 'w':return count*7*24*60*60_000;
-    default:return count*60_000;
-  }
-}
-
 export class CoreSpiritVelaEngine {
   readonly language = 'corespirit';
 
@@ -204,63 +179,6 @@ export class CoreSpiritVelaEngine {
         .filter(dep => dep.symbol !== 'current' && !(dep.symbol === req.market.symbol && (dep.timeframe === 'chart' || dep.timeframe === req.market.timeframe)))
         .map(dep => [dependencyKey(dep.symbol, dep.timeframe), { symbol: dep.symbol, timeframe: dep.timeframe }]),
     ).values()];
-
-    const dataResolver: CoreSpiritDataResolver = {
-      requestAt: (request: CoreSpiritDataRequest, context: CoreSpiritDataResolutionContext): CoreSpiritDataSnapshot | null => {
-        const key=dependencyKey(request.symbol,request.timeframe);
-        const rows=secondaryData.get(key);
-        if(!rows?.length)return null;
-        const offset=Math.max(0,Math.floor(request.offset??0));
-        // Runtime execution contexts expose epoch seconds; Vela's candle adapter
-        // normalizes timestamps to milliseconds. Align units before as-of lookup,
-        // confirmation, exact matching and staleness checks.
-        const rawAsOf=Number(context.asOfTimestamp);
-        if(!Number.isFinite(rawAsOf))return null;
-        const asOfTimestampMs=rawAsOf>=1e11?rawAsOf:rawAsOf*1000;
-        const end=upperBoundMarketTime(rows,asOfTimestampMs)-1;
-        if(end<0)return null;
-        const duration=timeframeDurationMs(request.timeframe);
-        const isConfirmed=(candidate:CoreSpiritMarketBar)=>{
-          const t=barTimeMillis(candidate.timestamp);
-          return context.executionMode!=='realtime'||t+duration<=asOfTimestampMs;
-        };
-        let target=end;
-        if(context.alignment==='last-confirmed'){
-          let cursor=end;
-          while(cursor>=0&&!isConfirmed(rows[cursor]!))cursor-=1;
-          if(cursor<0)return null;
-          target=cursor-offset;
-        }else if(context.alignment==='nearest-confirmed'){
-          // "Nearest confirmed" is still causal: never look beyond asOfTimestamp.
-          // In live/replay this naturally means the latest confirmed bar at or
-          // before asOf; in historical mode it uses the same no-lookahead rule.
-          let cursor=end;
-          while(cursor>=0&&!isConfirmed(rows[cursor]!))cursor-=1;
-          if(cursor<0)return null;
-          target=cursor-offset;
-        }else{
-          target=end-offset;
-        }
-        const row=rows[target];
-        if(!row)return null;
-        const time=barTimeMillis(row.timestamp);
-        const confirmed=isConfirmed(row);
-        const distance=Math.abs(asOfTimestampMs-time);
-        const stale=context.maxStalenessMs!=null && distance>context.maxStalenessMs;
-        if(stale)return null;
-        if(context.alignment==='exact'&&time!==asOfTimestampMs)return null;
-        if(context.alignment==='developing'&&time>asOfTimestampMs)return null;
-        return {
-          value:Number((row as any)[request.field]),
-          source:`vela.fetchSeries:${request.symbol}:${request.timeframe}`,
-          symbol:request.symbol,
-          timeframe:request.timeframe,
-          timestamp:time,
-          state:confirmed?'confirmed':'developing',
-          revision:context.revision,
-        };
-      },
-    };
 
     const loadSecondaryData = async (force=false): Promise<void> => {
       if (stopped || !req.fetchSeries || !secondaryDependencies.length) return;
@@ -383,7 +301,6 @@ export class CoreSpiritVelaEngine {
       const runtimeOptions:CoreSpiritWorkerRuntimeOptions={
         symbol:req.market.symbol,
         timeframe:req.market.timeframe,
-        sourceId:token.sourceId,
         executionMode:req.mode==='live'?'realtime':'historical',
         executionTarget:'chart',
         layer:'script',
