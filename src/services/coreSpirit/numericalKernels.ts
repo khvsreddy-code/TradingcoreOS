@@ -359,31 +359,70 @@ function rollingPair(left: CoreSpiritNumericSeries, right: CoreSpiritNumericSeri
   if (!Number.isInteger(ddof) || ddof < 0 || ddof >= period) throw new Error('ddof must be an integer in [0, period)');
   const covariance = output(length);
   const correlation = output(length);
-  let sx = 0; let sy = 0; let sxx = 0; let syy = 0; let sxy = 0; let invalid = 0;
+
+  // Maintain centered co-moments with reversible Welford updates. The former
+  // sum(x*x) - sum(x)^2/n formulation loses precision for price-level series
+  // (e.g. 1e12 + small intraday moves), corrupting covariance/correlation.
+  let count = 0;
+  let meanX = 0;
+  let meanY = 0;
+  let cxx = 0;
+  let cyy = 0;
+  let cxy = 0;
+  let invalid = 0;
+
+  const add = (x: number, y: number): void => {
+    count += 1;
+    const dx = x - meanX;
+    const dy = y - meanY;
+    meanX += dx / count;
+    meanY += dy / count;
+    cxx += dx * (x - meanX);
+    cyy += dy * (y - meanY);
+    cxy += dx * (y - meanY);
+  };
+  const remove = (x: number, y: number): void => {
+    if (count <= 1) {
+      count = 0; meanX = 0; meanY = 0; cxx = 0; cyy = 0; cxy = 0;
+      return;
+    }
+    const nextCount = count - 1;
+    const nextMeanX = (count * meanX - x) / nextCount;
+    const nextMeanY = (count * meanY - y) / nextCount;
+    cxx -= (x - meanX) * (x - nextMeanX);
+    cyy -= (y - meanY) * (y - nextMeanY);
+    cxy -= (x - meanX) * (y - nextMeanY);
+    meanX = nextMeanX;
+    meanY = nextMeanY;
+    count = nextCount;
+  };
+
   for (let i = 0; i < length; i += 1) {
-    const x = Number(left[i]); const y = Number(right[i]);
-    if (Number.isFinite(x) && Number.isFinite(y)) { sx += x; sy += y; sxx += x*x; syy += y*y; sxy += x*y; }
+    const x = Number(left[i]);
+    const y = Number(right[i]);
+    if (Number.isFinite(x) && Number.isFinite(y)) add(x, y);
     else invalid += 1;
+
     if (i >= period) {
-      const oldX = Number(left[i-period]); const oldY = Number(right[i-period]);
-      if (Number.isFinite(oldX) && Number.isFinite(oldY)) { sx -= oldX; sy -= oldY; sxx -= oldX*oldX; syy -= oldY*oldY; sxy -= oldX*oldY; }
+      const oldX = Number(left[i - period]);
+      const oldY = Number(right[i - period]);
+      if (Number.isFinite(oldX) && Number.isFinite(oldY)) remove(oldX, oldY);
       else invalid -= 1;
     }
-    if (i < period-1 || invalid !== 0) continue;
-    const covNumerator = sxy - sx*sy/period;
-    const varX = sxx - sx*sx/period;
-    const varY = syy - sy*sy/period;
-    const scaleX = Math.max(1, Math.abs(sxx), Math.abs(sx*sx/period));
-    const scaleY = Math.max(1, Math.abs(syy), Math.abs(sy*sy/period));
-    const stableX = varX < 0 && Math.abs(varX) <= Number.EPSILON*scaleX*16 ? 0 : varX;
-    const stableY = varY < 0 && Math.abs(varY) <= Number.EPSILON*scaleY*16 ? 0 : varY;
-    covariance[i] = covNumerator / (period-ddof);
-    if (stableX > 0 && stableY > 0) correlation[i] = Math.max(-1, Math.min(1, covNumerator / Math.sqrt(stableX*stableY)));
-    if (stableX < 0 || stableY < 0) covariance[i] = Number.NaN;
+
+    if (i < period - 1 || invalid !== 0 || count !== period) continue;
+    const toleranceX = Number.EPSILON * Math.max(1, Math.abs(cxx)) * period * 32;
+    const toleranceY = Number.EPSILON * Math.max(1, Math.abs(cyy)) * period * 32;
+    const stableX = cxx < 0 && Math.abs(cxx) <= toleranceX ? 0 : cxx;
+    const stableY = cyy < 0 && Math.abs(cyy) <= toleranceY ? 0 : cyy;
+    if (stableX < 0 || stableY < 0) continue;
+    covariance[i] = cxy / (period - ddof);
+    if (stableX > 0 && stableY > 0) {
+      correlation[i] = Math.max(-1, Math.min(1, cxy / Math.sqrt(stableX * stableY)));
+    }
   }
   return { covariance, correlation };
 }
-
 export function covariance(left: CoreSpiritNumericSeries, right: CoreSpiritNumericSeries, period: number, ddof = 0): Float64Array {
   return rollingPair(left, right, period, ddof).covariance;
 }
