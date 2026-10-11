@@ -27,6 +27,8 @@ import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisual
 import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
+import { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
+export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
 export type CoreSpiritCompileResult = { ir?: CoreSpiritIrProgram; diagnostics: CoreSpiritDiagnostic[]; artifact?: CoreSpiritExecutableArtifact };
 export type CoreSpiritCompilerOptions = {
@@ -44,17 +46,6 @@ export function parseModelFeatureExpression(source: string): CoreSpiritAstNode {
   const declaration = parsed.body[0];
   if (!declaration || declaration.type !== 'let') throw new Error(`Invalid model feature expression: ${source}`);
   return declaration.expression;
-}
-export function buildCoreSpiritSemanticFingerprint(options: Pick<CoreSpiritCompilerOptions,'layer'|'components'> = {}): string {
-  const componentSource = options.components ?? coreSpiritComponentRegistry;
-  const componentContracts = componentSource && typeof componentSource === 'object' && 'listContracts' in componentSource
-    ? (componentSource as any).listContracts()
-    : componentSource;
-  return JSON.stringify({
-    compilerPipeline: 'semantic-v2',
-    layer: options.layer || 'script',
-    components: componentContracts,
-  });
 }
 
 export class CoreSpiritCompiler {

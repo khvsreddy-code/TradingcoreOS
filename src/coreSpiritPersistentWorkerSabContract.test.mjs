@@ -24,6 +24,9 @@ if(!/SharedArrayBuffer/.test(output)||!/materializeSharedSeriesOutput/.test(outp
 if(!/crossOriginIsolated/.test(buffer))throw new Error('SAB capability must respect cross-origin isolation');
 if(!/const\s+contexts\s*=\s*new Map/.test(worker)||!/artifactIdFor/.test(worker)||!/executeBar/.test(worker))throw new Error('Worker must retain runtime contexts/artifacts and support incremental execution');
 if(!/readCoreSpiritSharedMarketDescriptor/.test(worker)||!/sharedSeries/.test(worker))throw new Error('Worker must read shared market input and emit shared numeric series output');
+if(!/marketFrame:CoreSpiritMarketFrame/.test(worker)||!/coreSpiritMarketFrameFromColumns/.test(worker)||!/coreSpiritMarketFrameArrayFacade/.test(worker))throw new Error('Worker market inputs must stay columnar with an on-demand compatibility facade');
+if(/function ensureBarArray/.test(worker)||/bar\.timestamp=new Date/.test(worker))throw new Error('Worker must not maintain/rewrite one object for every shared row');
+if(!/getMarketFrame\(\): CoreSpiritMarketFrame/.test(read('src/services/coreSpirit/runtime.ts')))throw new Error('Runtime must expose the zero-copy typed-column boundary for quant/ML feature builders');
 if(!/Cross-Origin-Opener-Policy/.test(vite)||!/Cross-Origin-Embedder-Policy/.test(vite))throw new Error('Vite must expose SAB isolation headers');
 if(!Array.isArray(vercel.headers)||!vercel.headers.some(h=>h.source==='/(.*)'&&h.headers?.some(x=>x.key==='Cross-Origin-Embedder-Policy'&&x.value==='require-corp')))throw new Error('Vercel live route must expose COEP require-corp');
 if(!/sharedMemory/.test(live)||!/crossOriginIsolated/.test(live))throw new Error('Live telemetry must expose shared-memory capability');

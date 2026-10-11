@@ -1,6 +1,9 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel.ts';
 import type { InputValue } from './services/core/chart/velaNativeChartKernel.ts';
-import { compileCoreSpirit, normalizeCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
+import { loadOrCompileCoreSpiritArtifact } from './services/coreSpirit/artifactCache.ts';
+import { compileCoreSpiritArtifactOffThread } from './services/coreSpirit/coreSpiritCompilerClient.ts';
+import { normalizeCoreSpiritSource as normalizeCoreSpirit } from './services/coreSpirit/syntax.ts';
+import type { CoreSpiritIrProgram } from './services/coreSpirit/ir.ts';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
@@ -14,7 +17,7 @@ type DirtyRange = { from: number; to: number };
 type PreparedToken = {
   sourceId: string;
   source: string;
-  ir: NonNullable<ReturnType<typeof compileCoreSpirit>['ir']>;
+  ir: CoreSpiritIrProgram;
 };
 
 type VelaOhlcv = {
@@ -152,12 +155,13 @@ export class CoreSpiritVelaEngine {
 
   async prepare(source: string, instanceId: string): Promise<PreparedScript> {
     const normalized = normalizeCoreSpirit(source);
-    const compiled = compileCoreSpirit(source, instanceId);
-    const error = compiled.diagnostics?.find(diagnostic => diagnostic.severity === 'error');
-    if (!compiled.ir || error) throw new Error(error?.message || 'CoreSpirit compilation failed');
-
-    const metadata = resolveCoreSpiritVelaMetadata(source, compiled.ir);
-    const token: PreparedToken = { sourceId: instanceId, source: normalized, ir: compiled.ir };
+    const artifact = await loadOrCompileCoreSpiritArtifact(source, instanceId, {
+      backend:'worker-vm',
+      compileInWorker:(input, sourceId, options)=>compileCoreSpiritArtifactOffThread(input,sourceId,options),
+    });
+    const ir = artifact.ir;
+    const metadata = resolveCoreSpiritVelaMetadata(source, ir);
+    const token: PreparedToken = { sourceId: instanceId, source: normalized, ir };
 
     return {
       language: this.language,
@@ -165,7 +169,7 @@ export class CoreSpiritVelaEngine {
       props: metadata.props,
       meta: metadata.meta,
       reactsToViewport: metadata.reactsToViewport,
-      maxLookback: compiled.ir.maxLookback,
+      maxLookback: artifact.maxLookback,
       token,
     };
   }

@@ -1,4 +1,5 @@
 import type { HistoricalCandle } from './types';
+import type { CoreSpiritMarketFrame } from './marketData';
 import { CoreEventBus, coreEventBus } from '../core/event/eventBus';
 import { CoreSpiritObject, CoreSpiritProgram, CoreSpiritValue } from './types';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
@@ -60,6 +61,8 @@ export type CoreSpiritRuntimeOptions = {
   propValues?: Readonly<Record<string, CoreSpiritValue>>;
   /** Read-only recomputation (viewport/backfill refresh) must not emit execution or external event side effects. */
   suppressExternalEffects?: boolean;
+  /** Zero-copy numeric inputs for quant/ML feature adapters. */
+  marketFrame?: () => CoreSpiritMarketFrame;
 };
 export type CoreSpiritKernelState =
   | { family:'fused'; state:CoreSpiritFusedSeriesCursor }
@@ -154,6 +157,7 @@ function visibleVpvrPoc(
 /** Stateful, chronological CoreSpirit executor. No DOM, network or broker APIs are exposed here. */
 export class CoreSpiritRuntime {
   private readonly dataResolver?: CoreSpiritDataResolver;
+  private marketFrameResolver?: () => CoreSpiritMarketFrame;
   private readonly compiler = new CoreSpiritCompiler();
   private readonly options: { symbol:string; timeframe:string; sourceId:string; maxStepsPerBar:number; timezone:string; stateHistoryLimit:number };
   private readonly bus: CoreEventBus;
@@ -241,6 +245,7 @@ export class CoreSpiritRuntime {
 
   constructor(options: CoreSpiritRuntimeOptions = {}, bus: CoreEventBus = coreEventBus) {
     this.dataResolver = options.dataResolver;
+    this.marketFrameResolver = options.marketFrame;
     this.profiler = new CoreSpiritProfiler(options.profiler);
     this.modelOutputResolver = options.modelOutputResolver;
     this.modelPredictionResolver = options.modelPredictionResolver;
@@ -492,6 +497,16 @@ export class CoreSpiritRuntime {
   }
 
   getRealtimeLifecycle(): 'idle'|'evaluating'|'committed' { return this.realtimeLifecycle; }
+
+  /** Direct typed-column input boundary for quant and ML feature builders. */
+  getMarketFrame(): CoreSpiritMarketFrame | undefined {
+    return this.marketFrameResolver?.();
+  }
+
+  /** Worker contexts can replace column views without rebuilding the runtime. */
+  setMarketFrameResolver(resolver: () => CoreSpiritMarketFrame): void {
+    this.marketFrameResolver = resolver;
+  }
 
   getExecutionFrame() {
     const b=this.state.barState;

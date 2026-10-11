@@ -1,16 +1,17 @@
 import { CoreSpiritProgram } from './types';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
-import { CoreSpiritCompiler, buildCoreSpiritSemanticFingerprint } from './compiler';
+import { CoreSpiritCompiler } from './compiler';
+import { buildCoreSpiritArtifactLookupIdentity, buildCoreSpiritSemanticFingerprint, coreSpiritComponentFingerprint } from './artifactLookupIdentity';
+export { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
 import type { CoreSpiritCompileResult } from './compiler';
 import { CoreSpiritRuntime, CoreSpiritExecutionResult } from './runtime';
 import type { CoreSpiritMarketBar } from './marketData';
 import { normalizeCoreSpiritSource } from './syntax';
 import { describeCoreSpiritSurface } from './surfaceForms';
-import { sha256HexSync } from './artifactIdentity';
-import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_RUNTIME_ABI, CORE_SPIRIT_OPTIMIZER_ABI } from './VERSION';
+
+import { CORE_SPIRIT_COMPILER_VERSION } from './VERSION';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
-import { coreSpiritComponentRegistry } from './coreSpiritComponents';
 import type { CoreSpiritExecutableArtifact } from './artifact';
 
 export type { CoreSpiritCompileResult };
@@ -51,41 +52,6 @@ export function clearCoreSpiritCompileCache(): void {
   diagnosticsCache.clear();
 }
 
-function componentFingerprint(options: { components?: CoreSpiritComponentRegistryLike }): string {
-  const components = options.components ?? coreSpiritComponentRegistry;
-  if (components && typeof components === 'object' && 'listContracts' in components) {
-    return JSON.stringify((components as any).listContracts());
-  }
-  return JSON.stringify(components);
-}
-
-export function buildCoreSpiritArtifactLookupIdentity(
-  source:string,
-  sourceId:string,
-  options:{components?:CoreSpiritComponentRegistryLike; layer?:string},
-): { key:string; sourceHash:string; normalizedHash:string; semanticHash:string } {
-  const normalizedSource=normalizeCoreSpiritSource(source);
-  const sourceHash=sha256HexSync(source);
-  const normalizedHash=sha256HexSync(normalizedSource);
-  const semanticFingerprint=JSON.stringify({
-    compiler:CORE_SPIRIT_COMPILER_VERSION,
-    semantic:buildCoreSpiritSemanticFingerprint({
-      layer:options.layer as any,
-      components:options.components,
-    }),
-    componentSet:componentFingerprint(options),
-    runtimeABI:CORE_SPIRIT_RUNTIME_ABI,
-    optimizerABI:CORE_SPIRIT_OPTIMIZER_ABI,
-  });
-  const semanticHash=sha256HexSync(`${normalizedHash}\n${semanticFingerprint}`);
-  return {
-    key:`${sourceId}:${semanticHash}`,
-    sourceHash,
-    normalizedHash,
-    semanticHash,
-  };
-}
-
 export function compileCoreSpirit(
   source: string,
   sourceId = 'coreSpirit',
@@ -110,7 +76,7 @@ export function compileCoreSpirit(
       layer:options.layer,
       components:options.components,
     }),
-    componentSet:componentFingerprint(options),
+    componentSet:coreSpiritComponentFingerprint(options),
   });
 
   const surface=describeCoreSpiritSurface(source,options as any);

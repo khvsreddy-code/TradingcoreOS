@@ -1,5 +1,12 @@
 import { CoreSpiritRuntime } from './runtime';
-import type { CoreSpiritMarketBar } from './marketData';
+import {
+  coreSpiritMarketFrameArrayFacade,
+  coreSpiritMarketFrameFromBars,
+  coreSpiritMarketFrameFromColumns,
+  emptyCoreSpiritMarketFrame,
+  type CoreSpiritMarketBar,
+  type CoreSpiritMarketFrame,
+} from './marketData';
 import { CoreSpiritGaussianHMM, type CoreSpiritHMMArtifactBinding } from './quantMath';
 import {
   readCoreSpiritSharedMarketDescriptor,
@@ -17,6 +24,9 @@ type WorkerContext={
   artifact:CoreSpiritExecutableArtifact;
   sourceId:string;
   runtime:CoreSpiritRuntime;
+  /** Canonical columns, normally backed by the host's SharedArrayBuffer. */
+  marketFrame:CoreSpiritMarketFrame;
+  /** Read-only compatibility facade; no retained object per bar. */
   bars:CoreSpiritMarketBar[];
   datasetVersion:number;
   initialized:boolean;
@@ -70,48 +80,24 @@ type Message=LoadArtifactMessage|UpdateHMMArtifactsMessage|UpdateGraphMessage|Ru
 
 const contexts=new Map<string,WorkerContext>();
 
-function ensureBarArray(context:WorkerContext,length:number):void {
-  if(context.bars.length===length)return;
-  if(context.bars.length>length)context.bars.length=length;
-  while(context.bars.length<length){
-    context.bars.push({
-      timestamp:new Date(0).toISOString(),
-      open:0,
-      high:0,
-      low:0,
-      close:0,
-      volume:0,
-    });
-  }
-}
-
 function syncSharedMarket(
   context:WorkerContext,
   descriptor:CoreSpiritSharedMarketDescriptor,
 ):{dirtyFrom:number;dirtyTo:number}{
   const columns=readCoreSpiritSharedMarketDescriptor(descriptor);
   const length=Math.max(0,Math.min(descriptor.length,descriptor.capacity));
-  ensureBarArray(context,length);
-
+  // Zero-copy views over the descriptor; no per-bar object mutation or allocation.
+  context.marketFrame=coreSpiritMarketFrameFromColumns({...columns,length,timeUnit:'seconds'},length);
   const dirtyFrom=Math.max(0,Math.min(length,Math.floor(descriptor.dirtyFrom)));
   const dirtyTo=Math.max(dirtyFrom,Math.min(length,Math.ceil(descriptor.dirtyTo)));
-
-  for(let i=dirtyFrom;i<dirtyTo;i+=1){
-    const bar=context.bars[i]!;
-    bar.timestamp=new Date(columns.time[i]! * 1000).toISOString();
-    bar.open=columns.open[i]!;
-    bar.high=columns.high[i]!;
-    bar.low=columns.low[i]!;
-    bar.close=columns.close[i]!;
-    bar.volume=columns.volume[i]!;
-  }
-
   return {dirtyFrom,dirtyTo};
 }
 
 function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirtyFrom:number;dirtyTo:number}{
-  context.bars=bars;
-  return {dirtyFrom:0,dirtyTo:bars.length};
+  // The compatibility transport is converted once into columns; the input array
+  // is not retained across runs.
+  context.marketFrame=coreSpiritMarketFrameFromBars(bars);
+  return {dirtyFrom:0,dirtyTo:context.marketFrame.length};
 }
 
 function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpiritHMMArtifactBinding[]):void {
@@ -146,6 +132,18 @@ function installArtifact(message:LoadArtifactMessage):void{
     message.graphBaseTimeframe ?? 'chart',
   );
   const hmmModels=new Map<string,CoreSpiritGaussianHMM>();
+  const context:WorkerContext={
+    artifact:message.artifact,
+    sourceId:message.sourceId,
+    runtime:undefined as unknown as CoreSpiritRuntime,
+    marketFrame:emptyCoreSpiritMarketFrame(),
+    bars:[] as CoreSpiritMarketBar[],
+    datasetVersion:0,
+    initialized:false,
+    graphResolver,
+    hmmModels,
+  };
+  context.bars=coreSpiritMarketFrameArrayFacade(()=>context.marketFrame);
   const runtime=new CoreSpiritRuntime({
     sourceId:message.sourceId,
     executionMode:'historical',
@@ -153,19 +151,12 @@ function installArtifact(message:LoadArtifactMessage):void{
     executionTier:'optimized',
     dataResolver:graphResolver,
     hmmArtifactResolver:modelName=>hmmModels.get(modelName),
+    marketFrame:()=>context.marketFrame,
   });
   runtime.loadIr(message.artifact.ir);
-  contexts.set(message.contextKey,{
-    artifact:message.artifact,
-    sourceId:message.sourceId,
-    runtime,
-    bars:[],
-    datasetVersion:0,
-    initialized:false,
-    graphResolver,
-    hmmModels,
-  });
-  replaceHMMArtifacts(contexts.get(message.contextKey)!,message.hmmArtifacts ?? []);
+  context.runtime=runtime;
+  contexts.set(message.contextKey,context);
+  replaceHMMArtifacts(context,message.hmmArtifacts ?? []);
 }
 function getContext(message:RunMessage):WorkerContext{
   const context=contexts.get(message.contextKey);

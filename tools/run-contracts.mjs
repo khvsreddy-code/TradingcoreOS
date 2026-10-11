@@ -14,6 +14,8 @@ const contracts = [
   ['series-backend-dispatcher', ['src/services/coreSpirit/seriesBackendDispatcherContract.test.mjs', true]],
   ['dirty-graph', ['src/services/coreSpirit/dirtyGraphContract.test.mjs', true]],
   ['columnar-market-data', ['src/services/coreSpirit/columnarMarketDataContract.test.mjs', true]],
+  ['market-frame-facade', ['src/services/coreSpirit/marketFrameFacade.test.ts', true]],
+  ['corespirit-off-thread-compile-cache', ['src/coreSpiritOffThreadCompileContract.test.mjs', false]],
   ['optimized-execution', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
   ['authoring-levels', ['src/coreSpiritAuthoringLevelsContract.test.mjs', true]],
   ['unified-language', ['src/coreSpiritUnifiedLanguageContract.test.mjs', true]],

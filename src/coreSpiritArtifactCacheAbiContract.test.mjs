@@ -27,6 +27,7 @@ if(!/sourceHash/.test(pipeline)||!/normalizedHash/.test(pipeline)||!/semanticHas
 if(!/indexedDB\.open/.test(cache)||!/ARTIFACT_STORE/.test(cache)||!/ALIAS_STORE/.test(cache)) throw new Error('Persistent CoreSpirit artifact cache must use IndexedDB');
 if(!/worker-vm/.test(cache)||!/browser-vm/.test(abi)) throw new Error('Artifact cache must distinguish execution backends');
 if(!/loadOrCompileCoreSpiritArtifact/.test(runner)||!/backend:'worker-vm'/.test(runner)) throw new Error('Chart execution must resolve artifacts from the persistent worker backend cache');
+if(!/loadOrCompileCoreSpiritArtifact/.test(read('src/CoreSpiritVelaEngine.ts'))) throw new Error('Vela prepare must use the persistent executable artifact cache');
 if(!/artifactIdFor/.test(pool)||!/artifactId,/.test(pool)) throw new Error('Persistent worker envelope must use the formal artifact hash');
 if(!/artifactIdFor/.test(worker)||!/message\.artifactId/.test(worker)) throw new Error('Worker context validation must use the formal artifact hash');
 

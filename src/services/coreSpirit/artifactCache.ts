@@ -3,7 +3,7 @@ import type { CoreSpiritExecutableArtifact } from './artifact';
 import { validateExecutableArtifact } from './artifact';
 import { artifactBackendKey, type CoreSpiritExecutionBackend } from './artifactAbi';
 import { sha256HexSync, type CoreSpiritArtifactIdentity } from './artifactIdentity';
-import { buildCoreSpiritArtifactLookupIdentity, compileCoreSpirit } from './coreSpiritPipeline';
+import { buildCoreSpiritArtifactLookupIdentity } from './artifactLookupIdentity';
 
 const DB_NAME='tradingcoreos-corespirit-artifacts';
 const DB_VERSION=1;
@@ -16,6 +16,8 @@ export type CoreSpiritArtifactLookupOptions = Readonly<{
   backend?: CoreSpiritExecutionBackend;
   layer?: string;
   components?: CoreSpiritComponentRegistryLike;
+  /** Async worker hook used by Vela; custom component registries stay on the compatibility path. */
+  compileInWorker?: (source:string, sourceId:string, options:{layer?:string}) => Promise<CoreSpiritExecutableArtifact>;
 }>;
 
 type PersistedArtifactRecord = {
@@ -272,14 +274,27 @@ export async function loadOrCompileCoreSpiritArtifact(
       return persisted;
     }
 
-    const compiled=compileCoreSpirit(source,sourceId,{
-      components:options.components,
-      layer:options.layer as any,
-    });
-    const artifact=compiled.artifact;
-    if(!artifact || !artifact.abi || !validateExecutableArtifact(artifact)){
-      const message=compiled.diagnostics?.find(d=>d.severity==='error')?.message;
-      throw new Error(message || 'CoreSpirit artifact compilation failed');
+    let artifact:CoreSpiritExecutableArtifact|undefined;
+    let validatedOffThread=false;
+    if(options.compileInWorker && !options.components){
+      artifact=await options.compileInWorker(source,sourceId,{layer:options.layer});
+      // The compiler worker validates the full artifact before transferring it,
+      // avoiding a second expensive IR serialization/hash pass on the UI thread.
+      validatedOffThread=true;
+    }else{
+      const {compileCoreSpirit}=await import('./coreSpiritPipeline');
+      const compiled=compileCoreSpirit(source,sourceId,{
+        components:options.components,
+        layer:options.layer as any,
+      });
+      artifact=compiled.artifact;
+      if(!artifact || !artifact.abi || !validateExecutableArtifact(artifact)){
+        const message=compiled.diagnostics?.find(d=>d.severity==='error')?.message;
+        throw new Error(message || 'CoreSpirit artifact compilation failed');
+      }
+    }
+    if(!artifact || !artifact.abi || (!validatedOffThread && !validateExecutableArtifact(artifact))){
+      throw new Error('CoreSpirit artifact compilation produced an invalid executable artifact');
     }
 
     const identity=identityFromArtifact(artifact);
