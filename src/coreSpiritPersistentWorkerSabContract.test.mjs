@@ -12,6 +12,7 @@ const buffer=read('src/services/coreSpirit/sharedMarketBuffer.ts');
 const vercel=JSON.parse(read('vercel.json'));
 const vite=read('vite.config.ts');
 const live=read('src/LiveTradingWorkspace.tsx');
+const velaEngine=read('src/CoreSpiritVelaEngine.ts');
 
 if(!/loadOrCompileCoreSpiritArtifact\(/.test(runner)||!/runArtifact\(\s*artifact/.test(runner))throw new Error('Chart runner must address workers with compiled executable artifacts');
 if(!/contextArtifacts/.test(pool)||!/artifactChanged/.test(pool))throw new Error('Worker pool must retain per-context artifact identity');
@@ -24,6 +25,11 @@ if(!/SharedArrayBuffer/.test(output)||!/materializeSharedSeriesOutput/.test(outp
 if(!/crossOriginIsolated/.test(buffer))throw new Error('SAB capability must respect cross-origin isolation');
 if(!/const\s+contexts\s*=\s*new Map/.test(worker)||!/artifactIdFor/.test(worker)||!/executeBar/.test(worker))throw new Error('Worker must retain runtime contexts/artifacts and support incremental execution');
 if(!/if\(typeof window!=='undefined'\)\s*\{\s*return Promise\.reject\(new Error\('CoreSpirit chart execution requires Web Worker support/.test(pool))throw new Error('Browser chart execution must fail closed rather than interpret history on the UI thread when Worker is unavailable');
+if(!/!job\.readOnly/.test(pool)||/const mode:WorkerRunEnvelope\['mode'\][\s\S]{0,100}job\.datasetVersion/.test(pool)&&!/!job\.readOnly/.test(pool))throw new Error('Read-only historical requests must never be downgraded to incremental execution');
+if(!/!readOnly&&datasetVersion>context\.datasetVersion/.test(pool))throw new Error('Node/SSR compatibility runtime must honour the read-only replay boundary');
+if(!/message\.readOnly\s*\|\|/.test(worker))throw new Error('Execution worker must enforce read-only requests as full replays even if an envelope requests incremental mode');
+if(!/runCoreSpiritArtifactInWorker/.test(velaEngine)||/runtime\.executeIr|runtime\.executeBar|createRuntime\(/.test(velaEngine))throw new Error('Vela scripting sessions must evaluate prepared CoreSpirit artifacts through persistent workers, not the terminal thread');
+if(!/cloneGraphSnapshot/.test(pool)||!/graphSnapshotForTransfer/.test(pool))throw new Error('Worker graph transfer must clone transferables so cached secondary-market arrays are not detached');
 if(!/readCoreSpiritSharedMarketDescriptor/.test(worker)||!/sharedSeries/.test(worker))throw new Error('Worker must read shared market input and emit shared numeric series output');
 if(!/marketFrame:CoreSpiritMarketFrame/.test(worker)||!/coreSpiritMarketFrameFromColumns/.test(worker)||!/coreSpiritMarketFrameArrayFacade/.test(worker))throw new Error('Worker market inputs must stay columnar with an on-demand compatibility facade');
 if(/function ensureBarArray/.test(worker)||/bar\.timestamp=new Date/.test(worker))throw new Error('Worker must not maintain/rewrite one object for every shared row');
