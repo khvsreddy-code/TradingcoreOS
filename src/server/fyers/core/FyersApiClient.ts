@@ -55,11 +55,18 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 export class FyersApiClient {
+  private readonly rateLimitIdentity: string;
+
   constructor(
     private readonly accessToken: string,
     private readonly appId = process.env.FYERS_CLIENT_ID || '',
     private readonly capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
-  ) {}
+    rateLimitIdentity?: string,
+  ) {
+    // Access tokens rotate; use the authenticated account/user identity for
+    // quota keys so reconnecting cannot reset that user's minute/day budget.
+    this.rateLimitIdentity = String(rateLimitIdentity || accessToken).trim();
+  }
 
   async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
     return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'data');
@@ -138,13 +145,13 @@ private async request<T>(base: string, path: string, params: Record<string, stri
   ): Promise<T> {
     if (budget === 'data') {
       const limits = this.capabilities.dataApiRateLimits;
-      return withBrokerRequestGate('fyers', this.accessToken, task, signal, {
+      return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal, {
         budgetKey: 'data',
         minIntervalMs: Math.ceil(1000 / limits.requestsPerSecond),
         maxPerMinute: limits.requestsPerMinute,
         maxPerDay: limits.requestsPerDay,
       });
     }
-    return withBrokerRequestGate('fyers', this.accessToken, task, signal);
+    return withBrokerRequestGate('fyers', this.rateLimitIdentity, task, signal);
   }
 }
