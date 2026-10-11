@@ -203,12 +203,18 @@ export class CoreSpiritVelaEngine {
         const rows=secondaryData.get(key);
         if(!rows?.length)return null;
         const offset=Math.max(0,Math.floor(request.offset??0));
-        const end=upperBoundMarketTime(rows,context.asOfTimestamp)-1;
+        // Runtime execution contexts expose epoch seconds; Vela's candle adapter
+        // normalizes timestamps to milliseconds. Align units before as-of lookup,
+        // confirmation, exact matching and staleness checks.
+        const rawAsOf=Number(context.asOfTimestamp);
+        if(!Number.isFinite(rawAsOf))return null;
+        const asOfTimestampMs=rawAsOf>=1e11?rawAsOf:rawAsOf*1000;
+        const end=upperBoundMarketTime(rows,asOfTimestampMs)-1;
         if(end<0)return null;
         const duration=timeframeDurationMs(request.timeframe);
         const isConfirmed=(candidate:CoreSpiritMarketBar)=>{
           const t=barTimeMillis(candidate.timestamp);
-          return context.executionMode!=='realtime'||t+duration<=context.asOfTimestamp;
+          return context.executionMode!=='realtime'||t+duration<=asOfTimestampMs;
         };
         let target=end;
         if(context.alignment==='last-confirmed'){
@@ -231,11 +237,11 @@ export class CoreSpiritVelaEngine {
         if(!row)return null;
         const time=barTimeMillis(row.timestamp);
         const confirmed=isConfirmed(row);
-        const distance=Math.abs(context.asOfTimestamp-time);
+        const distance=Math.abs(asOfTimestampMs-time);
         const stale=context.maxStalenessMs!=null && distance>context.maxStalenessMs;
         if(stale)return null;
-        if(context.alignment==='exact'&&time!==context.asOfTimestamp)return null;
-        if(context.alignment==='developing'&&time>context.asOfTimestamp)return null;
+        if(context.alignment==='exact'&&time!==asOfTimestampMs)return null;
+        if(context.alignment==='developing'&&time>asOfTimestampMs)return null;
         return {
           value:Number((row as any)[request.field]),
           source:`vela.fetchSeries:${request.symbol}:${request.timeframe}`,
