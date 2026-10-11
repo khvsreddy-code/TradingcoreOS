@@ -59,10 +59,10 @@ function eventIdentity(event: DomainMarketEvent): unknown {
     case 'OrderUpdate':
       return {
         v: EVENT_KEY_VERSION, type: event.type, brokerOrderId: event.brokerOrderId || event.orderId || null,
-        clientOrderId: event.clientOrderId || null, status: event.status,
+        status: event.status,
         quantity: event.quantity ?? null, filledQuantity: event.filledQuantity ?? null,
         averagePrice: event.averagePrice ?? null, side: event.side ?? null,
-        orderType: event.orderType ?? null, product: event.product ?? null, message: event.message ?? null,
+        orderType: event.orderType ?? null, product: event.product ?? null,
       };
     case 'Fill':
       return { v: EVENT_KEY_VERSION, type: event.type, tradeId: event.tradeId };
