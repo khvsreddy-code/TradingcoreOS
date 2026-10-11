@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { extractCoreSpiritSurfaceMetadata } from './services/coreSpirit/languageConcepts.ts';
 import { normalizeCoreSpiritSource } from './services/coreSpirit/surfaceForms.ts';
 
@@ -54,5 +55,47 @@ assert.equal(viewportPrepared.inputs[0].key, 'rows');
 assert.equal(viewportPrepared.inputs[0].min, 2);
 assert.equal(viewportPrepared.inputs[0].max, 400);
 assert.equal(viewportPrepared.inputs[0].title, 'Profile Rows');
+const viewportBars = Array.from({ length: 40 }, (_, index) => {
+  const close = 100 + index;
+  return { time: 1_700_000_000_000 + index * 300_000, open: close - 0.5, high: close + 1, low: close - 1, close, volume: 1000 + index };
+});
+const originalExecuteIr = CoreSpiritRuntime.prototype.executeIr;
+let viewportExecuteIrCalls = 0;
+CoreSpiritRuntime.prototype.executeIr = function (...args) {
+  viewportExecuteIrCalls += 1;
+  return originalExecuteIr.apply(this, args);
+};
+let viewportSession;
+try {
+  viewportSession = instance.execute({
+    prepared: viewportPrepared,
+    market: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
+    bars: viewportBars,
+    getBars: () => viewportBars,
+    mode: 'static',
+    historyState: 'complete',
+  }, {
+    onModel: () => undefined,
+    onScenePatches: () => undefined,
+    onError: error => { throw error; },
+    onDone: () => undefined,
+  });
+  assert.equal(viewportExecuteIrCalls, 1, 'viewport indicator initial history should execute once');
+  const visibleRange = { left: viewportBars[5].time, right: viewportBars[20].time };
+  viewportSession.setVisibleRange(visibleRange);
+  assert.equal(viewportExecuteIrCalls, 2, 'first viewport change should execute its bounded range once');
+  viewportSession.setVisibleRange(visibleRange);
+  assert.equal(viewportExecuteIrCalls, 2, 'identical viewport notifications must not rebuild the range runtime');
+
+  viewportSession.notifyBars('backfill', { from: viewportBars[5].time, to: viewportBars[20].time });
+  assert.equal(viewportExecuteIrCalls, 3, 'backfill must refresh the changed range');
+  viewportSession.setVisibleRange(visibleRange);
+  assert.equal(viewportExecuteIrCalls, 4, 'data backfill must invalidate the viewport-result cache');
+  viewportSession.stop();
+} finally {
+  if (viewportSession) viewportSession.stop();
+  CoreSpiritRuntime.prototype.executeIr = originalExecuteIr;
+}
+
 
 console.log('CORESPIRIT_VELA_FULL_CAPABILITY_CONTRACT_OK');
