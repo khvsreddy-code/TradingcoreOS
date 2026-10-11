@@ -30,6 +30,7 @@ export class CoreSpiritVisualObjectStore {
   create(node: CoreSpiritSceneNode): CoreSpiritVisualHandle {
     if (node.sourceId !== this.sourceId) throw new Error(`visual '${node.id}' belongs to '${node.sourceId}', expected '${this.sourceId}'`);
     if (this.nodes.has(node.id)) throw new Error(`visual '${node.id}' already exists`);
+    this.assertNoParentCycle(node.id, node.parentId);
     this.nodes.set(node.id, cloneNode(node));
     return { id: node.id, sourceId: this.sourceId, kind: node.kind };
   }
@@ -40,6 +41,7 @@ export class CoreSpiritVisualObjectStore {
     if (current && current.kind !== node.kind) {
       throw new Error(`visual '${node.id}' cannot change kind from '${current.kind}' to '${node.kind}'`);
     }
+    this.assertNoParentCycle(node.id, node.parentId);
     this.nodes.set(node.id, cloneNode(node));
     return { id: node.id, sourceId: this.sourceId, kind: node.kind };
   }
@@ -55,8 +57,20 @@ export class CoreSpiritVisualObjectStore {
       kind: current.kind,
       layer: current.layer,
     };
+    this.assertNoParentCycle(id, next.parentId);
     this.nodes.set(id, cloneNode(next));
     return { id, sourceId: this.sourceId, kind: current.kind };
+  }
+
+  private assertNoParentCycle(id: string, parentId?: string): void {
+    let cursor = parentId;
+    const visited = new Set<string>();
+    while (cursor) {
+      if (cursor === id) throw new Error(`visual '${id}' cannot create a parent cycle`);
+      if (visited.has(cursor)) throw new Error(`visual hierarchy contains a parent cycle at '${cursor}'`);
+      visited.add(cursor);
+      cursor = this.nodes.get(cursor)?.parentId;
+    }
   }
 
   remove(id: string): boolean {

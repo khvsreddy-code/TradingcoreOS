@@ -15,6 +15,10 @@ export type CoreSpiritOptimizationNode = Readonly<{
   effectful: boolean;
   cacheable: boolean;
   estimatedBarWork: number;
+  /** Longest data-dependency path ending at this instruction; not an execution schedule. */
+  dependencyDepth: number;
+  dependencyCriticalPathBarWork: number;
+  fanOut: number;
 }>;
 
 export type CoreSpiritOptimizationPass = Readonly<{
@@ -36,6 +40,10 @@ export type CoreSpiritOptimizationCost = Readonly<{
   peakLiveRegisters: number;
   chronologicalPasses: 1;
   estimatedSavedBarWork: number;
+  /** Data-dependency DAG lower bound; branch/effect ordering is not reordered. */
+  dependencyCriticalPathBarWork: number;
+  maxDependencyDepth: number;
+  maxFanOut: number;
 }>;
 
 export type CoreSpiritOptimizationPlan = Readonly<{
@@ -311,15 +319,32 @@ function buildOptimizationPlan(
     if ('dest' in instruction && instruction.dest) producer.set(instruction.dest,index);
     if (instruction.op==='setLocal' || instruction.op==='setState') producer.set(instruction.name,index);
   }
+  const dependencyDepthByInstruction = new Array<number>(instructions.length).fill(1);
+  const dependencyCriticalPathByInstruction = new Array<number>(instructions.length).fill(0);
+  let maxDependencyDepth = 0;
+  let maxFanOut = 0;
   const nodes=instructions.map((instruction,index)=>{
     const x=info(instruction);
+    const dependencies = dependencyMap.get(index) ?? [];
+    const dependencyDepth = dependencies.length
+      ? 1 + Math.max(...dependencies.map(dependency => dependencyDepthByInstruction[dependency] ?? 0))
+      : 1;
+    const dependencyCriticalPathBarWork = x.work + Math.max(0, ...dependencies.map(dependency => dependencyCriticalPathByInstruction[dependency] ?? 0));
+    const fanOut = (userMap.get(index) ?? []).length;
+    dependencyDepthByInstruction[index] = dependencyDepth;
+    dependencyCriticalPathByInstruction[index] = dependencyCriticalPathBarWork;
+    maxDependencyDepth = Math.max(maxDependencyDepth, dependencyDepth);
+    maxFanOut = Math.max(maxFanOut, fanOut);
     return Object.freeze({
       instruction:index,
       op:instruction.op,
       ...('name' in instruction && instruction.op==='call' ? {name:instruction.name}:{}),
       ...('dest' in instruction ? {dest:instruction.dest}:{}),
-      dependencies:Object.freeze([...(dependencyMap.get(index)??[])]),
+      dependencies:Object.freeze([...dependencies]),
       users:Object.freeze([...(userMap.get(index)??[])]),
+      dependencyDepth,
+      dependencyCriticalPathBarWork,
+      fanOut,
       pure:x.pure, deterministic:x.deterministic, stateful:x.stateful, effectful:x.effectful, cacheable:x.cacheable,
       estimatedBarWork:x.work,
     });
@@ -362,6 +387,9 @@ function buildOptimizationPlan(
     cost:Object.freeze({
       estimatedBarWork,pureBarWork,effectBarWork,statefulBarWork,historyReadOps,sourceReadReuse,cseEliminated:eliminated,deadPureInstructionsRemoved:deadRemoved,peakLiveRegisters,
       chronologicalPasses:1 as const,estimatedSavedBarWork,
+      dependencyCriticalPathBarWork:Math.max(0,...dependencyCriticalPathByInstruction),
+      maxDependencyDepth,
+      maxFanOut,
     }),
     explanation:Object.freeze([
       'All execution remains one chronological bar traversal; no second semantic runtime is introduced.',
@@ -370,6 +398,8 @@ function buildOptimizationPlan(
       deadSkipReason ?? (deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.'),
       'Stateful indicator calls remain ordered stream operators and are not aliased by generic CSE.',
       `Estimated peak temporary register pressure: ${peakLiveRegisters}.`,
+      `Data-dependency critical path estimate: ${Math.max(0,...dependencyCriticalPathByInstruction).toFixed(2)} work units across at most ${maxDependencyDepth} dependent instruction(s).`,
+      `Maximum data-dependency fan-out: ${maxFanOut}; effect and branch order are preserved and are not rescheduled.`,
     ]),
   });
 }

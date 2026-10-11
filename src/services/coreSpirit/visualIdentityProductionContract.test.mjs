@@ -34,6 +34,21 @@ assert.throws(
   'a stable visual id cannot silently change primitive kind',
 );
 
+
+store.create(node('grandchild', { text: 'grandchild' }, { parentId: 'child' }));
+const hierarchyChecksum = store.checksum();
+assert.throws(
+  () => store.update('parent', { parentId: 'grandchild' }),
+  /parent cycle/,
+  'reparenting must not introduce a cycle through descendants',
+);
+assert.equal(store.checksum(), hierarchyChecksum, 'rejected reparenting must not mutate the retained scene');
+assert.throws(
+  () => store.create(node('self-parent', {}, { parentId: 'self-parent' })),
+  /parent cycle/,
+  'a visual object cannot parent itself',
+);
+
 const previousChecksum = store.checksum();
 assert.throws(() => store.apply([
   { op: 'update', id: 'child', patch: { payload: { changed: true } } },

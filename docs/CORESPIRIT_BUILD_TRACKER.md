@@ -1,6 +1,6 @@
 # TradingCoreOS / CoreSpirit Build Tracker
 
-**Last updated:** 2026-10-05  
+**Last updated:** 2026-10-11  
 **Architecture lock:** CoreSpirit-first scripting + Vela chart engine + TCO-owned data/compute/broker systems. PineScript/PineTS compatibility is not part of the product architecture.
 
 ## Current performance path
@@ -48,6 +48,8 @@ FYERS compact columns
 - [x] Primary history backfill computes a causal dirty range with lookback warmup.
 - [x] CoreSpirit can evaluate the affected range instead of blindly rerunning all retained bars.
 - [x] Vela supports localized range patches.
+- [x] CoreSpiritSceneDiff now reports the union of actual time-bounded output extents instead of echoing the full requested dirty range; non-time-bounded value collections conservatively fall back to the requested range.
+- [x] Contract covers a wide requested range with a smaller exact output envelope and rejects time-bounded outputs wholly outside the dirty request.
 - [~] Dirty spans are not yet universal across every RenderPacket/ScenePatch collection and renderer-owned overlay category.
 - [ ] Make every supported overlay consume the same exact causal `[from,to]` range, with full replacement only as a proven fallback.
 
@@ -91,6 +93,7 @@ These are intentionally **not falsely marked as finished**:
 - [x] Historical checkpoint export/import remains clone-safe because it is a cold recovery path.
 - [x] Realtime execution results use the non-cloning state view; explicit snapshot callers retain the cloned API.
 - [x] Added CI coverage for the hot VM and copy-on-write invariants.
+- [x] Retained visual objects reject direct or descendant-derived parent cycles before mutating scene state.
 - [x] Realtime event/order/signal emissions are buffered by CoreSpiritEventRouter and committed only with the forming-bar transaction.
 
 ### 7. Vela workspace and data-path hardening
@@ -281,3 +284,13 @@ The chart data plane established the zero-copy canonical chart data plane at the
 - [ ] Prove family-level Vela drawing requests and CoreSpirit optimized runtime speedups in browser traces.
 
 - [x] Keep Vela workspace construction behind `velaWorkspaceLoader` in the live workspace consumer; the build contract now enforces the lazy value boundary.
+
+
+## v140 — scene invalidation and optimizer observability
+
+- [x] Scene value patches carry the envelope of changed time-bounded outputs; a line/zone crossing the changed bar contributes its full visual extent.
+- [x] Untimed collection mutations retain the requested dirty interval as a conservative fallback.
+- [x] Retained visual-object writes reject self-parenting and ancestor cycles before commit; transactional mutation rollback remains intact.
+- [x] Optimized IR nodes and the optimization cost model expose data-dependency depth, estimated dependency critical path and fan-out for planner diagnostics.
+- [ ] This DAG metric is analysis only: CFG-aware scheduling/dominance, state-identity reuse and representative 5k/50k/500k runtime benchmarks remain open.
+- [ ] Authenticated 1/4/8-chart browser evidence, 5k history-load/prepend timing and live forming-bar measurements remain open until captured against a running environment.

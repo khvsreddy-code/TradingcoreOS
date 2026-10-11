@@ -205,8 +205,11 @@ export class CoreSpiritSceneDiff {
         const collections: any[] = [];
         const instanceBatches: any[] = [];
         const out: ScenePatch[] = [];
-        let from = dirty.from;
-        let to = dirty.to;
+        // Track the actual time extent of emitted changes. Initializing this to the
+        // requested range silently widened every small patch back to the full range.
+        let from = Number.POSITIVE_INFINITY;
+        let to = Number.NEGATIVE_INFINITY;
+        let hasUnboundedValuePatch = false;
 
         for (const output of outputs) {
             const span = outputDirtySpan(output);
@@ -216,7 +219,18 @@ export class CoreSpiritSceneDiff {
             if (result?.delta) series.push(result.delta);
             if (result?.collection) collections.push(result.collection);
             if (result?.instanceDelta) instanceBatches.push(result.instanceDelta);
-            if (span) { from=Math.max(dirty.from, Math.min(from, span.from)); to=Math.min(dirty.to, Math.max(to, span.to)); }
+
+            // Time-bounded objects contribute their complete visual extent: a line
+            // or zone can cross the changed bar. Non-time-bounded collection patches
+            // conservatively retain the caller's range rather than inventing a span.
+            if (result?.delta || result?.collection || result?.instanceDelta) {
+                if (!span) {
+                    hasUnboundedValuePatch = true;
+                } else {
+                    from = Math.min(from, span.from);
+                    to = Math.max(to, span.to);
+                }
+            }
         }
 
         if (!this.markerSeriesMounted && this.markers.size > 0) {
@@ -234,11 +248,16 @@ export class CoreSpiritSceneDiff {
             for (let i = series.length - 1; i >= 0; i--) if (series[i]!.seriesId === this.markerSeriesId) series.splice(i, 1);
         }
 
-        if (series.length || collections.length || instanceBatches.length) out.push({
-            kind: 'value', indicatorId: this.indicatorId, dirty: { from, to }, series,
-            ...(collections.length ? { collections } : {}),
-            ...(instanceBatches.length ? { instanceBatches } : {}),
-        });
+        if (series.length || collections.length || instanceBatches.length) {
+            const patchDirty = hasUnboundedValuePatch || !Number.isFinite(from) || !Number.isFinite(to)
+                ? dirty
+                : { from, to };
+            out.push({
+                kind: 'value', indicatorId: this.indicatorId, dirty: patchDirty, series,
+                ...(collections.length ? { collections } : {}),
+                ...(instanceBatches.length ? { instanceBatches } : {}),
+            });
+        }
         return out;
     }
 

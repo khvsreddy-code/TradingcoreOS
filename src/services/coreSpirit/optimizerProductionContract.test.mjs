@@ -42,6 +42,12 @@ assert.equal(jump.target, instructions.length - 1, 'jump target must still point
 assert.equal(optimized.optimizationPlan.passes.at(-1).name, 'dead-pure-value-elimination');
 assert.equal(optimized.optimizationPlan.cost.deadPureInstructionsRemoved, 3);
 assert.equal(optimized.optimizationPlan.passes.at(-1).instructionsAfter, instructions.length);
+assert.ok(optimized.optimizationPlan.cost.dependencyCriticalPathBarWork > 0, 'optimizer should expose a data-dependency critical-path estimate');
+assert.ok(optimized.optimizationPlan.cost.maxDependencyDepth >= 2, 'optimizer should measure chained register dependencies');
+assert.ok(optimized.optimizationPlan.cost.maxFanOut >= 1, 'optimizer should measure shared values/fan-out');
+assert.ok(optimized.optimizationPlan.nodes.some(node => node.dependencyDepth > 1), 'per-instruction DAG depth should be retained for execution planning');
+assert.ok(optimized.optimizationPlan.explanation.some(line => line.includes('effect and branch order are preserved')), 'optimizer should state the safety boundary of the new cost analysis');
+
 
 const loopProgram = {
   ...program,
