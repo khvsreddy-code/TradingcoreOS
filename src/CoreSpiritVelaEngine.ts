@@ -600,7 +600,7 @@ export class CoreSpiritVelaEngine {
             const executionStart = Math.max(0, start - maxLookback);
             const rangeBars = currentBars.slice(executionStart, end);
             if (rangeBars.length) {
-              const rangeRuntime = createRuntime();
+              const rangeRuntime = createRuntime({ suppressExternalEffects:true });
               rangeRuntime.loadIr(token.ir);
               const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
               emitScenePatches(rangeResult, dirtyRange);
