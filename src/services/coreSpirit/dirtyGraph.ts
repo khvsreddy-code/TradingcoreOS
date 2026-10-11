@@ -38,12 +38,15 @@ function normalizedCallName(name: string | undefined): string {
   return String(name || '').split('.').at(-1)?.toLowerCase() || '';
 }
 
-/** Forward invalidation horizon for a changed input: N-bar windows have N-1 bars of impact; recursive accumulators extend to the execution end. */
+/** Forward invalidation horizon: rolling windows use N-1; rising/falling inspect N prior bars; recursive operators extend to the execution end. */
 function inferLookback(node: CoreSpiritDirtyNode, instructionName: string | undefined, constantValue?: number): number {
   const name = normalizedCallName(instructionName);
   if (RECURSIVE_TAIL_CALLS.has(name)) return -1;
   if (ONE_BAR_CHANGE_CALLS.has(name)) return 1;
-  if (name === 'rising' || name === 'falling' || FINITE_WINDOW_CALLS.has(name)) {
+  if (name === 'rising' || name === 'falling') {
+    return Number.isFinite(constantValue) ? Math.max(0, Math.floor(constantValue as number)) : Number.POSITIVE_INFINITY;
+  }
+  if (FINITE_WINDOW_CALLS.has(name)) {
     return Number.isFinite(constantValue) ? Math.max(0, Math.floor(constantValue as number) - 1) : Number.POSITIVE_INFINITY;
   }
   if (node.stateful) return Number.POSITIVE_INFINITY;
@@ -54,7 +57,12 @@ export function buildCoreSpiritDirtyGraph(graph: CoreSpiritSemanticGraph, reacti
   const dependents = reactive.dependents;
   const constants = new Map<string, number>();
   for (const instruction of instructions) {
-    if (instruction.op === 'const' && typeof instruction.value === 'number' && Number.isFinite(instruction.value)) constants.set(instruction.dest, instruction.value);
+    if (!('dest' in instruction) || !instruction.dest) continue;
+    // A register's last definition wins; never infer a window from a stale const.
+    constants.delete(instruction.dest);
+    if (instruction.op === 'const' && typeof instruction.value === 'number' && Number.isFinite(instruction.value)) {
+      constants.set(instruction.dest, instruction.value);
+    }
   }
   const output = graph.nodes.map((node) => {
     const name = node.name;
