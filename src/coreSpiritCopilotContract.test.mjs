@@ -23,6 +23,10 @@ assert.doesNotMatch(route,/temperature\s*:/,'Gemini 3.x request must not include
 assert.doesNotMatch(route,/VITE_[A-Z_]*GEMINI|VITE_[A-Z_]*GOOGLE/,'provider key must never be read from a browser-visible environment variable');
 assert.match(route,/compileCoreSpirit\(generated\.source,'corespirit-editor'/,'generated source must go through the canonical compiler with the same artifact identity as the editor');
 assert.match(editor,/copilotServerArtifactHashRef\.current=payload\.validation\?\.artifactHash/,'the Copilot response artifact hash must be pinned to its exact draft');
+assert.match(editor,/copilotReplayPassRef\.current!==true/,'Copilot Run must fail closed until the exact artifact passes replay');
+assert.match(editor,/copilotReplayPassRef\.current=replayPassed/,'replay gate must be tied to the completed replay result');
+assert.match(editor,/setCopilotStatus\('blocked'\)/,'missing history or replay infrastructure failure must block Copilot Run');
+assert.doesNotMatch(editor,/copilotReplayPassRef\.current=false;[\s\S]{0,400}setCopilotStatus\('ready'\)/,'a missing replay result must never be represented as replay-ready');
 assert.match(editor,/COPILOT_ARTIFACT_HASH_MISMATCH/,'server/local artifact identity mismatches must block Copilot Run');
 const worker=read('src/services/coreSpirit/coreSpiritCompiler.worker.ts');
 const client=read('src/services/coreSpirit/coreSpiritCompilerClient.ts');
@@ -42,6 +46,7 @@ assert.match(editor,/\/api\/corespirit\/copilot\/generate/,'editor must use the 
 assert.match(editor,/Authorization:/,'editor must send an authorization header');
 assert.match(editor,/session\.access_token/,'editor must send the signed-in access token');
 assert.match(editor,/Nothing runs automatically/,'UI must state that AI output is not executed automatically');
+assert.match(editor,/must then pass a bounded read-only historical replay before Run/,'UI must explain the mandatory replay gate');
 const start=editor.indexOf('const generateCopilotDraft=async()=>{');
 const end=editor.indexOf('const save = async () =>',start);
 assert.ok(start>=0&&end>start,'Copilot handler must be present');

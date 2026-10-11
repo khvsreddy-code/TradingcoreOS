@@ -37,7 +37,8 @@ assert.match(model,/deferSemanticAnalysis/,'typing preview must skip synchronous
 assert.match(model,/getCoreSpiritEditorPreviewSnapshot/,'typing preview must avoid full compiler diagnostics');
 assert.match(editor,/createCoreSpiritSandbox/,'editor compilation must apply chart sandbox policy');
 assert.match(editor,/validateCoreScriptCapabilitiesAgainstSandbox/,'editor must reject ungranted CoreScript capabilities');
-assert.match(editor,/copilotValidationPassRef\.current===false/,'Copilot server validation failures must block Run until the generated source is changed/revalidated');
+assert.match(editor,/copilotValidationPassRef\.current!==true/,'Copilot Run must fail closed unless server compiler/security validation passed');
+assert.match(editor,/copilotReplayPassRef\.current!==true/,'Copilot Run must also require successful replay of the exact artifact');
 assert.match(chartRunner,/compileInWorker:/,'chart artifacts must compile off the UI thread on cache miss');
 assert.match(chartRunner,/runCoreSpiritArtifactInWorker/,'Run must accept a previously compiled artifact');
 assert.match(cache,/validateCoreSpiritExecutableArtifactOffThread/,'persistent artifacts must be integrity-checked off the UI thread');

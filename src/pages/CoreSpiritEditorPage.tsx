@@ -89,9 +89,11 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const copilotValidationPassRef = useRef<boolean|null>(null);
   const copilotServerArtifactHashRef = useRef<string|null>(null);
   const copilotValidationDiagnosticsRef = useRef<CoreSpiritCompileResult['diagnostics']>([]);
+  // AI drafts require both compiler/security approval and a successful bounded replay.
+  const copilotReplayPassRef = useRef<boolean|null>(null);
   const [compilePending,setCompilePending]=useState(false);
   const [copilotPrompt,setCopilotPrompt]=useState('');
-  const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'replaying'|'ready'|'needs-fixes'|'error'>('idle');
+  const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'replaying'|'ready'|'needs-fixes'|'blocked'|'error'>('idle');
   const [copilotSummary,setCopilotSummary]=useState('');
   const [copilotAssumptions,setCopilotAssumptions]=useState<string[]>([]);
   const [copilotArtifactHash,setCopilotArtifactHash]=useState<string|null>(null);
@@ -160,6 +162,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       copilotValidationPassRef.current=null;
       copilotServerArtifactHashRef.current=null;
       copilotValidationDiagnosticsRef.current=[];
+      copilotReplayPassRef.current=null;
       setCopilotStatus('idle');
       setCopilotArtifactHash(null);
     }
@@ -290,9 +293,15 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
 
   const runOnChart=async()=>{
     try{
-      if(copilotSourceRef.current===source&&copilotValidationPassRef.current===false){
-        setRunStatus('Copilot validation failed · fix capability/security diagnostics before Run');
-        return;
+      if(copilotSourceRef.current===source){
+        if(copilotValidationPassRef.current!==true){
+          setRunStatus('Copilot security validation has not passed. Fix the diagnostics before Run.');
+          return;
+        }
+        if(copilotReplayPassRef.current!==true){
+          setRunStatus('Copilot replay gate is not passed. Load chart history and successfully replay this exact draft before Run.');
+          return;
+        }
       }
       const existing=lastCompileRef.current;
       const result=existing?.source===source?existing.result:await compileSource(source);
@@ -317,7 +326,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const generateCopilotDraft=async()=>{
     const prompt=copilotPrompt.trim();
     if(!prompt){setCopilotStatus('error');setCopilotError('Describe what you want the script to do first.');return;}
-    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];
+    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;
     try{
       const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
       if(sessionError||!session?.access_token)throw new Error('Sign in to TradingCore before using Copilot.');
@@ -363,8 +372,9 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       const replayTarget=coreSpiritChartRegistry.getActive();
       const recentBars=Array.from(replayTarget?.getBars?.()??[]).slice(-3000);
       if(!recentBars.length){
-        setCopilotSummary(prev=>`${prev}\n\nHistorical replay preflight skipped: open a chart with candle history to evaluate this draft.`);
-        setCopilotStatus('ready');
+        copilotReplayPassRef.current=false;
+        setCopilotSummary(prev=>`${prev}\\n\\nRun is blocked: no chart history was available for the required replay preflight. Open a chart with candle history, then generate/revalidate the draft again.`);
+        setCopilotStatus('blocked');
         return;
       }
 
@@ -378,16 +388,18 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         });
         if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
         const replayDiagnostics=replay.diagnostics.length
-          ? `\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
+          ? `\\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
           : '';
-        setCopilotSummary(prev=>`${prev}\n\nHistorical replay preflight: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}`);
-        setCopilotStatus(replay.diagnostics.length?'needs-fixes':'ready');
+        const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum);
+        copilotReplayPassRef.current=replayPassed;
+        setCopilotSummary(prev=>`${prev}\\n\\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\\nReplay gate passed.':'\\nRun is blocked until replay diagnostics are resolved and the draft passes again.'}`);
+        setCopilotStatus(replayPassed?'ready':'needs-fixes');
       }catch(replayError){
         if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
-        setCopilotSummary(prev=>`${prev}\n\nHistorical replay preflight unavailable: ${replayError instanceof Error?replayError.message:String(replayError)}`);
-        // Infrastructure failure is not a compiler/security failure.
-        // The validated artifact remains available for an explicitly requested Run.
-        setCopilotStatus('ready');
+        copilotReplayPassRef.current=false;
+        setCopilotSummary(prev=>`${prev}\\n\\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
+        // A missing replay result is not evidence of correctness: fail closed.
+        setCopilotStatus('blocked');
       }
     }catch(error){
       setCopilotStatus('error');
@@ -452,13 +464,13 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
             <textarea value={copilotPrompt} onChange={e=>setCopilotPrompt(e.target.value)} rows={4} maxLength={4000} placeholder='Example: Build a 3-state HMM for NIFTY 5m using returns, ATR, volume z-score and RSI.' className="w-full resize-y rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-[10px] leading-5 text-[var(--tco-text-2)] outline-none focus:border-[#3b82f6]/50" />
             <button onClick={()=>void generateCopilotDraft()} disabled={copilotStatus==='generating'||copilotStatus==='validating'||copilotStatus==='replaying'} className="premium-button premium-button-primary w-full justify-center disabled:opacity-50"><Sparkles className="h-4 w-4"/>{copilotStatus==='generating'?'Generating draft…':copilotStatus==='replaying'?'Running read-only replay…':'Generate CoreScript draft'}</button>
             <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-[var(--tco-dim)]">
-              <span className={copilotStatus==='ready'?'text-[#3b82f6]':copilotStatus==='needs-fixes'||copilotStatus==='error'?'text-[#f59e0b]':'text-[var(--tco-dim)]'}>{copilotStatus==='ready'?'VALIDATED · REPLAY CHECKED':copilotStatus==='needs-fixes'?'NEEDS FIXES':copilotStatus==='replaying'?'HISTORICAL REPLAY':copilotStatus==='validating'?'VALIDATING CORE SCRIPT':copilotStatus==='generating'?'GENERATING':copilotStatus==='error'?'COPILOT ERROR':'DRAFT ONLY'}</span>
+              <span className={copilotStatus==='ready'?'text-[#3b82f6]':copilotStatus==='needs-fixes'||copilotStatus==='blocked'||copilotStatus==='error'?'text-[#f59e0b]':'text-[var(--tco-dim)]'}>{copilotStatus==='ready'?'VALIDATED · REPLAY CHECKED':copilotStatus==='needs-fixes'?'NEEDS FIXES':copilotStatus==='blocked'?'REPLAY REQUIRED':copilotStatus==='replaying'?'HISTORICAL REPLAY':copilotStatus==='validating'?'VALIDATING CORE SCRIPT':copilotStatus==='generating'?'GENERATING':copilotStatus==='error'?'COPILOT ERROR':'DRAFT ONLY'}</span>
               {copilotArtifactHash&&<span className="ml-auto truncate" title={copilotArtifactHash}>ARTIFACT · {copilotArtifactHash.slice(0,12)}</span>}
             </div>
             {copilotSummary&&<div className="rounded border border-[var(--tco-border)] bg-[#090b11] p-2 text-[10px] leading-5 text-[var(--tco-text-2)]">{copilotSummary}</div>}
             {copilotAssumptions.length>0&&<div className="space-y-1 text-[9px] leading-4 text-[var(--tco-dim)]">{copilotAssumptions.map((item,i)=><div key={i}>• {item}</div>)}</div>}
             {copilotError&&<div className="text-[10px] leading-4 text-[#f59e0b]">{copilotError}</div>}
-            <div className="text-[9px] leading-4 text-[var(--tco-dim)]">Copilot sends your prompt and current source to the configured AI provider. Its output is only a draft: source is compiled, type-checked and capability-validated. A bounded read-only replay may run in the worker after validation, but it never updates the chart or sends orders. Review the code and use Run on chart yourself.</div>
+            <div className="text-[9px] leading-4 text-[var(--tco-dim)]">Copilot generates CoreScript only. The compiler, type checker and capability/security gate validate the artifact; the exact artifact must then pass a bounded read-only historical replay before Run. Replay does not update the chart or send orders. Review the source and explicitly use Run on chart yourself.</div>
           </div>
         </Panel>
         <Panel title="EXAMPLES" subtitle="Starter CoreSpirit scripts"><div className="space-y-2">{EXAMPLES.map(([name, code]) => <button key={name} onClick={() => setEditorSource(code)} className="flex w-full items-center gap-2 rounded-lg border border-[var(--tco-border)] bg-[#090b11] p-3 text-left hover:border-[#3b82f6]/40"><BookOpen className="h-4 w-4 text-[#3b82f6]"/><span className="text-[10px] font-mono text-[var(--tco-text-2)]">{name}</span></button>)}</div></Panel>
