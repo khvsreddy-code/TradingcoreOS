@@ -237,6 +237,14 @@ export function analyzeCoreSpirit(ast:CoreSpiritAst, options:CoreSpiritSemanticO
           report(n,`${n.name} expects ${builtin.minArgs === builtin.maxArgs ? builtin.minArgs : `${builtin.minArgs}-${max}`} arguments; got ${n.args.length}`,'ARG_COUNT');
         }
 
+        if(n.name==='request' && n.args.length===5){
+          const alignment=n.args[4];
+          const allowedAlignments=['confirmed','historical','developing','realtime'];
+          if(alignment?.type!=='string' || !allowedAlignments.includes(String(alignment.value).toLowerCase())){
+            report(n,"request fifth argument must be the literal 'confirmed', 'historical', 'developing' or 'realtime'",'TYPE_REQUEST_ALIGNMENT');
+          }
+        }
+
         if(['exp','log','tanh','sigmoid','probability'].includes(n.name) && n.args.length>0 && !isNumericType(argTypes[0])) report(n,`${n.name} expects a numeric input`,'TYPE_MODEL_INPUT');
         if(n.name==='clamp' && [0,1,2].some(i=>!isNumericType(argTypes[i]))) report(n,'clamp expects numeric value, minimum and maximum','TYPE_MODEL_CLAMP');
         if(['predict','score'].includes(n.name)) {
