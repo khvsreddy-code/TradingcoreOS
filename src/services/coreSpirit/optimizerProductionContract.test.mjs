@@ -43,4 +43,20 @@ assert.equal(optimized.optimizationPlan.passes.at(-1).name, 'dead-pure-value-eli
 assert.equal(optimized.optimizationPlan.cost.deadPureInstructionsRemoved, 3);
 assert.equal(optimized.optimizationPlan.passes.at(-1).instructionsAfter, instructions.length);
 
+const loopProgram = {
+  ...program,
+  sourceId: 'optimizer-loop-safety',
+  entry: {
+    instructions: [
+      { op: 'const', dest: 'loopUnused', value: 100 },
+      { op: 'jump', target: 0 },
+    ],
+  },
+  sourceMap: { version: 1, sourceId: 'optimizer-loop-safety', entries: [] },
+};
+const loopOptimized = optimizeCoreSpiritIr(loopProgram);
+assert.deepEqual(loopOptimized.entry.instructions, loopProgram.entry.instructions, 'linear DCE must skip programs with back-edges');
+assert.equal(loopOptimized.optimizationPlan.cost.deadPureInstructionsRemoved, 0);
+assert.ok(loopOptimized.optimizationPlan.explanation.some(line => line.includes('backward control-flow edge')));
+
 console.log('CORESPIRIT_OPTIMIZER_PRODUCTION_CONTRACT_OK');
