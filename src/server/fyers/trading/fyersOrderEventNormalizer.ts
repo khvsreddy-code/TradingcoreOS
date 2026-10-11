@@ -40,6 +40,51 @@ function epoch(value: unknown, fallback: number): number | undefined {
   }
   return fallback;
 }
+/** FYERS v3 orderbook status codes, as documented by the broker. */
+export function normalizeFyersOrderStatus(value: unknown, quantity?: number, filledQuantity?: number): string {
+  const raw = String(value ?? '').trim();
+  const upper = raw.toUpperCase().replace(/[\\s-]+/g, '_');
+  const numeric = Number(raw);
+  let status: string;
+  if (Number.isFinite(numeric) && raw !== '') {
+    status = ({
+      1: 'CANCELLED',
+      2: 'FILLED',
+      3: 'UNKNOWN',
+      4: 'ACKNOWLEDGED',
+      5: 'REJECTED',
+      6: 'OPEN',
+      7: 'EXPIRED',
+    } as Record<number, string>)[numeric] || 'UNKNOWN';
+  } else if (['FILLED','FILL','TRADED','EXECUTED','COMPLETE','COMPLETED'].includes(upper)) {
+    status = 'FILLED';
+  } else if (['CANCELLED','CANCELED','CANCEL','CANCEL_COMPLETE'].includes(upper)) {
+    status = 'CANCELLED';
+  } else if (upper.includes('CANCEL') && (upper.includes('PENDING') || upper.includes('TRANSIT'))) {
+    status = 'CANCEL_PENDING';
+  } else if (['REJECTED','REJECT','FAILED'].includes(upper)) {
+    status = 'REJECTED';
+  } else if (['EXPIRED','EXPIRY'].includes(upper)) {
+    status = 'EXPIRED';
+  } else if (['PARTIAL','PARTIALLY_FILLED','PARTIALLY_EXECUTED','PARTIAL_FILL'].includes(upper)) {
+    status = 'PARTIAL';
+  } else if (['TRANSIT','ACKNOWLEDGED','ACK','ACCEPTED','RECEIVED'].includes(upper)) {
+    status = 'ACKNOWLEDGED';
+  } else if (['PENDING','OPEN','NEW','LIVE','ACTIVE'].includes(upper)) {
+    status = 'OPEN';
+  } else if (['SUBMITTED','SUBMITTING','QUEUED'].includes(upper)) {
+    status = 'SUBMITTED';
+  } else {
+    status = 'UNKNOWN';
+  }
+
+  const qty = Number(quantity);
+  const filled = Number(filledQuantity);
+  if (['OPEN','ACKNOWLEDGED','SUBMITTED'].includes(status) && Number.isFinite(filled) && filled > 0 &&
+      Number.isFinite(qty) && qty > filled) return 'PARTIAL';
+  return status;
+}
+
 function metadata(row: Row, sequence: number, receivedAt: number): DomainEventMetadata {
   const rawBrokerTime = first(row, ['timestamp', 'orderDateTime', 'tradeDateTime', 'exchOrdDateTime', 'fyTokenTimestamp']);
   const brokerTimestamp = rawBrokerTime === undefined ? undefined : epoch(rawBrokerTime, receivedAt);
@@ -65,13 +110,17 @@ function looksLikeFunds(row: Row): boolean {
 function normalizeOne(kind: 'order' | 'trade' | 'position' | 'funds', row: Row, sequence: number, receivedAt: number): FyersNormalizedOrderEvent | undefined {
   const meta = metadata(row, sequence, receivedAt);
   if (kind === 'order') {
-    const orderId = text(row, ['orderId', 'id', 'orderNumber', 'order_id']);
+    const orderId = text(row, ['orderId', 'id', 'orderNumber', 'order_id', 'id_fyers']);
     if (!orderId) return undefined;
-    const state = text(row, ['status', 'orderStatus', 'order_status', 'messageString']) || 'unknown';
+    const quantity = number(row, ['qty', 'quantity', 'orderQty', 'orderQuantity']);
+    const filledQuantity = number(row, ['filledQty', 'filledQuantity', 'tradedQty', 'executedQty']);
+    const state = normalizeFyersOrderStatus(first(row, ['status', 'orderStatus', 'order_status']), quantity, filledQuantity);
+    const clientOrderId = text(row, ['clientOrderId', 'client_order_id', 'orderTag', 'order_tag', 'tag']);
     const event: OrderUpdate = {
-      ...meta, type: 'OrderUpdate', orderId, status: state, side: side(row),
-      ...(number(row, ['qty', 'quantity', 'orderQty', 'orderQuantity']) !== undefined ? { quantity: number(row, ['qty', 'quantity', 'orderQty', 'orderQuantity']) } : {}),
-      ...(number(row, ['filledQty', 'filledQuantity', 'tradedQty', 'executedQty']) !== undefined ? { filledQuantity: number(row, ['filledQty', 'filledQuantity', 'tradedQty', 'executedQty']) } : {}),
+      ...meta, type: 'OrderUpdate', orderId, brokerOrderId: orderId, clientOrderId: clientOrderId || null,
+      status: state, side: side(row),
+      ...(quantity !== undefined ? { quantity } : {}),
+      ...(filledQuantity !== undefined ? { filledQuantity } : {}),
       ...(number(row, ['avgPrice', 'averagePrice', 'tradedPrice', 'tradePrice']) !== undefined ? { averagePrice: number(row, ['avgPrice', 'averagePrice', 'tradedPrice', 'tradePrice']) } : {}),
       ...(text(row, ['type', 'orderType', 'order_type']) ? { orderType: text(row, ['type', 'orderType', 'order_type']) } : {}),
       ...(text(row, ['productType', 'product', 'product_type']) ? { product: text(row, ['productType', 'product', 'product_type']) } : {}),
@@ -81,11 +130,16 @@ function normalizeOne(kind: 'order' | 'trade' | 'position' | 'funds', row: Row, 
   }
   if (kind === 'trade') {
     const tradeId = text(row, ['tradeId', 'trade_id', 'id', 'tradedId']);
-    const orderId = text(row, ['orderId', 'orderNumber', 'order_id']);
+    const orderId = text(row, ['orderId', 'orderNumber', 'order_id', 'id_fyers']);
+    const clientOrderId = text(row, ['clientOrderId', 'client_order_id', 'orderTag', 'order_tag', 'tag']);
     const price = number(row, ['tradePrice', 'tradedPrice', 'price', 'avgPrice']);
     const quantity = number(row, ['tradedQty', 'qty', 'quantity', 'tradeQty']);
     if (!tradeId || price === undefined || quantity === undefined) return undefined;
-    const fill: Fill = { ...meta, type: 'Fill', tradeId, orderId: orderId || 'UNKNOWN', price, quantity, side: side(row) };
+    const fill: Fill = {
+      ...meta, type: 'Fill', tradeId, orderId: orderId || 'UNKNOWN',
+      brokerOrderId: orderId || null, clientOrderId: clientOrderId || null,
+      price, quantity, side: side(row),
+    };
     return { type: 'trade', data: fill };
   }
   if (kind === 'position') {
