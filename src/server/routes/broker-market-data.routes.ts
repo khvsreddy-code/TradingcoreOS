@@ -353,9 +353,19 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
       plan: capabilities.plan,
     });
   }
+  const requestedFeedClass = req.method === 'POST' ? req.body?.feed_class : req.query.feed_class;
+  const hasExplicitFeedClass = requestedFeedClass !== undefined && requestedFeedClass !== null && String(requestedFeedClass).trim() !== '';
+  const normalizedFeedClass = String(requestedFeedClass || 'full').trim().toLowerCase();
+  if (!['lite', 'full', 'depth'].includes(normalizedFeedClass)) {
+    return res.status(400).json({ success: false, error: 'feed_class must be one of: lite, full, depth.', code: 'FYERS_INVALID_FEED_CLASS' });
+  }
+  const feedClass = normalizedFeedClass as 'lite' | 'full' | 'depth';
   const depthSymbol = toFyersSymbol(String(req.method === 'POST' ? (req.body?.depth_symbol ?? '') : (req.query.depth_symbol || '')));
-  const includeDepth = Boolean(depthSymbol);
-  const depthSymbols = includeDepth ? [depthSymbol] : symbols;
+  if (hasExplicitFeedClass && depthSymbol) {
+    return res.status(400).json({ success: false, error: 'depth_symbol is only supported for legacy combined full + depth subscriptions; choose feed_class=depth and pass the depth symbols as instrument_keys instead.', code: 'FYERS_CONFLICTING_FEED_CLASS' });
+  }
+  const includeDepth = !hasExplicitFeedClass && Boolean(depthSymbol);
+  const depthSymbols = includeDepth ? [depthSymbol] : (feedClass === 'depth' ? symbols : []);
   const capacity = FyersMarketDataTransport.checkSubscriptionCapacity(
     session.userId,
     symbols,
@@ -393,7 +403,7 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
   let unsubscribe: (() => void);
   try {
     unsubscribe = FyersMarketDataTransport.subscribe(
-      session.userId, session.token, symbols, write, includeDepth, depthSymbols, capabilities.maxStreamSymbols,
+      session.userId, session.token, symbols, write, includeDepth, depthSymbols, capabilities.maxStreamSymbols, feedClass,
     );
   } catch (error: any) {
     write({ type: 'error', error: error?.message || 'Unable to subscribe to FYERS market data', code: error?.code });
