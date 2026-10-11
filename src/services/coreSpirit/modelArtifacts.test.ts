@@ -1,8 +1,10 @@
 import {
   createResearchArtifact,
+  coreSpiritSha256,
   InMemoryModelArtifactStore,
   loadModelForInference,
   sealModelArtifact,
+  verifyModelArtifactIntegrity,
   type ModelProvenance,
 } from './modelArtifacts.ts';
 
@@ -85,6 +87,35 @@ async function main(): Promise<void> {
     invalidRangeRejected = true;
   }
   assert(invalidRangeRejected, 'artifact sealing must reject invalid training ranges');
+
+  const malformedProvenance={
+    ...provenance,
+    trainingParameters:{epochs:{unexpected:'nested-value'}},
+  } as unknown as ModelProvenance;
+  const malformedPayload={
+    schemaVersion:artifact.schemaVersion,
+    name:artifact.name,
+    provenance:malformedProvenance,
+    weights:artifact.weights,
+    metrics:artifact.metrics,
+  };
+  const selfConsistentButInvalid={
+    ...artifact,
+    provenance:malformedProvenance,
+    hash:await coreSpiritSha256(malformedPayload),
+  };
+  assert(!(await verifyModelArtifactIntegrity(selfConsistentButInvalid)),
+    'inference must reject malformed provenance even when its content hash is internally consistent');
+
+  const unsupportedProvenance={...provenance,backend:'not-a-backend'} as unknown as ModelProvenance;
+  const unsupportedPayload={...malformedPayload,provenance:unsupportedProvenance};
+  const unsupportedArtifact={
+    ...artifact,
+    provenance:unsupportedProvenance,
+    hash:await coreSpiritSha256(unsupportedPayload),
+  };
+  assert(!(await verifyModelArtifactIntegrity(unsupportedArtifact)),
+    'inference must reject unsupported model execution backends');
 }
 
 void main().catch(error => {
