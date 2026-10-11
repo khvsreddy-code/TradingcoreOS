@@ -1,6 +1,6 @@
 import type { CoreSpiritMarketBar } from './marketData';
 import type { CoreSpiritHMMArtifactBinding } from './quantMath';
-import { coreSpiritWorkerPool, type CoreSpiritWorkerRunResult } from './coreSpiritWorkerPool';
+import { coreSpiritWorkerPool, type CoreSpiritWorkerRunResult, type CoreSpiritWorkerRuntimeOptions } from './coreSpiritWorkerPool';
 import { loadOrCompileCoreSpiritArtifact } from './artifactCache';
 import { compileCoreSpiritArtifactOffThread } from './coreSpiritCompilerClient';
 import type { CoreSpiritExecutableArtifact } from './artifact';
@@ -17,6 +17,10 @@ export type CoreSpiritWorkerRunOptions = {
   graphSnapshot?:CoreSpiritGraphSnapshot;
   /** Preverified artifacts loaded once per chart/runtime, never fetched per candle. */
   hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
+  /** Read-only history/range evaluation must suppress side effects. */
+  readOnly?:boolean;
+  /** Serializable Vela session configuration; changes reset the persistent runtime. */
+  runtimeOptions?:CoreSpiritWorkerRuntimeOptions;
 };
 
 /**
@@ -58,6 +62,8 @@ export async function runCoreSpiritArtifactInWorker(
     graphBaseSymbol:options.baseSymbol,
     graphBaseTimeframe:options.baseTimeframe,
     hmmArtifacts:options.hmmArtifacts,
+    readOnly:options.readOnly,
+    runtimeOptions:options.runtimeOptions,
   });
 }
 
