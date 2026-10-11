@@ -122,7 +122,7 @@ function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpirit
 }
 
 function stableRuntimeSignature(value:unknown):string {
-  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(value===null||typeof value!=='object')return JSON.stringify(value)??'undefined';
   if(Array.isArray(value))return `[${value.map(stableRuntimeSignature).join(',')}]`;
   const record=value as Record<string,unknown>;
   return `{${Object.keys(record).sort().map(key=>`${JSON.stringify(key)}:${stableRuntimeSignature(record[key])}`).join(',')}}`;
