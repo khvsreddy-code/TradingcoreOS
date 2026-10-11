@@ -127,6 +127,11 @@ export class CoreSpiritWorkerPool {
   ):Promise<CoreSpiritWorkerRunResult> {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
+      // A browser must never fall back to interpreting a full history on the UI
+      // thread. Keep the compatibility runtime only for Node/SSR/test execution.
+      if(typeof window!=='undefined'){
+        return Promise.reject(new Error('CoreSpirit chart execution requires Web Worker support; inline browser-thread execution is disabled.'));
+      }
       if(!artifact || !validateExecutableArtifact(artifact)) return Promise.reject(new Error('CoreSpirit worker requires a valid executable artifact'));
       return this.runFallback(artifact,bars,sourceId,options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,options?.hmmArtifacts);
     }
