@@ -80,7 +80,7 @@ async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next:
         plan: error.plan,
       });
     }
-    throw error;
+    return next(error);
   }
   try {
     const data = await new FyersMarketDataService(client, capabilities).quotes(symbols);
@@ -92,7 +92,7 @@ async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next:
         plan: capabilities.plan,
         maxQuoteBatch: capabilities.maxQuoteBatch,
         requestedSymbols: symbols.length,
-        providerRequests: 1,
+        quoteBatches: 1,
       },
     });
   } catch (error: any) {
