@@ -13,8 +13,7 @@ type CompileWorkerResponse=
     }
   | {type:'compileError';requestId:string;sourceVersion:number;message:string}
   | {type:'artifactValidated';requestId:string;valid:boolean;message?:string}
-  | {type:'replayPreviewed';requestId:string;barsProcessed:number;plotsEmitted:number;signalsEmitted:number;orderIntentsEmitted:number;diagnostics:string[];outputChecksum:string}
-  | {type:'replayPreviewError';requestId:string;message:string};
+;
 type PendingCompile={
   resolve:(result:CoreSpiritOffThreadCompileResult)=>void;
   reject:(error:Error)=>void;
@@ -46,11 +45,14 @@ const pending=new Map<string,PendingCompile>();
 const pendingValidation=new Map<string,PendingValidation>();
 const pendingReplay=new Map<string,PendingReplay>();
 
-function rejectAll(error:Error):void{
+function rejectCompilerRequests(error:Error):void{
   for(const request of pending.values()){clearTimeout(request.timeout);request.reject(error);}
   pending.clear();
   for(const request of pendingValidation.values()){clearTimeout(request.timeout);request.reject(error);}
   pendingValidation.clear();
+}
+
+function rejectReplayRequests(error:Error):void{
   for(const request of pendingReplay.values()){clearTimeout(request.timeout);request.reject(error);}
   pendingReplay.clear();
 }
@@ -100,25 +102,68 @@ function getCompilerWorker():Worker|undefined{
       else validation.reject(new Error('Unexpected artifact validation response'));
       return;
     }
-    const replay=pendingReplay.get(message.requestId);
-    if(!replay)return;
-    pendingReplay.delete(message.requestId);
-    clearTimeout(replay.timeout);
-    if(message.type==='replayPreviewError')replay.reject(new Error(message.message||'CoreSpirit historical replay failed'));
-    else if(message.type==='replayPreviewed')replay.resolve({
-      barsProcessed:message.barsProcessed,plotsEmitted:message.plotsEmitted,
-      signalsEmitted:message.signalsEmitted,orderIntentsEmitted:message.orderIntentsEmitted,
-      diagnostics:message.diagnostics,outputChecksum:message.outputChecksum,
-    });
-    else replay.reject(new Error('Unexpected CoreSpirit historical replay response'));
   };
   worker.onerror=(event)=>{
-    rejectAll(new Error(event.message || 'CoreSpirit compiler worker failed'));
+    rejectCompilerRequests(new Error(event.message || 'CoreSpirit compiler worker failed'));
     try{worker.terminate();}catch{}
     if(compilerWorker===worker)compilerWorker=undefined;
   };
   compilerWorker=worker;
   return worker;
+}
+
+type ReplayWorkerResponse =
+  | {type:'replayPreviewed';requestId:string;barsProcessed:number;plotsEmitted:number;signalsEmitted:number;orderIntentsEmitted:number;diagnostics:string[];outputChecksum:string}
+  | {type:'replayPreviewError';requestId:string;message:string};
+
+let replayWorker:Worker|undefined;
+let replayWorkerBootError:Error|undefined;
+
+function getReplayWorker():Worker|undefined {
+  if(typeof Worker==='undefined')return undefined;
+  if(replayWorker)return replayWorker;
+  let worker:Worker;
+  try{
+    worker=new Worker(new URL('./coreSpiritReplay.worker.ts',import.meta.url),{type:'module',name:'CoreSpiritReplay'});
+  }catch(error){
+    replayWorkerBootError=error instanceof Error?error:new Error(String(error));
+    return undefined;
+  }
+  replayWorkerBootError=undefined;
+  worker.onmessage=(event:MessageEvent<ReplayWorkerResponse>)=>{
+    const message=event.data;
+    if(!message||typeof message.requestId!=='string')return;
+    const request=pendingReplay.get(message.requestId);
+    if(!request)return;
+    pendingReplay.delete(message.requestId);
+    clearTimeout(request.timeout);
+    if(message.type==='replayPreviewError'){
+      request.reject(new Error(message.message||'CoreSpirit historical replay failed'));
+      return;
+    }
+    request.resolve({
+      barsProcessed:message.barsProcessed,plotsEmitted:message.plotsEmitted,
+      signalsEmitted:message.signalsEmitted,orderIntentsEmitted:message.orderIntentsEmitted,
+      diagnostics:message.diagnostics,outputChecksum:message.outputChecksum,
+    });
+  };
+  worker.onerror=(event)=>{
+    const error=new Error(event.message||'CoreSpirit replay worker failed');
+    rejectReplayRequests(error);
+    try{worker.terminate();}catch{}
+    if(replayWorker===worker)replayWorker=undefined;
+    replayWorkerBootError=error;
+  };
+  replayWorker=worker;
+  return worker;
+}
+
+function resetReplayWorker(error:Error):void {
+  rejectReplayRequests(error);
+  const worker=replayWorker;
+  replayWorker=undefined;
+  try{worker?.terminate();}catch{}
+  replayWorkerBootError=error;
 }
 
 /** Debounce at the editor boundary; this request compiles only the submitted immutable source snapshot. */
@@ -212,18 +257,18 @@ export async function previewCoreSpiritArtifactOffThread(
 ):Promise<CoreSpiritHistoricalReplayPreview>{
   if(!artifact||!artifact.abi?.artifactHash||!artifact.ir)throw new Error('Historical replay requires a compiled artifact.');
   if(!bars.length||bars.length>3000)throw new Error('Historical replay preflight supports 1–3,000 bars.');
-  const worker=getCompilerWorker();
+  const worker=getReplayWorker();
   if(!worker){
-    if(typeof Worker!=='undefined')throw new Error(`CoreSpirit compiler worker could not start: ${compilerWorkerBootError?.message||'worker unavailable'}`);
+    if(typeof Worker!=='undefined')throw new Error(`CoreSpirit replay worker could not start: ${replayWorkerBootError?.message||'worker unavailable'}`);
     throw new Error('Historical replay preflight requires Web Worker support.');
   }
   const requestId=`cs-replay-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
   return new Promise((resolve,reject)=>{
     const timeout=setTimeout(()=>{
-      const active=pendingReplay.get(requestId);
-      if(!active)return;
-      pendingReplay.delete(requestId);
-      reject(new Error('CoreSpirit historical replay preflight timed out.'));
+      if(!pendingReplay.has(requestId))return;
+      // A wedged replay must not hold the dedicated worker forever. Restarting
+      // it cannot affect compiler diagnostics because those use another worker.
+      resetReplayWorker(new Error('CoreSpirit historical replay preflight timed out; replay worker restarted.'));
     },20_000);
     pendingReplay.set(requestId,{resolve,reject,timeout});
     try{
