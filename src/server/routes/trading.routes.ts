@@ -256,6 +256,9 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     const orderId = isRecord(data) ? (data.orderId ?? data.order_id ?? data.id ?? null) : null;
     if (clientOrderId) {
       try {
+        if (orderId == null || !String(orderId).trim()) {
+          throw new Error('FYERS accepted the request but returned no broker order id.');
+        }
         await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'ACKNOWLEDGED', {
           brokerOrderId: orderId == null ? null : String(orderId),
           symbol: orderPayload.symbol,
