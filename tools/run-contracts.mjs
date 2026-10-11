@@ -58,6 +58,7 @@ const contracts = [
   ['vela-v108-boundary', ['src/velaV108BoundaryContract.test.mjs', false]],
   ['corespirit-vela-full-capability', ['src/coreSpiritVelaCapabilityContract.test.mjs', true]],
   ['corespirit-live-startup-single-pass', ['src/coreSpiritLiveStartupContract.test.mjs', true]],
+  ['corespirit-viewport-side-effect-suppression', ['src/coreSpiritViewportSideEffectContract.test.mjs', true]],
   ['corespirit-secondary-refresh-latest-wins', ['src/coreSpiritSecondaryRefreshRaceContract.test.mjs', true]],
   ['corespirit-architecture-1-to-8-production', ['src/coreSpiritArchitecture1to8ProductionContract.test.mjs', true]],
   ['corespirit-exact-dirty-span', ['src/coreSpiritExactDirtySpanContract.test.mjs', true]],
