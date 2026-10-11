@@ -1,5 +1,6 @@
 import type { DataProvider, ProviderInfo, SymbolDescriptor, BarRange, OHLCV, ColumnarBars, ColumnarBarUpdate } from './services/core/chart/velaNativeChartKernel';
-import { getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
+import { chartDataPlaneKey, getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from './services/marketData/chartDataPlane';
+import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
@@ -25,6 +26,26 @@ function runtimeTimeframe(timeframe: string): string {
   if (CHART_TIMEFRAME_INTERVALS[value]) return value;
   if (/^\d+[mhd]$/i.test(value)) return value.toLowerCase();
   return '5m';
+}
+export function tcoVelaPerformanceKey(brokerId: string, symbol: string, timeframe: string): string {
+  return chartDataPlaneKey(brokerId, runtimeSymbol(symbol), runtimeTimeframe(timeframe));
+}
+
+function performanceNow(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function recordVelaRenderUpdate(key: string, patchStartedAt: number, lastPacketAt: number, callbackDurationMs: number): void {
+  if (!key) return;
+  const record = () => {
+    const renderedAt = performanceNow();
+    const tickToPatchMs = lastPacketAt > 0 ? Math.max(0, patchStartedAt - lastPacketAt) : 0;
+    const tickToRenderMs = lastPacketAt > 0 ? Math.max(0, renderedAt - lastPacketAt) : 0;
+    chartPerformanceTelemetry.recordRenderUpdate(key, tickToPatchMs, tickToRenderMs, callbackDurationMs);
+  };
+  // Sample the next frame after Vela accepts the bar update, including a renderer paint opportunity.
+  if (typeof globalThis.requestAnimationFrame === 'function') globalThis.requestAnimationFrame(record);
+  else globalThis.setTimeout(record, 16);
 }
 
 async function activeBrokerId(): Promise<string> {
@@ -365,6 +386,7 @@ export class TcoVelaDataProvider implements DataProvider {
     let plane: ReturnType<typeof getChartDataPlane> | undefined;
     let stopPlane: (() => void) | undefined;
     let attachedBrokerId: string | undefined;
+    let performanceKey = '';
     let cancelled = false;
     let fingerprint = '';
     let pendingSequence = 0;
@@ -387,7 +409,13 @@ export class TcoVelaDataProvider implements DataProvider {
       const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
-      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
+      const patchStartedAt = performanceNow();
+      const lastPacketAt = chartPerformanceTelemetry.getLastPacketAt(performanceKey);
+      try {
+        onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
+      } finally {
+        recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
+      }
     };
 
     const schedule = () => {
@@ -405,6 +433,7 @@ export class TcoVelaDataProvider implements DataProvider {
       stopPlane?.();
       stopPlane = undefined;
       attachedBrokerId = undefined;
+      performanceKey = '';
       plane = undefined;
       fingerprint = '';
       dirty = false;
@@ -420,6 +449,7 @@ export class TcoVelaDataProvider implements DataProvider {
       if (cancelled || attachedBrokerId === brokerId) return;
       detach();
       attachedBrokerId = brokerId;
+      performanceKey = tcoVelaPerformanceKey(brokerId, symbol, tcoTimeframe);
       plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
       stopPlane = plane.subscribe((event) => {
         if (event.type !== 'snapshot' && event.type !== 'tick') return;
@@ -455,6 +485,7 @@ export class TcoVelaDataProvider implements DataProvider {
     let plane: ReturnType<typeof getChartDataPlane> | undefined;
     let stopPlane: (() => void) | undefined;
     let attachedBrokerId: string | undefined;
+    let performanceKey = '';
     let cancelled = false;
     let fingerprint = '';
     let scheduled = false;
@@ -479,7 +510,13 @@ export class TcoVelaDataProvider implements DataProvider {
       const nextKey = `${next.time}|${next.open}|${next.high}|${next.low}|${next.close}|${next.volume ?? ''}`;
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
-      onBar(next);
+      const patchStartedAt = performanceNow();
+      const lastPacketAt = chartPerformanceTelemetry.getLastPacketAt(performanceKey);
+      try {
+        onBar(next);
+      } finally {
+        recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
+      }
     };
 
     const schedule = () => {
@@ -497,6 +534,7 @@ export class TcoVelaDataProvider implements DataProvider {
       stopPlane?.();
       stopPlane = undefined;
       attachedBrokerId = undefined;
+      performanceKey = '';
       plane = undefined;
       fingerprint = '';
       dirty = false;
@@ -512,6 +550,7 @@ export class TcoVelaDataProvider implements DataProvider {
       if (cancelled || attachedBrokerId === brokerId) return;
       detach();
       attachedBrokerId = brokerId;
+      performanceKey = tcoVelaPerformanceKey(brokerId, symbol, tcoTimeframe);
       plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
       stopPlane = plane.subscribe((event) => {
         if (event.type !== 'snapshot' && event.type !== 'tick') return;
