@@ -246,7 +246,7 @@ function deps(instruction: CoreSpiritIrInstruction): string[] {
     case 'move': return [instruction.source];
     case 'unary': return [instruction.operand];
     case 'binary': return [instruction.left,instruction.right];
-    case 'call': return instruction.args;
+    case 'call': return [...instruction.args, ...(instruction.seriesArgs ?? []), ...(instruction.seriesSources ?? []).map(source => source.ref)];
     case 'index': return [instruction.target,instruction.index];
     case 'setLocal':
     case 'setState': return [instruction.source];
