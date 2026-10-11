@@ -10,6 +10,7 @@ import { compileCoreSpiritSourceOffThread, previewCoreSpiritArtifactOffThread } 
 import { getSupabaseClient } from '../services/auth/supabaseClient';
 import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from '../services/coreSpirit/capabilitySandbox';
 import { coreSpiritChartRegistry } from '../services/coreSpirit/chartRegistry';
+import { sha256HexSync } from '../services/coreSpirit/artifactIdentity';
 import { loadEditorScript, saveEditorScript, saveExecutionRun } from '../services/coreSpirit/cloudPersistence';
 import { versionedStorageKey } from '../services/coreSpirit/storageSchema';
 import { normalizeCoreSpiritSource } from '../services/coreSpirit/syntax';
@@ -50,21 +51,14 @@ type CopilotReplayGate = Readonly<{
   datasetSignature:string;
 }>;
 
-// The replay approval is bound to every bar in the bounded history, not just its
-// endpoints. This detects corrected/backfilled middle candles without a crypto
-// dependency or any cost on the live market-data hot path.
+// Bind approval to every normalized OHLCV row, not just the first/last bars.
+// This runs only during Copilot replay and explicit Run validation, never per tick.
 function replayDatasetSignature(bars:readonly unknown[]):string {
-  let hash=2166136261;
-  const feed=(value:unknown)=>{
-    const encoded=JSON.stringify(value);
-    for(let i=0;i<encoded.length;i+=1){hash^=encoded.charCodeAt(i);hash=Math.imul(hash,16777619);}
-    hash^=10;hash=Math.imul(hash,16777619);
-  };
-  for(const bar of bars){
+  const canonical=bars.map(bar=>{
     const value=bar&&typeof bar==='object'?bar as Record<string,unknown>:{};
-    feed([value.timestamp??value.time??null,value.open??null,value.high??null,value.low??null,value.close??null,value.volume??null]);
-  }
-  return `${bars.length}:${(hash>>>0).toString(16).padStart(8,'0')}`;
+    return JSON.stringify([value.timestamp??value.time??null,value.open??null,value.high??null,value.low??null,value.close??null,value.volume??null]);
+  }).join('\n');
+  return `${bars.length}:${sha256HexSync(canonical)}`;
 }
 
 function replayGateMatches(gate:CopilotReplayGate,source:string,artifactHash:string|null,target:NonNullable<ReturnType<typeof coreSpiritChartRegistry.getActive>>):boolean {
