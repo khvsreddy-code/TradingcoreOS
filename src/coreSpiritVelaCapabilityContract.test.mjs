@@ -106,6 +106,8 @@ try {
   const engineSource=await readFile(new URL('./CoreSpiritVelaEngine.ts',import.meta.url),'utf8');
   assert.match(engineSource,/runCoreSpiritArtifactInWorker/,'Vela engine must route compiled artifacts to persistent workers');
   assert.doesNotMatch(engineSource,/runtime\.executeIr|runtime\.executeBar|createRuntime\(/,'Vela engine must not execute CoreSpirit historical/live workloads on the UI thread');
+assert.match(engineSource,/if\(secondaryDependencies\.length&&!req\.fetchSeries\)/,'missing secondary-data providers must explicitly degrade the Vela runtime');
+assert.match(engineSource,/secondaryDegraded=true;[\s\S]{0,180}secondaryFailed\.add/,'missing secondary market data must block signals/order intents rather than use empty values');
   viewportSession.stop();
 } finally {
   if (viewportSession) viewportSession.stop();
