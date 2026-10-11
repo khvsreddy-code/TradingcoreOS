@@ -12,11 +12,17 @@ assert.deepEqual(Array.from(rollingMean(values, 2), Number.isNaN), [true, false,
 close(rollingMean(values, 2)[1], 1.5);
 close(rollingMean(values, 2)[3], 3.5);
 close(rollingVariance(Float64Array.from([1, 2, 3]), 2)[1], 0.25);
-const highLevelPrices = Float64Array.from([1e12 + 0.125, 1e12 + 0.25, 1e12 + 0.375]);
-close(rollingVariance(highLevelPrices, 3)[2], 1 / 96, 1e-7,
+const highLevelPrices = Float64Array.from([1e12 + 0.125, 1e12 + 0.25, 1e12 + 0.375, 1e12 + 0.5]);
+const highLevelVariance = rollingVariance(highLevelPrices, 3);
+close(highLevelVariance[2], 1 / 96, 1e-7,
   'rolling variance should preserve small intrawindow movement around a large price level');
-close(rollingVariance(highLevelPrices, 3, 1)[2], 1 / 64, 1e-7,
+close(highLevelVariance[3], 1 / 96, 1e-7,
+  'rolling Welford removal should preserve precision when the window advances');
+const highLevelSampleVariance = rollingVariance(highLevelPrices, 3, 1);
+close(highLevelSampleVariance[2], 1 / 64, 1e-7,
   'sample variance should use period - ddof as its denominator');
+close(highLevelSampleVariance[3], 1 / 64, 1e-7,
+  'sample variance should remain stable when the window advances');
 close(rollingStd(Float64Array.from([1, 2, 3]), 2)[2], 0.5);
 assert.deepEqual(Array.from(rollingMin(values, 2).slice(1)), [1, 2, 3]);
 assert.deepEqual(Array.from(rollingMax(values, 2).slice(1)), [2, 3, 4]);
