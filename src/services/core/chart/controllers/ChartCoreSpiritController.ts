@@ -5,6 +5,7 @@ import { CoreSpiritChartOutputController } from '../../../coreSpirit/chartOutput
 import { runCoreSpiritInWorker, runCoreSpiritArtifactInWorker } from '../../../coreSpirit/chartRunner';
 import { compileCoreSpiritSourceOffThread, type CoreSpiritOffThreadCompileResult } from '../../../coreSpirit/coreSpiritCompilerClient';
 import type { CoreSpiritExecutableArtifact } from '../../../coreSpirit/artifact';
+import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from '../../../coreSpirit/capabilitySandbox';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
 
@@ -81,8 +82,17 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
     const generation=++compileGeneration;
     store.setStatus('Compiling in worker…');
     try{
-      const result=await compileCoreSpiritSourceOffThread(source,generation,'chart-indicator');
+      const compilerResult=await compileCoreSpiritSourceOffThread(source,generation,'chart-indicator');
       if(generation!==compileGeneration||store.getSnapshot().source!==source)return false;
+      const sandbox=createCoreSpiritSandbox({layer:'script',target:'chart'});
+      const policyDiagnostics=[
+        ...validateCoreSpiritSandboxArchitecture().map(message=>({severity:'error' as const,message,code:'CHART_SANDBOX_ARCHITECTURE'})),
+        ...(compilerResult.ir?validateCoreScriptCapabilitiesAgainstSandbox(sandbox,compilerResult.ir.requiredCapabilities??[]):[]).map(message=>({severity:'error' as const,message,code:'CHART_CAPABILITY_DENIED'})),
+      ];
+      const result:CoreSpiritOffThreadCompileResult={
+        ...compilerResult,
+        diagnostics:[...(compilerResult.diagnostics||[]),...policyDiagnostics],
+      };
       const diagnostics=(result.diagnostics||[]).map((d:any)=>`${d.line?`Line ${d.line}: `:''}${d.message}`);
       const errors=(result.diagnostics||[]).filter((d:any)=>d.severity==='error');
       lastValidated={source,result};
