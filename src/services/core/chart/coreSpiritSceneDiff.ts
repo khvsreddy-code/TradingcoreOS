@@ -52,6 +52,10 @@ function pointTimeSpan(points: unknown): DirtySpan | null {
     if (!Array.isArray(points)) return null;
     let from = Number.POSITIVE_INFINITY, to = Number.NEGATIVE_INFINITY;
     for (const point of points) {
+        const space = (point as any)?.space;
+        // Explicit non-time coordinate spaces are not comparable with the chart's
+        // market-time dirty range. Return null for the whole geometry, not a partial span.
+        if (typeof space === 'string' && space !== 'time') return null;
         const time = Number((point as any)?.time ?? (point as any)?.timestamp ?? (point as any)?.x);
         if (!Number.isFinite(time)) continue;
         from = Math.min(from, time);
@@ -60,13 +64,34 @@ function pointTimeSpan(points: unknown): DirtySpan | null {
     return Number.isFinite(from) && Number.isFinite(to) ? { from, to } : null;
 }
 
+function visualGeometryTimeSpan(geometry: unknown): DirtySpan | null {
+    if (!geometry || typeof geometry !== 'object') return null;
+    const value = geometry as any;
+    const pointSpaceAllowed = (point: any) => !point || typeof point.space !== 'string' || point.space === 'time';
+    if (value.kind === 'point') {
+        return pointSpaceAllowed(value.point) ? finiteSpan(value.point?.x) : null;
+    }
+    if (value.kind === 'line' || value.kind === 'box') {
+        if (!pointSpaceAllowed(value.from) || !pointSpaceAllowed(value.to)) return null;
+        return finiteSpan(value.from?.x, value.to?.x);
+    }
+    if (value.kind === 'polygon' && Array.isArray(value.points)) {
+        return pointTimeSpan(value.points);
+    }
+    // Support legacy renderer-neutral geometry that used bar-time x values before
+    // coordinate spaces were explicit. Unknown explicit spaces remain conservative.
+    if (Array.isArray(value.points)) return pointTimeSpan(value.points);
+    return null;
+}
+
 /** Return the causal-time envelope for every time-bearing CoreSpirit output. */
 export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
     const value = output as any;
 
     // Custom geometry can extend far beyond its anchor time.
     if (output.kind === 'customVisual') {
-        return unionDirtySpans(pointTimeSpan(value.geometry?.points), finiteSpan(value.time));
+        if (value.geometry && visualGeometryTimeSpan(value.geometry) === null) return null;
+        return unionDirtySpans(visualGeometryTimeSpan(value.geometry), finiteSpan(value.time));
     }
 
     if (Number.isFinite(Number(value.time))) {

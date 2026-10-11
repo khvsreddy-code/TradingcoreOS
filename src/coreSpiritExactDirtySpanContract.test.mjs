@@ -103,4 +103,22 @@ assert.deepEqual(outputDirtySpan({
   geometry: { kind: 'polygon', points: [{ x: 80, y: 1 }, { x: 120, y: 2 }] },
 }), { from: 80, to: 120 }, 'custom geometry must dirty the full point extent, not only its anchor bar');
 
+assert.equal(outputDirtySpan({
+  kind: 'customVisual',
+  id: 'screen-geometry',
+  time: 100,
+  geometry: { kind: 'polygon', points: [
+    { kind: 'point', space: 'screen', x: 8, y: 4 },
+    { kind: 'point', space: 'screen', x: 90, y: 4 },
+    { kind: 'point', space: 'screen', x: 90, y: 40 },
+  ] },
+}), null, 'screen-space x values must not be mistaken for market timestamps; null requires conservative dirty-range fallback');
+
+assert.deepEqual(outputDirtySpan({
+  kind: 'customVisual',
+  id: 'time-geometry',
+  geometry: { kind: 'line', from: { kind: 'point', space: 'time', x: 85, y: 4 }, to: { kind: 'point', space: 'time', x: 115, y: 40 } },
+}), { from: 85, to: 115 }, 'time-space custom lines should expose their complete market-time span');
+
+
 console.log('CORESPIRIT_EXACT_DIRTY_SPAN_CONTRACT_OK');
