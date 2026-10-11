@@ -35,7 +35,7 @@ assert.match(transport, /session\.reconciliationOverflowed/,
   'overflow must force a new snapshot rather than silently lose order events');
 assert.match(transport, /static getStatus\(userId: string\)/,
   'late subscribers need the actual reconciliation state');
-assert.match(transport, /if \(session\.reconciling \|\| session\.reconciliationBlocked\)/);
+assert.match(transport, /session\.reconciling \|\| \(session\.reconciliationBlocked && session\.socket\?\.readyState === WebSocket\.OPEN\)/);
 assert.match(streamRoute, /FyersOrderStreamTransport\.getStatus\(userId\)/,
   'HTTP heartbeats must not claim connected while the REST snapshot is incomplete');
 assert.doesNotMatch(streamRoute, /setInterval\(\(\)=>write\(\{type:'status',status:'connected'\}\)/);
