@@ -393,27 +393,31 @@ export class CoreSpiritVelaEngine {
         currentBars=newest;
         if(!currentBars.length)return {currentBars,baseline,tail:undefined};
 
-        tail=await executeInWorker(currentBars,mainContextKey,false,{
-          from:Math.max(0,currentBars.length-1),to:currentBars.length,
-        });
-        if(stopped||generation!==mainRunGeneration)return undefined;
-        const afterTail=getCurrentBars();
-        if(afterTail.length!==currentBars.length||afterTail.at(-2)?.timestamp!==currentBars.at(-2)?.timestamp){
-          currentBars=afterTail;
-          continue;
-        }
-        if(barValueSignature(afterTail.at(-1))!==barValueSignature(currentBars.at(-1))){
-          // Only the developing candle changed during the worker run. Re-submit
-          // its newest snapshot without re-warming confirmed history.
-          currentBars=afterTail;
+        let stableTail=false;
+        for(let tailAttempt=0;tailAttempt<4;tailAttempt+=1){
           tail=await executeInWorker(currentBars,mainContextKey,false,{
             from:Math.max(0,currentBars.length-1),to:currentBars.length,
           });
           if(stopped||generation!==mainRunGeneration)return undefined;
-        }else{
+          const afterTail=getCurrentBars();
+          if(afterTail.length!==currentBars.length||afterTail.at(-2)?.timestamp!==currentBars.at(-2)?.timestamp){
+            // A new confirmed candle arrived while the tail ran. Warm that
+            // newly confirmed history before retrying the forming bar.
+            currentBars=afterTail;
+            break;
+          }
+          if(barValueSignature(afterTail.at(-1))!==barValueSignature(currentBars.at(-1))){
+            // Same candle, newer OHLCV revision: re-run only that tail. Continue
+            // checking after every asynchronous reply so we never commit a stale
+            // single retry if another tick landed while it was executing.
+            currentBars=afterTail;
+            continue;
+          }
           currentBars=afterTail;
+          stableTail=true;
+          break;
         }
-        return {currentBars,baseline,tail};
+        if(stableTail)return {currentBars,baseline,tail};
       }
       throw new Error('CoreSpirit chart history changed repeatedly during worker initialization; retry after the candle update settles.');
     };
