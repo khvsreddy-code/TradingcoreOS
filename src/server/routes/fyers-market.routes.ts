@@ -39,19 +39,19 @@ function fyersSymbol(value: string): string {
   return raw;
 }
 
-function rawQuoteSymbols(req: AuthenticatedRequest): { values: string[]; error?: string } {
+function rawQuoteSymbols(req: AuthenticatedRequest): { values: string[]; error?: string; status?: 400 | 413 } {
   const supplied = req.method === 'POST'
     ? (req.body?.symbols ?? req.body?.instrument_keys)
     : req.query.symbols;
   if (typeof supplied === 'string') return { values: supplied.split(',') };
   if (Array.isArray(supplied)) {
-    if (supplied.some(value => typeof value !== 'string')) return { values: [], error: 'symbols must contain only strings.' };
+    if (supplied.some(value => typeof value !== 'string')) return { values: [], error: 'symbols must contain only strings.', status: 400 };
     // Bound parsing cost separately from broker capabilities; this is an input
     // abuse guard, not an exchange/provider symbol limit.
-    if (supplied.length > 5_000) return { values: [], error: 'Too many symbol entries in one request.' };
+    if (supplied.length > 5_000) return { values: [], error: 'Too many symbol entries in one request.', status: 413 };
     return { values: supplied as string[] };
   }
-  return { values: [], error: 'symbols is required as a comma-separated string or string array.' };
+  return { values: [], error: 'symbols is required as a comma-separated string or string array.', status: 400 };
 }
 
 async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next: () => void) {
@@ -59,8 +59,7 @@ async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next:
   const client = await clientFor(req, res); if (!client) return;
   const capabilities = resolveFyersCapabilities(req.tradingCoreUserId!);
   const parsed = rawQuoteSymbols(req);
-  if (parsed.error) return res.status(parsed.error === 'symbols is required as a comma-separated string or string array.' ? 400 : 413)
-    .json({ success: false, error: parsed.error });
+  if (parsed.error) return res.status(parsed.status ?? 400).json({ success: false, error: parsed.error });
   const symbols = [...new Set(parsed.values.map(fyersSymbol).map(symbol => symbol.trim()).filter(Boolean))];
   if (!symbols.length) return res.status(400).json({ success: false, error: 'symbols must include at least one valid symbol.' });
   if (symbols.length > capabilities.maxQuoteBatch) {
