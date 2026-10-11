@@ -37,6 +37,15 @@ assert(theme.includes("accent: '#d3ebf4'"));
 assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
 assert(provider.includes("return EMPTY_COLUMNAR_BARS"), "cold Vela column load must yield to progressive history");
 assert(provider.includes("plane.ensureReadyHistory(firstPaintBars)"), "cold Vela history must use the shared ChartDataPlane history path");
+assert(!/await Promise\.all\(\[brokerReady,\s*defaultsPromise\]\)/.test(live),
+  "Vela workspace mount must not block first paint on broker session restoration");
+assert(live.includes("void brokerReady.then(() => {"),
+  "common-symbol history warm-up should begin after the workspace is already mounted");
+assert.equal((provider.match(/else void activeBrokerId\(\)\.then\(attach\)\.catch\(\(\) => undefined\);/g) ?? []).length, 2,
+  "both columnar and row subscriptions must attach after asynchronous broker restoration");
+assert(!provider.includes("if (!brokerId) return () => {};"),
+  "a subscription created before broker restoration must not become a permanent no-op");
+
 assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela provider must not bypass the shared history cache");
 
 assert(plane.includes("columns.time.length === 0"));
