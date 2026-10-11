@@ -178,6 +178,14 @@ function canDiscardPureValue(instruction: CoreSpiritIrInstruction): instruction 
  * Branch targets are remapped so pruning does not change control-flow meaning.
  */
 function eliminateDeadPureValues(instructions: readonly CoreSpiritIrInstruction[]): { instructions: CoreSpiritIrInstruction[]; removed: number } {
+  // This pass uses conservative linear liveness. Back-edges require a fixed-point CFG
+  // analysis; until that analysis is available, leave loop-containing programs untouched.
+  const hasBackEdge = instructions.some((instruction, index) =>
+    (instruction.op === 'jump' || instruction.op === 'jumpIfFalse' || instruction.op === 'eventGate')
+    && Number.isFinite(instruction.target)
+    && instruction.target <= index,
+  );
+  if (hasBackEdge) return { instructions: [...instructions], removed: 0 };
   const keep = new Array<boolean>(instructions.length).fill(true);
   const liveRegisters = new Set<string>();
   for (let index = instructions.length - 1; index >= 0; index -= 1) {
@@ -211,6 +219,7 @@ function eliminateDeadPureValues(instructions: readonly CoreSpiritIrInstruction[
   }
   return { instructions: output, removed: instructions.length - output.length };
 }
+
 function deps(instruction: CoreSpiritIrInstruction): string[] {
   switch (instruction.op) {
     case 'move': return [instruction.source];
@@ -306,7 +315,7 @@ function buildOptimizationPlan(
       'All execution remains one chronological bar traversal; no second semantic runtime is introduced.',
       sourceReadReuse>0 ? `Reused ${sourceReadReuse} repeated series read(s).` : 'No repeated series reads required reuse.',
       eliminated>0 ? `Eliminated ${eliminated} safe pure duplicate expression(s).` : 'No additional safe pure expression duplicates were found.',
-      deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.',
+      deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : instructions.some((instruction,index)=>(instruction.op==='jump'||instruction.op==='jumpIfFalse'||instruction.op==='eventGate')&&instruction.target<=index) ? 'Skipped dead-value elimination because a backward control-flow edge requires CFG liveness.' : 'No dead pure value instructions were found.',
       'Stateful indicator calls remain ordered stream operators and are not aliased by generic CSE.',
       `Estimated peak temporary register pressure: ${peakLiveRegisters}.`,
     ]),
