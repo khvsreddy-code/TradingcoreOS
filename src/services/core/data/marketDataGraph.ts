@@ -199,7 +199,10 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     index-=Math.max(0,Math.floor(request.offset||0));
     if(index<0||index>=node.time.length)return {value:null,source:alignment==='exact'?'data-graph:unaligned':'data-graph:empty',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
     const timestamp=Number(node.time[index]);
-    if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&Math.abs(asOf-timestamp)*1000>ctx.maxStalenessMs){
+    const barDurationSeconds=timeframeSeconds(node.timeframe);
+    const freshnessTimestamp=timestamp+(barDurationSeconds>0?barDurationSeconds:0);
+    const staleAgeMs=Math.max(0,asOf-freshnessTimestamp)*1000;
+    if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&staleAgeMs>ctx.maxStalenessMs){
       return {value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,timestamp,state:'historical'};
     }
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
