@@ -527,7 +527,14 @@ export class CoreSpiritVelaEngine {
         start=Math.max(0,normalizedInputLength-1);
         normalizedBarsCache.length=start;
       }
-      for(let i=start;i<length;i+=1)normalizedBarsCache.push(normalizeVelaBar(rows[i]!,i));
+      let previousTime=start>0?barTimeMillis(normalizedBarsCache[start-1]?.timestamp):0;
+      for(let i=start;i<length;i+=1){
+        const row=normalizeVelaBar(rows[i]!,i);
+        const time=barTimeMillis(row.timestamp);
+        if(i>0&&time<previousTime)throw new Error(`CoreSpirit Vela data adapter rejected non-chronological bar sequence at index ${i}.`);
+        previousTime=time;
+        normalizedBarsCache.push(row);
+      }
       normalizedInputLength=length;
       return normalizedBarsCache.slice();
     };
@@ -554,7 +561,7 @@ export class CoreSpiritVelaEngine {
         const snapshot = scene.snapshot();
         return {
           language: 'corespirit',
-          phase: req.mode === 'live' && !stopped ? 'streaming' : 'idle',
+          phase: stopped ? 'idle' : initializationInFlight ? 'computing' : req.mode === 'live' ? 'streaming' : 'idle',
           barIndex: state?.barIndex ?? -1,
           meta: {
             title: currentMetadata.meta.title,
