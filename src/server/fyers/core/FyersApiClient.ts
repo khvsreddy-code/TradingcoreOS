@@ -1,4 +1,5 @@
 import { withBrokerRequestGate } from '../../brokers/BrokerRequestGate.js';
+import { DEFAULT_FYERS_CAPABILITIES, type FyersCapabilities } from './FyersCapabilities.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../../latency/budgets.js';
 
 export class FyersApiError extends Error {
@@ -41,10 +42,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 export class FyersApiClient {
-  constructor(private readonly accessToken: string, private readonly appId = process.env.FYERS_CLIENT_ID || '') {}
+  constructor(
+    private readonly accessToken: string,
+    private readonly appId = process.env.FYERS_CLIENT_ID || '',
+    private readonly capabilities: FyersCapabilities = DEFAULT_FYERS_CAPABILITIES,
+  ) {}
 
   async dataGet<T = unknown>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
-    return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs);
+    return this.request<T>(DATA_BASE, path, params, signal, 'GET', undefined, timeoutMs, 'data');
   }
 
   async apiGet<T = unknown>(path: string, params: Record<string, string | number | undefined> = {}, signal?: AbortSignal, timeoutMs: number = API_LATENCY_BUDGET_MS.account): Promise<T> {
@@ -55,7 +60,7 @@ export class FyersApiClient {
     return this.request<T>(API_BASE, path, {}, signal, 'POST', body, timeoutMs);
   }
 
-private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs: number = API_LATENCY_BUDGET_MS.quote): Promise<T> {
+private async request<T>(base: string, path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal, method = 'GET', body?: unknown, timeoutMs: number = API_LATENCY_BUDGET_MS.quote, budget: 'data' | 'general' = 'general'): Promise<T> {
     const deadlineSignal = timeoutSignal(timeoutMs, signal);
     const execute = async (gateSignal?: AbortSignal): Promise<T> => {
       const requestSignal = gateSignal || deadlineSignal;
@@ -102,6 +107,15 @@ private async request<T>(base: string, path: string, params: Record<string, stri
     // Every FYERS REST call shares the authenticated-user scheduler. This keeps
     // history, quotes, option chain, depth and account calls from independently
     // consuming the same broker quota.
+    if (budget === 'data') {
+      const limits = this.capabilities.dataApiRateLimits;
+      return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal, {
+        budgetKey: 'data',
+        minIntervalMs: Math.ceil(1000 / limits.requestsPerSecond),
+        maxPerMinute: limits.requestsPerMinute,
+        maxPerDay: limits.requestsPerDay,
+      });
+    }
     return withBrokerRequestGate('fyers', this.accessToken, execute, deadlineSignal);
   }
 }
