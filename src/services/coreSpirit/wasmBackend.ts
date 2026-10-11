@@ -208,3 +208,42 @@ export class CoreSpiritWasmBackend {
 }
 
 
+
+
+export const CORE_SPIRIT_BUNDLED_WASM_SIMD_URL = '/coreSpirit/numerical-kernels-simd.wasm';
+
+export const CORE_SPIRIT_BUNDLED_WASM_SIMD_MANIFEST: CoreSpiritWasmKernelManifest = Object.freeze({
+  abiVersion: 1,
+  simd: true,
+  kernels: Object.freeze([
+    Object.freeze({
+      name: 'rollingMean',
+      variant: 'simd' as const,
+      inputCount: 1,
+      outputCount: 1,
+      stateful: false,
+      deterministic: true,
+    }),
+  ]),
+});
+
+/**
+ * Lazily load the bundled SIMD module for historical/research jobs.
+ * Callers can pass bytes explicitly in tests, server hosts, or offline runtimes.
+ */
+export async function loadCoreSpiritBundledWasmSimdBackend(options: {
+  backend?: CoreSpiritWasmBackend;
+  source?: WebAssembly.Module | WebAssembly.Instance | ArrayBuffer | Uint8Array;
+  url?: string;
+} = {}): Promise<CoreSpiritWasmBackend> {
+  const backend = options.backend ?? new CoreSpiritWasmBackend();
+  let source = options.source;
+  if (source === undefined) {
+    if (typeof fetch !== 'function') throw new Error('fetch is unavailable; provide the bundled CoreSpirit WASM bytes explicitly');
+    const response = await fetch(options.url ?? CORE_SPIRIT_BUNDLED_WASM_SIMD_URL);
+    if (!response.ok) throw new Error(`CoreSpirit WASM asset request failed with HTTP ${response.status}`);
+    source = await response.arrayBuffer();
+  }
+  await backend.load(source, CORE_SPIRIT_BUNDLED_WASM_SIMD_MANIFEST);
+  return backend;
+}
