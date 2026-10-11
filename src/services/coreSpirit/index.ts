@@ -98,6 +98,10 @@ export * from './semanticGraph';
 export * from './reactiveEngine';
 
 export * from './executionPlanner';
+export * from './backendRegistry';
+export * from './numericalKernels';
+export * from './wasmBackend';
+export * from './numericalKernelExecutor';
 export { CORE_SPIRIT_SANDBOX_LIMITS, CoreSpiritCapabilityDeniedError, CoreSpiritSandboxQuotaError, CoreSpiritCapabilitySandbox, createCoreSpiritSandbox, validateCoreSpiritSandboxArchitecture, computeCapabilityForBackend } from './capabilitySandbox';
 export type { CoreSpiritSandboxCapability, CoreSpiritForbiddenCapability as CoreSpiritSandboxForbiddenCapability, CoreSpiritSandboxLimits, CoreSpiritCapabilitySandboxOptions } from './capabilitySandbox';
 export * from './coreSpiritV1Runtime';
