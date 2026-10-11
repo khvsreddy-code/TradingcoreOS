@@ -106,6 +106,8 @@ try {
   const engineSource=await readFile(new URL('./CoreSpiritVelaEngine.ts',import.meta.url),'utf8');
   assert.match(engineSource,/runCoreSpiritArtifactInWorker/,'Vela engine must route compiled artifacts to persistent workers');
   assert.doesNotMatch(engineSource,/runtime\.executeIr|runtime\.executeBar|createRuntime\(/,'Vela engine must not execute CoreSpirit historical/live workloads on the UI thread');
+  assert.match(engineSource,/phase: stopped \? 'idle' : initializationInFlight \? 'computing'/,'Vela execution snapshots must report pending worker computation instead of idling while work is in flight');
+  assert.match(engineSource,/workerDatasetVersions\.delete\(mainContextKey\)[\s\S]{0,220}historyInitialized=false;[\s\S]{0,80}liveStarted=false;/,'historical backfill must invalidate live worker state and force a read-only warm-up before the next forming-bar run');
 assert.match(engineSource,/if\(secondaryDependencies\.length&&!req\.fetchSeries\)/,'missing secondary-data providers must explicitly degrade the Vela runtime');
 assert.match(engineSource,/secondaryDegraded=true;[\s\S]{0,180}secondaryFailed\.add/,'missing secondary market data must block signals/order intents rather than use empty values');
   viewportSession.stop();
