@@ -71,6 +71,20 @@ function normalizeVelaBars(rows: readonly VelaOhlcv[]): CoreSpiritMarketBar[] {
   return out;
 }
 
+function secondaryRowsMatch(existing:readonly CoreSpiritMarketBar[]|undefined,rows:readonly VelaOhlcv[]):boolean{
+  if(!existing||existing.length!==rows.length)return false;
+  for(let i=0;i<rows.length;i+=1){
+    const raw=rows[i]!;
+    const old=existing[i]!;
+    const timestamp=barTimeMillis(raw.time??raw.timestamp);
+    if(timestamp!==barTimeMillis(old.timestamp) ||
+      Number(raw.open)!==old.open || Number(raw.high)!==old.high ||
+      Number(raw.low)!==old.low || Number(raw.close)!==old.close ||
+      (raw.volume==null?0:Number(raw.volume))!==(old.volume??0))return false;
+  }
+  return true;
+}
+
 function lowerBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: number): number {
   let lo = 0, hi = bars.length;
   while (lo < hi) {
@@ -215,8 +229,14 @@ export class CoreSpiritVelaEngine {
           // A slower request must never overwrite a newer symbol/timeframe snapshot.
           if (stopped || requestVersion !== secondaryRequestVersion) return;
           if(rows?.length){
-            secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
-            secondaryGraphDirty=true;
+            const existing=secondaryData.get(key);
+            // Vela's cache-backed fetch can return the exact same 5k–50k candles
+            // on consecutive refreshes. Avoid reallocating object bars and
+            // retransferring identical graph columns when nothing changed.
+            if(!secondaryRowsMatch(existing,rows as unknown as VelaOhlcv[])){
+              secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
+              secondaryGraphDirty=true;
+            }
             secondaryFailed.delete(key);
           }else{
             // Do not leave an old cross-symbol snapshot addressable after a
