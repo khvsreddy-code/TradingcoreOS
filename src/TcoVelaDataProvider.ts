@@ -364,6 +364,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     let plane: ReturnType<typeof getChartDataPlane> | undefined;
     let stopPlane: (() => void) | undefined;
+    let attachedBrokerId: string | undefined;
     let cancelled = false;
     let fingerprint = '';
     let pendingSequence = 0;
@@ -399,8 +400,26 @@ export class TcoVelaDataProvider implements DataProvider {
         : Number(setTimeout(flush, 16));
     };
 
+
+    const detach = () => {
+      stopPlane?.();
+      stopPlane = undefined;
+      attachedBrokerId = undefined;
+      plane = undefined;
+      fingerprint = '';
+      dirty = false;
+      if (raf) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
+        else clearTimeout(raf);
+      }
+      raf = 0;
+      scheduled = false;
+    };
+
     const attach = (brokerId: string) => {
-      if (cancelled || stopPlane) return;
+      if (cancelled || attachedBrokerId === brokerId) return;
+      detach();
+      attachedBrokerId = brokerId;
       plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
       stopPlane = plane.subscribe((event) => {
         if (event.type !== 'snapshot' && event.type !== 'tick') return;
@@ -410,21 +429,23 @@ export class TcoVelaDataProvider implements DataProvider {
       schedule();
     };
 
+    const syncBroker = () => {
+      if (cancelled) return;
+      const brokerId = activeBrokerIdSync();
+      if (brokerId) attach(brokerId);
+      else detach();
+    };
+    const offBrokerConnected = tradingCoreRuntime.on('BROKER_CONNECTED', syncBroker);
+    const offBrokerDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', syncBroker);
     const brokerId = activeBrokerIdSync();
     if (brokerId) attach(brokerId);
     else void activeBrokerId().then(attach).catch(() => undefined);
 
     return () => {
       cancelled = true;
-      stopPlane?.();
-      stopPlane = undefined;
-      dirty = false;
-      if (raf) {
-        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
-        else clearTimeout(raf);
-      }
-      raf = 0;
-      scheduled = false;
+      offBrokerConnected();
+      offBrokerDisconnected();
+      detach();
     };
   }
 
@@ -433,6 +454,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const tcoTimeframe = runtimeTimeframe(timeframe);
     let plane: ReturnType<typeof getChartDataPlane> | undefined;
     let stopPlane: (() => void) | undefined;
+    let attachedBrokerId: string | undefined;
     let cancelled = false;
     let fingerprint = '';
     let scheduled = false;
@@ -470,8 +492,26 @@ export class TcoVelaDataProvider implements DataProvider {
         : Number(setTimeout(flush, 16));
     };
 
+
+    const detach = () => {
+      stopPlane?.();
+      stopPlane = undefined;
+      attachedBrokerId = undefined;
+      plane = undefined;
+      fingerprint = '';
+      dirty = false;
+      if (raf) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
+        else clearTimeout(raf);
+      }
+      raf = 0;
+      scheduled = false;
+    };
+
     const attach = (brokerId: string) => {
-      if (cancelled || stopPlane) return;
+      if (cancelled || attachedBrokerId === brokerId) return;
+      detach();
+      attachedBrokerId = brokerId;
       plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
       stopPlane = plane.subscribe((event) => {
         if (event.type !== 'snapshot' && event.type !== 'tick') return;
@@ -480,21 +520,23 @@ export class TcoVelaDataProvider implements DataProvider {
       schedule();
     };
 
+    const syncBroker = () => {
+      if (cancelled) return;
+      const brokerId = activeBrokerIdSync();
+      if (brokerId) attach(brokerId);
+      else detach();
+    };
+    const offBrokerConnected = tradingCoreRuntime.on('BROKER_CONNECTED', syncBroker);
+    const offBrokerDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', syncBroker);
     const brokerId = activeBrokerIdSync();
     if (brokerId) attach(brokerId);
     else void activeBrokerId().then(attach).catch(() => undefined);
 
     return () => {
       cancelled = true;
-      stopPlane?.();
-      stopPlane = undefined;
-      dirty = false;
-      if (raf) {
-        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
-        else clearTimeout(raf);
-      }
-      raf = 0;
-      scheduled = false;
+      offBrokerConnected();
+      offBrokerDisconnected();
+      detach();
     };
   }
 }
