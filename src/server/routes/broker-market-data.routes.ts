@@ -319,7 +319,7 @@ brokerMarketDataRoutes.get('/:brokerId/option-chain', async (req: Request, res: 
   try {
     const capabilities = resolveFyersCapabilities(session.userId);
     const adapter = BrokerRegistry.getAdapter('fyers') as FyersAdapter;
-    const data = await adapter.getOptionChain(session.token, symbol, expiryDate, capabilities);
+    const data = await adapter.getOptionChain(session.token, symbol, expiryDate, capabilities, session.userId);
     res.setHeader('Cache-Control', 'private, max-age=5');
     return res.json({ success: true, data, capabilities: { plan:capabilities.plan, dataApiRateLimits:capabilities.dataApiRateLimits } });
   } catch (err: any) {
