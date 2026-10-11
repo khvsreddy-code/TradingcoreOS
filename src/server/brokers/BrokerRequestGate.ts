@@ -183,6 +183,12 @@ export async function withBrokerRequestGate<T>(
         if (acquired) await distributed.releaseLock(lockKey, owner).catch(() => undefined);
       }
     } else if (distributedEnabled() && process.env.NODE_ENV === 'production') {
+      if (process.env.TRADINGCORE_DISTRIBUTED_COORDINATION_REQUIRED === 'true') {
+        throw Object.assign(
+          new Error('Shared Redis coordination is required before broker API calls can be admitted.'),
+          { status:503, code:'BROKER_COORDINATION_REQUIRED' },
+        );
+      }
       const marker = globalThis as typeof globalThis & { __tradingCoreRedisWarningLogged?: boolean };
       if (!marker.__tradingCoreRedisWarningLogged) {
         marker.__tradingCoreRedisWarningLogged = true;
