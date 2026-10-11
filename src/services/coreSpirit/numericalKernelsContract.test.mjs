@@ -43,8 +43,21 @@ close(regression.slope[1], 1);
 close(regression.fitted[1], 2);
 close(regression.fitted[3], 4);
 close(regression.rSquared[3], 1);
+const highLevelRegression = linearRegression(highLevelPrices, 3);
+close(highLevelRegression.slope[2], 0.125, 1e-7,
+  'linear regression slope should remain accurate at high absolute price levels');
+close(highLevelRegression.fitted[2], highLevelPrices[2], 1e-5,
+  'linear regression fitted price should preserve its high-level price anchor');
 close(correlation(Float64Array.from([1, 2, 3]), Float64Array.from([2, 4, 6]), 2)[2], 1);
 close(covariance(Float64Array.from([1, 2, 3]), Float64Array.from([2, 4, 6]), 2)[2], 0.5);
+const highLevelY = Float64Array.from([2e12 + 0.25, 2e12 + 0.5, 2e12 + 0.75, 2e12 + 1]);
+const highLevelCovariance = covariance(highLevelPrices, highLevelY, 3);
+close(highLevelCovariance[2], 1 / 48, 1e-7);
+close(highLevelCovariance[3], 1 / 48, 1e-7,
+  'rolling covariance should remain stable as large-level price windows advance');
+close(correlation(highLevelPrices, highLevelY, 3)[2], 1, 1e-7);
+close(correlation(highLevelPrices, highLevelY, 3)[3], 1, 1e-7,
+  'rolling correlation should remain stable as large-level price windows advance');
 close(zScore(Float64Array.from([1, 2, 3]), 2)[2], 1);
 close(dotProduct(Float64Array.from([1, 2, 3]), Float64Array.from([4, 5, 6])), 32);
 
