@@ -15,6 +15,7 @@ const snapshot = chartPerformanceTelemetry.snapshot(key);
 
 assert.equal(snapshot.initialHistoryLoadMs, 42);
 assert.equal(snapshot.initialHistoryCandles, 500);
+assert.ok(Number.isFinite(snapshot.lastMarketUpdateAgeMs) && snapshot.lastMarketUpdateAgeMs >= 0 && snapshot.lastMarketUpdateAgeMs < 1000, 'latest market packet age should prove the live stream was recently active');
 assert.equal(snapshot.olderHistoryLoadMs, 17);
 assert.equal(snapshot.olderHistoryCandles, 250);
 assert.equal(snapshot.historyPrependOps, 1);
