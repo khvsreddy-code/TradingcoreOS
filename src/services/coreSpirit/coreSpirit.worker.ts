@@ -232,6 +232,7 @@ self.onmessage=(event:MessageEvent<Message>)=>{
       : syncObjectBars(context,message.bars || []);
 
     const fullReset=
+      message.readOnly ||
       message.mode==='historical' ||
       !context.initialized ||
       message.datasetVersion<=context.datasetVersion;
