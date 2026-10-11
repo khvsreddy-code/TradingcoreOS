@@ -1,6 +1,6 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
-import { createTcoVelaDataProvider, prewarmTcoVelaHistory } from './TcoVelaDataProvider';
+import { createTcoVelaDataProvider, prewarmTcoVelaHistory, tcoVelaPerformanceKey } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
@@ -175,16 +175,24 @@ export function LiveTradingWorkspace() {
   useEffect(() => {
     const perfTimer = window.setInterval(() => {
       const stats = workspaceRef.current?.getPerformanceStats?.() ?? [];
-      for (const sample of stats) {
-        chartPerformanceTelemetry.ingestRendererSnapshot(`vela:${sample.cellId}`, sample);
+      const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
+      const activePipelineKeys = new Set<string>();
+      if (brokerId) {
+        for (const sample of stats) {
+          if (!sample.symbol || !sample.timeframe) continue;
+          const key = tcoVelaPerformanceKey(brokerId, sample.symbol, sample.timeframe);
+          activePipelineKeys.add(key);
+          chartPerformanceTelemetry.ingestRendererSnapshot(key, sample);
+        }
       }
       if (typeof window !== 'undefined') {
         (window as Window & { __TCO_PERF__?: unknown }).__TCO_PERF__ = {
           capturedAt: Date.now(),
           cells: stats,
-          pipeline: chartPerformanceTelemetry.keys().map(key => chartPerformanceTelemetry.snapshot(key)),
+          // Only expose active Vela chart data planes; omit unrelated profiler and legacy keys.
+          pipeline: [...activePipelineKeys].map(key => chartPerformanceTelemetry.snapshot(key)),
           sharedMemory: {
-            crossOriginIsolated: typeof window !== 'undefined' ? Boolean(window.crossOriginIsolated) : false,
+            crossOriginIsolated: Boolean(window.crossOriginIsolated),
             sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
           },
         };
