@@ -34,6 +34,12 @@ assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlis
 assert(topbar.includes("b.dataset.actionId = action.id"));
 assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
+assert.equal((provider.match(/export class TcoVelaDataProvider implements DataProvider/g) ?? []).length, 1,
+  "the Vela data provider must have one canonical implementation");
+assert.equal((provider.match(/else void activeBrokerId\(\)\.then\(attach\)\.catch\(\(\) => undefined\);/g) ?? []).length, 2,
+  "both Vela live-subscription forms must attach if broker restore completes after subscribe");
+assert(!provider.includes("if (!brokerId) return () => {};"),
+  "a cold-start subscription must not become a permanent no-op before broker restore");
 assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
 assert(provider.includes("return EMPTY_COLUMNAR_BARS"), "cold Vela column load must yield to progressive history");
 assert(provider.includes("plane.ensureReadyHistory(firstPaintBars)"), "cold Vela history must use the shared ChartDataPlane history path");
