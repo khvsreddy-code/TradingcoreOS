@@ -343,7 +343,7 @@ export function planCoreSpiritExecution(
       nodeIds: offloadableNodes.map(node => node.id),
       workUnits: Math.max(1, backendCapabilityPlans.reduce((sum, plan) => sum + plan.workUnits, 0)),
       deterministic: backend.deterministic,
-      reason: \`registered \${backend.backend.toUpperCase()} kernels receive only explicitly mapped numerical builtin nodes\`,
+      reason: `registered ${backend.backend.toUpperCase()} kernels receive only explicitly mapped numerical builtin nodes`,
     });
     assignments.push({
       backend: 'cpu',
@@ -352,7 +352,7 @@ export function planCoreSpiritExecution(
       deterministic: true,
       reason: 'non-kernel IR, effects and unsupported operations remain ordered on CPU',
     });
-    explanation.push(\`hybrid plan selected: \${backend.backend} may execute \${offloadableNodes.length} registered numerical kernel node(s); CPU retains \${cpuNodes.length} other node(s).\`);
+    explanation.push(`hybrid plan selected: ${backend.backend} may execute ${offloadableNodes.length} registered numerical kernel node(s); CPU retains ${cpuNodes.length} other node(s).`);
   } else {
     strategy = backend.backend === 'gpu' ? 'gpu-vectorized' : 'wasm-portable';
     assignments.push({
@@ -360,9 +360,9 @@ export function planCoreSpiritExecution(
       nodeIds: offloadableNodes.map(node => node.id),
       workUnits: Math.max(1, backendCapabilityPlans.reduce((sum, plan) => sum + plan.workUnits, 0)),
       deterministic: backend.deterministic,
-      reason: \`\${backend.backend.toUpperCase()} is registered for the exact numerical kernel operation(s) in this plan\`,
+      reason: `${backend.backend.toUpperCase()} is registered for the exact numerical kernel operation(s) in this plan`,
     });
-    explanation.push(\`\${backend.backend.toUpperCase()} is selected for registered numerical kernels only.\`);
+    explanation.push(`${backend.backend.toUpperCase()} is selected for registered numerical kernels only.`);
   }
 
   const computeAssignment = assignments.find(a => a.backend !== 'cpu');
