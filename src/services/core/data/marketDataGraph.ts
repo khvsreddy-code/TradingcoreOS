@@ -59,7 +59,7 @@ function normalizeTimeframe(value:string):string{
   if(!raw||raw==='chart')return raw||'chart';
   // Vela/CoreSpirit commonly expose minute timeframes as bare numerals ('5', '15').
   // Canonicalize them before graph lookup so cross-timeframe requests don't miss.
-  if(/^\\d+$/.test(raw))return `${Number(raw)}m`;
+  if(/^\d+$/.test(raw))return `${Number(raw)}m`;
   const lower=raw.toLowerCase();
   if(lower==='day')return '1D';
   if(lower==='1h'||lower==='60m')return '1H';
