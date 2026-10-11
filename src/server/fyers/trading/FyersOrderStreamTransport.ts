@@ -56,8 +56,19 @@ export class FyersOrderStreamTransport {
     } else if (!session.socket || session.socket.readyState === WebSocket.CLOSED || session.socket.readyState === WebSocket.CLOSING) {
       this.connect(userId, session);
     }
-    listener({ type: 'status', status: session.socket?.readyState === WebSocket.OPEN ? 'connected' : 'connecting' });
+    listener(this.getStatus(userId));
     return () => this.unsubscribe(userId, listener);
+  }
+
+  /** Current transport state for late subscribers and HTTP stream heartbeats. */
+  static getStatus(userId: string): Extract<FyersOrderStreamEvent, { type: 'status' }> {
+    const session = this.sessions.get(userId);
+    if (!session) return { type: 'status', status: 'disconnected' };
+    if (session.reconciling || session.reconciliationBlocked) {
+      return { type: 'status', status: 'reconciling' };
+    }
+    if (session.socket?.readyState === WebSocket.OPEN) return { type: 'status', status: 'connected' };
+    return { type: 'status', status: session.reconnectTimer ? 'reconnecting' : 'connecting' };
   }
 
   static disconnect(userId: string): void {
