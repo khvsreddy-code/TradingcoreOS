@@ -67,6 +67,7 @@ const contracts = [
   ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
   ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
+  ['fyers-multi-class-domain-events', ['src/fyersMultiClassDomainEventsContract.test.mjs', true]],
   ['vela-advanced-drawing-family-lazy', ['src/velaAdvancedDrawingFamilyLazyContract.test.mjs', true]],
   ['corespirit-kernel-snapshots', ['src/coreSpiritKernelSnapshotContract.test.mjs', true]],
 
