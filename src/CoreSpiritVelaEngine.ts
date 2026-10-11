@@ -7,7 +7,7 @@ import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
-import { resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
+import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
 
 type DirtyRange = { from: number; to: number };
 
@@ -84,6 +84,34 @@ function upperBoundBarTime(bars: readonly CoreSpiritMarketBar[], targetMs: numbe
   return lo;
 }
 
+
+function sameInputValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left == null || right == null || typeof left !== 'object' || typeof right !== 'object') return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const leftKeys = Object.keys(left as Record<string, unknown>).sort();
+  const rightKeys = Object.keys(right as Record<string, unknown>).sort();
+  if (leftKeys.length !== rightKeys.length || leftKeys.some((key, index) => key !== rightKeys[index])) return false;
+  return leftKeys.every(key => sameInputValue(
+    (left as Record<string, unknown>)[key],
+    (right as Record<string, unknown>)[key],
+  ));
+}
+
+function sameInputRecord(
+  left: Readonly<Record<string, unknown>>,
+  right: Readonly<Record<string, unknown>>,
+): boolean {
+  return sameInputValue(left, right);
+}
+
+function runtimeAffectingProps(values: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).filter(([key]) => !isDisplayOnlyCoreSpiritProp(key)));
+}
+
+function presentationProps(values: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).filter(([key]) => isDisplayOnlyCoreSpiritProp(key)));
+}
 
 function dependencyKey(symbol:string,timeframe:string):string {
   return `${symbol.toUpperCase()}|${timeframe.toLowerCase()}`;
@@ -451,8 +479,40 @@ export class CoreSpiritVelaEngine {
       },
       update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
         if (stopped) return;
+
+        const previousMetadata = currentMetadata;
+        const nextMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
+        const inputsUnchanged = sameInputRecord(previousMetadata.inputValues, nextMetadata.inputValues);
+        const runtimePropsUnchanged = sameInputRecord(
+          runtimeAffectingProps(previousMetadata.propValues),
+          runtimeAffectingProps(nextMetadata.propValues),
+        );
+
+        // Vela may call update for display-only settings such as precision,
+        // overlay, title, format or shorttitle. Update the model metadata without
+        // resetting CoreSpirit state or replaying historical bars.
+        if (inputsUnchanged && runtimePropsUnchanged) {
+          const presentationChanged =
+            !sameInputValue(previousMetadata.meta, nextMetadata.meta) ||
+            !sameInputRecord(
+              presentationProps(previousMetadata.propValues),
+              presentationProps(nextMetadata.propValues),
+            );
+          currentMetadata = nextMetadata;
+          if (presentationChanged && historyInitialized) {
+            emitModel(
+              Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
+                ? { from:firstSeriesTime, to:lastTime }
+                : undefined,
+            );
+          }
+          // Do not invalidate an in-flight semantic settings update that is
+          // waiting for secondary data; it will use the newest metadata snapshot.
+          return;
+        }
+
         const updateGeneration = ++updateVersion;
-        currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
+        currentMetadata = nextMetadata;
 
         const runUpdate = (): void => {
           if (stopped || updateGeneration !== updateVersion) return;
