@@ -96,27 +96,58 @@ export class CoreSpiritDirtyGraph {
   }
 
   planTail(sources: readonly CoreSpiritDirtySource[], barIndex: number, executionEnd = barIndex): CoreSpiritDirtyExecutionPlan {
+    const start = Math.max(0, Math.floor(Number.isFinite(barIndex) ? barIndex : 0));
+    const requestedEnd = Number.isFinite(executionEnd) ? Math.floor(executionEnd) : start;
+    const end = Math.max(start, requestedEnd);
     const dirty = new Map<string, CoreSpiritDirtyRange>();
     const queue: string[] = [];
-    const mark = (id:string, from:number, to:number):void => {
-      const node=this.nodesById.get(id); if(!node)return;
-      const nextFrom=Math.max(0,from), nextTo=Math.max(nextFrom,Math.min(executionEnd,to));
-      const previous=dirty.get(id);
-      if(previous && previous.from<=nextFrom && previous.to>=nextTo)return;
-      dirty.set(id, previous ? {from:Math.min(previous.from,nextFrom),to:Math.max(previous.to,nextTo)} : {from:nextFrom,to:nextTo});
+    let queueCursor = 0;
+    const mark = (id: string, from: number, inputTo: number): void => {
+      const node = this.nodesById.get(id);
+      if (!node) return;
+      const nextFrom = Math.max(0, Math.floor(from));
+      const clampedInputTo = Math.max(nextFrom, Math.min(end, Math.floor(Number.isFinite(inputTo) ? inputTo : end)));
+      // Expand the span when calculating this node's outputs, not one edge later.
+      const nextTo = node.lookback < 0 || !Number.isFinite(node.lookback)
+        ? end
+        : Math.min(end, clampedInputTo + Math.max(0, Math.floor(node.lookback)));
+      const previous = dirty.get(id);
+      if (previous && previous.from <= nextFrom && previous.to >= nextTo) return;
+      dirty.set(id, previous
+        ? { from: Math.min(previous.from, nextFrom), to: Math.max(previous.to, nextTo) }
+        : { from: nextFrom, to: nextTo });
       queue.push(id);
     };
-    for(const source of sources) for(const id of this.sourceDependents.get(source) || []) mark(id,barIndex,barIndex);
-    for(const node of this.nodesById.values()) if(node.alwaysRecompute) mark(node.id,barIndex,barIndex);
-    while(queue.length){
-      const id=queue.shift()!, node=this.nodesById.get(id)!; const range=dirty.get(id)!;
-      const nextTo=node.lookback >= 0 ? Math.min(executionEnd,range.to+node.lookback) : executionEnd;
-      for(const dependent of node.dependents) mark(dependent,range.from,nextTo);
+    for (const source of sources) {
+      for (const id of this.sourceDependents.get(source) || []) mark(id, start, start);
     }
-    const instructions=new Set<number>(); for(const id of dirty.keys()) instructions.add(this.nodesById.get(id)!.instruction);
-    const ranges=new Map<string,CoreSpiritDirtyRange>(dirty);
-    const values=[...ranges.values()];
-    return {sourceFields:Object.freeze([...sources]),nodes:new Set(dirty.keys()),instructions,ranges,earliest:values.length?Math.min(...values.map(r=>r.from)):barIndex,latest:values.length?Math.max(...values.map(r=>r.to)):barIndex,allHistory:false};
+    for (const node of this.nodesById.values()) {
+      if (node.alwaysRecompute) mark(node.id, start, start);
+    }
+    // A cursor avoids repeated O(n) copies from Array.shift() on large graphs.
+    while (queueCursor < queue.length) {
+      const id = queue[queueCursor++]!;
+      const node = this.nodesById.get(id);
+      const range = dirty.get(id);
+      if (!node || !range) continue;
+      for (const dependent of node.dependents) mark(dependent, range.from, range.to);
+    }
+    const instructions = new Set<number>();
+    for (const id of dirty.keys()) {
+      const node = this.nodesById.get(id);
+      if (node) instructions.add(node.instruction);
+    }
+    const ranges = new Map<string, CoreSpiritDirtyRange>(dirty);
+    const values = [...ranges.values()];
+    return {
+      sourceFields: Object.freeze([...new Set(sources)]),
+      nodes: new Set(dirty.keys()),
+      instructions,
+      ranges,
+      earliest: values.length ? Math.min(...values.map(range => range.from)) : start,
+      latest: values.length ? Math.max(...values.map(range => range.to)) : start,
+      allHistory: false,
+    };
   }
 
   planFull(executionEnd:number): CoreSpiritDirtyExecutionPlan {
