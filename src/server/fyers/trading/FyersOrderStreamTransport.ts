@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
-import type { Fill, FundsUpdate, OrderUpdate, PositionUpdate } from '../../../types/market-events.js';
+import type { DomainMarketEvent, Fill, FundsUpdate, OrderUpdate, PositionUpdate } from '../../../types/market-events.js';
+import { marketEventBus } from '../../marketData/MarketEventBus.js';
 import { normalizeFyersOrderPayload, type FyersNormalizedOrderEvent } from './fyersOrderEventNormalizer.js';
 
 type Listener = (event: FyersOrderStreamEvent) => void;
@@ -105,7 +106,13 @@ export class FyersOrderStreamTransport {
       const normalized = normalizeFyersOrderPayload(payload, session.sequence + 1, receivedAt);
       for (const item of normalized) {
         const sequence = ++session.sequence;
-        this.emit(session, resequence(item, sequence));
+        const event = resequence(item, sequence);
+        // Order, fill, position and funds frames use the same domain vocabulary as live/replay data.
+        // Unknown broker frames were dropped by the normalizer before this boundary.
+        if (event.type === 'order' || event.type === 'trade' || event.type === 'position' || event.type === 'funds') {
+          marketEventBus.publish(event.data as DomainMarketEvent);
+        }
+        this.emit(session, event);
       }
     });
 
