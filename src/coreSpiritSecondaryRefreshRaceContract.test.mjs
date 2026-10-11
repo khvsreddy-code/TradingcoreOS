@@ -80,6 +80,9 @@ assert.ok(latestValues(freshContext).some((value) => Number(value) === 222),
   'the newest secondary response should be visible to CoreSpirit');
 assert.match((await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url), 'utf8'), /time:Float64Array\.from\(rows,row=>Math\.floor\(barTimeMillis\(row\.timestamp\)\/1000\)\)/,
   'Vela secondary candle timestamps must be normalized to epoch seconds for the CoreSpirit market graph resolver');
+const velaEngineSource=(await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url),'utf8');
+assert.match(velaEngineSource,/dep\.symbol === 'current' \|\| dep\.symbol === req\.market\.symbol/,'only current-symbol requests on the primary timeframe may skip secondary fetching');
+assert.match(velaEngineSource,/const symbol=dep\.symbol==='current'\?req\.market\.symbol:dep\.symbol/,'current-symbol secondary timeframes must resolve to the active chart symbol');
 
 // Deliver older responses after the newest snapshot has been consumed.
 pending[1].resolve([secondaryBar(333, secondaryTime)]);
