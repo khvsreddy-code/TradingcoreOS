@@ -438,69 +438,114 @@ export class CoreSpiritVelaEngine {
       if (patches.length) handlers.onScenePatches?.(patches);
     };
 
-    const initializeStatic = (currentBars: CoreSpiritMarketBar[]): void => {
-      if (stopped || historyInitialized) return;
-      const result = safeOutputs(runtime.executeIrReadOnly(token.ir, currentBars).outputs);
-      scene.reset();
-      scene.seed(result);
-      firstSeriesTime = currentBars.length ? barTimeMillis(currentBars[0]?.timestamp) : Number.NaN;
-      lastTime = currentBars.length ? barTimeMillis(currentBars.at(-1)?.timestamp) : Number.NaN;
-      historyInitialized = true;
-      emitModel(
-        Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
-          ? { from:firstSeriesTime, to:lastTime }
-          : undefined,
-      );
-      handlers.onDone?.();
+    const rememberWorkerState=(value:unknown):void=>{
+      lastExecutionState=value&&typeof value==='object'?value as RuntimeSnapshot:undefined;
+    };
+    const barValueSignature=(bar:CoreSpiritMarketBar|undefined):string=>bar?JSON.stringify([
+      bar.timestamp,bar.open,bar.high,bar.low,bar.close,bar.volume??0,
+    ]):'empty';
+
+    const evaluateLiveSnapshot=async(startingBars:CoreSpiritMarketBar[],generation:number)=>{
+      let currentBars=startingBars;
+      let baseline:Awaited<ReturnType<typeof executeInWorker>>|undefined;
+      let tail:Awaited<ReturnType<typeof executeInWorker>>|undefined;
+      for(let attempt=0;attempt<3;attempt+=1){
+        const historical=currentBars.slice(0,-1);
+        baseline=await executeInWorker(historical,mainContextKey,true,{from:0,to:historical.length});
+        if(stopped||generation!==mainRunGeneration)return undefined;
+
+        // If a new candle was appended while history was warming, warm again so
+        // the newly confirmed candle is committed before evaluating the new tail.
+        const newest=getCurrentBars();
+        const sameHistoryBoundary=newest.length===currentBars.length&&
+          newest.at(-2)?.timestamp===currentBars.at(-2)?.timestamp;
+        if(!sameHistoryBoundary){currentBars=newest;continue;}
+        currentBars=newest;
+        if(!currentBars.length)return {currentBars,baseline,tail:undefined};
+
+        tail=await executeInWorker(currentBars,mainContextKey,false,{
+          from:Math.max(0,currentBars.length-1),to:currentBars.length,
+        });
+        if(stopped||generation!==mainRunGeneration)return undefined;
+        const afterTail=getCurrentBars();
+        if(afterTail.length!==currentBars.length||afterTail.at(-2)?.timestamp!==currentBars.at(-2)?.timestamp){
+          currentBars=afterTail;
+          continue;
+        }
+        if(barValueSignature(afterTail.at(-1))!==barValueSignature(currentBars.at(-1))){
+          // Only the developing candle changed during the worker run. Re-submit
+          // its newest snapshot without re-warming confirmed history.
+          currentBars=afterTail;
+          tail=await executeInWorker(currentBars,mainContextKey,false,{
+            from:Math.max(0,currentBars.length-1),to:currentBars.length,
+          });
+          if(stopped||generation!==mainRunGeneration)return undefined;
+        }else{
+          currentBars=afterTail;
+        }
+        return {currentBars,baseline,tail};
+      }
+      throw new Error('CoreSpirit chart history changed repeatedly during worker initialization; retry after the candle update settles.');
     };
 
-    const initializeLive = (currentBars: CoreSpiritMarketBar[]): void => {
-      if (stopped || liveStarted) return;
-      scene.reset();
-
-      if (!currentBars.length) {
-        historyInitialized = true;
-        liveStarted = true;
-        return;
+    const initializeStatic = async(currentBars:CoreSpiritMarketBar[]):Promise<void>=>{
+      if(stopped||historyInitialized||initializationInFlight)return;
+      initializationInFlight=true;
+      const generation=++mainRunGeneration;
+      try{
+        const result=await executeInWorker(currentBars,mainContextKey,true,{from:0,to:currentBars.length});
+        if(stopped||generation!==mainRunGeneration)return;
+        const outputs=safeOutputs(result.outputs);
+        scene.reset();
+        scene.seed(outputs);
+        rememberWorkerState(result.state);
+        firstSeriesTime=currentBars.length?barTimeMillis(currentBars[0]?.timestamp):Number.NaN;
+        lastTime=currentBars.length?barTimeMillis(currentBars.at(-1)?.timestamp):Number.NaN;
+        historyInitialized=true;
+        emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined);
+        handlers.onDone?.();
+      }catch(error){
+        if(!stopped&&generation===mainRunGeneration)handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+      }finally{
+        initializationInFlight=false;
       }
-
-      const historical = currentBars.slice(0, -1);
-      if (historical.length) {
-        // One confirmed-history pass establishes the runtime's stable baseline.
-        // The same runtime then evaluates the forming bar without rehydrating history.
-        const warm = safeOutputs(runtime.executeIrReadOnly(token.ir, historical).outputs);
-        scene.seed(warm);
-      }
-
-      const latest = currentBars.at(-1);
-      if (!latest) {
-        historyInitialized = true;
-        liveStarted = true;
-        return;
-      }
-
-      const result = safeOutputs(runtime.executeBar(latest).outputs);
-      const latestTime = barTimeMillis(latest.timestamp);
-      firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
-      lastTime = latestTime;
-      historyInitialized = true;
-      liveStarted = true;
-
-      if (Number.isFinite(latestTime)) emitScenePatches(result, { from:latestTime, to:latestTime });
-      emitModel(
-        Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
-          ? { from:firstSeriesTime, to:lastTime }
-          : undefined,
-      );
     };
 
-    const initializeFromBars = (currentBars: CoreSpiritMarketBar[]): void => {
-      try {
-        if (req.mode === 'live') initializeLive(currentBars);
-        else initializeStatic(currentBars);
-      } catch (error) {
-        handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+    const initializeLive = async(currentBars:CoreSpiritMarketBar[]):Promise<void>=>{
+      if(stopped||liveStarted||initializationInFlight)return;
+      if(!currentBars.length){historyInitialized=false;liveStarted=false;return;}
+      initializationInFlight=true;
+      const generation=++mainRunGeneration;
+      try{
+        const execution=await evaluateLiveSnapshot(currentBars,generation);
+        if(!execution||stopped||generation!==mainRunGeneration)return;
+        if(!execution.currentBars.length||!execution.tail){historyInitialized=false;liveStarted=false;return;}
+        const warmOutputs=safeOutputs(execution.baseline.outputs);
+        const tailOutputs=safeOutputs(execution.tail.outputs);
+        // Commit visuals only after both the confirmed-history baseline and the
+        // forming-bar run succeeded; a worker failure leaves the current scene intact.
+        scene.reset();
+        scene.seed(warmOutputs);
+        const latest=execution.currentBars.at(-1)!;
+        const latestTime=barTimeMillis(latest.timestamp);
+        if(Number.isFinite(latestTime))emitScenePatches(tailOutputs,{from:latestTime,to:latestTime});
+        rememberWorkerState(execution.tail.state);
+        firstSeriesTime=barTimeMillis(execution.currentBars[0]?.timestamp);
+        lastTime=latestTime;
+        historyInitialized=true;
+        liveStarted=true;
+        emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined);
+      }catch(error){
+        if(!stopped&&generation===mainRunGeneration)handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+      }finally{
+        initializationInFlight=false;
       }
+    };
+
+    const initializeFromBars = (currentBars:CoreSpiritMarketBar[]):void=>{
+      if(stopped||historyInitialized||initializationInFlight)return;
+      if(req.mode==='live')void initializeLive(currentBars);
+      else void initializeStatic(currentBars);
     };
 
     const getCurrentBars = (): CoreSpiritMarketBar[] =>
