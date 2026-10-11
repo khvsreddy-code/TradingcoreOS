@@ -232,7 +232,7 @@ export class FyersAdapter extends BaseBroker {
       '15minute':'15','20minute':'20','30minute':'30','60minute':'60',
       '120minute':'120','240minute':'240','day':'D','1day':'D','week':'1W','month':'1M',
     };
-    const secondsMatch = /^(\\d+)\\s*(?:s|sec|second|seconds)$/i.exec(interval) || /^(\\d+)S$/i.exec(interval);
+    const secondsMatch = /^([0-9]+)(?:s|sec|second|seconds)$/i.exec(interval.trim()) || /^([0-9]+)S$/i.exec(interval.trim());
     const resolution = secondsMatch ? `${Number(secondsMatch[1])}S` : (resolutionMap[interval] || interval);
     if (!resolution) throw new Error(`Unsupported Fyers history interval: ${interval}`);
     const secondsInterval = Boolean(secondsMatch);
@@ -296,7 +296,7 @@ export class FyersAdapter extends BaseBroker {
     // Keep this legacy adapter compatible with the same Data API quota gate as
     // the dedicated FYERS route. The newer route preserves the fuller chain.
     const params:Record<string,string|number|undefined> = { symbol:instrumentKey, strikecount:'7' };
-    if (expiryDate && expiryDate !== 'current_week' && /^\\d+$/.test(expiryDate)) params.timestamp=expiryDate;
+    if (expiryDate && expiryDate !== 'current_week' && /^[0-9]+$/.test(expiryDate)) params.timestamp=expiryDate;
     const client = new FyersApiClient(accessToken, undefined, capabilities);
     const payload = await client.dataGet<any>(
       '/options-chain-v3',
