@@ -1265,7 +1265,9 @@ export class CoreSpiritRuntime {
         const kind=String(r.kind ?? '');
         if (kind==='market' || kind==='timeframe' || kind==='series') {
           const symbol=kind==='market' ? String(r.symbol ?? this.executionContext.symbol) : this.executionContext.symbol;
-          const timeframe=(kind==='timeframe' || kind==='series') ? String(r.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
+          // market(...).timeframe(...) keeps kind='market'; always honor its
+          // explicit timeframe instead of silently falling back to the chart TF.
+          const timeframe=String(r.timeframe ?? this.executionContext.timeframe);
           const field=member;
           if(field==='trade') return finish(this.dataResolver?.trade?.(symbol,timeframe) ?? null);
           if(field==='orderbook') return finish(this.dataResolver?.orderbook?.(symbol,timeframe) ?? null);
