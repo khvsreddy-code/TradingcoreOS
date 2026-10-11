@@ -1,7 +1,7 @@
 import type { DomainEventMetadata, Fill, FundsUpdate, OrderUpdate, PositionUpdate, Trade } from '../../../types/market-events.js';
 
 type Row = Record<string, unknown>;
-type EventEnvelope =
+export type FyersNormalizedOrderEvent =
   | { type: 'order'; data: OrderUpdate }
   | { type: 'trade'; data: Fill }
   | { type: 'position'; data: PositionUpdate }
@@ -61,7 +61,7 @@ function looksLikeFunds(row: Row): boolean {
   return ['availableBalance', 'available_amount', 'availableAmount', 'available', 'fund_limit', 'totalCapital']
     .some(key => row[key] !== undefined);
 }
-function normalizeOne(kind: 'order' | 'trade' | 'position' | 'funds', row: Row, sequence: number, receivedAt: number): EventEnvelope | undefined {
+function normalizeOne(kind: 'order' | 'trade' | 'position' | 'funds', row: Row, sequence: number, receivedAt: number): FyersNormalizedOrderEvent | undefined {
   const meta = metadata(row, sequence, receivedAt);
   if (kind === 'order') {
     const orderId = text(row, ['orderId', 'id', 'orderNumber', 'order_id']);
@@ -115,11 +115,11 @@ function normalizeOne(kind: 'order' | 'trade' | 'position' | 'funds', row: Row, 
 /** Convert untrusted FYERS socket payloads into strict, replay-safe domain events. Unknown
  * payloads are deliberately dropped rather than broadcasting raw broker objects to consumers.
  */
-export function normalizeFyersOrderPayload(payload: unknown, sequence: number, receivedAt = Date.now()): EventEnvelope[] {
+export function normalizeFyersOrderPayload(payload: unknown, sequence: number, receivedAt = Date.now()): FyersNormalizedOrderEvent[] {
   const root = asRow(payload);
   if (!root) return [];
   const kindText = String(first(root, ['type', 'T', 'event', 'channel']) ?? '').toLowerCase();
-  const output: EventEnvelope[] = [];
+  const output: FyersNormalizedOrderEvent[] = [];
   const categories: Array<{ kind: 'order' | 'trade' | 'position' | 'funds'; keys: readonly string[]; keyword: string }> = [
     { kind: 'order', keys: ['orders', 'order'], keyword: 'order' },
     { kind: 'trade', keys: ['trades', 'trade'], keyword: 'trade' },
