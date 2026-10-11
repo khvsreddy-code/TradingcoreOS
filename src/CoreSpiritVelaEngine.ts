@@ -310,7 +310,7 @@ export class CoreSpiritVelaEngine {
 
     let activeVisibleRange = req.visibleRange ? { left:Number(req.visibleRange.left), right:Number(req.visibleRange.right) } : undefined;
 
-    const createRuntime = (): CoreSpiritRuntime => new CoreSpiritRuntime({
+    const createRuntime = (runtimeOverrides: { suppressExternalEffects?: boolean } = {}): CoreSpiritRuntime => new CoreSpiritRuntime({
       symbol: req.market.symbol,
       timeframe: req.market.timeframe,
       sourceId: token.sourceId,
@@ -321,6 +321,7 @@ export class CoreSpiritVelaEngine {
       visibleRange: activeVisibleRange ? { from:activeVisibleRange.left, to:activeVisibleRange.right } : undefined,
       inputValues: currentMetadata.inputValues,
       propValues: currentMetadata.propValues,
+      suppressExternalEffects: runtimeOverrides.suppressExternalEffects === true,
     });
 
     let runtime = createRuntime();
@@ -577,7 +578,7 @@ export class CoreSpiritVelaEngine {
         const rangeBars = currentBars.slice(executionStart, end);
         if (!rangeBars.length) return;
 
-        const rangeRuntime = createRuntime();
+        const rangeRuntime = createRuntime({ suppressExternalEffects:true });
         rangeRuntime.loadIr(token.ir);
         const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
         emitScenePatches(rangeResult, { from: viewportFrom, to: viewportTo });
