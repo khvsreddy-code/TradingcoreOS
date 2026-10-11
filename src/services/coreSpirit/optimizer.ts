@@ -81,7 +81,17 @@ export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIr
 
 function constantFold(instructions: readonly CoreSpiritIrInstruction[]): CoreSpiritIrInstruction[] {
   const constants = new Map<string, number|string|boolean|null>();
-  return instructions.map((instruction): CoreSpiritIrInstruction => {
+  const blockStarts = new Set<number>([0]);
+  for (let index = 0; index < instructions.length; index += 1) {
+    const instruction = instructions[index]!;
+    if (instruction.op !== 'jump' && instruction.op !== 'jumpIfFalse' && instruction.op !== 'eventGate') continue;
+    if (Number.isInteger(instruction.target) && instruction.target >= 0 && instruction.target < instructions.length) blockStarts.add(instruction.target);
+    if (index + 1 < instructions.length) blockStarts.add(index + 1);
+  }
+  return instructions.map((instruction, index): CoreSpiritIrInstruction => {
+    // Constants are only propagated within a basic block. Cross-branch constant
+    // propagation needs a dominance/data-flow analysis, not lexical instruction order.
+    if (blockStarts.has(index)) constants.clear();
     const dest = 'dest' in instruction ? instruction.dest : undefined;
     // Capture operands before invalidating the destination: IR permits an assignment
     // to reuse its input register, so x = -x must still fold when the old x is constant.
@@ -209,15 +219,24 @@ function canDiscardPureValue(instruction: CoreSpiritIrInstruction): instruction 
  * All effects, stateful calls, emits, and control-flow instructions remain.
  * Branch targets are remapped so pruning does not change control-flow meaning.
  */
-function eliminateDeadPureValues(instructions: readonly CoreSpiritIrInstruction[]): { instructions: CoreSpiritIrInstruction[]; removed: number } {
-  // This pass uses conservative linear liveness. Back-edges require a fixed-point CFG
-  // analysis; until that analysis is available, leave loop-containing programs untouched.
-  const hasBackEdge = instructions.some((instruction, index) =>
-    (instruction.op === 'jump' || instruction.op === 'jumpIfFalse' || instruction.op === 'eventGate')
-    && Number.isFinite(instruction.target)
-    && instruction.target <= index,
-  );
-  if (hasBackEdge) return { instructions: [...instructions], removed: 0 };
+function eliminateDeadPureValues(instructions: readonly CoreSpiritIrInstruction[]): { instructions: CoreSpiritIrInstruction[]; removed: number; skippedReason?: string } {
+  // This pass uses conservative linear liveness. Back-edges need fixed-point CFG
+  // analysis; reused destinations across branch paths need reaching-definition analysis.
+  const isControlFlow = (instruction: CoreSpiritIrInstruction): instruction is Extract<CoreSpiritIrInstruction, { target: number }> =>
+    instruction.op === 'jump' || instruction.op === 'jumpIfFalse' || instruction.op === 'eventGate';
+  const hasBackEdge = instructions.some((instruction, index) => isControlFlow(instruction) && Number.isFinite(instruction.target) && instruction.target <= index);
+  if (hasBackEdge) return { instructions: [...instructions], removed: 0, skippedReason: 'Skipped dead-value elimination because a backward control-flow edge requires CFG liveness.' };
+  const hasControlFlow = instructions.some(isControlFlow);
+  const destinations = new Set<string>();
+  const hasReusedDestination = instructions.some(instruction => {
+    if (!('dest' in instruction) || !instruction.dest) return false;
+    if (destinations.has(instruction.dest)) return true;
+    destinations.add(instruction.dest);
+    return false;
+  });
+  if (hasControlFlow && hasReusedDestination) {
+    return { instructions: [...instructions], removed: 0, skippedReason: 'Skipped dead-value elimination because reused destinations across control-flow paths require reaching-definition analysis.' };
+  }
   const keep = new Array<boolean>(instructions.length).fill(true);
   const liveRegisters = new Set<string>();
   for (let index = instructions.length - 1; index >= 0; index -= 1) {
@@ -347,7 +366,7 @@ function buildOptimizationPlan(
       'All execution remains one chronological bar traversal; no second semantic runtime is introduced.',
       sourceReadReuse>0 ? `Reused ${sourceReadReuse} repeated series read(s).` : 'No repeated series reads required reuse.',
       eliminated>0 ? `Eliminated ${eliminated} safe pure duplicate expression(s).` : 'No additional safe pure expression duplicates were found.',
-      deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : instructions.some((instruction,index)=>(instruction.op==='jump'||instruction.op==='jumpIfFalse'||instruction.op==='eventGate')&&instruction.target<=index) ? 'Skipped dead-value elimination because a backward control-flow edge requires CFG liveness.' : 'No dead pure value instructions were found.',
+      dead.skippedReason ?? (deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.'),
       'Stateful indicator calls remain ordered stream operators and are not aliased by generic CSE.',
       `Estimated peak temporary register pressure: ${peakLiveRegisters}.`,
     ]),
