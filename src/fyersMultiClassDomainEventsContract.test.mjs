@@ -85,7 +85,11 @@ assert.match(transport, /session\.feedClass === 'depth' \? 'DepthUpdate'/);
 assert.match(transport, /session\.subscriptions\.get\(listener\)/,
   'each consumer must only receive symbols it subscribed to');
 assert.match(transport, /checkSubscriptionCapacity\(userId, symbols, maxSymbols\)/);
-assert.match(transport, /domainEvent: buildDomainEvent\(tick, session\.feedClass\)/);
+assert.match(transport, /const domainEvent = buildDomainEvent\(tick, session\.feedClass\)/);
+assert.match(transport, /marketEventBus\.publish\(domainEvent\)/);
+assert.match(transport, /if \(feedClass === 'lite'\) \{[\s\S]*?type: 'Quote'/);
+assert.match(eventBus, /export class MarketEventBus/);
+assert.match(orderTransport, /marketEventBus\.publish\(event\.data as DomainMarketEvent\)/);
 assert.match(marketTypes, /domainEvent\?: DomainMarketEvent/);
 for (const type of ['MarketTick', 'Quote', 'DepthSnapshot', 'DepthDelta', 'Trade', 'OrderUpdate', 'Fill', 'PositionUpdate', 'FundsUpdate']) {
   assert.ok(domainTypes.includes(`type: '${type}'`), `missing domain event type ${type}`);
