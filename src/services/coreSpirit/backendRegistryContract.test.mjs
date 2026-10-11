@@ -81,4 +81,9 @@ assert.throws(() => planCoreSpiritBackend({
   operation: 'x', purpose: 'live', workload: 'scalar', workUnits: -1, inputElements: 1,
 }, accelerated), /workUnits/);
 
+assert.throws(() => planCoreSpiritBackend({
+  operation: 'rollingMean', purpose: 'live', workload: 'series',
+  workUnits: 5_000_000, inputElements: 4_194_305,
+}, defaults), /split it into bounded batches/);
+
 console.log('CoreSpirit backend capability planner contract: OK');

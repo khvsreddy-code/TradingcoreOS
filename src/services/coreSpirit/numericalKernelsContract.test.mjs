@@ -64,4 +64,7 @@ assert.throws(() => matrixMultiply(
   { rows: 1, columns: 1, data: Float64Array.from([3]) },
 ), /inner dimensions/);
 
+assert.throws(() => executeCoreSpiritNumericalKernel('matrixMultiply', [[], []], [257, 1, 1]), /dimensions must not exceed/);
+assert.throws(() => executeCoreSpiritNumericalKernel('matrixDecomposition', [[1]], [2]), /input length must match/);
+
 console.log('CoreSpirit numerical kernel contract: OK');

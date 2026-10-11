@@ -143,32 +143,6 @@ export function estimateCoreSpiritWorkload(
   dimensions: { symbolCount?: number; timeframeCount?: number; barCount?: number } = {},
 ): CoreSpiritWorkloadEstimate {
   const nodes = nodesFrom(program);
-  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
-  const backendPurpose = options.backendPurpose ?? 'live';
-  const kernelCalls = program.entry.instructions.flatMap((instruction, index) => {
-    if (instruction.op !== 'call') return [];
-    const operation = coreSpiritKernelOperationForBuiltin(instruction.name);
-    if (!operation) return [];
-    const matrixOperation = operation === 'matrixMultiply' || operation === 'matrixDecomposition';
-    const workloadKind: CoreSpiritBackendWorkload = matrixOperation ? 'matrix'
-      : operation === 'dotProduct' || operation === 'logSumExp' || operation === 'softmax' ? 'scalar'
-      : 'series';
-    return [{ operation, workloadKind, stateful: isCoreSpiritStatefulKernelOperation(operation), nodeId: `i:${index}` }];
-  });
-  const perKernelWork = Math.max(1, workload.workUnits / Math.max(1, kernelCalls.length));
-  const inputElements = Math.max(1, workload.bars * workload.symbols * workload.timeframes);
-  const backendCapabilityPlans: readonly CoreSpiritBackendPlan[] = Object.freeze(kernelCalls.map(call =>
-    planCoreSpiritBackend({
-      operation: call.operation,
-      purpose: backendPurpose,
-      workload: call.workloadKind,
-      workUnits: perKernelWork,
-      inputElements,
-      stateful: call.stateful,
-      deterministic: requireDeterministic,
-      allowRemoteResearch: options.allowRemoteResearchBackend === true,
-    }, backendRegistry),
-  ));
   const symbols = Math.max(1, Math.floor(dimensions.symbolCount ?? 1));
   const timeframes = Math.max(1, Math.floor(dimensions.timeframeCount ?? 1));
   const bars = Math.max(1, Math.floor(dimensions.barCount ?? 1));
@@ -253,6 +227,33 @@ export function planCoreSpiritExecution(
     barCount: options.barCount,
   });
   const nodes = nodesFrom(program);
+  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
+  const backendPurpose = options.backendPurpose ?? 'live';
+  const kernelCalls = program.entry.instructions.flatMap((instruction, index) => {
+    if (instruction.op !== 'call') return [];
+    const operation = coreSpiritKernelOperationForBuiltin(instruction.name);
+    if (!operation) return [];
+    const matrixOperation = operation === 'matrixMultiply' || operation === 'matrixDecomposition';
+    const workloadKind: CoreSpiritBackendWorkload = matrixOperation ? 'matrix'
+      : operation === 'dotProduct' || operation === 'logSumExp' || operation === 'softmax' ? 'scalar'
+      : 'series';
+    return [{ operation, workloadKind, stateful: isCoreSpiritStatefulKernelOperation(operation), nodeId: `i:${index}` }];
+  });
+  const perKernelWork = Math.max(1, workload.workUnits / Math.max(1, kernelCalls.length));
+  // Per-dispatch size is bounded by the compiler's actual batch limit; workUnits below still reflect total workload for threshold selection.
+  const inputElements = Math.max(1, Math.min(workload.bars * workload.symbols * workload.timeframes, maxBatchSize));
+  const backendCapabilityPlans: readonly CoreSpiritBackendPlan[] = Object.freeze(kernelCalls.map(call =>
+    planCoreSpiritBackend({
+      operation: call.operation,
+      purpose: backendPurpose,
+      workload: call.workloadKind,
+      workUnits: perKernelWork,
+      inputElements,
+      stateful: call.stateful,
+      deterministic: requireDeterministic,
+      allowRemoteResearch: options.allowRemoteResearchBackend === true,
+    }, backendRegistry),
+  ));
   const effectNodes = nodes.filter(node => node.effectful);
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
   const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits });
@@ -338,7 +339,22 @@ export function planCoreSpiritExecution(
     dimensions: { symbols: workload.symbols, timeframes: workload.timeframes, bars: workload.bars },
     strategy,
     backendPurpose,
-    backendCapabilities: backendCapabilityPlans.map(plan => ({ operation: plan.operation, backend: plan.backend, deterministic: plan.deterministic, fallback: plan.fallback })),
+    requireDeterministic,
+    backendCapabilityRegistry: backendCapabilityPlans[0]?.registrySnapshot ?? backendRegistry.profiles.map(profile => ({
+      backend: profile.backend,
+      available: profile.available,
+      deterministic: profile.deterministic,
+      vectorized: profile.vectorized,
+      supportedOperations: profile.supportedOperations,
+    })),
+    backendCapabilities: backendCapabilityPlans.map(plan => ({
+      operation: plan.operation,
+      backend: plan.backend,
+      deterministic: plan.deterministic,
+      fallback: plan.fallback,
+      workUnits: plan.workUnits,
+      inputElements: plan.inputElements,
+    })),
     tradingNative: {
       multiSymbol: tradingNativePlan.multiSymbol,
       multiTimeframe: tradingNativePlan.multiTimeframe,

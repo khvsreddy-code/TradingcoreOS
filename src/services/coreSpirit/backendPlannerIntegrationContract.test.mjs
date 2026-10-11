@@ -32,6 +32,17 @@ assert.equal(smaPlan?.backend, 'wasm-simd', 'historical plans use a registered e
 assert.ok(historical.explanation.some(line => line.includes('kernel rollingMean: planned wasm-simd')));
 assert.notEqual(historical.cacheKey, live.cacheKey, 'cache identity includes execution purpose and backend capability plan');
 
+const boundedBatch = planCoreSpiritExecution(compiled.ir!, {
+  barCount: 5_000_000,
+  maxBatchSize: 32_768,
+  backendPurpose: 'historical',
+  backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
+});
+const boundedSmaPlan = boundedBatch.backendCapabilityPlans.find(item => item.operation === 'rollingMean');
+assert.equal(boundedSmaPlan?.backend, 'wasm-simd');
+assert.equal(boundedSmaPlan?.inputElements, 32_768,
+  'capability planning must use bounded batch input size while thresholds account for total work');
+
 const statelessWithGpu = createCoreSpiritBackendRegistry({
   wasm,
   webgpu: {

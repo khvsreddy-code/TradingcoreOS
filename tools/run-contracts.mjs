@@ -37,6 +37,7 @@ const contracts = [
   ['corespirit-model-artifact-provenance', ['src/services/coreSpirit/modelArtifacts.test.ts', true]],
   ['corespirit-numerical-kernels', ['src/services/coreSpirit/numericalKernelsContract.test.mjs', false]],
   ['corespirit-multibackend-capabilities', ['src/services/coreSpirit/backendRegistryContract.test.mjs', false]],
+  ['corespirit-multibackend-execution-planner', ['src/services/coreSpirit/backendPlannerIntegrationContract.test.mjs', true]],
   ['corespirit-model-lifecycle-training-inference', ['src/services/coreSpirit/modelLifecycle.test.ts', true]],
   ['artifact-hygiene', ['src/generatedArtifactHygieneContract.test.mjs', false]],
   ['routes', ['src/routeContract.test.mjs', false]],

@@ -522,6 +522,14 @@ export function executeCoreSpiritNumericalKernel(
       const rows = validatePeriod(p(0), 'left matrix rows');
       const inner = validatePeriod(p(1), 'left matrix columns');
       const columns = validatePeriod(p(2), 'right matrix columns');
+      if ([rows, inner, columns].some(dimension => dimension > CORE_SPIRIT_MAX_KERNEL_MATRIX_DIMENSION)) {
+        throw new Error(`matrixMultiply dimensions must not exceed ${CORE_SPIRIT_MAX_KERNEL_MATRIX_DIMENSION}`);
+      }
+      const leftLength = validateSeries(inputs[0]!, 'matrixMultiply left data');
+      const rightLength = validateSeries(inputs[1]!, 'matrixMultiply right data');
+      if (leftLength !== rows * inner || rightLength !== inner * columns) {
+        throw new Error('matrixMultiply input lengths must match their declared dimensions');
+      }
       return matrixMultiply(
         { rows, columns: inner, data: Float64Array.from(inputs[0]!) },
         { rows: inner, columns, data: Float64Array.from(inputs[1]!) },
@@ -530,6 +538,11 @@ export function executeCoreSpiritNumericalKernel(
     case 'matrixDecomposition': {
       requireInputs(1);
       const size = validatePeriod(p(0), 'matrix dimension');
+      if (size > CORE_SPIRIT_MAX_KERNEL_MATRIX_DIMENSION) {
+        throw new Error(`matrixDecomposition dimension must not exceed ${CORE_SPIRIT_MAX_KERNEL_MATRIX_DIMENSION}`);
+      }
+      const length = validateSeries(inputs[0]!, 'matrixDecomposition data');
+      if (length !== size * size) throw new Error('matrixDecomposition input length must match the declared square dimensions');
       return matrixDecomposition({ rows: size, columns: size, data: Float64Array.from(inputs[0]!) }, p(1, 1e-12));
     }
     case 'softmax': requireInputs(1); return softmax(inputs[0]!);

@@ -278,8 +278,10 @@ export function planCoreSpiritBackend(
     candidates.push(registry.get('cpu-optimized')!, registry.get('js-scalar')!);
   }
 
-  const chosen = candidates.find((profile) => eligible(profile, request, deterministicRequired)) ??
-    registry.get('cpu-optimized')!;
+  const chosen = candidates.find((profile) => eligible(profile, request, deterministicRequired));
+  if (!chosen) {
+    throw new Error('No registered backend can safely accept this workload; split it into bounded batches or register a compatible adapter');
+  }
   const fallback = chosen.backend === 'cpu-optimized' || chosen.backend === 'js-scalar';
   const reason = request.purpose === 'live'
     ? (stateful ? 'live stateful/realtime work stays local to preserve ordered low-latency updates' : 'live work stays local; asynchronous accelerator dispatch is not on the chart hot path')
