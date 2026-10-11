@@ -194,7 +194,12 @@ export class CoreSpiritWorkerPool {
         dirtyRange:options?.dirtyRange,
         resolve,
         reject,
-        priority:sourceId.includes('chart') ? 1 : 3,
+        // Use the declared execution target/mode, not the human-readable
+        // sourceId, to prioritize live chart work. Vela's instance IDs are
+        // generated and often do not contain the word "chart".
+        priority:options?.runtimeOptions?.executionTarget==='chart'
+          ? (options.runtimeOptions.executionMode==='realtime'?1:2)
+          : sourceId.includes('chart')?3:4,
         graphSnapshot:options?.graphSnapshot,
         graphBaseSymbol:options?.graphBaseSymbol,
         graphBaseTimeframe:options?.graphBaseTimeframe,
