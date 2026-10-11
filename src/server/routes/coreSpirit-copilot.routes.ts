@@ -79,8 +79,23 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       contents:userContent,
       config:{
         systemInstruction,
-        responseMimeType:'application/json',
-        temperature:0.2,
+        // Gemini 3.8 requires the structured-output responseFormat shape and
+        // no longer accepts temperature/top_p/top_k sampling overrides.
+        responseFormat:{
+          text:{
+            mimeType:'application/json',
+            schema:{
+              type:'object',
+              properties:{
+                source:{type:'string'},
+                summary:{type:'string'},
+                assumptions:{type:'array',items:{type:'string'}},
+              },
+              required:['source','summary','assumptions'],
+            },
+          },
+        },
+        thinkingConfig:{thinkingLevel:'low'},
         maxOutputTokens:4096,
       },
     });

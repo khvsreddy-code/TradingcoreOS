@@ -17,6 +17,9 @@ assert.match(route,/windowMs:60_000/,'Copilot limiter must use a one-minute wind
 assert.match(route,/max:10/,'Copilot needs a 10-request per-minute limit');
 assert.match(route,/tradingCoreUserId/,'Copilot rate limit keys must be user-scoped');
 assert.match(route,/process\.env\.GEMINI_API_KEY/,'provider secret must remain server-side');
+assert.match(route,/responseFormat:\s*\{/,'Copilot must use Gemini structured JSON output');
+assert.match(route,/thinkingConfig:\{thinkingLevel:'low'\}/,'Copilot should use the low-latency Gemini thinking configuration');
+assert.doesNotMatch(route,/temperature\s*:/,'Gemini 3.x request must not include unsupported sampling parameters');
 assert.doesNotMatch(route,/VITE_[A-Z_]*GEMINI|VITE_[A-Z_]*GOOGLE/,'provider key must never be read from a browser-visible environment variable');
 assert.match(route,/compileCoreSpirit\(generated\.source/,'generated source must go through the canonical CoreScript compiler');
 assert.match(route,/validateExecutableArtifact\(compiled\.artifact\)/,'generated artifact must pass integrity validation');
