@@ -122,17 +122,31 @@ function cseKey(instruction: CoreSpiritIrInstruction): string | undefined {
       return ['index',instruction.seriesName ?? '',instruction.target,instruction.index].join('|');
     case 'call':
       if (!pureDeterministicCall(instruction)) return undefined;
-      return ['call',instruction.name,instruction.componentId ?? '',instruction.args.join(','),JSON.stringify(instruction.seriesSources ?? [])].join('|');
+      return ['call',instruction.name,instruction.componentId ?? '',instruction.args.join(','),JSON.stringify(instruction.seriesArgs ?? []),JSON.stringify(instruction.seriesSources ?? []),String(instruction.componentPure ?? ''),String(instruction.componentStateful ?? ''),String(instruction.componentDeterministic ?? '')].join('|');
     default:
       return undefined;
   }
 }
 
 function commonSubexpressionEliminate(instructions: readonly CoreSpiritIrInstruction[]): { instructions: CoreSpiritIrInstruction[]; eliminated: number } {
-  const canonical = new Map<string,string>();
+  // Do not reuse expressions across control-flow blocks: a value from one branch may
+  // not dominate a later branch target, even when the expression text is identical.
+  const blockStarts = new Set<number>([0]);
+  for (let index = 0; index < instructions.length; index += 1) {
+    const instruction = instructions[index]!;
+    if (instruction.op !== 'jump' && instruction.op !== 'jumpIfFalse' && instruction.op !== 'eventGate') continue;
+    if (Number.isInteger(instruction.target) && instruction.target >= 0 && instruction.target < instructions.length) {
+      blockStarts.add(instruction.target);
+    }
+    if (index + 1 < instructions.length) blockStarts.add(index + 1);
+  }
+
+  let canonical = new Map<string, string>();
   const out: CoreSpiritIrInstruction[] = [];
   let eliminated = 0;
-  for (const instruction of instructions) {
+  for (let index = 0; index < instructions.length; index += 1) {
+    if (blockStarts.has(index)) canonical = new Map<string, string>();
+    const instruction = instructions[index]!;
     const dest = 'dest' in instruction ? instruction.dest : undefined;
     const key = dest ? cseKey(instruction) : undefined;
     const existing = key ? canonical.get(key) : undefined;
