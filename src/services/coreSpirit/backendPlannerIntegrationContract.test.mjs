@@ -36,8 +36,31 @@ const historical = planCoreSpiritExecution(program, {
 });
 const smaPlan = historical.backendCapabilityPlans.find(item => item.operation === 'rollingMean');
 assert.equal(smaPlan?.backend, 'wasm-simd', 'historical plans use a registered exact SIMD kernel when the threshold is crossed');
+assert.equal(historical.strategy, 'wasm-portable',
+  'the whole-program plan should expose WASM only when its registered kernel plan qualifies');
+assert.equal(historical.assignments[0]?.backend, 'wasm',
+  'the compatibility planner should bridge registry capabilities into its legacy backend enum');
 assert.ok(historical.explanation.some(line => line.includes('kernel rollingMean: planned wasm-simd')));
 assert.notEqual(historical.cacheKey, live.cacheKey, 'cache identity includes execution purpose and backend capability plan');
+
+const mixedProgram = {
+  ...program,
+  sourceId: 'backend-planner-mixed-ir',
+  entry: { instructions: [
+    { op: 'const', dest: 'period', value: 20 },
+    { op: 'call', dest: 'average', name: 'sma', args: ['close', 'period'] },
+  ] },
+};
+const mixedPlan = planCoreSpiritExecution(mixedProgram, {
+  barCount: 20_000,
+  backendPurpose: 'historical',
+  backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
+});
+assert.equal(mixedPlan.strategy, 'hybrid-pure-offload');
+assert.deepEqual(mixedPlan.assignments.find(item => item.backend === 'wasm')?.nodeIds, ['i:1'],
+  'only the explicitly registered numerical kernel call may be assigned to WASM');
+assert.deepEqual(mixedPlan.assignments.find(item => item.backend === 'cpu')?.nodeIds, ['i:0'],
+  'constants and other Core IR instructions stay on CPU until a full IR backend exists');
 
 const boundedBatch = planCoreSpiritExecution(program, {
   barCount: 5_000_000,
@@ -69,5 +92,19 @@ const deterministic = planCoreSpiritExecution(program, {
 });
 assert.equal(deterministic.backendCapabilityPlans.find(item => item.operation === 'rollingMean')?.backend, 'wasm-simd',
   'deterministic plans must not select nondeterministic WebGPU');
+
+const forgedLegacyProfiles = planCoreSpiritExecution(program, {
+  barCount: 20_000,
+  backendPurpose: 'historical',
+  // Caller-supplied legacy profiles are not proof of executable adapters.
+  backends: [
+    { backend: 'cpu', available: true, deterministic: true, vectorized: false, maxBatchSize: 1_000_000, sharedMemoryBytes: 0 },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, maxBatchSize: 65_536, sharedMemoryBytes: 64 * 1024 * 1024 },
+    { backend: 'gpu', available: true, deterministic: true, vectorized: true, maxBatchSize: 262_144, sharedMemoryBytes: 512 * 1024 * 1024 },
+  ],
+});
+assert.equal(forgedLegacyProfiles.strategy, 'cpu-fallback',
+  'legacy profiles cannot manufacture WASM/GPU availability without a registered executable kernel');
+assert.equal(forgedLegacyProfiles.assignments[0]?.backend, 'cpu');
 
 console.log('CoreSpirit integrated multibackend execution planner contract: OK');

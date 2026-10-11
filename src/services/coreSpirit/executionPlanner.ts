@@ -22,6 +22,7 @@ import type { CoreSpiritTradingNativePlan } from './tradingNativePlan';
 import {
   createCoreSpiritBackendRegistry,
   planCoreSpiritBackend,
+  toLegacyCoreSpiritBackendProfiles,
 } from './backendRegistry';
 import { coreSpiritKernelOperationForBuiltin, isCoreSpiritStatefulKernelOperation } from './kernelOperationMap';
 import type {
@@ -40,6 +41,9 @@ export interface CoreSpiritComputeBackendProfile {
   vectorized: boolean;
   maxBatchSize: number;
   sharedMemoryBytes: number;
+  /** Exact operations supported by the registered adapter; absent means no offload eligibility. */
+  supportedOperations?: readonly string[];
+  supportsStatefulSeries?: boolean;
 }
 
 export interface CoreSpiritExecutionPlannerOptions {
@@ -132,8 +136,10 @@ function nodesFrom(program: CoreSpiritIrProgram): CoreSpiritGraphNode[] {
     dest: 'dest' in instruction ? instruction.dest : undefined,
     dependencies: [],
     sourceInputs: [],
-    pure: ['const','loadSeries','move','unary','binary','index'].includes(instruction.op),
-    effectful: !['const','loadSeries','move','unary','binary','index'].includes(instruction.op),
+    pure: ['const','loadSeries','move','unary','binary','index'].includes(instruction.op) ||
+      (instruction.op === 'call' && coreSpiritKernelOperationForBuiltin(instruction.name) !== undefined),
+    effectful: !(['const','loadSeries','move','unary','binary','index'].includes(instruction.op) ||
+      (instruction.op === 'call' && coreSpiritKernelOperationForBuiltin(instruction.name) !== undefined)),
   } as unknown as CoreSpiritGraphNode));
 }
 
@@ -196,18 +202,29 @@ function pickBackend(
   profiles: readonly CoreSpiritComputeBackendProfile[],
   workload: CoreSpiritWorkloadEstimate,
   options: Required<Pick<CoreSpiritExecutionPlannerOptions, 'requireDeterministic'|'allowSplitPureWork'|'minGpuWorkUnits'|'minWasmWorkUnits'>>,
+  capabilityPlans: readonly CoreSpiritBackendPlan[],
 ): CoreSpiritComputeBackendProfile {
-  const eligible = profiles.filter(profile =>
-    profile.available &&
-    profile.vectorized &&
-    workload.vectorizableInstructionCount > 0 &&
-    (!options.requireDeterministic || profile.deterministic),
-  );
-  const gpu = eligible.find(profile => profile.backend === 'gpu');
-  if (gpu && workload.workUnits >= options.minGpuWorkUnits) return gpu;
-  const wasm = eligible.find(profile => profile.backend === 'wasm');
-  if (wasm && workload.workUnits >= options.minWasmWorkUnits) return wasm;
-  return profiles.find(profile => profile.backend === 'cpu') ?? { backend: 'cpu', available: true, deterministic: true, vectorized: false, maxBatchSize: 1_000_000, sharedMemoryBytes: 0 };
+  const cpu = profiles.find(profile => profile.backend === 'cpu') ??
+    { backend: 'cpu' as const, available: true, deterministic: true, vectorized: false, maxBatchSize: 1_000_000, sharedMemoryBytes: 0 };
+  // The whole-program compatibility planner must never advertise acceleration
+  // from optimistic caller metadata. The executable registry and exact per-kernel
+  // plans are the source of truth.
+  const accelerated = capabilityPlans.length > 0 &&
+    capabilityPlans.every(plan => !plan.fallback && plan.backend === capabilityPlans[0]!.backend);
+  if (!accelerated || !workload.vectorizableInstructionCount) return cpu;
+  const actualBackend = capabilityPlans[0]!.backend;
+  const legacyBackend: CoreSpiritComputeBackend | undefined =
+    actualBackend === 'wasm-simd' ? 'wasm' : actualBackend === 'webgpu' ? 'gpu' : undefined;
+  if (!legacyBackend) return cpu;
+  const profile = profiles.find(candidate => candidate.backend === legacyBackend);
+  if (!profile?.available || !profile.vectorized ||
+      (options.requireDeterministic && !profile.deterministic)) return cpu;
+  const requiredThreshold = legacyBackend === 'gpu' ? options.minGpuWorkUnits : options.minWasmWorkUnits;
+  if (workload.workUnits < requiredThreshold) return cpu;
+  // WebGPU is for stateless historical kernels only. Stateful recurrences stay
+  // in chronological CPU execution unless a separately validated path is added.
+  if (legacyBackend === 'gpu' && capabilityPlans.some(plan => ['ema', 'rma', 'atr', 'rsi'].includes(plan.operation))) return cpu;
+  return profile;
 }
 
 export function planCoreSpiritExecution(
@@ -216,7 +233,25 @@ export function planCoreSpiritExecution(
 ): CoreSpiritExecutionPlan {
   const inputErrors = validateCoreSpiritExecutionPlannerInputs(options);
   if (inputErrors.length) throw new Error(`Invalid CoreSpirit execution planner options: ${inputErrors.join('; ')}`);
-  const profiles = options.backends?.length ? [...options.backends] : [...CORE_SPIRIT_DEFAULT_COMPUTE_BACKENDS];
+  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
+  const registeredProfiles = toLegacyCoreSpiritBackendProfiles(backendRegistry);
+  const requestedProfiles = options.backends?.length ? [...options.backends] : registeredProfiles;
+  // Caller-supplied profiles may tune limits but cannot manufacture adapter
+  // availability. Intersect them with live registry capabilities before planning.
+  const profiles: CoreSpiritComputeBackendProfile[] = requestedProfiles.map(profile => {
+    const registryBackend = backendRegistry.get(
+      profile.backend === 'wasm' ? 'wasm-simd' : profile.backend === 'gpu' ? 'webgpu' : 'cpu-optimized',
+    );
+    return {
+      ...profile,
+      available: profile.available && registryBackend?.available === true,
+      deterministic: profile.deterministic && registryBackend?.deterministic === true,
+      vectorized: profile.vectorized && registryBackend?.vectorized === true,
+      maxBatchSize: Math.max(1, Math.min(profile.maxBatchSize, registryBackend?.maxInputElements ?? 1)),
+      supportedOperations: registryBackend?.supportedOperations ?? [],
+      supportsStatefulSeries: registryBackend?.supportsStatefulSeries ?? false,
+    };
+  });
   const requireDeterministic = options.requireDeterministic ?? true;
   const allowSplitPureWork = options.allowSplitPureWork ?? true;
   const minGpuWorkUnits = Math.max(1, Math.floor(options.minGpuWorkUnits ?? 1_000_000));
@@ -229,7 +264,6 @@ export function planCoreSpiritExecution(
     barCount: options.barCount,
   });
   const nodes = nodesFrom(program);
-  const backendRegistry = options.backendRegistry ?? createCoreSpiritBackendRegistry();
   const backendPurpose = options.backendPurpose ?? 'live';
   const kernelCalls = program.entry.instructions.flatMap((instruction, index) => {
     if (instruction.op !== 'call') return [];
@@ -258,7 +292,18 @@ export function planCoreSpiritExecution(
   ));
   const effectNodes = nodes.filter(node => node.effectful);
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
-  const backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits });
+  const kernelNodeIds = new Set(kernelCalls.map(call => call.nodeId));
+  const offloadableNodes = pureNodes.filter(node => kernelNodeIds.has(`i:${node.instruction}`));
+  let backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits }, backendCapabilityPlans);
+  // This registry describes numerical-kernel executors, not a general Core IR
+  // machine. Keep unsupported IR instructions on CPU and make the split explicit.
+  if (backend.backend !== 'cpu' && offloadableNodes.length === 0) {
+    backend = profiles.find(profile => profile.backend === 'cpu')!;
+  }
+  const cpuNodes = nodes.filter(node => !offloadableNodes.includes(node));
+  if (backend.backend !== 'cpu' && cpuNodes.length > 0 && !allowSplitPureWork) {
+    backend = profiles.find(profile => profile.backend === 'cpu')!;
+  }
   const seriesFusion = planCoreSpiritSeriesFusion(program);
   const specializedPlan = program.specializedPlan ?? buildCoreSpiritSpecializedPlan(program.entry.instructions);
   const tradingNativePlan = options.tradingNativePlan ?? program.tradingNativePlan ?? {
@@ -291,33 +336,33 @@ export function planCoreSpiritExecution(
       reason: effectNodes.length ? 'effectful/stateful operations require the ordered CPU runtime' : 'GPU/WASM thresholds or availability did not qualify an alternate backend',
     });
     explanation.push('CPU is the deterministic baseline and remains the semantic fallback.');
-  } else if (effectNodes.length && allowSplitPureWork) {
+  } else if (backend.backend !== 'cpu' && cpuNodes.length > 0) {
     strategy = 'hybrid-pure-offload';
     assignments.push({
       backend: backend.backend,
-      nodeIds: pureNodes.map(node => node.id),
-      workUnits: workload.workUnits,
+      nodeIds: offloadableNodes.map(node => node.id),
+      workUnits: Math.max(1, backendCapabilityPlans.reduce((sum, plan) => sum + plan.workUnits, 0)),
       deterministic: backend.deterministic,
-      reason: `${backend.backend.toUpperCase()} receives only pure numerical nodes; effect/state nodes remain in the CPU runtime`,
+      reason: `registered ${backend.backend.toUpperCase()} kernels receive only explicitly mapped numerical builtin nodes`,
     });
     assignments.push({
       backend: 'cpu',
-      nodeIds: effectNodes.map(node => node.id),
+      nodeIds: cpuNodes.map(node => node.id),
       workUnits: 0,
       deterministic: true,
-      reason: 'side effects, state transitions and output emission stay ordered on CPU',
+      reason: 'non-kernel IR, effects and unsupported operations remain ordered on CPU',
     });
-    explanation.push(`hybrid plan selected: ${backend.backend} may accelerate pure work while CPU retains ${effectNodes.length} effect/state nodes.`);
+    explanation.push(`hybrid plan selected: ${backend.backend} may execute ${offloadableNodes.length} registered numerical kernel node(s); CPU retains ${cpuNodes.length} other node(s).`);
   } else {
     strategy = backend.backend === 'gpu' ? 'gpu-vectorized' : 'wasm-portable';
     assignments.push({
       backend: backend.backend,
-      nodeIds: pureNodes.map(node => node.id),
-      workUnits: workload.workUnits,
+      nodeIds: offloadableNodes.map(node => node.id),
+      workUnits: Math.max(1, backendCapabilityPlans.reduce((sum, plan) => sum + plan.workUnits, 0)),
       deterministic: backend.deterministic,
-      reason: `${backend.backend.toUpperCase()} profile is available and eligible for the pure numerical workload`,
+      reason: `${backend.backend.toUpperCase()} is registered for the exact numerical kernel operation(s) in this plan`,
     });
-    explanation.push(`${backend.backend.toUpperCase()} is selected for pure vectorizable work.`);
+    explanation.push(`${backend.backend.toUpperCase()} is selected for registered numerical kernels only.`);
   }
 
   const computeAssignment = assignments.find(a => a.backend !== 'cpu');

@@ -89,23 +89,45 @@ export function rollingVariance(values: CoreSpiritNumericSeries, periodValue: nu
   const ddof = Number(ddofValue);
   if (!Number.isInteger(ddof) || ddof < 0 || ddof >= period) throw new Error('variance ddof must be an integer in [0, period)');
   const result = output(length);
-  let sum = 0;
-  let sumSquares = 0;
+  // Rolling Welford updates avoid E[x²] - E[x]² cancellation on price series
+  // whose level is large relative to their intrawindow variation. Removing an
+  // outgoing sample uses the inverse Welford update; complexity remains O(n).
+  let count = 0;
+  let mean = 0;
+  let m2 = 0;
   let invalid = 0;
   for (let i = 0; i < length; i += 1) {
-    const current = Number(values[i]);
-    if (Number.isFinite(current)) { sum += current; sumSquares += current * current; }
-    else invalid += 1;
     if (i >= period) {
       const leaving = Number(values[i - period]);
-      if (Number.isFinite(leaving)) { sum -= leaving; sumSquares -= leaving * leaving; }
-      else invalid -= 1;
+      if (Number.isFinite(leaving)) {
+        if (count <= 1) {
+          count = 0;
+          mean = 0;
+          m2 = 0;
+        } else {
+          const nextCount = count - 1;
+          const nextMean = (count * mean - leaving) / nextCount;
+          m2 -= (leaving - mean) * (leaving - nextMean);
+          mean = nextMean;
+          count = nextCount;
+          if (m2 < 0 && Math.abs(m2) <= Number.EPSILON * Math.max(1, Math.abs(m2)) * count * 32) m2 = 0;
+        }
+      } else {
+        invalid -= 1;
+      }
     }
-    if (i >= period - 1 && invalid === 0) {
-      const centered = sumSquares - (sum * sum) / period;
-      const scale = Math.max(1, Math.abs(sumSquares), Math.abs((sum * sum) / period));
-      const stableCentered = centered < 0 && Math.abs(centered) <= Number.EPSILON * scale * 16 ? 0 : centered;
-      result[i] = stableCentered < 0 ? Number.NaN : stableCentered / (period - ddof);
+    const current = Number(values[i]);
+    if (Number.isFinite(current)) {
+      count += 1;
+      const delta = current - mean;
+      mean += delta / count;
+      m2 += delta * (current - mean);
+    } else {
+      invalid += 1;
+    }
+    if (i >= period - 1 && invalid === 0 && count === period) {
+      const centered = m2 < 0 && Math.abs(m2) <= Number.EPSILON * Math.max(1, Math.abs(m2)) * count * 32 ? 0 : m2;
+      result[i] = centered < 0 ? Number.NaN : centered / (period - ddof);
     }
   }
   return result;
