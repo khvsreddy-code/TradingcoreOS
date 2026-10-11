@@ -19,7 +19,9 @@ function makeBars(count: number) {
 
 const source = `
 indicator "Live Startup"
-plot(ema(close, 3))
+    input length: int = 3 min=1 max=20
+    precision = 2
+plot(ema(close, length))
 `;
 
 const engine = new CoreSpiritVelaEngine();
@@ -44,6 +46,7 @@ try {
   const mutableBars = bars.map((bar) => ({ ...bar }));
 
   let modelCount = 0;
+  let latestModel;
   const session = engine.execute(
     {
       prepared,
@@ -54,7 +57,7 @@ try {
       historyState: 'complete',
     },
     {
-      onModel: () => { modelCount += 1; },
+      onModel: (model) => { modelCount += 1; latestModel = model; },
       onScenePatches: () => undefined,
       onError: (error) => { throw error; },
     },
@@ -68,6 +71,13 @@ try {
   assert.equal(executeIrCalls, 1, 'complete notification must not replay already-initialized history');
   assert.equal(executeBarCalls, 1, 'complete notification must not re-run the forming bar');
 
+  const beforeDisplayUpdateModels = modelCount;
+  session.update({ length: 3 }, { precision: 4 });
+  assert.equal(executeIrCalls, 1, 'display-only Vela props must not replay historical CoreSpirit execution');
+  assert.equal(executeBarCalls, 1, 'display-only Vela props must not reevaluate the forming bar');
+  assert.equal(modelCount, beforeDisplayUpdateModels + 1, 'display-only props must refresh Vela metadata');
+  assert.equal(latestModel.precision, 4, 'display-only props must reach Vela indicator metadata');
+
   mutableBars[mutableBars.length - 1] = {
     ...mutableBars[mutableBars.length - 1]!,
     close: 121,
@@ -76,6 +86,12 @@ try {
   session.notifyBars(undefined);
   assert.equal(executeIrCalls, 1, 'intrabar updates must not rebuild historical runtime state');
   assert.equal(executeBarCalls, 2, 'intrabar update should advance only the forming-bar execution');
+
+  session.update({ length: 4 }, { precision: 4 });
+  assert.equal(executeIrCalls, 2, 'semantic input changes must rebuild the history-dependent runtime once');
+  assert.equal(executeBarCalls, 3, 'semantic input changes must reevaluate the latest forming bar once');
+  assert.equal(latestModel.precision, 4, 'semantic input changes must preserve display settings');
+
   session.stop();
 } finally {
   CoreSpiritRuntime.prototype.executeIr = originalExecuteIr;
