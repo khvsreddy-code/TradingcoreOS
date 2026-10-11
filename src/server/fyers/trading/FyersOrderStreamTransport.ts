@@ -64,7 +64,7 @@ export class FyersOrderStreamTransport {
   static getStatus(userId: string): Extract<FyersOrderStreamEvent, { type: 'status' }> {
     const session = this.sessions.get(userId);
     if (!session) return { type: 'status', status: 'disconnected' };
-    if (session.reconciling || session.reconciliationBlocked) {
+    if (session.reconciling || (session.reconciliationBlocked && session.socket?.readyState === WebSocket.OPEN)) {
       return { type: 'status', status: 'reconciling' };
     }
     if (session.socket?.readyState === WebSocket.OPEN) return { type: 'status', status: 'connected' };
