@@ -58,6 +58,8 @@ export type CoreSpiritRuntimeOptions = {
   visibleRange?: { from:number; to:number };
   inputValues?: Readonly<Record<string, CoreSpiritValue>>;
   propValues?: Readonly<Record<string, CoreSpiritValue>>;
+  /** Read-only recomputation (viewport/backfill refresh) must not emit execution or external event side effects. */
+  suppressExternalEffects?: boolean;
 };
 export type CoreSpiritKernelState =
   | { family:'fused'; state:CoreSpiritFusedSeriesCursor }
@@ -218,6 +220,7 @@ export class CoreSpiritRuntime {
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
   private readonly propValues: Readonly<Record<string, CoreSpiritValue>>;
+  private readonly suppressExternalEffects: boolean;
   private visibleRange?: { from:number; to:number };
   private readonly viewportMemo = new Map<string, number | null>();
   private readonly stateStore = new CoreSpiritStateStore();
@@ -246,6 +249,7 @@ export class CoreSpiritRuntime {
     this.riskResolver = options.riskResolver;
     this.inputValues = Object.freeze({ ...(options.inputValues ?? {}) });
     this.propValues = Object.freeze({ ...(options.propValues ?? {}) });
+    this.suppressExternalEffects = options.suppressExternalEffects === true;
     this.visibleRange = options.visibleRange ? { from:Number(options.visibleRange.from), to:Number(options.visibleRange.to) } : undefined;
     this.eventResolver = options.eventResolver;
     this.executionTarget = options.executionTarget || 'chart';
@@ -1275,6 +1279,10 @@ export class CoreSpiritRuntime {
 
   private sessionDay(timestamp:string):string { const d=new Date(timestamp); return new Intl.DateTimeFormat('en-CA',{timeZone:this.timezone}).format(d); }
   private emitIntent(kind:Extract<CoreSpiritIrInstruction,{op:'emit'}>['kind'],args:unknown[],bar:HistoricalCandle,barIndex:number,outputs:CoreSpiritOutputCollector,diagnostics:string[],outputId?:string):void {
+    // Viewport/backfill rendering passes evaluate a bounded slice of history and
+    // are not an execution clock. Suppress any order/alert/webhook side effects
+    // before argument validation or intent construction.
+    if (this.suppressExternalEffects && ['orderIntent','buy','sell','entry','exit','alert','webhook'].includes(kind)) return;
     const time=this.toEpoch(bar.timestamp);
     this.outputCount += 1;
     const finite = (v:unknown) => Number.isFinite(Number(v));
@@ -1402,7 +1410,7 @@ export class CoreSpiritRuntime {
         const name=String(args[0]??'event');
         const event={kind:'event' as const,id:`${this.options.sourceId}:event:${barIndex}:${outputId||name}`,time,name,metadata:{source:this.options.sourceId,barIndex}};
         outputs.push(event);
-        this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time,name,metadata:{barIndex}});
+        if (!this.suppressExternalEffects) this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time,name,metadata:{barIndex}});
       }
       else if(kind==='orderIntent'){
         const side=normalizeCoreSpiritOrderDirection(String(args[0]??'long'));
@@ -1414,7 +1422,7 @@ export class CoreSpiritRuntime {
           target:Number.isFinite(Number(args[4]))?Number(args[4]):null,
         },{id:`${this.options.sourceId}:order:${barIndex}:${outputId||'orderIntent'}`,time,sourceId:this.options.sourceId,barIndex,mode:this.executionContext.mode,runId:this.executionContext.runId});
         outputs.push(intent);
-        this.eventRouter.executionIntent(this.options.sourceId,intent);
+        if (!this.suppressExternalEffects) this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
       else if(kind==='buy' || kind==='sell'){
         const quantity=Number(args[0]);
@@ -1429,7 +1437,7 @@ export class CoreSpiritRuntime {
       }
       else if(kind==='signal'){
         const type=String(args[0]??'signal'); outputs.push({kind:'signal',time,type,metadata:{source:this.options.sourceId,barIndex}});
-        this.eventRouter.scriptSignal({scriptId:this.options.sourceId,time,type,metadata:{barIndex}});
+        if (!this.suppressExternalEffects) this.eventRouter.scriptSignal({scriptId:this.options.sourceId,time,type,metadata:{barIndex}});
       }
       else if(kind==='entry') {
         const condition=Boolean(args[0]); if(!condition) return;
@@ -1451,8 +1459,8 @@ export class CoreSpiritRuntime {
         outputs.push(intent);
         this.eventRouter.executionIntent(this.options.sourceId,intent);
       }
-      else if(kind==='alert') this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,barIndex}});
-      else if(kind==='webhook') this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex}});
+      else if(kind==='alert' && !this.suppressExternalEffects) this.eventRouter.scriptAlert({scriptId:this.options.sourceId,time,payload:{args,barIndex}});
+      else if(kind==='webhook' && !this.suppressExternalEffects) this.eventRouter.scriptWebhook({scriptId:this.options.sourceId,time,endpoint:typeof args[0]==='string'?args[0]:undefined,payload:{args:typeof args[0]==='string'?args.slice(1):args,barIndex}});
     } catch(error) { diagnostics.push(`output ${kind} at bar ${barIndex}: ${error instanceof Error?error.message:String(error)}`); }
   }
   private pushState(key:string,value:number|string):void { this.stateStore.pushSeries(this.seriesRegistry.idFor(key),Number(value),this.stateHistoryLimit); }
