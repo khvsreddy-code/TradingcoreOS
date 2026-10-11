@@ -332,6 +332,7 @@ export class CoreSpiritVelaEngine {
     let historyInitialized = false;
     let firstSeriesTime = Number.NaN;
     let lastTime = Number.NaN;
+    let lastViewportComputationKey: string | undefined;
 
     const safeOutputs = (outputs: CoreSpiritObject[]): CoreSpiritObject[] =>
       secondaryDegraded
@@ -513,6 +514,7 @@ export class CoreSpiritVelaEngine {
         }
 
         const updateGeneration = ++updateVersion;
+        lastViewportComputationKey = undefined;
         currentMetadata = nextMetadata;
 
         const runUpdate = (): void => {
@@ -571,6 +573,15 @@ export class CoreSpiritVelaEngine {
         activeVisibleRange = { left:viewportFrom, right:viewportTo };
         const currentBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
         if (!currentBars.length) return;
+        const viewportKey = [
+          viewportFrom,
+          viewportTo,
+          currentBars.length,
+          barTimeMillis(currentBars[0]?.timestamp),
+          barTimeMillis(currentBars.at(-1)?.timestamp),
+          updateVersion,
+        ].join('|');
+        if (viewportKey === lastViewportComputationKey) return;
         const start = lowerBoundBarTime(currentBars, viewportFrom);
         const end = Math.min(currentBars.length, upperBoundBarTime(currentBars, viewportTo));
         const maxLookback = Math.max(0, Number(token.ir.maxLookback) || 0);
@@ -582,9 +593,12 @@ export class CoreSpiritVelaEngine {
         rangeRuntime.loadIr(token.ir);
         const rangeResult = safeOutputs(rangeRuntime.executeIr(token.ir, rangeBars).outputs);
         emitScenePatches(rangeResult, { from: viewportFrom, to: viewportTo });
+        lastViewportComputationKey = viewportKey;
       },
       notifyBars(reason, dirtyRange) {
         if (stopped) return;
+        // Data revisions/backfills invalidate a viewport result even when bar count and endpoints stay the same.
+        lastViewportComputationKey = undefined;
         const currentBars = getCurrentBars();
         if (!currentBars.length) return;
 
