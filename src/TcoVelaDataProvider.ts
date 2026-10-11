@@ -362,6 +362,352 @@ export class TcoVelaDataProvider implements DataProvider {
   subscribeColumns(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void): () => void {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
+    let plane: ReturnType<typeof getChartDataPlane> | undefined;
+    let stopPlane: (() => void) | undefined;
+    let cancelled = false;
+    let fingerprint = '';
+    let pendingSequence = 0;
+    const timelineKey = `${symbol}|${tcoTimeframe}`;
+    let scheduled = false;
+    let dirty = false;
+    let raf = 0;
+
+    const flush = () => {
+      scheduled = false;
+      if (cancelled || !dirty || !plane) return;
+      dirty = false;
+      const view = marketLatencyTrace.measure(timelineKey, pendingSequence, 'canonical', () => plane!.readCanonical());
+      if (!view.length) return;
+      const i = view.length - 1;
+      const time = view.time[i]!;
+      const open = view.open[i]!, high = view.high[i]!, low = view.low[i]!, close = view.close[i]!;
+      const volume = Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined;
+      const sequence = plane.canonicalDataPlane().revision;
+      const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
+      if (nextKey === fingerprint) return;
+      fingerprint = nextKey;
+      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
+    };
+
+    const schedule = () => {
+      if (cancelled) return;
+      dirty = true;
+      if (scheduled) return;
+      scheduled = true;
+      raf = typeof globalThis.requestAnimationFrame === 'function'
+        ? globalThis.requestAnimationFrame(flush)
+        : Number(setTimeout(flush, 16));
+    };
+
+    const attach = (brokerId: string) => {
+      if (cancelled || stopPlane) return;
+      plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+      stopPlane = plane.subscribe((event) => {
+        if (event.type !== 'snapshot' && event.type !== 'tick') return;
+        pendingSequence = event.snapshot.revision;
+        schedule();
+      });
+      // Broker restore can finish after initial history is seeded. Replay the
+      // current canonical bar so the caller doesn't miss its first live update.
+      schedule();
+    };
+
+    const brokerId = activeBrokerIdSync();
+    if (brokerId) attach(brokerId);
+    else void activeBrokerId().then(attach).catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      stopPlane?.();
+      stopPlane = undefined;
+      dirty = false;
+      if (raf) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
+        else clearTimeout(raf);
+      }
+      raf = 0;
+      scheduled = false;
+    };
+  }
+
+  subscribe(ticker: string, timeframe: string, onBar: (bar: OHLCV) => void): () => void {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    let plane: ReturnType<typeof getChartDataPlane> | undefined;
+    let stopPlane: (() => void) | undefined;
+    let cancelled = false;
+    let fingerprint = '';
+    let scheduled = false;
+    let dirty = false;
+    let raf = 0;
+
+    const flush = () => {
+      scheduled = false;
+      if (cancelled || !dirty || !plane) return;
+      dirty = false;
+      const view = plane.readCanonical();
+      if (!view.length) return;
+      const i = view.length - 1;
+      const next: OHLCV = {
+        time: view.time[i]! * 1000,
+        open: view.open[i]!,
+        high: view.high[i]!,
+        low: view.low[i]!,
+        close: view.close[i]!,
+        volume: Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined,
+      };
+      const nextKey = `${next.time}|${next.open}|${next.high}|${next.low}|${next.close}|${next.volume ?? ''}`;
+      if (nextKey === fingerprint) return;
+      fingerprint = nextKey;
+      onBar(next);
+    };
+
+    const schedule = () => {
+      if (cancelled) return;
+      dirty = true;
+      if (scheduled) return;
+      scheduled = true;
+      raf = typeof globalThis.requestAnimationFrame === 'function'
+        ? globalThis.requestAnimationFrame(flush)
+        : Number(setTimeout(flush, 16));
+    };
+
+    const attach = (brokerId: string) => {
+      if (cancelled || stopPlane) return;
+      plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+      stopPlane = plane.subscribe((event) => {
+        if (event.type !== 'snapshot' && event.type !== 'tick') return;
+        schedule();
+      });
+      schedule();
+    };
+
+    const brokerId = activeBrokerIdSync();
+    if (brokerId) attach(brokerId);
+    else void activeBrokerId().then(attach).catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      stopPlane?.();
+      stopPlane = undefined;
+      dirty = false;
+      if (raf) {
+        if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
+        else clearTimeout(raf);
+      }
+      raf = 0;
+      scheduled = false;
+    };
+  }
+
+}
+
+export class TcoVelaDataProvider implements DataProvider {
+  info(): ProviderInfo {
+    return {
+      name: 'tco',
+      displayName: 'TradingCoreOS',
+      supportedTimeframes: ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
+      capabilities: { enumerate: true, stream: true, symbolInfo: true },
+    };
+  }
+
+  listSymbols(): Promise<SymbolDescriptor[]> {
+    return Promise.resolve(SYMBOLS.map(symbol => ({ ...symbol })));
+  }
+
+  async getBarsColumns(ticker: string, timeframe: string, range: BarRange): Promise<ColumnarBars> {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const brokerId = await activeBrokerId();
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+
+    // HOT path: a recently viewed symbol already lives in the shared canonical plane.
+    // Return its typed arrays immediately — no REST, no object materialization.
+    const cached = plane.readCanonical();
+    if (cached.length > 0 && plane.getSnapshot().historyReady) {
+      const requestedTo = range.to == null
+        ? null
+        : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+      const newestMs = cached.time[cached.length - 1]! * 1000;
+      if (requestedTo == null || requestedTo >= newestMs - 1) {
+        return marketViewToColumns(cached, range, requested);
+      }
+    }
+
+    // COLD path: deliberately return an empty column set so Vela moves immediately to
+    // getBarsProgressive(). That path paints the first real history page before older
+    // history is fetched. A 5k REST request must never become the first-frame bottleneck.
+    return EMPTY_COLUMNAR_BARS;
+  }
+
+  /**
+   * Progressive TCO history: first paint is a small real window from the shared history
+   * plane; older pages stream in behind it. Abort promptly when Vela switches symbols.
+   */
+  async getBarsProgressive(
+    ticker: string,
+    timeframe: string,
+    range: BarRange,
+    onBatch: (bars: OHLCV[]) => void,
+    opts?: { signal?: AbortSignal },
+  ): Promise<OHLCV[]> {
+    if (opts?.signal?.aborted) return [];
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const brokerId = await activeBrokerId();
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const firstPaintBars = Math.min(requested, 300);
+
+    const abort = () => Boolean(opts?.signal?.aborted);
+    if (abort()) return [];
+
+    // History and quote are independent. Race them for time-to-first-visible-price,
+    // but always keep the history promise alive so real candles replace the seed.
+    const historyPromise: Promise<OHLCV[]> = plane.ensureReadyHistory(firstPaintBars).then(historicalToVelaBars).catch(() => []);
+    const quotePromise = tradingCoreRuntime.getMarketQuotes([symbol]).catch(() => ({}));
+
+    type FirstPaintResult =
+      | { kind: 'history'; bars: OHLCV[] }
+      | { kind: 'quote'; bars: OHLCV[] };
+
+    const quoteBars = async (): Promise<OHLCV[]> => {
+      if (abort()) return [];
+      const quote = await quotePromise;
+      if (abort()) return [];
+      const row = quote[symbol];
+      const ltp = Number(row?.ltp);
+      if (!Number.isFinite(ltp) || ltp <= 0) return [];
+      const now = Date.now();
+      const interval = timeframeMs(tcoTimeframe);
+      return [{
+        time: Math.floor(now / interval) * interval,
+        open: ltp,
+        high: ltp,
+        low: ltp,
+        close: ltp,
+        volume: Number.isFinite(Number(row?.volume)) ? Number(row?.volume) : undefined,
+      }];
+    };
+
+    let first: OHLCV[] = [];
+    const firstResult: FirstPaintResult = await Promise.race([
+      historyPromise.then((bars): FirstPaintResult => ({ kind: 'history', bars })),
+      quoteBars().then((bars): FirstPaintResult => ({ kind: 'quote', bars })),
+    ]);
+
+    if (abort()) return firstResult.bars;
+    if (firstResult.bars.length > 0) {
+      first = firstResult.bars;
+      onBatch(first.slice(-requested));
+    }
+
+    // Always let real history supersede the quote seed when it arrives. The quote seed
+    // exists only to make the first frame non-empty; it is never written into historyStore.
+    const history = await historyPromise;
+    if (abort()) return history.length ? history : first;
+    if (history.length > 0 && (firstResult.kind !== 'history' || history.length !== first.length)) {
+      first = history;
+      onBatch(history.slice(-requested));
+    } else if (history.length === 0 && first.length === 0) {
+      // History can legally return an empty page during a broker/session race. Re-use
+      // the already-started quote request so Vela never leaves a blank canvas while
+      // the live price path is healthy.
+      const fallback = await quoteBars();
+      if (!abort() && fallback.length) {
+        first = fallback;
+        onBatch(fallback);
+      }
+    }
+
+    let currentLength = history.length || first.length;
+    while (!abort() && currentLength > 0 && currentLength < requested) {
+      const beforeLength = currentLength;
+      const older = historicalToVelaBars(await plane.loadOlderHistory('warm', { visibleBars: Math.min(1200, requested - currentLength) }));
+      if (abort()) return older;
+      currentLength = older.length;
+      if (currentLength <= beforeLength) break;
+      onBatch(older.slice(-requested));
+    }
+
+    return !abort() ? (plane.readCanonical().length ? marketViewToBars(plane.readCanonical(), range, requested) : first) : first;
+  }
+
+  /**
+   * Explicit ranged-history seam used by Vela's 5k backward paging. Keeping this
+   * method on the TCO provider guarantees that deep scrolls go through the shared
+   * ChartDataPlane/Fyers cache instead of opening a second broker-history path.
+   */
+  async loadRange(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const requested = Math.max(2, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const brokerId = await activeBrokerId();
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+    await plane.ensureReadyHistory(5000);
+    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+    const current = plane.readCanonical();
+    const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+    if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
+      await plane.loadOlderHistory('visible', { visibleBars: requested });
+    }
+    const loaded = plane.readCanonical();
+    if (loaded.length) return marketViewToBars(loaded, range, requested);
+    // A zero-row canonical plane is not a successful history response.
+    // Reuse the same broker/quote fallback as normal chart bootstrap.
+    return this.getBars(ticker, timeframe, range);
+  }
+
+  async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
+    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
+    const brokerId = await activeBrokerId();
+    const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+    let lastError: unknown = null;
+    try {
+      await plane.ensureReadyHistory(requested);
+      const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+      const current = plane.readCanonical();
+      const currentNewestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
+      if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(currentNewestMs) && requestedTo < currentNewestMs - 1) {
+        await plane.loadOlderHistory('visible');
+      }
+      const canonical = plane.readCanonical();
+      if (canonical.length) return marketViewToBars(canonical, range, requested);
+      lastError = new Error('Vela canonical market-data plane returned no history bars.');
+    } catch (error) {
+      lastError = error;
+    }
+
+    // Compatibility fallback is deliberately outside the canonical path. It is only
+    // used when the shared plane could not initialize, and the next websocket update
+    // still enters through the canonical TCO data plane.
+    try {
+      const quote = await tradingCoreRuntime.getMarketQuotes([symbol]);
+      const row = quote[symbol];
+      if (row && Number.isFinite(Number(row.ltp)) && Number(row.ltp) > 0) {
+        const now = Date.now();
+        const interval = timeframeMs(tcoTimeframe);
+        return [{ time: Math.floor(now / interval) * interval, open: Number(row.ltp), high: Number(row.ltp), low: Number(row.ltp), close: Number(row.ltp), volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined }];
+      }
+    } catch {
+      // Preserve the original canonical-history error at the Vela fault boundary.
+    }
+    if (lastError) throw lastError;
+    return [];
+  }
+
+  getSymbolInfo(ticker: string) {
+    const symbol = runtimeSymbol(ticker);
+    return Promise.resolve({ ticker: symbol, exchange: symbol.startsWith('BSE:') ? 'BSE' : 'NSE', type: 'index' });
+  }
+
+  subscribeColumns(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void): () => void {
+    const symbol = runtimeSymbol(ticker);
+    const tcoTimeframe = runtimeTimeframe(timeframe);
     const brokerId = activeBrokerIdSync();
     if (!brokerId) return () => {};
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
