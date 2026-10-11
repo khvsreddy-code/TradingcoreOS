@@ -42,6 +42,24 @@ normalRuntime.emitIntent('orderIntent', ['long', 'quantity', 1, null, null], bar
 assert.equal(normalOutputs[0]?.kind, 'orderIntent', 'normal strategy evaluation must continue producing order intents');
 assert.equal(normalExternalCalls(), 1, 'normal strategy evaluation must retain host-owned order-intent routing');
 
+const replayRuntime = new CoreSpiritRuntime({ sourceId: 'historical-replay-scope' });
+const replayEvents = observeExternalEvents(replayRuntime);
+const executeIrStub = function () {
+  this.emitIntent('orderIntent', ['long', 'quantity', 1, null, null], bar, 0, collector, diagnostics, 'history');
+  return { outputs: [], state: {}, diagnostics: [] };
+};
+replayRuntime.executeIr = executeIrStub;
+replayRuntime.executeIrReadOnly({}, []);
+assert.equal(replayEvents(), 0, 'read-only history replay must suppress historical execution intents');
+replayRuntime.executeIr({}, []);
+assert.equal(replayEvents(), 1, 'read-only suppression must be restored before the next forming-bar execution');
+
+assert.equal(
+  (velaSource.match(/executeIrReadOnly\(token\.ir,/g) ?? []).length,
+  6,
+  'initial, update, viewport and backfill history-only passes must all use scoped read-only replay',
+);
+
 const velaSource = fs.readFileSync('src/CoreSpiritVelaEngine.ts', 'utf8');
 assert.equal(
   (velaSource.match(/createRuntime\(\{\s*suppressExternalEffects\s*:\s*true\s*\}\)/g) ?? []).length,
