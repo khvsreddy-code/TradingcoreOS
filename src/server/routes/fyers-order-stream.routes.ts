@@ -22,7 +22,9 @@ fyersOrderStreamRoutes.get('/:brokerId/order-stream', async (req: AuthenticatedR
   res.flushHeaders();
   const write=(event: FyersOrderStreamEvent)=>{try{res.write(JSON.stringify(event)+'\n')}catch{}};
   const unsubscribe=FyersOrderStreamTransport.subscribe(userId,token,write);
-  const heartbeat=setInterval(()=>write({type:'status',status:'connected'}),5000);
+  // Heartbeats must reflect reconciliation gates; never announce connected
+  // while REST snapshots are still catching up missed broker events.
+  const heartbeat=setInterval(()=>write(FyersOrderStreamTransport.getStatus(userId)),5000);
   const leaseTimer=setTimeout(()=>{
     write({type:'status',status:'disconnected',reason:'stream_lease_expired'});
     clearInterval(heartbeat);
