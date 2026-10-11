@@ -77,6 +77,8 @@ const freshContext = await session.getContext();
 const latestValues = (context) => Object.values(context?.plots ?? {}).map((points) => points.at(-1)?.value);
 assert.ok(latestValues(freshContext).some((value) => Number(value) === 222),
   'the newest secondary response should be visible to CoreSpirit');
+assert.match((await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url), 'utf8'), /asOfTimestampMs=rawAsOf>=1e11\?rawAsOf:rawAsOf\*1000/,
+  'CoreSpirit runtime seconds must be converted to Vela milliseconds before secondary-series alignment');
 
 // Deliver older responses after the newest snapshot has been consumed.
 pending[1].resolve([secondaryBar(333, secondaryTime)]);
