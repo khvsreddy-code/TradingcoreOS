@@ -171,7 +171,14 @@ export class CoreSpiritVelaEngine {
 
   execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
     const token = req.prepared.token as PreparedToken;
-    const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
+    const initialBarCount=req.bars.length;
+    // With Vela's live accessor the initial bars argument is only a snapshot;
+    // normalize the canonical getBars() data once instead of materializing the
+    // same history twice on the UI thread.
+    const bars = req.getBars ? [] : normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
+    const currentBarCount=():number=>{
+      try{return req.getBars?.().length??bars.length;}catch{return initialBarCount;}
+    };
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryGraphRevision=0;
     let secondaryGraphDirty=false;
@@ -262,7 +269,7 @@ export class CoreSpiritVelaEngine {
             if(secondaryWarnings.length>100)secondaryWarnings.splice(0,secondaryWarnings.length-100);
             handlers.onWarning?.({
               message:warning,
-              method:'secondary-data',bar:Math.max(0,bars.length-1)
+              method:'secondary-data',bar:Math.max(0,latestBars.length-1)
             });
           }
         }
@@ -593,7 +600,7 @@ export class CoreSpiritVelaEngine {
           },
           plots: Object.fromEntries([...snapshot.points.entries()].map(([key, values]) => [key, values])),
           variables: state?.locals ?? {},
-          warnings: secondaryWarnings.slice(-20).map(message => ({ message, method: 'secondary-data', bar: Math.max(0, bars.length - 1) })),
+          warnings: secondaryWarnings.slice(-20).map(message => ({ message, method: 'secondary-data', bar: Math.max(0, currentBarCount() - 1) })),
         };
       },
       stop() {
