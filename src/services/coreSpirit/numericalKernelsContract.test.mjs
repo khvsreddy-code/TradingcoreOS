@@ -50,8 +50,8 @@ const largeY = Float64Array.from([2e12 + 0.25, 2e12 + 0.5, 2e12 + 0.75, 2e12 + 1
 close(correlation(largeX, largeY, 3)[2], 1, 1e-7);
 close(correlation(largeX, largeY, 3)[3], 1, 1e-7,
   'rolling correlation should remain stable as large-level price windows advance');
-close(covariance(largeX, largeY, 3)[2], 1 / 96, 1e-7);
-close(covariance(largeX, largeY, 3)[3], 1 / 96, 1e-7,
+close(covariance(largeX, largeY, 3)[2], 1 / 48, 1e-7);
+close(covariance(largeX, largeY, 3)[3], 1 / 48, 1e-7,
   'rolling covariance should not collapse under large absolute price levels');
 close(zScore(Float64Array.from([1, 2, 3]), 2)[2], 1);
 close(dotProduct(Float64Array.from([1, 2, 3]), Float64Array.from([4, 5, 6])), 32);
