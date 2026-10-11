@@ -23,7 +23,9 @@ export interface MarketEventSubscription {
  * In-process normalized event bus. It is intentionally synchronous and
  * non-buffering: a slow consumer must not add latency to the broker socket.
  * Consumers needing durable/replay semantics must persist to their own queue.
- * Raw broker payloads never enter this bus.
+ * Raw broker payloads never enter this bus. Depth is privileged/high-volume:
+ * subscriptions must explicitly opt in via an orderbook/ML/CoreSpirit/audit
+ * consumer filter; an unfiltered listener receives no depth frames by default.
  */
 export class MarketEventBus {
   private readonly listeners = new Set<{
@@ -53,7 +55,11 @@ export class MarketEventBus {
     for (const entry of this.listeners) {
       if (entry.types && !entry.types.has(event.type)) continue;
       if (entry.symbols && !entry.symbols.has(event.symbol)) continue;
-      if (entry.consumers && !routesToConsumer(event, entry.consumers)) continue;
+      if (isDepthEvent(event)) {
+        // Fail closed: a generic listener must never inherit order-book bandwidth
+        // just because it subscribed to the shared normalized event bus.
+        if (!entry.consumers || !routesToConsumer(event, entry.consumers)) continue;
+      } else if (entry.consumers && !routesToConsumer(event, entry.consumers)) continue;
       try { entry.listener(event); } catch {
         // Isolate consumers; market-data ingress must never be blocked by UI/ML work.
       }
@@ -61,6 +67,10 @@ export class MarketEventBus {
   }
 
   get subscriberCount(): number { return this.listeners.size; }
+}
+
+function isDepthEvent(event: DomainMarketEvent): boolean {
+  return event.type === 'DepthSnapshot' || event.type === 'DepthDelta';
 }
 
 function routesToConsumer(event: DomainMarketEvent, consumers: ReadonlySet<MarketConsumer>): boolean {
