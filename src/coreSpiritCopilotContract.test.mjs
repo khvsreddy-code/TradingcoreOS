@@ -24,6 +24,12 @@ assert.doesNotMatch(route,/VITE_[A-Z_]*GEMINI|VITE_[A-Z_]*GOOGLE/,'provider key 
 assert.match(route,/compileCoreSpirit\(generated\.source,'corespirit-editor'/,'generated source must go through the canonical compiler with the same artifact identity as the editor');
 assert.match(editor,/copilotServerArtifactHashRef\.current=payload\.validation\?\.artifactHash/,'the Copilot response artifact hash must be pinned to its exact draft');
 assert.match(editor,/copilotReplayPassRef\.current!==true/,'Copilot Run must fail closed until the exact artifact passes replay');
+assert.match(editor,/requestedEditorVersion/,'late Copilot responses must not overwrite edits made while generation is in flight');
+assert.match(editor,/generationRequest!==copilotGenerationRef\.current/,'overlapping Copilot requests and stale replay results must be discarded');
+assert.match(editor,/replayGateMatches\(replayGate,source,copilotServerArtifactHashRef\.current,targetAtStart\)/,'Copilot replay approval must be tied to the same source, artifact, and active chart');
+assert.match(editor,/replayContextStillCurrent/,'replay approval must be invalidated if the active chart/history boundary changes during preflight');
+assert.match(editor,/copilotReplayGateRef\.current=replayPassed\?/,'only a successful replay may issue a context-bound approval gate');
+assert.match(editor,/activeAfterGeneration/,'Copilot generation must remain attached to the chart context supplied to the model');
 assert.match(editor,/copilotReplayPassRef\.current=replayPassed/,'replay gate must be tied to the completed replay result');
 assert.match(editor,/setCopilotStatus\('blocked'\)/,'missing history or replay infrastructure failure must block Copilot Run');
 assert.doesNotMatch(editor,/copilotReplayPassRef\.current=false;[\s\S]{0,400}setCopilotStatus\('ready'\)/,'a missing replay result must never be represented as replay-ready');

@@ -40,6 +40,29 @@ const EXAMPLES: Array<[string, string]> = [
   ['Interactive UI', `let panel = ui.panel("Market Structure")\npanel.number("ATR", atr(14))\npanel.button("Recalculate", recalibrate)\npanel.toggle("Show Liquidity", true, toggle_liquidity)\npanel.slider("Sensitivity", 1, 10, 5, set_sensitivity)`],
 ];
 
+type CopilotReplayGate = Readonly<{
+  source:string;
+  artifactHash:string;
+  chartId:string;
+  symbol:string;
+  timeframe:string;
+  barsProcessed:number;
+  firstBarSignature:string;
+  lastBarSignature:string;
+}>;
+
+function replayBarSignature(bar:unknown):string {
+  if(!bar||typeof bar!=='object')return '';
+  const value=bar as Record<string,unknown>;
+  return JSON.stringify([value.timestamp??value.time??null,value.open??null,value.high??null,value.low??null,value.close??null,value.volume??null]);
+}
+
+function replayGateMatches(gate:CopilotReplayGate,source:string,artifactHash:string|null,target:NonNullable<ReturnType<typeof coreSpiritChartRegistry.getActive>>):boolean {
+  if(gate.source!==source||!artifactHash||gate.artifactHash!==artifactHash||gate.chartId!==target.chartId||gate.symbol!==target.symbol||gate.timeframe!==target.timeframe)return false;
+  const bars=Array.from(target.getBars?.()??[]).slice(-3000);
+  return bars.length===gate.barsProcessed&&replayBarSignature(bars[0])===gate.firstBarSignature&&replayBarSignature(bars[bars.length-1])===gate.lastBarSignature;
+}
+
 function lineCount(source: string) { return Math.max(1, source.split('\n').length); }
 
 function escapeHtml(value: string) { return value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -91,6 +114,8 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const copilotValidationDiagnosticsRef = useRef<CoreSpiritCompileResult['diagnostics']>([]);
   // AI drafts require both compiler/security approval and a successful bounded replay.
   const copilotReplayPassRef = useRef<boolean|null>(null);
+  const copilotReplayGateRef = useRef<CopilotReplayGate|null>(null);
+  const copilotGenerationRef = useRef(0);
   const [compilePending,setCompilePending]=useState(false);
   const [copilotPrompt,setCopilotPrompt]=useState('');
   const [copilotStatus,setCopilotStatus]=useState<'idle'|'generating'|'validating'|'replaying'|'ready'|'needs-fixes'|'blocked'|'error'>('idle');
@@ -163,6 +188,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       copilotServerArtifactHashRef.current=null;
       copilotValidationDiagnosticsRef.current=[];
       copilotReplayPassRef.current=null;
+      copilotReplayGateRef.current=null;
       setCopilotStatus('idle');
       setCopilotArtifactHash(null);
     }
@@ -293,13 +319,17 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
 
   const runOnChart=async()=>{
     try{
+      const targetAtStart=coreSpiritChartRegistry.getActive();
+      if(!targetAtStart)throw new Error('No active TradingCoreOS chart. Open a live chart and click it once.');
       if(copilotSourceRef.current===source){
         if(copilotValidationPassRef.current!==true){
           setRunStatus('Copilot security validation has not passed. Fix the diagnostics before Run.');
           return;
         }
-        if(copilotReplayPassRef.current!==true){
-          setRunStatus('Copilot replay gate is not passed. Load chart history and successfully replay this exact draft before Run.');
+        const replayGate=copilotReplayGateRef.current;
+        if(copilotReplayPassRef.current!==true||!replayGate||!replayGateMatches(replayGate,source,copilotServerArtifactHashRef.current,targetAtStart)){
+          copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;setCopilotStatus('blocked');
+          setRunStatus('Copilot replay approval is stale: the source, artifact, chart, or chart-history boundary changed. Revalidate and replay this draft before Run.');
           return;
         }
       }
@@ -308,9 +338,14 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       if(!result)return;
       const errors=(result.diagnostics||[]).filter(d=>d.severity==='error');
       if(errors.length||!result.ir||!result.artifact){setCompiled(false);return;}
+      if(copilotSourceRef.current===source&&result.artifact.abi?.artifactHash!==copilotReplayGateRef.current?.artifactHash){
+        copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;setCopilotStatus('blocked');
+        setRunStatus('The compiled artifact no longer matches the artifact approved by Copilot replay. Revalidate before Run.');
+        return;
+      }
+      if(coreSpiritChartRegistry.getActive()?.chartId!==targetAtStart.chartId)throw new Error('The active chart changed during compilation. Select the intended chart and run again.');
       setLastCompile(result);setCompiled(true);setRunStatus('Running on active chart…');
-      const target=coreSpiritChartRegistry.getActive();
-      if(!target)throw new Error('No active TradingCoreOS chart. Open a live chart and click it once.');
+      const target=targetAtStart;
       const snapshot=await ideBridge.runActiveChart(source,'coreSpirit-editor',result);
       const run=snapshot.run;
       if(!run)throw new Error(snapshot.error||'CoreSpirit run failed');
@@ -326,7 +361,10 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const generateCopilotDraft=async()=>{
     const prompt=copilotPrompt.trim();
     if(!prompt){setCopilotStatus('error');setCopilotError('Describe what you want the script to do first.');return;}
-    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;
+    const generationRequest=++copilotGenerationRef.current;
+    const requestedSource=source;
+    const requestedEditorVersion=editorModel.getVersion();
+    setCopilotStatus('generating');setCopilotError('');setCopilotSummary('');setCopilotAssumptions([]);setCopilotArtifactHash(null);copilotSourceRef.current=null;copilotValidationPassRef.current=null;copilotServerArtifactHashRef.current=null;copilotValidationDiagnosticsRef.current=[];copilotReplayPassRef.current=null;copilotReplayGateRef.current=null;
     try{
       const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
       if(sessionError||!session?.access_token)throw new Error('Sign in to TradingCore before using Copilot.');
@@ -341,7 +379,19 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         success?:boolean;error?:string;source?:string;summary?:string;assumptions?:string[];
         validation?:{valid?:boolean;artifactHash?:string|null;diagnostics?:Array<{severity:string;message:string;line?:number;start?:number;end?:number;code?:string}>};
       }|null;
+      if(generationRequest!==copilotGenerationRef.current)return;
       if(!response.ok||!payload?.success||typeof payload.source!=='string')throw new Error(payload?.error||'CoreSpirit Copilot request failed.');
+      if(editorModel.getSource()!==requestedSource||editorModel.getVersion()!==requestedEditorVersion){
+        setCopilotStatus('needs-fixes');
+        setCopilotError('The editor changed while Copilot was generating. Your edits were preserved; generate again to apply a draft to the current source.');
+        return;
+      }
+      const activeAfterGeneration=coreSpiritChartRegistry.getActive();
+      if((target?.chartId??null)!==(activeAfterGeneration?.chartId??null)||target?.symbol!==activeAfterGeneration?.symbol||target?.timeframe!==activeAfterGeneration?.timeframe){
+        setCopilotStatus('blocked');
+        setCopilotError('The active chart changed while Copilot was generating. Your editor was not replaced; select the intended chart and generate again.');
+        return;
+      }
       setCopilotSummary(payload.summary||'Draft generated. Review its source and validation results.');
       setCopilotAssumptions(payload.assumptions||[]);
       copilotSourceRef.current=payload.source;
@@ -370,7 +420,12 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       }
 
       const replayTarget=coreSpiritChartRegistry.getActive();
-      const recentBars=Array.from(replayTarget?.getBars?.()??[]).slice(-3000);
+      if(!replayTarget||replayTarget.chartId!==target?.chartId||replayTarget.symbol!==target?.symbol||replayTarget.timeframe!==target?.timeframe){
+        copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;setCopilotStatus('blocked');
+        setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the active chart changed after generation. Select the original chart and generate/revalidate the draft again.`);
+        return;
+      }
+      const recentBars=Array.from(replayTarget.getBars?.()??[]).slice(-3000);
       if(!recentBars.length){
         copilotReplayPassRef.current=false;
         setCopilotSummary(prev=>`${prev}\n\nRun is blocked: no chart history was available for the required replay preflight. Open a chart with candle history, then generate/revalidate the draft again.`);
@@ -378,6 +433,14 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
         return;
       }
 
+      const replayContext={
+        chartId:replayTarget.chartId,
+        symbol:replayTarget.symbol,
+        timeframe:replayTarget.timeframe,
+        barsProcessed:recentBars.length,
+        firstBarSignature:replayBarSignature(recentBars[0]),
+        lastBarSignature:replayBarSignature(recentBars[recentBars.length-1]),
+      };
       setCopilotStatus('replaying');
       setCopilotSummary(prev=>`${prev}\n\nChecking the compiled artifact against the latest ${recentBars.length.toLocaleString()} chart bars in an isolated read-only replay…`);
       try{
@@ -386,22 +449,30 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
           timeframe:replayTarget?.timeframe,
           sourceId:'corespirit-copilot-preflight',
         });
-        if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
+        if(generationRequest!==copilotGenerationRef.current||copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
         const replayDiagnostics=replay.diagnostics.length
           ? `\nReplay diagnostics: ${replay.diagnostics.slice(0,3).join(' | ')}`
           : '';
-        const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum);
+        const activeAfterReplay=coreSpiritChartRegistry.getActive();
+        const latestBars=Array.from(activeAfterReplay?.getBars?.()??[]).slice(-3000);
+        const replayContextStillCurrent=Boolean(activeAfterReplay&&activeAfterReplay.chartId===replayContext.chartId&&
+          activeAfterReplay.symbol===replayContext.symbol&&activeAfterReplay.timeframe===replayContext.timeframe&&
+          latestBars.length===replayContext.barsProcessed&&replayBarSignature(latestBars[0])===replayContext.firstBarSignature&&
+          replayBarSignature(latestBars[latestBars.length-1])===replayContext.lastBarSignature);
+        const replayPassed=replay.diagnostics.length===0&&replay.barsProcessed===recentBars.length&&Boolean(replay.outputChecksum)&&replayContextStillCurrent;
         copilotReplayPassRef.current=replayPassed;
-        setCopilotSummary(prev=>`${prev}\n\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\nReplay gate passed.':'\nRun is blocked until replay diagnostics are resolved and the draft passes again.'}`);
-        setCopilotStatus(replayPassed?'ready':'needs-fixes');
+        copilotReplayGateRef.current=replayPassed?{source:payload.source,artifactHash:compiled.artifact.abi?.artifactHash??'',...replayContext}:null;
+        setCopilotSummary(prev=>`${prev}\n\nRead-only historical replay: ${replay.barsProcessed.toLocaleString()} bars, ${replay.plotsEmitted} plots, ${replay.signalsEmitted} signals. Output fingerprint: ${replay.outputChecksum.slice(0,12)}.${replayDiagnostics}${replayPassed?'\nReplay gate passed for this artifact and chart-history boundary.':replayContextStillCurrent?'\nRun is blocked until replay diagnostics are resolved and the draft passes again.':'\nThe active chart or its history changed during replay. Run is blocked; replay the current chart context again.'}`);
+        setCopilotStatus(replayPassed?'ready':replayContextStillCurrent?'needs-fixes':'blocked');
       }catch(replayError){
         if(copilotSourceRef.current!==payload.source||editorModel.getSource()!==payload.source)return;
-        copilotReplayPassRef.current=false;
+        copilotReplayPassRef.current=false;copilotReplayGateRef.current=null;
         setCopilotSummary(prev=>`${prev}\n\nRun is blocked because the required read-only replay could not complete: ${replayError instanceof Error?replayError.message:String(replayError)}. Retry after the replay worker is healthy.`);
         // A missing replay result is not evidence of correctness: fail closed.
         setCopilotStatus('blocked');
       }
     }catch(error){
+      if(generationRequest!==copilotGenerationRef.current)return;
       setCopilotStatus('error');
       setCopilotError(error instanceof Error?error.message:String(error));
     }
