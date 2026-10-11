@@ -1,3 +1,5 @@
+import type { DomainMarketEvent } from './market-events.js';
+
 export type MarketFeedStatus =
   | 'connecting'
   | 'connected'
@@ -40,11 +42,19 @@ export interface NormalizedMarketTick {
   totalSellQuantity?: number;
   ohlc?: NormalizedOHLC[];
   receivedAt?: string;
+  /** Normalized domain-event metadata; optional for compatibility with cached/polled ticks. */
+  sequence?: number;
+  timestamp?: number;
+  receivedAtEpoch?: number;
+  brokerTimestamp?: number;
+  source?: 'fyers' | 'paper' | 'replay' | 'backtest' | 'simulator';
+  revision?: number;
+  feedClass?: 'lite' | 'full' | 'depth';
 }
 
 export type MarketFeedEvent =
   | { type: 'status'; status: MarketFeedStatus }
-  | { type: 'tick'; tick: NormalizedMarketTick }
+  | { type: 'tick'; tick: NormalizedMarketTick; domainEvent?: DomainMarketEvent }
   | { type: 'market_status'; marketStatus: Record<string, string> }
   | { type: 'error'; error: string };
 
