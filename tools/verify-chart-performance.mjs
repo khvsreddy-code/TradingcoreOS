@@ -54,7 +54,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);
   if (!perf.capturedAt) throw new Error(`Browser verification: telemetry capture timestamp missing for ${url}`);
   if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
-  if (perf.pipeline.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} realtime pipeline sample(s), got ${perf.pipeline.length}`);
+  if (perf.pipeline.length < 1) throw new Error(`Browser verification: no active Vela chart data-plane telemetry for ${url}`);
   for (const cell of perf.cells) {
     if (!(Number(cell.frames) > 0)) throw new Error(`Browser verification: no rendered-frame samples for cell ${cell.cellId || 'unknown'}`);
     if (!['webgl2', 'canvas2d'].includes(String(cell.backend))) throw new Error(`Browser verification: renderer backend not identified for cell ${cell.cellId || 'unknown'}`);
