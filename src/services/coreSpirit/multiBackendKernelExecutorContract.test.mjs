@@ -21,6 +21,11 @@ const brokenWasm={isLoaded:()=>true,profile:()=>({backend:'wasm',available:true,
 const registry=createCoreSpiritBackendRegistry({wasm:brokenWasm});
 const fallback=await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{purpose:'historical',wasm:brokenWasm,registry,minWasmWorkUnits:1,onBackendFallback:()=>{fallbackCount++;}});
 assert.equal(fallback.plan.backend,'wasm-simd');assert.equal(fallback.backend,'cpu-optimized');assert.equal(fallback.fallbackReason,'simulated WASM trap');assert.equal(fallbackCount,1);
+const registryOnlyFallback = await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{
+ purpose:'historical',registry,minWasmWorkUnits:1,
+});
+assert.equal(registryOnlyFallback.fallbackReason,'simulated WASM trap',
+  'the executor must run the same WASM adapter registered with the planner even when the adapter is only supplied via the registry');
 
 const incompatibleRegistry=createCoreSpiritBackendRegistry({wasm:{isLoaded:()=>true,profile:()=>({backend:'wasm',available:true,deterministic:true,vectorized:true}),hasKernel:name=>name==='dotProduct',kernelVariant:name=>name==='dotProduct'?'simd':undefined}});
 const dot=await executeCoreSpiritNumericalKernelPlanned('dotProduct',[[1,2,3],[4,5,6]],[],{purpose:'historical',registry:incompatibleRegistry,minWasmWorkUnits:1});
