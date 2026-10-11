@@ -66,7 +66,9 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
       publishLifecycle('ready');
       return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,runId:`${sourceId}:${runId}`,outputs:result.outputs};
     }catch(error){
-      publishLifecycle('error');
+      // A superseded worker snapshot is expected during rapid edits/ticks. Never
+      // let an obsolete run flip the current chart lifecycle to an error state.
+      if(runId===coreSpiritRunId.current)publishLifecycle('error');
       throw error;
     }
   };
