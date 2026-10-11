@@ -339,6 +339,7 @@ export class CoreSpiritVelaEngine {
     let liveStarted = false;
     let historyInitialized = false;
     let initializationInFlight=false;
+    let initializationOwnerGeneration=0;
     let mainRunGeneration=0;
     let liveRunGeneration=0;
     let viewportRunGeneration=0;
@@ -571,12 +572,12 @@ export class CoreSpiritVelaEngine {
 
     return {
       async getContext() {
-        const state = runtime.getState();
+        const state = lastExecutionState;
         const snapshot = scene.snapshot();
         return {
           language: 'corespirit',
           phase: req.mode === 'live' && !stopped ? 'streaming' : 'idle',
-          barIndex: state.barIndex,
+          barIndex: state?.barIndex ?? -1,
           meta: {
             title: currentMetadata.meta.title,
             overlay: currentMetadata.meta.overlay,
@@ -584,7 +585,7 @@ export class CoreSpiritVelaEngine {
             shorttitle: currentMetadata.meta.shorttitle,
           },
           plots: Object.fromEntries([...snapshot.points.entries()].map(([key, values]) => [key, values])),
-          variables: state.locals,
+          variables: state?.locals ?? {},
           warnings: secondaryWarnings.slice(-20).map(message => ({ message, method: 'secondary-data', bar: Math.max(0, bars.length - 1) })),
         };
       },
@@ -592,91 +593,83 @@ export class CoreSpiritVelaEngine {
         stopped = true;
         secondaryRequestVersion += 1;
         updateVersion += 1;
+        mainRunGeneration += 1;
+        liveRunGeneration += 1;
+        viewportRunGeneration += 1;
+        initializationInFlight=false;
         secondaryRefreshPromise = undefined;
       },
       update(inputs: Record<string, InputValue>, props?: Record<string, InputValue>) {
-        if (stopped) return;
-
-        const previousMetadata = currentMetadata;
-        const nextMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, { inputs, props });
-        const inputsUnchanged = sameInputRecord(previousMetadata.inputValues, nextMetadata.inputValues);
-        const runtimePropsUnchanged = sameInputRecord(
-          runtimeAffectingProps(previousMetadata.propValues),
-          runtimeAffectingProps(nextMetadata.propValues),
+        if(stopped)return;
+        const previousMetadata=currentMetadata;
+        const nextMetadata=resolveCoreSpiritVelaMetadata(token.source,token.ir,{inputs,props});
+        const inputsUnchanged=sameInputRecord(previousMetadata.inputValues,nextMetadata.inputValues);
+        const runtimePropsUnchanged=sameInputRecord(
+          runtimeAffectingProps(previousMetadata.propValues),runtimeAffectingProps(nextMetadata.propValues),
         );
 
-        // Vela may call update for display-only settings such as precision,
-        // overlay, title, format or shorttitle. Update the model metadata without
-        // resetting CoreSpirit state or replaying historical bars.
-        if (inputsUnchanged && runtimePropsUnchanged) {
-          const presentationChanged =
-            !sameInputValue(previousMetadata.meta, nextMetadata.meta) ||
-            !sameInputRecord(
-              presentationProps(previousMetadata.propValues),
-              presentationProps(nextMetadata.propValues),
-            );
-          currentMetadata = nextMetadata;
-          if (presentationChanged && historyInitialized) {
-            emitModel(
-              Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
-                ? { from:firstSeriesTime, to:lastTime }
-                : undefined,
-            );
-          }
-          // Do not invalidate an in-flight semantic settings update that is
-          // waiting for secondary data; it will use the newest metadata snapshot.
+        // Presentation-only edits must not reset the worker's VM or replay history.
+        if(inputsUnchanged&&runtimePropsUnchanged){
+          const presentationChanged=!sameInputValue(previousMetadata.meta,nextMetadata.meta)||
+            !sameInputRecord(presentationProps(previousMetadata.propValues),presentationProps(nextMetadata.propValues));
+          currentMetadata=nextMetadata;
+          if(presentationChanged&&historyInitialized)emitModel(
+            Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined,
+          );
           return;
         }
 
-        const updateGeneration = ++updateVersion;
-        lastViewportComputationKey = undefined;
-        currentMetadata = nextMetadata;
+        const updateGeneration=++updateVersion;
+        const executionGeneration=++mainRunGeneration;
+        liveRunGeneration+=1;
+        viewportRunGeneration+=1;
+        initializationInFlight=true;
+        initializationOwnerGeneration=executionGeneration;
+        lastViewportComputationKey=undefined;
+        currentMetadata=nextMetadata;
 
-        const runUpdate = (): void => {
-          if (stopped || updateGeneration !== updateVersion) return;
-          const currentBars = getCurrentBars();
-          runtime = createRuntime();
-          runtime.loadIr(token.ir);
-          scene.reset();
+        const runUpdate=async()=>{
+          if(stopped||updateGeneration!==updateVersion||executionGeneration!==mainRunGeneration)return;
+          if(secondaryDependencies.length)await loadSecondaryData(true);
+          if(stopped||updateGeneration!==updateVersion||executionGeneration!==mainRunGeneration)return;
+          const currentBars=getCurrentBars();
+          if(!currentBars.length)return;
 
-          if (req.mode === 'live') {
-            const historical = currentBars.slice(0, -1);
-            if (historical.length) scene.seed(safeOutputs(runtime.executeIrReadOnly(token.ir, historical).outputs));
-
-            const latest = currentBars.at(-1);
-            if (latest) {
-              const latestResult = safeOutputs(runtime.executeBar(latest).outputs);
-              const latestTime = barTimeMillis(latest.timestamp);
-              if (Number.isFinite(latestTime)) emitScenePatches(latestResult, { from:latestTime, to:latestTime });
-              lastTime = latestTime;
-            }
-
-            firstSeriesTime = currentBars.length ? barTimeMillis(currentBars[0]?.timestamp) : Number.NaN;
-            historyInitialized = true;
-            liveStarted = true;
-          } else {
-            const result = safeOutputs(runtime.executeIrReadOnly(token.ir, currentBars).outputs);
-            scene.seed(result);
-            firstSeriesTime = barTimeMillis(currentBars[0]?.timestamp);
-            lastTime = barTimeMillis(currentBars.at(-1)?.timestamp);
-            historyInitialized = true;
+          let outputs:CoreSpiritObject[];
+          if(req.mode==='live'){
+            const execution=await evaluateLiveSnapshot(currentBars,executionGeneration);
+            if(!execution||stopped||updateGeneration!==updateVersion||executionGeneration!==mainRunGeneration)return;
+            if(!execution.currentBars.length||!execution.tail)return;
+            scene.reset();
+            scene.seed(safeOutputs(execution.baseline.outputs));
+            const latest=execution.currentBars.at(-1)!;
+            const latestTime=barTimeMillis(latest.timestamp);
+            outputs=safeOutputs(execution.tail.outputs);
+            if(Number.isFinite(latestTime))emitScenePatches(outputs,{from:latestTime,to:latestTime});
+            rememberWorkerState(execution.tail.state);
+            firstSeriesTime=barTimeMillis(execution.currentBars[0]?.timestamp);
+            lastTime=latestTime;
+            liveStarted=true;
+          }else{
+            const result=await executeInWorker(currentBars,mainContextKey,true,{from:0,to:currentBars.length});
+            if(stopped||updateGeneration!==updateVersion||executionGeneration!==mainRunGeneration)return;
+            outputs=safeOutputs(result.outputs);
+            scene.reset();
+            scene.seed(outputs);
+            rememberWorkerState(result.state);
+            firstSeriesTime=barTimeMillis(currentBars[0]?.timestamp);
+            lastTime=barTimeMillis(currentBars.at(-1)?.timestamp);
           }
-
-          emitModel(
-            Number.isFinite(firstSeriesTime) && Number.isFinite(lastTime)
-              ? { from:firstSeriesTime, to:lastTime }
-              : undefined,
-          );
+          historyInitialized=true;
+          emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined);
         };
 
-        if (secondaryDependencies.length) {
-          void loadSecondaryData(true)
-            .then(runUpdate)
-            .catch(error => handlers.onError?.(error instanceof Error ? error : new Error(String(error))));
-        } else {
-          try { runUpdate(); }
-          catch (error) { handlers.onError?.(error instanceof Error ? error : new Error(String(error))); }
-        }
+        void runUpdate().catch(error=>{
+          if(!stopped&&updateGeneration===updateVersion&&executionGeneration===mainRunGeneration)
+            handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+        }).finally(()=>{
+          if(initializationOwnerGeneration===executionGeneration)initializationInFlight=false;
+        });
       },
       setVisibleRange(range) {
         if (stopped || !currentMetadata.reactsToViewport) return;
