@@ -37,6 +37,20 @@ function stableSignature(value:unknown):string {
   return `{${Object.keys(record).sort().map(key=>`${JSON.stringify(key)}:${stableSignature(record[key])}`).join(',')}}`;
 }
 
+
+function cloneGraphSnapshot(snapshot:CoreSpiritGraphSnapshot):CoreSpiritGraphSnapshot {
+  // Transfer copies, not the caller-owned snapshot: transferables detach their
+  // buffers, and a Vela session may reuse its cached snapshot across many ticks.
+  return {
+    ...snapshot,
+    nodes:snapshot.nodes.map(node=>({
+      ...node,
+      time:new Float64Array(node.time),open:new Float64Array(node.open),high:new Float64Array(node.high),
+      low:new Float64Array(node.low),close:new Float64Array(node.close),volume:new Float64Array(node.volume),
+    })),
+  };
+}
+
 export type CoreSpiritWorkerRunResult = {
   outputs: CoreSpiritObject[];
   diagnostics: string[];
@@ -269,6 +283,7 @@ export class CoreSpiritWorkerPool {
     const runtimeOptionsSignature=stableSignature(job.runtimeOptions??{});
     const artifactChanged=this.contextArtifacts.get(job.contextKey)!==artifactId || this.contextRuntimeOptions.get(job.contextKey)!==runtimeOptionsSignature;
     const graphChanged=!!job.graphSnapshot && this.contextGraphRevisions.get(job.contextKey)!==job.graphSnapshot.revision;
+    const graphSnapshotForTransfer=(job.graphSnapshot&&(artifactChanged||graphChanged))?cloneGraphSnapshot(job.graphSnapshot):undefined;
     const hmmSignature=(job.hmmArtifacts ?? []).map(binding=>binding.artifactHash+':'+binding.modelAlias).sort().join('|');
     const hmmArtifactsChanged=job.hmmArtifacts!==undefined && this.contextHMMArtifacts.get(job.contextKey)!==hmmSignature;
     const sendArtifact=artifactChanged ? {
@@ -277,7 +292,7 @@ export class CoreSpiritWorkerPool {
       artifact:job.artifact,
       contextKey:job.contextKey,
       sourceId:job.sourceId,
-      graphSnapshot:job.graphSnapshot,
+      graphSnapshot:graphSnapshotForTransfer,
       graphBaseSymbol:job.graphBaseSymbol,
       graphBaseTimeframe:job.graphBaseTimeframe,
       hmmArtifacts:job.hmmArtifacts ?? [],
@@ -294,7 +309,7 @@ export class CoreSpiritWorkerPool {
       type:'updateGraph' as const,
       requestId,
       contextKey:job.contextKey,
-      graphSnapshot:job.graphSnapshot,
+      graphSnapshot:graphSnapshotForTransfer,
       graphBaseSymbol:job.graphBaseSymbol,
       graphBaseTimeframe:job.graphBaseTimeframe,
     } : null;
@@ -355,9 +370,9 @@ export class CoreSpiritWorkerPool {
     };
 
     try{
-      if(sendArtifact)slot.worker.postMessage(sendArtifact, job.graphSnapshot ? graphSnapshotTransferables(job.graphSnapshot) : []);
+      if(sendArtifact)slot.worker.postMessage(sendArtifact, graphSnapshotForTransfer ? graphSnapshotTransferables(graphSnapshotForTransfer) : []);
       else if(sendHMMArtifacts)slot.worker.postMessage(sendHMMArtifacts);
-      if(!sendArtifact&&sendGraph)slot.worker.postMessage(sendGraph, graphSnapshotTransferables(job.graphSnapshot!));
+      if(!sendArtifact&&sendGraph&&graphSnapshotForTransfer)slot.worker.postMessage(sendGraph, graphSnapshotTransferables(graphSnapshotForTransfer));
       slot.worker.postMessage(
         envelope,
         sharedMarket && !sharedMarket.shared ? [sharedMarket.buffer] : [],
