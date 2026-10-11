@@ -69,7 +69,7 @@ export function optimizeCoreSpiritIr(program: CoreSpiritIrProgram): CoreSpiritIr
   const cse = commonSubexpressionEliminate(folded);
   const dead = eliminateDeadPureValues(cse.instructions);
   const instructions = dead.instructions;
-  const plan = buildOptimizationPlan(before, folded, cse.instructions, instructions, constantPassChanged, cse.eliminated, dead.removed);
+  const plan = buildOptimizationPlan(before, folded, cse.instructions, instructions, constantPassChanged, cse.eliminated, dead.removed, dead.skippedReason);
   return {
     ...program,
     entry: { ...program.entry, instructions },
@@ -294,6 +294,7 @@ function buildOptimizationPlan(
   constantPassChanged: boolean,
   eliminated: number,
   deadRemoved: number,
+  deadSkipReason?: string,
 ): CoreSpiritOptimizationPlan {
   const producer = new Map<string,number>();
   const dependencyMap = new Map<number,number[]>();
@@ -366,7 +367,7 @@ function buildOptimizationPlan(
       'All execution remains one chronological bar traversal; no second semantic runtime is introduced.',
       sourceReadReuse>0 ? `Reused ${sourceReadReuse} repeated series read(s).` : 'No repeated series reads required reuse.',
       eliminated>0 ? `Eliminated ${eliminated} safe pure duplicate expression(s).` : 'No additional safe pure expression duplicates were found.',
-      dead.skippedReason ?? (deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.'),
+      deadSkipReason ?? (deadRemoved>0 ? `Removed ${deadRemoved} dead pure value instruction(s) without dropping effects or stateful operations.` : 'No dead pure value instructions were found.'),
       'Stateful indicator calls remain ordered stream operators and are not aliased by generic CSE.',
       `Estimated peak temporary register pressure: ${peakLiveRegisters}.`,
     ]),
