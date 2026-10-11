@@ -183,6 +183,7 @@ export class CoreSpiritVelaEngine {
     const token = req.prepared.token as PreparedToken;
     const bars = normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
+    let secondaryGraphRevision=0;
     let secondaryRefreshPromise: Promise<void>|undefined;
     // Forced refreshes may overlap. Only the newest generation is allowed to
     // mutate the shared secondary-data snapshot used by live execution.
@@ -276,6 +277,7 @@ export class CoreSpiritVelaEngine {
           if (stopped || requestVersion !== secondaryRequestVersion) return;
           if(rows?.length){
             secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
+            secondaryGraphRevision+=1;
             secondaryFailed.delete(key);
           }else{
             secondaryFailed.add(key);
@@ -325,29 +327,77 @@ export class CoreSpiritVelaEngine {
 
     let activeVisibleRange = req.visibleRange ? { left:Number(req.visibleRange.left), right:Number(req.visibleRange.right) } : undefined;
 
-    const createRuntime = (runtimeOverrides: { suppressExternalEffects?: boolean } = {}): CoreSpiritRuntime => new CoreSpiritRuntime({
-      symbol: req.market.symbol,
-      timeframe: req.market.timeframe,
-      sourceId: token.sourceId,
-      executionMode: req.mode === 'live' ? 'realtime' : 'historical',
-      executionTarget: 'chart',
-      executionTier: 'optimized',
-      dataResolver,
-      visibleRange: activeVisibleRange ? { from:activeVisibleRange.left, to:activeVisibleRange.right } : undefined,
-      inputValues: currentMetadata.inputValues,
-      propValues: currentMetadata.propValues,
-      suppressExternalEffects: runtimeOverrides.suppressExternalEffects === true,
-    });
-
-    let runtime = createRuntime();
-    runtime.loadIr(token.ir);
-
     const scene = new CoreSpiritSceneDiff(token.sourceId);
+    const mainContextKey=`vela:${token.sourceId}:${req.market.symbol}:${req.market.timeframe}:main`;
+    const rangeContextKey=`${mainContextKey}:range`;
+    const workerDatasetVersions=new Map<string,number>();
+    type RuntimeSnapshot={barIndex?:number;locals?:Record<string,unknown>};
+    let lastExecutionState:RuntimeSnapshot|undefined;
     let liveStarted = false;
     let historyInitialized = false;
+    let initializationInFlight=false;
+    let mainRunGeneration=0;
+    let liveRunGeneration=0;
+    let viewportRunGeneration=0;
     let firstSeriesTime = Number.NaN;
     let lastTime = Number.NaN;
     let lastViewportComputationKey: string | undefined;
+
+    const makeSecondaryGraphSnapshot=():CoreSpiritGraphSnapshot|undefined=>{
+      if(!secondaryDependencies.length)return undefined;
+      return {
+        version:1,
+        revision:secondaryGraphRevision,
+        nodes:secondaryDependencies.map(dep=>{
+          const rows=secondaryData.get(dependencyKey(dep.symbol,dep.timeframe))??[];
+          return {
+            id:`vela-secondary:${dependencyKey(dep.symbol,dep.timeframe)}`,
+            symbol:dep.symbol,
+            timeframe:dep.timeframe,
+            revision:secondaryGraphRevision,
+            time:Float64Array.from(rows,row=>Math.floor(barTimeMillis(row.timestamp)/1000)),
+            open:Float64Array.from(rows,row=>row.open),
+            high:Float64Array.from(rows,row=>row.high),
+            low:Float64Array.from(rows,row=>row.low),
+            close:Float64Array.from(rows,row=>row.close),
+            volume:Float64Array.from(rows,row=>row.volume??0),
+          };
+        }),
+      };
+    };
+
+    const executeInWorker=async(
+      currentBars:CoreSpiritMarketBar[],
+      contextKey:string,
+      readOnly:boolean,
+      dirtyRange:DirtyRange,
+      visibleRange?:{from:number;to:number},
+    )=>{
+      const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
+      workerDatasetVersions.set(contextKey,datasetVersion);
+      const runtimeOptions:CoreSpiritWorkerRuntimeOptions={
+        symbol:req.market.symbol,
+        timeframe:req.market.timeframe,
+        sourceId:token.sourceId,
+        executionMode:req.mode==='live'?'realtime':'historical',
+        executionTarget:'chart',
+        layer:'script',
+        executionTier:'optimized',
+        inputValues:currentMetadata.inputValues,
+        propValues:currentMetadata.propValues,
+        visibleRange,
+      };
+      return runCoreSpiritArtifactInWorker(token.artifact,currentBars,token.sourceId,{
+        contextKey,
+        datasetVersion,
+        dirtyRange,
+        baseSymbol:req.market.symbol,
+        baseTimeframe:req.market.timeframe,
+        graphSnapshot:makeSecondaryGraphSnapshot(),
+        readOnly,
+        runtimeOptions,
+      });
+    };
 
     const safeOutputs = (outputs: CoreSpiritObject[]): CoreSpiritObject[] =>
       secondaryDegraded
