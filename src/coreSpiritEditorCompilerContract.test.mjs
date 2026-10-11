@@ -52,6 +52,7 @@ assert.match(pool,/Avoid hashing\/serializing a potentially large IR on the UI t
 assert.match(target,/updateCode\?/,'active chart target must expose transactional source replacement');
 assert.match(controller,/updateCode:\(source,artifact/,'chart controller must route artifact replacement directly to the worker');
 assert.match(controller,/fatalDiagnostic=result\.diagnostics\.find\(isFatalCoreSpiritDiagnostic\)/,'worker runtime failures must block a replacement chart commit');
+assert.match(controller,/if\(runId===coreSpiritRunId\.current\)publishLifecycle\('error'\)/,'superseded worker jobs must not mark the latest chart run as failed');
 assert.ok(controller.indexOf('const fatalDiagnostic=result.diagnostics.find(isFatalCoreSpiritDiagnostic)')<controller.indexOf('output?.reset();'),'fatal diagnostics must be checked before old chart visuals are reset');
 assert.match(controller,/validateCoreScriptCapabilitiesAgainstSandbox/,'chart editor deploy must enforce the same chart sandbox as CoreSpirit Coder');
 assert.match(controller,/CHART_CAPABILITY_DENIED/,'chart editor must report capability-policy failures before Run');
