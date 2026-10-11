@@ -4,7 +4,11 @@ import { loadOrCompileCoreSpiritArtifact } from './services/coreSpirit/artifactC
 import { compileCoreSpiritArtifactOffThread } from './services/coreSpirit/coreSpiritCompilerClient.ts';
 import { normalizeCoreSpiritSource as normalizeCoreSpirit } from './services/coreSpirit/syntax.ts';
 import type { CoreSpiritIrProgram } from './services/coreSpirit/ir.ts';
-import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
+import type { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
+import { runCoreSpiritArtifactInWorker } from './services/coreSpirit/chartRunner.ts';
+import type { CoreSpiritExecutableArtifact } from './services/coreSpirit/artifact.ts';
+import type { CoreSpiritGraphSnapshot } from './services/core/data/marketDataGraph.ts';
+import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreSpiritWorkerPool.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import type { CoreSpiritDataResolver, CoreSpiritDataResolutionContext, CoreSpiritDataRequest, CoreSpiritDataSnapshot } from './services/coreSpirit/types.ts';
@@ -18,6 +22,7 @@ type PreparedToken = {
   sourceId: string;
   source: string;
   ir: CoreSpiritIrProgram;
+  artifact: CoreSpiritExecutableArtifact;
 };
 
 type VelaOhlcv = {
@@ -161,7 +166,7 @@ export class CoreSpiritVelaEngine {
     });
     const ir = artifact.ir;
     const metadata = resolveCoreSpiritVelaMetadata(source, ir);
-    const token: PreparedToken = { sourceId: instanceId, source: normalized, ir };
+    const token: PreparedToken = { sourceId: instanceId, source: normalized, ir, artifact };
 
     return {
       language: this.language,
