@@ -397,8 +397,23 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   };
 
   const generateCopilotDraft=async()=>{
-    const prompt=copilotPrompt.trim();
-    if(!prompt){setCopilotStatus('error');setCopilotError('Describe what you want the script to do first.');return;}
+    const modeDefaults:Partial<Record<CopilotMode,string>>={
+      'explain-error':'Explain current compiler errors and warnings, prioritizing root causes and source locations.',
+      'fix':'Repair the current CoreScript with the smallest safe changes. Preserve intended signals, visuals, risk controls and causal semantics.',
+      'optimize':'Optimize the current CoreScript for redundant work and bounded lookbacks without changing intended signals or causal behavior.',
+      'convert-to-quant':'Refactor the current CoreScript into typed, reusable quant-oriented code while preserving strategy behavior.',
+      'generate-tests':'Generate focused regression tests for current source, especially edge cases, temporal alignment and no-lookahead behavior.',
+      'generate-backtest':'Draft a deterministic causal backtest for current strategy intent. State entry/exit, warm-up and transaction-cost assumptions.',
+      'generate-features':'Propose a compact typed feature set from available market inputs, with lookbacks and leakage risks.',
+      'generate-model':'Draft a supported CoreScript model/inference pipeline from current source intent, separating training and live inference.',
+      'generate-docs':'Document current source purpose, inputs, outputs, signal rules, lookback, temporal assumptions and limitations.',
+      'explain-lookback':'Explain compiler-reported maximum lookback, warm-up requirements and the expressions driving them.',
+      'find-lookahead':'Audit current source for future access, developing higher-timeframe values and backtest/live divergence. Separate findings from risks.',
+      'find-repainting':'Audit repainting risks using confirmation gates, timeframe access and compiler diagnostics.',
+      'find-unused-computation':'Find calculations not consumed by outputs or downstream work; keep all observable side effects.',
+    };
+    const prompt=copilotPrompt.trim()||modeDefaults[copilotMode]||'';
+    if(!prompt){setCopilotStatus('error');setCopilotError('Describe what you want the script to build.');return;}
     const generationRequest=++copilotGenerationRef.current;
     const requestedSource=source;
     const requestedEditorVersion=editorModel.getVersion();
