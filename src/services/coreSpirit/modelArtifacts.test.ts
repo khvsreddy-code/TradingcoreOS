@@ -106,6 +106,9 @@ async function main(): Promise<void> {
   };
   assert(!(await verifyModelArtifactIntegrity(selfConsistentButInvalid)),
     'inference must reject malformed provenance even when its content hash is internally consistent');
+  let invalidWriteRejected=false;
+  try{await store.put(selfConsistentButInvalid);}catch{invalidWriteRejected=true;}
+  assert(invalidWriteRejected,'artifact storage must reject malformed provenance before publication');
 
   const unsupportedProvenance={...provenance,backend:'not-a-backend'} as unknown as ModelProvenance;
   const unsupportedPayload={...malformedPayload,provenance:unsupportedProvenance};
