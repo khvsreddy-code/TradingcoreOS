@@ -121,6 +121,7 @@ export class FyersMarketDataTransport {
       };
       this.sessions.set(key, session);
     }
+    const tokenChanged = session.accessToken !== accessToken;
     session.accessToken = accessToken;
     session.closing = false;
     session.listeners.add(listener);
@@ -129,7 +130,10 @@ export class FyersMarketDataTransport {
     newSymbols.forEach(symbol => session!.instruments.add(symbol));
 
     const stale = session.socket?.readyState === WebSocket.OPEN && session.lastTickAt > 0 && Date.now() - session.lastTickAt > 5_000;
-    if (stale) this.restartSocket(key, session);
+    // Never keep a socket authenticated with a rotated/expired token. Restart
+    // the shared feed once; the latest token is used for reconnect and resubscribe.
+    if (tokenChanged && session.socket) this.restartSocket(key, session);
+    else if (stale) this.restartSocket(key, session);
     else if (!session.socket || session.socket.readyState === WebSocket.CLOSED || session.socket.readyState === WebSocket.CLOSING) {
       void this.connect(key, session);
     } else if (newSymbols.length && session.socket.readyState === WebSocket.OPEN) {
@@ -305,6 +309,12 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
     .map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) }));
   const isDepth = feedClass === 'depth' || String(payload.type || '').toLowerCase() === 'dp' || String(payload.type || '').toLowerCase() === 'depthupdate';
 
+  // Keep each socket class strict. An informational/depth frame must not leak
+  // into a full-tick stream as an empty quote, and an LTP-only frame is not a
+  // valid depth snapshot.
+  if (feedClass === 'depth' && !depthBids.length && !depthAsks.length) return null;
+  if (feedClass === 'full' && ltp === undefined) return null;
+
   if (feedClass === 'lite') {
     if (ltp === undefined) return null;
     const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
@@ -360,9 +370,6 @@ function buildDomainEvent(tick: NormalizedMarketTick, feedClass: FyersDataFeedCl
       asks: (tick.ask || []).map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) })),
     };
   }
-  if (ltpMissing(tick.ltp)) {
-    return { ...base, type: 'DepthSnapshot', bids: [], asks: [] };
-  }
   if (feedClass === 'lite') {
     return {
       ...base, type: 'Quote', ltp: tick.ltp,
@@ -386,4 +393,3 @@ function buildDomainEvent(tick: NormalizedMarketTick, feedClass: FyersDataFeedCl
     ...(tick.ask?.[0] ? { askPrice: tick.ask[0].price, askQuantity: tick.ask[0].quantity } : {}),
   };
 }
-function ltpMissing(value: number | undefined): value is undefined { return value === undefined || !Number.isFinite(value); }
