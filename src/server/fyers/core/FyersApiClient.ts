@@ -35,8 +35,17 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   if (signal?.aborted) return Promise.reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' }));
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    const abort = () => { clearTimeout(timer); reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' })); };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => signal?.removeEventListener('abort', abort);
+    const abort = () => {
+      if (timer) clearTimeout(timer);
+      cleanup();
+      reject(Object.assign(new Error('FYERS request aborted'), { name: 'AbortError' }));
+    };
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
     signal?.addEventListener('abort', abort, { once: true });
   });
 }
