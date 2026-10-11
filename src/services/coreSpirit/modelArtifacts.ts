@@ -185,6 +185,12 @@ function validateProvenance(provenance: ModelProvenance): void {
       Array.isArray(provenance.trainingParameters)) {
     throw new Error('Model provenance trainingParameters must be an object');
   }
+  for(const [name,value] of Object.entries(provenance.trainingParameters)){
+    if(!name.trim()||!(value===null||typeof value==='string'||typeof value==='boolean'||
+      (typeof value==='number'&&Number.isFinite(value)))){
+      throw new Error('Model training parameter values must be named, finite JSON primitives');
+    }
+  }
   if (!Number.isSafeInteger(provenance.randomSeed) || provenance.randomSeed < 0) {
     throw new Error('Model randomSeed must be a non-negative safe integer');
   }
@@ -293,11 +299,22 @@ export class InMemoryModelArtifactStore<TWeights = unknown> implements ModelArti
 
 /** Recomputes a sealed artifact's content identity before persistence or inference. */
 export async function verifyModelArtifactIntegrity<TWeights>(artifact: ModelArtifact<TWeights>): Promise<boolean> {
-  if (!artifact || artifact.kind !== 'corespirit-model' ||
-      artifact.schemaVersion !== CORESPIRIT_MODEL_ARTIFACT_VERSION ||
-      !/^[a-f0-9]{64}$/.test(artifact.hash)) return false;
-  const expectedHash = await coreSpiritSha256(modelArtifactHashPayload(artifact));
-  return expectedHash === artifact.hash;
+  try{
+    if (!artifact || artifact.kind !== 'corespirit-model' ||
+        artifact.schemaVersion !== CORESPIRIT_MODEL_ARTIFACT_VERSION ||
+        !/^[a-f0-9]{64}$/.test(artifact.hash) ||
+        typeof artifact.name!=='string'||!artifact.name.trim() ||
+        !artifact.metrics||typeof artifact.metrics!=='object'||Array.isArray(artifact.metrics)) return false;
+    validateProvenance(artifact.provenance);
+    for(const [name,value] of Object.entries(artifact.metrics)){
+      if(!name.trim()||typeof value!=='number'||!Number.isFinite(value))return false;
+    }
+    if(typeof artifact.createdAt!=='string'||!Number.isFinite(Date.parse(artifact.createdAt)))return false;
+    const expectedHash = await coreSpiritSha256(modelArtifactHashPayload(artifact));
+    return expectedHash === artifact.hash;
+  }catch{
+    return false;
+  }
 }
 
 /** Pins inference to one immutable artifact; it never invokes training. */
