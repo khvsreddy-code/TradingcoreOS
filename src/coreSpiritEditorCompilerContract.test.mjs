@@ -41,6 +41,9 @@ assert.match(editor,/copilotValidationPassRef\.current===false/,'Copilot server 
 assert.match(chartRunner,/compileInWorker:/,'chart artifacts must compile off the UI thread on cache miss');
 assert.match(chartRunner,/runCoreSpiritArtifactInWorker/,'Run must accept a previously compiled artifact');
 assert.match(cache,/validateCoreSpiritExecutableArtifactOffThread/,'persistent artifacts must be integrity-checked off the UI thread');
+assert.match(client,/previewCoreSpiritArtifactOffThread/,'historical preflight must be run off the UI thread');
+assert.match(worker,/executeIrReadOnly/,'historical preflight must suppress runtime side effects');
+assert.match(worker,/message\.bars\.length>3000/,'historical preflight must bound the replay dataset');
 assert.match(pool,/Avoid hashing\/serializing a potentially large IR on the UI thread/,'execution worker dispatch must not re-validate large artifacts synchronously');
 assert.match(target,/updateCode\?/,'active chart target must expose transactional source replacement');
 assert.match(controller,/updateCode:\(source,artifact/,'chart controller must route artifact replacement directly to the worker');

@@ -100,7 +100,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       },
     });
     const generated=parseGeneratedPayload(String(generation.text||''));
-    const compiled=compileCoreSpirit(generated.source,'corespirit-copilot',{layer:'script'});
+    const compiled=compileCoreSpirit(generated.source,'corespirit-editor',{layer:'script'});
     const compilerDiagnostics=[...(compiled.diagnostics||[])];
     const artifactValid=Boolean(compiled.artifact&&validateExecutableArtifact(compiled.artifact));
     if(compiled.artifact&&!artifactValid)compilerDiagnostics.push({severity:'error' as const,message:'Compiler artifact failed integrity validation.',code:'COPILOT_INVALID_ARTIFACT'});

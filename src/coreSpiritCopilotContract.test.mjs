@@ -21,7 +21,15 @@ assert.match(route,/responseFormat:\s*\{/,'Copilot must use Gemini structured JS
 assert.match(route,/thinkingConfig:\{thinkingLevel:'low'\}/,'Copilot should use the low-latency Gemini thinking configuration');
 assert.doesNotMatch(route,/temperature\s*:/,'Gemini 3.x request must not include unsupported sampling parameters');
 assert.doesNotMatch(route,/VITE_[A-Z_]*GEMINI|VITE_[A-Z_]*GOOGLE/,'provider key must never be read from a browser-visible environment variable');
-assert.match(route,/compileCoreSpirit\(generated\.source/,'generated source must go through the canonical CoreScript compiler');
+assert.match(route,/compileCoreSpirit\(generated\.source,'corespirit-editor'/,'generated source must go through the canonical compiler with the same artifact identity as the editor');
+assert.match(editor,/copilotServerArtifactHashRef\.current=payload\.validation\?\.artifactHash/,'the Copilot response artifact hash must be pinned to its exact draft');
+assert.match(editor,/COPILOT_ARTIFACT_HASH_MISMATCH/,'server/local artifact identity mismatches must block Copilot Run');
+const worker=read('src/services/coreSpirit/coreSpiritCompiler.worker.ts');
+const client=read('src/services/coreSpirit/coreSpiritCompilerClient.ts');
+assert.match(worker,/type==='replayPreview'/,'validated Copilot artifacts should get an isolated replay preflight');
+assert.match(worker,/executeIrReadOnly/,'Copilot replay must suppress external effects');
+assert.match(worker,/message\.bars\.length>3000/,'replay preflight must be bounded to 3,000 bars');
+assert.match(client,/previewCoreSpiritArtifactOffThread/,'replay must execute through the compiler worker client');
 assert.match(route,/validateExecutableArtifact\(compiled\.artifact\)/,'generated artifact must pass integrity validation');
 assert.match(route,/createCoreSpiritSandbox\(\{layer:'script',target:'chart'\}\)/,'generated code must be checked against chart-layer grants');
 assert.match(route,/validateCoreScriptCapabilitiesAgainstSandbox/,'required capabilities must be checked against sandbox grants');
