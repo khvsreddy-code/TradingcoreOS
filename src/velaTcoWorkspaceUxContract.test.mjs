@@ -40,6 +40,11 @@ assert.equal((provider.match(/else void activeBrokerId\(\)\.then\(attach\)\.catc
   "both Vela live-subscription forms must attach if broker restore completes after subscribe");
 assert(!provider.includes("if (!brokerId) return () => {};"),
   "a cold-start subscription must not become a permanent no-op before broker restore");
+assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_CONNECTED', syncBroker\)/g) ?? []).length, 2,
+  "row and columnar subscriptions must recover when a broker is connected after chart mount");
+assert.equal((provider.match(/tradingCoreRuntime\.on\('BROKER_DISCONNECTED', syncBroker\)/g) ?? []).length, 2,
+  "row and columnar subscriptions must detach stale broker streams after disconnect");
+
 assert(provider.includes("const cached = plane.readCanonical()"), "Vela TCO provider must inspect shared canonical cache first");
 assert(provider.includes("return EMPTY_COLUMNAR_BARS"), "cold Vela column load must yield to progressive history");
 assert(provider.includes("plane.ensureReadyHistory(firstPaintBars)"), "cold Vela history must use the shared ChartDataPlane history path");
