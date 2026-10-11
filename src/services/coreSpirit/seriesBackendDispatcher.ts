@@ -80,13 +80,13 @@ export function selectCoreSpiritSeriesBackend(
   if (context.realtime) return { requested: 'cpu', workUnits: units, reason: 'realtime work stays on fused CPU' };
   const deterministic = context.deterministic !== false;
   const gpu = profiles.find((x) => x.backend === 'gpu');
-  if (supportsGroup(gpu, group) && (group.eligibleBackends?.includes('gpu') ?? true) && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
+  if (gpu && supportsGroup(gpu, group) && (group.eligibleBackends?.includes('gpu') ?? true) && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
     return { requested: 'gpu', workUnits: units, reason: 'large stateless historical workload' };
   }
   const wasm = profiles.find((x) => x.backend === 'wasm');
   const recurrence = hasRecurrence(group);
   const statefulWasmEligible = !recurrence || (context.allowStatefulWasm === true && wasm?.supportsStatefulSeries === true && context.bars <= Math.max(1, Math.floor(context.maxStatefulWasmBars ?? 16_384)));
-  if (supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 10_000))) {
+  if (wasm && supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 10_000))) {
     return { requested: 'wasm', workUnits: units, reason: 'long historical workload' };
   }
   return { requested: 'cpu', workUnits: units, reason: hasRecurrence(group) ? 'chronological recurrence stays on fused CPU' : 'CPU threshold/availability fallback' };

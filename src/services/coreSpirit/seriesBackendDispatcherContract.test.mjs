@@ -71,7 +71,7 @@ const actual = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, output,
   { realtime: false, bars: 20_000, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
   ] },
 );
@@ -85,7 +85,7 @@ const acceleratedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, acceleratedOutput,
   { realtime: false, bars: 20_000, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
   ] },
   { wasm: (_group, _input, target) => { executorCalled = true; target.set([9, 9]); } },
@@ -104,7 +104,7 @@ const failedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
     fallbackObserved = true;
   }, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
-    { backend: 'wasm', available: true, deterministic: true, vectorized: true },
+    { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
   ] },
   { wasm: (_group, _input, target) => { target[0] = 999; throw new Error('simulated WASM trap'); } },

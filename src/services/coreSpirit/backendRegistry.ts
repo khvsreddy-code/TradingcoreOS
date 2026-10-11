@@ -293,6 +293,9 @@ export async function executePlannedExternalCoreSpiritBackend(
   request: CoreSpiritBackendRequest,
   registry: CoreSpiritBackendRegistry,
 ): Promise<unknown> {
+  // Safety policy is checked before any stale-plan/capability work so that
+  // a reused research plan cannot even begin external dispatch for live work.
+  if (request.purpose === 'live') throw new Error('external compute backends are not permitted on the live chart path');
   if (plan.operation !== request.operation || plan.backend === 'js-scalar' || plan.backend === 'cpu-optimized') {
     throw new Error('execution plan does not target a registered external backend for this operation');
   }
@@ -303,7 +306,6 @@ export async function executePlannedExternalCoreSpiritBackend(
   if (currentPlan.backend !== plan.backend) {
     throw new Error(`stale backend plan: expected '${currentPlan.backend}', received '${plan.backend}'`);
   }
-  if (request.purpose === 'live') throw new Error('external compute backends are not permitted on the live chart path');
   if (plan.backend === 'remote-research' &&
       (request.purpose !== 'research-training' || request.allowRemoteResearch !== true || request.workload !== 'model-training')) {
     throw new Error('remote research execution requires an explicit research-training opt-in');
