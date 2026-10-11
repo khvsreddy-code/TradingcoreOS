@@ -43,7 +43,11 @@ function rawQuoteSymbols(req: AuthenticatedRequest): { values: string[]; error?:
   const supplied = req.method === 'POST'
     ? (req.body?.symbols ?? req.body?.instrument_keys)
     : req.query.symbols;
-  if (typeof supplied === 'string') return { values: supplied.split(',') };
+  if (typeof supplied === 'string') {
+    const values = supplied.split(',');
+    if (values.length > 5_000) return { values: [], error: 'Too many symbol entries in one request.', status:413 };
+    return { values };
+  }
   if (Array.isArray(supplied)) {
     if (supplied.some(value => typeof value !== 'string')) return { values: [], error: 'symbols must contain only strings.', status: 400 };
     // Bound parsing cost separately from broker capabilities; this is an input
