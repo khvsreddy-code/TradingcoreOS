@@ -41,7 +41,8 @@ function epoch(value: unknown, fallback: number): number | undefined {
   return fallback;
 }
 function metadata(row: Row, sequence: number, receivedAt: number): DomainEventMetadata {
-  const brokerTimestamp = epoch(first(row, ['timestamp', 'orderDateTime', 'tradeDateTime', 'exchOrdDateTime', 'fyTokenTimestamp']), receivedAt);
+  const rawBrokerTime = first(row, ['timestamp', 'orderDateTime', 'tradeDateTime', 'exchOrdDateTime', 'fyTokenTimestamp']);
+  const brokerTimestamp = rawBrokerTime === undefined ? undefined : epoch(rawBrokerTime, receivedAt);
   return {
     sequence,
     timestamp: brokerTimestamp ?? receivedAt,
