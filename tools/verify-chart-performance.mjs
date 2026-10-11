@@ -12,8 +12,9 @@ const settleMs = Math.max(0, Math.min(60000, Number(process.env.TCO_BROWSER_SETT
 const maxTickToComputeP95Ms = Number(process.env.TCO_MAX_TICK_TO_COMPUTE_P95_MS || 20);
 const maxTickToPatchP95Ms = Number(process.env.TCO_MAX_TICK_TO_PATCH_P95_MS || 25);
 const maxTickToRenderP95Ms = Number(process.env.TCO_MAX_TICK_TO_RENDER_P95_MS || 25);
+const maxMarketUpdateAgeMs = Number(process.env.TCO_MAX_MARKET_UPDATE_AGE_MS || 2000);
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
-const requiredPipelineFields = ['marketUpdatesPerSec','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
+const requiredPipelineFields = ['marketUpdatesPerSec','lastMarketUpdateAgeMs','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
 
 function run(args) {
   const result = spawnSync('agent-browser', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -66,6 +67,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
       if (!Number.isFinite(Number(sample[field]))) throw new Error(`Browser verification: non-finite pipeline telemetry value: ${field}`);
     }
     const marketRate = Number(sample.marketUpdatesPerSec) || 0;
+    const lastMarketUpdateAgeMs = Number(sample.lastMarketUpdateAgeMs);
     const renderRate = Number(sample.renderUpdatesPerSec) || 0;
     const computeRate = Number(sample.computeUpdatesPerSec) || 0;
     const tickToComputeP95Ms = Number(sample.tickToComputeP95Ms) || 0;
@@ -75,6 +77,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     if (marketRate <= 0 || computeRate <= 0 || renderRate <= 0) {
       throw new Error(`Browser verification: no sustained market → compute → render activity for ${sample.key || url}; this run did not prove performance under live load.`);
     }
+    if (lastMarketUpdateAgeMs > maxMarketUpdateAgeMs) throw new Error(`Browser verification: market stream is stale (${lastMarketUpdateAgeMs.toFixed(0)}ms since last packet; limit ${maxMarketUpdateAgeMs}ms); live-load proof requires a currently active feed.`);
     if (tickToComputeP95Ms > maxTickToComputeP95Ms) throw new Error(`Browser verification: tick-to-compute p95 exceeded (${tickToComputeP95Ms.toFixed(2)}ms > ${maxTickToComputeP95Ms}ms)`);
     if (tickToPatchP95Ms > maxTickToPatchP95Ms) throw new Error(`Browser verification: tick-to-patch p95 exceeded (${tickToPatchP95Ms.toFixed(2)}ms > ${maxTickToPatchP95Ms}ms)`);
     if (tickToRenderP95Ms > maxTickToRenderP95Ms) throw new Error(`Browser verification: tick-to-render p95 exceeded (${tickToRenderP95Ms.toFixed(2)}ms > ${maxTickToRenderP95Ms}ms)`);
@@ -98,6 +101,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxTickToComputeP95Ms,
     maxTickToPatchP95Ms,
     maxTickToRenderP95Ms,
+    maxMarketUpdateAgeMs,
     requireSharedMemory,
     requireAuth,
     sharedMemory: perf.sharedMemory,
@@ -105,6 +109,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     pipeline: perf.pipeline.map((sample) => ({
       key: sample.key,
       marketHz: sample.marketUpdatesPerSec,
+      lastMarketUpdateAgeMs: sample.lastMarketUpdateAgeMs,
       computeHz: sample.computeUpdatesPerSec,
       renderHz: sample.renderUpdatesPerSec,
       computeCoalescingRate: sample.computeCoalescingRate,
