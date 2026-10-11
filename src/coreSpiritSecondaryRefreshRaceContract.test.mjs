@@ -29,6 +29,7 @@ function secondaryBar(close, time) {
 const engine = new CoreSpiritVelaEngine();
 const prepared = await engine.prepare(`
 indicator "Secondary Refresh Race"
+input scale: int = 1 min=1 max=5
 let banknifty = market("BANKNIFTY")
 plot(banknifty.close)
 `, 'secondary-refresh-race-contract');
@@ -63,8 +64,8 @@ assert.equal(pending.length, 1, 'initial execution should start one secondary-se
 
 // Multiple fast settings updates can overlap. The final update must be the only
 // one that mutates data or emits an execution result.
-session.update({});
-session.update({});
+session.update({scale:2});
+session.update({scale:3});
 assert.equal(pending.length, 3, 'each forced update starts a new refresh generation');
 
 const secondaryTime = bars.at(-1).time - 600;
@@ -94,6 +95,9 @@ mutableBars[mutableBars.length - 1] = {
   high: mutableBars.at(-1).high + 1,
 };
 session.notifyBars(undefined);
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setTimeout(resolve, 0));
 const afterStaleCompletion = await session.getContext();
 assert.equal(runtimeError, undefined, runtimeError?.message);
 assert.ok(latestValues(afterStaleCompletion).some((value) => Number(value) === 222),
@@ -122,7 +126,7 @@ const stoppedSession = engine.execute({
   onError: (error) => { throw error; },
 });
 assert.equal(stopPending.length, 1);
-stoppedSession.update({});
+stoppedSession.update({scale:2});
 assert.equal(stopPending.length, 2);
 stoppedSession.stop();
 stopPending[1].resolve([secondaryBar(222, secondaryTime)]);
