@@ -344,7 +344,9 @@ export class FyersOrderStateEngine {
           this.memoryStates.set(stateKey, merged);
           return { duplicate: false, applied: true, sequence, events: [merged] };
         }
-        return { duplicate: false, applied: true, sequence, events: [] };
+        // Pre-ack INTENT/SUBMITTED events have no broker id yet, but they are
+        // still canonical lifecycle events and must be visible to audit/consumers.
+        return { duplicate: false, applied: true, sequence, events: [canonical] };
       }
       return { duplicate: false, applied: false, sequence, events: source === 'reconciliation' && current ? [current] : [] };
     }
