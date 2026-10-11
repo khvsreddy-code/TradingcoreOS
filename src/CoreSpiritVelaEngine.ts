@@ -608,15 +608,19 @@ export class CoreSpiritVelaEngine {
         if(!rangeBars.length)return;
         const generation=++viewportRunGeneration;
         const updateGeneration=updateVersion;
+        // Reserve the cache key before scheduling the async worker so repeated
+        // identical pan/zoom notifications cannot queue duplicate history runs.
+        lastViewportComputationKey=viewportKey;
         void executeInWorker(rangeBars,rangeContextKey,true,{from:0,to:rangeBars.length},{from:viewportFrom,to:viewportTo})
           .then(result=>{
             if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
             emitScenePatches(safeOutputs(result.outputs),{from:viewportFrom,to:viewportTo});
-            lastViewportComputationKey=viewportKey;
           })
           .catch(error=>{
-            if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion)
+            if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion){
+              lastViewportComputationKey=undefined;
               handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+            }
           });
       },
       notifyBars(reason,dirtyRange) {
