@@ -73,7 +73,13 @@ export interface Trade extends DomainEventMetadata {
 
 export interface OrderUpdate extends DomainEventMetadata {
   type: 'OrderUpdate';
+  /** Legacy alias retained for existing UI/client contracts. */
   orderId: string;
+  /** Canonical FYERS broker id; null only for pre-ack intents. */
+  brokerOrderId?: string | null;
+  /** Stable TradingCore-generated client tag propagated to FYERS orderTag. */
+  clientOrderId?: string | null;
+  /** Canonical lifecycle state (INTENT/SUBMITTED/ACKNOWLEDGED/OPEN/PARTIAL/...). */
   status: string;
   side?: 'buy' | 'sell' | 'unknown';
   quantity?: number;
@@ -88,6 +94,8 @@ export interface Fill extends DomainEventMetadata {
   type: 'Fill';
   tradeId: string;
   orderId: string;
+  brokerOrderId?: string | null;
+  clientOrderId?: string | null;
   price: number;
   quantity: number;
   side: 'buy' | 'sell' | 'unknown';
