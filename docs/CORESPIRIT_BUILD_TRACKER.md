@@ -279,7 +279,8 @@ The chart data plane established the zero-copy canonical chart data plane at the
 - [x] Runtime consumes the compiler-produced series-fusion plan.
 - [x] Add a regression contract covering the full compiler → optimizer → execution-plan chain.
 - [~] The optimizer is still conservative: no generic state-identity analysis for shareable stateful calls.
-- [ ] Add DAG critical-path/fan-out scheduling and a richer cost model.
+- [x] Expose dependency depth, estimated critical path and fan-out in the optimizer cost diagnostics.
+- [ ] Add CFG-aware scheduling/dominance only after representative benchmarks, while preserving chronological state and effect order.
 - [ ] Add representative 5k/50k/500k-bar benchmark evidence.
 - [ ] Prove family-level Vela drawing requests and CoreSpirit optimized runtime speedups in browser traces.
 
@@ -305,3 +306,13 @@ The chart data plane established the zero-copy canonical chart data plane at the
 - [x] Added contracts for moved retained geometry, stable marker relocation and 36k-instruction optimizer cost diagnostics.
 - [ ] All renderer-owned overlays still require verification with actual Vela RenderPacket/ScenePatch integration and authenticated live-browser telemetry.
 - [ ] Production deployment remains blocked by the Vercel deployment API quota (more than 100 deployments in 24 hours); no setting or plan changes were made.
+
+
+## v142 — coordinate-safe geometry and indexed incremental updates
+
+- [x] Retained visual dirty spans are indexed by stable object identity, avoiding a full collection scan for each output during incremental updates.
+- [x] Marker state uses a time-sorted key list and an index map; same-time/forming-marker updates replace one slot, chronological inserts use binary search, and relocation emits ordered remove/insert deltas.
+- [x] Vela's actual ScenePatch applier contract verifies marker relocation keeps neighboring marker state intact.
+- [x] Custom geometry explicitly marked screen, normalized, percentage, price or bar space is not treated as market time. Unresolvable geometry returns a conservative dirty-span fallback instead of a misleading narrow range.
+- [x] Contracts cover 1,000 retained markers, forming-marker replacement, marker relocation through Vela, and custom-geometry coordinate-space handling.
+- [ ] Authenticated browser proof under 1/4/8 charts, 5k history load/prepend and realtime forming-bar telemetry remains outstanding.

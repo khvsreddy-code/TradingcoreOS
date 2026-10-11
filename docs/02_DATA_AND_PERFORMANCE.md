@@ -563,3 +563,6 @@ CoreSpirit chart workers receive a graph snapshot once per graph revision and re
 A bounded update accounts for both an object's prior extent and its replacement extent. Stable-ID line, zone/box, label/shape, polyline and background updates union retained and new spans before deciding whether to skip a patch. Marker time relocation emits ordered removal and insertion deltas so it cannot overwrite an unrelated sorted marker slot. Time-bearing custom geometry contributes its full point-time envelope. Viewport-domain zones stay conservative because viewport coordinates are not canonical market times.
 
 Optimizer dependency cost diagnostics are analysis-only and use reductions rather than large argument spreads, avoiding JavaScript engine argument-count limits for large IR programs.
+
+
+Retained object lookup is keyed by visual identity rather than scanning each renderer collection for every output. Marker values use a time-sorted identity list plus an index map: a same-time update replaces a single slot, chronological insertion searches by time, and relocation emits remove-then-insert deltas that are verified against Vela's ScenePatch applier. Custom visual geometry only contributes a narrow time span when its coordinate space is unambiguously market time; otherwise it falls back to the caller's dirty range.

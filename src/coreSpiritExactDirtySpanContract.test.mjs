@@ -95,6 +95,24 @@ assert.deepEqual(
   [10, 30, 40],
   'Vela must apply marker move deltas in order without overwriting a neighboring marker',
 );
+assert.deepEqual(movedMarkerDiff.snapshot().markers.map(marker => marker.time), [10, 30, 40]);
+
+const indexedMarkerDiff = new CoreSpiritSceneDiff('dirty-span-indexed-markers');
+indexedMarkerDiff.seed(Array.from({ length: 1000 }, (_, index) => ({
+  kind: 'marker', id: `marker-${index}`, time: index, price: 100 + index,
+})));
+assert.equal(indexedMarkerDiff.snapshot().markers.length, 1000, 'ordered marker index should retain every seeded marker');
+assert.deepEqual(
+  indexedMarkerDiff.snapshot().markers.slice(0, 3).map(marker => marker.time),
+  [0, 1, 2],
+);
+const sameTimeMarkerPatch = indexedMarkerDiff.apply([
+  { kind: 'marker', id: 'marker-999', time: 999, price: 9999 },
+], { from: 999, to: 999 }).find(patch => patch.kind === 'value');
+assert.equal(sameTimeMarkerPatch.series.length, 1, 'forming-marker updates should emit one replacement, not reorder the marker list');
+assert.equal(sameTimeMarkerPatch.series[0].start, 999);
+assert.equal(sameTimeMarkerPatch.series[0].op, 'replace-range');
+assert.equal(indexedMarkerDiff.snapshot().markers[999].price, 9999);
 
 assert.deepEqual(outputDirtySpan({
   kind: 'customVisual',
