@@ -126,7 +126,6 @@ function normalizeResult(value: unknown): CoreSpiritWorkerRunResult {
 export class CoreSpiritWorkerPool {
   private readonly slots: WorkerSlot[] = [];
   private readonly queue: WorkerJob[] = [];
-  private queueCursor = 0;
   private disposed = false;
   private readonly maxWorkers:number;
   private readonly contextSlots = new Map<string,WorkerSlot>();
@@ -186,7 +185,7 @@ export class CoreSpiritWorkerPool {
 
     return new Promise((resolve,reject)=>{
       const contextKey=options?.contextKey || sourceId;
-      this.queue.push({
+      const job:WorkerJob={
         artifact:artifact as CoreSpiritExecutableArtifact,
         sourceId,
         contextKey,
@@ -202,7 +201,18 @@ export class CoreSpiritWorkerPool {
         hmmArtifacts:options?.hmmArtifacts,
         readOnly:options?.readOnly===true,
         runtimeOptions:options?.runtimeOptions,
-      });
+      };
+
+      // Market updates are snapshots, not a durable event queue. If this chart
+      // context is already queued behind a busy worker, only the newest snapshot
+      // can produce useful output; reject superseded promises so no caller hangs.
+      for(let index=this.queue.length-1;index>=0;index-=1){
+        const queued=this.queue[index]!;
+        if(queued.contextKey!==contextKey)continue;
+        this.queue.splice(index,1);
+        queued.reject(new Error('CoreSpirit worker request superseded by a newer snapshot for the same context.'));
+      }
+      this.queue.push(job);
       this.queue.sort((a,b)=>a.priority-b.priority);
       this.dispatch();
     });
@@ -214,9 +224,8 @@ export class CoreSpiritWorkerPool {
       try{slot.job?.reject(new Error('CoreSpirit worker pool disposed'));}catch{}
       try{slot.worker.terminate();}catch{}
     }
-    for(let i=this.queueCursor;i<this.queue.length;i++) this.queue[i].reject(new Error('CoreSpirit worker pool disposed'));
+    for(const job of this.queue) job.reject(new Error('CoreSpirit worker pool disposed'));
     this.queue.length=0;
-    this.queueCursor=0;
     this.contextSlots.clear();
     this.sharedBuffers.clear();
     this.contextArtifacts.clear();
@@ -227,26 +236,29 @@ export class CoreSpiritWorkerPool {
   }
 
   private dispatch():void {
-    if(this.disposed) return;
+    if(this.disposed)return;
 
-    while(this.queueCursor<this.queue.length){
-      const job=this.queue[this.queueCursor]!;
-      let slot=this.contextSlots.get(job.contextKey);
-
-      if(slot && slot.busy) return;
-      if(!slot){
-        slot=this.slots.find(candidate=>!candidate.busy);
-        if(!slot && this.slots.length<this.maxWorkers) slot=this.createSlot();
-        if(!slot) return;
-        this.contextSlots.set(job.contextKey,slot);
-        slot.contexts.add(job.contextKey);
-      }
-
-      this.queueCursor+=1;
-      this.attachJob(slot,job);
-      if(this.queueCursor===this.queue.length){
-        this.queue.length=0;
-        this.queueCursor=0;
+    // Search for any runnable context rather than head-of-line blocking on a
+    // chart whose own worker is busy. The queue itself contains only one pending
+    // snapshot per context due to runArtifact's coalescing step above.
+    let madeProgress=true;
+    while(madeProgress){
+      madeProgress=false;
+      for(let index=0;index<this.queue.length;index+=1){
+        const job=this.queue[index]!;
+        let slot=this.contextSlots.get(job.contextKey);
+        if(slot?.busy)continue;
+        if(!slot){
+          slot=this.slots.find(candidate=>!candidate.busy);
+          if(!slot&&this.slots.length<this.maxWorkers)slot=this.createSlot();
+          if(!slot)continue;
+          this.contextSlots.set(job.contextKey,slot);
+          slot.contexts.add(job.contextKey);
+        }
+        this.queue.splice(index,1);
+        this.attachJob(slot,job);
+        madeProgress=true;
+        break;
       }
     }
   }
