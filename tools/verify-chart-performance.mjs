@@ -50,7 +50,8 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const perfJson = run(['eval', 'JSON.stringify(window.__TCO_PERF__ || null)']);
   const perf = JSON.parse(perfJson || 'null');
   if (!perf || !Array.isArray(perf.cells)) throw new Error(`Browser verification: __TCO_PERF__ missing for ${url}`);
-  if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);  if (!perf.capturedAt) throw new Error(`Browser verification: telemetry capture timestamp missing for ${url}`);
+  if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);
+  if (!perf.capturedAt) throw new Error(`Browser verification: telemetry capture timestamp missing for ${url}`);
   if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
   if (perf.pipeline.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} realtime pipeline sample(s), got ${perf.pipeline.length}`);
   for (const cell of perf.cells) {
@@ -62,8 +63,6 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   for (const sample of perf.pipeline) {
     for (const field of requiredPipelineFields) {
       if (!(field in sample)) throw new Error(`Browser verification: pipeline telemetry field missing: ${field}`);
-    }
-    for (const field of requiredPipelineFields) {
       if (!Number.isFinite(Number(sample[field]))) throw new Error(`Browser verification: non-finite pipeline telemetry value: ${field}`);
     }
     const marketRate = Number(sample.marketUpdatesPerSec) || 0;
