@@ -151,7 +151,10 @@ async function fallbackQuoteCandle(client: FyersApiClient, symbol: string, signa
       volume: Number.isFinite(volume) ? volume : 0,
       liveSeed: true,
     }];
-  } catch {
+  } catch (error: any) {
+    // Do not disguise a quota response or deadline as "no historical data";
+    // callers must surface throttling and cancellation to the UI accurately.
+    if (Number(error?.status) === 429 || error?.name === 'AbortError' || signal.aborted) throw error;
     return [];
   }
 }
