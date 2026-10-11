@@ -4,6 +4,7 @@ import { EncryptionService } from '../encryption/EncryptionService.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { FyersMarketDataService } from '../fyers/market/FyersMarketDataService.js';
+import { resolveFyersCapabilities, toPublicFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 
 export const fyersMarketRoutes = Router();
 fyersMarketRoutes.use(requireUser);
@@ -16,7 +17,8 @@ async function clientFor(req: AuthenticatedRequest, res: Response): Promise<Fyer
     return null;
   }
   try {
-    return new FyersApiClient(EncryptionService.decrypt(session.accessTokenEncrypted));
+    const capabilities = resolveFyersCapabilities(userId);
+    return new FyersApiClient(EncryptionService.decrypt(session.accessTokenEncrypted), undefined, capabilities);
   } catch {
     res.status(500).json({ success: false, error: 'Unable to decrypt the Fyers session.' });
     return null;
@@ -24,7 +26,8 @@ async function clientFor(req: AuthenticatedRequest, res: Response): Promise<Fyer
 }
 
 function fyersSymbol(value: string): string {
-  const raw = decodeURIComponent(String(value || '')).trim();
+  let raw = '';
+  try { raw = decodeURIComponent(String(value || '')).trim(); } catch { return ''; }
   const n = raw.toLowerCase().replace(/\s+/g, '');
   const aliases: Record<string, string> = {
     nifty: 'NSE:NIFTY50-INDEX', nifty50: 'NSE:NIFTY50-INDEX',
@@ -36,19 +39,83 @@ function fyersSymbol(value: string): string {
   return raw;
 }
 
-fyersMarketRoutes.get('/:brokerId/quotes', async (req: AuthenticatedRequest, res: Response, next) => {
+function rawQuoteSymbols(req: AuthenticatedRequest): { values: string[]; error?: string } {
+  const supplied = req.method === 'POST'
+    ? (req.body?.symbols ?? req.body?.instrument_keys)
+    : req.query.symbols;
+  if (typeof supplied === 'string') return { values: supplied.split(',') };
+  if (Array.isArray(supplied)) {
+    if (supplied.some(value => typeof value !== 'string')) return { values: [], error: 'symbols must contain only strings.' };
+    // Bound parsing cost separately from broker capabilities; this is an input
+    // abuse guard, not an exchange/provider symbol limit.
+    if (supplied.length > 5_000) return { values: [], error: 'Too many symbol entries in one request.' };
+    return { values: supplied as string[] };
+  }
+  return { values: [], error: 'symbols is required as a comma-separated string or string array.' };
+}
+
+async function handleFyersQuotes(req: AuthenticatedRequest, res: Response, next: () => void) {
   if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
   const client = await clientFor(req, res); if (!client) return;
-  const symbols = String(req.query.symbols || '').split(',').map(fyersSymbol).filter(Boolean);
-  if (!symbols.length) return res.status(400).json({ success: false, error: 'symbols is required' });
-  if (symbols.length > 50) return res.status(400).json({ success: false, error: 'FYERS quotes supports at most 50 symbols per request.' });
-  try {
-    const data = await new FyersMarketDataService(client).quotes(symbols);
-    res.setHeader('Cache-Control', 'private, max-age=2');
-    return res.json({ success: true, data });
-  } catch (error: any) {
-    return res.status(Number(error?.status) === 429 ? 429 : 502).json({ success: false, error: error?.message || 'Unable to load FYERS quotes', brokerCode: error?.brokerCode });
+  const capabilities = resolveFyersCapabilities(req.tradingCoreUserId!);
+  const parsed = rawQuoteSymbols(req);
+  if (parsed.error) return res.status(parsed.error === 'symbols is required as a comma-separated string or string array.' ? 400 : 413)
+    .json({ success: false, error: parsed.error });
+  const symbols = [...new Set(parsed.values.map(fyersSymbol).map(symbol => symbol.trim()).filter(Boolean))];
+  if (!symbols.length) return res.status(400).json({ success: false, error: 'symbols must include at least one valid symbol.' });
+  if (symbols.length > capabilities.maxQuoteBatch) {
+    return res.status(400).json({
+      success: false,
+      error: `FYERS ${capabilities.plan} Quotes supports at most ${capabilities.maxQuoteBatch} unique symbols per request.`,
+      code: 'FYERS_QUOTE_BATCH_LIMIT',
+      limit: capabilities.maxQuoteBatch,
+      requested: symbols.length,
+      plan: capabilities.plan,
+    });
   }
+  try {
+    const data = await new FyersMarketDataService(client, capabilities).quotes(symbols);
+    res.setHeader('Cache-Control', 'private, max-age=2');
+    return res.json({
+      success: true,
+      data,
+      capabilities: {
+        plan: capabilities.plan,
+        maxQuoteBatch: capabilities.maxQuoteBatch,
+        requestedSymbols: symbols.length,
+        providerRequests: 1,
+      },
+    });
+  } catch (error: any) {
+    const status = Number(error?.status) === 429 ? 429 : Number(error?.status) === 400 ? 400 : 502;
+    return res.status(status).json({
+      success: false,
+      error: error?.message || 'Unable to load FYERS quotes',
+      brokerCode: error?.brokerCode,
+      code: error?.code,
+      limit: error?.limit,
+      plan: error?.plan,
+    });
+  }
+}
+
+// POST keeps Prime's 1,000-symbol batch out of URL/query-string length limits.
+// GET remains backward-compatible for existing watchlist clients.
+fyersMarketRoutes.get('/:brokerId/quotes', (req: AuthenticatedRequest, res: Response, next) => {
+  void handleFyersQuotes(req, res, next);
+});
+fyersMarketRoutes.post('/:brokerId/quotes', (req: AuthenticatedRequest, res: Response, next) => {
+  void handleFyersQuotes(req, res, next);
+});
+
+fyersMarketRoutes.get('/:brokerId/capabilities', async (req: AuthenticatedRequest, res: Response, next) => {
+  if (String(req.params.brokerId).toLowerCase() !== 'fyers') return next();
+  const userId = req.tradingCoreUserId!;
+  const session = await BrokerRepository.getSession('fyers', userId);
+  if (!session || session.status !== 'Connected') {
+    return res.status(401).json({ success: false, error: 'Fyers is not connected for this account.' });
+  }
+  return res.json({ success: true, data: toPublicFyersCapabilities(resolveFyersCapabilities(userId)) });
 });
 
 fyersMarketRoutes.get('/:brokerId/depth', async (req: AuthenticatedRequest, res: Response, next) => {
