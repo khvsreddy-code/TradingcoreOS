@@ -162,7 +162,7 @@ tradingRoutes.get('/:brokerId/option-chain', injectBrokerSession, async (req: Br
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Unable to load option chain') }); }
 });
 
-async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload, riskDecisionId: string) {
+async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload, riskDecisionId: string, userId: string) {
   const gatewayUrl = process.env.FYERS_EXECUTION_GATEWAY_URL?.replace(/\/$/, '');
   const gatewaySecret = process.env.FYERS_EXECUTION_GATEWAY_SECRET;
   if (!gatewayUrl || !gatewaySecret) throw new Error('FYERS execution gateway is not configured. Set FYERS_EXECUTION_GATEWAY_URL and FYERS_EXECUTION_GATEWAY_SECRET on the TradingCore server.');
@@ -182,6 +182,7 @@ async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: Brok
     version: 1,
     riskApproved: true,
     strategyId: 'tco-manual-order',
+    accountKey: createHash('sha256').update(userId).digest('hex'),
     riskDecisionId: String(riskDecisionId).slice(0, 128),
     issuedAt,
     expiresAt: issuedAt + 30_000,
@@ -258,7 +259,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     let data: unknown;
     try {
       data = brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL
-        ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload, idempotencyKey)
+        ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload, idempotencyKey, userId)
         : await req.brokerAdapter.placeOrder(req.accessToken, orderPayload);
     } catch (err: unknown) {
       const message = getErrorMessage(err, 'Broker order request failed');
