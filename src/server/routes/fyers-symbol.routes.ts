@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
-import { FyersSymbolMasterService } from '../fyers/symbols/FyersSymbolMasterService.js';
+import { FyersSymbolMasterService, type FyersMasterName } from '../fyers/symbols/FyersSymbolMasterService.js';
 
 export const fyersSymbolRoutes = Router();
 fyersSymbolRoutes.use(requireUser);
@@ -14,8 +14,13 @@ fyersSymbolRoutes.get('/:brokerId/symbol-master', async (req: AuthenticatedReque
 
   const requested = String(req.query.master || 'NSE_CM').trim().toUpperCase();
   const allowed = FyersSymbolMasterService.masterNames();
-  const masters = requested === 'ALL' ? allowed : requested.split(',').map((item) => item.trim()).filter(Boolean);
-  if (masters.length === 0 || masters.some((master) => !allowed.includes(master as never))) {
+  const masters: FyersMasterName[] = requested === 'ALL'
+    ? allowed
+    : requested.split(',').map((item) => item.trim()).filter((item): item is FyersMasterName =>
+        allowed.includes(item as FyersMasterName),
+      );
+  const requestedParts = requested === 'ALL' ? allowed : requested.split(',').map((item) => item.trim()).filter(Boolean);
+  if (masters.length === 0 || masters.length !== requestedParts.length) {
     return res.status(400).json({ success: false, error: 'Unsupported FYERS symbol master' });
   }
 
@@ -26,7 +31,7 @@ fyersSymbolRoutes.get('/:brokerId/symbol-master', async (req: AuthenticatedReque
     const results = await Promise.allSettled(
       masters.map(async (master) => ({
         master,
-        rows: await FyersSymbolMasterService.search(master as never, query, limit),
+        rows: await FyersSymbolMasterService.search(master, query, limit),
       })),
     );
 
