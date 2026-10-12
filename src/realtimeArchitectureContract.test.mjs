@@ -3,8 +3,11 @@ import fs from 'node:fs';
 
 const vercel = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 assert.equal(vercel.services?.web?.functions?.['api/index.ts']?.maxDuration, 15);
-assert.equal(vercel.services?.realtime?.runtime, 'container');
-assert.equal(vercel.services?.realtime?.entrypoint, 'Dockerfile');
+assert.equal(vercel.services?.realtimefresh?.runtime, 'container');
+assert.equal(vercel.services?.realtimefresh?.entrypoint, 'Dockerfile');
+assert.equal(vercel.services?.realtimefresh?.ignoreCommand, 'node tools/ignore-realtime-build.mjs');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimefresh'), 'health route must target the deployed realtime service');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimefresh'), 'WebSocket route must target the deployed realtime service');
 assert.deepEqual(vercel.regions, ['bom1'], 'India-first Vercel functions must remain in Mumbai (bom1)');
 assert.ok(vercel.services?.web?.functions?.['api/queue.ts'], 'queue worker must remain separate from api/index');
 
@@ -35,6 +38,7 @@ assert.match(gateway, /realtime_gateway_owner/);
 assert.match(gateway, /broadcast/);
 assert.match(gateway, /COORDINATION_CHANNEL/);
 assert.match(gateway, /verifyRealtimeTicket/);
+assert.match(gateway, /\/api\/realtime\/healthz/, 'the Vercel health rewrite path must be handled by the gateway');
 assert.match(gateway, /WebSocketServer/);
 
 const frontend = fs.readFileSync(new URL('./frontendPerformanceContract.test.mjs', import.meta.url), 'utf8');
