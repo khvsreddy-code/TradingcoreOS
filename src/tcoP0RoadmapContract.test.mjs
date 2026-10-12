@@ -26,7 +26,7 @@ assert.doesNotMatch(liveChart, /LegacyDrawing|legacyDrawing|DrawingController\b/
 assert.match(coreSpirit, /const loadSecondaryData = async \(force\s*=\s*false\)/);
 assert.match(multiSymbolTimeframe, /context\.alignment/, 'multi-timeframe snapshots must honor alignment policy');
 assert.match(multiSymbolTimeframe, /context\.maxStalenessMs/, 'multi-timeframe snapshots must honor stale-data bounds');
-assert.match(coreSpirit, /state:\s*confirmed\s*\?\s*['"]confirmed['"]\s*:\s*['"]developing['"]/);
+assert.match(multiSymbolTimeframe, /snapshot\.state && snapshot\.state === 'developing'/, 'last-confirmed alignment must exclude developing higher-timeframe samples');
 assert.match(coreSpirit, /Secondary market data refresh failed/);
 assert.match(coreSpirit, /void loadSecondaryData\(\)/);
 assert.doesNotMatch(provider, /getChartDataPlane\(['"]fyers['"]/);
