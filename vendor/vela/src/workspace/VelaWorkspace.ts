@@ -477,6 +477,8 @@ export class VelaWorkspace {
             host: this.root,
             // Row icons come from each descriptor's OWNING provider (resolveSymbolIcon).
             iconFor: (d) => this.feed.symbolIconOf(d),
+            // Search exchange catalogs on demand; startup still indexes only small local seeds.
+            search: (query, limit, market) => this.feed.searchSymbols(query, limit, market),
             onSelect: (ticker) => this.active.setSymbol(ticker),
             onOpenChange: (open) => {
                 // In-chart dialogs (indicator inputs, chart settings) live inside a cell's
