@@ -713,7 +713,12 @@ export class DrawingToolbar {
         if (!iconBtn) return;
         const type = this.lastUsed.get(group.id) ?? group.tools[0]?.type;
         const tool = group.tools.find((t) => t.type === type) ?? group.tools[0];
-        iconBtn.innerHTML = hitHtml(tool?.icon ?? '');
+        const candidate = tool?.icon ?? '';
+        // Lazy/custom catalog entries can be blank or contain only a generic circle.
+        // In that case, render a distinct semantic glyph for each toolbar group.
+        const onlyGenericCircle = /<circle\b/i.test(candidate)
+            && !/<(?:line|path|polyline|polygon|rect)\b/i.test(candidate);
+        iconBtn.innerHTML = hitHtml(candidate && !onlyGenericCircle ? candidate : drawingGroupFallbackIcon(group.id));
         // The tip names the tool the icon arms (the group's last-used), not the group label.
         const cell = this.groupCells.get(group.id);
         if (cell) this.tipText.set(cell, tool?.label ?? group.label);
@@ -832,6 +837,21 @@ const STAR_FILLED_ICON = icon('star-filled');
 /** Force an inline SVG icon to fill its 18px slot. */
 function sizedIcon(svg: string): string {
     return svg.replace('<svg ', '<svg width="100%" height="100%" ');
+}
+
+/** Distinct fallback glyphs when drawing group icon metadata is missing. */
+function drawingGroupFallbackIcon(groupId: string): string {
+    const body: Record<string, string> = {
+        'lines-channels-pitchforks': '<path d="M3 18 21 6"/><path d="M3 22 21 10"/><path d="M3 14 21 2"/>',
+        'fibonacci-gann': '<path d="M3 5h18M3 10h14M3 15h10M3 20h6"/>',
+        'patterns-waves-harmonics': '<polyline points="3 18 7 7 11 14 16 5 21 16"/>',
+        'measurements': '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M7 15 17 9M7 9v2M17 13v2"/>',
+        'brushes-arrows-shapes': '<path d="M4 18 8 13 11 15 18 6"/><path d="M14 6h4v4"/>',
+        'text': '<path d="M5 6h14M12 6v13"/>',
+        'icons': '<path d="M5 21V3M5 4h14l-3 4 3 4H5"/>',
+    };
+    const glyph = body[groupId] ?? '<path d="M4 18 8 12 12 15 20 5"/>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + glyph + '</svg>';
 }
 
 /** Wrap an SVG in a centered, fixed-size span (default 18px) so it sits consistently in a button. */
