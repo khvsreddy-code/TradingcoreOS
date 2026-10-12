@@ -302,7 +302,7 @@ export class BrokerMarketDataClient {
               ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
               receivedAt: new Date().toISOString(),
               ...(() => {
-                const raw = q.timestamp;
+                const raw = q.timestamp ?? q.last_traded_time ?? q.lastTradedTime ?? q.exch_feed_time ?? q.exchFeedTime ?? q.last_trade_time;
                 const numeric = typeof raw === 'number' ? raw : Number(raw);
                 if (Number.isFinite(numeric) && numeric > 0) {
                   return { lastTradeTimestamp: new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString() };
