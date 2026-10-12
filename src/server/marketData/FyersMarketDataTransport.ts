@@ -299,13 +299,13 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
     price: finite(payload[`bid_price${i}`]),
     quantity: finite(payload[`bid_size${i}`]),
     orders: finite(payload[`bid_order${i}`]),
-  })).filter((level): level is { price: number; quantity: number; orders?: number } => level.price !== undefined && level.quantity !== undefined)
+  })).filter((level): level is { price: number; quantity: number; orders: number | undefined } => level.price !== undefined && level.quantity !== undefined)
     .map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) }));
   const depthAsks = [1, 2, 3, 4, 5].map(i => ({
     price: finite(payload[`ask_price${i}`]),
     quantity: finite(payload[`ask_size${i}`]),
     orders: finite(payload[`ask_order${i}`]),
-  })).filter((level): level is { price: number; quantity: number; orders?: number } => level.price !== undefined && level.quantity !== undefined)
+  })).filter((level): level is { price: number; quantity: number; orders: number | undefined } => level.price !== undefined && level.quantity !== undefined)
     .map(level => ({ price: level.price, quantity: level.quantity, ...(level.orders !== undefined ? { orders: level.orders } : {}) }));
   const isDepth = feedClass === 'depth' || String(payload.type || '').toLowerCase() === 'dp' || String(payload.type || '').toLowerCase() === 'depthupdate';
 
