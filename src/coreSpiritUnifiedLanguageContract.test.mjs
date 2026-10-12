@@ -6,8 +6,6 @@ import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { semanticTypeForDeclaredName } from './services/coreSpirit/semanticTypeSystem.ts';
 
 const beginner=`
-data market = market("NSE:NIFTY50", "5m")
-
 let fast = ta.ema(close, 20)
 let slow = ta.ema(close, 50)
 
