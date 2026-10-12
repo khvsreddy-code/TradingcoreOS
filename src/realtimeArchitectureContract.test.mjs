@@ -12,7 +12,7 @@ assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healt
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimefresh'), 'WebSocket route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/:path*' && route.destination?.service === 'api'), 'API routes must target the API service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/(.*)' && route.destination?.service === 'web'), 'SPA routes must target the web service');
-assert.ok(vercel.services?.web?.routes?.some((route) => route.transforms?.some((transform) => transform.type === 'request.path' && transform.op === 'set' && transform.args === '/index.html')), 'Web service must transform deep links to the Vite index.html entrypoint');
+assert.ok(vercel.services?.web?.rewrites?.some((route) => route.source === '/(.*)' && route.destination === '/index.html'), 'Web service must rewrite deep links to the Vite index.html entrypoint');
 assert.deepEqual(vercel.regions, ['bom1'], 'India-first Vercel functions must remain in Mumbai (bom1)');
 assert.ok(vercel.services?.api?.functions?.['api/queue.ts'], 'queue worker must remain configured on the API service');
 
