@@ -156,11 +156,14 @@ export class DrawingToolbar {
      */
     private hydrateAdvancedDrawingIcons(): void {
         if (this.advancedCatalogHydration) return;
-        const unloaded = this.def.groups.some((group) => group.tools.some((tool) => {
-            const family = drawingFamilyForType(tool.type);
-            return !!family && !drawingTypes().some((meta) => meta.type === tool.type);
-        }));
-        if (!unloaded) return;
+        // Always refresh metadata for advanced tools in a shared workspace toolbar.
+        // Per-cell toolbars can be hidden, so relying on their lazy import side-effects
+        // leaves generic placeholder glyphs (often circles) in the visible shared bar.
+        const hasAdvancedTools = this.def.groups.some((group) =>
+            group.tools.some((tool) => drawingFamilyForType(tool.type))
+            || group.sections?.some((section) => section.tools.some((tool) => drawingFamilyForType(tool.type)),
+        );
+        if (!hasAdvancedTools) return;
 
         this.advancedCatalogHydration = loadAdvancedDrawingCatalog()
             .then(() => {
