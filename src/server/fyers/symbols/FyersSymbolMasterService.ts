@@ -27,8 +27,12 @@ export class FyersSymbolMasterService {
       const row = entry.value;
       if(!row || typeof row!=='object' || Array.isArray(row)) continue;
       const rowRecord = row as FyersSymbolRecord;
-      const symbol=String(rowRecord.symbol ?? rowRecord.symbol_ticker ?? rowRecord.symTicker ?? rowRecord.fyToken ?? rowRecord.fytoken ?? entry.symbolKey ?? '').trim();
-      if(symbol) records.set(symbol,{...rowRecord, symbol: String(rowRecord.symbol ?? rowRecord.symbol_ticker ?? rowRecord.symTicker ?? symbol)});
+      const explicitSymbol=String(rowRecord.symbol ?? rowRecord.symbol_ticker ?? rowRecord.symTicker ?? '').trim();
+      // The real FYERS masters key each row by a canonical PREFIX:TICKER. Preserve that
+      // key ahead of fyToken (which is a numeric provider token, not a chart symbol).
+      const keyedTicker=String(entry.symbolKey ?? '').trim();
+      const symbol=keyedTicker.includes(':') ? keyedTicker : (explicitSymbol || keyedTicker || String(rowRecord.fyToken ?? rowRecord.fytoken ?? '').trim());
+      if(symbol) records.set(symbol,{...rowRecord, symbol});
     }
     this.cache.set(master,{records,expiresAt:Date.now()+24*60*60*1000});
     return records;
