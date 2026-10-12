@@ -3,7 +3,7 @@ import path from 'node:path';
 const root=process.cwd();
 const vercel=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8'));
 const rewrites=vercel.rewrites||[];
-if (!rewrites.some((r)=>r.source==='/api/:path*'&&r.destination?.service==='web')) throw new Error('API catch-all must route to the web service');
+if (!rewrites.some((r)=>r.source==='/api/:path*'&&r.destination?.service==='api')) throw new Error('API catch-all must route to the API service');
 if (!rewrites.some((r)=>r.source==='/(.*)'&&r.destination?.service==='web')) throw new Error('SPA catch-all must route to the web service');
 const text=fs.readFileSync(path.join(root,'src/App.tsx'),'utf8');
 const workspaceShell=fs.readFileSync(path.join(root,'src/appShells/TradingWorkspaceShell.tsx'),'utf8');
