@@ -44,7 +44,10 @@ assert.match(auth, /Do not perform additional Supabase calls inside onAuthStateC
 assert.match(dataPlane, /Keep Vela on the typed canonical path/);
 assert.match(dataPlane, /setColumnarHistory/);
 assert.match(chartController, /seedLiveCandle/);
-assert.match(runtimeController, /seedLiveCandle/);
+assert.doesNotMatch(runtimeController, /seedLiveCandle/, 'runtime must not synthesize one-price candles before broker history arrives');
+assert.match(runtimeController, /event\.type==='quote'/, 'quote-only packets must not mutate candle state');
+assert.doesNotMatch(dataPlane, /void this\.ensureHistory\(\)/, 'subscription must not start object history before the typed loader');
+assert.match(dataPlane, /this\.ensureReadyColumns\(limit\)\.catch/, 'typed columnar history must be the first cold-start path');
 assert.match(runtimeController, /setHistoryFromCanonical/);
 assert.match(velaChrome, /registerSidePanel\(bookmarksPanel\)/);
 assert.match(velaChrome, /registerStatePersistence\(watchlistStatePersistence\)/);
