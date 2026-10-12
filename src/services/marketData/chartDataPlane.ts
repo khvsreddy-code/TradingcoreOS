@@ -347,7 +347,11 @@ export class ChartDataPlane {
     if (this.state.columns && this.state.candles.length === 0) {
       const result = this.onColumnarTick(tick, price);
       chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
-      if (!result.latest || !result.changed) return;
+      if (!result.latest || !result.changed) {
+        // Keep last-price/header subscribers fresh without mutating candles for a stale or duplicate trade bucket.
+        this.emit({ type: 'quote', snapshot: this.snapshot() });
+        return;
+      }
       if (!result.bucketChanged) chartPerformanceTelemetry.recordFormingBarReplaceLast(this.key);
 
       this.state.revision += 1;
@@ -377,7 +381,10 @@ export class ChartDataPlane {
       true,
     );
     chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
-    if (!result.candles.length) return;
+    if (!result.candles.length) {
+      this.emit({ type: 'quote', snapshot: this.snapshot() });
+      return;
+    }
     const previousLength = this.state.candles.length;
     const previousClose = this.state.candles[previousLength - 1]?.close;
     this.state.candles = result.candles;
