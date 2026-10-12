@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   ADVANCED_DRAWING_FAMILIES,
@@ -6,7 +7,22 @@ import {
   drawingTypes,
   defaultToolbar,
   loadDrawingFamily,
-} from './vendor/vela/src/core/drawings/index.ts';
+  loadAdvancedDrawingCatalog,
+} from '../vendor/vela/src/core/drawings/index.ts';
+
+const userDrawingSource = readFileSync(new URL('../vendor/vela/src/renderers/native/drawings/UserDrawingController.ts', import.meta.url), 'utf8');
+const drawingRegistrySource = readFileSync(new URL('../vendor/vela/src/core/drawings/registry.ts', import.meta.url), 'utf8');
+const nativeRendererSource = readFileSync(new URL('../vendor/vela/src/renderers/native/NativeRenderer.ts', import.meta.url), 'utf8');
+const tcoChromeSource = readFileSync(new URL('./services/core/chart/tcoVelaChrome.ts', import.meta.url), 'utf8');
+
+assert.match(userDrawingSource, /isCanonicalToolbarDefinition/);
+assert.match(userDrawingSource, /this\.customToolbar = !isCanonicalToolbarDefinition\(def\)/);
+assert.match(drawingRegistrySource, /function lazyDrawingIcon/);
+assert.doesNotMatch(drawingRegistrySource, /icon: svg24\('<circle cx="12" cy="12" r="7"\/>/);
+assert.match(nativeRendererSource, /private settingsEnabled = true/);
+for (const iconId of ['activity','briefcase','shield','list','layers','table','user','layout','play']) {
+  assert.match(tcoChromeSource, new RegExp(iconId + ': svg16\\('));
+}
 
 const advancedTypes = [
   'parallelchannel',
@@ -36,6 +52,12 @@ await loadDrawingFamily('patterns');
 const patternsAfter = new Set(drawingTypes().map((meta) => meta.type));
 assert.equal(patternsAfter.has('gartley'), true);
 assert.equal(patternsAfter.has('fibretracement'), false, 'loading patterns must not hydrate fibonacci');
+
+await loadDrawingFamily('fibonacci');
+await loadAdvancedDrawingCatalog();
+const hydratedToolbar = defaultToolbar();
+const hydratedIcons = hydratedToolbar.groups.flatMap((group) => group.tools.map((tool) => tool.icon));
+assert.ok(new Set(hydratedIcons).size > 20, 'advanced drawing tools must expose distinct recognisable SVG icons');
 
 assert.deepEqual([...ADVANCED_DRAWING_FAMILIES], ['channels', 'fibonacci', 'patterns']);
 

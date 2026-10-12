@@ -144,7 +144,7 @@ function epoch(value: unknown): number {
   const numeric = typeof value === 'number' ? value : Number(value);
   if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
   const parsed = Date.parse(String(value ?? ''));
-  return Number.isFinite(parsed) ? parsed : Date.now();
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 
@@ -209,19 +209,6 @@ function upperBound(values: Float64Array, target: number): number {
   let lo = 0, hi = values.length;
   while (lo < hi) { const mid = (lo + hi) >>> 1; if (values[mid]! <= target) lo = mid + 1; else hi = mid; }
   return lo;
-}
-
-function timeframeMs(timeframe: string): number {
-  const match = String(timeframe).trim().match(/^(\d+)([smhdw]?)$/i);
-  if (!match) return 5 * 60_000;
-  const n = Math.max(1, Number(match[1]));
-  switch (String(match[2]).toLowerCase()) {
-    case 's': return n * 1000;
-    case 'h': return n * 60 * 60_000;
-    case 'd': return n * 24 * 60 * 60_000;
-    case 'w': return n * 7 * 24 * 60 * 60_000;
-    default: return n * 60_000;
-  }
 }
 
 function activeBrokerIdSync(): string | null {
@@ -333,75 +320,36 @@ export class TcoVelaDataProvider implements DataProvider {
     const abort = () => Boolean(opts?.signal?.aborted);
     if (abort()) return [];
 
-    // History and quote are independent. Race them for time-to-first-visible-price,
-    // but always keep the history promise alive so real candles replace the seed.
-    const historyPromise: Promise<OHLCV[]> = plane.ensureReadyHistory(firstPaintBars).then(historicalToVelaBars).catch(() => []);
-    const quotePromise = tradingCoreRuntime.getMarketQuotes([symbol]).catch(() => ({}));
+    // A quote is a price, not OHLC history. Never manufacture a flat candle when
+    // historical data is unavailable.
+    const history = await plane.ensureReadyHistory(firstPaintBars)
+      .then(historicalToVelaBars)
+      .catch(() => [] as OHLCV[]);
 
-    type FirstPaintResult =
-      | { kind: 'history'; bars: OHLCV[] }
-      | { kind: 'quote'; bars: OHLCV[] };
+    // Rapid symbol/timeframe changes cancel this consumer. Stale work may populate
+    // the shared cache, but never repaint over the user's latest selection.
+    if (abort()) return [];
+    const first = history.slice(-requested);
+    if (first.length) onBatch(first);
 
-    const quoteBars = async (): Promise<OHLCV[]> => {
-      if (abort()) return [];
-      const quote = await quotePromise;
-      if (abort()) return [];
-      const row = quote[symbol];
-      const ltp = Number(row?.ltp);
-      if (!Number.isFinite(ltp) || ltp <= 0) return [];
-      const now = Date.now();
-      const interval = timeframeMs(tcoTimeframe);
-      return [{
-        time: Math.floor(now / interval) * interval,
-        open: ltp,
-        high: ltp,
-        low: ltp,
-        close: ltp,
-        volume: Number.isFinite(Number(row?.volume)) ? Number(row?.volume) : undefined,
-      }];
-    };
-
-    let first: OHLCV[] = [];
-    const firstResult: FirstPaintResult = await Promise.race([
-      historyPromise.then((bars): FirstPaintResult => ({ kind: 'history', bars })),
-      quoteBars().then((bars): FirstPaintResult => ({ kind: 'quote', bars })),
-    ]);
-
-    if (abort()) return firstResult.bars;
-    if (firstResult.bars.length > 0) {
-      first = firstResult.bars;
-      onBatch(first.slice(-requested));
+    // Resolve the visible chart immediately. Older history is warmed at low priority
+    // and promoted if the user scrolls back while it is queued.
+    if (first.length > 0 && first.length < requested) {
+      void plane.loadOlderHistory('warm', {
+        visibleBars: Math.min(300, requested - first.length),
+      }).then(() => {
+        if (abort()) return;
+        const canonical = plane.readCanonical();
+        const expanded = canonical.length
+          ? marketViewToBars(canonical, range, requested)
+          : historicalToVelaBars(plane.getCompatibilityCandles(requested));
+        if (expanded.length > first.length) onBatch(expanded.slice(-requested));
+      }).catch(() => {
+        // Optional background history must not invalidate the already-painted first batch.
+      });
     }
 
-    // Always let real history supersede the quote seed when it arrives. The quote seed
-    // exists only to make the first frame non-empty; it is never written into historyStore.
-    const history = await historyPromise;
-    if (abort()) return history.length ? history : first;
-    if (history.length > 0 && (firstResult.kind !== 'history' || history.length !== first.length)) {
-      first = history;
-      onBatch(history.slice(-requested));
-    } else if (history.length === 0 && first.length === 0) {
-      // History can legally return an empty page during a broker/session race. Re-use
-      // the already-started quote request so Vela never leaves a blank canvas while
-      // the live price path is healthy.
-      const fallback = await quoteBars();
-      if (!abort() && fallback.length) {
-        first = fallback;
-        onBatch(fallback);
-      }
-    }
-
-    let currentLength = history.length || first.length;
-    while (!abort() && currentLength > 0 && currentLength < requested) {
-      const beforeLength = currentLength;
-      const older = historicalToVelaBars(await plane.loadOlderHistory('warm', { visibleBars: Math.min(1200, requested - currentLength) }));
-      if (abort()) return older;
-      currentLength = older.length;
-      if (currentLength <= beforeLength) break;
-      onBatch(older.slice(-requested));
-    }
-
-    return !abort() ? (plane.readCanonical().length ? marketViewToBars(plane.readCanonical(), range, requested) : first) : first;
+    return first;
   }
 
   /**
@@ -425,7 +373,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const loaded = plane.readCanonical();
     if (loaded.length) return marketViewToBars(loaded, range, requested);
     // A zero-row canonical plane is not a successful history response.
-    // Reuse the same broker/quote fallback as normal chart bootstrap.
+    // Retry only through the real-history path; do not convert LTP into historical OHLC.
     return this.getBars(ticker, timeframe, range);
   }
 
@@ -451,20 +399,7 @@ export class TcoVelaDataProvider implements DataProvider {
       lastError = error;
     }
 
-    // Compatibility fallback is deliberately outside the canonical path. It is only
-    // used when the shared plane could not initialize, and the next websocket update
-    // still enters through the canonical TCO data plane.
-    try {
-      const quote = await tradingCoreRuntime.getMarketQuotes([symbol]);
-      const row = quote[symbol];
-      if (row && Number.isFinite(Number(row.ltp)) && Number(row.ltp) > 0) {
-        const now = Date.now();
-        const interval = timeframeMs(tcoTimeframe);
-        return [{ time: Math.floor(now / interval) * interval, open: Number(row.ltp), high: Number(row.ltp), low: Number(row.ltp), close: Number(row.ltp), volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined }];
-      }
-    } catch {
-      // Preserve the original canonical-history error at the Vela fault boundary.
-    }
+    // Never fabricate a historical candle from a quote; preserve the history error.
     if (lastError) throw lastError;
     return [];
   }
@@ -688,7 +623,7 @@ export function prewarmTcoVelaHistory(
     const requested = Math.max(200, Math.min(2000, Math.floor(Number(limit) || 1200)));
     for (const raw of unique) {
       const plane = getChartDataPlane(brokerId, runtimeSymbol(raw), runtimeTimeframe(timeframe));
-      void plane.ensureReadyHistory(requested).catch(() => {});
+      void plane.prewarmHistory(requested).catch(() => {});
     }
   };
 

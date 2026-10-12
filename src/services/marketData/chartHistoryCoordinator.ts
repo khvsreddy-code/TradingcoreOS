@@ -23,22 +23,39 @@ export class ChartHistoryCoordinator {
   private active = 0;
   private sequence = 0;
   private queue: Array<QueueItem<any>> = [];
+  private queuedByKey = new Map<string, QueueItem<any>>();
   private inflight = new Map<string, Promise<any>>();
+
+  private sortQueue(): void {
+    this.queue.sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      if (a.priority === PRIORITY.initial) return b.sequence - a.sequence;
+      return a.sequence - b.sequence;
+    });
+  }
+
+  promote(key: string, priority: HistoryRequestPriority = 'initial'): boolean {
+    const queued = this.queuedByKey.get(key);
+    const nextPriority = PRIORITY[priority];
+    if (!queued || nextPriority >= queued.priority) return false;
+    queued.priority = nextPriority;
+    queued.sequence = ++this.sequence;
+    this.sortQueue();
+    return true;
+  }
 
   request<T>(key: string, run: () => Promise<T>, priority: HistoryRequestPriority = 'visible'): Promise<T> {
     const existing = this.inflight.get(key);
-    if (existing) return existing as Promise<T>;
+    if (existing) {
+      this.promote(key, priority);
+      return existing as Promise<T>;
+    }
 
     const promise = new Promise<T>((resolve, reject) => {
-      this.queue.push({ key, priority: PRIORITY[priority], sequence: ++this.sequence, run, resolve, reject });
-      this.queue.sort((a, b) => {
-        if (a.priority !== b.priority) return a.priority - b.priority;
-        // Latest cold-start request wins over older queued cold-starts. Rapid
-        // symbol/timeframe switching should paint the user's newest choice
-        // rather than waiting behind abandoned chart selections.
-        if (a.priority === PRIORITY.initial) return b.sequence - a.sequence;
-        return a.sequence - b.sequence;
-      });
+      const item: QueueItem<T> = { key, priority: PRIORITY[priority], sequence: ++this.sequence, run, resolve, reject };
+      this.queue.push(item);
+      this.queuedByKey.set(key, item);
+      this.sortQueue();
       this.pump();
     });
     this.inflight.set(key, promise);
@@ -48,6 +65,7 @@ export class ChartHistoryCoordinator {
   private pump(): void {
     while (this.active < this.maxConcurrent && this.queue.length) {
       const item = this.queue.shift()!;
+      this.queuedByKey.delete(item.key);
       this.active += 1;
       Promise.resolve()
         .then(item.run)

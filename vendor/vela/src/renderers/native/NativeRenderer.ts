@@ -364,7 +364,8 @@ export class NativeRenderer implements IChartRenderer {
      *  so dialogs center globally instead of clipping inside one cell). Null = the plot. */
     private dialogHost: HTMLElement | null = null;
     private settingsButton: HTMLButtonElement | null = null;
-    private settingsEnabled = false;
+    // TradingCoreOS uses Vela's native settings dialog for candle, scale, grid and theme.
+    private settingsEnabled = true;
 
     // ── "scroll to most recent bar" button (bottom-right; shown only when the latest bar is scrolled off and the cursor is near) ──
     private scrollButton: HTMLButtonElement | null = null;

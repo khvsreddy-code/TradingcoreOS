@@ -318,6 +318,31 @@ function prettyLazyDrawingLabel(type: DrawingTypeKey): string {
     return type.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').replace(/\b\w/g, (value) => value.toUpperCase());
 }
 
+/** Recognisable fallback glyph while an advanced drawing family is loading. */
+function lazyDrawingIcon(type: DrawingTypeKey): string {
+    if (/fib|gann|dedekind|sonic|golden|supersonic/.test(type)) {
+        return svg24('<line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="3" y1="20" x2="21" y2="20"/>');
+    }
+    if (/channel|pitchfork|regression/.test(type)) {
+        return svg24('<line x1="3" y1="17" x2="21" y2="9"/><line x1="3" y1="21" x2="21" y2="13"/><line x1="3" y1="13" x2="21" y2="5"/>');
+    }
+    if (/arrow/.test(type)) return svg24('<path d="M4 20 19 5"/><path d="M9 5h10v10"/>');
+    if (/pattern|abcd|elliott|gartley|butterfly|headshoulders|crab|shark|cypher|bat/.test(type)) {
+        return svg24('<polyline points="3 18 7 7 11 14 16 5 21 16"/>');
+    }
+    if (/position|range|measure|magnifier|vwap|profile/.test(type)) {
+        return svg24('<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 19 20 5"/>');
+    }
+    if (/ellipse|circle|arc|spiral/.test(type)) {
+        return svg24('<ellipse cx="12" cy="12" rx="8.5" ry="5.5"/><path d="M5 12a7 7 0 0 1 14 0"/>');
+    }
+    if (/brush|freehand|highlighter|path|polyline|curve/.test(type)) {
+        return svg24('<path d="M4 18 8 13 11 15 18 6"/><path d="M4 21h8"/>');
+    }
+    if (/flag|stamp|icon/.test(type)) return svg24('<path d="M5 21V3"/><path d="M5 4h13l-3 4 3 4H5"/>');
+    return svg24('<polyline points="3 17 8 10 12 14 17 6 21 9"/>');
+}
+
 /** Metadata for tools whose implementation is intentionally not imported yet. */
 export function lazyDrawingTypes(family?: AdvancedDrawingFamily): DrawingTypeMeta[] {
     const families = family ? [family] : ADVANCED_DRAWING_FAMILIES;
@@ -331,7 +356,7 @@ export function lazyDrawingTypes(family?: AdvancedDrawingFamily): DrawingTypeMet
                     : currentFamily === 'fibonacci' ? (type.startsWith('fib') || type.startsWith('trendfib') || type.startsWith('gann') || ['dedekind','sonic','supersonic','goldensonic','goldensupersonic'].includes(type) ? 'fibonacci' : 'measure')
                     : ['xabcd','abcd','headshoulders','elliottimpulse','elliottcorrection','gartley','bat','butterfly','crab','shark','cypher'].includes(type) ? 'patterns' : 'harmonics',
                 label: prettyLazyDrawingLabel(type),
-                icon: svg24('<circle cx="12" cy="12" r="7"/>'),
+                icon: lazyDrawingIcon(type),
                 defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
                 create: () => { throw new Error(`Drawing type '${type}' is not loaded; load its advanced drawing family before creating it.`); },
             });

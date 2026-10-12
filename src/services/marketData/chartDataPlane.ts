@@ -87,6 +87,8 @@ type PlaneState = {
   olderHistoryLoading: boolean;
   historyPromise?: Promise<HistoricalCandle[]>;
   olderHistoryPromise?: Promise<HistoricalCandle[]>;
+  olderHistoryRequestKey?: string;
+  olderHistoryPriority?: 'visible' | 'warm';
   feedStop?: () => void;
   marketStop?: () => void;
   idleTimer?: ReturnType<typeof setTimeout>;
@@ -489,6 +491,28 @@ export class ChartDataPlane {
     return this.ensureHistory(limitOverride);
   }
 
+  /**
+   * Warm a rarely-used dataset without competing with a selected chart. If the user
+   * selects it while queued, the foreground request promotes this same single-flight.
+   */
+  prewarmHistory(limitOverride?: number): Promise<void> {
+    if (this.state.historyPromise || this.state.historyReady) return Promise.resolve();
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    const baseLimit = initialHistoryCandles(this.timeframe);
+    const requestedLimit = Number.isFinite(Number(limitOverride))
+      ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride))))
+      : baseLimit;
+    if (historyStore.get(this.brokerId, this.instrumentKey, interval)?.length) return Promise.resolve();
+
+    const requestKey = `${this.key}:initial:${requestedLimit}`;
+    return chartHistoryCoordinator.request(requestKey, async () => {
+      const rows = await tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, requestedLimit);
+      const normalized = normalizeHistory(rows);
+      if (normalized.length) historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit);
+      return normalized;
+    }, 'warm').then(() => undefined);
+  }
+
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
@@ -621,8 +645,15 @@ export class ChartDataPlane {
 
   async loadOlderHistory(priority: 'visible' | 'warm' = 'visible', demand?: { visibleBars?: number }): Promise<HistoricalCandle[]> {
     if (this.state.historyReady && !this.state.candles.length && this.state.columns) this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
-    if (this.state.olderHistoryPromise || !this.state.historyReady || this.state.olderHistoryExhausted || this.state.candles.length >= MAX_HISTORY_CANDLES) {
-      return this.state.olderHistoryPromise || this.state.candles;
+    if (this.state.olderHistoryPromise) {
+      if (priority === 'visible' && this.state.olderHistoryPriority === 'warm' && this.state.olderHistoryRequestKey) {
+        chartHistoryCoordinator.promote(this.state.olderHistoryRequestKey, 'visible');
+        this.state.olderHistoryPriority = 'visible';
+      }
+      return this.state.olderHistoryPromise;
+    }
+    if (!this.state.historyReady || this.state.olderHistoryExhausted || this.state.candles.length >= MAX_HISTORY_CANDLES) {
+      return this.state.candles;
     }
     const oldest = this.state.candles[0];
     if (!oldest?.timestamp) return this.state.candles;
@@ -642,6 +673,8 @@ export class ChartDataPlane {
       this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     }
     const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    this.state.olderHistoryRequestKey = requestKey;
+    this.state.olderHistoryPriority = priority;
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataBefore(this.instrumentKey, interval, oldest.timestamp, limit), priority)
       .then(rows => {
         const older = normalizeHistory(rows).filter(row => Date.parse(row.timestamp) < Date.parse(oldest.timestamp));
@@ -655,7 +688,11 @@ export class ChartDataPlane {
       .finally(() => {
         this.state.olderHistoryLoading = false;
         this.state.olderHistoryPromise = undefined;
-        if (priority === 'visible') this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        if (this.state.olderHistoryRequestKey === requestKey) {
+          this.state.olderHistoryRequestKey = undefined;
+          this.state.olderHistoryPriority = undefined;
+        }
+        if (priority === 'visible' || this.state.historyReady) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
       });
     this.state.olderHistoryPromise = promise;
     return promise;

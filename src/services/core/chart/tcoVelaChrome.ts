@@ -18,6 +18,22 @@ import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
 import { getAutomations } from '../../workspace/workspaceState';
+import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
+
+// TCO-only topbar / panel actions need real registered SVGs. Unknown Vela ids otherwise
+// render blank spans inside clickable icon-only controls.
+const TCO_CHROME_ICONS: Record<string, string> = {
+  activity: svg16('<path d="M1.5 8h3l2-5 3 10 2-5h3"/>'),
+  briefcase: svg16('<rect x="2" y="5" width="12" height="9" rx="1.5"/><path d="M5 5V3h6v2M2 8h12"/>'),
+  shield: svg16('<path d="M8 1.5 13.5 3.5v4c0 3.4-2.4 5.8-5.5 7-3.1-1.2-5.5-3.6-5.5-7v-4z"/><path d="m5.5 7.8 1.7 1.8 3.4-3.4"/>'),
+  list: svg16('<path d="M5 3h9M5 8h9M5 13h9"/><path d="M2 3h.1M2 8h.1M2 13h.1"/>'),
+  layers: svg16('<path d="m8 1.5 6 3.2-6 3.2-6-3.2z"/><path d="m2 8 6 3.2L14 8M2 11l6 3.2 6-3.2"/>'),
+  table: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M1.5 6h13M6 2v12M10 6v8"/>'),
+  user: svg16('<circle cx="8" cy="4.5" r="2.5"/><path d="M2 14c.3-3 2.3-4.5 6-4.5s5.7 1.5 6 4.5"/>'),
+  layout: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M7 2v12M7 7h7"/>'),
+  play: svg16('<path d="M4 2.5 13.5 8 4 13.5z"/>'),
+};
+for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
 type WatchlistItem = { symbol: string; label: string; short: string };
 

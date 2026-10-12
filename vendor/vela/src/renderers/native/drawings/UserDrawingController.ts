@@ -72,6 +72,17 @@ export interface UserDrawingDeps {
 /** No interaction targets on the interleave layers — handles always paint in front. */
 const EMPTY_TARGETS: PaintTargets = {};
 
+function isCanonicalToolbarDefinition(definition: ToolbarDefinition): boolean {
+    const canonical = defaultToolbar();
+    return definition.groups.length === canonical.groups.length
+        && definition.groups.every((group, index) => {
+            const expected = canonical.groups[index];
+            return !!expected
+                && group.id === expected.id
+                && group.tools.map((tool) => tool.type).join('|') === expected.tools.map((tool) => tool.type).join('|');
+        });
+}
+
 /**
  * Which interleave layer a drawing belongs to: the first series boundary at-or-above its z —
  * the slice painted just before that series, so a drawing TYING a series' z paints under it.
@@ -189,7 +200,9 @@ export class UserDrawingController implements IDrawingsRendererPort {
 
     // ── IDrawingsRendererPort (commands down) ──
     setToolbar(def: ToolbarDefinition): void {
-        this.customToolbar = true;
+        // The core pushes the initial resolved toolbar on every chart. That is not a
+        // custom toolbar: classifying it as custom stopped real icons replacing placeholders.
+        this.customToolbar = !isCanonicalToolbarDefinition(def);
         this.toolbarDefinition = def;
         this.toolbar.setDefinition(def);
     }

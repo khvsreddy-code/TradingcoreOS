@@ -51,4 +51,24 @@ assert.deepEqual(order, ['old','new'], 'already-running work preserves correctne
 const queued = coordinator.snapshot();
 assert.equal(queued.active, 0);
 assert.equal(queued.queued, 0);
+const promoted = new ChartHistoryCoordinator();
+const unblock = [];
+const blockers = Array.from({ length: promoted.maxConcurrent }, (_, index) =>
+  promoted.request('block-' + index, () => new Promise((resolve) => unblock.push(resolve)), 'initial')
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(promoted.snapshot().active, promoted.maxConcurrent, 'blockers should fill the history budget');
+
+const promotedOrder = [];
+const queuedWarm = promoted.request('selected', async () => { promotedOrder.push('selected'); return 'selected'; }, 'warm');
+const otherWarm = promoted.request('background', async () => { promotedOrder.push('background'); return 'background'; }, 'warm');
+const selectedForeground = promoted.request('selected', async () => { promotedOrder.push('duplicate-selected'); return 'wrong'; }, 'initial');
+unblock[0]('released');
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(promotedOrder[0], 'selected', 'foreground selection must promote ahead of speculative history');
+for (const release of unblock.slice(1)) release('released');
+await Promise.all([...blockers, queuedWarm, otherWarm, selectedForeground]);
+assert.equal(promoted.snapshot().queued, 0);
+assert.equal(promoted.snapshot().active, 0);
+
 console.log('CHART_CANDLE_DATA_PLANE_FAST_SWITCH_CONTRACT_OK');
