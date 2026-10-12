@@ -37,11 +37,13 @@ function descriptorFromMaster(master: FyersMasterName, row: FyersSymbolRecord): 
   if (!ticker || !ticker.includes(':')) return undefined;
   const prefix = ticker.slice(0, ticker.indexOf(':')).toUpperCase();
   if (!/^[A-Z0-9_-]{2,16}$/.test(prefix)) return undefined;
+  const providerTicker = ticker.slice(ticker.indexOf(':') + 1);
+  if (!providerTicker) return undefined;
   const description = textField(row, 'description', 'symbol_desc', 'symbolDesc', 'display_name', 'name');
-  const kind = master.endsWith('_FO') || master.endsWith('_COM') ? 'derivative' :
-    master.endsWith('_CD') ? 'currency' : master === 'MCX_COM' || master === 'NSE_COM' ? 'commodity' :
+  const kind = master === 'NSE_COM' || master === 'MCX_COM' ? 'commodity' :
+    master === 'NSE_CD' ? 'currency' : master.endsWith('_FO') ? 'derivative' :
     /INDEX/i.test(ticker) ? 'index' : 'equity';
-  return { ticker, prefix, description: description || ticker, type: kind, market: master };
+  return { ticker: providerTicker, prefix, description: description || ticker, type: kind, market: master };
 }
 
 async function loadFyersSymbolCatalog(): Promise<SymbolDescriptor[]> {
@@ -88,7 +90,9 @@ async function loadFyersSymbolCatalog(): Promise<SymbolDescriptor[]> {
 function runtimeSymbol(ticker: string): string {
   const value = String(ticker || '').trim();
   if (!value) return 'NSE:NIFTY50-INDEX';
-  return value.includes(':') ? value : `NSE:${value}`;
+  if (value.includes(':')) return value;
+  const discovered = symbolCatalog?.symbols.find((item) => item.ticker.toUpperCase() === value.toUpperCase());
+  return `${discovered?.prefix || 'NSE'}:${value}`;
 }
 
 function runtimeTimeframe(timeframe: string): string {
