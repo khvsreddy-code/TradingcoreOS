@@ -249,6 +249,8 @@ export interface SymbolPickerOptions {
     /** The row's icon URL — routed to the descriptor's OWNING provider
      *  (`resolveSymbolIcon`). Absent or `undefined` per row ⇒ the initials badge. */
     iconFor?: (d: SymbolDescriptor) => string | undefined;
+    /** Optional remote/provider search. The existing indexed results remain visible while it runs. */
+    search?: (query: string, limit: number, market: string) => Promise<SymbolDescriptor[]>;
 }
 
 /** Rows rendered per page — the list GROWS by this much every time the scroll nears the
@@ -264,6 +266,10 @@ export class SymbolPicker {
     private highlighted = 0;
     private seed = '';
     private activeTab = 'All';
+    private remoteSymbols: SymbolDescriptor[] = [];
+    private remoteResultKey = '';
+    private remoteTimer: ReturnType<typeof setTimeout> | null = null;
+    private remoteSequence = 0;
     private tabs!: HTMLElement;
     private visible = PAGE;
     /** The last filter pass returned fewer raw rows than asked — the pool is drained
@@ -299,6 +305,7 @@ export class SymbolPicker {
                 this.activeTab = t;
                 for (const c of this.tabs.children) delete (c as HTMLElement).dataset.active;
                 b.dataset.active = '1';
+                this.beginRemoteSearch();
                 this.refresh();
             });
             this.tabs.appendChild(b);
@@ -327,6 +334,7 @@ export class SymbolPicker {
                 if (open) {
                     this.input.value = this.seed.toUpperCase();
                     this.seed = '';
+                    this.beginRemoteSearch();
                     this.refresh();
                     // Focus after the machine settles its own focus management.
                     setTimeout(() => {
@@ -350,6 +358,7 @@ export class SymbolPicker {
                 this.input.value = next;
                 if (start != null && end != null) this.input.setSelectionRange(start, end);
             }
+            this.beginRemoteSearch();
             this.refresh();
         });
         this.input.addEventListener('keydown', (e) => {
@@ -397,6 +406,7 @@ export class SymbolPicker {
             return;
         }
         this.input.value = (this.input.value + text).toUpperCase();
+        this.beginRemoteSearch();
         this.refresh();
     }
 
@@ -405,6 +415,9 @@ export class SymbolPicker {
     }
 
     destroy(): void {
+        this.remoteSequence += 1;
+        if (this.remoteTimer) clearTimeout(this.remoteTimer);
+        this.remoteTimer = null;
         this.dialog.destroy();
     }
 
@@ -459,11 +472,48 @@ export class SymbolPicker {
      *  the hook runs when the pool CHANGES (an index lands or refreshes), never per
      *  keystroke; an async hook resolves onto the next repaint (stale-while-revalidate
      *  in between, the raw pool before the first resolve). */
+    private remoteSearchKey(): string {
+        return `${this.activeTab}\\u0000${this.input.value.trim().toUpperCase()}`;
+    }
+
+    /** Debounced remote search; stale responses from older keystrokes/tabs are ignored. */
+    private beginRemoteSearch(): void {
+        if (this.remoteTimer) clearTimeout(this.remoteTimer);
+        this.remoteTimer = null;
+        const query = this.input.value.trim();
+        const key = this.remoteSearchKey();
+        const sequence = ++this.remoteSequence;
+        this.remoteSymbols = [];
+        this.remoteResultKey = '';
+        this.ranked = null;
+        if (!this.opts.search || query.length < 2) return;
+        this.remoteTimer = setTimeout(() => {
+            this.remoteTimer = null;
+            void this.opts.search!(query, 100, this.activeTab).then((symbols) => {
+                if (sequence !== this.remoteSequence || key !== this.remoteSearchKey()) return;
+                this.remoteSymbols = dedupeSymbols(symbols);
+                this.remoteResultKey = key;
+                this.ranked = null;
+                this.refresh();
+            }).catch(() => {
+                if (sequence !== this.remoteSequence || key !== this.remoteSearchKey()) return;
+                // Keep local results usable when remote search/authentication is unavailable.
+                this.remoteSymbols = [];
+                this.remoteResultKey = key;
+                this.ranked = null;
+                this.refresh();
+            });
+        }, 220);
+    }
+
     private pool(): readonly SymbolDescriptor[] {
-        const raw = this.source();
+        const local = this.source();
+        const raw = this.remoteResultKey === this.remoteSearchKey()
+            ? dedupeSymbols([...local, ...this.remoteSymbols])
+            : local;
         const hook = symbolRanking();
         if (!hook) return raw;
-        const key = `${raw.length}:${raw[0]?.ticker ?? ''}:${raw[raw.length - 1]?.ticker ?? ''}`;
+        const key = `${raw.length}:${raw[0]?.ticker ?? ''}:${raw[raw.length - 1]?.ticker ?? ''}:${this.remoteResultKey}`;
         if (this.ranked?.key !== key && !this.ranking) {
             this.ranking = true;
             Promise.resolve([...raw])
@@ -484,7 +534,7 @@ export class SymbolPicker {
     }
 
     private computeRows(): SymbolDescriptor[] {
-        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root'], Forex: ['forex'], Commodities: ['commodity'] };
+        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root', 'derivative', 'option'], Forex: ['forex'], Commodities: ['commodity'] };
         const all = this.pool();
         const pool =
             this.activeTab === 'All'
