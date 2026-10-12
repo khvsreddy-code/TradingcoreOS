@@ -45,11 +45,15 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "/api/index"
+      "destination": {
+        "service": "web"
+      }
     },
     {
       "source": "/(.*)",
-      "destination": "/"
+      "destination": {
+        "service": "web"
+      }
     }
   ],
   "headers": [
