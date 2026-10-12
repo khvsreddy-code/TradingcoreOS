@@ -1,4 +1,4 @@
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import { Router, type Response } from 'express';
 import { requireUser } from '../auth/requireUser.js';
 import type { AuthenticatedRequest } from '../auth/requireUser.js';
@@ -120,21 +120,16 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       contents:userContent,
       config:{
         systemInstruction,
-        // Gemini 3.8 requires the structured-output responseFormat shape and
-        // no longer accepts temperature/top_p/top_k sampling overrides.
-        responseFormat:{
-          text:{
-            mimeType:'application/json',
-            schema:{
-              type:'object',
-              properties:{
-                source:{type:'string'},
-                summary:{type:'string'},
-                assumptions:{type:'array',items:{type:'string'}},
-              },
-              required:['source','summary','assumptions'],
-            },
+        // Use the installed @google/genai SDK's supported structured-output fields.
+        responseMimeType:'application/json',
+        responseSchema:{
+          type:Type.OBJECT,
+          properties:{
+            source:{type:Type.STRING},
+            summary:{type:Type.STRING},
+            assumptions:{type:Type.ARRAY,items:{type:Type.STRING}},
           },
+          required:['source','summary','assumptions'],
         },
         thinkingConfig:{thinkingLevel:ThinkingLevel.LOW},
         maxOutputTokens:4096,
