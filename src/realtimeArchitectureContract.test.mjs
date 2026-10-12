@@ -11,7 +11,7 @@ assert.equal(vercel.services?.realtimefresh?.ignoreCommand, 'node tools/ignore-r
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimefresh'), 'health route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimefresh'), 'WebSocket route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/:path*' && route.destination?.service === 'api'), 'API routes must target the API service');
-assert.ok(vercel.rewrites?.some((route) => route.source === '/(.*)' && route.destination?.service === 'web'), 'SPA routes must target the web service');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/(.*)' && route.destination === '/index.html'), 'SPA routes must resolve through the Vite index.html fallback');
 assert.deepEqual(vercel.regions, ['bom1'], 'India-first Vercel functions must remain in Mumbai (bom1)');
 assert.ok(vercel.services?.api?.functions?.['api/queue.ts'], 'queue worker must remain configured on the API service');
 
