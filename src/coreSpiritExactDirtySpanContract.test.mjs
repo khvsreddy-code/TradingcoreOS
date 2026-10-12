@@ -139,4 +139,36 @@ assert.deepEqual(outputDirtySpan({
 }), { from: 85, to: 115 }, 'time-space custom lines should expose their complete market-time span');
 
 
+
+assert.deepEqual(outputDirtySpan({
+  kind: 'line',
+  id: 'anchored-line',
+  time: 100,
+  start: { time: 80, price: 200 },
+  end: { time: 120, price: 220 },
+}), { from: 80, to: 120 }, 'an anchor timestamp must not truncate line endpoint invalidation');
+
+assert.deepEqual(outputDirtySpan({
+  kind: 'polyline',
+  id: 'anchored-polyline',
+  time: 100,
+  points: [{ time: 70, price: 10 }, { time: 130, price: 20 }],
+}), { from: 70, to: 130 }, 'polyline geometry must widen its anchor dirty span');
+
+assert.deepEqual(outputDirtySpan({
+  kind: 'footprint',
+  id: 'anchored-footprint',
+  time: 100,
+  points: [{ time: 90, price: 10 }, { time: 110, price: 20 }],
+}), { from: 90, to: 110 }, 'footprint geometry must widen its anchor dirty span');
+
+assert.equal(outputDirtySpan({
+  kind: 'box',
+  id: 'viewport-box',
+  time: 100,
+  domain: 'viewport',
+  left: 80,
+  right: 120,
+}), null, 'viewport geometry must not be falsely bounded by a market-time anchor');
+
 console.log('CORESPIRIT_EXACT_DIRTY_SPAN_CONTRACT_OK');
