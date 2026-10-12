@@ -163,7 +163,7 @@ tradingRoutes.get('/:brokerId/option-chain', injectBrokerSession, async (req: Br
 });
 
 async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload, riskDecisionId: string, userId: string) {
-  const gatewayUrl = process.env.FYERS_EXECUTION_GATEWAY_URL?.replace(/\/$/, '');
+  const gatewayUrl = process.env.FYERS_EXECUTION_GATEWAY_URL?.trim().replace(/\/$/, '');
   const gatewaySecret = process.env.FYERS_EXECUTION_GATEWAY_SECRET;
   if (!gatewayUrl || !gatewaySecret) throw new Error('FYERS execution gateway is not configured. Set FYERS_EXECUTION_GATEWAY_URL and FYERS_EXECUTION_GATEWAY_SECRET on the TradingCore server.');
 
@@ -185,7 +185,10 @@ async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: Brok
     accountKey: createHash('sha256').update(userId).digest('hex'),
     riskDecisionId: String(riskDecisionId).slice(0, 128),
     issuedAt,
-    expiresAt: issuedAt + 30_000,
+    expiresAt: issuedAt + (() => {
+      const configured = Number(process.env.FYERS_GATEWAY_CONTEXT_TTL_MS ?? 30_000);
+      return Number.isFinite(configured) ? Math.max(5_000, Math.min(60_000, configured)) : 30_000;
+    })(),
     maxQuantity,
     orderHash: createHash('sha256').update(JSON.stringify(order)).digest('hex'),
   };
@@ -217,6 +220,16 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
   if (!idempotencyKey || idempotencyKey.length > 128) { res.status(400).json({ success: false, error: 'Idempotency-Key header is required for live order placement (1-128 characters).' }); return; }
   const userId = req.tradingCoreUserId!;
   const brokerId = req.params.brokerId.toLowerCase();
+  // Never silently fall back to a serverless egress IP for FYERS orders.
+  // Require the allowlisted fixed-IP gateway before claiming the idempotency key.
+  if (brokerId === 'fyers' && (!process.env.FYERS_EXECUTION_GATEWAY_URL?.trim() || !process.env.FYERS_EXECUTION_GATEWAY_SECRET)) {
+    res.status(503).json({
+      success: false,
+      orderSubmitted: false,
+      error: 'FYERS live orders are disabled until the fixed-IP execution gateway URL and shared secret are configured.',
+    });
+    return;
+  }
   let orderPayload: BrokerOrderPayload;
   try { orderPayload = parseBrokerOrderPayload(req.body); } catch (error: unknown) { res.status(400).json({ success: false, error: getErrorMessage(error, 'Invalid order payload') }); return; }
   try {
@@ -258,7 +271,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     }
     let data: unknown;
     try {
-      data = brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL
+      data = brokerId === 'fyers'
         ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload, idempotencyKey, userId)
         : await req.brokerAdapter.placeOrder(req.accessToken, orderPayload);
     } catch (err: unknown) {
