@@ -4,7 +4,19 @@
   "services": {
     "web": {
       "root": ".",
-      "framework": "vite"
+      "framework": "vite",
+      "routes": [
+        {
+          "src": "^/(?!assets/|.*\\.[^/]+$)(.*)$",
+          "transforms": [
+            {
+              "type": "request.path",
+              "op": "set",
+              "args": "/index.html"
+            }
+          ]
+        }
+      ]
     },
     "api": {
       "root": ".",
@@ -56,7 +68,9 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": {
+        "service": "web"
+      }
     }
   ],
   "headers": [
