@@ -74,6 +74,7 @@ function runtimeSymbol(ticker: string): string {
 function runtimeTimeframe(timeframe: string): string {
   const value = String(timeframe || '5').trim();
   if (/^\d+$/.test(value)) return `${value}m`;
+  if (/^[DWM]$/i.test(value)) return `1${value.toUpperCase()}`;
   if (CHART_TIMEFRAME_INTERVALS[value]) return value;
   if (/^\d+[mhd]$/i.test(value)) return value.toLowerCase();
   return '5m';
@@ -313,42 +314,66 @@ export class TcoVelaDataProvider implements DataProvider {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
     const brokerId = await activeBrokerId();
+    if (opts?.signal?.aborted) return [];
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
     const firstPaintBars = Math.min(requested, 300);
-
     const abort = () => Boolean(opts?.signal?.aborted);
     if (abort()) return [];
 
-    // A quote is a price, not OHLC history. Never manufacture a flat candle when
-    // historical data is unavailable.
-    const history = await plane.ensureReadyHistory(firstPaintBars)
+    // Start/attach to the single-flight, then inspect the cache immediately.
+    // ensureReadyHistory installs fresh/stale HistoryStore rows synchronously before
+    // its first network await, so real candles can paint without waiting for refresh.
+    const historyPromise = plane.ensureReadyHistory(firstPaintBars)
       .then(historicalToVelaBars)
       .catch(() => [] as OHLCV[]);
 
-    // Rapid symbol/timeframe changes cancel this consumer. Stale work may populate
-    // the shared cache, but never repaint over the user's latest selection.
-    if (abort()) return [];
-    const first = history.slice(-requested);
-    if (first.length) onBatch(first);
-
-    // Resolve the visible chart immediately. Older history is warmed at low priority
-    // and promoted if the user scrolls back while it is queued.
-    if (first.length > 0 && first.length < requested) {
-      void plane.loadOlderHistory('warm', {
-        visibleBars: Math.min(300, requested - first.length),
-      }).then(() => {
-        if (abort()) return;
-        const canonical = plane.readCanonical();
-        const expanded = canonical.length
-          ? marketViewToBars(canonical, range, requested)
-          : historicalToVelaBars(plane.getCompatibilityCandles(requested));
-        if (expanded.length > first.length) onBatch(expanded.slice(-requested));
-      }).catch(() => {
-        // Optional background history must not invalidate the already-painted first batch.
-      });
+    let first: OHLCV[] = [];
+    const snapshot = plane.getSnapshot();
+    if (snapshot.historyReady && !abort()) {
+      const canonical = plane.readCanonical();
+      const cached = canonical.length
+        ? marketViewToBars(canonical, range, firstPaintBars)
+        : historicalToVelaBars(plane.getCompatibilityCandles(firstPaintBars));
+      if (cached.length) {
+        first = cached.slice(-requested);
+        onBatch(first);
+      }
     }
 
+    const history = await historyPromise;
+    // Never let a late request from an abandoned symbol/timeframe repaint the chart.
+    if (abort()) return [];
+    if (history.length) {
+      const next = history.slice(-requested);
+      const same = first.length === next.length && next.every((bar, index) => {
+        const old = first[index];
+        return !!old
+          && Number(old.time) === Number(bar.time)
+          && Number(old.open) === Number(bar.open)
+          && Number(old.high) === Number(bar.high)
+          && Number(old.low) === Number(bar.low)
+          && Number(old.close) === Number(bar.close)
+          && Number(old.volume ?? 0) === Number(bar.volume ?? 0);
+      });
+      if (!same) onBatch(next);
+      first = next;
+    }
+    if (!first.length) return [];
+
+    // Older pages never block first paint, and each consumer checks its abort signal.
+    if (first.length < requested) {
+      void plane.loadOlderHistory('warm', { visibleBars: Math.min(300, requested - first.length) })
+        .then(() => {
+          if (abort()) return;
+          const canonical = plane.readCanonical();
+          const expanded = canonical.length
+            ? marketViewToBars(canonical, range, requested)
+            : historicalToVelaBars(plane.getCompatibilityCandles(requested));
+          if (expanded.length > first.length) onBatch(expanded.slice(-requested));
+        })
+        .catch(() => { /* older history is opportunistic; preserve the visible window */ });
+    }
     return first;
   }
 
@@ -383,10 +408,23 @@ export class TcoVelaDataProvider implements DataProvider {
     const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
+    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+    const historyPromise = plane.ensureReadyHistory(requested);
+    const initialSnapshot = plane.getSnapshot();
+    if (initialSnapshot.historyReady) {
+      const cachedView = plane.readCanonical();
+      const cachedRows = cachedView.length
+        ? marketViewToBars(cachedView, range, requested)
+        : historicalToVelaBars(plane.getCompatibilityCandles(requested));
+      const cachedOldest = cachedRows[0]?.time;
+      if (cachedRows.length && (requestedTo == null || !Number.isFinite(cachedOldest) || requestedTo >= cachedOldest)) {
+        void historyPromise.catch(() => undefined);
+        return cachedRows;
+      }
+    }
     let lastError: unknown = null;
     try {
-      await plane.ensureReadyHistory(requested);
-      const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+      await historyPromise;
       const current = plane.readCanonical();
       const currentNewestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
       if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(currentNewestMs) && requestedTo < currentNewestMs - 1) {
