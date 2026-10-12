@@ -44,6 +44,9 @@ signal("LONG")
 `;
 
 const automation=`
+requires execution.route
+requires risk.evaluate
+requires automation
 on signal("LONG") {
     if (risk.allowed()) {
         automation.notify("High-confidence bullish regime", "ops")
