@@ -272,7 +272,8 @@ async function handleConnection(socket:WebSocket,request:http.IncomingMessage):P
 }
 
 const server=http.createServer((request,response)=>{
-  if(request.url==='/healthz'){
+  const pathname = new URL(request.url || '/', 'http://localhost').pathname;
+  if(pathname==='/healthz'||pathname==='/api/realtime/healthz'){
     response.writeHead(coordinationReady?200:503,{'content-type':'application/json','cache-control':'no-store'});
     response.end(JSON.stringify({status:coordinationReady?'ok':'degraded',instanceId:INSTANCE_ID,localConnections:localConnections.size,ownedUsers:ownedUsers.size,timestamp:new Date().toISOString()}));
     return;
