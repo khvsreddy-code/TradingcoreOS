@@ -26,6 +26,7 @@ const EXACT_RUNTIME_FILES = new Set([
   'npm-shrinkwrap.json',
   'tsconfig.json',
   'tsconfig.build.json',
+  'vercel.json',
 ]);
 
 const RUNTIME_PREFIXES = [
