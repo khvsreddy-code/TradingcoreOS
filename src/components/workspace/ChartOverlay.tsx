@@ -1,4 +1,4 @@
-import { Code2, Eye, Pencil, RotateCcw, Search, Settings2, Trash2, X, Play, Zap } from 'lucide-react';
+import { Activity, BarChart3, Code2, Eye, Layers3, PanelRight, Pencil, RotateCcw, Search, Settings2, Sparkles, Trash2, Volume2, X, Play, Zap } from 'lucide-react';
 import type { CandleAppearance } from '../../services/core/chart/candleAppearance';
 import { DEFAULT_CANDLE_APPEARANCE } from '../../services/core/chart/candleAppearance';
 import type { IndicatorConfig } from '../../services/marketData/indicatorEngine';
@@ -15,7 +15,7 @@ export function ChartOverlay({
   indicators,indicatorCount,showIndicatorMenu,setShowIndicatorMenu,editingIndicator,setEditingIndicator,addIndicatorFromChart,patchIndicator,removeIndicator,viewingIndicator,setViewingIndicatorCode,
   predictionModelIds,predictionQuery,setPredictionQuery,showPredictionMenu,setShowPredictionMenu,savePredictionModelIds,setPredictionModelIds,
   drawingTool,showDrawingMenu,setShowDrawingMenu,selectDrawingTool,clearDrawings,undoDrawing,showLevels,setShowLevels,showOI,setShowOI,showDepth,setShowDepth,showVolume,setShowVolume,
-  coreSpiritState,setCoreSpiritSource,openCoreSpirit,compileCoreSpirit,deployCoreSpirit,closeCoreSpirit,analytics,
+  coreSpiritState,setCoreSpiritSource,openCoreSpirit,openChartSettings,compileCoreSpirit,deployCoreSpirit,closeCoreSpirit,analytics,
 }: {
   resolvedInstrumentKey:string;
   timeframe:string;
@@ -60,6 +60,7 @@ export function ChartOverlay({
   coreSpiritState:CoreSpiritChartStoreState;
   setCoreSpiritSource:(source:string)=>void;
   openCoreSpirit:()=>void;
+  openChartSettings:()=>void;
   compileCoreSpirit:()=>void;
   deployCoreSpirit:()=>void;
   closeCoreSpirit:()=>void;
@@ -69,14 +70,14 @@ export function ChartOverlay({
     <div className="absolute left-2 top-2 z-40 flex flex-wrap items-center gap-1.5 rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1.5 text-[9px] shadow-xl backdrop-blur">
       <span className="px-1.5 font-mono uppercase tracking-widest text-[var(--tco-dim)]">Chart</span>
       {Object.keys(intervals).map(value=><button key={value} onClick={()=>setTimeframe(value)} className={`rounded border px-2 py-1 font-mono ${timeframe===value?'border-[#3b82f6]/50 bg-[#3b82f6]/10 text-[#93c5fd]':'border-[var(--tco-border)] text-[var(--tco-muted)]'}`}>{value}</button>)}
-      <button onClick={()=>setShowCandleSettings(!showCandleSettings)} className="toolbar-pill"><Settings2 className="mr-1 inline h-3 w-3"/>Style</button>
-      <button onClick={()=>{setShowIndicatorMenu(!showIndicatorMenu);setShowPredictionMenu(false);setShowDrawingMenu(false)}} className="toolbar-pill">Indicators {indicatorCount}</button>
-      <button onClick={()=>{setShowPredictionMenu(!showPredictionMenu);setShowIndicatorMenu(false);setShowDrawingMenu(false)}} className={`toolbar-pill ${predictionModelIds.length?'toolbar-pill-active':''}`}>AI {predictionModelIds.length}</button>
-      <button onClick={()=>{setShowDrawingMenu(!showDrawingMenu);setShowIndicatorMenu(false);setShowPredictionMenu(false)}} className={`toolbar-pill ${drawingTool!=='none'?'toolbar-pill-active':''}`}><Pencil className="mr-1 inline h-3 w-3"/>Draw</button>
-      <button onClick={()=>setShowLevels(!showLevels)} className={`toolbar-pill ${showLevels?'toolbar-pill-active':''}`}>Levels</button>
-      <button onClick={()=>setShowOI(!showOI)} className={`toolbar-pill ${showOI?'toolbar-pill-active':''}`}>OI</button>
-      <button onClick={()=>setShowDepth(!showDepth)} className={`toolbar-pill ${showDepth?'toolbar-pill-active':''}`}>L2</button>
-      <button onClick={()=>setShowVolume(!showVolume)} className={`toolbar-pill ${showVolume?'toolbar-pill-active-blue':''}`}>Volume</button>
+      <button title="Candle style" aria-label="Candle style" onClick={()=>setShowCandleSettings(!showCandleSettings)} className="toolbar-pill"><Settings2 className="inline h-3.5 w-3.5"/>Style</button>
+      <button title="Indicators" aria-label="Indicators" onClick={()=>{setShowIndicatorMenu(!showIndicatorMenu);setShowPredictionMenu(false);setShowDrawingMenu(false)}} className="toolbar-pill"><BarChart3 className="inline h-3.5 w-3.5"/>Indicators {indicatorCount}</button>
+      <button title="AI prediction models" aria-label="AI prediction models" onClick={()=>{setShowPredictionMenu(!showPredictionMenu);setShowIndicatorMenu(false);setShowDrawingMenu(false)}} className={`toolbar-pill ${predictionModelIds.length?'toolbar-pill-active':''}`}><Sparkles className="inline h-3.5 w-3.5"/>AI {predictionModelIds.length}</button>
+      <button title="Drawing tools" aria-label="Drawing tools" onClick={()=>{setShowDrawingMenu(!showDrawingMenu);setShowIndicatorMenu(false);setShowPredictionMenu(false)}} className={`toolbar-pill ${drawingTool!=='none'?'toolbar-pill-active':''}`}><Pencil className="inline h-3.5 w-3.5"/>Draw</button>
+      <button title="Support and resistance levels" aria-label="Support and resistance levels" onClick={()=>setShowLevels(!showLevels)} className={`toolbar-pill ${showLevels?'toolbar-pill-active':''}`}><Layers3 className="inline h-3.5 w-3.5"/>Levels</button>
+      <button title="Open interest" aria-label="Open interest" onClick={()=>setShowOI(!showOI)} className={`toolbar-pill ${showOI?'toolbar-pill-active':''}`}><Activity className="inline h-3.5 w-3.5"/>OI</button>
+      <button title="Market depth (Level 2)" aria-label="Market depth (Level 2)" onClick={()=>setShowDepth(!showDepth)} className={`toolbar-pill ${showDepth?'toolbar-pill-active':''}`}><PanelRight className="inline h-3.5 w-3.5"/>L2</button>
+      <button title="Volume" aria-label="Volume" onClick={()=>setShowVolume(!showVolume)} className={`toolbar-pill ${showVolume?'toolbar-pill-active-blue':''}`}><Volume2 className="inline h-3.5 w-3.5"/>Volume</button>
       <span className="ml-1 font-mono text-[var(--tco-dim)]">{indicators.filter(x=>x.enabled).length} indicators</span>
     </div>
 
@@ -120,8 +121,9 @@ export function ChartOverlay({
       <button onClick={clearDrawings} className="w-full border-t border-[var(--tco-border)] px-2 pt-2 text-left text-[8px] text-[#ef4444]">Clear drawings</button><button onClick={undoDrawing} className="mt-1 w-full border-t border-[var(--tco-border)] px-2 pt-2 text-left text-[8px]">Undo</button>
     </div>}
 
-    <div className="absolute right-2 top-2 z-40 flex flex-col items-center gap-1 rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1 shadow-2xl">
-      <button title="CoreSpirit Editor" onClick={openCoreSpirit} className={`flex h-8 w-8 items-center justify-center rounded ${coreSpiritState.open?'bg-[#3b82f6]/20 text-[#93c5fd]':'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}><Code2 size={15}/></button>
+    <div className="absolute right-2 top-2 bottom-2 z-40 flex flex-col items-center justify-between rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1 shadow-2xl">
+      <button title="CoreSpirit Editor" aria-label="CoreSpirit Editor" onClick={openCoreSpirit} className={`flex h-8 w-8 items-center justify-center rounded ${coreSpiritState.open?'bg-[#3b82f6]/20 text-[#93c5fd]':'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}><Code2 size={15}/></button>
+      <button title="Vela chart settings" aria-label="Vela chart settings" onClick={openChartSettings} className="flex h-8 w-8 items-center justify-center rounded text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white"><Settings2 size={15}/></button>
     </div>
 
     {coreSpiritState.open&&<div className="absolute right-12 top-2 z-50 w-[min(520px,calc(100%-70px))] overflow-hidden rounded-xl border border-[var(--tco-control)] bg-[var(--tco-surface-blue)] shadow-2xl">
