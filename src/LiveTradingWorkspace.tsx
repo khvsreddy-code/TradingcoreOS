@@ -89,14 +89,14 @@ export function LiveTradingWorkspace() {
       // allowed to drive first-candle loading concurrently.
       void brokerReady.then(() => {
         if (cancelled) return;
+        // Keep speculative history off the user's critical path. The active chart's
+        // initial request has priority; warm only the default symbol/timeframe, and let
+        // rapid symbol/timeframe switches reuse the shared per-key single-flight cache.
         prewarmTcoVelaHistory(
-          ['NSE:NIFTY50-INDEX', 'NSE:NIFTYBANK-INDEX', 'BSE:SENSEX-INDEX', 'NSE:FINNIFTY-INDEX', 'NSE:MIDCPNIFTY-INDEX'],
+          ['NSE:NIFTY50-INDEX'],
           defaults.timeframe || '5',
-          1200,
+          300,
         );
-        prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '1', 600);
-        prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '15', 600);
-        prewarmTcoVelaHistory(['NSE:NIFTY50-INDEX'], '60', 600);
       });
 
       if (typeof window !== 'undefined') {
