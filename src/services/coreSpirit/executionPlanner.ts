@@ -336,7 +336,7 @@ export function planCoreSpiritExecution(
       reason: effectNodes.length ? 'effectful/stateful operations require the ordered CPU runtime' : 'GPU/WASM thresholds or availability did not qualify an alternate backend',
     });
     explanation.push('CPU is the deterministic baseline and remains the semantic fallback.');
-  } else if (backend.backend !== 'cpu' && cpuNodes.length > 0) {
+  } else if (cpuNodes.length > 0) {
     strategy = 'hybrid-pure-offload';
     assignments.push({
       backend: backend.backend,
