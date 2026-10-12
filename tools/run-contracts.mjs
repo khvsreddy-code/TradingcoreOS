@@ -72,6 +72,7 @@ const contracts = [
   ['chart-performance-history-telemetry', ['src/chartPerformanceHistoryTelemetryContract.test.mjs', true]],
   ['tco-vela-performance-telemetry', ['src/tcoVelaPerformanceTelemetryContract.test.mjs', false]],
   ['fyers-execution-token-cache', ['src/fyersExecutionTokenCacheContract.test.mjs', true]],
+  ['fyers-compliance-symbol-catalog', ['src/fyersComplianceSymbolCatalogContract.test.mjs', false]],
   ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
   ['fyers-order-reconciliation-state-machine', ['src/fyersOrderStateReconciliationContract.test.mjs', true]],
   ['fyers-multi-class-domain-events', ['src/fyersMultiClassDomainEventsContract.test.mjs', true]],
