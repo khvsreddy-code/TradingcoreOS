@@ -76,7 +76,7 @@ async function loadFyersSymbolCatalog(): Promise<SymbolDescriptor[]> {
         const value = entry.value;
         if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
         const descriptor = descriptorFromMaster(result.value.master, value as FyersSymbolRecord, entry.symbolKey);
-        const key = descriptor ? descriptor.prefix + ':' + descriptor.ticker : '';
+        const key = descriptor ? String(descriptor.prefix || 'NSE') + ':' + descriptor.ticker : '';
         if (descriptor && !byTicker.has(key)) byTicker.set(key, descriptor);
       }
     }
