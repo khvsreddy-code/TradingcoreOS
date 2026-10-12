@@ -301,14 +301,14 @@ export class BrokerMarketDataClient {
               bid: Number.isFinite(Number(q.bid)) ? [{ price: Number(q.bid), quantity: 0 }] : undefined,
               ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
               receivedAt: new Date().toISOString(),
-              lastTradeTimestamp: (() => {
+              ...(() => {
                 const raw = q.timestamp;
                 const numeric = typeof raw === 'number' ? raw : Number(raw);
-                if (Number.isFinite(numeric)) {
-                  return new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString();
+                if (Number.isFinite(numeric) && numeric > 0) {
+                  return { lastTradeTimestamp: new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString() };
                 }
                 const parsed = Date.parse(String(raw || ''));
-                return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
+                return Number.isFinite(parsed) && parsed > 0 ? { lastTradeTimestamp: new Date(parsed).toISOString() } : {};
               })(),
             };
 
