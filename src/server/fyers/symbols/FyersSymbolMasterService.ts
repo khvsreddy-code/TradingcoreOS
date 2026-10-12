@@ -7,10 +7,35 @@ const BASE = 'https://public.fyers.in/sym_details';
 interface CacheEntry { records: Map<string,FyersSymbolRecord>; expiresAt: number; }
 export class FyersSymbolMasterService {
   private static cache = new Map<FyersMasterName, CacheEntry>();
+  private static inFlight = new Map<FyersMasterName, Promise<Map<string,FyersSymbolRecord>>>();
   static masterNames(): FyersMasterName[] { return [...MASTER_NAMES]; }
-  static async load(master: FyersMasterName): Promise<Map<string,FyersSymbolRecord>> {
-    const cached=this.cache.get(master); if(cached && cached.expiresAt>Date.now()) return cached.records;
-    const response=await fetch(`${BASE}/${master}_sym_master.json`, { headers:{Accept:'application/json'} });
+
+  /**
+   * Cache the in-progress request as well as the resulting master. Debounced search
+   * can issue several queries while the first multi-megabyte download is pending;
+   * all those queries must share one fetch per master per server instance.
+   */
+  static load(master: FyersMasterName): Promise<Map<string,FyersSymbolRecord>> {
+    const cached=this.cache.get(master);
+    if(cached && cached.expiresAt>Date.now()) return Promise.resolve(cached.records);
+    const inFlight=this.inFlight.get(master);
+    if(inFlight) return inFlight;
+
+    const request=this.fetchAndIndex(master).then((records) => {
+      this.cache.set(master,{records,expiresAt:Date.now()+24*60*60*1000});
+      return records;
+    }).finally(() => {
+      if(this.inFlight.get(master) === request) this.inFlight.delete(master);
+    });
+    this.inFlight.set(master,request);
+    return request;
+  }
+
+  private static async fetchAndIndex(master: FyersMasterName): Promise<Map<string,FyersSymbolRecord>> {
+    const response=await fetch(`${BASE}/${master}_sym_master.json`, {
+      headers:{Accept:'application/json'},
+      signal:AbortSignal.timeout(12_000),
+    });
     if(!response.ok) throw new Error(`FYERS symbol master ${master} returned ${response.status}`);
     const payload: unknown = await response.json();
     const records = new Map<string,FyersSymbolRecord>();
@@ -34,18 +59,29 @@ export class FyersSymbolMasterService {
       const symbol=keyedTicker.includes(':') ? keyedTicker : (explicitSymbol || keyedTicker || String(rowRecord.fyToken ?? rowRecord.fytoken ?? '').trim());
       if(symbol) records.set(symbol,{...rowRecord, symbol});
     }
-    this.cache.set(master,{records,expiresAt:Date.now()+24*60*60*1000});
     return records;
   }
+
   static async find(master:FyersMasterName, symbol:string):Promise<FyersSymbolRecord|undefined>{ return (await this.load(master)).get(symbol.trim()); }
+
   static async search(master:FyersMasterName, query:string, limit=50):Promise<FyersSymbolRecord[]>{
-    const q=query.trim().toUpperCase(); if(!q) return [];
+    const q=query.trim().replace(/^[A-Z0-9_-]{2,16}:/i,'').toUpperCase();
+    if(!q) return [];
     const maximum = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 50;
-    const out:FyersSymbolRecord[]=[];
+    const ranked: Array<{row:FyersSymbolRecord; ticker:string; rank:number}> = [];
     for(const [key,row] of (await this.load(master)).entries()){
-      const haystack=[key,row.symbol,row.symbol_ticker,row.symTicker,row.exSymName,row.symDetails].map(value=>String(value ?? '')).join(' ').toUpperCase();
-      if(haystack.includes(q)){out.push(row); if(out.length>=maximum)break;}
+      const symbol=String(row.symbol ?? row.symbol_ticker ?? row.symTicker ?? key).toUpperCase();
+      const ticker=symbol.split(':').pop() ?? symbol;
+      const description=String(row.exSymName ?? row.symDetails ?? row.description ?? '').toUpperCase();
+      const rank=ticker===q ? 0
+        : ticker.startsWith(q) ? 1
+        : ticker.includes(q) ? 2
+        : description.startsWith(q) ? 3
+        : description.includes(q) ? 4
+        : -1;
+      if(rank>=0) ranked.push({row,ticker,rank});
     }
-    return out;
+    ranked.sort((a,b)=>a.rank-b.rank || a.ticker.localeCompare(b.ticker));
+    return ranked.slice(0,maximum).map((item)=>item.row);
   }
 }

@@ -27,6 +27,11 @@ assert(symbolRoute.includes('query.length < 2'), 'Short queries must not trigger
 assert(symbolRoute.includes('Promise.allSettled'), 'Partial master failures must not suppress healthy search results');
 assert(symbolRoute.includes('catalogMaster: result.value.master'), 'Search results must preserve their source market for Vela typing');
 assert(symbolRoute.includes('requested === \'ALL\''), 'All-category search must span all supported FYERS masters');
+assert(masterService.includes("private static inFlight = new Map<FyersMasterName, Promise<Map<string,FyersSymbolRecord>>>()"), 'Concurrent catalog queries must share a single in-flight master download');
+assert(masterService.includes('if(inFlight) return inFlight'), 'Repeated queries must reuse the pending symbol-master request');
+assert(masterService.includes('signal:AbortSignal.timeout(12_000)'), 'Master downloads must have an explicit timeout');
+assert(masterService.includes('ranked.sort((a,b)=>a.rank-b.rank'), 'Ticker-prefix/exact matches must be ranked before limiting result count');
+assert(masterService.includes("ranked.slice(0,maximum)"), 'Ranked symbol search must enforce a bounded result count');
 assert(masterService.includes('Object.entries(payloadRecord)'), 'Keyed FYERS JSON symbols must retain their ticker key');
 assert(masterService.includes("keyedTicker.includes(':') ? keyedTicker"), 'Canonical ticker keys must win over numeric FYERS tokens');
 assert(masterService.includes('row.exSymName'), 'Search index must query FYERS display-name fields');
