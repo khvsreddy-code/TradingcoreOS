@@ -4,7 +4,7 @@ import type { ToolbarDefinition, ToolGroup, ToolSection } from '../../../core/dr
 import { icon } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
-import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily } from '../../../core/drawings/registry';
+import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily, loadAdvancedDrawingCatalog } from '../../../core/drawings/registry';
 
 /** Expanded bar width in px — a docked host's left-gutter reservation must match it. */
 export const TOOLBAR_WIDTH = 44;
@@ -54,6 +54,7 @@ export class DrawingToolbar {
     private shortcuts = new Map<DrawingTypeKey, string>();
     /** Star elements of the currently open flyout, by tool type (live-updated, never stale). */
     private readonly starEls = new Map<DrawingTypeKey, HTMLElement>();
+    private advancedCatalogHydration: Promise<void> | null = null;
     private flyout: HTMLDivElement | null = null;
     private flyoutOwnerId: string | null = null; // group id (or MAGNET_ID) whose flyout is open
     private flyoutCell: HTMLElement | null = null; // the cell the open flyout is anchored to
@@ -145,6 +146,44 @@ export class DrawingToolbar {
             if (first && !this.lastUsed.has(g.id)) this.lastUsed.set(g.id, first.type);
         }
         this.rebuild();
+        this.hydrateAdvancedDrawingIcons();
+    }
+
+    /**
+     * Vela's multi-chart workspace hides per-cell drawing bars and owns one shared toolbar.
+     * That means no visible per-cell toolbar triggers lazy drawing registration. Hydrate the
+     * shared definition itself once the catalog arrives, including custom groups and sections.
+     */
+    private hydrateAdvancedDrawingIcons(): void {
+        if (this.advancedCatalogHydration) return;
+        const unloaded = this.def.groups.some((group) => group.tools.some((tool) => {
+            const family = drawingFamilyForType(tool.type);
+            return !!family && !drawingTypes().some((meta) => meta.type === tool.type);
+        }));
+        if (!unloaded) return;
+
+        this.advancedCatalogHydration = loadAdvancedDrawingCatalog()
+            .then(() => {
+                const hydrate = (tool: ToolGroup['tools'][number]) => {
+                    const metadata = getDrawingType(tool.type);
+                    if (!metadata) return;
+                    tool.label = metadata.label;
+                    tool.icon = metadata.icon;
+                };
+                // Work from this.def, not a captured older definition: the user may switch
+                // layouts while the asynchronous import is still in flight.
+                for (const group of this.def.groups) {
+                    group.tools.forEach(hydrate);
+                    group.sections?.forEach((section) => section.tools.forEach(hydrate));
+                }
+                this.rebuild();
+            })
+            .catch((error) => {
+                console.error('[vela] failed to hydrate workspace drawing icons', error);
+            })
+            .finally(() => {
+                this.advancedCatalogHydration = null;
+            });
     }
 
     /** Reflect the core's favorite set. An OPEN flyout updates its stars IN PLACE — starring
