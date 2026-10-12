@@ -98,6 +98,9 @@ assert.equal(detectQuantRegime(0.03,0.1),'volatile');
 
 
 const unifiedSource = `
+requires execution.route
+requires risk.evaluate
+requires automation
 data nifty = market("NSE:NIFTY50", "5m")
 
 let trend = ta.ema(nifty.close, 50)
