@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const provider = fs.readFileSync('src/TcoVelaDataProvider.ts', 'utf8');
+const gateway = fs.readFileSync('fyers-execution-gateway/server.mjs', 'utf8');
+const routes = fs.readFileSync('src/server/routes/trading.routes.ts', 'utf8');
+
+for (const master of ['NSE_CM','NSE_FO','NSE_CD','NSE_COM','BSE_CM','BSE_FO','MCX_COM']) {
+  assert(provider.includes(master), `Vela symbol catalog must include ${master}`);
+}
+assert(provider.includes('Promise.allSettled'), 'A failed exchange master must not suppress healthy catalogs');
+assert(provider.includes('SYMBOL_CATALOG_TTL_MS'), 'Catalog must be cached');
+assert(provider.includes('AbortSignal.timeout(12_000)'), 'Symbol-master fetches must be bounded');
+assert(provider.includes('symbolCatalogLoad'), 'Concurrent list calls must share one catalog load');
+assert(provider.includes('descriptorFromMaster'), 'Catalog rows must be normalized into Vela descriptors');
+assert(provider.includes('discovered?.prefix'), 'Bare symbol resolution must preserve the discovered venue');
+
+assert(gateway.includes('validateExecutionContext(body.order, body.executionContext)'), 'Gateway must validate context before upstream order placement');
+assert(gateway.includes('context.riskApproved !== true'), 'Gateway must reject unapproved risk context');
+assert(gateway.includes('context.expiresAt'), 'Gateway must reject expired contexts');
+assert(gateway.includes('quantity > maxQuantity'), 'Gateway must enforce context quantity cap');
+assert(gateway.includes('does not match the submitted order'), 'Gateway must bind risk context to exact order');
+assert(routes.includes('riskApproved: true'), 'Trusted server must attach an explicit risk decision');
+assert(routes.includes('orderHash: createHash'), 'Trusted server must bind context to exact order');
+assert(routes.includes('FYERS_GATEWAY_MAX_ORDER_QUANTITY'), 'Trusted server must apply the configured order cap');
+
+console.log('FYERS_COMPLIANCE_GATEWAY_AND_VELA_SYMBOL_CATALOG_CONTRACT_OK');
