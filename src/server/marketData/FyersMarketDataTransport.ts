@@ -339,7 +339,7 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
     ...(finite(payload.ch) !== undefined ? { change: finite(payload.ch) } : (ltp !== undefined && prevClose !== undefined ? { change: ltp - prevClose } : {})),
     ...(finite(payload.chp) !== undefined ? { changePercent: finite(payload.chp) } : {}),
     ...(finite(payload.vol_traded_today) !== undefined ? { volume: finite(payload.vol_traded_today) } : {}),
-    ...(Number.isFinite(eventTime(brokerTimestamp, receivedAt)) ? { lastTradeTimestamp: new Date(eventTime(brokerTimestamp, receivedAt)).toISOString() } : {}),
+    ...(brokerTimestamp !== undefined && brokerTimestamp > 0 ? { lastTradeTimestamp: new Date(eventTime(brokerTimestamp, receivedAt)).toISOString() } : {}),
     ...(depthBids.length ? { bid: depthBids } : (finite(payload.bid_price) !== undefined ? { bid: [{ price: finite(payload.bid_price)!, quantity: finite(payload.bid_size) ?? 0 }] } : {})),
     ...(depthAsks.length ? { ask: depthAsks } : (finite(payload.ask_price) !== undefined ? { ask: [{ price: finite(payload.ask_price)!, quantity: finite(payload.ask_size) ?? 0 }] } : {})),
     ...(finite(payload.oi) !== undefined ? { oi: finite(payload.oi) } : {}),

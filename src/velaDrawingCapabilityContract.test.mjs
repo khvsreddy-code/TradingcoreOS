@@ -21,6 +21,8 @@ assert(fibonacci.includes('GannFan'),'Fibonacci registry must own Gann implement
 assert(patterns.includes('ElliottImpulse'),'pattern registry must own wave/pattern implementations');
 assert(patterns.includes('FixedRangeVolumeProfile'),'pattern registry must own volume-profile implementation');
 assert(controller.includes('loadAdvancedDrawingCatalog'),'drawing controller must load advanced catalogs only with toolbar capability');
-assert(controller.includes('if (!this.customToolbar)'),'custom toolbar definitions must not be overwritten by the default advanced reload');
+assert(controller.includes('this.customToolbar = !isCanonicalToolbarDefinition(def);'),'canonical and custom toolbars must be classified separately');
+assert(controller.includes('for (const group of this.toolbarDefinition.groups)'),'advanced icon hydration must update the current toolbar definition');
+assert(controller.includes('this.toolbar.setDefinition(this.toolbarDefinition);'),'hydrated icons must repaint the current toolbar');
 
 console.log('VELA_DRAWING_CAPABILITY_SPLIT_OK');

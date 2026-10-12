@@ -8,6 +8,7 @@ function read(path) {
 const drawingState = read('./services/core/chart/chartRuntimeSupport.ts');
 const liveChart = read('./components/workspace/LiveChart.tsx');
 const coreSpirit = read('./CoreSpiritVelaEngine.ts');
+const multiSymbolTimeframe = read('./services/coreSpirit/multiSymbolTimeframe.ts');
 const provider = read('./TcoVelaDataProvider.ts');
 const runtime = read('./services/runtime/TradingCoreRuntime.ts');
 const server = read('../server.ts');
@@ -23,14 +24,14 @@ assert.match(drawingState, /const velaDrawings\s*=\s*migrateVelaDrawings\(/, 'Ve
 assert.match(drawingState, /\n\s*velaDrawings,/, 'Vela persisted state must contain the migrated serialized drawing array');
 assert.doesNotMatch(liveChart, /LegacyDrawing|legacyDrawing|DrawingController\b/, 'TCO chart UI must not keep a second drawing authority');
 assert.match(coreSpirit, /const loadSecondaryData = async \(force\s*=\s*false\)/);
-assert.match(coreSpirit, /context\.alignment/);
-assert.match(coreSpirit, /context\.maxStalenessMs/);
-assert.match(coreSpirit, /state:\s*confirmed\s*\?\s*['"]confirmed['"]\s*:\s*['"]developing['"]/);
+assert.match(multiSymbolTimeframe, /context\.alignment/, 'multi-timeframe snapshots must honor alignment policy');
+assert.match(multiSymbolTimeframe, /context\.maxStalenessMs/, 'multi-timeframe snapshots must honor stale-data bounds');
+assert.match(multiSymbolTimeframe, /snapshot\.state && snapshot\.state === 'developing'/, 'last-confirmed alignment must exclude developing higher-timeframe samples');
 assert.match(coreSpirit, /Secondary market data refresh failed/);
 assert.match(coreSpirit, /void loadSecondaryData\(\)/);
 assert.doesNotMatch(provider, /getChartDataPlane\(['"]fyers['"]/);
 assert.match(provider, /activeBrokerIdSync/);
-assert.match(provider, /tradingCoreRuntime\.getMarketQuotes\(\[symbol\]\)/, 'Vela history must retain an independent quote fallback');
+assert.match(provider, /plane\.ensureReadyHistory\(firstPaintBars\)/, 'Vela first paint must use the shared chart-data-plane history loader');
 assert.match(runtime, /getPrimaryBrokerId\(\)/);
 assert.match(runtime, /columns && columns\.time\.length > 0/);
 assert.match(runtime, /getHistoricalData\(/);
@@ -44,7 +45,10 @@ assert.match(auth, /Do not perform additional Supabase calls inside onAuthStateC
 assert.match(dataPlane, /Keep Vela on the typed canonical path/);
 assert.match(dataPlane, /setColumnarHistory/);
 assert.match(chartController, /seedLiveCandle/);
-assert.match(runtimeController, /seedLiveCandle/);
+assert.doesNotMatch(runtimeController, /seedLiveCandle/, 'runtime must not synthesize one-price candles before broker history arrives');
+assert.match(runtimeController, /event\.type==='quote'/, 'quote-only packets must not mutate candle state');
+assert.doesNotMatch(dataPlane, /void this\.ensureHistory\(\)/, 'subscription must not start object history before the typed loader');
+assert.match(dataPlane, /this\.ensureReadyColumns\(limit\)\.catch/, 'typed columnar history must be the first cold-start path');
 assert.match(runtimeController, /setHistoryFromCanonical/);
 assert.match(velaChrome, /registerSidePanel\(bookmarksPanel\)/);
 assert.match(velaChrome, /registerStatePersistence\(watchlistStatePersistence\)/);

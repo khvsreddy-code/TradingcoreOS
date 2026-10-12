@@ -106,6 +106,26 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
       });
       deps.chart.current=c;
 
+      // Vela defaults to UTC. TCO primarily serves NSE/BSE users, so use IST on first
+      // load while respecting a timezone the user selects in Vela's native settings.
+      const timezoneKey='tradingcore:vela-timezone:v1';
+      const timezoneRenderer=c.renderer;
+      let timezone='Asia/Kolkata';
+      try {
+        const saved=window.localStorage.getItem(timezoneKey);
+        if(saved && saved.trim()) timezone=saved;
+      } catch { /* storage may be unavailable in privacy-restricted contexts */ }
+      timezoneRenderer.applyFeature('timezone',timezone);
+      // Generic candle countdowns do not know NSE/BSE sessions or holidays. Disable by
+      // default in TCO so after-hours bars do not appear to be counting down to a live close.
+      timezoneRenderer.applyFeature('countdown',false);
+      const stopTimezonePersistence=timezoneRenderer.onConfigChanged(()=>{
+        try {
+          const next=timezoneRenderer.readFeature('timezone');
+          if(typeof next==='string' && next.trim()) window.localStorage.setItem(timezoneKey,next);
+        } catch { /* keep rendering if the browser blocks storage */ }
+      });
+
       if(!deps.candle.current)deps.candle.current=c.addSeries(CandlestickSeries,candleSeriesOptions(deps.candleAppearance) as any);
       if(!deps.closeLine.current)deps.closeLine.current=c.addSeries(LineSeries,{color:'#38bdf8',lineWidth:2,priceLineVisible:false,lastValueVisible:true,visible:deps.chartType==='line'});
       if(!deps.volume.current)deps.volume.current=c.addSeries(HistogramSeries,{priceFormat:{type:'volume'},priceScaleId:'volume'});
@@ -189,29 +209,14 @@ export function createChartRuntimeController(deps:ChartRuntimeControllerDeps){
           }
         }
 
+        // Quote-only events may refresh LTP UI state but must never trigger candle or indicator updates.
+        if(event.type==='quote')return;
+
         const canonical = deps.chartDataPlane.readCanonical();
         if(canonical.length)deps.rendererController.setHistoryFromCanonical(canonical,deps.appearanceRef.current);
         const data=snapshot.candles.length?snapshot.candles:deps.chartDataPlane.getCompatibilityCandles();
         if(!data.length){
-          // A healthy live tick is enough to keep the chart visually alive while
-          // historical recovery is still in flight. Seed one forming candle at
-          // the Vela boundary; subsequent ticks return to the normal canonical
-          // columnar path once history is available.
-          if(event.type==='tick' && snapshot.latestTick){
-            const seeded=deps.rendererController.seedLiveCandle?.(
-              snapshot.latestTick,
-              deps.appearanceRef.current,
-              deps.timeframe,
-              true,
-            );
-            if(seeded){
-              deps.candles.current=[seeded];
-              deps.setError('');
-              realtimeController.handleTick({...snapshot,candles:[seeded]},Boolean(event.bucketChanged));
-            } else {
-              realtimeController.handleTick(snapshot,Boolean(event.bucketChanged));
-            }
-          }
+          // Keep the chart honest while broker history is loading or unavailable; never fabricate OHLC.
           return;
         }
         deps.candles.current=data;
@@ -267,6 +272,7 @@ indicatorController:chartIndicatorController,dataController:chartDataController,
 
       return()=>{
         dead=true;
+        stopTimezonePersistence();
         stopInteraction();
         stopData();
         chartDataController.dispose();

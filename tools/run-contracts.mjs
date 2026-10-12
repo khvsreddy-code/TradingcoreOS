@@ -4,6 +4,7 @@ const contracts = [
   ['vela-scene-graph', ['src/velaSceneGraphContract.test.mjs', false]],
   ['frontend-bundle-architecture', ['src/frontendBundleArchitectureContract.test.mjs', false]],
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
+  ['chart-cold-start-real-candles', ['src/chartColdStartAndRealCandleContract.test.mjs', false]],
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
   ['execution-plan', ['src/services/coreSpirit/executionPlanVisualizerContract.test.mjs', true]],
   ['repaint-profiler', ['src/services/coreSpirit/repaintProfilerContract.test.mjs', true]],
