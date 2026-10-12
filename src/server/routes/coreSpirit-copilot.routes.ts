@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { Router, type Response } from 'express';
 import { requireUser } from '../auth/requireUser.js';
 import type { AuthenticatedRequest } from '../auth/requireUser.js';
@@ -92,7 +92,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
       'The generated code will be independently compiled, type checked and capability-validated before the user may run it. Invalid source is acceptable as a draft but must not be presented as validated.',
     ].join('\n');
     const currentCompile = currentSource ? compileCoreSpirit(currentSource,'corespirit-editor',{layer:'script'}) : null;
-    const currentIr = currentCompile?.ir as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;semanticDependencyGraph?:{nodes?:unknown[];edges?:unknown[]}}|undefined;
+    const currentIr = currentCompile?.ir as unknown as {maxLookback?:number;repaintSafety?:unknown;causalityAnalysis?:unknown;semanticDependencyGraph?:{nodes?:readonly unknown[];edges?:readonly unknown[]}}|undefined;
     const compilerContext = JSON.stringify({
       diagnostics:(currentCompile?.diagnostics??[]).slice(0,80).map(d=>({severity:d.severity,code:d.code,message:d.message,line:d.line,column:d.column})),
       maxLookback:currentIr?.maxLookback??null,
@@ -136,7 +136,7 @@ coreSpiritCopilotRoutes.post('/generate',copilotRateLimit,async(req:Authenticate
             },
           },
         },
-        thinkingConfig:{thinkingLevel:'low'},
+        thinkingConfig:{thinkingLevel:ThinkingLevel.LOW},
         maxOutputTokens:4096,
       },
     });
