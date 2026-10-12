@@ -122,6 +122,13 @@ export interface DataProvider {
      */
     listSymbols?(): Promise<SymbolDescriptor[]>;
 
+    /**
+     * Search symbols on demand without forcing a provider to enumerate its entire universe
+     * during chart initialization. Results are indexed by the registry before being returned.
+     * `market` is the symbol picker's active category (for example "Stocks" or "Futures").
+     */
+    searchSymbols?(query: string, limit?: number, market?: string): Promise<SymbolDescriptor[]>;
+
     /** Per-symbol metadata for engine `syminfo.*`. Absent ⇒ the engine synthesizes a fallback. */
     getSymbolInfo?(ticker: string): Promise<SymbolInfo | undefined>;
 
