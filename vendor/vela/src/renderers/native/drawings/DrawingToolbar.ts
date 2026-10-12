@@ -161,7 +161,9 @@ export class DrawingToolbar {
         // leaves generic placeholder glyphs (often circles) in the visible shared bar.
         const hasAdvancedTools = this.def.groups.some((group) =>
             group.tools.some((tool) => drawingFamilyForType(tool.type))
-            || group.sections?.some((section) => section.tools.some((tool) => drawingFamilyForType(tool.type)),
+            || (group.sections?.some((section) =>
+                section.tools.some((tool) => drawingFamilyForType(tool.type)),
+            ) ?? false),
         );
         if (!hasAdvancedTools) return;
 
