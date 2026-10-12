@@ -407,7 +407,7 @@ async function handleFyersMarketStream(req: AuthenticatedRequest, res: Response,
       session.userId, session.token, symbols, write, includeDepth, depthSymbols, capabilities.maxStreamSymbols, feedClass,
     );
   } catch (error: any) {
-    write({ type: 'error', error: error?.message || 'Unable to subscribe to FYERS market data', code: error?.code });
+    write({ type: 'error', error: error?.message || 'Unable to subscribe to FYERS market data' });
     res.end();
     return;
   }
