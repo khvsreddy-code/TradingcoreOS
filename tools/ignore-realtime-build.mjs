@@ -45,7 +45,7 @@ const NON_RUNTIME_SERVER_PREFIXES = [
 ];
 
 export function isRealtimeRuntimePath(filename) {
-  const normalized = String(filename || '').replaceAll('\\\\', '/').replace(/^\.\//, '');
+  const normalized = String(filename || '').replaceAll('\\', '/').replace(/^\.\//, '');
   if (!normalized) return false;
   if (NON_RUNTIME_SERVER_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return false;
   return EXACT_RUNTIME_FILES.has(normalized) || RUNTIME_PREFIXES.some((prefix) => normalized.startsWith(prefix));
@@ -59,7 +59,7 @@ export function readChangedPaths(previousSha, currentSha) {
   return execFileSync('git', [
     'diff', '--name-only', '--no-renames', previousSha, currentSha, '--',
   ], { encoding: 'utf8' })
-    .split(/\\r?\\n/)
+    .split(/\r?\n/)
     .map((filename) => filename.trim())
     .filter(Boolean);
 }
