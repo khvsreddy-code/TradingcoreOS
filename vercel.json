@@ -20,7 +20,7 @@
         }
       }
     },
-    "realtime-v2": {
+    "realtimefresh": {
       "root": ".",
       "entrypoint": "Dockerfile",
       "runtime": "container",
@@ -34,13 +34,13 @@
     {
       "source": "/api/realtime/healthz",
       "destination": {
-        "service": "realtime-v2"
+        "service": "realtimefresh"
       }
     },
     {
       "source": "/api/realtime/ws",
       "destination": {
-        "service": "realtime-v2"
+        "service": "realtimefresh"
       }
     },
     {
