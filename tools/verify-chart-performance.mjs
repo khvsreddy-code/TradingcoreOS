@@ -13,6 +13,7 @@ const maxTickToComputeP95Ms = Number(process.env.TCO_MAX_TICK_TO_COMPUTE_P95_MS 
 const maxTickToPatchP95Ms = Number(process.env.TCO_MAX_TICK_TO_PATCH_P95_MS || 25);
 const maxTickToRenderP95Ms = Number(process.env.TCO_MAX_TICK_TO_RENDER_P95_MS || 25);
 const maxMarketUpdateAgeMs = Number(process.env.TCO_MAX_MARKET_UPDATE_AGE_MS || 2000);
+const maxTelemetryAgeMs = Math.max(1000, Number(process.env.TCO_MAX_TELEMETRY_AGE_MS || 15000));
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
 const requiredPipelineFields = ['marketUpdatesPerSec','lastMarketUpdateAgeMs','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
 
@@ -53,6 +54,12 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   if (!perf || !Array.isArray(perf.cells)) throw new Error(`Browser verification: __TCO_PERF__ missing for ${url}`);
   if (!Array.isArray(perf.pipeline)) throw new Error(`Browser verification: realtime pipeline telemetry missing for ${url}`);
   if (!perf.capturedAt) throw new Error(`Browser verification: telemetry capture timestamp missing for ${url}`);
+  const capturedAtMs = typeof perf.capturedAt === 'number' ? perf.capturedAt : Date.parse(perf.capturedAt);
+  if (!Number.isFinite(capturedAtMs)) throw new Error(`Browser verification: telemetry capture timestamp is invalid for ${url}`);
+  const telemetryAgeMs = Date.now() - capturedAtMs;
+  if (telemetryAgeMs < -5000 || telemetryAgeMs > maxTelemetryAgeMs) {
+    throw new Error(`Browser verification: telemetry is stale or clock-skewed (${telemetryAgeMs.toFixed(0)}ms old; allowed 0-${maxTelemetryAgeMs}ms) for ${url}; cached samples cannot count as live-load evidence.`);
+  }
   if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
   if (perf.pipeline.length < 1) throw new Error(`Browser verification: no active Vela chart data-plane telemetry for ${url}`);
   for (const cell of perf.cells) {
@@ -102,6 +109,8 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxTickToPatchP95Ms,
     maxTickToRenderP95Ms,
     maxMarketUpdateAgeMs,
+    maxTelemetryAgeMs,
+    telemetryAgeMs,
     requireSharedMemory,
     requireAuth,
     sharedMemory: perf.sharedMemory,
