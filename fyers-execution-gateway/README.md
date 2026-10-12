@@ -42,8 +42,8 @@ Put HTTPS in front of it with Caddy/Nginx or a managed TLS proxy. Restrict port 
 - `FYERS_GATEWAY_MAX_SKEW_MS` (optional, default `60000`)
 - `FYERS_GATEWAY_UPSTREAM_TIMEOUT_MS` (optional, default `8000`)
 - `FYERS_GATEWAY_MAX_ORDER_QUANTITY` (optional, default `1000`; configure to your permitted account/instrument limits)
-- `FYERS_GATEWAY_CONTEXT_TTL_MS` (optional, default `30000`, clamped to 5–60 seconds)
+- `FYERS_GATEWAY_CONTEXT_TTL_MS` (optional, default `30000`, clamped to 5–60 seconds; set the same value on both the TradingCore server and the gateway)
 
-The gateway also enforces a maximum of 10 order requests per rolling second per account and forces `offlineOrder=false`. FYERS applies MPP treatment to market orders; the gateway leaves market-order pricing behavior to FYERS rather than pretending to implement broker-side MPP itself. The trusted TradingCore server and gateway must use matching quantity limits.
+The gateway also enforces a maximum of 10 order requests per rolling second per account, removes expired rate-window entries, and forces `offlineOrder=false`. FYERS order placement fails closed when the fixed-IP gateway URL or shared secret is missing; it must not fall back to direct serverless broker egress. FYERS applies MPP treatment to market orders; the gateway leaves market-order pricing behavior to FYERS rather than pretending to implement broker-side MPP itself. The trusted TradingCore server and gateway must use matching quantity limits.
 
 The gateway should remain the only service that sends FYERS order POSTs.
