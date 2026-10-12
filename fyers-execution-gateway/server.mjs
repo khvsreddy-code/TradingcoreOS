@@ -8,6 +8,8 @@ const MAX_SKEW_MS = Number(process.env.FYERS_GATEWAY_MAX_SKEW_MS || 60_000);
 const UPSTREAM_TIMEOUT_MS = Number(process.env.FYERS_GATEWAY_UPSTREAM_TIMEOUT_MS || 8_000);
 const allowLegacySecret = process.env.FYERS_GATEWAY_ALLOW_LEGACY_SECRET === 'true';
 const nonces = new Map();
+const orderTimestampsByAccount = new Map();
+const MAX_ORDERS_PER_SECOND = 10;
 const MAX_ORDER_QUANTITY = Math.max(1, Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY || 1000));
 const MAX_CONTEXT_TTL_MS = Math.max(5_000, Math.min(60_000, Number(process.env.FYERS_GATEWAY_CONTEXT_TTL_MS || 30_000)));
 
@@ -92,18 +94,28 @@ function validateExecutionContext(order, context) {
   const strategyId = String(context.strategyId || '').trim();
   const decisionId = String(context.riskDecisionId || '').trim();
   const orderHash = String(context.orderHash || '').trim().toLowerCase();
+  const accountKey = String(context.accountKey || '').trim();
   if (context.version !== 1 || context.riskApproved !== true) throw new Error('Execution context has no approved risk decision');
-  if (!strategyId || strategyId.length > 128 || !decisionId || decisionId.length > 128) throw new Error('Execution context strategy or risk decision identity is invalid');
+  if (!strategyId || strategyId.length > 128 || !decisionId || decisionId.length > 128 || !/^[a-f0-9]{64}$/.test(accountKey)) throw new Error('Execution context strategy, account, or risk decision identity is invalid');
   if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || issuedAt > now + 2_000 || issuedAt < now - MAX_CONTEXT_TTL_MS || expiresAt <= now || expiresAt - issuedAt > MAX_CONTEXT_TTL_MS) {
     throw new Error('Execution context is expired or outside its permitted time window');
   }
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > MAX_ORDER_QUANTITY || !Number.isSafeInteger(maxQuantity) || maxQuantity < 1 || quantity > maxQuantity || maxQuantity > MAX_ORDER_QUANTITY) {
     throw new Error('Order quantity exceeds the validated risk limits');
   }
+  if (order?.offlineOrder === true) throw new Error('After-market orders are disabled for compliant FYERS API execution');
   const expectedHash = crypto.createHash('sha256').update(JSON.stringify(order)).digest('hex');
   if (!/^[a-f0-9]{64}$/.test(orderHash) || !timingSafeEqualHex(orderHash, expectedHash)) {
     throw new Error('Execution context does not match the submitted order');
   }
+}
+
+function enforceAccountOrderRate(accountKey) {
+  const now = Date.now();
+  const recent = (orderTimestampsByAccount.get(accountKey) || []).filter((timestamp) => now - timestamp < 1000);
+  if (recent.length >= MAX_ORDERS_PER_SECOND) throw Object.assign(new Error('FYERS compliance rate limit exceeded: maximum 10 order requests per second per account'), { statusCode: 429 });
+  recent.push(now);
+  orderTimestampsByAccount.set(accountKey, recent);
 }
 
 function buildFyersPayload(order = {}) {
@@ -118,7 +130,8 @@ function buildFyersPayload(order = {}) {
     stopPrice: type === 3 || type === 4 ? numberOrZero(order.triggerPrice ?? order.stopPrice) : 0,
     disclosedQty: Math.max(0, Math.trunc(numberOrZero(order.disclosedQty))),
     validity: String(order.validity || 'DAY').toUpperCase() === 'IOC' ? 'IOC' : 'DAY',
-    offlineOrder: Boolean(order.offlineOrder),
+    // Retail algo compliance does not permit AMO submissions through this gateway.
+    offlineOrder: false,
     stopLoss: numberOrZero(order.stopLoss),
     takeProfit: numberOrZero(order.takeProfit ?? order.target),
     orderTag: String(order.orderTag || 'TradingCoreOS').slice(0, 50),
@@ -152,6 +165,7 @@ const server = http.createServer(async (req, res) => {
     const accessToken = String(body.accessToken || '');
     if (!accessToken) return json(res, 400, { success: false, error: 'FYERS access token is required' });
     validateExecutionContext(body.order, body.executionContext);
+    enforceAccountOrderRate(String(body.executionContext.accountKey));
     const fyersPayload = buildFyersPayload(body.order);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
@@ -173,7 +187,7 @@ const server = http.createServer(async (req, res) => {
       clearTimeout(timer);
     }
   } catch (error) {
-    const status = error?.name === 'AbortError' ? 504 : 400;
+    const status = error?.name === 'AbortError' ? 504 : Number(error?.statusCode) === 429 ? 429 : 400;
     return json(res, status, { success: false, error: error?.name === 'AbortError' ? 'FYERS upstream request timed out' : error?.message || 'Invalid request' });
   }
 });
