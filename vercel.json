@@ -4,7 +4,12 @@
   "services": {
     "web": {
       "root": ".",
-      "framework": "vite",
+      "framework": "vite"
+    },
+    "api": {
+      "root": ".",
+      "framework": "express",
+      "entrypoint": "api/index.ts",
       "functions": {
         "api/index.ts": {
           "maxDuration": 15
@@ -46,7 +51,7 @@
     {
       "source": "/api/:path*",
       "destination": {
-        "service": "web"
+        "service": "api"
       }
     },
     {
