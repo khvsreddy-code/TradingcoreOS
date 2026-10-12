@@ -26,7 +26,6 @@ const EXACT_RUNTIME_FILES = new Set([
   'npm-shrinkwrap.json',
   'tsconfig.json',
   'tsconfig.build.json',
-  'vercel.json',
 ]);
 
 const RUNTIME_PREFIXES = [
@@ -65,6 +64,19 @@ export function readChangedPaths(previousSha, currentSha) {
     .filter(Boolean);
 }
 
+function realtimeServiceConfigChanged(previousSha, currentSha) {
+  const readConfig = (sha) => {
+    const raw = execFileSync('git', ['show', `${sha}:vercel.json`], { encoding: 'utf8' });
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') throw new Error('vercel.json is not an object');
+    return parsed.services?.realtimefresh ?? null;
+  };
+
+  // Rewrites, headers and web/API service changes do not affect the realtime
+  // process. Only rebuild if the actual realtime service definition changed.
+  return JSON.stringify(readConfig(previousSha)) !== JSON.stringify(readConfig(currentSha));
+}
+
 export function runRealtimeIgnoreCommand(env = process.env) {
   if (env.TCO_REALTIME_FORCE_BUILD === '1') {
     console.log('[realtime-ignore] Forced rebuild requested; rebuilding the realtime image.');
@@ -86,6 +98,10 @@ export function runRealtimeIgnoreCommand(env = process.env) {
     execFileSync('git', ['cat-file', '-e', `${currentSha}^{commit}`], { stdio: 'ignore' });
     const changed = readChangedPaths(previousSha, currentSha);
     const relevant = changed.filter(isRealtimeRuntimePath);
+
+    if (changed.includes('vercel.json') && realtimeServiceConfigChanged(previousSha, currentSha)) {
+      relevant.push('vercel.json (realtimefresh service configuration)');
+    }
 
     if (relevant.length) {
       console.log('[realtime-ignore] Realtime runtime dependency changes detected; rebuilding:');
