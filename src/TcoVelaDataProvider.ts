@@ -32,14 +32,16 @@ function textField(row: FyersSymbolRecord, ...keys: string[]): string {
   return '';
 }
 
-function descriptorFromMaster(master: FyersMasterName, row: FyersSymbolRecord): SymbolDescriptor | undefined {
-  const ticker = textField(row, 'symbol', 'symbol_ticker', 'fySymbol', 'fysymbol');
+function descriptorFromMaster(master: FyersMasterName, row: FyersSymbolRecord, symbolKey = ''): SymbolDescriptor | undefined {
+  // FYERS JSON masters are keyed by ticker and may use symTicker/exSymName/symDetails.
+  let ticker = textField(row, 'symbol', 'symbol_ticker', 'symTicker', 'fySymbol', 'fysymbol') || symbolKey;
+  if (!ticker.includes(':') && symbolKey.includes(':')) ticker = symbolKey;
   if (!ticker || !ticker.includes(':')) return undefined;
   const prefix = ticker.slice(0, ticker.indexOf(':')).toUpperCase();
   if (!/^[A-Z0-9_-]{2,16}$/.test(prefix)) return undefined;
   const providerTicker = ticker.slice(ticker.indexOf(':') + 1);
   if (!providerTicker) return undefined;
-  const description = textField(row, 'description', 'symbol_desc', 'symbolDesc', 'display_name', 'name');
+  const description = textField(row, 'description', 'symbol_desc', 'symbolDesc', 'display_name', 'name', 'exSymName', 'symDetails');
   const kind = master === 'NSE_COM' || master === 'MCX_COM' ? 'commodity' :
     master === 'NSE_CD' ? 'currency' : master.endsWith('_FO') ? 'derivative' :
     /INDEX/i.test(ticker) ? 'index' : 'equity';
@@ -58,18 +60,24 @@ async function loadFyersSymbolCatalog(): Promise<SymbolDescriptor[]> {
       if (!response.ok) throw new Error(`FYERS ${master} symbol master returned HTTP ${response.status}`);
       const payload: unknown = await response.json();
       const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : undefined;
-      const rows: unknown[] = Array.isArray(payload) ? payload :
-        Array.isArray(root?.data) ? root.data as unknown[] :
-        root ? Object.values(root) : [];
+      const rows: Array<{ symbolKey?: string; value: unknown }> = Array.isArray(payload)
+        ? payload.map((value) => ({ value }))
+        : Array.isArray(root?.data)
+          ? (root.data as unknown[]).map((value) => ({ value }))
+          : root
+            ? Object.entries(root).map(([symbolKey, value]) => ({ symbolKey, value }))
+            : [];
       return { master, rows };
     }));
     const byTicker = new Map<string, SymbolDescriptor>();
     for (const result of settled) {
       if (result.status !== 'fulfilled') continue; // partial master outage must not hide healthy venues
-      for (const value of result.value.rows) {
+      for (const entry of result.value.rows) {
+        const value = entry.value;
         if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-        const descriptor = descriptorFromMaster(result.value.master, value as FyersSymbolRecord);
-        if (descriptor && !byTicker.has(descriptor.ticker)) byTicker.set(descriptor.ticker, descriptor);
+        const descriptor = descriptorFromMaster(result.value.master, value as FyersSymbolRecord, entry.symbolKey);
+        const key = descriptor ? descriptor.prefix + ':' + descriptor.ticker : '';
+        if (descriptor && !byTicker.has(key)) byTicker.set(key, descriptor);
       }
     }
     // Keep the terminal usable during an upstream outage, but never cache a fallback-only
