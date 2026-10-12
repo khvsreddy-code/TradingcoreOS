@@ -104,6 +104,11 @@ export class MultiProviderFeed implements MarketDataFeed {
         return this.registry.symbolsOf(name);
     }
 
+    /** Search provider catalogs on demand; discovered rows are added to the registry index. */
+    searchSymbols(query: string, limit = 100, market = 'All'): Promise<SymbolDescriptor[]> {
+        return this.registry.searchSymbols(query, limit, market);
+    }
+
     /** Told when a symbol stays unservable by everything registered (the load is parked). */
     onUnresolved(cb: (info: { symbol: string; providers: string[] }) => void): Unsubscribe {
         return this.registry.onUnresolved(cb);

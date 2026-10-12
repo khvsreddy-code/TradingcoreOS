@@ -324,6 +324,60 @@ export class ProviderRegistry {
         return this.symbolIconOf({ ...(d ?? { ticker: resolved.ticker }), provider: d?.provider ?? resolved.provider });
     }
 
+    /**
+     * Search registered providers on demand. Returned descriptors are merged into each
+     * provider's in-memory resolution indexes before returning, so selecting a lazily
+     * discovered PREFIX:TICKER can immediately be resolved by the chart feed.
+     */
+    async searchSymbols(query: string, limit = 100, market = 'All'): Promise<SymbolDescriptor[]> {
+        const term = query.trim();
+        const maximum = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.trunc(limit))) : 100;
+        if (term.length < 2) return [];
+        const providers = [...this.entries.values()].filter((entry) => entry.provider.searchSymbols);
+        const results = await Promise.allSettled(providers.map(async (entry) => ({
+            entry,
+            symbols: await entry.provider.searchSymbols!(term, maximum, market),
+        })));
+        const merged: SymbolDescriptor[] = [];
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue;
+            const { entry, symbols } = result.value;
+            let changed = false;
+            for (const raw of symbols) {
+                if (!raw || typeof raw.ticker !== 'string' || !raw.ticker.trim()) continue;
+                const descriptor: SymbolDescriptor = { ...raw, provider: entry.name };
+                const venue = normName(descriptor.prefix ?? entry.name);
+                const ticker = normTicker(descriptor.ticker);
+                const canonicalKey = `${venue}:${ticker}`;
+                const existingIndex = entry.descriptors.findIndex((item) =>
+                    `${normName(item.prefix ?? entry.name)}:${normTicker(item.ticker)}` === canonicalKey,
+                );
+                if (existingIndex >= 0) {
+                    entry.descriptors[existingIndex] = { ...entry.descriptors[existingIndex], ...descriptor };
+                } else {
+                    entry.descriptors.push(descriptor);
+                }
+                entry.index ??= new Set<string>();
+                entry.byTicker ??= new Map<string, SymbolDescriptor>();
+                entry.prefixIndex ??= new Map<string, SymbolDescriptor>();
+                entry.index.add(ticker);
+                // Prefix resolution is venue-specific. The bare-ticker map is only a
+                // fallback, so retain the first descriptor if two listings share a ticker.
+                if (!entry.byTicker.has(ticker)) entry.byTicker.set(ticker, descriptor);
+                if (descriptor.prefix) entry.prefixIndex.set(`${venue}:${ticker}`, descriptor);
+                merged.push(descriptor);
+                changed = true;
+            }
+            if (changed) this.notify(true);
+        }
+        const unique = new Map<string, SymbolDescriptor>();
+        for (const symbol of merged) {
+            const key = `${normName(symbol.prefix ?? symbol.provider ?? '')}:${normTicker(symbol.ticker)}`;
+            if (!unique.has(key)) unique.set(key, symbol);
+        }
+        return [...unique.values()].slice(0, maximum);
+    }
+
     /** Indexed symbols for one provider (or all, concatenated) — for autocomplete. */
     symbolsOf(rawName?: string): SymbolDescriptor[] {
         if (rawName != null) return this.entries.get(normName(rawName))?.descriptors ?? [];
