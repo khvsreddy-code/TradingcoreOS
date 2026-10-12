@@ -105,6 +105,9 @@ export function canTransitionFyersOrderStatus(
     : undefined;
   if (!current) return true;
   if (current === next) return true;
+  // Once a stored state is UNKNOWN, any recognized broker state can recover it.
+  // Handle this before TERMINAL.has() so TypeScript does not narrow UNKNOWN away.
+  if (current === 'UNKNOWN') return next !== 'UNKNOWN';
   if (next === 'UNKNOWN') return false;
   if (TERMINAL.has(current)) {
     return source === 'reconciliation' && TERMINAL.has(next);
@@ -116,7 +119,6 @@ export function canTransitionFyersOrderStatus(
   if (current === 'OPEN') return ['PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED'].includes(next);
   if (current === 'PARTIAL') return ['PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED'].includes(next);
   if (current === 'CANCEL_PENDING') return ['OPEN','PARTIAL','FILLED','CANCELLED','REJECTED','EXPIRED'].includes(next);
-  if (current === 'UNKNOWN') return next !== 'UNKNOWN';
   return false;
 }
 
@@ -329,14 +331,15 @@ export class FyersOrderStateEngine {
     const sequence = ++this.memorySequence;
     const canonical = withSequence(event, sequence);
     if (event.type === 'OrderUpdate') {
+      const canonicalOrder = canonical as OrderUpdate;
       if (!brokerOrderId || canTransitionFyersOrderStatus(current?.status, event.status, source)) {
         if (brokerOrderId) {
-          const incomingFilled = Number(canonical.filledQuantity || 0);
+          const incomingFilled = Number(canonicalOrder.filledQuantity || 0);
           const currentFilled = Number(current?.filledQuantity || 0);
           const merged = {
             ...(current || {}),
-            ...canonical,
-            quantity: canonical.quantity ?? current?.quantity,
+            ...canonicalOrder,
+            quantity: canonicalOrder.quantity ?? current?.quantity,
             filledQuantity: Math.max(currentFilled, incomingFilled),
           } as OrderUpdate;
           if (merged.quantity && merged.quantity > 0 && (merged.filledQuantity || 0) >= merged.quantity) {
