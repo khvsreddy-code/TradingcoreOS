@@ -56,10 +56,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "service": "web",
-        "path": "/index.html"
-      }
+      "destination": "/index.html"
     }
   ],
   "headers": [
