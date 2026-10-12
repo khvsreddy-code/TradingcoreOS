@@ -59,7 +59,7 @@ assert(routes.includes('Order quantity exceeds TradingCoreOS pre-trade limit'), 
 assert(routes.includes('Stop orders require a positive trigger price'), 'Preflight must validate stop-order trigger prices');
 assert(routes.includes('riskApproved: decision.approved'), 'The approval must derive from the preflight result, not an unconditional boolean');
 assert(routes.includes('checks: decision.checks'), 'The context decision must name the checks that passed');
-assert(routes.includes('orderHash: createHash'), 'Trusted server must bind context to exact order');
+assert(routes.includes("const orderHash = createHash('sha256').update(JSON.stringify(order)).digest('hex')"), 'Trusted server must bind context to exact order');
 assert(routes.includes('FYERS_GATEWAY_MAX_ORDER_QUANTITY'), 'Trusted server must apply the configured order cap');
 assert(routes.includes('FYERS live orders are disabled until the fixed-IP execution gateway'), 'FYERS must fail closed when its fixed-IP gateway is missing');
 assert(routes.includes('FYERS_GATEWAY_CONTEXT_TTL_MS'), 'Trusted server context expiry must match gateway configuration');
