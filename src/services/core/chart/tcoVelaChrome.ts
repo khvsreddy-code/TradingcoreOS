@@ -32,6 +32,14 @@ const TCO_CHROME_ICONS: Record<string, string> = {
   user: svg16('<circle cx="8" cy="4.5" r="2.5"/><path d="M2 14c.3-3 2.3-4.5 6-4.5s5.7 1.5 6 4.5"/>'),
   layout: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M7 2v12M7 7h7"/>'),
   play: svg16('<path d="M4 2.5 13.5 8 4 13.5z"/>'),
+  search: svg16('<circle cx="6.8" cy="6.8" r="4.4"/><path d="m10 10 4 4"/>'),
+  replay: svg16('<path d="M3 5V1.8L1 4M3 5h5a5 5 0 1 1-4.6 7"/>'),
+  datawindow: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M4 5h8M4 8h5M4 11h6"/>'),
+  star: svg16('<path d="m8 1.5 2 4.2 4.6.6-3.3 3.2.8 4.5L8 11.8l-4.1 2.2.8-4.5L1.4 6.3 6 5.7z"/>'),
+  calendar: svg16('<rect x="1.5" y="3" width="13" height="11" rx="1"/><path d="M4.5 1.5v3M11.5 1.5v3M1.5 6h13M5 8.5h2M9 8.5h2"/>'),
+  gear: svg16('<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/>'),
+  objects: svg16('<rect x="1.5" y="1.5" width="5" height="5" rx=".5"/><rect x="9.5" y="1.5" width="5" height="5" rx=".5"/><rect x="1.5" y="9.5" width="5" height="5" rx=".5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/>'),
+  indicators: svg16('<path d="M1.5 12.5 5 8.5l2.5 2 5-7 2 2"/>'),
 };
 for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
