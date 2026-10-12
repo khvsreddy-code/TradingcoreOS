@@ -71,6 +71,8 @@ export type ChartDataPlaneSnapshot = Readonly<{
 export type DataPlaneEvent =
   | { type: 'snapshot'; reason: 'cache' | 'history' | 'older-history'; snapshot: ChartDataPlaneSnapshot; olderAdded?: number; requestedLimit?: number }
   | { type: 'tick'; bucketChanged: boolean; snapshot: ChartDataPlaneSnapshot }
+  /** A quote whose exchange trade time is unknown. Consumers may update quote UI, but must not mutate candles. */
+  | { type: 'quote'; snapshot: ChartDataPlaneSnapshot }
   | { type: 'status'; status: 'loading' | 'ready' | 'error'; error?: string; snapshot: ChartDataPlaneSnapshot };
 
 type Subscriber = (event: DataPlaneEvent) => void;
@@ -102,6 +104,22 @@ type PlaneState = {
 };
 
 const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
+
+/** Only a valid exchange trade timestamp may create or advance a candle. Packet arrival time is not trade time. */
+function tradeTimestamp(tick: NormalizedMarketTick): string | undefined {
+  const raw = tick.lastTradeTimestamp ?? tick.brokerTimestamp ?? (
+    tick.source === 'paper' || tick.source === 'replay' || tick.source === 'backtest' || tick.source === 'simulator'
+      ? tick.timestamp ?? tick.receivedAtEpoch ?? tick.receivedAt
+      : undefined
+  );
+  if (raw == null || raw === '') return undefined;
+  const numeric = typeof raw === 'number' ? raw : Number(String(raw).trim());
+  const milliseconds = Number.isFinite(numeric)
+    ? (numeric > 1e12 ? numeric : numeric * 1000)
+    : Date.parse(String(raw));
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return undefined;
+  return new Date(milliseconds).toISOString();
+}
 
 function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
   const bySecond = new Map<number, HistoricalCandle>();
@@ -217,14 +235,12 @@ export class ChartDataPlane {
 
   private onColumnarTick(tick: NormalizedMarketTick, price: number): { changed: boolean; bucketChanged: boolean; latest: HistoricalCandle | null } {
     const view = this.canonicalPlane.read();
-    const rawTimestamp = tick.lastTradeTimestamp ?? tick.receivedAt ?? Date.now();
-    const numericTimestamp = typeof rawTimestamp === 'number' ? rawTimestamp : Number(rawTimestamp);
-    const timestampMs = Number.isFinite(numericTimestamp)
-      ? (numericTimestamp > 1e12 ? numericTimestamp : numericTimestamp * 1000)
-      : (() => {
-          const parsed = Date.parse(String(rawTimestamp));
-          return Number.isFinite(parsed) ? parsed : Date.now();
-        })();
+    const rawTimestamp = tradeTimestamp(tick);
+    if (rawTimestamp == null) return { changed: false, bucketChanged: false, latest: null };
+    // tradeTimestamp() returns only a validated ISO exchange timestamp. Never
+    // turn malformed broker data into a packet-receive-time candle.
+    const timestampMs = Date.parse(rawTimestamp);
+    if (!Number.isFinite(timestampMs) || timestampMs <= 0) return { changed: false, bucketChanged: false, latest: null };
     const intervalSeconds = CHART_TIMEFRAME_SECONDS[this.timeframe] || 300;
     const bucketTime = Math.floor(timestampMs / (intervalSeconds * 1000)) * intervalSeconds;
     const lastIndex = view.length - 1;
@@ -310,6 +326,15 @@ export class ChartDataPlane {
     this.state.latestTick = tick;
     const price = Number(tick.ltp);
     if (!Number.isFinite(price)) return;
+
+    // Quotes can keep the LTP UI current, but only trusted exchange trade times
+    // and already-loaded broker history may update a candle.
+    const hasHistory = Boolean(this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length);
+    if (!hasHistory || tradeTimestamp(tick) == null) {
+      this.emit({ type: 'quote', snapshot: this.snapshot() });
+      return;
+    }
+
     const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
     // The global transport is instrument-only; this per-plane counter joins the
     // packet to the timeframe-specific history, compute, and Vela update metrics.
@@ -345,7 +370,7 @@ export class ChartDataPlane {
       compatibility,
       {
         price,
-        timestamp: tick.lastTradeTimestamp ?? tick.receivedAt ?? Date.now(),
+        timestamp: tradeTimestamp(tick)!,
       },
       CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
       MAX_HISTORY_CANDLES,
@@ -393,7 +418,9 @@ export class ChartDataPlane {
       const cachedTick = chartMarketStore.getTick(marketKey) ?? tradingCoreRuntime.getMarketSnapshot(this.instrumentKey);
       if (cachedTick) this.onTick(cachedTick);
     }
-    void this.ensureHistory();
+    // Do not start object history here. The chart runtime and Vela provider explicitly
+    // call ensureReady(), which tries typed columnar data first and falls back only
+    // when the compact endpoint is unsupported. This avoids a first-load race.
   }
 
   private stopAfterIdle(): void {
@@ -486,9 +513,13 @@ export class ChartDataPlane {
     return this.activeWindow(materialized, limitOverride);
   }
 
-  /** Explicit mature object-history path used by TCO's fast progressive adapter. */
+  /**
+   * Compatibility entry point retained for Vela call sites. Always try the typed
+   * columnar path first; the shared loader falls back to object candles only when
+   * the provider cannot serve columns.
+   */
   ensureReadyHistory(limitOverride?: number): Promise<HistoricalCandle[]> {
-    return this.ensureHistory(limitOverride);
+    return this.ensureReady(limitOverride);
   }
 
   /**
