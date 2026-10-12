@@ -8,6 +8,7 @@ function read(path) {
 const drawingState = read('./services/core/chart/chartRuntimeSupport.ts');
 const liveChart = read('./components/workspace/LiveChart.tsx');
 const coreSpirit = read('./CoreSpiritVelaEngine.ts');
+const multiSymbolTimeframe = read('./services/coreSpirit/multiSymbolTimeframe.ts');
 const provider = read('./TcoVelaDataProvider.ts');
 const runtime = read('./services/runtime/TradingCoreRuntime.ts');
 const server = read('../server.ts');
@@ -23,8 +24,8 @@ assert.match(drawingState, /const velaDrawings\s*=\s*migrateVelaDrawings\(/, 'Ve
 assert.match(drawingState, /\n\s*velaDrawings,/, 'Vela persisted state must contain the migrated serialized drawing array');
 assert.doesNotMatch(liveChart, /LegacyDrawing|legacyDrawing|DrawingController\b/, 'TCO chart UI must not keep a second drawing authority');
 assert.match(coreSpirit, /const loadSecondaryData = async \(force\s*=\s*false\)/);
-assert.match(coreSpirit, /context\.alignment/);
-assert.match(coreSpirit, /context\.maxStalenessMs/);
+assert.match(multiSymbolTimeframe, /context\.alignment/, 'multi-timeframe snapshots must honor alignment policy');
+assert.match(multiSymbolTimeframe, /context\.maxStalenessMs/, 'multi-timeframe snapshots must honor stale-data bounds');
 assert.match(coreSpirit, /state:\s*confirmed\s*\?\s*['"]confirmed['"]\s*:\s*['"]developing['"]/);
 assert.match(coreSpirit, /Secondary market data refresh failed/);
 assert.match(coreSpirit, /void loadSecondaryData\(\)/);
