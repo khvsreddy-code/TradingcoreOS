@@ -12,7 +12,7 @@ import { coreSpiritAboveBar, coreSpiritAtBar, coreSpiritBelowBar, coreSpiritChar
 import { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { CoreSpiritCompiler } from './compiler';
 import { createCoreSpiritExecutionContext, createCoreSpiritExecutionFrame } from './executionContext';
-import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritDataResolutionContext } from './types';
+import type { CoreSpiritExecutionContext, CoreSpiritExecutionMode, CoreSpiritDataResolver, CoreSpiritTick, CoreSpiritFootprint, CoreSpiritIntrabar, CoreSpiritDataRequest, CoreSpiritDataSnapshot, CoreSpiritDataResolutionContext, CoreSpiritDataAlignment } from './types';
 import type { CoreSpiritWorkspaceSlot, CoreSpiritWorkspaceWidgetKind } from './visualApp';
 import type { CoreSpiritChartAreaKind } from './visualCoordinates';
 import type { CoreSpiritSurfaceDeclaration } from './languageConcepts';
@@ -87,14 +87,16 @@ function cloneCoreSpiritKernelState(value: CoreSpiritKernelState): CoreSpiritKer
 
 function copyCoreSpiritKernelState(target: CoreSpiritKernelState, source: CoreSpiritKernelState): void {
   if (target.family !== source.family) throw new Error(`CoreSpirit kernel snapshot family mismatch: ${target.family} !== ${source.family}`);
+  // The family equality guard above establishes matching runtime variants;
+  // explicit casts let TypeScript preserve that invariant across two unions.
   switch (target.family) {
-    case 'fused': target.state.copyFrom(source.state); break;
-    case 'direct': target.state.copyFrom(source.state); break;
-    case 'rsi': target.state.copyFrom(source.state); break;
-    case 'atr': target.state.copyFrom(source.state); break;
-    case 'vwap': target.state.copyFrom(source.state); break;
-    case 'beta': target.state.copyFrom(source.state); break;
-    case 'trend': target.state.copyFrom(source.state); break;
+    case 'fused': target.state.copyFrom(source.state as CoreSpiritFusedSeriesCursor); break;
+    case 'direct': target.state.copyFrom(source.state as CoreSpiritFusedSeriesCursor); break;
+    case 'rsi': target.state.copyFrom(source.state as RSIState); break;
+    case 'atr': target.state.copyFrom(source.state as ATRState); break;
+    case 'vwap': target.state.copyFrom(source.state as VWAPSessionState); break;
+    case 'beta': target.state.copyFrom(source.state as RollingBetaState); break;
+    case 'trend': target.state.copyFrom(source.state as RollingCorrelationState); break;
   }
 }
 
