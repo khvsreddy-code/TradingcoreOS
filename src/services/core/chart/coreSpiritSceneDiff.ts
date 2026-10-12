@@ -87,40 +87,46 @@ function visualGeometryTimeSpan(geometry: unknown): DirtySpan | null {
 /** Return the causal-time envelope for every time-bearing CoreSpirit output. */
 export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
     const value = output as any;
+    const anchor = finiteSpan(value.time);
+    const end = value.metadata?.endTime ?? value.metadata?.toTime;
+    const start = value.metadata?.startTime ?? value.metadata?.fromTime;
+    const metadataSpan = Number.isFinite(Number(value.time))
+        ? unionDirtySpans(anchor, finiteSpan(start, end ?? value.time))
+        : finiteSpan(start, end);
 
-    // Custom geometry can extend far beyond its anchor time.
+    // Geometry must widen an object's anchor span. Checking time first used to
+    // truncate anchored lines/polylines/footprints to a single bar, leaving stale
+    // retained pixels at old geometry endpoints after an incremental update.
     if (output.kind === 'customVisual') {
-        if (value.geometry && visualGeometryTimeSpan(value.geometry) === null) return null;
-        return unionDirtySpans(visualGeometryTimeSpan(value.geometry), finiteSpan(value.time));
+        const geometry = value.geometry ? visualGeometryTimeSpan(value.geometry) : null;
+        if (value.geometry && geometry === null) return null;
+        return unionDirtySpans(metadataSpan, geometry);
     }
-
-    if (Number.isFinite(Number(value.time))) {
-        const baseTime = Number(value.time);
-        const end = value.metadata?.endTime ?? value.metadata?.toTime;
-        const anchor = finiteSpan(baseTime, end);
-        const start = value.metadata?.startTime ?? value.metadata?.fromTime;
-        return unionDirtySpans(anchor, finiteSpan(start, end ?? baseTime));
-    }
-
     if (output.kind === 'line' || output.kind === 'arrow') {
-        return finiteSpan(value.start?.time, value.end?.time);
+        return unionDirtySpans(metadataSpan, finiteSpan(value.start?.time, value.end?.time));
     }
     if (output.kind === 'box' || output.kind === 'zone') {
-        // Viewport coordinates are not canonical market time. Keep them conservative.
-        return value.domain === 'viewport' ? null : finiteSpan(value.left, value.right);
+        // Viewport coordinates are not canonical market time; an anchor timestamp
+        // cannot prove that the whole viewport object is bounded.
+        if (value.domain === 'viewport') return null;
+        return unionDirtySpans(metadataSpan, finiteSpan(value.left, value.right));
     }
     if (output.kind === 'polyline' || output.kind === 'polygon') {
-        return pointTimeSpan(value.points);
-    }
-    if (output.kind === 'table') {
-        return finiteSpan(value.metadata?.fromTime ?? value.metadata?.time, value.metadata?.toTime ?? value.metadata?.endTime);
+        const geometry = pointTimeSpan(value.points);
+        if (Array.isArray(value.points) && geometry === null) return null;
+        return unionDirtySpans(metadataSpan, geometry);
     }
     if (output.kind === 'footprint' || output.kind === 'event' || output.kind === 'scanCandidate' || output.kind === 'orderIntent') {
-        return pointTimeSpan(value.points ?? value.geometry?.points);
+        const points = value.points ?? value.geometry?.points;
+        const geometry = pointTimeSpan(points);
+        if (Array.isArray(points) && geometry === null) return null;
+        return unionDirtySpans(metadataSpan, geometry);
     }
-    return null;
+    if (output.kind === 'table') {
+        return unionDirtySpans(metadataSpan, finiteSpan(value.metadata?.fromTime ?? value.metadata?.time, value.metadata?.toTime ?? value.metadata?.endTime));
+    }
+    return metadataSpan;
 }
-
 type SceneDiffEmission = any;
 function removed(output: CoreSpiritObject): boolean {
     return output.metadata?.removed === true;
