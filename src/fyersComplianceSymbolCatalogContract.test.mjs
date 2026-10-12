@@ -20,6 +20,10 @@ assert(gateway.includes('context.riskApproved !== true'), 'Gateway must reject u
 assert(gateway.includes('context.expiresAt'), 'Gateway must reject expired contexts');
 assert(gateway.includes('quantity > maxQuantity'), 'Gateway must enforce context quantity cap');
 assert(gateway.includes('does not match the submitted order'), 'Gateway must bind risk context to exact order');
+assert(gateway.includes('MAX_ORDERS_PER_SECOND = 10'), 'Gateway must enforce FYERS order-rate ceiling');
+assert(gateway.includes('enforceAccountOrderRate'), 'Order-rate ceiling must be account-scoped');
+assert(gateway.includes('offlineOrder: false'), 'Gateway must disallow after-market order payloads');
+assert(gateway.includes('accountKey'), 'Execution context must be bound to an account identity');
 assert(routes.includes('riskApproved: true'), 'Trusted server must attach an explicit risk decision');
 assert(routes.includes('orderHash: createHash'), 'Trusted server must bind context to exact order');
 assert(routes.includes('FYERS_GATEWAY_MAX_ORDER_QUANTITY'), 'Trusted server must apply the configured order cap');
