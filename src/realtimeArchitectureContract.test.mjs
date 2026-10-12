@@ -8,6 +8,8 @@ assert.equal(vercel.services?.realtimefresh?.entrypoint, 'Dockerfile');
 assert.equal(vercel.services?.realtimefresh?.ignoreCommand, 'node tools/ignore-realtime-build.mjs');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/healthz' && route.destination?.service === 'realtimefresh'), 'health route must target the deployed realtime service');
 assert.ok(vercel.rewrites?.some((route) => route.source === '/api/realtime/ws' && route.destination?.service === 'realtimefresh'), 'WebSocket route must target the deployed realtime service');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/api/:path*' && route.destination?.service === 'web'), 'API routes must target the web service');
+assert.ok(vercel.rewrites?.some((route) => route.source === '/(.*)' && route.destination?.service === 'web'), 'SPA routes must target the web service');
 assert.deepEqual(vercel.regions, ['bom1'], 'India-first Vercel functions must remain in Mumbai (bom1)');
 assert.ok(vercel.services?.web?.functions?.['api/queue.ts'], 'queue worker must remain separate from api/index');
 
