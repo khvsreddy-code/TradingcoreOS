@@ -8,6 +8,8 @@ const MAX_SKEW_MS = Number(process.env.FYERS_GATEWAY_MAX_SKEW_MS || 60_000);
 const UPSTREAM_TIMEOUT_MS = Number(process.env.FYERS_GATEWAY_UPSTREAM_TIMEOUT_MS || 8_000);
 const allowLegacySecret = process.env.FYERS_GATEWAY_ALLOW_LEGACY_SECRET === 'true';
 const nonces = new Map();
+const MAX_ORDER_QUANTITY = Math.max(1, Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY || 1000));
+const MAX_CONTEXT_TTL_MS = Math.max(5_000, Math.min(60_000, Number(process.env.FYERS_GATEWAY_CONTEXT_TTL_MS || 30_000)));
 
 if (!SECRET) throw new Error('FYERS_GATEWAY_SECRET is required');
 
@@ -78,6 +80,32 @@ function numberOrZero(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function validateExecutionContext(order, context) {
+  if (!context || typeof context !== 'object' || Array.isArray(context)) {
+    throw new Error('Validated TradingCoreOS execution context is required');
+  }
+  const now = Date.now();
+  const issuedAt = Number(context.issuedAt);
+  const expiresAt = Number(context.expiresAt);
+  const maxQuantity = Number(context.maxQuantity);
+  const quantity = Math.trunc(numberOrZero(order?.quantity ?? order?.qty));
+  const strategyId = String(context.strategyId || '').trim();
+  const decisionId = String(context.riskDecisionId || '').trim();
+  const orderHash = String(context.orderHash || '').trim().toLowerCase();
+  if (context.version !== 1 || context.riskApproved !== true) throw new Error('Execution context has no approved risk decision');
+  if (!strategyId || strategyId.length > 128 || !decisionId || decisionId.length > 128) throw new Error('Execution context strategy or risk decision identity is invalid');
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || issuedAt > now + 2_000 || issuedAt < now - MAX_CONTEXT_TTL_MS || expiresAt <= now || expiresAt - issuedAt > MAX_CONTEXT_TTL_MS) {
+    throw new Error('Execution context is expired or outside its permitted time window');
+  }
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > MAX_ORDER_QUANTITY || !Number.isSafeInteger(maxQuantity) || maxQuantity < 1 || quantity > maxQuantity || maxQuantity > MAX_ORDER_QUANTITY) {
+    throw new Error('Order quantity exceeds the validated risk limits');
+  }
+  const expectedHash = crypto.createHash('sha256').update(JSON.stringify(order)).digest('hex');
+  if (!/^[a-f0-9]{64}$/.test(orderHash) || !timingSafeEqualHex(orderHash, expectedHash)) {
+    throw new Error('Execution context does not match the submitted order');
+  }
+}
+
 function buildFyersPayload(order = {}) {
   const type = orderType(order.orderType || order.type);
   const payload = {
@@ -123,6 +151,7 @@ const server = http.createServer(async (req, res) => {
     const body = JSON.parse(rawBody || '{}');
     const accessToken = String(body.accessToken || '');
     if (!accessToken) return json(res, 400, { success: false, error: 'FYERS access token is required' });
+    validateExecutionContext(body.order, body.executionContext);
     const fyersPayload = buildFyersPayload(body.order);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
