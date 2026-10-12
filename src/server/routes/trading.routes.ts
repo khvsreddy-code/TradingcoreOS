@@ -162,13 +162,35 @@ tradingRoutes.get('/:brokerId/option-chain', injectBrokerSession, async (req: Br
   catch (err: unknown) { res.status(502).json({ success: false, error: getErrorMessage(err, 'Unable to load option chain') }); }
 });
 
-async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload) {
+async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: BrokerOrderPayload, riskDecisionId: string) {
   const gatewayUrl = process.env.FYERS_EXECUTION_GATEWAY_URL?.replace(/\/$/, '');
   const gatewaySecret = process.env.FYERS_EXECUTION_GATEWAY_SECRET;
   if (!gatewayUrl || !gatewaySecret) throw new Error('FYERS execution gateway is not configured. Set FYERS_EXECUTION_GATEWAY_URL and FYERS_EXECUTION_GATEWAY_SECRET on the TradingCore server.');
+
+  // Fail closed before any network side effect. The gateway independently checks this
+  // short-lived context against the exact serialized order and the signed request body.
+  const quantity = Number(order.quantity ?? order.qty);
+  const maxQuantity = Math.max(1, Math.min(1000, Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY || 1000)));
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+    throw new Error(`Order quantity exceeds TradingCoreOS pre-trade limit (${maxQuantity}).`);
+  }
+  if (!/^[A-Z0-9_-]{2,16}:[A-Z0-9&_.-]{1,80}$/i.test(String(order.symbol || '').trim())) {
+    throw new Error('Order symbol must be a fully-qualified broker symbol (for example NSE:SBIN-EQ).');
+  }
+  const issuedAt = Date.now();
+  const executionContext = {
+    version: 1,
+    riskApproved: true,
+    strategyId: 'tco-manual-order',
+    riskDecisionId: String(riskDecisionId).slice(0, 128),
+    issuedAt,
+    expiresAt: issuedAt + 30_000,
+    maxQuantity,
+    orderHash: createHash('sha256').update(JSON.stringify(order)).digest('hex'),
+  };
   const timestamp = String(Date.now());
   const nonce = randomUUID();
-  const body = JSON.stringify({ accessToken, order });
+  const body = JSON.stringify({ accessToken, order, executionContext });
   const bodyHash = createHash('sha256').update(body).digest('hex');
   const signingInput = ['POST', '/v1/fyers/order', timestamp, nonce, bodyHash].join('\n');
   const signature = createHmac('sha256', gatewaySecret).update(signingInput).digest('hex');
@@ -236,7 +258,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     let data: unknown;
     try {
       data = brokerId === 'fyers' && process.env.FYERS_EXECUTION_GATEWAY_URL
-        ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload)
+        ? await placeFyersOrderViaFixedIpGateway(req.accessToken, orderPayload, idempotencyKey)
         : await req.brokerAdapter.placeOrder(req.accessToken, orderPayload);
     } catch (err: unknown) {
       const message = getErrorMessage(err, 'Broker order request failed');
