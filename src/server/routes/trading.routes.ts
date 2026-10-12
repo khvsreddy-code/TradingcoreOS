@@ -30,6 +30,73 @@ function parseBrokerOrderPayload(value: unknown): BrokerOrderPayload {
   return value as BrokerOrderPayload;
 }
 
+type FyersPreflightDecision = {
+  approved: true;
+  version: 'manual-order-preflight-v1';
+  maxQuantity: number;
+  checks: readonly string[];
+};
+
+function configuredFyersOrderQuantityLimit(): number {
+  const value = Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY ?? 1000);
+  return Number.isSafeInteger(value) && value > 0 ? Math.max(1, Math.min(1000, value)) : 1000;
+}
+
+/**
+ * Baseline fail-closed pre-trade validation for manual orders.
+ *
+ * This is intentionally NOT represented as portfolio-aware risk management: it enforces
+ * typed order fields, allowed enums, symbol shape, quantity ceilings, price requirements,
+ * and AMO denial. Strategy automation must pass its own risk pipeline before it can
+ * receive an execution context in a future strategy-specific route.
+ */
+function validateFyersManualOrderPreflight(order: BrokerOrderPayload): FyersPreflightDecision {
+  const quantity = Number(order.quantity ?? order.qty);
+  const maxQuantity = configuredFyersOrderQuantityLimit();
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+    throw Object.assign(new Error(`Order quantity exceeds TradingCoreOS pre-trade limit (${maxQuantity}).`), { statusCode: 400 });
+  }
+
+  const symbol = String(order.symbol ?? '').trim();
+  if (!/^[A-Z0-9_-]{2,16}:[A-Z0-9&_.-]{1,80}$/i.test(symbol)) {
+    throw Object.assign(new Error('Order symbol must be a fully-qualified broker symbol (for example NSE:SBIN-EQ).'), { statusCode: 400 });
+  }
+
+  const side = String(order.side ?? '').trim().toUpperCase();
+  if (side !== 'BUY' && side !== 'SELL') {
+    throw Object.assign(new Error('FYERS order side must be Buy or Sell.'), { statusCode: 400 });
+  }
+
+  const orderType = String(order.orderType ?? '').trim().toUpperCase();
+  if (!['MARKET', 'LIMIT', 'SL', 'SL-M'].includes(orderType)) {
+    throw Object.assign(new Error('Unsupported FYERS order type.'), { statusCode: 400 });
+  }
+
+  const product = String(order.product ?? '').trim().toUpperCase();
+  if (!['CNC', 'MIS', 'NRML'].includes(product)) {
+    throw Object.assign(new Error('Unsupported FYERS product type.'), { statusCode: 400 });
+  }
+
+  const price = Number(order.price);
+  const triggerPrice = Number(order.triggerPrice);
+  if (orderType !== 'MARKET' && (!Number.isFinite(price) || price <= 0)) {
+    throw Object.assign(new Error('Limit and stop-limit orders require a positive limit price.'), { statusCode: 400 });
+  }
+  if ((orderType === 'SL' || orderType === 'SL-M') && (!Number.isFinite(triggerPrice) || triggerPrice <= 0)) {
+    throw Object.assign(new Error('Stop orders require a positive trigger price.'), { statusCode: 400 });
+  }
+  if (order.offlineOrder === true) {
+    throw Object.assign(new Error('After-market orders are disabled for FYERS API execution.'), { statusCode: 400 });
+  }
+
+  return {
+    approved: true,
+    version: 'manual-order-preflight-v1',
+    maxQuantity,
+    checks: ['required-fields', 'side-enum', 'order-type-enum', 'product-enum', 'fully-qualified-symbol', 'quantity-limit', 'price-fields', 'amo-disabled'],
+  };
+}
+
 async function injectBrokerSession(req: BrokerSessionRequest, res: Response, next: NextFunction) {
   const brokerId = req.params.brokerId;
   const userId = req.tradingCoreUserId!;
@@ -167,30 +234,27 @@ async function placeFyersOrderViaFixedIpGateway(accessToken: string, order: Brok
   const gatewaySecret = process.env.FYERS_EXECUTION_GATEWAY_SECRET;
   if (!gatewayUrl || !gatewaySecret) throw new Error('FYERS execution gateway is not configured. Set FYERS_EXECUTION_GATEWAY_URL and FYERS_EXECUTION_GATEWAY_SECRET on the TradingCore server.');
 
-  // Fail closed before any network side effect. The gateway independently checks this
-  // short-lived context against the exact serialized order and the signed request body.
-  const quantity = Number(order.quantity ?? order.qty);
-  const maxQuantity = Math.max(1, Math.min(1000, Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY || 1000)));
-  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
-    throw new Error(`Order quantity exceeds TradingCoreOS pre-trade limit (${maxQuantity}).`);
-  }
-  if (!/^[A-Z0-9_-]{2,16}:[A-Z0-9&_.-]{1,80}$/i.test(String(order.symbol || '').trim())) {
-    throw new Error('Order symbol must be a fully-qualified broker symbol (for example NSE:SBIN-EQ).');
-  }
+  // Fail closed before any network side effect. A context is issued only after these
+  // concrete pre-trade checks pass; the gateway then validates the signed, order-bound context.
+  const decision = validateFyersManualOrderPreflight(order);
   const issuedAt = Date.now();
+  const orderHash = createHash('sha256').update(JSON.stringify(order)).digest('hex');
+  const decisionId = createHash('sha256').update(JSON.stringify({
+    version: decision.version, userId, idempotencyKey: riskDecisionId, orderHash, checks: decision.checks,
+  })).digest('hex');
   const executionContext = {
     version: 1,
-    riskApproved: true,
+    riskApproved: decision.approved,
     strategyId: 'tco-manual-order',
     accountKey: createHash('sha256').update(userId).digest('hex'),
-    riskDecisionId: String(riskDecisionId).slice(0, 128),
+    riskDecisionId: decisionId,
     issuedAt,
     expiresAt: issuedAt + (() => {
       const configured = Number(process.env.FYERS_GATEWAY_CONTEXT_TTL_MS ?? 30_000);
       return Number.isFinite(configured) ? Math.max(5_000, Math.min(60_000, configured)) : 30_000;
     })(),
-    maxQuantity,
-    orderHash: createHash('sha256').update(JSON.stringify(order)).digest('hex'),
+    maxQuantity: decision.maxQuantity,
+    orderHash,
   };
   const timestamp = String(Date.now());
   const nonce = randomUUID();
@@ -231,7 +295,15 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     return;
   }
   let orderPayload: BrokerOrderPayload;
-  try { orderPayload = parseBrokerOrderPayload(req.body); } catch (error: unknown) { res.status(400).json({ success: false, error: getErrorMessage(error, 'Invalid order payload') }); return; }
+  try {
+    orderPayload = parseBrokerOrderPayload(req.body);
+    if (brokerId === 'fyers') validateFyersManualOrderPreflight(orderPayload);
+  } catch (error: unknown) {
+    res.status(getErrorStatus(error) >= 400 && getErrorStatus(error) < 500 ? getErrorStatus(error) : 400).json({
+      success: false, orderSubmitted: false, error: getErrorMessage(error, 'Invalid order payload'),
+    });
+    return;
+  }
   try {
     const claim = await OrderIdempotencyRepository.claim(userId, brokerId, idempotencyKey, orderPayload);
     if (!claim.claimed) {
