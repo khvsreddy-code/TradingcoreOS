@@ -101,6 +101,7 @@ const unifiedSource = `
 requires execution.route
 requires risk.evaluate
 requires automation
+requires events
 data nifty = market("NSE:NIFTY50", "5m")
 
 let trend = ta.ema(nifty.close, 50)
