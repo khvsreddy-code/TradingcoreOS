@@ -5,6 +5,7 @@ import type { CanonicalMarketView } from './services/core/data/canonicalDataPlan
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
+import { tradingApi, readTradingApiJson } from './services/http/tradingApi';
 
 const FALLBACK_SYMBOLS: readonly SymbolDescriptor[] = [
   { ticker: 'NIFTY50-INDEX', prefix: 'NSE', description: 'NIFTY 50', type: 'index' },
@@ -17,9 +18,7 @@ const FALLBACK_SYMBOLS: readonly SymbolDescriptor[] = [
 type FyersMasterName = 'NSE_CM'|'NSE_FO'|'NSE_CD'|'NSE_COM'|'BSE_CM'|'BSE_FO'|'MCX_COM';
 type FyersSymbolRecord = Record<string, unknown>;
 const FYERS_MASTERS: readonly FyersMasterName[] = ['NSE_CM','NSE_FO','NSE_CD','NSE_COM','BSE_CM','BSE_FO','MCX_COM'];
-const SYMBOL_CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
-let symbolCatalog: { expiresAt: number; symbols: SymbolDescriptor[] } | undefined;
-let symbolCatalogLoad: Promise<SymbolDescriptor[]> | undefined;
+let symbolCatalog: SymbolDescriptor[] = FALLBACK_SYMBOLS.map((symbol) => ({ ...symbol }));
 
 function textField(row: FyersSymbolRecord, ...keys: string[]): string {
   for (const key of keys) {
@@ -33,7 +32,7 @@ function textField(row: FyersSymbolRecord, ...keys: string[]): string {
 }
 
 function descriptorFromMaster(master: FyersMasterName, row: FyersSymbolRecord, symbolKey = ''): SymbolDescriptor | undefined {
-  // FYERS JSON masters are keyed by ticker and may use symTicker/exSymName/symDetails.
+  // The server preserves FYERS's ticker key because master rows often omit a generic symbol field.
   let ticker = textField(row, 'symbol', 'symbol_ticker', 'symTicker', 'fySymbol', 'fysymbol') || symbolKey;
   if (!ticker.includes(':') && symbolKey.includes(':')) ticker = symbolKey;
   if (!ticker || !ticker.includes(':')) return undefined;
@@ -41,65 +40,34 @@ function descriptorFromMaster(master: FyersMasterName, row: FyersSymbolRecord, s
   if (!/^[A-Z0-9_-]{2,16}$/.test(prefix)) return undefined;
   const providerTicker = ticker.slice(ticker.indexOf(':') + 1);
   if (!providerTicker) return undefined;
+
   const description = textField(row, 'description', 'symbol_desc', 'symbolDesc', 'display_name', 'name', 'exSymName', 'symDetails');
+  const series = textField(row, 'exSeries', 'series').toUpperCase();
+  const display = `${providerTicker} ${description}`.toUpperCase();
   const kind = master === 'NSE_COM' || master === 'MCX_COM' ? 'commodity' :
-    master === 'NSE_CD' ? 'currency' : master.endsWith('_FO') ? 'derivative' :
-    /INDEX/i.test(ticker) ? 'index' : 'equity';
+    master === 'NSE_CD' ? 'forex' :
+    master.endsWith('_FO') ? 'derivative' :
+    /INDEX/.test(display) ? 'index' :
+    series === 'ETF' || /\\bETF\\b|BEES/.test(display) ? 'etf' : 'stock';
   return { ticker: providerTicker, prefix, description: description || ticker, type: kind, market: master };
 }
 
-async function loadFyersSymbolCatalog(): Promise<SymbolDescriptor[]> {
-  if (symbolCatalog && symbolCatalog.expiresAt > Date.now()) return symbolCatalog.symbols;
-  if (symbolCatalogLoad) return symbolCatalogLoad;
-  symbolCatalogLoad = (async () => {
-    const settled = await Promise.allSettled(FYERS_MASTERS.map(async (master) => {
-      const response = await fetch(`https://public.fyers.in/sym_details/${master}_sym_master.json`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (!response.ok) throw new Error(`FYERS ${master} symbol master returned HTTP ${response.status}`);
-      const payload: unknown = await response.json();
-      const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : undefined;
-      const rows: Array<{ symbolKey?: string; value: unknown }> = Array.isArray(payload)
-        ? payload.map((value) => ({ value }))
-        : Array.isArray(root?.data)
-          ? (root.data as unknown[]).map((value) => ({ value }))
-          : root
-            ? Object.entries(root).map(([symbolKey, value]) => ({ symbolKey, value }))
-            : [];
-      return { master, rows };
-    }));
-    const byTicker = new Map<string, SymbolDescriptor>();
-    for (const result of settled) {
-      if (result.status !== 'fulfilled') continue; // partial master outage must not hide healthy venues
-      for (const entry of result.value.rows) {
-        const value = entry.value;
-        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-        const descriptor = descriptorFromMaster(result.value.master, value as FyersSymbolRecord, entry.symbolKey);
-        const key = descriptor ? String(descriptor.prefix || 'NSE') + ':' + descriptor.ticker : '';
-        if (descriptor && !byTicker.has(key)) byTicker.set(key, descriptor);
-      }
-    }
-    // Keep the terminal usable during an upstream outage, but never cache a fallback-only
-    // result for the full TTL: the next list request should retry discovery.
-    const symbols = [...byTicker.values()];
-    for (const fallback of FALLBACK_SYMBOLS) {
-      if (!byTicker.has(`${fallback.prefix}:${fallback.ticker}`) && !byTicker.has(fallback.ticker)) {
-        if (!symbols.some((item) => item.ticker === fallback.ticker || item.ticker === `${fallback.prefix}:${fallback.ticker}`)) symbols.push({ ...fallback });
-      }
-    }
-    symbols.sort((a, b) => a.ticker.localeCompare(b.ticker));
-    if (byTicker.size > 0) symbolCatalog = { symbols, expiresAt: Date.now() + SYMBOL_CATALOG_TTL_MS };
-    return symbols;
-  })().finally(() => { symbolCatalogLoad = undefined; });
-  return symbolCatalogLoad;
+function rememberDiscoveredSymbols(discovered: readonly SymbolDescriptor[]): void {
+  const byVenueAndTicker = new Map<string, SymbolDescriptor>();
+  for (const symbol of symbolCatalog) {
+    byVenueAndTicker.set(`${symbol.prefix ?? 'fyers'}:${symbol.ticker.toUpperCase()}`, symbol);
+  }
+  for (const symbol of discovered) {
+    byVenueAndTicker.set(`${symbol.prefix ?? 'fyers'}:${symbol.ticker.toUpperCase()}`, { ...symbol });
+  }
+  symbolCatalog = [...byVenueAndTicker.values()];
 }
 
 function runtimeSymbol(ticker: string): string {
   const value = String(ticker || '').trim();
   if (!value) return 'NSE:NIFTY50-INDEX';
   if (value.includes(':')) return value;
-  const discovered = symbolCatalog?.symbols.find((item) => item.ticker.toUpperCase() === value.toUpperCase());
+  const discovered = symbolCatalog.find((item) => item.ticker.toUpperCase() === value.toUpperCase());
   return `${discovered?.prefix || 'NSE'}:${value}`;
 }
 
@@ -270,9 +238,51 @@ export class TcoVelaDataProvider implements DataProvider {
     };
   }
 
+  // Vela's registry builds synchronously useful seed indexes first. Full exchange masters
+  // are queried only after a user searches, never during chart initialization.
   async listSymbols(): Promise<SymbolDescriptor[]> {
-    try { return (await loadFyersSymbolCatalog()).map((symbol) => ({ ...symbol })); }
-    catch { return FALLBACK_SYMBOLS.map((symbol) => ({ ...symbol })); }
+    return FALLBACK_SYMBOLS.map((symbol) => ({ ...symbol }));
+  }
+
+  async searchSymbols(query: string, limit = 100, market = 'All'): Promise<SymbolDescriptor[]> {
+    const rawQuery = String(query || '').trim();
+    const term = rawQuery.replace(/^[A-Z0-9_-]{2,16}:/i, '').trim();
+    if (term.length < 2) return [];
+
+    const mastersByMarket: Record<string, FyersMasterName[]> = {
+      All: [...FYERS_MASTERS],
+      Stocks: ['NSE_CM', 'BSE_CM'],
+      ETFs: ['NSE_CM', 'BSE_CM'],
+      Futures: ['NSE_FO', 'BSE_FO'],
+      Forex: ['NSE_CD'],
+      Commodities: ['NSE_COM', 'MCX_COM'],
+      Crypto: [],
+    };
+    const masters = mastersByMarket[market] ?? [...FYERS_MASTERS];
+    if (masters.length === 0) return [];
+
+    const maxResults = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 100;
+    const response = await tradingApi(
+      `/api/trading/fyers/symbol-master?master=${encodeURIComponent(masters.join(','))}&q=${encodeURIComponent(term)}&limit=${maxResults}`,
+      { signal: AbortSignal.timeout(12_000) },
+    );
+    const payload = await readTradingApiJson<{ success?: boolean; data?: FyersSymbolRecord[]; error?: string }>(response);
+    if (!response.ok || payload?.success !== true || !Array.isArray(payload.data)) {
+      throw new Error(payload?.error || `FYERS symbol search failed (HTTP ${response.status})`);
+    }
+
+    const byKey = new Map<string, SymbolDescriptor>();
+    for (const row of payload.data) {
+      const masterText = textField(row, 'catalogMaster', 'market');
+      if (!FYERS_MASTERS.includes(masterText as FyersMasterName)) continue;
+      const descriptor = descriptorFromMaster(masterText as FyersMasterName, row, textField(row, 'symbol'));
+      if (!descriptor) continue;
+      const key = `${descriptor.prefix}:${descriptor.ticker.toUpperCase()}`;
+      if (!byKey.has(key)) byKey.set(key, descriptor);
+    }
+    const discovered = [...byKey.values()];
+    rememberDiscoveredSymbols(discovered);
+    return discovered;
   }
 
   async getBarsColumns(ticker: string, timeframe: string, range: BarRange): Promise<ColumnarBars> {
