@@ -212,10 +212,22 @@ export class UserDrawingController implements IDrawingsRendererPort {
         this.toolbar.setVisible(visible && !this.mobileLayout);
         if (visible) {
             void loadAdvancedDrawingCatalog().then(() => {
-                if (!this.customToolbar) {
-                    this.toolbarDefinition = defaultToolbar();
-                    this.toolbar.setDefinition(this.toolbarDefinition);
+                // A host-supplied toolbar can contain the same lazy metadata placeholders
+                // as the default layout. Refresh every current group rather than assuming
+                // the canonical default toolbar owns these buttons.
+                const hydrate = (tool: { type: DrawingTypeKey; label: string; icon: string }) => {
+                    const metadata = getDrawingType(tool.type);
+                    if (!metadata) return;
+                    tool.label = metadata.label;
+                    tool.icon = metadata.icon;
+                };
+                for (const group of this.toolbarDefinition.groups) {
+                    group.tools.forEach(hydrate);
+                    group.sections?.forEach((section) => section.tools.forEach(hydrate));
                 }
+                this.toolbar.setDefinition(this.toolbarDefinition);
+            }).catch((error) => {
+                console.error('[vela] failed to hydrate chart drawing icons', error);
             });
         }
         this.syncToolbarGutter(); // reserve/release the left gutter so the bar never overlaps the plot
