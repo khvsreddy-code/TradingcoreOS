@@ -51,6 +51,27 @@ assert.deepEqual(order, ['old','new'], 'already-running work preserves correctne
 const queued = coordinator.snapshot();
 assert.equal(queued.active, 0);
 assert.equal(queued.queued, 0);
+const warmLimited = new ChartHistoryCoordinator();
+let releaseWarmWork;
+const warmGate = new Promise((resolve) => { releaseWarmWork = resolve; });
+const warmTasks = Array.from({ length: 8 }, (_, index) =>
+  warmLimited.request('speculative-' + index, () => warmGate.then(() => index), 'warm')
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(warmLimited.snapshot().activeWarm, warmLimited.maxConcurrentWarm, 'speculative history must be concurrency-capped');
+
+let urgentStarted = false;
+const urgent = warmLimited.request('urgent-user-selection', async () => {
+  urgentStarted = true;
+  return 'visible';
+}, 'initial');
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(urgentStarted, true, 'active warm requests must leave a slot for a user-selected dataset');
+releaseWarmWork();
+await Promise.all([...warmTasks, urgent]);
+assert.equal(warmLimited.snapshot().active, 0);
+assert.equal(warmLimited.snapshot().queued, 0);
+
 const promoted = new ChartHistoryCoordinator();
 const unblock = [];
 const blockers = Array.from({ length: promoted.maxConcurrent }, (_, index) =>

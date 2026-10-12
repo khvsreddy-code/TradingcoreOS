@@ -20,7 +20,10 @@ const PRIORITY: Record<HistoryRequestPriority, number> = { initial: -10, visible
  */
 export class ChartHistoryCoordinator {
   readonly maxConcurrent = 6;
+  /** Reserve most request slots for user-visible history. */
+  readonly maxConcurrentWarm = 2;
   private active = 0;
+  private activeWarm = 0;
   private sequence = 0;
   private queue: Array<QueueItem<any>> = [];
   private queuedByKey = new Map<string, QueueItem<any>>();
@@ -64,21 +67,39 @@ export class ChartHistoryCoordinator {
 
   private pump(): void {
     while (this.active < this.maxConcurrent && this.queue.length) {
-      const item = this.queue.shift()!;
+      // Never let speculative history occupy every connection slot. Because the
+      // queue is priority-sorted, a user-visible request still starts as soon as
+      // one foreground slot opens, even when many warm jobs are queued.
+      const nextIndex = this.queue.findIndex((item) =>
+        item.priority !== PRIORITY.warm || this.activeWarm < this.maxConcurrentWarm
+      );
+      if (nextIndex < 0) break;
+      const [item] = this.queue.splice(nextIndex, 1);
+      if (!item) break;
       this.queuedByKey.delete(item.key);
+      const isWarm = item.priority === PRIORITY.warm;
       this.active += 1;
+      if (isWarm) this.activeWarm += 1;
       Promise.resolve()
         .then(item.run)
         .then(item.resolve, item.reject)
         .finally(() => {
           this.active -= 1;
+          if (isWarm) this.activeWarm -= 1;
           this.pump();
         });
     }
   }
 
   snapshot() {
-    return { active: this.active, queued: this.queue.length, inflight: this.inflight.size, maxConcurrent: this.maxConcurrent };
+    return {
+      active: this.active,
+      activeWarm: this.activeWarm,
+      queued: this.queue.length,
+      inflight: this.inflight.size,
+      maxConcurrent: this.maxConcurrent,
+      maxConcurrentWarm: this.maxConcurrentWarm,
+    };
   }
 }
 
