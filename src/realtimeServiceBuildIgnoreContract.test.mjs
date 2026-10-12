@@ -13,6 +13,7 @@ assert.equal(isRealtimeRuntimePath('src/server/fyers/symbols/FyersSymbolMasterSe
 assert.equal(isRealtimeRuntimePath('src/server/marketData/FyersMarketDataTransport.ts'), true, 'Realtime data transport changes must rebuild');
 assert.equal(isRealtimeRuntimePath('realtime-gateway/server.ts'), true, 'Realtime gateway entrypoint changes must rebuild');
 assert.equal(isRealtimeRuntimePath('package-lock.json'), true, 'Dependency lock changes must rebuild');
+assert.equal(isRealtimeRuntimePath('vercel.json'), true, 'Service routing/config changes must rebuild the affected service');
 assert.equal(shouldBuildRealtime(['src/TcoVelaDataProvider.ts', 'src/services/coreSpirit/compiler.ts']), false);
 assert.equal(shouldBuildRealtime(['src/TcoVelaDataProvider.ts', 'realtime-gateway/server.ts']), true);
 
