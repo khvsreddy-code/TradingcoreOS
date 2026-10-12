@@ -329,6 +329,10 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
         coreSpiritState={coreSpiritState}
         setCoreSpiritSource={setCoreSpiritSource}
         openCoreSpirit={openCoreSpirit}
+        openChartSettings={()=>{
+          const renderer=chart.current?.renderer;
+          if(renderer?.openSettingsDialog) renderer.openSettingsDialog();
+        }}
         compileCoreSpirit={compileCoreSpirit}
         deployCoreSpirit={deployCoreSpirit}
         closeCoreSpirit={closeCoreSpirit}
