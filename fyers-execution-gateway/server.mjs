@@ -9,9 +9,16 @@ const UPSTREAM_TIMEOUT_MS = Number(process.env.FYERS_GATEWAY_UPSTREAM_TIMEOUT_MS
 const allowLegacySecret = process.env.FYERS_GATEWAY_ALLOW_LEGACY_SECRET === 'true';
 const nonces = new Map();
 const orderTimestampsByAccount = new Map();
+let nextOrderRateCleanupAt = 0;
 const MAX_ORDERS_PER_SECOND = 10;
-const MAX_ORDER_QUANTITY = Math.max(1, Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY || 1000));
-const MAX_CONTEXT_TTL_MS = Math.max(5_000, Math.min(60_000, Number(process.env.FYERS_GATEWAY_CONTEXT_TTL_MS || 30_000)));
+const configuredMaxQuantity = Number(process.env.FYERS_GATEWAY_MAX_ORDER_QUANTITY ?? 1000);
+const MAX_ORDER_QUANTITY = Number.isSafeInteger(configuredMaxQuantity) && configuredMaxQuantity > 0
+  ? Math.min(1_000_000, configuredMaxQuantity)
+  : 1000;
+const configuredContextTtl = Number(process.env.FYERS_GATEWAY_CONTEXT_TTL_MS ?? 30_000);
+const MAX_CONTEXT_TTL_MS = Number.isFinite(configuredContextTtl)
+  ? Math.max(5_000, Math.min(60_000, configuredContextTtl))
+  : 30_000;
 
 if (!SECRET) throw new Error('FYERS_GATEWAY_SECRET is required');
 
@@ -112,6 +119,14 @@ function validateExecutionContext(order, context) {
 
 function enforceAccountOrderRate(accountKey) {
   const now = Date.now();
+  if (now >= nextOrderRateCleanupAt) {
+    nextOrderRateCleanupAt = now + 1000;
+    for (const [key, timestamps] of orderTimestampsByAccount) {
+      const active = timestamps.filter((timestamp) => now - timestamp < 1000);
+      if (active.length) orderTimestampsByAccount.set(key, active);
+      else orderTimestampsByAccount.delete(key);
+    }
+  }
   const recent = (orderTimestampsByAccount.get(accountKey) || []).filter((timestamp) => now - timestamp < 1000);
   if (recent.length >= MAX_ORDERS_PER_SECOND) throw Object.assign(new Error('FYERS compliance rate limit exceeded: maximum 10 order requests per second per account'), { statusCode: 429 });
   recent.push(now);
