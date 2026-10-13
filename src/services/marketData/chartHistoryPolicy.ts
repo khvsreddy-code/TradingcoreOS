@@ -23,11 +23,11 @@ export const HISTORY_WARM_TARGET_CANDLES: Record<string, number> = {
 export const HISTORY_MAX_CANDLES = 50_000;
 
 export function initialHistoryCandles(timeframe: string): number {
-  return INITIAL_HISTORY_CANDLES[timeframe] ?? 900;
+  return INITIAL_HISTORY_CANDLES[timeframe] ?? 500;
 }
 
 export function historyPageCandles(timeframe: string): number {
-  return HISTORY_PAGE_CANDLES[timeframe] ?? 750;
+  return HISTORY_PAGE_CANDLES[timeframe] ?? 1000;
 }
 
 
@@ -50,7 +50,7 @@ export function historyDemandLeadBars(timeframe: string, visibleBars: number): n
 }
 
 export function historyWarmTarget(timeframe: string): number {
-  return HISTORY_WARM_TARGET_CANDLES[timeframe] ?? 1_800;
+  return HISTORY_WARM_TARGET_CANDLES[timeframe] ?? 500;
 }
 
 /** Trigger a visible-range request only when the user is approaching the
