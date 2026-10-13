@@ -13,6 +13,44 @@ import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTermi
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
+function timestampMs(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
+  if (typeof value === 'number' || (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value.trim()))) {
+    const numeric = Number(value);
+    const milliseconds = numeric > 1e12 ? numeric : numeric * 1000;
+    return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function isIndianCashSession(timestamp: number): boolean {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return false;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(timestamp));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  const day = get('weekday');
+  if (day === 'Sat' || day === 'Sun') return false;
+  const minute = Number(get('hour')) * 60 + Number(get('minute'));
+  return Number.isFinite(minute) && minute >= 9 * 60 + 15 && minute < 15 * 60 + 30;
+}
+
+/** Only show Vela's bar-close countdown when a recent exchange timestamp confirms a live NSE/BSE session. */
+function shouldShowExchangeCountdown(symbol: string, now = Date.now()): boolean {
+  if (!/^(NSE|BSE):/i.test(String(symbol || '')) || !isIndianCashSession(now)) return false;
+  const tick = tradingCoreRuntime.getMarketSnapshot(symbol);
+  if (!tick) return false;
+  const received = timestampMs(tick.receivedAtEpoch ?? tick.receivedAt);
+  const exchangeTimes = [timestampMs(tick.lastTradeTimestamp), timestampMs(tick.brokerTimestamp)]
+    .filter((value): value is number => value !== undefined && value <= now + 60_000);
+  if (received == null || !exchangeTimes.length) return false;
+  const exchangeTime = Math.max(...exchangeTimes);
+  return now - received >= -1_000 && now - received < 4_000
+    && now - exchangeTime >= -60_000 && now - exchangeTime < 120_000
+    && isIndianCashSession(exchangeTime);
+}
+
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
 
 function readCoreSpiritManifest() {
