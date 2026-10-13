@@ -661,28 +661,41 @@ export function createTcoVelaDataProvider(): TcoVelaDataProvider {
 }
 
 
-/** Prewarm the common index set without blocking chart construction or first paint. */
+/** Prewarm likely next timeframe choices off the critical path, without holding up first paint. */
 export function prewarmTcoVelaHistory(
   symbols: readonly string[],
-  timeframe = '5m',
+  timeframe: string | readonly string[] = '5m',
   limit = 1200,
 ): void {
-  const unique = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 8);
-  if (!unique.length) return;
+  const uniqueSymbols = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 4);
+  const requestedTimeframes = Array.isArray(timeframe) ? timeframe : [timeframe];
+  const uniqueTimeframes = [...new Set(requestedTimeframes.map(runtimeTimeframe))].slice(0, 6);
+  if (!uniqueSymbols.length || !uniqueTimeframes.length) return;
 
   const run = () => {
     const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
     if (!brokerId) return;
-    const requested = Math.max(200, Math.min(2000, Math.floor(Number(limit) || 1200)));
-    for (const raw of unique) {
-      const plane = getChartDataPlane(brokerId, runtimeSymbol(raw), runtimeTimeframe(timeframe));
-      void plane.prewarmHistory(requested).catch(() => {});
-    }
+    // Keep each background request modest and serialized. The visible chart's foreground
+    // request always wins; ChartHistoryCoordinator coalesces any duplicate key.
+    const requested = Math.max(200, Math.min(400, Math.floor(Number(limit) || 300)));
+    void (async () => {
+      for (const raw of uniqueSymbols) {
+        const symbol = runtimeSymbol(raw);
+        for (const tf of uniqueTimeframes) {
+          const plane = getChartDataPlane(brokerId, symbol, tf);
+          try {
+            await plane.prewarmHistory(requested);
+          } catch {
+            // A warm miss must never surface as a chart error or stop later timeframes.
+          }
+        }
+      }
+    })();
   };
 
   if (typeof globalThis.requestIdleCallback === 'function') {
-    globalThis.requestIdleCallback(run, { timeout: 1500 });
+    globalThis.requestIdleCallback(run, { timeout: 1800 });
   } else {
-    globalThis.setTimeout(run, 150);
+    globalThis.setTimeout(run, 200);
   }
 }
