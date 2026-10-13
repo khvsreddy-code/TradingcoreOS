@@ -44,9 +44,17 @@ function descriptorFromMaster(master: FyersMasterName, row: FyersSymbolRecord, s
   const description = textField(row, 'description', 'symbol_desc', 'symbolDesc', 'display_name', 'name', 'exSymName', 'symDetails');
   const series = textField(row, 'exSeries', 'series').toUpperCase();
   const display = `${providerTicker} ${description}`.toUpperCase();
+  const optionSide = textField(row, 'optionType', 'option_type', 'optionTypeCode', 'option_type_code').toUpperCase();
+  const strike = Number(textField(row, 'strikePrice', 'strike_price', 'strike'));
+  const looksLikeOption = master.endsWith('_FO') && (
+    /^(CE|PE|CALL|PUT)$/.test(optionSide) ||
+    (Number.isFinite(strike) && strike > 0) ||
+    /(?:CE|PE)$/.test(providerTicker.toUpperCase())
+  );
   const kind = master === 'NSE_COM' || master === 'MCX_COM' ? 'commodity' :
     master === 'NSE_CD' ? 'forex' :
-    master.endsWith('_FO') ? 'derivative' :
+    looksLikeOption ? 'option' :
+    master.endsWith('_FO') ? 'futures' :
     /INDEX/.test(display) ? 'index' :
     series === 'ETF' || /\\bETF\\b|BEES/.test(display) ? 'etf' : 'stock';
   return { ticker: providerTicker, prefix, description: description || ticker, type: kind, market: master };
