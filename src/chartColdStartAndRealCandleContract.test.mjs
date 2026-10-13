@@ -8,6 +8,8 @@ const brokerClient = read('./services/marketData/BrokerMarketDataClient.ts');
 const fyersTransport = read('./server/marketData/FyersMarketDataTransport.ts');
 const overlay = read('./components/workspace/ChartOverlay.tsx');
 const css = read('./index.css');
+const velaProvider = read('./TcoVelaDataProvider.ts');
+const liveWorkspace = read('./LiveTradingWorkspace.tsx');
 
 const start = plane.match(/private start\(\): void \{([\s\S]*?)\n  \}/)?.[1] ?? '';
 assert.ok(start, 'ChartDataPlane.start() must remain present');
@@ -27,6 +29,10 @@ assert.match(overlay, /<BarChart3/, 'indicator action must have a visible icon')
 assert.match(overlay, /<Sparkles/, 'AI action must have a visible icon');
 assert.match(overlay, /<Volume2/, 'volume action must have a visible icon');
 assert.match(css, /color: #a7b4c9/, 'toolbar controls must have readable contrast');
+assert.doesNotMatch(velaProvider, /2e12/, 'epoch-millisecond chart ranges must not be misclassified as seconds');
+assert.match(velaProvider, /from > 1e11 \\? from \\/ 1000 : from/, 'Vela millisecond range starts must normalize to canonical epoch seconds');
+assert.match(velaProvider, /Number\\(range\\.to\\) > 1e11 \\? Number\\(range\\.to\\) : Number\\(range\\.to\\) \\* 1000/, 'Vela millisecond range ends must normalize without a second multiplication');
+assert.match(liveWorkspace, /defaults\\.layout \\|\\| '1'/, 'new live workspaces should default to the single-chart Vela view');
 assert.doesNotMatch(brokerClient, /return Number\.isFinite\(parsed\) \? new Date\(parsed\)\.toISOString\(\) : new Date\(\)\.toISOString\(\)/, 'quote reception cannot be substituted for missing trade time');
 assert.match(fyersTransport, /brokerTimestamp !== undefined[^\n]*lastTradeTimestamp/, 'FYERS must not invent a trade timestamp when the broker omits it');
 
