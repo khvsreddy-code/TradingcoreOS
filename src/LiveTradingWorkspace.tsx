@@ -9,6 +9,7 @@ import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
+import { CoreSpiritLiveEditor } from './components/workspace/CoreSpiritLiveEditor';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
@@ -35,6 +36,7 @@ export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
+  const [coreSpiritEditorOpen, setCoreSpiritEditorOpen] = useState(false);
   useEffect(() => {
     if (!host.current) return;
 
@@ -156,6 +158,12 @@ export function LiveTradingWorkspace() {
 
 
   useEffect(() => {
+    const openEditor = () => setCoreSpiritEditorOpen(true);
+    window.addEventListener('tco:open-corespirit-editor', openEditor);
+    return () => window.removeEventListener('tco:open-corespirit-editor', openEditor);
+  }, []);
+
+  useEffect(() => {
     const openBroker = () => setBrokerStatusOpen(true);
     const openProfile = () => workspaceRef.current?.togglePanel('tco.account', true);
     const togglePrimary = () => {
@@ -210,18 +218,33 @@ export function LiveTradingWorkspace() {
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-    <div
-      ref={host}
-      className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
-      aria-label="TradingCoreOS Vela live trading chart"
-    >
-      {brokerStatusOpen && (
-        <BrokerSettingsModal
-          isOpen={brokerStatusOpen}
-          onClose={() => setBrokerStatusOpen(false)}
+    <>
+      <div
+        ref={host}
+        className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
+        aria-label="TradingCoreOS live trading chart"
+      >
+        {brokerStatusOpen && (
+          <BrokerSettingsModal
+            isOpen={brokerStatusOpen}
+            onClose={() => setBrokerStatusOpen(false)}
+          />
+        )}
+      </div>
+      {coreSpiritEditorOpen && (
+        <CoreSpiritLiveEditor
+          onClose={() => setCoreSpiritEditorOpen(false)}
+          getActiveChart={() => (workspaceRef.current as any)?.active?.chart ?? null}
+          getMarket={() => {
+            const market = (workspaceRef.current as any)?.active?.chart?.market;
+            return {
+              symbol: String(market?.symbol ?? 'NSE:NIFTY50-INDEX'),
+              timeframe: String(market?.timeframe ?? '5'),
+            };
+          }}
         />
       )}
-    </div>
+    </>
     </Profiler>
   );
 }
