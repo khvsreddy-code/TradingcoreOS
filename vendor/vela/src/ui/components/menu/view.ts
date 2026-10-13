@@ -7,6 +7,7 @@ import { runMachine, spreadProps, type HandleOf } from '../../zag';
 import { injectStyles } from '../../styles';
 import { floatingLayerHost } from '../../tokens';
 import { iconEl } from '../../icons';
+import { announceSurface } from '../../surface-events';
 import { holdForExit, type SurfaceExit } from '../../surface-exit';
 import { menuController, type MenuControllerOptions, type MenuItemDescriptor } from './controller';
 import { MENU_CSS, MENU_STYLE_ID } from './styles';
@@ -45,6 +46,8 @@ interface SurfaceOptions {
     onSelect: (id: string) => void;
     onOpenChange?: (open: boolean) => void;
     trigger?: HTMLElement;
+    /** A submenu's branch row — announced as its opener (it takes trigger-ITEM props, not `trigger`'s). */
+    opener?: HTMLElement;
     triggerId?: string;
     id?: string;
     minWidth?: string;
@@ -76,6 +79,11 @@ class Surface {
     /** Trigger rect captured when this level opened — the list stays put if the
      *  trigger then moves (favorite chips shifting the caret). */
     private pinnedAnchor: { x: number; y: number; width: number; height: number } | null = null;
+    /** The open state last announced — see {@link announce}. */
+    private shown = false;
+    /** The list's exit animation after a close; a reopen cancels it. */
+    private exit: SurfaceExit | null = null;
+    private readonly opener: HTMLElement | null;
 
     constructor(doc: Document, opts: SurfaceOptions) {
         this.doc = doc;
@@ -94,6 +102,7 @@ class Surface {
         this.host.appendChild(this.positioner);
 
         const trigger = opts.trigger;
+        this.opener = trigger ?? opts.opener ?? null;
         this.ctrl = menuController({
             items: [],
             id: opts.id,
@@ -115,11 +124,19 @@ class Surface {
         if (opts.triggerId && trigger) trigger.id = opts.triggerId;
         this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
             const api = this.ctrl.connect(service);
+            // Close announces while the list still shows, open once it does.
+            const closing = this.shown && !api.open;
+            if (closing) this.announce(false);
+            if (api.open && this.exit) {
+                this.exit.cancel();
+                this.exit = null;
+            }
             if (trigger) spreadProps(trigger, api.getTriggerProps(), this.mid);
             spreadProps(this.positioner, api.getPositionerProps(), this.mid);
             spreadProps(this.list, api.getContentProps(), this.mid);
             this.project(api);
             if (closing) this.holdExit();
+            if (api.open && !this.shown) this.announce(true);
         });
     }
 
@@ -136,6 +153,11 @@ class Surface {
 
     get api(): zagMenu.Api {
         return this.ctrl.connect(this.handle.service);
+    }
+
+    private announce(open: boolean): void {
+        this.shown = open;
+        announceSurface(this.list, open, 'menu', this.opener);
     }
 
     setItems(items: readonly MenuItemDescriptor[]): void {
@@ -160,6 +182,8 @@ class Surface {
         this.subs.clear();
         this.exit?.finish();
         this.handle.stop();
+        // Torn down while open: the stopped machine never projects the close.
+        if (this.shown) this.announce(false);
         this.positioner.remove();
     }
 
@@ -285,6 +309,7 @@ class Surface {
                 const sub = new Surface(doc, {
                     host: this.host,
                     placement: 'right-start',
+                    opener: li,
                     onSelect: this.onSelect,
                     onFavorite: this.onFavorite,
                     checkmarks: this.checkmarks,

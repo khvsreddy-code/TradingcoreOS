@@ -6,6 +6,7 @@ import { injectStyles } from '../../styles';
 import { drawerController, type DrawerControllerOptions } from './controller';
 import { DRAWER_CSS, DRAWER_STYLE_ID } from './styles';
 import * as zagDialog from '@zag-js/dialog';
+import { announceSurface } from '../../surface-events';
 import { holdForExit, type SurfaceExit } from '../../surface-exit';
 
 /** Drag past this fraction of the sheet's height (or this many px, whichever is
@@ -102,6 +103,9 @@ export class Drawer {
         const mid = String(this.ctrl.props.id);
         this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
             const api = this.ctrl.connect(service);
+            // Close announces while the panel still shows (before the close props land), open once it does.
+            const closing = this.wasOpen && !api.open;
+            if (closing) this.announce(false);
             spreadProps(this.backdrop, api.getBackdropProps(), mid);
             spreadProps(this.positioner, api.getPositionerProps(), mid);
             spreadProps(this.panel, api.getContentProps(), mid);
@@ -118,6 +122,9 @@ export class Drawer {
             } else if (!this.exit) {
                 this.setShown(false);
             }
+            if (api.open && !this.wasOpen) this.announce(true);
+            if (this.wasOpen && !api.open) this.restoreOpener();
+            this.wasOpen = api.open;
         });
     }
 
@@ -243,11 +250,64 @@ export class Drawer {
         this.titleEl.textContent = title;
     }
 
+    private opener: HTMLElement | null = null;
+    private wasOpen = false;
+    /** The sheet and scrim's exit animation after a close; a reopen cancels it. */
+    private exit: SurfaceExit | null = null;
+    private destroyed = false;
+
+    private setShown(shown: boolean): void {
+        this.backdrop.style.display = shown ? '' : 'none';
+        this.positioner.style.display = shown ? '' : 'none';
+    }
+
+    /** Keep the just-closed sheet up through its exit animation, then hide it — or
+     *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+     *  props' `hidden` only when its value changes, so lifting it keeps the sheet and
+     *  scrim up until the exit ends. The positioner spans the host: inert, it lets
+     *  clicks through to the page while the sheet animates out. */
+    private holdExit(): void {
+        const held = [this.panel, this.backdrop];
+        for (const el of held) el.hidden = false;
+        this.exit = holdForExit(
+            held,
+            () => {
+                this.exit = null;
+                if (this.destroyed) {
+                    this.detach();
+                } else if (!this.open) {
+                    for (const el of held) el.hidden = true;
+                    this.setShown(false);
+                }
+            },
+            { inert: [this.positioner] },
+        );
+    }
+
+    private detach(): void {
+        this.backdrop.remove();
+        this.positioner.remove();
+    }
+
+    /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+     *  teardown that outruns the machine's close notification). */
+    private restoreOpener(): void {
+        const opener = this.opener;
+        this.opener = null;
+        if (opener?.isConnected) opener.focus({ preventScroll: true });
+    }
+
+    private announce(open: boolean): void {
+        const opener = this.opener === this.panel.ownerDocument.body ? null : this.opener;
+        announceSurface(this.panel, open, 'drawer', opener);
+    }
+
     get open(): boolean {
         return this.ctrl.connect(this.handle.service).open;
     }
 
     show(): void {
+        this.opener = this.panel.ownerDocument.activeElement as HTMLElement | null;
         this.ctrl.connect(this.handle.service).setOpen(true);
     }
 
@@ -262,6 +322,12 @@ export class Drawer {
         if (this.wasOpen && !this.open) this.handle.flush();
         this.handle.stop();
         this.destroyed = true;
+        // Torn down while open: the stopped machine never projects the close.
+        if (this.wasOpen) {
+            this.wasOpen = false;
+            this.announce(false);
+        }
+        this.restoreOpener();
         if (!this.exit) this.detach();
     }
 }
