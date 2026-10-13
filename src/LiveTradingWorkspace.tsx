@@ -95,7 +95,7 @@ export function LiveTradingWorkspace() {
         prewarmTcoVelaHistory(
           ['NSE:NIFTY50-INDEX'],
           defaults.timeframe || '5',
-          300,
+          500,
         );
       });
 

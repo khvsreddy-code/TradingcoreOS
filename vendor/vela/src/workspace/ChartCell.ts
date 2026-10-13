@@ -1326,22 +1326,48 @@ export class ChartCell {
 
     addNative(type: string): void {
         const chart = this.inner;
-        if (!chart) return;
+        if (!chart || this.destroyed) return;
         const before = new Set(chart.indicators().map((h) => h.id));
-        let added: IndicatorHandle | null = chart.addNativeIndicator(type);
-        this.syncPresentNatives();
-        this.refreshNativeCatalog();
-        if (before.has(added.id)) return;
-        this.history.push({
-            undo: () => {
-                added?.remove();
-                added = null;
-                this.refreshNativeCatalog();
-            },
-            redo: () => {
-                added = this.inner?.addNativeIndicator(type) ?? null;
-                this.refreshNativeCatalog();
-            },
+
+        // Vela 0.8.3 classic studies are lazy-loaded. The synchronous add path only
+        // works for already-registered native types; picker rows can point at a catalog
+        // entry whose implementation chunk has not loaded yet. Await the public async API.
+        void chart.addNativeIndicatorAsync(type).then((handle) => {
+            if (this.destroyed || this.inner !== chart) {
+                handle.remove();
+                return;
+            }
+            this.syncPresentNatives();
+            this.refreshNativeCatalog();
+            if (before.has(handle.id)) return;
+
+            let added: IndicatorHandle | null = handle;
+            this.history.push({
+                undo: () => {
+                    added?.remove();
+                    added = null;
+                    this.syncPresentNatives();
+                    this.refreshNativeCatalog();
+                },
+                redo: () => {
+                    const current = this.inner;
+                    if (!current) return;
+                    void current.addNativeIndicatorAsync(type).then((nextHandle) => {
+                        if (this.destroyed || this.inner !== current) {
+                            nextHandle.remove();
+                            return;
+                        }
+                        added = nextHandle;
+                        this.syncPresentNatives();
+                        this.refreshNativeCatalog();
+                    }).catch((error) => {
+                        console.warn('[vela] native indicator redo failed:', error);
+                    });
+                },
+            });
+        }).catch((error) => {
+            console.warn('[vela] native indicator failed to load:', error);
+            this.refreshNativeCatalog();
         });
     }
 

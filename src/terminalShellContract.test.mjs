@@ -11,9 +11,13 @@ const terminalTopology = read('src/services/core/chart/tcoVelaTerminal.ts');
 
 assert.match(terminal, /return\s*<LiveTradingWorkspace\s*\/>/);
 assert.doesNotMatch(terminal, /useEffect\(|history\.|popstate|setTimeout\(/);
+assert.ok(terminalTopology.includes('bars:500'), 'Vela should request a bounded initial candle window');
 
-for (const token of ['VelaWorkspace', 'defaultLanguage', 'corespirit', 'CoreSpiritVelaEngine', 'createTcoVelaDataProvider', 'bars: 5000', 'live: true', 'indicatorPicker: true', 'maxWebglCells: 8']) {
+for (const token of ['VelaWorkspace', 'CoreSpiritVelaEngine', 'createTcoVelaDataProvider']) {
   assert.ok(workspace.includes(token), 'new Vela live contract missing: ' + token);
+}
+for (const token of ['defaultLanguage', 'corespirit', 'bars:500', 'live:true', 'indicatorPicker:true', 'maxWebglCells:8']) {
+  assert.ok(terminalTopology.includes(token), 'Vela terminal configuration missing: ' + token);
 }
 
 for (const token of ['LiveChart', 'RightTerminalDock', 'WatchlistDock', 'AdvancedOrderTicket', 'useLiveTradingTerminalController', 'Option Chain', 'Order Book', 'Strategy Log', 'TradingCoreRuntime.placeOrder', 'tco-terminal-shell', 'TRADINGCORE_TOGGLE_OI', 'TRADINGCORE_TOGGLE_DEPTH']) {

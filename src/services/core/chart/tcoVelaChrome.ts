@@ -19,6 +19,8 @@ import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineL
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
 import { getAutomations } from '../../workspace/workspaceState';
 import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
+import { compileCoreSpiritSourceOffThread } from '../../coreSpirit/coreSpiritCompilerClient';
+import { versionedStorageKey } from '../../coreSpirit/storageSchema';
 
 // TCO-only topbar / panel actions need real registered SVGs. Unknown Vela ids otherwise
 // render blank spans inside clickable icon-only controls.
@@ -155,6 +157,170 @@ function panelRoot(body: HTMLElement): HTMLDivElement {
   body.appendChild(root);
   return root;
 }
+
+const CORESPIRIT_LIVE_EDITOR_KEY = 'tradingcore:corespirit:chart-source';
+const CORESPIRIT_STARTER = `indicator("CoreSpirit Trend") {
+    overlay: true
+    input length = int(20, min: 1)
+}
+
+fast = ema(close, length)
+slow = ema(close, length * 2)
+
+plot fast
+plot slow
+
+if fast crossesAbove slow {
+    signal "BUY"
+}
+
+if fast crossesBelow slow {
+    signal "SELL"
+}`;
+
+const coreSpiritCodePanel: SidePanelDescriptor = {
+  id: 'tco.corespirit-code',
+  title: 'CoreSpirit',
+  icon: 'indicators',
+  order: 5,
+  width: 520,
+  resizable: true,
+  minWidth: 380,
+  maxWidth: 760,
+  maximizable: true,
+  mount(ctx, body, header) {
+    header.setTitle('CoreSpirit Studio');
+    const root = panelRoot(body);
+    root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
+    root.style.gap = '10px';
+    const top = document.createElement('div');
+    top.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const language = document.createElement('span');
+    language.textContent = 'CORESCRIPT';
+    language.style.cssText = 'font:700 10px ui-monospace,monospace;letter-spacing:.14em;color:#a5b4fc;border:1px solid rgba(129,140,248,.25);border-radius:5px;padding:5px 7px;';
+    const target = document.createElement('span');
+    target.textContent = 'Live chart · worker compiler';
+    target.style.cssText = 'margin-left:auto;font-size:10px;color:#64748b;';
+    top.append(language, target);
+    const examples = document.createElement('select');
+    examples.setAttribute('aria-label', 'CoreSpirit starter examples');
+    examples.style.cssText = 'width:100%;padding:7px 8px;border:1px solid #263043;border-radius:6px;background:#0b1019;color:#cbd5e1;font-size:11px;';
+    for (const [value, label] of [['starter','Trend crossover'],['rsi','RSI recovery'],['levels','Range levels']]) {
+      const option = document.createElement('option'); option.value = value; option.textContent = label; examples.appendChild(option);
+    }
+    const editorFrame = document.createElement('div');
+    editorFrame.style.cssText = 'display:flex;min-height:260px;flex:1;overflow:hidden;border:1px solid #263043;border-radius:8px;background:#080c13;';
+    const gutter = document.createElement('div');
+    gutter.style.cssText = 'flex:0 0 38px;overflow:hidden;padding:12px 7px;text-align:right;background:#0b1018;border-right:1px solid #202938;color:#465268;font:11px/1.65 ui-monospace,SFMono-Regular,monospace;user-select:none;';
+    const editor = document.createElement('textarea');
+    editor.spellcheck = false;
+    editor.setAttribute('aria-label', 'CoreSpirit code editor');
+    editor.setAttribute('autocapitalize', 'off');
+    editor.setAttribute('autocomplete', 'off');
+    editor.setAttribute('autocorrect', 'off');
+    editor.wrap = 'off';
+    editor.style.cssText = 'flex:1;min-width:0;min-height:260px;resize:vertical;border:0;outline:0;padding:12px;background:transparent;color:#dbe5f5;caret-color:#a5b4fc;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:4;white-space:pre;overflow:auto;';
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    status.style.cssText = 'min-height:34px;white-space:pre-wrap;border:1px solid #202938;border-radius:6px;padding:8px;color:#94a3b8;background:#0b1018;font:10px/1.5 ui-monospace,monospace;';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:7px;align-items:center;';
+    const compile = document.createElement('button');
+    compile.type = 'button'; compile.textContent = 'Validate';
+    compile.style.cssText = 'border:1px solid #303b50;border-radius:6px;padding:8px 12px;background:#111827;color:#cbd5e1;font-size:11px;font-weight:600;cursor:pointer;';
+    const run = document.createElement('button');
+    run.type = 'button'; run.textContent = 'Compile & Run';
+    run.style.cssText = 'border:1px solid rgba(129,140,248,.42);border-radius:6px;padding:8px 12px;background:rgba(99,102,241,.15);color:#c7d2fe;font-size:11px;font-weight:700;cursor:pointer;';
+    const openFull = document.createElement('button');
+    openFull.type = 'button'; openFull.textContent = 'Full IDE ↗';
+    openFull.style.cssText = 'margin-left:auto;border:1px solid #263043;border-radius:6px;padding:8px 10px;background:transparent;color:#94a3b8;font-size:10px;cursor:pointer;';
+    actions.append(compile, run, openFull);
+    editorFrame.append(gutter, editor);
+    root.append(top, examples, editorFrame, status, actions);
+
+    const sourceFor = (key: string): string => {
+      if (key === 'rsi') return 'indicator("RSI Recovery")\n\nr = rsi(close, 14)\nplot(r, name = "RSI")\n\nif crossover(r, 30) {\n    signal("RSI RECOVERY")\n}';
+      if (key === 'levels') return 'indicator("Range Levels")\n\nhi = highest(high, 20)\nlo = lowest(low, 20)\nplot(hi, name = "20-bar High")\nplot(lo, name = "20-bar Low")';
+      return CORESPIRIT_STARTER;
+    };
+    try { editor.value = localStorage.getItem(CORESPIRIT_LIVE_EDITOR_KEY) || CORESPIRIT_STARTER; } catch { editor.value = CORESPIRIT_STARTER; }
+    const syncEditor = () => {
+      const lines = editor.value.split('\n').length;
+      gutter.textContent = Array.from({ length: lines }, (_, i) => String(i + 1)).join('\n');
+      try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, editor.value); } catch {}
+    };
+    editor.addEventListener('input', syncEditor);
+    editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop; });
+    editor.addEventListener('keydown', (event) => {
+      if (event.key !== 'Tab') return;
+      event.preventDefault();
+      const start = editor.selectionStart, end = editor.selectionEnd;
+      editor.setRangeText('    ', start, end, 'end');
+      syncEditor();
+    });
+    examples.addEventListener('change', () => { editor.value = sourceFor(examples.value); syncEditor(); });
+    syncEditor();
+
+    let compileGeneration = 0;
+    const compileSource = async (shouldRun: boolean) => {
+      const source = editor.value.trim();
+      if (!source) { status.textContent = 'Enter a CoreScript indicator first.'; status.style.color = '#fca5a5'; return; }
+      const generation = ++compileGeneration;
+      compile.disabled = run.disabled = true;
+      compile.textContent = 'Compiling…';
+      run.textContent = 'Compiling…';
+      status.textContent = 'Parsing and type-checking in the CoreSpirit compiler worker…';
+      status.style.color = '#94a3b8';
+      try {
+        const result = await compileCoreSpiritSourceOffThread(source, generation, 'tco-live-studio', { layer: 'chart' });
+        if (generation !== compileGeneration) return;
+        const errors = result.diagnostics.filter(d => d.severity === 'error');
+        if (errors.length || !result.artifact) {
+          status.textContent = errors.slice(0, 5).map(d => d.message).join('\n') || 'No executable artifact was produced.';
+          status.style.color = '#fca5a5';
+          return;
+        }
+        status.textContent = `Valid · ${result.artifactHash?.slice(0, 12) || 'artifact ready'} · ${result.diagnostics.length} diagnostics`;
+        status.style.color = '#86efac';
+        if (shouldRun) {
+          ctx.addIndicator({ name: 'CoreSpirit · Live Studio', script: source, language: 'corespirit' });
+          ctx.toast('CoreSpirit compiled and submitted to the active Vela chart', 'success');
+        }
+      } catch (error) {
+        if (generation !== compileGeneration) return;
+        status.textContent = error instanceof Error ? error.message : String(error);
+        status.style.color = '#fca5a5';
+      } finally {
+        if (generation === compileGeneration) {
+          compile.disabled = run.disabled = false;
+          compile.textContent = 'Validate';
+          run.textContent = 'Compile & Run';
+        }
+      }
+    };
+    compile.addEventListener('click', () => { void compileSource(false); });
+    run.addEventListener('click', () => { void compileSource(true); });
+    openFull.addEventListener('click', () => {
+      try { localStorage.setItem(versionedStorageKey('editor'), editor.value); localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
+      window.history.pushState({}, '', '/corespirit');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      ctx.toast('Opened the full CoreSpirit IDE', 'success');
+    });
+    return { onOpen() { editor.focus({ preventScroll: true }); }, destroy() { compileGeneration += 1; } };
+  },
+};
+
+const coreSpiritCodeAction: WidgetActionDescriptor = {
+  id: 'tco.corespirit-code',
+  target: 'topbar',
+  label: 'Code',
+  icon: 'indicators',
+  iconOnly: true,
+  align: 'right',
+  order: 3.5,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.corespirit-code'); },
+};
 
 const bookmarksPanel: SidePanelDescriptor = {
   id: 'tco.bookmarks', title: 'Watchlist', icon: 'star', order: 10, width: 320, resizable: true, minWidth: 260, maxWidth: 460,
@@ -1149,11 +1315,6 @@ registerLegendAction(coreSpiritOpenAction);
 registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
-const brandAction: WidgetActionDescriptor = {
-  id: 'tco.brand', target: 'topbar', label: 'TradingCoreOS × Vela', iconOnly: false, align: 'left', order: 0, mobile: 'menu',
-  run() {},
-};
-
 const researchAction:WidgetActionDescriptor={
   id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
@@ -1169,93 +1330,33 @@ const tradingAction:WidgetActionDescriptor={
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
-const replayAction: WidgetActionDescriptor = {
-  id: 'tco.replay',
-  target: 'topbar',
-  label: 'Replay',
-  icon: 'play',
-  iconOnly: false,
-  align: 'right',
-  order: 3,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.replay'); },
-};
-
 const positionsAction: WidgetActionDescriptor = {
   id: 'tco.positions',
   target: 'topbar',
   label: 'Positions',
   icon: 'briefcase',
-  iconOnly: false,
+  iconOnly: true,
   align: 'right',
   order: 4,
   mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.positions'); },
 };
 
-const riskAction: WidgetActionDescriptor = {
-  id: 'tco.risk',
+const chartSettingsAction: WidgetActionDescriptor = {
+  id: 'tco.chart-settings',
   target: 'topbar',
-  label: 'Risk',
-  icon: 'shield',
+  label: 'Chart settings',
+  icon: 'gear',
   iconOnly: true,
   align: 'right',
-  order: 5,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.risk'); },
-};
-
-const orderBookAction: WidgetActionDescriptor = {
-  id: 'tco.orderbook',
-  target: 'topbar',
-  label: 'Order Book',
-  icon: 'list',
-  iconOnly: true,
-  align: 'right',
-  order: 6,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.orderbook'); },
-};
-
-const optionsAction: WidgetActionDescriptor = {
-  id: 'tco.options',
-  target: 'topbar',
-  label: 'Options',
-  icon: 'layers',
-  iconOnly: true,
-  align: 'right',
-  order: 7,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.options'); },
-};
-
-const dataWindowAction: WidgetActionDescriptor = {
-  id: 'tco.data-window',
-  target: 'topbar',
-  label: 'Data Window',
-  icon: 'table',
-  iconOnly: true,
-  align: 'right',
-  order: 8,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.data-window'); },
-};
-
-const vpvrAction: WidgetActionDescriptor = {
-  id: 'tco.vpvr',
-  target: 'topbar',
-  label: 'VPVR',
-  icon: 'objects',
-  iconOnly: true,
-  align: 'right',
-  order: 9,
+  order: 20,
   mobile: 'menu',
   run(ctx) {
-    try {
-      ctx.addNativeIndicator('vpvr');
-      ctx.toast('VPVR added via Vela native indicator', 'success');
-    } catch (error) {
-      ctx.toast(error instanceof Error ? error.message : 'Unable to add VPVR', 'error');
+    const renderer = ctx.chart.renderer;
+    if (typeof renderer.openSettings === 'function') {
+      renderer.openSettings();
+    } else {
+      ctx.toast('Chart settings are unavailable for this renderer', 'error');
     }
   },
 };
@@ -1270,21 +1371,7 @@ const journalAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
-const panelsAction: WidgetActionDescriptor = {
-  id: 'tco.panels', target: 'topbar', label: 'Panels', icon: 'layout', iconOnly: false, align: 'right', order: 2, mobile: 'menu',
-  run() { window.dispatchEvent(new Event('tco:toggle-primary-panel')); },
-};
-
-const profileAction: WidgetActionDescriptor = {
-  id: 'tco.profile', target: 'topbar', label: 'Account', icon: 'user', iconOnly: true, align: 'right', order: 1, mobile: 'menu',
-  run() { window.dispatchEvent(new Event('tco:open-profile-panel')); },
-};
-
-const brokerAction: WidgetActionDescriptor = {
-  id: 'tco.broker-connection', target: 'topbar', label: 'Broker Connection', icon: 'gear', iconOnly: true, align: 'right', order: 10, mobile: 'menu',
-  run() { window.dispatchEvent(new Event('tco:open-broker')); },
-};
-
+registerSidePanel(coreSpiritCodePanel);
 registerSidePanel(bookmarksPanel);
 registerSidePanel(researchPanel);
 registerSidePanel(automationPanel);
@@ -1297,19 +1384,6 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
-registerWidgetAction(brandAction);
-const marketHealthAction: WidgetActionDescriptor = {
-  id: 'tco.market-health',
-  target: 'topbar',
-  label: 'Market Health',
-  icon: 'activity',
-  iconOnly: true,
-  align: 'right',
-  order: 3,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.market-health'); },
-};
-
 const healthAttachment: WidgetAttachment = {
   id: 'tco.market-health-attachment',
   mount(ctx) {
@@ -1349,21 +1423,13 @@ const healthAttachment: WidgetAttachment = {
   },
 };
 
-registerWidgetAction(marketHealthAction);
-registerWidgetAttachment(healthAttachment);
 registerWidgetAttachment(tradeMarksAttachment);
+registerWidgetAttachment(healthAttachment);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
-registerWidgetAction(replayAction);
 registerWidgetAction(positionsAction);
-registerWidgetAction(riskAction);
-registerWidgetAction(orderBookAction);
-registerWidgetAction(optionsAction);
-registerWidgetAction(dataWindowAction);
-registerWidgetAction(vpvrAction);
+registerWidgetAction(coreSpiritCodeAction);
 registerWidgetAction(watchlistAction);
+registerWidgetAction(chartSettingsAction);
 registerWidgetAction(journalAction);
-registerWidgetAction(panelsAction);
-registerWidgetAction(profileAction);
-registerWidgetAction(brokerAction);
