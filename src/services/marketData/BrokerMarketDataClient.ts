@@ -293,6 +293,7 @@ export class BrokerMarketDataClient {
 
             const tick: any = {
               instrumentKey: String(key),
+              source: 'fyers',
               ltp,
               close: Number(q.close ?? q.prevClose ?? 0) || undefined,
               change: Number(q.change ?? 0) || undefined,
@@ -306,7 +307,7 @@ export class BrokerMarketDataClient {
                 const candidates = [q.last_traded_time, q.exch_feed_time, q.lastTradeTimestamp, q.lastTradedTime, q.exchFeedTime, q.last_trade_time, q.timestamp]
                   .map((raw) => {
                     if (raw == null || raw === '') return undefined;
-                    const numeric = typeof raw === 'number' || (typeof raw === 'string' && /^\\d+(?:\\.\\d+)?$/.test(raw.trim())) ? Number(raw) : Number.NaN;
+                    const numeric = typeof raw === 'number' || (typeof raw === 'string' && /^\d+(?:\.\d+)?$/.test(raw.trim())) ? Number(raw) : Number.NaN;
                     const parsed = Number.isFinite(numeric) ? (numeric > 1e12 ? numeric : numeric * 1000) : Date.parse(String(raw));
                     return Number.isFinite(parsed) && parsed > 0 && parsed <= now + 60_000 ? parsed : undefined;
                   })
