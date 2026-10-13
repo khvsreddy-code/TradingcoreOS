@@ -45,7 +45,7 @@ export function createTcoVelaTerminalOptions(
     layout,
     symbol,
     timeframe,
-    bars:5000,
+    bars:500,
     timeframes:['1','3','5','10','15','30','60','120','240','D','W','M'],
     live:true,
     theme:{
@@ -69,8 +69,8 @@ export function createTcoVelaTerminalOptions(
     drawings:true,
     drawingToolbar:true,
     indicatorPicker:true,
-    // Keep the shell focused: no redundant TCO×Vela brand pill and no dock-panel
-    // icon wall. The panels remain available through their owning TCO navigation items.
+    // Match Vela's compact professional command surface: no duplicate TCO×Vela brand pill,
+    // no duplicate Replay action, and no redundant icon-only panel shortcuts.
     topbar:{
       left:['symbol','timeframes','style','layout','indicators'],
       right:[
@@ -79,8 +79,7 @@ export function createTcoVelaTerminalOptions(
         'tco.automation',
         'tco.trading',
         'tco.journal',
-        'tco.replay',
-        'tco.positions',
+          'tco.positions',
         'alerts',
       ],
     },
