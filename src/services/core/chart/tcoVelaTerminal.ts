@@ -60,7 +60,7 @@ export function createTcoVelaTerminalOptions(
       fontFamily:'Inter, DM Sans, system-ui, sans-serif',
     },
     // Keep market updates snappy while leaving native zoom/pan feedback enabled.
-    animations:{ zoom:true, pan:100, priceScale:100, liveBar:false, intro:false },
+    animations:{ zoom:true, pan:100, autoscale:100, liveBar:false, intro:false },
     defaultLanguage:'corespirit',
     providers:{
       tco:()=>deps.createDataProvider(),
