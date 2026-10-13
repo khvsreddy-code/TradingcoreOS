@@ -253,7 +253,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     let monacoAdapter: CoreSpiritMonacoAdapter | undefined;
     let disposed = false;
     const syncEditor = () => {
-      target.textContent = `Live chart · worker compiler · ${source.split('\\n').length} lines`;
+      target.textContent = `Live chart · worker compiler · ${source.split('\n').length} lines`;
       fallbackEditor.value = source;
       try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, source); } catch {}
     };
@@ -318,9 +318,21 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         status.style.color = '#86efac';
         if (shouldRun) {
           try {
+            const before = ctx.chart.inspect().indicators.length;
             ctx.addIndicator({ name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
-            status.textContent = 'Compiled · submitted to the active Vela chart. Check the indicator legend for the new instance.';
-            ctx.toast('CoreSpirit indicator submitted to the active chart', 'success');
+            window.setTimeout(() => {
+              if (disposed) return;
+              const after = ctx.chart.inspect().indicators.length;
+              if (after > before) {
+                status.textContent = 'Running · indicator instance is attached to the active chart.';
+                status.style.color = '#86efac';
+                ctx.toast('CoreSpirit indicator added to the active chart', 'success');
+              } else {
+                status.textContent = 'The compiler succeeded, but Vela did not attach the indicator. Check the compiler diagnostics and browser errors.';
+                status.style.color = '#fca5a5';
+                ctx.toast('Vela did not attach the CoreSpirit indicator', 'error');
+              }
+            }, 350);
           } catch (error) {
             status.textContent = error instanceof Error ? error.message : String(error);
             status.style.color = '#fca5a5';
@@ -342,7 +354,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     compile.addEventListener('click', () => { void compileSource(false); });
     run.addEventListener('click', () => { void compileSource(true); });
     openFull.addEventListener('click', () => {
-      try { localStorage.setItem(versionedStorageKey('editor'), editor.value); localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
+      try { localStorage.setItem(versionedStorageKey('editor'), source); localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
       window.history.pushState({}, '', '/corespirit');
       window.dispatchEvent(new PopStateEvent('popstate'));
       ctx.toast('Opened the full CoreSpirit IDE', 'success');
