@@ -227,6 +227,8 @@ export class ChartCell {
     readonly instances: CellInstance[] = [];
     /** The native-indicator catalog with this cell's live supported/present flags. */
     nativeCatalog: CellNativeInfo[] = [];
+    /** Native handles whose picker-add operation already owns an undo entry. */
+    private readonly nativeHistoryRecordedIds = new Set<string>();
     /** Last crosshair position in this cell (the alt+H/alt+V shortcuts anchor here). */
     lastCrossTime: number | null = null;
     lastCrossPrice: number | null = null;
@@ -1324,29 +1326,30 @@ export class ChartCell {
         if (handle.visible !== visible) handle.setVisible(visible);
     }
 
-    addNative(type: string): void {
+    addNative(type: string, recordHistory = true): void {
         const chart = this.inner;
         if (!chart) return;
         const before = new Set(chart.indicators().map((handle) => handle.id));
 
-        // The picker intentionally exposes classic studies as metadata before their
-        // implementation chunks have loaded. Use Vela's async entry point so it
-        // resolves the family's lazy descriptor before attempting to add the study.
-        // A sync add here returned a fail-soft handle for unloaded RSI/MACD/EMA/etc.,
-        // which made a picker click appear to do nothing.
+        // The picker exposes classic studies as metadata before their implementation
+        // chunks have loaded. Resolve the lazy descriptor before trying to add a study.
+        // A synchronous add produced an inert handle for unloaded RSI/MACD/EMA/etc.
         void chart.addNativeIndicatorAsync(type).then((handle) => {
             if (this.destroyed || this.inner !== chart) {
                 handle.remove();
                 return;
             }
+            const alreadyExisted = before.has(handle.id) || this.nativeHistoryRecordedIds.has(handle.id);
             this.syncPresentNatives();
             this.refreshNativeCatalog();
             this.deps.onIndicatorsChanged(this.id);
-            if (before.has(handle.id)) return; // Single-instance study was already present.
+            if (!recordHistory || alreadyExisted) return;
 
             let added: IndicatorHandle | null = handle;
+            this.nativeHistoryRecordedIds.add(handle.id);
             this.history.push({
                 undo: () => {
+                    if (added) this.nativeHistoryRecordedIds.delete(added.id);
                     added?.remove();
                     added = null;
                     this.syncPresentNatives();
@@ -1362,6 +1365,7 @@ export class ChartCell {
                             return;
                         }
                         added = nextHandle;
+                        this.nativeHistoryRecordedIds.add(nextHandle.id);
                         this.syncPresentNatives();
                         this.refreshNativeCatalog();
                         this.deps.onIndicatorsChanged(this.id);
@@ -1434,7 +1438,7 @@ export class ChartCell {
             cellId: this.id,
             chart: this.chart,
             addIndicator: (entry) => this.history.silently(() => this.addExternalIndicator(entry)),
-            addNativeIndicator: (type) => this.history.silently(() => this.addNative(type)),
+            addNativeIndicator: (type) => this.history.silently(() => this.addNative(type, false)),
         };
     }
 
