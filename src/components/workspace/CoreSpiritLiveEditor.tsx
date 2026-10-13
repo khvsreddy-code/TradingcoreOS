@@ -56,6 +56,8 @@ export function CoreSpiritLiveEditor({ onClose, getActiveChart, getMarket }: Pro
       setStatus('Unsaved changes');
     }).then((mounted) => {
       if (disposed) { mounted.dispose(); return; }
+      // The user may have typed into the fallback editor while Monaco loaded.
+      mounted.setSource(model.current?.getSource() ?? source);
       adapter.current = mounted;
       setMonacoReady(true);
     }).catch((error: unknown) => {
