@@ -48,16 +48,19 @@ export function createTcoVelaTerminalOptions(
     bars:5000,
     timeframes:['1','3','5','10','15','30','60','120','240','D','W','M'],
     live:true,
+    // Vela's native dark terminal palette: clear neutral chrome and high-contrast
+    // teal/red price action, tuned to match the latest Vela workspace reference.
     theme:{
-      background:'#07080c',
-      textColor:'#9aa1b2',
-      gridColor:'#171b27',
-      borderColor:'#252a35',
-      upColor:'#46d89a',
-      downColor:'#ef6b7a',
-      fontFamily:'DM Sans, system-ui, sans-serif',
+      background:'#111318',
+      textColor:'#a5aab5',
+      gridColor:'#252832',
+      borderColor:'#2c303b',
+      upColor:'#0fba91',
+      downColor:'#f0445c',
+      fontFamily:'Inter, DM Sans, system-ui, sans-serif',
     },
-    animations:false,
+    // Keep market updates snappy while leaving native zoom/pan feedback enabled.
+    animations:{ zoom:true, pan:100, priceScale:100, liveBar:false, intro:false },
     defaultLanguage:'corespirit',
     providers:{
       tco:()=>deps.createDataProvider(),
@@ -69,10 +72,10 @@ export function createTcoVelaTerminalOptions(
     drawings:true,
     drawingToolbar:true,
     indicatorPicker:true,
-    // Keep the shell focused: no redundant TCO×Vela brand pill and no dock-panel
-    // icon wall. The panels remain available through their owning TCO navigation items.
+    // Native Vela primary controls stay in the familiar left cluster. TCO's
+    // trading modules keep their shortcuts as compact icon actions on the right.
     topbar:{
-      left:['symbol','timeframes','style','layout','indicators'],
+      left:['symbol','timeframes','style','layout','indicators','undo-redo'],
       right:[
         'tco.watchlist',
         'tco.research',
@@ -81,7 +84,11 @@ export function createTcoVelaTerminalOptions(
         'tco.journal',
         'tco.replay',
         'tco.positions',
+        'tco.profile',
+        'tco.broker-connection',
         'alerts',
+        'panels',
+        'screenshot',
       ],
     },
     sync:{
@@ -94,7 +101,7 @@ export function createTcoVelaTerminalOptions(
     volume:true,
     watermark:true,
     statusline:true,
-    bottombar:false,
+    bottombar:true,
     autofocus:false,
     persist:'tradingcore-live-vela-v5',
     storage,
