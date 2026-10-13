@@ -16,7 +16,7 @@ assert.equal((fyers.match(/latestExchangeTimestamp\(payload\.last_traded_time, p
 assert.doesNotMatch(fyers, /finite\(payload\.last_traded_time \?\? payload\.exch_feed_time\)/, 'a stale non-null last-trade field must not mask a fresher exchange-feed field');
 assert.match(quoteClient, /source: 'fyers'/, 'polled broker quotes must follow the same closed-session guard');
 assert.match(quoteClient, /Math\.max\(\.\.\.candidates\)/, 'REST quote timestamps must use the freshest valid broker field');
-assert.doesNotMatch(quoteClient, /new Date\(\)\.toISOString\(\);[\s\S]{0,200}lastTradeTimestamp/, 'packet arrival must not be used as an exchange trade timestamp');
+assert.doesNotMatch(quoteClient, /return Number\.isFinite\(parsed\)[^\n]*new Date\(\)\.toISOString\(\)/, 'packet arrival must not be used as a fallback trade timestamp');
 
 assert.match(plane, /function tradeTimestamp\(tick: NormalizedMarketTick\)/, 'chart data plane needs a canonical timestamp selector');
 assert.match(plane, /return new Date\(Math\.max\(\.\.\.candidates\)\)\.toISOString\(\)/, 'data plane must prefer the newest trusted exchange timestamp');
