@@ -97,6 +97,10 @@ export type {
     IntroAnimation,
     AddIndicatorOptions,
     SettingsVisibilityPolicy,
+    PriceAxisOptions,
+    PriceAxisTick,
+    PriceAxisTickContext,
+    PriceAxisTicksFn,
 } from './core/options';
 export type { IndicatorHandle, IndicatorEventMap } from './core/IndicatorHandle';
 export type { VelaEventMap } from './core/events/types';
