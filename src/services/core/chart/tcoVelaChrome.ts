@@ -300,8 +300,10 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     compile.addEventListener('click', () => { void compileSource(false); });
     run.addEventListener('click', () => { void compileSource(true); });
     openFull.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('tco:open-corespirit-editor', { detail: { source: editor.value } }));
-      ctx.toast('Full CoreSpirit IDE request sent', 'info');
+      try { localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
+      window.history.pushState({}, '', '/corespirit');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      ctx.toast('Opened the full CoreSpirit IDE', 'success');
     });
     return { onOpen() { editor.focus({ preventScroll: true }); }, destroy() { compileGeneration += 1; } };
   },
@@ -1327,18 +1329,6 @@ const tradingAction:WidgetActionDescriptor={
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
-const replayAction: WidgetActionDescriptor = {
-  id: 'tco.replay',
-  target: 'topbar',
-  label: 'Replay',
-  icon: 'play',
-  iconOnly: false,
-  align: 'right',
-  order: 3,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.replay'); },
-};
-
 const positionsAction: WidgetActionDescriptor = {
   id: 'tco.positions',
   target: 'topbar',
@@ -1433,6 +1423,7 @@ const healthAttachment: WidgetAttachment = {
 };
 
 registerWidgetAttachment(tradeMarksAttachment);
+registerWidgetAttachment(healthAttachment);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
