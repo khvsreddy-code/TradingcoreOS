@@ -71,7 +71,7 @@ export function LiveTradingWorkspace() {
       const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
-      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '4');
+      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '1');
 
       workspace = new VelaWorkspaceClass(host.current, createTcoVelaTerminalOptions({
         layout: initialLayout,
@@ -92,11 +92,15 @@ export function LiveTradingWorkspace() {
         // Keep speculative history off the user's critical path. The active chart's
         // initial request has priority; warm only the default symbol/timeframe, and let
         // rapid symbol/timeframe switches reuse the shared per-key single-flight cache.
-        prewarmTcoVelaHistory(
-          ['NSE:NIFTY50-INDEX'],
-          defaults.timeframe || '5',
-          300,
-        );
+        const activeSymbol = 'NSE:NIFTY50-INDEX';
+        const activeTimeframe = defaults.timeframe || '5';
+        prewarmTcoVelaHistory([activeSymbol], activeTimeframe, 300);
+        // Warm the most common adjacent intraday intervals in the low-priority history
+        // queue. Timeframe changes can paint from the shared cache instead of waiting
+        // for a cold FYERS history round trip; these never block the active chart.
+        for (const timeframe of ['1', '3', '15']) {
+          if (timeframe !== activeTimeframe) prewarmTcoVelaHistory([activeSymbol], timeframe, 250);
+        }
       });
 
       if (typeof window !== 'undefined') {
