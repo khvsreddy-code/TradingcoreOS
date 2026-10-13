@@ -295,7 +295,7 @@ function eventTime(value: unknown, fallback: number): number {
  * so the chart's forming candle does not remain stuck in an old bucket.
  */
 function latestFyersTimestamp(payload: Record<string, unknown>): number | undefined {
-  const candidates = [payload.last_traded_time, payload.exch_feed_time, payload.timestamp]
+  const candidates = [payload.last_traded_time, payload.exch_feed_time]
     .map(finite)
     .filter((value): value is number => value !== undefined && value > 0)
     .map(value => value > 1e12 ? value : value * 1000)
