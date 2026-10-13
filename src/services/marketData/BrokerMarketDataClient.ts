@@ -293,6 +293,7 @@ export class BrokerMarketDataClient {
 
             const tick: any = {
               instrumentKey: String(key),
+              source: 'fyers',
               ltp,
               close: Number(q.close ?? q.prevClose ?? 0) || undefined,
               change: Number(q.change ?? 0) || undefined,
@@ -302,13 +303,16 @@ export class BrokerMarketDataClient {
               ask: Number.isFinite(Number(q.ask)) ? [{ price: Number(q.ask), quantity: 0 }] : undefined,
               receivedAt: new Date().toISOString(),
               ...(() => {
-                const raw = q.timestamp ?? q.last_traded_time ?? q.lastTradedTime ?? q.exch_feed_time ?? q.exchFeedTime ?? q.last_trade_time;
-                const numeric = typeof raw === 'number' ? raw : Number(raw);
-                if (Number.isFinite(numeric) && numeric > 0) {
-                  return { lastTradeTimestamp: new Date((numeric > 1e12 ? numeric : numeric * 1000)).toISOString() };
-                }
-                const parsed = Date.parse(String(raw || ''));
-                return Number.isFinite(parsed) && parsed > 0 ? { lastTradeTimestamp: new Date(parsed).toISOString() } : {};
+                const now = Date.now();
+                const candidates = [q.last_traded_time, q.exch_feed_time, q.lastTradeTimestamp, q.lastTradedTime, q.exchFeedTime, q.last_trade_time, q.timestamp]
+                  .map((raw) => {
+                    if (raw == null || raw === '') return undefined;
+                    const numeric = typeof raw === 'number' || (typeof raw === 'string' && /^\d+(?:\.\d+)?$/.test(raw.trim())) ? Number(raw) : Number.NaN;
+                    const parsed = Number.isFinite(numeric) ? (numeric > 1e12 ? numeric : numeric * 1000) : Date.parse(String(raw));
+                    return Number.isFinite(parsed) && parsed > 0 && parsed <= now + 60_000 ? parsed : undefined;
+                  })
+                  .filter((value): value is number => value !== undefined);
+                return candidates.length ? { lastTradeTimestamp: new Date(Math.max(...candidates)).toISOString() } : {};
               })(),
             };
 

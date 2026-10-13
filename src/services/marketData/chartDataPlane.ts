@@ -105,20 +105,75 @@ type PlaneState = {
 
 const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
 
-/** Only a valid exchange trade timestamp may create or advance a candle. Packet arrival time is not trade time. */
-function tradeTimestamp(tick: NormalizedMarketTick): string | undefined {
-  const raw = tick.lastTradeTimestamp ?? tick.brokerTimestamp ?? (
-    tick.source === 'paper' || tick.source === 'replay' || tick.source === 'backtest' || tick.source === 'simulator'
-      ? tick.timestamp ?? tick.receivedAtEpoch ?? tick.receivedAt
-      : undefined
-  );
+/** Parse broker epoch seconds/milliseconds or ISO time without confusing numeric strings with ISO dates. */
+function timestampMilliseconds(raw: unknown): number | undefined {
   if (raw == null || raw === '') return undefined;
-  const numeric = typeof raw === 'number' ? raw : Number(String(raw).trim());
-  const milliseconds = Number.isFinite(numeric)
-    ? (numeric > 1e12 ? numeric : numeric * 1000)
-    : Date.parse(String(raw));
-  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return undefined;
-  return new Date(milliseconds).toISOString();
+  if (typeof raw === 'number' || (typeof raw === 'string' && /^\d+(?:\.\d+)?$/.test(raw.trim()))) {
+    const numeric = Number(raw);
+    const milliseconds = numeric > 1e12 ? numeric : numeric * 1000;
+    return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined;
+  }
+  const parsed = Date.parse(String(raw));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+/** Only a valid exchange trade timestamp may create or advance a candle. Packet arrival time is not trade time. */
+function tradeTimestamp(tick: NormalizedMarketTick, allowFreshStreamReceiveTime = false): string | undefined {
+  const values: unknown[] = [tick.lastTradeTimestamp, tick.brokerTimestamp];
+  if (tick.source === 'paper' || tick.source === 'replay' || tick.source === 'backtest' || tick.source === 'simulator') {
+    values.push(tick.timestamp, tick.receivedAtEpoch, tick.receivedAt);
+  }
+  const now = Date.now();
+  const candidates = values
+    .map(timestampMilliseconds)
+    .filter((value): value is number => value !== undefined && (tick.source !== 'fyers' || value <= now + 60_000));
+  const exchangeTime = candidates.length ? Math.max(...candidates) : undefined;
+  if (tick.source === 'fyers' && tick.feedClass === 'full' && allowFreshStreamReceiveTime) {
+    const receivedAt = timestampMilliseconds(tick.receivedAtEpoch ?? tick.receivedAt);
+    const now = Date.now();
+    // Only an actual FULL-stream price change can use packet time as a bar bucket,
+    // and only while the Indian cash session is open. REST/Lite/watchlist polling
+    // and off-session packets never manufacture a new chart candle.
+    if (
+      receivedAt !== undefined
+      && now - receivedAt >= -1_000
+      && now - receivedAt < 5_000
+      && isIndianCashSession(receivedAt)
+      && (exchangeTime === undefined || receivedAt - exchangeTime > 120_000)
+    ) {
+      return new Date(receivedAt).toISOString();
+    }
+  }
+  if (exchangeTime === undefined) return undefined;
+  // The last-trade timestamp can lag the exchange-feed timestamp; use the freshest supplied exchange clock.
+  return new Date(exchangeTime).toISOString();
+}
+
+/** NSE/BSE cash-session guard for broker ticks. Stale/off-session quotes may update
+ * the LTP header, but must not rewrite the last historical candle or create after-hours bars. */
+function isIndianCashSession(timestampMs: number): boolean {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return false;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(timestampMs));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  const day = get('weekday');
+  if (day === 'Sat' || day === 'Sun') return false;
+  const minute = Number(get('hour')) * 60 + Number(get('minute'));
+  return Number.isFinite(minute) && minute >= 9 * 60 + 15 && minute < 15 * 60 + 30;
+}
+
+function isStaleOrClosedCashTick(tick: NormalizedMarketTick, timestampMs: number): boolean {
+  if (tick.source !== 'fyers' || !/^(NSE|BSE):/i.test(String(tick.instrumentKey || ''))) return false;
+  const receivedAt = timestampMilliseconds(tick.receivedAtEpoch ?? tick.receivedAt);
+  if (!isIndianCashSession(timestampMs) || receivedAt == null || !isIndianCashSession(receivedAt)) return true;
+  // Index ticks should be close to the exchange clock. This rejects stale after-hours /
+  // holiday quotes even when the exchange timestamp still lies within regular trading hours.
+  return receivedAt - timestampMs > 120_000;
 }
 
 function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
@@ -233,10 +288,8 @@ export class ChartDataPlane {
     });
   }
 
-  private onColumnarTick(tick: NormalizedMarketTick, price: number): { changed: boolean; bucketChanged: boolean; latest: HistoricalCandle | null } {
+  private onColumnarTick(tick: NormalizedMarketTick, price: number, rawTimestamp: string): { changed: boolean; bucketChanged: boolean; latest: HistoricalCandle | null } {
     const view = this.canonicalPlane.read();
-    const rawTimestamp = tradeTimestamp(tick);
-    if (rawTimestamp == null) return { changed: false, bucketChanged: false, latest: null };
     // tradeTimestamp() returns only a validated ISO exchange timestamp. Never
     // turn malformed broker data into a packet-receive-time candle.
     const timestampMs = Date.parse(rawTimestamp);
@@ -323,6 +376,7 @@ export class ChartDataPlane {
 
   private onTick = (tick: NormalizedMarketTick): void => {
     if (String(tick.instrumentKey || '') !== String(this.instrumentKey)) return;
+    const previousTick = this.state.latestTick;
     this.state.latestTick = tick;
     const price = Number(tick.ltp);
     if (!Number.isFinite(price)) return;
@@ -330,7 +384,29 @@ export class ChartDataPlane {
     // Quotes can keep the LTP UI current, but only trusted exchange trade times
     // and already-loaded broker history may update a candle.
     const hasHistory = Boolean(this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length);
-    if (!hasHistory || tradeTimestamp(tick) == null) {
+    const previousPrice = Number(previousTick?.ltp);
+    const allowReceiveTime = tick.source === 'fyers' && tick.feedClass === 'full'
+      && (!Number.isFinite(previousPrice) || previousPrice !== price);
+    let exchangeTimestamp = tradeTimestamp(tick, allowReceiveTime);
+    if (allowReceiveTime && exchangeTimestamp) {
+      const receiveMs = timestampMilliseconds(tick.receivedAtEpoch ?? tick.receivedAt);
+      const intervalSeconds = CHART_TIMEFRAME_SECONDS[this.timeframe] || 300;
+      const canonical = this.canonicalPlane.read();
+      const lastChartTime = canonical.length ? Number(canonical.time[canonical.length - 1]) : Number.NaN;
+      const eventBucket = Math.floor(Date.parse(exchangeTimestamp) / (intervalSeconds * 1000)) * intervalSeconds;
+      if (Number.isFinite(lastChartTime) && eventBucket < lastChartTime && receiveMs !== undefined
+        && Date.now() - receiveMs >= -1_000 && Date.now() - receiveMs < 5_000 && isIndianCashSession(receiveMs)) {
+        // A fresh, changed FULL-stream quote in the open session can correct a stale
+        // per-trade clock whose bucket would otherwise be discarded as older than history.
+        exchangeTimestamp = new Date(receiveMs).toISOString();
+      }
+    }
+    if (!hasHistory || exchangeTimestamp == null) {
+      this.emit({ type: 'quote', snapshot: this.snapshot() });
+      return;
+    }
+    const exchangeTimestampMs = Date.parse(exchangeTimestamp);
+    if (isStaleOrClosedCashTick(tick, exchangeTimestampMs)) {
       this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
     }
@@ -345,7 +421,7 @@ export class ChartDataPlane {
     // typed state with OHLCV[]; that was the remaining zero-object hot-path leak and could
     // also delay first paint when history was temporarily empty.
     if (this.state.columns && this.state.candles.length === 0) {
-      const result = this.onColumnarTick(tick, price);
+      const result = this.onColumnarTick(tick, price, exchangeTimestamp);
       chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
       if (!result.latest || !result.changed) {
         // Keep last-price/header subscribers fresh without mutating candles for a stale or duplicate trade bucket.
@@ -374,7 +450,7 @@ export class ChartDataPlane {
       compatibility,
       {
         price,
-        timestamp: tradeTimestamp(tick)!,
+        timestamp: exchangeTimestamp,
       },
       CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
       MAX_HISTORY_CANDLES,
