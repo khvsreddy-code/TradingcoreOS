@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import { FyersSymbolMasterService } from './server/fyers/symbols/FyersSymbolMasterService.ts';
+import { canonicalFyersSymbol } from './server/fyers/symbols/canonicalFyersSymbol.ts';
 import { filterSymbols } from '../vendor/vela/src/widget/symbol-picker.ts';
+
+assert.equal(canonicalFyersSymbol('NSE:NIFTY26JUN22600PE'), 'NSE:NIFTY26JUN22600PE',
+  'history routing must not rewrite an option contract as an equity');
+assert.equal(canonicalFyersSymbol('NSE:NIFTY26JUN22600CE'), 'NSE:NIFTY26JUN22600CE',
+  'call contracts must stay on the requested derivatives instrument');
+assert.equal(canonicalFyersSymbol('BSE:SENSEX26JUN80000PE'), 'BSE:SENSEX26JUN80000PE',
+  'BSE index option contracts must keep their listing venue');
+assert.equal(canonicalFyersSymbol('NSE:RELIANCE'), 'NSE:RELIANCE-EQ',
+  'ordinary NSE equity normalization should remain unchanged');
+
 
 // Use a deterministic miniature instrument master so this contract checks the actual
 // production matching logic without network access or a live broker session.
