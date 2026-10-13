@@ -1102,7 +1102,7 @@ const accountPanel: SidePanelDescriptor = {
     const profile = document.createElement('button'); profile.type='button'; profile.textContent='Profile'; profile.style.cssText='flex:1;border:1px solid rgba(124,92,255,.3);border-radius:8px;padding:8px;background:rgba(124,92,255,.10);color:#ddd6fe;font:600 10px ui-monospace;cursor:pointer;';
     profile.onclick=()=>{ window.history.pushState({},'', '/profile'); window.dispatchEvent(new PopStateEvent('popstate')); };
     const settings = document.createElement('button'); settings.type='button'; settings.textContent='Settings'; settings.style.cssText='flex:1;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px;background:#0d1017;color:#cbd5e1;font:600 10px ui-monospace;cursor:pointer;';
-    settings.onclick=()=>{ window.dispatchEvent(new Event('tco:open-settings')); };
+    settings.onclick=()=>{ ctx.chart.renderer.openSettingsDialog?.(); };
     actions.append(profile,settings); card.append(avatar,name,email,actions); root.append(card);
     void (async()=>{ try { const client=(await import('../../auth/supabaseClient')).getSupabaseClient(); const u=(await client.auth.getUser()).data.user; if(!u)return; name.textContent=u.user_metadata?.full_name||u.email||'Trader'; email.textContent=u.email||''; if (u.user_metadata?.avatar_url) avatar.src=String(u.user_metadata.avatar_url); const {data}=await client.from('profiles').select('name,email,avatar').eq('id',u.id).maybeSingle(); if(data){name.textContent=data.name||name.textContent;email.textContent=data.email||email.textContent;if(data.avatar)avatar.src=String(data.avatar);} } catch {} })();
     return {};
@@ -1149,23 +1149,18 @@ registerLegendAction(coreSpiritOpenAction);
 registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
-const brandAction: WidgetActionDescriptor = {
-  id: 'tco.brand', target: 'topbar', label: 'TradingCoreOS × Vela', iconOnly: false, align: 'left', order: 0, mobile: 'menu',
-  run() {},
-};
-
 const researchAction:WidgetActionDescriptor={
-  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
+  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:true, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
 };
 
 const automationAction:WidgetActionDescriptor={
-  id:'tco.automation', target:'topbar', label:'Automation', icon:'replay', iconOnly:false, align:'right', order:1.6, mobile:'menu',
+  id:'tco.automation', target:'topbar', label:'Automation', icon:'replay', iconOnly:true, align:'right', order:1.6, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.automation');},
 };
 
 const tradingAction:WidgetActionDescriptor={
-  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:false, align:'right', order:1.7, mobile:'menu',
+  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:true, align:'right', order:1.7, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
@@ -1261,12 +1256,12 @@ const vpvrAction: WidgetActionDescriptor = {
 };
 
 const watchlistAction: WidgetActionDescriptor = {
-  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: false, align: 'right', order: 0, mobile: 'menu',
+  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: true, align: 'right', order: 0, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
 };
 
 const journalAction: WidgetActionDescriptor = {
-  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: false, align: 'right', order: 1, mobile: 'menu',
+  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: true, align: 'right', order: 1, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
@@ -1297,7 +1292,6 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
-registerWidgetAction(brandAction);
 const marketHealthAction: WidgetActionDescriptor = {
   id: 'tco.market-health',
   target: 'topbar',
