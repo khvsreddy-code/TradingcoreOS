@@ -273,7 +273,37 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     syncEditor();
     let compileGeneration = 0;
     // A Run action should update the Studio's active script in place, not stack duplicates.
-    let liveStudioHandle: ReturnType<typeof ctx.chart.indicators>[number] | undefined;
+    type LiveStudioHandle = ReturnType<typeof ctx.chart.indicators>[number];
+    let liveStudioHandle: LiveStudioHandle | undefined;
+    let liveStudioBoundHandleId: string | undefined;
+    let liveStudioHasRun = false;
+    let liveStudioUpdateToken = 0;
+    const bindLiveStudioHandle = (handle: LiveStudioHandle, alreadyRunning: boolean): void => {
+      if (liveStudioBoundHandleId === handle.id) return;
+      liveStudioBoundHandleId = handle.id;
+      liveStudioHandle = handle;
+      liveStudioHasRun = alreadyRunning;
+      handle.on('ready', () => {
+        if (disposed || liveStudioHandle?.id !== handle.id) return;
+        liveStudioHasRun = true;
+        status.textContent = 'Running · CoreSpirit indicator is attached to the active chart.';
+        status.style.color = '#86efac';
+        ctx.toast('CoreSpirit indicator is running on the active chart', 'success');
+      });
+      handle.on('error', ({ error }) => {
+        if (disposed || liveStudioHandle?.id !== handle.id) return;
+        liveStudioUpdateToken += 1; // cancel any status poll for a superseded update
+        const hadWorkingVersion = liveStudioHasRun;
+        if (!hadWorkingVersion) {
+          try { handle.remove(); } catch {}
+          if (liveStudioHandle?.id === handle.id) liveStudioHandle = undefined;
+          liveStudioBoundHandleId = undefined;
+        }
+        status.textContent = `Vela could not compile or execute this CoreScript: ${error instanceof Error ? error.message : String(error)}`;
+        status.style.color = '#fca5a5';
+        ctx.toast(hadWorkingVersion ? 'CoreSpirit update failed' : 'CoreSpirit indicator failed and was removed', 'error');
+      });
+    };
     void mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
       source = nextSource;
       compileGeneration += 1;
@@ -328,42 +358,45 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
               ? liveStudioHandle
               : currentHandles.find((candidate) => candidate.id.startsWith('tco-corespirit-live-'));
             if (handle) {
-              liveStudioHandle = handle;
-              status.textContent = 'Updating the active CoreSpirit indicator…';
-              status.style.color = '#fbbf24';
-              const update = await handle.updateCode(currentSource);
-              if (disposed || generation !== compileGeneration) return;
-              if (!update.ok) throw update.error ?? new Error('CoreSpirit update did not complete; the previous version remains active.');
-              status.textContent = 'Running · CoreSpirit indicator updated in place.';
-              status.style.color = '#86efac';
-              ctx.toast('CoreSpirit indicator updated in place', 'success');
+              bindLiveStudioHandle(handle, true);
+              if (handle.source === currentSource) {
+                status.textContent = 'Running · CoreSpirit Studio already matches the active chart script.';
+                status.style.color = '#86efac';
+              } else {
+                const updateToken = ++liveStudioUpdateToken;
+                status.textContent = 'Updating the active CoreSpirit indicator…';
+                status.style.color = '#fbbf24';
+                // Vela's updateCode() is intentionally fire-and-observe (void). The
+                // handle.source changes only after Vela has prepared the replacement.
+                handle.updateCode(currentSource);
+                const updateStartedAt = Date.now();
+                const observeUpdate = (): void => {
+                  if (disposed || generation !== compileGeneration || updateToken !== liveStudioUpdateToken || liveStudioHandle?.id !== handle.id) return;
+                  if (handle.source === currentSource) {
+                    status.textContent = 'Updated · Vela accepted the new CoreScript and is refreshing its output.';
+                    status.style.color = '#86efac';
+                    ctx.toast('CoreSpirit indicator updated in place', 'success');
+                    return;
+                  }
+                  if (Date.now() - updateStartedAt >= 10000) {
+                    status.textContent = 'Vela is still preparing this update. The source has not yet been accepted.';
+                    status.style.color = '#fbbf24';
+                    return;
+                  }
+                  window.setTimeout(observeUpdate, 80);
+                };
+                window.setTimeout(observeUpdate, 40);
+              }
             } else {
               const indicatorId = `tco-corespirit-live-${generation}-${Date.now().toString(36)}`;
               ctx.addIndicator({ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
               handle = ctx.chart.indicators().find((candidate) => candidate.id === indicatorId);
               if (!handle) throw new Error('Vela refused to create an indicator instance. Check the chart engine and compiler diagnostics.');
-              liveStudioHandle = handle;
-              let settled = false;
-              handle.on('ready', () => {
-                if (disposed || settled) return;
-                settled = true;
-                status.textContent = 'Running · CoreSpirit indicator is attached to the active chart.';
-                status.style.color = '#86efac';
-                ctx.toast('CoreSpirit indicator added to the active chart', 'success');
-              });
-              handle.on('error', ({ error }) => {
-                if (settled) return;
-                settled = true;
-                try { handle?.remove(); } catch {}
-                if (liveStudioHandle?.id === indicatorId) liveStudioHandle = undefined;
-                status.textContent = `Vela could not execute this indicator: ${error instanceof Error ? error.message : String(error)}`;
-                status.style.color = '#fca5a5';
-                ctx.toast('CoreSpirit indicator failed to execute and was removed', 'error');
-              });
+              bindLiveStudioHandle(handle, false);
               status.textContent = 'Indicator queued · waiting for Vela’s first execution…';
               status.style.color = '#fbbf24';
               window.setTimeout(() => {
-                if (disposed || settled) return;
+                if (disposed || liveStudioHasRun || liveStudioHandle?.id !== indicatorId) return;
                 status.textContent = 'Indicator is still compiling or waiting for chart data. Check the browser error panel if it does not appear.';
                 status.style.color = '#fbbf24';
               }, 10000);
