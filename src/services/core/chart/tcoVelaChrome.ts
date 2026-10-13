@@ -20,6 +20,7 @@ import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage
 import { getAutomations } from '../../workspace/workspaceState';
 import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
 import { compileCoreSpiritSourceOffThread } from '../../coreSpirit/coreSpiritCompilerClient';
+import { versionedStorageKey } from '../../coreSpirit/storageSchema';
 
 // TCO-only topbar / panel actions need real registered SVGs. Unknown Vela ids otherwise
 // render blank spans inside clickable icon-only controls.
@@ -300,7 +301,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     compile.addEventListener('click', () => { void compileSource(false); });
     run.addEventListener('click', () => { void compileSource(true); });
     openFull.addEventListener('click', () => {
-      try { localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
+      try { localStorage.setItem(versionedStorageKey('editor'), editor.value); localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
       window.history.pushState({}, '', '/corespirit');
       window.dispatchEvent(new PopStateEvent('popstate'));
       ctx.toast('Opened the full CoreSpirit IDE', 'success');
@@ -1351,9 +1352,9 @@ const chartSettingsAction: WidgetActionDescriptor = {
   order: 20,
   mobile: 'menu',
   run(ctx) {
-    const renderer = ctx.chart.renderer as unknown as { openSettingsDialog?: (section?: string) => void };
-    if (typeof renderer.openSettingsDialog === 'function') {
-      renderer.openSettingsDialog();
+    const renderer = ctx.chart.renderer;
+    if (typeof renderer.openSettings === 'function') {
+      renderer.openSettings();
     } else {
       ctx.toast('Chart settings are unavailable for this renderer', 'error');
     }
