@@ -289,6 +289,20 @@ function eventTime(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/**
+ * FYERS can send a stale last_traded_time alongside a newer exch_feed_time.
+ * Prefer the newest valid exchange-provided timestamp, never packet receive time,
+ * so the chart's forming candle does not remain stuck in an old bucket.
+ */
+function latestFyersTimestamp(payload: Record<string, unknown>): number | undefined {
+  const candidates = [payload.last_traded_time, payload.exch_feed_time, payload.timestamp]
+    .map(finite)
+    .filter((value): value is number => value !== undefined && value > 0)
+    .map(value => value > 1e12 ? value : value * 1000)
+    .filter(value => Number.isFinite(value) && value > 0 && value <= Date.now() + 60_000);
+  return candidates.length ? Math.max(...candidates) : undefined;
+}
+
 function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, sequence: number): NormalizedMarketTick | null {
   const payload = asRecord(value);
   if (!payload || typeof payload.symbol !== 'string' || !payload.symbol.trim()) return null;
@@ -317,7 +331,7 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
 
   if (feedClass === 'lite') {
     if (ltp === undefined) return null;
-    const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
+    const brokerTimestamp = latestFyersTimestamp(payload);
     return {
       instrumentKey: payload.symbol, ltp,
       receivedAt: new Date(receivedAt).toISOString(),
@@ -328,7 +342,7 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
   }
   if (ltp === undefined && !isDepth && !depthBids.length && !depthAsks.length) return null;
   const prevClose = finite(payload.prev_close_price);
-  const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
+  const brokerTimestamp = latestFyersTimestamp(payload);
   const tick: NormalizedMarketTick = {
     instrumentKey: payload.symbol,
     ...(ltp !== undefined ? { ltp } : {}),
