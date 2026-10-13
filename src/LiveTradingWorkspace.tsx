@@ -1,5 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { Activity, Bot, BrainCircuit, ChevronDown, Code2, BriefcaseBusiness, Gauge, LayoutDashboard, Settings2, SlidersHorizontal, Sparkles, UserCircle } from 'lucide-react';
+import { Activity, Bot, BrainCircuit, BriefcaseBusiness, ChevronDown, Code2, Gauge, LayoutDashboard, Settings2, SlidersHorizontal, Sparkles, Star, UserCircle } from 'lucide-react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, tcoVelaPerformanceKey } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -309,8 +309,11 @@ export function LiveTradingWorkspace() {
             <button type="button" title="Indicators" aria-label="Indicators" onClick={() => navigateLiveRoute('/indicators')} className="tco-live-rail-button">
               <Gauge size={17} />
             </button>
-            <button type="button" title="Prediction models" aria-label="Prediction models" onClick={() => navigateLiveRoute('/predictions')} className="tco-live-rail-button">
+            <button type="button" title="AI models" aria-label="AI models" onClick={() => navigateLiveRoute('/models')} className="tco-live-rail-button">
               <BrainCircuit size={17} />
+            </button>
+            <button type="button" title="Predictions" aria-label="Predictions" onClick={() => navigateLiveRoute('/predictions')} className="tco-live-rail-button">
+              <Sparkles size={17} />
             </button>
             <button type="button" title="Automations" aria-label="Automations" onClick={() => navigateLiveRoute('/automations')} className="tco-live-rail-button">
               <Bot size={17} />
@@ -320,6 +323,9 @@ export function LiveTradingWorkspace() {
             </button>
             <div className="my-2 h-px w-6 bg-white/[0.07]" />
             <button type="button" title="Watchlist" aria-label="Watchlist" onClick={() => workspaceRef.current?.togglePanel('tco.bookmarks', true)} className="tco-live-rail-button">
+              <Star size={17} />
+            </button>
+            <button type="button" title="Portfolio" aria-label="Portfolio" onClick={() => navigateLiveRoute('/portfolio')} className="tco-live-rail-button">
               <BriefcaseBusiness size={17} />
             </button>
             <div className="flex-1" />
