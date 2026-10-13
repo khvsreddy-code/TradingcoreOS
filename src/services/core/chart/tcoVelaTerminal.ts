@@ -45,6 +45,8 @@ export function createTcoVelaTerminalOptions(
     layout,
     symbol,
     timeframe,
+    timezone:'Asia/Kolkata',
+    settings:true,
     bars:5000,
     timeframes:['1','3','5','10','15','30','60','120','240','D','W','M'],
     live:true,
