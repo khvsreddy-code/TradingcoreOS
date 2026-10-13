@@ -17,6 +17,12 @@ assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.tes
 assert(/const initialLayout = .*defaults\.layout/.test(live));
 assert(live.includes("layout: initialLayout"));
 assert(live.includes('tco-live-shell'), 'live page should provide its own polished TCO application header around Vela');
+assert(live.includes('aria-label="TradingCoreOS navigation"'), 'live terminal should expose the narrow left navigation rail from the reference UI');
+assert(live.includes("navigateLiveRoute('/corespirit')"), 'CoreSpirit rail item should navigate to the full IDE');
+assert(live.includes("workspaceRef.current?.togglePanel('tco.bookmarks', true)"), 'watchlist rail button should open the existing Vela dock panel');
+assert(live.includes('aria-label="Workspace options"'), 'the live header should include a workspace actions menu');
+assert(live.includes("workspaceRef.current?.setLayout('1')") && live.includes("workspaceRef.current?.setLayout('4')") && live.includes("workspaceRef.current?.setLayout('8')"), 'workspace menu should offer the native single, 2x2, and 2x4 layouts');
+assert(read('src/index.css').includes('.tco-live-rail-button-active'), 'live navigation rail should have a dedicated compact style');
 assert(live.includes('Connect broker'), 'the live application header must expose an actionable broker connection entry');
 assert(topology.includes("'tco.replay-action'"), 'the live toolbar must surface Vela workspace replay');
 assert(topology.includes("'undo-redo'"), 'Vela native undo/redo controls must remain visible');
