@@ -15,7 +15,7 @@ export function ChartOverlay({
   indicators,indicatorCount,showIndicatorMenu,setShowIndicatorMenu,editingIndicator,setEditingIndicator,addIndicatorFromChart,patchIndicator,removeIndicator,viewingIndicator,setViewingIndicatorCode,
   predictionModelIds,predictionQuery,setPredictionQuery,showPredictionMenu,setShowPredictionMenu,savePredictionModelIds,setPredictionModelIds,
   drawingTool,showDrawingMenu,setShowDrawingMenu,selectDrawingTool,clearDrawings,undoDrawing,showLevels,setShowLevels,showOI,setShowOI,showDepth,setShowDepth,showVolume,setShowVolume,
-  coreSpiritState,setCoreSpiritSource,openCoreSpirit,openChartSettings,compileCoreSpirit,deployCoreSpirit,closeCoreSpirit,analytics,
+  coreSpiritState,setCoreSpiritSource,openCoreSpirit,compileCoreSpirit,deployCoreSpirit,closeCoreSpirit,analytics,
 }: {
   resolvedInstrumentKey:string;
   timeframe:string;
@@ -60,7 +60,6 @@ export function ChartOverlay({
   coreSpiritState:CoreSpiritChartStoreState;
   setCoreSpiritSource:(source:string)=>void;
   openCoreSpirit:()=>void;
-  openChartSettings:()=>void;
   compileCoreSpirit:()=>void;
   deployCoreSpirit:()=>void;
   closeCoreSpirit:()=>void;
@@ -121,9 +120,8 @@ export function ChartOverlay({
       <button onClick={clearDrawings} className="w-full border-t border-[var(--tco-border)] px-2 pt-2 text-left text-[8px] text-[#ef4444]">Clear drawings</button><button onClick={undoDrawing} className="mt-1 w-full border-t border-[var(--tco-border)] px-2 pt-2 text-left text-[8px]">Undo</button>
     </div>}
 
-    <div className="absolute right-2 top-2 bottom-2 z-40 flex flex-col items-center justify-between rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1 shadow-2xl">
+    <div className="absolute right-2 top-2 z-40 flex flex-col items-center gap-1 rounded-lg border border-[var(--tco-control)] bg-[var(--tco-surface-2)]/95 p-1 shadow-2xl">
       <button title="CoreSpirit Editor" aria-label="CoreSpirit Editor" onClick={openCoreSpirit} className={`flex h-8 w-8 items-center justify-center rounded ${coreSpiritState.open?'bg-[#3b82f6]/20 text-[#93c5fd]':'text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white'}`}><Code2 size={15}/></button>
-      <button title="Vela chart settings" aria-label="Vela chart settings" onClick={openChartSettings} className="flex h-8 w-8 items-center justify-center rounded text-[var(--tco-muted)] hover:bg-[var(--tco-hover)] hover:text-white"><Settings2 size={15}/></button>
     </div>
 
     {coreSpiritState.open&&<div className="absolute right-12 top-2 z-50 w-[min(520px,calc(100%-70px))] overflow-hidden rounded-xl border border-[var(--tco-control)] bg-[var(--tco-surface-blue)] shadow-2xl">
