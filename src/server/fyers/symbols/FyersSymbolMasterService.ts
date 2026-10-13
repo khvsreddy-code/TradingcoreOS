@@ -69,7 +69,7 @@ export class FyersSymbolMasterService {
     // naturally type human-readable queries such as "NIFTY 22600 PE". Split into tokens
     // and require every token to match instead of requiring the whole phrase contiguously.
     const sourceQuery=query.trim().replace(/^[A-Z0-9_-]{2,16}:/i,'').toUpperCase();
-    const tokens=sourceQuery.match(/[A-Z]+|\\d+(?:\\.\\d+)?/g) ?? [];
+    const tokens=sourceQuery.match(/[A-Z]+|\d+(?:\.\d+)?/g) ?? [];
     if(!tokens.length) return [];
     const maximum = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 50;
     const compactQuery=sourceQuery.replace(/[^A-Z0-9.]/g,'');
@@ -98,4 +98,6 @@ export class FyersSymbolMasterService {
     }
     ranked.sort((a,b)=>a.rank-b.rank || a.ticker.localeCompare(b.ticker));
     return ranked.slice(0,maximum).map((item)=>item.row);
-  }}
+  }
+}
+
