@@ -277,7 +277,7 @@ export class TcoVelaDataProvider implements DataProvider {
   async getBarsColumns(ticker: string, timeframe: string, range: BarRange): Promise<ColumnarBars> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 5000)));
+    const requested = Math.max(100, Math.min(500, Math.floor(Number(range.limit) || 500)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
 
@@ -406,7 +406,7 @@ export class TcoVelaDataProvider implements DataProvider {
   async getBars(ticker: string, timeframe: string, range: BarRange): Promise<OHLCV[]> {
     const symbol = runtimeSymbol(ticker);
     const tcoTimeframe = runtimeTimeframe(timeframe);
-    const requested = Math.max(100, Math.min(5000, Math.floor(Number(range.limit) || 750)));
+    const requested = Math.max(100, Math.min(500, Math.floor(Number(range.limit) || 500)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
