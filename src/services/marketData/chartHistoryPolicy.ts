@@ -1,22 +1,23 @@
 export const INITIAL_HISTORY_CANDLES: Record<string, number> = {
-  // First paint is deliberately viewport-friendly. Deeper history is warmed
-  // after the chart is visible instead of blocking candle visibility.
-  '1m': 1200,
-  '3m': 1000,
-  '5m': 900,
-  '10m': 900,
-  '15m': 750,
-  '30m': 600,
-  '1H': 480,
-  '1D': 240,
+  // Fast first paint and fast timeframe switches: fetch a bounded 500-bar window,
+  // then request older pages only when the user scrolls toward the loaded edge.
+  '1m': 500,
+  '3m': 500,
+  '5m': 500,
+  '10m': 500,
+  '15m': 500,
+  '30m': 500,
+  '1H': 500,
+  '1D': 500,
 };
 
 export const HISTORY_PAGE_CANDLES: Record<string, number> = {
-  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000, '15m': 5000, '30m': 5000, '1H': 5000, '1D': 5000,
+  '1m': 1000, '3m': 1000, '5m': 1000, '10m': 1000, '15m': 1000, '30m': 1000, '1H': 1000, '1D': 1000,
 };
 
 export const HISTORY_WARM_TARGET_CANDLES: Record<string, number> = {
-  '1m': 5000, '3m': 5000, '5m': 5000, '10m': 5000, '15m': 5000, '30m': 5000, '1H': 5000, '1D': 5000,
+  // No eager 5k background history burst: older data is demand-loaded as needed.
+  '1m': 500, '3m': 500, '5m': 500, '10m': 500, '15m': 500, '30m': 500, '1H': 500, '1D': 500,
 };
 
 export const HISTORY_MAX_CANDLES = 50_000;
@@ -39,7 +40,7 @@ export function historyPageCandles(timeframe: string): number {
 export function historyDemandPageCandles(timeframe: string, visibleBars: number): number {
   const base = initialHistoryCandles(timeframe);
   const bars = Math.max(1, Math.ceil(Number(visibleBars) || 1));
-  return Math.max(250, Math.min(5000, Math.max(base, bars * 4)));
+  return Math.max(250, Math.min(1500, Math.max(base, bars * 4)));
 }
 
 export function historyDemandLeadBars(timeframe: string, visibleBars: number): number {
