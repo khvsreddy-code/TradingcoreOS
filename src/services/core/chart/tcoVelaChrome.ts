@@ -358,8 +358,9 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
               ? liveStudioHandle
               : currentHandles.find((candidate) => candidate.id.startsWith('tco-corespirit-live-'));
             if (handle) {
-              bindLiveStudioHandle(handle, true);
-              if (handle.source === currentSource) {
+              const activeHandle = handle;
+              bindLiveStudioHandle(activeHandle, true);
+              if (activeHandle.source === currentSource) {
                 status.textContent = 'Running · CoreSpirit Studio already matches the active chart script.';
                 status.style.color = '#86efac';
               } else {
@@ -368,11 +369,11 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
                 status.style.color = '#fbbf24';
                 // Vela's updateCode() is intentionally fire-and-observe (void). The
                 // handle.source changes only after Vela has prepared the replacement.
-                handle.updateCode(currentSource);
+                activeHandle.updateCode(currentSource);
                 const updateStartedAt = Date.now();
                 const observeUpdate = (): void => {
-                  if (disposed || generation !== compileGeneration || updateToken !== liveStudioUpdateToken || liveStudioHandle?.id !== handle.id) return;
-                  if (handle.source === currentSource) {
+                  if (disposed || generation !== compileGeneration || updateToken !== liveStudioUpdateToken || liveStudioHandle?.id !== activeHandle.id) return;
+                  if (activeHandle.source === currentSource) {
                     status.textContent = 'Updated · Vela accepted the new CoreScript and is refreshing its output.';
                     status.style.color = '#86efac';
                     ctx.toast('CoreSpirit indicator updated in place', 'success');
