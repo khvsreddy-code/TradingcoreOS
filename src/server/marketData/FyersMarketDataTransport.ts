@@ -289,6 +289,19 @@ function eventTime(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/** Use the freshest actual exchange clock among FYERS fields. `last_traded_time` may
+ * remain stale while `exch_feed_time` advances (notably for index quotes). Never
+ * substitute packet-arrival time here; callers keep it separate for liveness only. */
+function latestExchangeTimestamp(...values: unknown[]): number | undefined {
+  const now = Date.now();
+  const candidates = values
+    .map(finite)
+    .filter((value): value is number => value !== undefined && value > 0)
+    .map((value) => value > 1e12 ? value : value * 1000)
+    .filter((value) => Number.isFinite(value) && value > 0 && value <= now + 60_000);
+  return candidates.length ? Math.max(...candidates) : undefined;
+}
+
 function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, sequence: number): NormalizedMarketTick | null {
   const payload = asRecord(value);
   if (!payload || typeof payload.symbol !== 'string' || !payload.symbol.trim()) return null;
@@ -317,7 +330,7 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
 
   if (feedClass === 'lite') {
     if (ltp === undefined) return null;
-    const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
+    const brokerTimestamp = latestExchangeTimestamp(payload.last_traded_time, payload.exch_feed_time);
     return {
       instrumentKey: payload.symbol, ltp,
       receivedAt: new Date(receivedAt).toISOString(),
@@ -328,7 +341,7 @@ function normalizeFyersTick(value: unknown, feedClass: FyersDataFeedClass, seque
   }
   if (ltp === undefined && !isDepth && !depthBids.length && !depthAsks.length) return null;
   const prevClose = finite(payload.prev_close_price);
-  const brokerTimestamp = finite(payload.last_traded_time ?? payload.exch_feed_time);
+  const brokerTimestamp = latestExchangeTimestamp(payload.last_traded_time, payload.exch_feed_time);
   const tick: NormalizedMarketTick = {
     instrumentKey: payload.symbol,
     ...(ltp !== undefined ? { ltp } : {}),
