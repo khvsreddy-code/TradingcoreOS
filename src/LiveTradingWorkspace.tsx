@@ -52,6 +52,24 @@ export function LiveTradingWorkspace() {
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
   const [brokerBadge, setBrokerBadge] = useState(() => readBrokerBadge());
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !workspaceMenuRef.current?.contains(target)) setWorkspaceMenuOpen(false);
+    };
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWorkspaceMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', dismissOutside);
+    window.addEventListener('keydown', dismissEscape);
+    return () => {
+      window.removeEventListener('pointerdown', dismissOutside);
+      window.removeEventListener('keydown', dismissEscape);
+    };
+  }, [workspaceMenuOpen]);
+
   useEffect(() => {
     if (!host.current) return;
 
@@ -233,7 +251,7 @@ export function LiveTradingWorkspace() {
             </span>
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate text-[12px] font-semibold tracking-[-0.02em] text-[#f3f4f6]">TradingCoreOS</span>
-              <span className="rounded border border-[#089981]/25 bg-[#089981]/10 px-1.5 py-[3px] font-mono text-[8px] font-bold tracking-[0.12em] text-[#50c6a7]">LIVE</span>
+              <span className="hidden rounded border border-[#089981]/25 bg-[#089981]/10 px-1.5 py-[3px] font-mono text-[8px] font-bold tracking-[0.12em] text-[#50c6a7] sm:inline">LIVE</span>
             </div>
             <span className="mx-1 hidden h-5 w-px bg-white/[0.09] sm:block" />
             <span className="hidden items-center gap-1.5 rounded-md border border-[#8571c4]/25 bg-[#8571c4]/[0.08] px-2 py-1 text-[10px] font-medium text-[#c9baff] sm:inline-flex">
@@ -242,7 +260,7 @@ export function LiveTradingWorkspace() {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <div className="relative">
+            <div className="relative" ref={workspaceMenuRef}>
               <button
                 type="button"
                 aria-expanded={workspaceMenuOpen}
@@ -252,7 +270,7 @@ export function LiveTradingWorkspace() {
                 title="Workspace layouts and save options"
               >
                 <LayoutDashboard size={13} className="text-[#8d95a5]" />
-                My workspace
+                <span className="hidden sm:inline">My workspace</span>
                 <ChevronDown size={12} className={workspaceMenuOpen ? "rotate-180 text-[#9a8ad1] transition-transform" : "text-[#778093] transition-transform"} />
               </button>
               {workspaceMenuOpen && (
@@ -280,10 +298,10 @@ export function LiveTradingWorkspace() {
               onClick={() => setBrokerStatusOpen(true)}
               title={brokerBadge.connected ? "Manage broker connection" : "Connect a broker"}
               aria-label={brokerBadge.connected ? "Manage broker connection" : "Connect a broker"}
-              className="inline-flex h-[28px] max-w-[185px] items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.025] px-2.5 text-[10px] text-[#c4cad5] transition-colors hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-white"
+              className="inline-flex h-[28px] max-w-[108px] items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.025] px-2 text-[10px] sm:max-w-[185px] sm:gap-2 sm:px-2.5 text-[#c4cad5] transition-colors hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-white"
             >
               <span className={brokerBadge.connected ? "h-1.5 w-1.5 shrink-0 rounded-full bg-[#30c59a] shadow-[0_0_9px_rgba(48,197,154,.45)]" : "h-1.5 w-1.5 shrink-0 rounded-full bg-[#e4a34d]"} />
-              <span className="truncate">{brokerBadge.connected ? brokerBadge.label : "Connect broker"}</span>
+              <span className="max-w-[58px] truncate sm:max-w-none">{brokerBadge.connected ? brokerBadge.label : <><span className="hidden sm:inline">Connect broker</span><span className="sm:hidden">Connect</span></>}</span>
               <ChevronDown size={12} className="shrink-0 text-[#778093]" />
             </button>
             <button
@@ -303,7 +321,7 @@ export function LiveTradingWorkspace() {
             <button type="button" title="Command center" aria-label="Command center" onClick={() => navigateLiveRoute('/dashboard')} className="tco-live-rail-button">
               <LayoutDashboard size={17} />
             </button>
-            <button type="button" title="Live chart" aria-label="Live chart" aria-current="page" onClick={() => { workspaceRef.current?.setLayout('1'); }} className="tco-live-rail-button tco-live-rail-button-active">
+            <button type="button" title="Live chart" aria-label="Live chart" aria-current="page" onClick={() => setWorkspaceMenuOpen(false)} className="tco-live-rail-button tco-live-rail-button-active">
               <Activity size={17} />
             </button>
             <button type="button" title="Indicators" aria-label="Indicators" onClick={() => navigateLiveRoute('/indicators')} className="tco-live-rail-button">
