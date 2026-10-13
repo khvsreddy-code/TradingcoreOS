@@ -163,8 +163,8 @@ const EMPTY_COLUMNAR_BARS: ColumnarBars = {
 function marketViewToBars(view: CanonicalMarketView, range: BarRange, limit: number): OHLCV[] {
   const from = range.from == null ? Number.NEGATIVE_INFINITY : Number(range.from);
   const to = range.to == null ? Number.POSITIVE_INFINITY : Number(range.to);
-  const start = Math.max(0, Number.isFinite(from) ? lowerBound(view.time, from > 2e12 ? from / 1000 : from) : 0);
-  const end = Number.isFinite(to) ? Math.min(view.length, upperBound(view.time, to > 2e12 ? to / 1000 : to)) : view.length;
+  const start = Math.max(0, Number.isFinite(from) ? lowerBound(view.time, from > 1e11 ? from / 1000 : from) : 0);
+  const end = Number.isFinite(to) ? Math.min(view.length, upperBound(view.time, to > 1e11 ? to / 1000 : to)) : view.length;
   const first = Math.max(start, end - limit);
   const bars = new Array<OHLCV>(Math.max(0, end - first));
   let out = 0;
@@ -185,8 +185,8 @@ function marketViewToBars(view: CanonicalMarketView, range: BarRange, limit: num
 function marketViewToColumns(view: CanonicalMarketView, range: BarRange, limit: number): ColumnarBars {
   const from = range.from == null ? Number.NEGATIVE_INFINITY : Number(range.from);
   const to = range.to == null ? Number.POSITIVE_INFINITY : Number(range.to);
-  const start = Math.max(0, Number.isFinite(from) ? lowerBound(view.time, from > 2e12 ? from / 1000 : from) : 0);
-  const end = Number.isFinite(to) ? Math.min(view.length, upperBound(view.time, to > 2e12 ? to / 1000 : to)) : view.length;
+  const start = Math.max(0, Number.isFinite(from) ? lowerBound(view.time, from > 1e11 ? from / 1000 : from) : 0);
+  const end = Number.isFinite(to) ? Math.min(view.length, upperBound(view.time, to > 1e11 ? to / 1000 : to)) : view.length;
   const first = Math.max(start, end - limit);
   return {
     time: view.time.subarray(first, end),
@@ -287,7 +287,7 @@ export class TcoVelaDataProvider implements DataProvider {
     if (cached.length > 0 && plane.getSnapshot().historyReady) {
       const requestedTo = range.to == null
         ? null
-        : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+        : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
       const newestMs = cached.time[cached.length - 1]! * 1000;
       if (requestedTo == null || requestedTo >= newestMs - 1) {
         return marketViewToColumns(cached, range, requested);
@@ -390,7 +390,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
     await plane.ensureReadyHistory(5000);
-    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+    const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
     const current = plane.readCanonical();
     const newestMs = current.length ? current.time[current.length - 1]! * 1000 : Number.NaN;
     if (requestedTo != null && Number.isFinite(requestedTo) && Number.isFinite(newestMs) && requestedTo < newestMs - 1) {
@@ -409,7 +409,7 @@ export class TcoVelaDataProvider implements DataProvider {
     const requested = Math.max(100, Math.min(500, Math.floor(Number(range.limit) || 500)));
     const brokerId = await activeBrokerId();
     const plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
-    const requestedTo = range.to == null ? null : (Number(range.to) > 2e12 ? Number(range.to) : Number(range.to) * 1000);
+    const requestedTo = range.to == null ? null : (Number(range.to) > 1e11 ? Number(range.to) : Number(range.to) * 1000);
     const historyPromise = plane.ensureReadyHistory(requested);
     const initialSnapshot = plane.getSnapshot();
     if (initialSnapshot.historyReady) {
