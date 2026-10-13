@@ -71,17 +71,19 @@ export function createTcoVelaTerminalOptions(
     drawings:true,
     drawingToolbar:true,
     indicatorPicker:true,
-    // Match Vela's compact professional command surface: no duplicate TCO×Vela brand pill,
-    // no duplicate Replay action, and no redundant icon-only panel shortcuts.
+    // Vela owns the chart chrome. Keep its native editing/history, alerts and screenshot
+    // actions visible, while TCO integrations use compact icon actions with tooltips.
     topbar:{
-      left:['symbol','timeframes','style','layout','indicators'],
+      left:['symbol','timeframes','style','layout','indicators','tco.replay-action','undo-redo'],
       right:[
         'tco.watchlist',
         'tco.research',
         'tco.automation',
         'tco.trading',
         'tco.corespirit-code',
+        'tco.chart-settings',
         'alerts',
+        'screenshot',
       ],
     },
     sync:{
