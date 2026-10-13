@@ -272,6 +272,8 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     });
     syncEditor();
     let compileGeneration = 0;
+    // A Run action should update the Studio's active script in place, not stack duplicates.
+    let liveStudioHandle: ReturnType<typeof ctx.chart.indicators>[number] | undefined;
     void mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
       source = nextSource;
       compileGeneration += 1;
@@ -319,39 +321,57 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         status.style.color = '#86efac';
         if (shouldRun) {
           try {
-            // Bind lifecycle events to this exact run. Comparing the entire indicator
-            // list before/after insertion can capture a different concurrent add.
-            const indicatorId = `tco-corespirit-live-${generation}-${Date.now().toString(36)}`;
-            ctx.addIndicator({ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
-            const handle = ctx.chart.indicators().find((candidate) => candidate.id === indicatorId);
-            if (!handle) throw new Error('Vela refused to create an indicator instance. Check the chart engine and compiler diagnostics.');
-            let settled = false;
-            handle.on('ready', () => {
-              if (disposed || settled) return;
-              settled = true;
-              status.textContent = 'Running · CoreSpirit indicator is attached to the active chart.';
-              status.style.color = '#86efac';
-              ctx.toast('CoreSpirit indicator added to the active chart', 'success');
-            });
-            handle.on('error', ({ error }) => {
-              if (settled) return;
-              settled = true;
-              try { handle.remove(); } catch {}
-              status.textContent = `Vela could not execute this indicator: ${error instanceof Error ? error.message : String(error)}`;
-              status.style.color = '#fca5a5';
-              ctx.toast('CoreSpirit indicator failed to execute and was removed', 'error');
-            });
-            status.textContent = 'Indicator queued · waiting for Vela’s first execution…';
-            status.style.color = '#fbbf24';
-            window.setTimeout(() => {
-              if (disposed || settled) return;
-              status.textContent = 'Indicator is still compiling or waiting for chart data. Check the browser error panel if it does not appear.';
+            const currentHandles = ctx.chart.indicators();
+            // Reuse this panel's active script (or one retained after the panel was
+            // closed/reopened) so Run behaves like a code editor, not "add duplicate".
+            let handle = liveStudioHandle && currentHandles.some((candidate) => candidate.id === liveStudioHandle?.id)
+              ? liveStudioHandle
+              : currentHandles.find((candidate) => candidate.id.startsWith('tco-corespirit-live-'));
+            if (handle) {
+              liveStudioHandle = handle;
+              status.textContent = 'Updating the active CoreSpirit indicator…';
               status.style.color = '#fbbf24';
-            }, 10000);
+              const update = await handle.updateCode(currentSource);
+              if (disposed || generation !== compileGeneration) return;
+              if (!update.ok) throw update.error ?? new Error('CoreSpirit update did not complete; the previous version remains active.');
+              status.textContent = 'Running · CoreSpirit indicator updated in place.';
+              status.style.color = '#86efac';
+              ctx.toast('CoreSpirit indicator updated in place', 'success');
+            } else {
+              const indicatorId = `tco-corespirit-live-${generation}-${Date.now().toString(36)}`;
+              ctx.addIndicator({ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
+              handle = ctx.chart.indicators().find((candidate) => candidate.id === indicatorId);
+              if (!handle) throw new Error('Vela refused to create an indicator instance. Check the chart engine and compiler diagnostics.');
+              liveStudioHandle = handle;
+              let settled = false;
+              handle.on('ready', () => {
+                if (disposed || settled) return;
+                settled = true;
+                status.textContent = 'Running · CoreSpirit indicator is attached to the active chart.';
+                status.style.color = '#86efac';
+                ctx.toast('CoreSpirit indicator added to the active chart', 'success');
+              });
+              handle.on('error', ({ error }) => {
+                if (settled) return;
+                settled = true;
+                try { handle?.remove(); } catch {}
+                if (liveStudioHandle?.id === indicatorId) liveStudioHandle = undefined;
+                status.textContent = `Vela could not execute this indicator: ${error instanceof Error ? error.message : String(error)}`;
+                status.style.color = '#fca5a5';
+                ctx.toast('CoreSpirit indicator failed to execute and was removed', 'error');
+              });
+              status.textContent = 'Indicator queued · waiting for Vela’s first execution…';
+              status.style.color = '#fbbf24';
+              window.setTimeout(() => {
+                if (disposed || settled) return;
+                status.textContent = 'Indicator is still compiling or waiting for chart data. Check the browser error panel if it does not appear.';
+                status.style.color = '#fbbf24';
+              }, 10000);
+            }
           } catch (error) {
             status.textContent = error instanceof Error ? error.message : String(error);
             status.style.color = '#fca5a5';
-            ctx.toast('CoreSpirit could not add the indicator to this chart', 'error');
+            ctx.toast('CoreSpirit could not add or update the indicator', 'error');
           }
         }
       } catch (error) {
