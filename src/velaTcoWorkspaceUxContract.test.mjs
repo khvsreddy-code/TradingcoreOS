@@ -11,6 +11,7 @@ const provider = read('src/TcoVelaDataProvider.ts');
 const plane = read('src/services/marketData/chartDataPlane.ts');
 const theme = read('src/theme/theme.ts');
 const picker = read('vendor/vela/src/widget/symbol-picker.ts');
+const chartCell = read('vendor/vela/src/workspace/ChartCell.ts');
 
 assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
 assert(/const initialLayout = .*defaults\.layout/.test(live));
@@ -34,6 +35,7 @@ assert(!chrome.includes("id: 'tco.panels'"), 'remove redundant panels shortcut')
 assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlist'"));
 assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be exposed inside the live Vela workspace');
 assert(picker.includes("Options: ['option', 'derivative', 'options']"), 'Options market tab must include option contracts');
+assert(chartCell.includes('chart.addNativeIndicatorAsync(type)'), 'picker-selected lazy Vela indicators must use the async native API');
 assert(topbar.includes("b.dataset.actionId = action.id"));
 assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
