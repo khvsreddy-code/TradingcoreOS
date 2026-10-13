@@ -85,7 +85,6 @@ export function createTcoVelaTerminalOptions(
         'tco.data-window',
         'tco.vpvr',
         'alerts',
-        'panels',
         'tco.profile',
         'tco.broker-connection',
         'screenshot',
