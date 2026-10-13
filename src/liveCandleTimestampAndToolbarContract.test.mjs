@@ -15,8 +15,9 @@ assert.match(transport, /return candidates\.length \? Math\.max\(\.\.\.candidate
 assert.equal((transport.match(/const brokerTimestamp = latestFyersTimestamp\(payload\);/g) || []).length, 2, 'both lite and full FYERS feeds must use the timestamp policy');
 assert.match(provider, /event\.type !== 'snapshot' && event\.type !== 'tick'/, 'Vela must only patch candles for snapshots and validated candle ticks');
 assert.match(terminal, /'tco\.watchlist'[\s\S]*'tco\.positions'[\s\S]*'alerts'[\s\S]*'panels'/, 'retain the primary TCO navigation while reducing icon-only toolbar clutter');
+const topbar = terminal.match(/right:\[([\s\S]*?)\],/)?.[1] ?? '';
 for (const duplicate of ["'tco.risk',", "'tco.orderbook',", "'tco.options',", "'tco.data-window',", "'tco.vpvr',"]) {
-  assert.doesNotMatch(terminal.match(/right:\[([\s\S]*?)\],/)?.[1] ?? '', new RegExp(duplicate.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&')), \`\${duplicate} must remain available from its panel but not be duplicated in the topbar\`);
+  assert.equal(topbar.includes(duplicate), false, duplicate + ' must not be duplicated in the topbar');
 }
 assert.doesNotMatch(overlay, /title="Vela chart settings"/, 'do not create a custom replacement for Vela native settings gear');
 assert.doesNotMatch(liveChart, /openChartSettings/, 'legacy chart must not wire a custom duplicate settings button');
