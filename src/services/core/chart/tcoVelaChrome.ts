@@ -1169,7 +1169,7 @@ const replayAction: WidgetActionDescriptor = {
   target: 'topbar',
   label: 'Replay',
   icon: 'play',
-  iconOnly: false,
+  iconOnly: true,
   align: 'right',
   order: 3,
   mobile: 'menu',
@@ -1181,7 +1181,7 @@ const positionsAction: WidgetActionDescriptor = {
   target: 'topbar',
   label: 'Positions',
   icon: 'briefcase',
-  iconOnly: false,
+  iconOnly: true,
   align: 'right',
   order: 4,
   mobile: 'menu',
@@ -1276,7 +1276,7 @@ const profileAction: WidgetActionDescriptor = {
 };
 
 const brokerAction: WidgetActionDescriptor = {
-  id: 'tco.broker-connection', target: 'topbar', label: 'Broker Connection', icon: 'gear', iconOnly: true, align: 'right', order: 10, mobile: 'menu',
+  id: 'tco.broker-connection', target: 'topbar', label: 'Broker Connection', icon: 'activity', iconOnly: true, align: 'right', order: 10, mobile: 'menu',
   run() { window.dispatchEvent(new Event('tco:open-broker')); },
 };
 
