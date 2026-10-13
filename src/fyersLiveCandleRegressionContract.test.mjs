@@ -18,8 +18,10 @@ assert.match(quoteClient, /source: 'fyers'/, 'polled broker quotes must follow t
 assert.match(quoteClient, /Math\.max\(\.\.\.candidates\)/, 'REST quote timestamps must use the freshest valid broker field');
 assert.doesNotMatch(quoteClient, /return Number\.isFinite\(parsed\)[^\n]*new Date\(\)\.toISOString\(\)/, 'packet arrival must not be used as a fallback trade timestamp');
 
-assert.match(plane, /function tradeTimestamp\(tick: NormalizedMarketTick\)/, 'chart data plane needs a canonical timestamp selector');
-assert.match(plane, /return new Date\(Math\.max\(\.\.\.candidates\)\)\.toISOString\(\)/, 'data plane must prefer the newest trusted exchange timestamp');
+assert.match(plane, /function tradeTimestamp\(tick: NormalizedMarketTick, allowFreshStreamReceiveTime = false\)/, 'chart data plane needs a canonical timestamp selector and safe live-feed fallback');
+assert.match(plane, /const exchangeTime = candidates\.length \? Math\.max\(\.\.\.candidates\) : undefined/, 'data plane must prefer the newest trusted exchange timestamp');
+assert.match(plane, /tick\.source === 'fyers' && tick\.feedClass === 'full' && allowFreshStreamReceiveTime/, 'only a fresh changed full-stream price may use received time when broker timestamps stall');
+assert.match(plane, /eventBucket < lastChartTime/, 'stale trade-time buckets must recover in-session on a fresh changed full-stream tick');
 assert.match(plane, /function isStaleOrClosedCashTick\(/, 'stale and closed-session broker ticks must not mutate bars');
 assert.match(plane, /if \(isStaleOrClosedCashTick\(tick, exchangeTimestampMs\)\)/, 'closed-session guard must run before candle reconciliation');
 assert.match(velaProvider, /event\.type !== 'snapshot' && event\.type !== 'tick'/, 'only real bar/history events should reach the Vela OHLC subscription');
