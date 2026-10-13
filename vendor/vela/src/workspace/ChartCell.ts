@@ -1327,21 +1327,53 @@ export class ChartCell {
     addNative(type: string): void {
         const chart = this.inner;
         if (!chart) return;
-        const before = new Set(chart.indicators().map((h) => h.id));
-        let added: IndicatorHandle | null = chart.addNativeIndicator(type);
-        this.syncPresentNatives();
-        this.refreshNativeCatalog();
-        if (before.has(added.id)) return;
-        this.history.push({
-            undo: () => {
-                added?.remove();
-                added = null;
-                this.refreshNativeCatalog();
-            },
-            redo: () => {
-                added = this.inner?.addNativeIndicator(type) ?? null;
-                this.refreshNativeCatalog();
-            },
+        const before = new Set(chart.indicators().map((handle) => handle.id));
+
+        // The picker intentionally exposes classic studies as metadata before their
+        // implementation chunks have loaded. Use Vela's async entry point so it
+        // resolves the family's lazy descriptor before attempting to add the study.
+        // A sync add here returned a fail-soft handle for unloaded RSI/MACD/EMA/etc.,
+        // which made a picker click appear to do nothing.
+        void chart.addNativeIndicatorAsync(type).then((handle) => {
+            if (this.destroyed || this.inner !== chart) {
+                handle.remove();
+                return;
+            }
+            this.syncPresentNatives();
+            this.refreshNativeCatalog();
+            this.deps.onIndicatorsChanged(this.id);
+            if (before.has(handle.id)) return; // Single-instance study was already present.
+
+            let added: IndicatorHandle | null = handle;
+            this.history.push({
+                undo: () => {
+                    added?.remove();
+                    added = null;
+                    this.syncPresentNatives();
+                    this.refreshNativeCatalog();
+                    this.deps.onIndicatorsChanged(this.id);
+                },
+                redo: () => {
+                    const target = this.inner;
+                    if (!target) return;
+                    void target.addNativeIndicatorAsync(type).then((nextHandle) => {
+                        if (this.destroyed || this.inner !== target) {
+                            nextHandle.remove();
+                            return;
+                        }
+                        added = nextHandle;
+                        this.syncPresentNatives();
+                        this.refreshNativeCatalog();
+                        this.deps.onIndicatorsChanged(this.id);
+                    }).catch((error) => {
+                        console.warn(`[vela] native indicator "${type}" could not be restored:`, error);
+                    });
+                },
+            });
+        }).catch((error) => {
+            // Keep the picker usable if a study family's code chunk fails to load.
+            console.warn(`[vela] native indicator "${type}" could not be loaded:`, error);
+            this.refreshNativeCatalog();
         });
     }
 
