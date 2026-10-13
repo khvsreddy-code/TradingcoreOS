@@ -79,6 +79,9 @@ export function LiveTradingWorkspace() {
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
     let cancelled = false;
+    let chartFeatureTimer: number | undefined;
+    const configuredCharts = new WeakSet<object>();
+    const countdownState = new WeakMap<object, boolean>();
     const browserErrors: Array<{ type: 'error' | 'unhandledrejection'; message: string; time: number }> = [];
     const pushBrowserError = (type: 'error' | 'unhandledrejection', message: string) => {
       browserErrors.push({ type, message: String(message).slice(0, 500), time: Date.now() });
@@ -161,12 +164,38 @@ export function LiveTradingWorkspace() {
           },
         };
       }
-      const bindActiveChart = () => undefined;
+      const configureNativeChartFeatures = () => {
+        for (const cell of workspace?.cells() ?? []) {
+          const chart = cell.chart;
+          void chart.ready().then(() => {
+            if (cancelled || !workspace || !chart.renderer) return;
+            const renderer = chart.renderer;
+            if (!configuredCharts.has(chart as object)) {
+              // Upgrade the old UTC default once. After initial migration, the
+              // native Vela settings dialog owns the user's timezone preference.
+              const timezone = renderer.readFeature('timezone');
+              if (!timezone || timezone === 'UTC' || timezone === 'Etc/UTC') {
+                renderer.applyFeature('timezone', 'Asia/Kolkata');
+              }
+              // This is Vela's native in-plot settings gear/dialog, not a TCO duplicate.
+              renderer.applyFeature('settings', true);
+              configuredCharts.add(chart as object);
+            }
+            const countdown = shouldShowExchangeCountdown(cell.chart.market.symbol);
+            if (countdownState.get(chart as object) !== countdown) {
+              renderer.applyFeature('countdown', countdown);
+              countdownState.set(chart as object, countdown);
+            }
+          }).catch(() => undefined);
+        }
+      };
+      const bindActiveChart = () => configureNativeChartFeatures();
       workspaceListenerDisposers.push(
         workspace.on('cell:active', bindActiveChart),
         workspace.on('layout:changed', bindActiveChart),
       );
       bindActiveChart();
+      chartFeatureTimer = window.setInterval(configureNativeChartFeatures, 15_000);
       workspaceRef.current = workspace;
     };
 
@@ -174,6 +203,7 @@ export function LiveTradingWorkspace() {
 
     return () => {
       cancelled = true;
+      if (chartFeatureTimer !== undefined) window.clearInterval(chartFeatureTimer);
       workspaceRef.current = null;
       for (const dispose of workspaceListenerDisposers) dispose();
       workspaceListenerDisposers.length = 0;
