@@ -273,6 +273,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     syncEditor();
     void mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
       source = nextSource;
+      compileGeneration += 1;
       editorModel.updateSource(source, '', { deferSemanticAnalysis: true });
       fallbackEditor.value = source;
       syncEditor();
@@ -305,15 +306,15 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       try {
         const result = await compileCoreSpiritSourceOffThread(currentSource, generation, 'tco-live-studio', { layer: 'chart' });
         if (generation !== compileGeneration) return;
+        editorModel.applyWorkerCompileResult(result, currentSource);
+        monacoAdapter?.setDiagnostics(result.diagnostics, currentSource);
+        monacoAdapter?.setSymbolInfo(result.symbols);
         const errors = result.diagnostics.filter(d => d.severity === 'error');
         if (errors.length || !result.artifact) {
           status.textContent = errors.slice(0, 5).map(d => d.message).join('\n') || 'No executable artifact was produced.';
           status.style.color = '#fca5a5';
           return;
         }
-        editorModel.applyWorkerCompileResult(result, currentSource);
-        monacoAdapter?.setDiagnostics(result.diagnostics, currentSource);
-        monacoAdapter?.setSymbolInfo(result.symbols);
         status.textContent = `Valid · ${result.artifactHash?.slice(0, 12) || 'artifact ready'} · ${result.diagnostics.length} diagnostics`;
         status.style.color = '#86efac';
         if (shouldRun) {
