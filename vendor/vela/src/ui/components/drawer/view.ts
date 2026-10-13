@@ -6,6 +6,7 @@ import { injectStyles } from '../../styles';
 import { drawerController, type DrawerControllerOptions } from './controller';
 import { DRAWER_CSS, DRAWER_STYLE_ID } from './styles';
 import * as zagDialog from '@zag-js/dialog';
+import { holdForExit, type SurfaceExit } from '../../surface-exit';
 
 /** Drag past this fraction of the sheet's height (or this many px, whichever is
  *  smaller) and the release dismisses; anything less springs back. */
@@ -105,10 +106,18 @@ export class Drawer {
             spreadProps(this.positioner, api.getPositionerProps(), mid);
             spreadProps(this.panel, api.getContentProps(), mid);
             spreadProps(this.titleEl, api.getTitleProps(), mid);
-            // Dialog-family machines expect conditional rendering (no `hidden` in the
-            // props) — the view toggles visibility from `api.open` itself.
-            this.backdrop.style.display = api.open ? '' : 'none';
-            this.positioner.style.display = api.open ? '' : 'none';
+            // Dialog-family machines expect conditional rendering (their `hidden` reaches the
+            // panel and backdrop only, and the sheet's authored display beats it) — the view
+            // toggles visibility from `api.open` itself, once the exit animation of a close has run.
+            if (api.open) {
+                this.exit?.cancel();
+                this.exit = null;
+                this.setShown(true);
+            } else if (closing) {
+                this.holdExit();
+            } else if (!this.exit) {
+                this.setShown(false);
+            }
         });
     }
 
@@ -247,8 +256,12 @@ export class Drawer {
     }
 
     destroy(): void {
+        // Closed but not projected yet — an owner disposing of the sheet as it reports
+        // closing: project the close now, so it animates out like any other close and
+        // leaves the DOM when its exit ends. A teardown while open leaves at once.
+        if (this.wasOpen && !this.open) this.handle.flush();
         this.handle.stop();
-        this.backdrop.remove();
-        this.positioner.remove();
+        this.destroyed = true;
+        if (!this.exit) this.detach();
     }
 }

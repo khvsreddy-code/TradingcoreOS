@@ -7,6 +7,7 @@ import { closeOpenPopovers, eventDismissedPopover, isPopoverOpen } from '../popo
 import { dialogController, type DialogControllerOptions } from './controller';
 import { DIALOG_CSS, DIALOG_STYLE_ID } from './styles';
 import * as zagDialog from '@zag-js/dialog';
+import { holdForExit, type SurfaceExit } from '../../surface-exit';
 
 export interface DialogOptions extends DialogControllerOptions {
     title?: string;
@@ -156,10 +157,18 @@ export class Dialog {
             spreadProps(this.panel, api.getContentProps(), mid);
             spreadProps(title, api.getTitleProps(), mid);
             spreadProps(close, api.getCloseTriggerProps(), mid);
-            // Zag dialogs expect CONDITIONAL rendering (their props carry no `hidden`,
-            // unlike tooltip/menu) — the view toggles visibility from `api.open` itself.
-            this.backdrop.style.display = api.open ? '' : 'none';
-            this.positioner.style.display = api.open ? '' : 'none';
+            // Zag dialogs expect CONDITIONAL rendering (their `hidden` reaches the panel and
+            // backdrop only, and the panel's authored display beats it) — the view toggles
+            // visibility from `api.open` itself, once the exit animation of a close has run.
+            if (api.open) {
+                this.exit?.cancel();
+                this.exit = null;
+                this.setShown(true);
+            } else if (closing) {
+                this.holdExit();
+            } else if (!this.exit) {
+                this.setShown(false);
+            }
         });
     }
 
@@ -184,12 +193,16 @@ export class Dialog {
     }
 
     destroy(): void {
+        // Closed but not projected yet — an owner disposing of the dialog as it reports
+        // closing: project the close now, so it animates out like any other close and
+        // leaves the DOM when its exit ends. A teardown while open leaves at once.
+        if (this.wasOpen && !this.open) this.handle.flush();
         // Exit the open state before stopping so the machine unwinds its open-time
         // effects (focus restore, and the body pointer-events lock of modal dialogs)
         // instead of leaving them behind.
         if (this.open) this.hide();
         this.handle.stop();
-        this.backdrop.remove();
-        this.positioner.remove();
+        this.destroyed = true;
+        if (!this.exit) this.detach();
     }
 }
