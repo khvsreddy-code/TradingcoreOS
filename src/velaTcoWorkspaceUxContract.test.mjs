@@ -29,9 +29,9 @@ assert(topology.includes("'undo-redo'"), 'Vela native undo/redo controls must re
 assert(topology.includes("'screenshot'"), 'Vela native screenshot action must remain visible');
 assert(topology.includes("'tco.chart-settings'"), 'native Vela chart settings must be reachable from the live topbar');
 assert(!chrome.includes('registerWidgetAttachment(healthAttachment)'), 'do not reserve chart height with the custom bottom health strip');
-assert(topology.includes('animations:false'));
+assert(topology.includes('animations:{ zoom:true, pan:true, liveBar:false }'), 'Vela zoom and pan animations should follow the supplied reference UI');
 assert(topology.includes("'tco.watchlist'"));
-assert(topology.includes("'tco.journal'"));
+assert(chrome.includes("registerSidePanel(journalPanel)"), "journal should remain registered as a dockable panel");
 assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
 assert(!topology.includes("'tco.brand'"));
 assert(!live.includes("'quant'"));
