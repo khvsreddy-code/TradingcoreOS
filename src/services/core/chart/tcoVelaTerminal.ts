@@ -79,11 +79,8 @@ export function createTcoVelaTerminalOptions(
         'tco.journal',
         'tco.replay',
         'tco.positions',
-        'tco.risk',
-        'tco.orderbook',
-        'tco.options',
-        'tco.data-window',
-        'tco.vpvr',
+        // These tools remain available from their panels/indicator picker; don't duplicate
+        // them as extra tiny topbar icons next to their owning workspace controls.
         'alerts',
         'panels',
         'tco.profile',
