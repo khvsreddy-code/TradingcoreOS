@@ -319,9 +319,11 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         status.style.color = '#86efac';
         if (shouldRun) {
           try {
-            const existingIds = new Set(ctx.chart.indicators().map((handle) => handle.id));
-            ctx.addIndicator({ name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
-            const handle = ctx.chart.indicators().find((candidate) => !existingIds.has(candidate.id));
+            // Bind lifecycle events to this exact run. Comparing the entire indicator
+            // list before/after insertion can capture a different concurrent add.
+            const indicatorId = `tco-corespirit-live-${generation}-${Date.now().toString(36)}`;
+            ctx.addIndicator({ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
+            const handle = ctx.chart.indicators().find((candidate) => candidate.id === indicatorId);
             if (!handle) throw new Error('Vela refused to create an indicator instance. Check the chart engine and compiler diagnostics.');
             let settled = false;
             handle.on('ready', () => {
