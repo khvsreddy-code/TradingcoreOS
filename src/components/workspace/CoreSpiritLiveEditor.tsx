@@ -45,10 +45,6 @@ export function CoreSpiritLiveEditor({ onClose, getActiveChart, getMarket }: Pro
   const [market, setMarket] = useState(() => getMarket());
 
   useEffect(() => {
-    setMarket(getMarket());
-  }, [getMarket]);
-
-  useEffect(() => {
     if (!host.current) return;
     let disposed = false;
     const editorModel = new CoreSpiritEditorModel(source);
