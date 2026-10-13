@@ -165,6 +165,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private priceStyle: PriceStyle = 'candles';
     /** Explicit time unit of the active native columnar market source. */
     private columnarTimeUnit: ColumnarTimeUnit = 'milliseconds';
+    private priceStyleWillChangeUnsub: Unsubscribe | null = null;
     private readonly readyPromise: Promise<void>;
     private unresolvedUnsub: Unsubscribe | null = null;
     /** Latest chart visible range (left/right bar times), fed to viewport-dependent scripts. */
@@ -289,6 +290,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // type may carry a DATA requirement beyond drawing: a bar-stream transform
         // (heikinashi) and/or a registered data engine (SDK chart types).
         this.renderer.onPriceStyleChange?.((style) => this.syncPriceStyle(style));
+        // Announced from the same write path BEFORE the renderer repaints, so a host can
+        // capture the outgoing frame (style-switch transitions).
+        this.priceStyleWillChangeUnsub =
+            this.renderer.onPriceStyleWillChange?.((from, to) => this.events.emit('priceStyle:change', { from, to })) ?? null;
         // Seed the bar transform from the CONSTRUCTED style (a chart created with
         // `priceStyle: 'heikinashi'`) so the initial load already produces the view.
         const initialStyle = this.renderer.readFeature('priceStyle');
@@ -2308,6 +2313,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.viewportTimer != null) clearTimeout(this.viewportTimer);
         this.viewportUnsub?.();
         this.paneActionUnsub?.();
+        this.priceStyleWillChangeUnsub?.();
+        this.priceStyleWillChangeUnsub = null;
         // native instances free their own caches/timers in stop()
         for (const record of this.registry.all()) {
             record.session?.stop();
