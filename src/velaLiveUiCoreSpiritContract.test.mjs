@@ -34,9 +34,9 @@ assert.match(chrome, /adapter\.setDiagnostics\(result\.diagnostics, currentSourc
 assert.match(chrome, /adapter\.setSymbolInfo\(result\.symbols\)/, 'compiler symbols must feed editor completion/hover');
 assert.match(chrome, /ctx\.addIndicator\(\{ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' \}\)/, 'Run must submit the actual CoreScript to the active Vela chart with an explicit instance identity');
 assert.match(chrome, /candidate\.id === indicatorId/, 'CoreSpirit Run must bind readiness/errors to its exact Vela indicator instance');
-assert.match(chrome, /handle\.updateCode\(currentSource\);/, 'subsequent CoreSpirit Run actions must use Vela updateCode without expecting a return value');
+assert.match(chrome, /activeHandle\.updateCode\(currentSource\);/, 'subsequent CoreSpirit Run actions must use Vela updateCode without expecting a return value');
 assert.match(chrome, /candidate\.id\.startsWith\('tco-corespirit-live-'\)/, 'reopening the live Code panel should find its active indicator');
-assert.match(chrome, /handle\.source === currentSource/, 'CoreSpirit Studio must observe Vela source adoption instead of awaiting a nonexistent update result');
+assert.match(chrome, /activeHandle\.source === currentSource/, 'CoreSpirit Studio must observe Vela source adoption instead of awaiting a nonexistent update result');
 assert.match(chrome, /ctx\.chart\.indicators\(\)/, 'find the indicator handle created by the workspace');
 assert.match(chrome, /handle\.on\('ready'/, 'report success only when Vela finishes the first execution');
 assert.match(chrome, /handle\.on\('error'/, 'surface Vela execution errors');
