@@ -259,11 +259,13 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     };
     fallbackEditor.addEventListener('input', () => {
       source = fallbackEditor.value;
+      compileGeneration += 1;
       editorModel.updateSource(source, '', { deferSemanticAnalysis: true });
       syncEditor();
     });
     examples.addEventListener('change', () => {
       source = sourceFor(examples.value);
+      compileGeneration += 1;
       editorModel.updateSource(source, '', { deferSemanticAnalysis: true });
       monacoAdapter?.setSource(source);
       syncEditor();
