@@ -10,6 +10,7 @@ const wheel = read('vendor/vela/src/widget/alt-wheel.ts');
 const provider = read('src/TcoVelaDataProvider.ts');
 const plane = read('src/services/marketData/chartDataPlane.ts');
 const theme = read('src/theme/theme.ts');
+const picker = read('vendor/vela/src/widget/symbol-picker.ts');
 
 assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
 assert(/const initialLayout = .*defaults\.layout/.test(live));
@@ -17,7 +18,7 @@ assert(live.includes("layout: initialLayout"));
 assert(topology.includes('animations:false'));
 assert(topology.includes("'tco.watchlist'"));
 assert(topology.includes("'tco.journal'"));
-assert(topology.includes("'panels'"), "workspace topology must expose Vela panel chrome");
+assert(topology.includes("'panelDock'"), "workspace topology must expose Vela panel chrome");
 assert(!topology.includes("'tco.brand'"));
 assert(!live.includes("'quant'"));
 assert(!chrome.includes("TradingCoreOS × Vela"), 'remove the redundant TradingCoreOS × Vela topbar label');
@@ -31,6 +32,8 @@ assert(chrome.includes("id: 'tco.watchlist'") || chrome.includes("id:'tco.watchl
 assert(chrome.includes("id: 'tco.journal'") || chrome.includes("id:'tco.journal'"));
 assert(!chrome.includes("id: 'tco.panels'"), 'remove redundant panels shortcut');
 assert(chrome.includes("title: 'Watchlist'") || chrome.includes("title:'Watchlist'"));
+assert(chrome.includes("id: 'tco.corespirit-code'"), 'CoreSpirit Studio must be exposed inside the live Vela workspace');
+assert(picker.includes("Options: ['option', 'derivative', 'options']"), 'Options market tab must include option contracts');
 assert(topbar.includes("b.dataset.actionId = action.id"));
 assert(wheel.includes("#7c5cff"));
 assert(theme.includes("accent: '#d3ebf4'"));
