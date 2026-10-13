@@ -319,21 +319,33 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         status.style.color = '#86efac';
         if (shouldRun) {
           try {
-            const before = ctx.chart.inspect().indicators.length;
+            const existingIds = new Set(ctx.chart.indicators().map((handle) => handle.id));
             ctx.addIndicator({ name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' });
+            const handle = ctx.chart.indicators().find((candidate) => !existingIds.has(candidate.id));
+            if (!handle) throw new Error('Vela refused to create an indicator instance. Check the chart engine and compiler diagnostics.');
+            let settled = false;
+            handle.on('ready', () => {
+              if (disposed || settled) return;
+              settled = true;
+              status.textContent = 'Running · CoreSpirit indicator is attached to the active chart.';
+              status.style.color = '#86efac';
+              ctx.toast('CoreSpirit indicator added to the active chart', 'success');
+            });
+            handle.on('error', ({ error }) => {
+              if (settled) return;
+              settled = true;
+              try { handle.remove(); } catch {}
+              status.textContent = `Vela could not execute this indicator: ${error instanceof Error ? error.message : String(error)}`;
+              status.style.color = '#fca5a5';
+              ctx.toast('CoreSpirit indicator failed to execute and was removed', 'error');
+            });
+            status.textContent = 'Indicator queued · waiting for Vela’s first execution…';
+            status.style.color = '#fbbf24';
             window.setTimeout(() => {
-              if (disposed) return;
-              const after = ctx.chart.inspect().indicators.length;
-              if (after > before) {
-                status.textContent = 'Running · indicator instance is attached to the active chart.';
-                status.style.color = '#86efac';
-                ctx.toast('CoreSpirit indicator added to the active chart', 'success');
-              } else {
-                status.textContent = 'The compiler succeeded, but Vela did not attach the indicator. Check the compiler diagnostics and browser errors.';
-                status.style.color = '#fca5a5';
-                ctx.toast('Vela did not attach the CoreSpirit indicator', 'error');
-              }
-            }, 350);
+              if (disposed || settled) return;
+              status.textContent = 'Indicator is still compiling or waiting for chart data. Check the browser error panel if it does not appear.';
+              status.style.color = '#fbbf24';
+            }, 10000);
           } catch (error) {
             status.textContent = error instanceof Error ? error.message : String(error);
             status.style.color = '#fca5a5';
