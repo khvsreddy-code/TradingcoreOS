@@ -105,20 +105,58 @@ type PlaneState = {
 
 const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
 
+/** Parse broker epoch seconds/milliseconds or ISO time without confusing numeric strings with ISO dates. */
+function timestampMilliseconds(raw: unknown): number | undefined {
+  if (raw == null || raw === '') return undefined;
+  if (typeof raw === 'number' || (typeof raw === 'string' && /^\\d+(?:\\.\\d+)?$/.test(raw.trim()))) {
+    const numeric = Number(raw);
+    const milliseconds = numeric > 1e12 ? numeric : numeric * 1000;
+    return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined;
+  }
+  const parsed = Date.parse(String(raw));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 /** Only a valid exchange trade timestamp may create or advance a candle. Packet arrival time is not trade time. */
 function tradeTimestamp(tick: NormalizedMarketTick): string | undefined {
-  const raw = tick.lastTradeTimestamp ?? tick.brokerTimestamp ?? (
-    tick.source === 'paper' || tick.source === 'replay' || tick.source === 'backtest' || tick.source === 'simulator'
-      ? tick.timestamp ?? tick.receivedAtEpoch ?? tick.receivedAt
-      : undefined
-  );
-  if (raw == null || raw === '') return undefined;
-  const numeric = typeof raw === 'number' ? raw : Number(String(raw).trim());
-  const milliseconds = Number.isFinite(numeric)
-    ? (numeric > 1e12 ? numeric : numeric * 1000)
-    : Date.parse(String(raw));
-  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return undefined;
-  return new Date(milliseconds).toISOString();
+  const values: unknown[] = [tick.lastTradeTimestamp, tick.brokerTimestamp];
+  if (tick.source === 'paper' || tick.source === 'replay' || tick.source === 'backtest' || tick.source === 'simulator') {
+    values.push(tick.timestamp, tick.receivedAtEpoch, tick.receivedAt);
+  }
+  const now = Date.now();
+  const candidates = values
+    .map(timestampMilliseconds)
+    .filter((value): value is number => value !== undefined && (tick.source !== 'fyers' || value <= now + 60_000));
+  if (!candidates.length) return undefined;
+  // The last-trade timestamp can lag the exchange-feed timestamp; use the freshest supplied exchange clock.
+  return new Date(Math.max(...candidates)).toISOString();
+}
+
+/** NSE/BSE cash-session guard for broker ticks. Stale/off-session quotes may update
+ * the LTP header, but must not rewrite the last historical candle or create after-hours bars. */
+function isIndianCashSession(timestampMs: number): boolean {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return false;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(timestampMs));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  const day = get('weekday');
+  if (day === 'Sat' || day === 'Sun') return false;
+  const minute = Number(get('hour')) * 60 + Number(get('minute'));
+  return Number.isFinite(minute) && minute >= 9 * 60 + 15 && minute < 15 * 60 + 30;
+}
+
+function isStaleOrClosedCashTick(tick: NormalizedMarketTick, timestampMs: number): boolean {
+  if (tick.source !== 'fyers' || !/^(NSE|BSE):/i.test(String(tick.instrumentKey || ''))) return false;
+  const receivedAt = timestampMilliseconds(tick.receivedAtEpoch ?? tick.receivedAt);
+  if (!isIndianCashSession(timestampMs) || receivedAt == null || !isIndianCashSession(receivedAt)) return true;
+  // Index ticks should be close to the exchange clock. This rejects stale after-hours /
+  // holiday quotes even when the exchange timestamp still lies within regular trading hours.
+  return receivedAt - timestampMs > 120_000;
 }
 
 function normalizeHistory(rows: HistoricalCandle[]): HistoricalCandle[] {
@@ -330,7 +368,13 @@ export class ChartDataPlane {
     // Quotes can keep the LTP UI current, but only trusted exchange trade times
     // and already-loaded broker history may update a candle.
     const hasHistory = Boolean(this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length);
-    if (!hasHistory || tradeTimestamp(tick) == null) {
+    const exchangeTimestamp = tradeTimestamp(tick);
+    if (!hasHistory || exchangeTimestamp == null) {
+      this.emit({ type: 'quote', snapshot: this.snapshot() });
+      return;
+    }
+    const exchangeTimestampMs = Date.parse(exchangeTimestamp);
+    if (isStaleOrClosedCashTick(tick, exchangeTimestampMs)) {
       this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
     }
