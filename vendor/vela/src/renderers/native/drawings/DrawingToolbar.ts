@@ -3,6 +3,7 @@ import type { DrawingTypeKey, SnapMode } from '../../../core/drawings';
 import type { ToolbarDefinition, ToolGroup, ToolSection } from '../../../core/drawings';
 import { icon } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
+import { announceSurface } from '../../../ui/surface-events';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
 import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily, loadAdvancedDrawingCatalog } from '../../../core/drawings/registry';
 import { holdForExit, type SurfaceExit } from '../../../ui/surface-exit';
@@ -718,9 +719,17 @@ export class DrawingToolbar {
 
     private closeFlyout(): void {
         this.starEls.clear();
-        if (this.flyout) {
-            this.flyout.remove();
+        const fly = this.flyout;
+        if (fly) {
+            // Clear before announcing: a listener that closes the flyout must not re-enter.
             this.flyout = null;
+            announceSurface(fly, false, 'menu', this.flyoutCell);
+            const owner = this.flyoutOwnerId ?? '';
+            const exit = holdForExit(fly, () => {
+                if (this.exitingFlyouts.get(owner)?.fly === fly) this.exitingFlyouts.delete(owner);
+                fly.remove();
+            });
+            if (exit) this.exitingFlyouts.set(owner, { fly, exit });
             this.flyoutCell?.classList.remove('vela-open');
             this.flyoutCell = null;
             this.flyoutOwnerId = null;
