@@ -543,7 +543,7 @@ export class SymbolPicker {
     }
 
     private computeRows(): SymbolDescriptor[] {
-        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Stocks: ['stock'], ETFs: ['etf'], Futures: ['futures', 'root', 'derivative', 'option'], Forex: ['forex'], Commodities: ['commodity'] };
+        const TAB_TYPES: Record<string, string[]> = { Crypto: ['crypto'], Stocks: ['stock'], ETFs: ['etf'], Options: ['option', 'derivative', 'options'], Futures: ['futures', 'root', 'derivative'], Forex: ['forex'], Commodities: ['commodity'] };
         const all = this.pool();
         const pool =
             this.activeTab === 'All'
