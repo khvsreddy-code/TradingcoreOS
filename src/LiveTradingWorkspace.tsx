@@ -94,7 +94,7 @@ export function LiveTradingWorkspace() {
         // rapid symbol/timeframe switches reuse the shared per-key single-flight cache.
         prewarmTcoVelaHistory(
           ['NSE:NIFTY50-INDEX'],
-          defaults.timeframe || '5',
+          ['1', '3', '5', '15', '60'],
           300,
         );
       });
