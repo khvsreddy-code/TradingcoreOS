@@ -123,6 +123,7 @@ export function filterSymbols(list: readonly SymbolDescriptor[], query: string, 
         })) tokenMatches.push(s);
         // Inside a scope the venue is fixed — the tier would swallow the whole pool.
         else if (!scope && (venueOf(s)?.toLowerCase().includes(qLower) || s.provider?.toLowerCase().includes(qLower))) venue.push(s);
+        if (prefix.length >= limit) break;
     }
     return [...prefix, ...substr, ...desc, ...tokenMatches, ...venue].slice(0, limit);
 }
