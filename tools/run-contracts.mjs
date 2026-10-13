@@ -43,7 +43,7 @@ const contracts = [
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
   ['semantic-series-type', ['src/coreSpiritSemanticSeriesTypeContract.test.mjs', false]],
   ['semantic-series-type-runtime', ['src/services/coreSpirit/semanticSeriesTypeRuntime.test.ts', true]],
-  ['pinets-informed-series-semantics', ['src/services/coreSpirit/pineTsSeriesSemanticsContract.test.mjs', false]],
+  ['pinets-informed-series-semantics', ['src/services/coreSpirit/pineTsSeriesSemanticsContract.test.mjs', true]],
   ['corescript-typed-quant-values-and-hmm', ['src/services/coreSpirit/typedQuantAndHmm.test.ts', true]],
   ['corespirit-model-artifact-provenance', ['src/services/coreSpirit/modelArtifacts.test.ts', true]],
   ['corespirit-numerical-kernels', ['src/services/coreSpirit/numericalKernelsContract.test.mjs', true]],
