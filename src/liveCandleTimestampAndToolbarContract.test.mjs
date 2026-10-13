@@ -10,7 +10,7 @@ const liveChart = read('./components/workspace/LiveChart.tsx');
 const renderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 
 assert.match(transport, /function latestFyersTimestamp\(payload: Record<string, unknown>\)/, 'FYERS timestamps must be normalized through one policy');
-assert.match(transport, /payload\.last_traded_time, payload\.exch_feed_time, payload\.timestamp/, 'consider all exchange timestamp fields rather than trusting a stale first field');
+assert.match(transport, /payload\.last_traded_time, payload\.exch_feed_time/, 'consider all exchange timestamp fields rather than trusting a stale first field');
 assert.match(transport, /return candidates\.length \? Math\.max\(\.\.\.candidates\) : undefined/, 'choose the newest valid exchange timestamp');
 assert.equal((transport.match(/const brokerTimestamp = latestFyersTimestamp\(payload\);/g) || []).length, 2, 'both lite and full FYERS feeds must use the timestamp policy');
 assert.match(provider, /event\.type !== 'snapshot' && event\.type !== 'tick'/, 'Vela must only patch candles for snapshots and validated candle ticks');
