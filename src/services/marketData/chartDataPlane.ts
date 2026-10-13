@@ -387,7 +387,20 @@ export class ChartDataPlane {
     const previousPrice = Number(previousTick?.ltp);
     const allowReceiveTime = tick.source === 'fyers' && tick.feedClass === 'full'
       && (!Number.isFinite(previousPrice) || previousPrice !== price);
-    const exchangeTimestamp = tradeTimestamp(tick, allowReceiveTime);
+    let exchangeTimestamp = tradeTimestamp(tick, allowReceiveTime);
+    if (allowReceiveTime && exchangeTimestamp) {
+      const receiveMs = timestampMilliseconds(tick.receivedAtEpoch ?? tick.receivedAt);
+      const intervalSeconds = CHART_TIMEFRAME_SECONDS[this.timeframe] || 300;
+      const canonical = this.canonicalPlane.read();
+      const lastChartTime = canonical.length ? Number(canonical.time[canonical.length - 1]) : Number.NaN;
+      const eventBucket = Math.floor(Date.parse(exchangeTimestamp) / (intervalSeconds * 1000)) * intervalSeconds;
+      if (Number.isFinite(lastChartTime) && eventBucket < lastChartTime && receiveMs !== undefined
+        && Date.now() - receiveMs >= -1_000 && Date.now() - receiveMs < 5_000 && isIndianCashSession(receiveMs)) {
+        // A fresh, changed FULL-stream quote in the open session can correct a stale
+        // per-trade clock whose bucket would otherwise be discarded as older than history.
+        exchangeTimestamp = new Date(receiveMs).toISOString();
+      }
+    }
     if (!hasHistory || exchangeTimestamp == null) {
       this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
