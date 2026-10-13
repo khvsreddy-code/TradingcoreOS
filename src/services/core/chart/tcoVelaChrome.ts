@@ -273,7 +273,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       try {
         const result = await compileCoreSpiritSourceOffThread(source, generation, 'tco-live-studio', { layer: 'chart' });
         if (generation !== compileGeneration) return;
-        const errors = result.diagnostics.filter(d => d.severity === 'error' || d.severity === 'fatal');
+        const errors = result.diagnostics.filter(d => d.severity === 'error');
         if (errors.length || !result.artifact) {
           status.textContent = errors.slice(0, 5).map(d => d.message).join('\n') || 'No executable artifact was produced.';
           status.style.color = '#fca5a5';
