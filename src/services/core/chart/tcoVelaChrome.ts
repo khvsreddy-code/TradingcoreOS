@@ -398,6 +398,18 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   },
 };
 
+const replayTopbarAction: WidgetActionDescriptor = {
+  id: 'tco.replay-action',
+  target: 'topbar',
+  label: 'Replay',
+  icon: 'replay',
+  iconOnly: false,
+  align: 'left',
+  order: 0,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.replay'); },
+};
+
 const coreSpiritCodeAction: WidgetActionDescriptor = {
   id: 'tco.corespirit-code',
   target: 'topbar',
@@ -1404,17 +1416,17 @@ registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
 const researchAction:WidgetActionDescriptor={
-  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
+  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:true, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
 };
 
 const automationAction:WidgetActionDescriptor={
-  id:'tco.automation', target:'topbar', label:'Automation', icon:'replay', iconOnly:false, align:'right', order:1.6, mobile:'menu',
+  id:'tco.automation', target:'topbar', label:'Automation', icon:'activity', iconOnly:true, align:'right', order:1.6, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.automation');},
 };
 
 const tradingAction:WidgetActionDescriptor={
-  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:false, align:'right', order:1.7, mobile:'menu',
+  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:true, align:'right', order:1.7, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
@@ -1450,12 +1462,12 @@ const chartSettingsAction: WidgetActionDescriptor = {
 };
 
 const watchlistAction: WidgetActionDescriptor = {
-  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: false, align: 'right', order: 0, mobile: 'menu',
+  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: true, align: 'right', order: 0, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
 };
 
 const journalAction: WidgetActionDescriptor = {
-  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: false, align: 'right', order: 1, mobile: 'menu',
+  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: true, align: 'right', order: 1, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
@@ -1472,47 +1484,8 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
-const healthAttachment: WidgetAttachment = {
-  id: 'tco.market-health-attachment',
-  mount(ctx) {
-    const strip = document.createElement('div');
-    strip.style.cssText = 'height:22px;display:flex;align-items:center;justify-content:center;gap:14px;padding:0 10px;border-top:1px solid rgba(255,255,255,.06);background:rgba(7,10,16,.96);color:#64748b;font:9px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.03em;';
-    const status = document.createElement('span');
-    const broker = document.createElement('span');
-    const latency = document.createElement('span');
-    const renderer = document.createElement('span');
-    strip.append(status, broker, latency, renderer);
-    const undock = ctx.dockStrip(strip);
-
-    const refresh = () => {
-      const info = tradingCoreRuntime.getPrimaryBrokerInfo();
-      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol);
-      const tickAge = tick?.receivedAt ? Math.max(0, Date.now() - Date.parse(String(tick.receivedAt))) : Number.POSITIVE_INFINITY;
-      const healthy = info?.status === 'Connected' && tickAge < 4000;
-      status.textContent = healthy ? '● LIVE' : '● DEGRADED';
-      status.style.color = healthy ? '#4ade80' : '#fb7185';
-      broker.textContent = info?.brokerId ? String(info.brokerId).toUpperCase() : 'NO BROKER';
-      broker.style.color = '#cbd5e1';
-      latency.textContent = Number.isFinite(tickAge) ? `TICK ${Math.round(tickAge)}MS` : 'TICK —';
-      latency.style.color = tickAge < 1200 ? '#cbd5e1' : '#facc15';
-      const perf = (window as Window & { __TCO_PERF__?: { cells?: Array<{ backend?: string; fps?: number; p95FrameMs?: number }> } }).__TCO_PERF__;
-      const cell = perf?.cells?.[0];
-      renderer.textContent = cell?.backend ? `VELA ${String(cell.backend).toUpperCase()}` : 'VELA AUTO';
-      if (cell?.p95FrameMs != null && Number(cell.p95FrameMs) > 20) renderer.style.color = '#facc15';
-      else renderer.style.color = '#cbd5e1';
-    };
-
-    refresh();
-    const timer = window.setInterval(refresh, 1000);
-    return () => {
-      window.clearInterval(timer);
-      undock();
-    };
-  },
-};
-
 registerWidgetAttachment(tradeMarksAttachment);
-registerWidgetAttachment(healthAttachment);
+registerWidgetAction(replayTopbarAction);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
