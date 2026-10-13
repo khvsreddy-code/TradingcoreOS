@@ -108,7 +108,7 @@ const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
 /** Parse broker epoch seconds/milliseconds or ISO time without confusing numeric strings with ISO dates. */
 function timestampMilliseconds(raw: unknown): number | undefined {
   if (raw == null || raw === '') return undefined;
-  if (typeof raw === 'number' || (typeof raw === 'string' && /^\\d+(?:\\.\\d+)?$/.test(raw.trim()))) {
+  if (typeof raw === 'number' || (typeof raw === 'string' && /^\d+(?:\.\d+)?$/.test(raw.trim()))) {
     const numeric = Number(raw);
     const milliseconds = numeric > 1e12 ? numeric : numeric * 1000;
     return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : undefined;
