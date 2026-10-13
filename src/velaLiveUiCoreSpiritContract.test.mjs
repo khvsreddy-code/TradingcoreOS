@@ -32,7 +32,10 @@ assert.match(chrome, /compileCoreSpiritSourceOffThread/, 'live CoreScript must c
 assert.match(chrome, /adapter\.setDiagnostics\(result\.diagnostics, currentSource\)/, 'compiler diagnostics must be visible in the editor');
 assert.match(chrome, /adapter\.setSymbolInfo\(result\.symbols\)/, 'compiler symbols must feed editor completion/hover');
 assert.match(chrome, /ctx\.addIndicator\(\{ name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' \}\)/, 'Run must submit the actual CoreScript to the active Vela chart');
-assert.match(chrome, /Vela did not attach the CoreSpirit indicator/, 'surface failed indicator attachment rather than falsely reporting success');
+assert.match(chrome, /ctx\.chart\.indicators\(\)/, 'find the indicator handle created by the workspace');
+assert.match(chrome, /handle\.on\('ready'/, 'report success only when Vela finishes the first execution');
+assert.match(chrome, /handle\.on\('error'/, 'surface Vela execution errors');
+assert.match(chrome, /try \{ handle\.remove\(\); \} catch \{\}/, 'remove failed indicators instead of leaving dead legend rows');
 assert.match(chrome, /registerDefaultEngine\('corespirit'/, 'CoreSpirit must remain registered as a Vela scripting engine');
 assert.match(engineLoader, /streaming: true,[\s\S]*visibleRange: true,[\s\S]*inputs: true,[\s\S]*props: true/, 'CoreSpirit must expose Vela streaming, viewport, inputs and props');
 assert.match(engine, /handlers\.onModel\(/, 'CoreSpirit execution must publish its model into Vela');
