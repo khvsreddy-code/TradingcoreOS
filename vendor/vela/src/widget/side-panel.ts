@@ -13,6 +13,7 @@
 // with the dock state.
 import { injectStyles } from '../ui/styles';
 import { iconEl } from '../ui/icons';
+import { holdForExit, type SurfaceExit } from '../ui/surface-exit';
 
 const STYLE_ID = 'vela-widget-sidepanel';
 
@@ -188,6 +189,11 @@ export class SidePanel {
     private readonly floatable: boolean;
     private overlayOn: boolean;
     private readonly pin: HTMLButtonElement | null = null;
+    /** Open as far as the dock and the host are concerned — a closed panel can still be on
+     *  screen while its exit animation runs. */
+    private isOpen = false;
+    /** The exit animation of a close; a reopen cancels it. */
+    private exit: SurfaceExit | null = null;
 
     /** `modifier` is the panel's own class, carrying its content styles (e.g. `vela-ot`). */
     constructor(host: HTMLElement, title: string, modifier: string, opts: SidePanelOptions = {}) {
@@ -241,7 +247,7 @@ export class SidePanel {
     }
 
     get open(): boolean {
-        return !this.el.hidden;
+        return this.isOpen;
     }
 
     /** Open/close the panel — a bare call flips it. */
@@ -309,6 +315,7 @@ export class SidePanel {
     }
 
     destroy(): void {
+        this.exit?.finish();
         this.el.remove();
     }
 
