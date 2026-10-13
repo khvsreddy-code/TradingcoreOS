@@ -244,8 +244,8 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     };
     try { editor.value = localStorage.getItem(CORESPIRIT_LIVE_EDITOR_KEY) || CORESPIRIT_STARTER; } catch { editor.value = CORESPIRIT_STARTER; }
     const syncEditor = () => {
-      const lines = editor.value.split('\\n').length;
-      gutter.textContent = Array.from({ length: lines }, (_, i) => String(i + 1)).join('\\n');
+      const lines = editor.value.split('\n').length;
+      gutter.textContent = Array.from({ length: lines }, (_, i) => String(i + 1)).join('\n');
       try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, editor.value); } catch {}
     };
     editor.addEventListener('input', syncEditor);
@@ -275,7 +275,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         if (generation !== compileGeneration) return;
         const errors = result.diagnostics.filter(d => d.severity === 'error' || d.severity === 'fatal');
         if (errors.length || !result.artifact) {
-          status.textContent = errors.slice(0, 5).map(d => d.message).join('\\n') || 'No executable artifact was produced.';
+          status.textContent = errors.slice(0, 5).map(d => d.message).join('\n') || 'No executable artifact was produced.';
           status.style.color = '#fca5a5';
           return;
         }
