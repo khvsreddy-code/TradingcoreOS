@@ -1046,7 +1046,10 @@ export class NativeRenderer implements IChartRenderer {
                 this.plot.appendChild(this.settingsButton);
             }
             if (this.settingsButton) this.settingsButton.style.display = 'flex';
-            if (this.plot && !this.settingsDialog) this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme);
+            if (this.plot && !this.settingsDialog) {
+                this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme);
+                this.settingsDialog.setLayoutMode(this.layoutMode);
+            }
         } else {
             this.settingsButton?.style.setProperty('display', 'none');
             this.settingsDialog?.close();
@@ -1079,9 +1082,19 @@ export class NativeRenderer implements IChartRenderer {
             pointerEvents: 'auto',
             padding: '0',
         });
+        btn.setAttribute('aria-label', 'Open chart settings');
         btn.addEventListener('mouseenter', () => (btn.style.opacity = '1'));
         btn.addEventListener('mouseleave', () => (btn.style.opacity = '0.75'));
-        btn.addEventListener('click', () => this.toggleSettingsDialog());
+        // The settings dialog is mounted into the chart's host. Stop the chart/pane
+        // gesture handlers from seeing the same press, or they can dismiss the dialog
+        // immediately after the gear opens it.
+        btn.addEventListener('pointerdown', (event) => event.stopPropagation());
+        btn.addEventListener('mousedown', (event) => event.stopPropagation());
+        btn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.openSettingsDialog();
+        });
         return btn;
     }
 
@@ -1090,8 +1103,8 @@ export class NativeRenderer implements IChartRenderer {
     openSettingsDialog(section?: string): void {
         if (!this.settingsDialog && this.plot) {
             this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme);
-            this.settingsDialog.setLayoutMode(this.layoutMode);
         }
+        this.settingsDialog?.setLayoutMode(this.layoutMode);
         this.toggleSettingsDialog(section);
     }
 

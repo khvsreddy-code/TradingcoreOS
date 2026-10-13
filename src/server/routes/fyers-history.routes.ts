@@ -5,6 +5,7 @@ import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { API_LATENCY_BUDGET_MS, timeoutSignal } from '../latency/budgets.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { canonicalFyersSymbol } from '../fyers/symbols/canonicalFyersSymbol.js';
 
 /**
  * Safe FYERS historical-data route.
@@ -35,36 +36,6 @@ const resolutionMap: Record<string, string> = {
 };
 
 
-function canonicalFyersSymbol(value: string): string {
-  const raw = String(value || '').trim();
-  const n = raw.toLowerCase().replace(/\s+/g, '');
-  if (['nse_index|nifty50','nse_index|nifty50index','nifty','nifty50','nifty50index'].includes(n) || n.includes('nifty50-index')) return 'NSE:NIFTY50-INDEX';
-  if (['nse_index|niftybank','nse_index|banknifty','banknifty','niftybank'].includes(n) || n.includes('niftybank-index')) return 'NSE:NIFTYBANK-INDEX';
-  if (['nse_index|finnifty','nse_index|niftyfinancialservices'].includes(n) || n.includes('finnifty-index')) return 'NSE:FINNIFTY-INDEX';
-  if (['nse_index|niftymidcapselect','nse_index|midcap'].includes(n) || n.includes('midcpnifty-index')) return 'NSE:MIDCPNIFTY-INDEX';
-  if (['bse_index|sensex','sensex'].includes(n) || n.includes('sensex-index')) return 'BSE:SENSEX-INDEX';
-
-  const eq = raw.match(/^(NSE|BSE)_(EQ|CM)\|(.+)$/i);
-  if (eq) {
-    const exchange = eq[1].toUpperCase();
-    const ticker = eq[3];
-    return /-(EQ|BE|SM|ST)$/i.test(ticker) ? `${exchange}:${ticker}` : `${exchange}:${ticker}-EQ`;
-  }
-
-  const pipe = raw.match(/^(NSE|BSE|MCX)_(CM|FO|CD|COM)\|(.+)$/i);
-  if (pipe) {
-    const exchange = pipe[1].toUpperCase();
-    const segment = pipe[2].toUpperCase();
-    const ticker = pipe[3];
-    if (segment === 'CM' && !/-(EQ|BE|SM|ST)$/i.test(ticker)) return `${exchange}:${ticker}-EQ`;
-    return `${exchange}:${ticker}`;
-  }
-
-  if (!raw.includes(':') && /^(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY).*?(?:FUT|CE|PE)$/i.test(raw)) return `NSE:${raw}`;
-  if (/^NSE:[A-Z0-9&._-]+$/i.test(raw) && !/-[A-Z]+$/i.test(raw)) return `${raw}-EQ`;
-  if (/^BSE:[A-Z0-9&._-]+$/i.test(raw) && !/-[A-Z]+$/i.test(raw)) return `${raw}-EQ`;
-  return raw;
-}
 
 function normalizeColumns(rows: any[], limit: number) {
   const sorted: Array<[number, number, number, number, number, number]> = [];

@@ -65,23 +65,39 @@ export class FyersSymbolMasterService {
   static async find(master:FyersMasterName, symbol:string):Promise<FyersSymbolRecord|undefined>{ return (await this.load(master)).get(symbol.trim()); }
 
   static async search(master:FyersMasterName, query:string, limit=50):Promise<FyersSymbolRecord[]>{
-    const q=query.trim().replace(/^[A-Z0-9_-]{2,16}:/i,'').toUpperCase();
-    if(!q) return [];
+    // FYERS option tickers are compact (for example NIFTY26...22600PE), while users
+    // naturally type human-readable queries such as "NIFTY 22600 PE". Split into tokens
+    // and require every token to match instead of requiring the whole phrase contiguously.
+    const sourceQuery=query.trim().replace(/^[A-Z0-9_-]{2,16}:/i,'').toUpperCase();
+    const tokens=sourceQuery.match(/[A-Z]+|\d+(?:\.\d+)?/g) ?? [];
+    if(!tokens.length) return [];
     const maximum = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 50;
+    const compactQuery=sourceQuery.replace(/[^A-Z0-9.]/g,'');
     const ranked: Array<{row:FyersSymbolRecord; ticker:string; rank:number}> = [];
     for(const [key,row] of (await this.load(master)).entries()){
       const symbol=String(row.symbol ?? row.symbol_ticker ?? row.symTicker ?? key).toUpperCase();
       const ticker=symbol.split(':').pop() ?? symbol;
-      const description=String(row.exSymName ?? row.symDetails ?? row.description ?? '').toUpperCase();
-      const rank=ticker===q ? 0
-        : ticker.startsWith(q) ? 1
-        : ticker.includes(q) ? 2
-        : description.startsWith(q) ? 3
-        : description.includes(q) ? 4
-        : -1;
-      if(rank>=0) ranked.push({row,ticker,rank});
+      const compactTicker=ticker.replace(/[^A-Z0-9.]/g,'');
+      const description=String(row.exSymName ?? row.symDetails ?? row.description ?? row.name ?? '').toUpperCase();
+      const detailFields=[
+        row.strikePrice, row.strike_price, row.strike, row.optionType, row.option_type,
+        row.optType, row.instrumentType, row.instrument_type, row.expiryDate, row.expiry,
+        row.exSeries, row.series,
+      ].map((value)=>String(value ?? '')).join(' ').toUpperCase();
+      const searchable=[symbol,ticker,description,detailFields].join(' ');
+      // Match the requested strike/side whether they appear in the compact ticker or as
+      // separate fields/words in the human-readable description.
+      if(!tokens.every((token)=>compactTicker.includes(token) || searchable.includes(token))) continue;
+      const tickerHasEveryToken=tokens.every((token)=>compactTicker.includes(token));
+      const rank=ticker===sourceQuery ? 0
+        : compactQuery.length > 0 && compactTicker.startsWith(compactQuery) ? 1
+        : compactQuery.length > 0 && compactTicker.includes(compactQuery) ? 2
+        : tickerHasEveryToken ? 3
+        : 4;
+      ranked.push({row,ticker,rank});
     }
     ranked.sort((a,b)=>a.rank-b.rank || a.ticker.localeCompare(b.ticker));
     return ranked.slice(0,maximum).map((item)=>item.row);
   }
 }
+

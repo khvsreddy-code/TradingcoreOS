@@ -241,6 +241,7 @@ export class TcoVelaDataProvider implements DataProvider {
       All: [...FYERS_MASTERS],
       Stocks: ['NSE_CM', 'BSE_CM'],
       ETFs: ['NSE_CM', 'BSE_CM'],
+      Options: ['NSE_FO', 'BSE_FO'],
       Futures: ['NSE_FO', 'BSE_FO'],
       Forex: ['NSE_CD'],
       Commodities: ['NSE_COM', 'MCX_COM'],
@@ -444,7 +445,21 @@ export class TcoVelaDataProvider implements DataProvider {
 
   getSymbolInfo(ticker: string) {
     const symbol = runtimeSymbol(ticker);
-    return Promise.resolve({ ticker: symbol, exchange: symbol.startsWith('BSE:') ? 'BSE' : 'NSE', type: 'index' });
+    const bareTicker = symbol.split(':').pop() ?? symbol;
+    const descriptor = symbolCatalog.find((item) =>
+      `${item.prefix ?? 'NSE'}:${item.ticker}`.toUpperCase() === symbol.toUpperCase(),
+    );
+    // Do not report every instrument as an index: Vela and CoreSpirit use this metadata
+    // for syminfo, instrument-specific behavior, and indicator context on option charts.
+    const type = /(?:CE|PE)$/i.test(bareTicker) ? 'option'
+      : /FUT(?:URES?)?$/i.test(bareTicker) ? 'future'
+      : /-INDEX$/i.test(bareTicker) || descriptor?.type === 'index' ? 'index'
+      : descriptor?.type ?? 'stock';
+    return Promise.resolve({
+      ticker: symbol,
+      exchange: symbol.startsWith('BSE:') ? 'BSE' : symbol.startsWith('MCX:') ? 'MCX' : 'NSE',
+      type,
+    });
   }
 
   subscribeColumns(ticker: string, timeframe: string, onBar: (bar: ColumnarBarUpdate) => void): () => void {
