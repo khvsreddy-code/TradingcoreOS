@@ -354,7 +354,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     compile.addEventListener('click', () => { void compileSource(false); });
     run.addEventListener('click', () => { void compileSource(true); });
     openFull.addEventListener('click', () => {
-      try { localStorage.setItem(versionedStorageKey('editor'), source); localStorage.setItem('tradingcore:corespirit:editor', editor.value); } catch {}
+      try { localStorage.setItem(versionedStorageKey('editor'), source); localStorage.setItem('tradingcore:corespirit:editor', source); } catch {}
       window.history.pushState({}, '', '/corespirit');
       window.dispatchEvent(new PopStateEvent('popstate'));
       ctx.toast('Opened the full CoreSpirit IDE', 'success');
