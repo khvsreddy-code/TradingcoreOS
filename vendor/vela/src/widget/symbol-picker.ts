@@ -106,17 +106,25 @@ export function filterSymbols(list: readonly SymbolDescriptor[], query: string, 
     const prefix: SymbolDescriptor[] = [];
     const substr: SymbolDescriptor[] = [];
     const desc: SymbolDescriptor[] = [];
+    const tokenMatches: SymbolDescriptor[] = [];
     const venue: SymbolDescriptor[] = [];
+    // Contracts are often compact, while traders type readable names such as "NIFTY 22600 PE".
+    // Match each token so a ticker like NIFTY26...22600PE can still be found.
+    const queryTokens = q.match(/[A-Z]+|\d+(?:\.\d+)?/g) ?? [];
     for (const s of pool) {
         const t = s.ticker.toUpperCase();
+        const description = (s.description ?? '').toUpperCase();
         if (t.startsWith(q)) prefix.push(s);
         else if (t.includes(q)) substr.push(s);
-        else if ((s.description ?? '').toUpperCase().includes(q)) desc.push(s);
+        else if (description.includes(q)) desc.push(s);
+        else if (queryTokens.length > 1 && queryTokens.every((token) => {
+            const tokenPool = (t + ' ' + description + ' ' + (s.type ?? '') + ' ' + (s.market ?? '')).toUpperCase();
+            return tokenPool.includes(token);
+        })) tokenMatches.push(s);
         // Inside a scope the venue is fixed — the tier would swallow the whole pool.
         else if (!scope && (venueOf(s)?.toLowerCase().includes(qLower) || s.provider?.toLowerCase().includes(qLower))) venue.push(s);
-        if (prefix.length >= limit) break;
     }
-    return [...prefix, ...substr, ...desc, ...venue].slice(0, limit);
+    return [...prefix, ...substr, ...desc, ...tokenMatches, ...venue].slice(0, limit);
 }
 
 const STYLE_ID = 'vela-widget-symbolpicker';
@@ -296,7 +304,7 @@ export class SymbolPicker {
         this.tabs.className = 'vela-sp-tabs';
         const head = doc.createElement('div');
         head.className = 'vela-sp-head';
-        for (const t of ['All', 'Stocks', 'ETFs', 'Crypto', 'Futures', 'Forex', 'Commodities']) {
+        for (const t of ['All', 'Stocks', 'ETFs', 'Options', 'Crypto', 'Futures', 'Forex', 'Commodities']) {
             const b = doc.createElement('button');
             b.className = 'vela-sp-tab';
             b.textContent = t;
