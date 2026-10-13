@@ -271,6 +271,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       syncEditor();
     });
     syncEditor();
+    let compileGeneration = 0;
     void mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
       source = nextSource;
       compileGeneration += 1;
@@ -293,7 +294,6 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       status.style.color = '#fbbf24';
     });
 
-    let compileGeneration = 0;
     const compileSource = async (shouldRun: boolean) => {
       const currentSource = source.trim();
       if (!currentSource) { status.textContent = 'Enter a CoreScript indicator first.'; status.style.color = '#fca5a5'; return; }
