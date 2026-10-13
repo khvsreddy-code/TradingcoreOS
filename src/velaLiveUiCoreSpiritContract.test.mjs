@@ -8,6 +8,7 @@ const chrome = read('./services/core/chart/tcoVelaChrome.ts');
 const engine = read('./CoreSpiritVelaEngine.ts');
 const engineLoader = read('./services/coreSpirit/coreSpiritVelaEngineLoader.ts');
 const provider = read('./TcoVelaDataProvider.ts');
+const semanticAdapter = read('./services/core/chart/tcoVelaSemanticAdapter.ts');
 const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.ts');
 
 assert.match(terminal, /background:'#141518'/, 'live chart should use Vela charcoal canvas');
@@ -41,5 +42,7 @@ assert.match(chrome, /registerDefaultEngine\('corespirit'/, 'CoreSpirit must rem
 assert.match(engineLoader, /streaming: true,[\s\S]*visibleRange: true,[\s\S]*inputs: true,[\s\S]*props: true/, 'CoreSpirit must expose Vela streaming, viewport, inputs and props');
 assert.match(engine, /handlers\.onModel\(/, 'CoreSpirit execution must publish its model into Vela');
 assert.match(engine, /handlers\.onScenePatches\?\./, 'CoreSpirit execution must publish incremental scene patches');
+assert.match(semanticAdapter, /overlay:meta\.overlay/, 'CoreSpirit line plots must respect indicator overlay declarations');
+assert.match(semanticAdapter, /paneHint:meta\.overlay \? 'price' : 'new'/, 'non-overlay CoreSpirit indicators must route to a Vela study pane');
 
 console.log('VELA_LIVE_UI_CORESPIRIT_CONTRACT_OK');
