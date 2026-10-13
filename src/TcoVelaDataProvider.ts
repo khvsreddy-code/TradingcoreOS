@@ -668,7 +668,7 @@ export function prewarmTcoVelaHistory(
   limit = 1200,
 ): void {
   const uniqueSymbols = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 4);
-  const requestedTimeframes = Array.isArray(timeframe) ? timeframe : [timeframe];
+  const requestedTimeframes: readonly string[] = typeof timeframe === 'string' ? [timeframe] : timeframe;
   const uniqueTimeframes = [...new Set(requestedTimeframes.map(runtimeTimeframe))].slice(0, 6);
   if (!uniqueSymbols.length || !uniqueTimeframes.length) return;
 
