@@ -40,6 +40,7 @@ const TCO_CHROME_ICONS: Record<string, string> = {
   gear: svg16('<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/>'),
   objects: svg16('<rect x="1.5" y="1.5" width="5" height="5" rx=".5"/><rect x="9.5" y="1.5" width="5" height="5" rx=".5"/><rect x="1.5" y="9.5" width="5" height="5" rx=".5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/>'),
   indicators: svg16('<path d="M1.5 12.5 5 8.5l2.5 2 5-7 2 2"/>'),
+  code: svg16('<path d="m5.5 4-4 4 4 4M10.5 4l4 4-4 4M9 2.5 7 13.5"/>'),
 };
 for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
@@ -1149,6 +1150,18 @@ registerLegendAction(coreSpiritOpenAction);
 registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
+const coreSpiritAction: WidgetActionDescriptor = {
+  id: 'tco.corespirit',
+  target: 'topbar',
+  label: 'CoreSpirit',
+  icon: 'code',
+  iconOnly: false,
+  align: 'right',
+  order: 0.5,
+  mobile: 'menu',
+  run() { window.dispatchEvent(new Event('tco:open-corespirit-editor')); },
+};
+
 const researchAction:WidgetActionDescriptor={
   id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
@@ -1346,6 +1359,7 @@ const healthAttachment: WidgetAttachment = {
 registerWidgetAction(marketHealthAction);
 registerWidgetAttachment(healthAttachment);
 registerWidgetAttachment(tradeMarksAttachment);
+registerWidgetAction(coreSpiritAction);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
