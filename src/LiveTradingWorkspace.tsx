@@ -9,6 +9,7 @@ import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
+import { CoreSpiritLiveEditor } from './components/workspace/CoreSpiritLiveEditor';
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
@@ -35,6 +36,7 @@ export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
+  const [coreSpiritEditorOpen, setCoreSpiritEditorOpen] = useState(false);
   useEffect(() => {
     if (!host.current) return;
 
@@ -71,7 +73,7 @@ export function LiveTradingWorkspace() {
       const [defaults, VelaWorkspaceClass] = await Promise.all([defaultsPromise, loadVelaWorkspace()]);
       if (cancelled || !host.current) return;
       const queryLayout = new URLSearchParams(window.location.search).get('velaLayout') || '';
-      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '4');
+      const initialLayout = ['1','4','8'].includes(queryLayout) ? queryLayout : (defaults.layout || '1');
 
       workspace = new VelaWorkspaceClass(host.current, createTcoVelaTerminalOptions({
         layout: initialLayout,
@@ -92,11 +94,15 @@ export function LiveTradingWorkspace() {
         // Keep speculative history off the user's critical path. The active chart's
         // initial request has priority; warm only the default symbol/timeframe, and let
         // rapid symbol/timeframe switches reuse the shared per-key single-flight cache.
-        prewarmTcoVelaHistory(
-          ['NSE:NIFTY50-INDEX'],
-          defaults.timeframe || '5',
-          300,
-        );
+        const activeSymbol = 'NSE:NIFTY50-INDEX';
+        const activeTimeframe = defaults.timeframe || '5';
+        prewarmTcoVelaHistory([activeSymbol], activeTimeframe, 300);
+        // Warm the most common adjacent intraday intervals in the low-priority history
+        // queue. Timeframe changes can paint from the shared cache instead of waiting
+        // for a cold FYERS history round trip; these never block the active chart.
+        for (const timeframe of ['1', '3', '15']) {
+          if (timeframe !== activeTimeframe) prewarmTcoVelaHistory([activeSymbol], timeframe, 250);
+        }
       });
 
       if (typeof window !== 'undefined') {
@@ -150,6 +156,12 @@ export function LiveTradingWorkspace() {
     };
   }, []);
 
+
+  useEffect(() => {
+    const openEditor = () => setCoreSpiritEditorOpen(true);
+    window.addEventListener('tco:open-corespirit-editor', openEditor);
+    return () => window.removeEventListener('tco:open-corespirit-editor', openEditor);
+  }, []);
 
   useEffect(() => {
     const openBroker = () => setBrokerStatusOpen(true);
@@ -206,18 +218,33 @@ export function LiveTradingWorkspace() {
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-    <div
-      ref={host}
-      className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
-      aria-label="TradingCoreOS Vela live trading chart"
-    >
-      {brokerStatusOpen && (
-        <BrokerSettingsModal
-          isOpen={brokerStatusOpen}
-          onClose={() => setBrokerStatusOpen(false)}
+    <>
+      <div
+        ref={host}
+        className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
+        aria-label="TradingCoreOS live trading chart"
+      >
+        {brokerStatusOpen && (
+          <BrokerSettingsModal
+            isOpen={brokerStatusOpen}
+            onClose={() => setBrokerStatusOpen(false)}
+          />
+        )}
+      </div>
+      {coreSpiritEditorOpen && (
+        <CoreSpiritLiveEditor
+          onClose={() => setCoreSpiritEditorOpen(false)}
+          getActiveChart={() => (workspaceRef.current as any)?.active?.chart ?? null}
+          getMarket={() => {
+            const market = (workspaceRef.current as any)?.active?.chart?.market;
+            return {
+              symbol: String(market?.symbol ?? 'NSE:NIFTY50-INDEX'),
+              timeframe: String(market?.timeframe ?? '5'),
+            };
+          }}
         />
       )}
-    </div>
+    </>
     </Profiler>
   );
 }

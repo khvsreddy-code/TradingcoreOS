@@ -1205,7 +1205,7 @@ export class ChartCell {
     /** Add by picker LIBRARY index (natives precede the manifest — mirrors libraryRows). */
     addFromLibrary(index: number): void {
         const natives = this.supportedNatives();
-        if (index < natives.length) this.addNative(natives[index]!.type);
+        if (index < natives.length) void this.addNative(natives[index]!.type);
         else {
             const entry = this.manifest[index - natives.length];
             if (entry) this.addManifestInstance(entry);
@@ -1324,23 +1324,49 @@ export class ChartCell {
         if (handle.visible !== visible) handle.setVisible(visible);
     }
 
-    addNative(type: string): void {
+    async addNative(type: string, recordHistory = true): Promise<void> {
         const chart = this.inner;
         if (!chart) return;
         const before = new Set(chart.indicators().map((h) => h.id));
-        let added: IndicatorHandle | null = chart.addNativeIndicator(type);
+        let added: IndicatorHandle;
+        try {
+            // The current Vela catalog is lazy: picker studies are not registered until
+            // their family chunk has loaded. The synchronous addNativeIndicator API is
+            // only for already-registered core types and silently breaks picker additions.
+            added = await chart.addNativeIndicatorAsync(type);
+        } catch (err) {
+            console.warn(`[vela] native indicator "${type}" failed to load/add:`, err);
+            this.refreshNativeCatalog();
+            return;
+        }
+        // Symbol/timeframe changes can replace this cell while the lazy study chunk loads.
+        if (this.destroyed || this.inner !== chart) {
+            added.remove();
+            return;
+        }
         this.syncPresentNatives();
         this.refreshNativeCatalog();
-        if (before.has(added.id)) return;
+        if (before.has(added.id) || !recordHistory) return;
         this.history.push({
             undo: () => {
-                added?.remove();
-                added = null;
+                added.remove();
+                this.syncPresentNatives();
                 this.refreshNativeCatalog();
             },
             redo: () => {
-                added = this.inner?.addNativeIndicator(type) ?? null;
-                this.refreshNativeCatalog();
+                const target = this.inner;
+                if (!target) return;
+                void target.addNativeIndicatorAsync(type).then((handle) => {
+                    if (this.destroyed || this.inner !== target) {
+                        handle.remove();
+                        return;
+                    }
+                    added = handle;
+                    this.syncPresentNatives();
+                    this.refreshNativeCatalog();
+                }).catch((err: unknown) => {
+                    console.warn(`[vela] native indicator "${type}" failed to restore:`, err);
+                });
             },
         });
     }
@@ -1402,7 +1428,7 @@ export class ChartCell {
             cellId: this.id,
             chart: this.chart,
             addIndicator: (entry) => this.history.silently(() => this.addExternalIndicator(entry)),
-            addNativeIndicator: (type) => this.history.silently(() => this.addNative(type)),
+            addNativeIndicator: (type) => { void this.addNative(type, false); },
         };
     }
 
