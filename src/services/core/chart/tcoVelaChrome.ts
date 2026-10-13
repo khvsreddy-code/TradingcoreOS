@@ -1149,11 +1149,6 @@ registerLegendAction(coreSpiritOpenAction);
 registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
-const brandAction: WidgetActionDescriptor = {
-  id: 'tco.brand', target: 'topbar', label: 'TradingCoreOS × Vela', iconOnly: false, align: 'left', order: 0, mobile: 'menu',
-  run() {},
-};
-
 const researchAction:WidgetActionDescriptor={
   id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
@@ -1193,69 +1188,21 @@ const positionsAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.positions'); },
 };
 
-const riskAction: WidgetActionDescriptor = {
-  id: 'tco.risk',
+const chartSettingsAction: WidgetActionDescriptor = {
+  id: 'tco.chart-settings',
   target: 'topbar',
-  label: 'Risk',
-  icon: 'shield',
+  label: 'Chart settings',
+  icon: 'gear',
   iconOnly: true,
   align: 'right',
-  order: 5,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.risk'); },
-};
-
-const orderBookAction: WidgetActionDescriptor = {
-  id: 'tco.orderbook',
-  target: 'topbar',
-  label: 'Order Book',
-  icon: 'list',
-  iconOnly: true,
-  align: 'right',
-  order: 6,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.orderbook'); },
-};
-
-const optionsAction: WidgetActionDescriptor = {
-  id: 'tco.options',
-  target: 'topbar',
-  label: 'Options',
-  icon: 'layers',
-  iconOnly: true,
-  align: 'right',
-  order: 7,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.options'); },
-};
-
-const dataWindowAction: WidgetActionDescriptor = {
-  id: 'tco.data-window',
-  target: 'topbar',
-  label: 'Data Window',
-  icon: 'table',
-  iconOnly: true,
-  align: 'right',
-  order: 8,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.data-window'); },
-};
-
-const vpvrAction: WidgetActionDescriptor = {
-  id: 'tco.vpvr',
-  target: 'topbar',
-  label: 'VPVR',
-  icon: 'objects',
-  iconOnly: true,
-  align: 'right',
-  order: 9,
+  order: 20,
   mobile: 'menu',
   run(ctx) {
-    try {
-      ctx.addNativeIndicator('vpvr');
-      ctx.toast('VPVR added via Vela native indicator', 'success');
-    } catch (error) {
-      ctx.toast(error instanceof Error ? error.message : 'Unable to add VPVR', 'error');
+    const renderer = ctx.chart.renderer as unknown as { openSettingsDialog?: (section?: string) => void };
+    if (typeof renderer.openSettingsDialog === 'function') {
+      renderer.openSettingsDialog();
+    } else {
+      ctx.toast('Chart settings are unavailable for this renderer', 'error');
     }
   },
 };
@@ -1270,21 +1217,6 @@ const journalAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
-const panelsAction: WidgetActionDescriptor = {
-  id: 'tco.panels', target: 'topbar', label: 'Panels', icon: 'layout', iconOnly: false, align: 'right', order: 2, mobile: 'menu',
-  run() { window.dispatchEvent(new Event('tco:toggle-primary-panel')); },
-};
-
-const profileAction: WidgetActionDescriptor = {
-  id: 'tco.profile', target: 'topbar', label: 'Account', icon: 'user', iconOnly: true, align: 'right', order: 1, mobile: 'menu',
-  run() { window.dispatchEvent(new Event('tco:open-profile-panel')); },
-};
-
-const brokerAction: WidgetActionDescriptor = {
-  id: 'tco.broker-connection', target: 'topbar', label: 'Broker Connection', icon: 'gear', iconOnly: true, align: 'right', order: 10, mobile: 'menu',
-  run() { window.dispatchEvent(new Event('tco:open-broker')); },
-};
-
 registerSidePanel(bookmarksPanel);
 registerSidePanel(researchPanel);
 registerSidePanel(automationPanel);
@@ -1297,19 +1229,6 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
-registerWidgetAction(brandAction);
-const marketHealthAction: WidgetActionDescriptor = {
-  id: 'tco.market-health',
-  target: 'topbar',
-  label: 'Market Health',
-  icon: 'activity',
-  iconOnly: true,
-  align: 'right',
-  order: 3,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.market-health'); },
-};
-
 const healthAttachment: WidgetAttachment = {
   id: 'tco.market-health-attachment',
   mount(ctx) {
@@ -1349,21 +1268,11 @@ const healthAttachment: WidgetAttachment = {
   },
 };
 
-registerWidgetAction(marketHealthAction);
-registerWidgetAttachment(healthAttachment);
 registerWidgetAttachment(tradeMarksAttachment);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
-registerWidgetAction(replayAction);
 registerWidgetAction(positionsAction);
-registerWidgetAction(riskAction);
-registerWidgetAction(orderBookAction);
-registerWidgetAction(optionsAction);
-registerWidgetAction(dataWindowAction);
-registerWidgetAction(vpvrAction);
 registerWidgetAction(watchlistAction);
+registerWidgetAction(chartSettingsAction);
 registerWidgetAction(journalAction);
-registerWidgetAction(panelsAction);
-registerWidgetAction(profileAction);
-registerWidgetAction(brokerAction);
