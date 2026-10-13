@@ -64,7 +64,9 @@ export function buildCoreSpiritVelaIndicatorModel(
       lineStyle:'solid',
     },
     visible:true,
-    overlay:true,
+    // Only price-overlay scripts should force their series onto Vela's price pane.
+    // For overlay:false, Vela routes the model into its dedicated study pane.
+    overlay:meta.overlay,
   }));
 
   if(markers.length){
@@ -87,7 +89,7 @@ export function buildCoreSpiritVelaIndicatorModel(
     overlay:meta.overlay,
     ...(meta.precision !== undefined ? { precision:meta.precision } : {}),
     ...(meta.format ? { format:meta.format } : {}),
-    paneHint:'price',
+    paneHint:meta.overlay ? 'price' : 'new',
     legend:true,
     anchorTime:anchorTime as IndicatorModel['anchorTime'],
     series,
