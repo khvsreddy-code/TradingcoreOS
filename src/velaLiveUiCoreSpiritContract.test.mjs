@@ -31,7 +31,8 @@ assert.match(chrome, /mountCoreSpiritMonaco/, 'live CoreSpirit panel should use 
 assert.match(chrome, /compileCoreSpiritSourceOffThread/, 'live CoreScript must compile off the UI thread');
 assert.match(chrome, /adapter\.setDiagnostics\(result\.diagnostics, currentSource\)/, 'compiler diagnostics must be visible in the editor');
 assert.match(chrome, /adapter\.setSymbolInfo\(result\.symbols\)/, 'compiler symbols must feed editor completion/hover');
-assert.match(chrome, /ctx\.addIndicator\(\{ name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' \}\)/, 'Run must submit the actual CoreScript to the active Vela chart');
+assert.match(chrome, /ctx\.addIndicator\(\{ id: indicatorId, name: 'CoreSpirit · Live Studio', script: currentSource, language: 'corespirit' \}\)/, 'Run must submit the actual CoreScript to the active Vela chart with an explicit instance identity');
+assert.match(chrome, /candidate\.id === indicatorId/, 'CoreSpirit Run must bind readiness/errors to its exact Vela indicator instance');
 assert.match(chrome, /ctx\.chart\.indicators\(\)/, 'find the indicator handle created by the workspace');
 assert.match(chrome, /handle\.on\('ready'/, 'report success only when Vela finishes the first execution');
 assert.match(chrome, /handle\.on\('error'/, 'surface Vela execution errors');
