@@ -1,4 +1,5 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
+import { Activity, ChevronDown, Settings2, Sparkles } from 'lucide-react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, tcoVelaPerformanceKey } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -14,6 +15,14 @@ const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
+
+function readBrokerBadge(): { label: string; connected: boolean } {
+  const info = tradingCoreRuntime.getPrimaryBrokerInfo();
+  return {
+    label: info?.brokerId ? String(info.brokerId).toUpperCase() : "BROKER",
+    connected: info?.status === "Connected",
+  };
+}
 
 function readCoreSpiritManifest() {
   try {
@@ -35,6 +44,7 @@ export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
+  const [brokerBadge, setBrokerBadge] = useState(() => readBrokerBadge());
   useEffect(() => {
     if (!host.current) return;
 
@@ -176,6 +186,8 @@ export function LiveTradingWorkspace() {
     const perfTimer = window.setInterval(() => {
       const stats = workspaceRef.current?.getPerformanceStats?.() ?? [];
       const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
+      const nextBrokerBadge = readBrokerBadge();
+      setBrokerBadge(previous => previous.label === nextBrokerBadge.label && previous.connected === nextBrokerBadge.connected ? previous : nextBrokerBadge);
       const activePipelineKeys = new Set<string>();
       if (brokerId) {
         for (const sample of stats) {
@@ -206,18 +218,60 @@ export function LiveTradingWorkspace() {
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-    <div
-      ref={host}
-      className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
-      aria-label="TradingCoreOS Vela live trading chart"
-    >
-      {brokerStatusOpen && (
-        <BrokerSettingsModal
-          isOpen={brokerStatusOpen}
-          onClose={() => setBrokerStatusOpen(false)}
-        />
-      )}
-    </div>
+      <div className="tco-live-shell fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141518] text-[#d1d4dc]" aria-label="TradingCoreOS live trading terminal">
+        <header className="relative z-[120] flex h-[42px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#1b1d24] px-3 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-md border border-[#6a5e89]/40 bg-[#282432] text-[#d7c7ff]">
+              <Activity size={16} strokeWidth={2.2} />
+            </span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-[12px] font-semibold tracking-[-0.02em] text-[#f3f4f6]">TradingCoreOS</span>
+              <span className="rounded border border-[#089981]/25 bg-[#089981]/10 px-1.5 py-[3px] font-mono text-[8px] font-bold tracking-[0.12em] text-[#50c6a7]">LIVE</span>
+            </div>
+            <span className="mx-1 hidden h-5 w-px bg-white/[0.09] sm:block" />
+            <span className="hidden items-center gap-1.5 rounded-md border border-[#8571c4]/25 bg-[#8571c4]/[0.08] px-2 py-1 text-[10px] font-medium text-[#c9baff] sm:inline-flex">
+              <Sparkles size={12} />
+              Quant
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden font-mono text-[8px] tracking-[0.12em] text-[#687080] lg:inline">MARKET WORKSPACE</span>
+            <button
+              type="button"
+              onClick={() => setBrokerStatusOpen(true)}
+              title={brokerBadge.connected ? "Manage broker connection" : "Connect a broker"}
+              aria-label={brokerBadge.connected ? "Manage broker connection" : "Connect a broker"}
+              className="inline-flex h-[28px] max-w-[185px] items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.025] px-2.5 text-[10px] text-[#c4cad5] transition-colors hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-white"
+            >
+              <span className={brokerBadge.connected ? "h-1.5 w-1.5 shrink-0 rounded-full bg-[#30c59a] shadow-[0_0_9px_rgba(48,197,154,.45)]" : "h-1.5 w-1.5 shrink-0 rounded-full bg-[#e4a34d]"} />
+              <span className="truncate">{brokerBadge.connected ? brokerBadge.label : "Connect broker"}</span>
+              <ChevronDown size={12} className="shrink-0 text-[#778093]" />
+            </button>
+            <button
+              type="button"
+              title="Broker settings"
+              aria-label="Broker settings"
+              onClick={() => setBrokerStatusOpen(true)}
+              className="flex h-[28px] w-[28px] items-center justify-center rounded-md border border-transparent text-[#8d95a5] transition-colors hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
+            >
+              <Settings2 size={15} />
+            </button>
+          </div>
+        </header>
+        <main className="relative min-h-0 flex-1 overflow-hidden bg-[#141518]">
+          <div
+            ref={host}
+            className="tco-live-surface absolute inset-0 bg-[#141518]"
+            aria-label="TradingCoreOS Vela live trading chart"
+          />
+          {brokerStatusOpen && (
+            <BrokerSettingsModal
+              isOpen={brokerStatusOpen}
+              onClose={() => setBrokerStatusOpen(false)}
+            />
+          )}
+        </main>
+      </div>
     </Profiler>
   );
 }
