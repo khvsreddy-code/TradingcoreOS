@@ -10,6 +10,7 @@ const workspace = read('./LiveTradingWorkspace.tsx');
 const chrome = read('./services/core/chart/tcoVelaChrome.ts');
 const editor = read('./components/workspace/CoreSpiritLiveEditor.tsx');
 const settings = read('../vendor/vela/src/renderers/native/chrome/SettingsDialog.ts');
+const chartCell = read('../vendor/vela/src/workspace/ChartCell.ts');
 
 assert.match(picker, /Options:\s*\['option'\]/, 'Options tab must retain option descriptors');
 assert.match(picker, /Futures:\s*\['futures', 'root', 'derivative'\]/, 'Futures tab must not swallow option contracts');
@@ -24,6 +25,8 @@ assert.match(chrome, /id: 'tco\.corespirit'/, 'CoreSpirit Studio must be reachab
 assert.match(editor, /compileCoreSpiritSourceOffThread/, 'CoreSpirit Studio must compile through the compiler worker');
 assert.match(editor, /chart\.runIndicator\(source, \{ language: 'corespirit' \}\)/, 'Run must add the script through Vela scripting engine port');
 assert.match(editor, /mountCoreSpiritMonaco/, 'CoreSpirit Studio must use the CoreScript language editor adapter');
+assert.match(chartCell, /await chart\.addNativeIndicatorAsync\(type\)/, 'picker-added native indicators must use Vela lazy async loading');
+assert.doesNotMatch(chartCell, /chart\.addNativeIndicator\(type\)/, 'do not use the sync-only native API for lazy picker studies');
 assert.match(settings, /Chart settings/, 'keep the official Vela chart settings dialog');
 for (const tab of ['Status line', 'Scales and lines', 'Canvas', 'Events', 'Advanced']) {
   assert.ok(settings.includes(tab), 'Vela settings dialog should include ' + tab);
