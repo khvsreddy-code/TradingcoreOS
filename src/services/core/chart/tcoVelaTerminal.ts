@@ -69,8 +69,10 @@ export function createTcoVelaTerminalOptions(
     drawings:true,
     drawingToolbar:true,
     indicatorPicker:true,
+    // Keep the shell focused: no redundant TCO×Vela brand pill and no dock-panel
+    // icon wall. The panels remain available through their owning TCO navigation items.
     topbar:{
-      left:['tco.brand','symbol','timeframes','style','layout','indicators'],
+      left:['symbol','timeframes','style','layout','indicators'],
       right:[
         'tco.watchlist',
         'tco.research',
@@ -79,13 +81,7 @@ export function createTcoVelaTerminalOptions(
         'tco.journal',
         'tco.replay',
         'tco.positions',
-        // These tools remain available from their panels/indicator picker; don't duplicate
-        // them as extra tiny topbar icons next to their owning workspace controls.
         'alerts',
-        'panels',
-        'tco.profile',
-        'tco.broker-connection',
-        'screenshot',
       ],
     },
     sync:{
