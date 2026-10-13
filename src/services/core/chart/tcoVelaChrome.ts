@@ -1149,11 +1149,6 @@ registerLegendAction(coreSpiritOpenAction);
 registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
-const brandAction: WidgetActionDescriptor = {
-  id: 'tco.brand', target: 'topbar', label: 'TradingCoreOS × Vela', iconOnly: false, align: 'left', order: 0, mobile: 'menu',
-  run() {},
-};
-
 const researchAction:WidgetActionDescriptor={
   id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
@@ -1297,7 +1292,6 @@ registerSidePanel(positionsPanel);
 registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
-registerWidgetAction(brandAction);
 const marketHealthAction: WidgetActionDescriptor = {
   id: 'tco.market-health',
   target: 'topbar',
