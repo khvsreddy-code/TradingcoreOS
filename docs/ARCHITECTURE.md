@@ -55,6 +55,32 @@ TradingCoreOS
 
 No plane should create a new stageNN, VNN, or parallel architecture generation to ship a feature.
 
+## Cross-boundary state contracts
+
+The boundary contracts below are the source-of-truth rules for integration work. Existing types and adapters should implement these rules; do not add a second chart engine, candle store, compiler, or order state machine to restate them.
+
+| Contract | Owner | Revision / mutation rule | Consumers |
+| --- | --- | --- | --- |
+| `MarketDataSnapshot` / `MarketDataRevision` | Canonical Market Data Plane | A key identifies one broker/instrument/timeframe timeline. Revisions are monotonic within that plane; OHLCV mutations are committed through the canonical store. | CoreSpirit, Compute, Vela, research |
+| `DirtyRange` | Canonical Market Data Plane / CoreSpirit dependency graph | Half-open bar-index range `[from, to)`; full history replacement invalidates the replaced timeline, while a forming-bar mutation invalidates only that bar and its dependent lookback/state. | Kernels and render patch builders |
+| `VisibleRange` | Vela | Vela owns chart viewport and scale state. React may request viewport operations but must not maintain a second authoritative range. | CoreSpirit viewport-aware compute |
+| `IndicatorOutputPatch` | CoreSpirit runtime | CoreSpirit owns indicator values and state; downstream rendering consumes output patches and must not recompute script semantics. | Vela adapter |
+| `ChartSeriesPatch` | Vela chart model | Append or replace-last for live bars; full replacement only for bootstrap, symbol/timeframe changes or history reconciliation. | Retained Vela renderer |
+| `OrderIntent` | TradingCoreOS host trading plane | A signal is a proposal, not an order. Risk and policy must approve before the execution adapter can submit. | Risk engine, policy engine, execution adapter |
+| `OrderStateTransition` | Broker execution/reconciliation adapter | Normalize broker events, preserve event sequence/correlation, reconcile against REST snapshots, and deduplicate before publishing state. | Portfolio, order panels, automation |
+
+### Mutation and freshness rules
+
+- **Canonical data is borrowed, not co-owned.** Consumers may read typed-array views but must not replace the canonical buffers or independently advance candle boundaries. Worker packets are copied and tagged with their source timeline/revision; buffer transfer changes ownership only at that worker boundary.
+- **A revision describes an accepted state change, not packet arrival.** A quote can refresh UI state without changing candle data. A repeated LTP that leaves open/high/low/close unchanged must not dirty the canonical series or manufacture a new chart-data revision.
+- **Older trade timestamps cannot rewrite newer bars.** A live update must be tied to a validated exchange trade timestamp. Ticks older than the chart tail or older than the latest accepted trade for that data-plane instance are rejected before they can regress chart quote/candle state. Timestamp-less quotes may update quote presentation only.
+- **The forming bar has one owner.** The canonical data plane commits the market mutation; CoreSpirit consumes the resulting data revision and dirty range; Vela receives a patch. No consumer independently infers a second append/replace-last transition from the same packet.
+- **Risk and broker authority stay host-owned.** CoreSpirit and externally orchestrated AI may emit signals/order intents only. The host validates quantity, account/venue policy, risk limits and lifecycle state before execution. External automation must not receive unrestricted broker credentials.
+
+### Required integration evidence
+
+A source contract proves only the invariant it checks. Release evidence must keep separate results for contract tests, TypeScript/build checks, bundle budgets, and authenticated browser runs. A passing unit or static contract is not evidence of real FYERS availability, correct candles in a live session, browser frame-time under load, or end-to-end order latency. Those require runtime tests with the relevant environment configured.
+
 ## Repository policy
 
 The production tree no longer carries the numbered CoreSpirit manifest lineage, stage-specific TypeScript configs, or stage/versioned architecture contract tests. Those artifacts remain recoverable through Git history; historical narrative documents belong under docs/archive/.
