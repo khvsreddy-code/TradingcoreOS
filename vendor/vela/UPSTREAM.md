@@ -8,8 +8,7 @@
 
 ## TradingCoreOS integration overlay
 
-This directory combines the Vela 0.8.4 foundation with deliberate TradingCoreOS extensions:
-This upgrade rebases the 0.8.4 release delta onto the TCO integration rather than replacing
+The Vela 0.8.4 release delta is rebased onto the deliberate TradingCoreOS integration rather than replacing
 TCO-specific code wholesale. TCO additions remain in place: typed columnar history and scene
 patching, lazy native-indicator catalog, advanced drawing registries, and the FYERS provider /
 CoreSpirit engine adapters. See `src/TcoVelaDataProvider.ts` and `src/services/core/chart/`.
@@ -18,4 +17,4 @@ CoreSpirit engine adapters. See `src/TcoVelaDataProvider.ts` and `src/services/c
 horizontal tabs, the Appearance Preview panel, and TCO host-setting hooks. The engine-owned
 controls continue to edit the live Vela `ChartConfig`; the preview uses sample data only.
 
-`vendor/vela/CHANGELOG.md` records upstream changes, including the 0.8.3 release.
+`vendor/vela/CHANGELOG.md` records upstream changes, including the 0.8.4 release.
