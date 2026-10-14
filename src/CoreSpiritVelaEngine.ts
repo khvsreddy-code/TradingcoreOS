@@ -404,6 +404,8 @@ export class CoreSpiritVelaEngine {
     };
 
     const emitScenePatches = (outputs: CoreSpiritObject[], dirty: VelaTimeRange, datasetRevision?: number): void => {
+      // Drop stale replies before mutating the retained diff state, not only at Vela's patch applier.
+      if (datasetRevision !== undefined && datasetRevision < canonicalDatasetRevision) return;
       const patches = scene.apply(outputs, dirty, datasetRevision);
       if (patches.length) handlers.onScenePatches?.(patches);
     };

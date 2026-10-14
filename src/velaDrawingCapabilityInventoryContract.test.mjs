@@ -4,7 +4,7 @@ import {CORE_SPIRIT_DRAWING_TOOL_CATALOG} from './services/core/chart/velaDrawin
 import {createDrawing,defaultToolbar,deserializeDrawing,drawingFamilyForType,drawingTypes,getDrawingType,loadAdvancedDrawingCatalog} from '../vendor/vela/src/core/drawings/index.ts';
 const native=readFileSync('vendor/vela/src/renderers/native/drawings/UserDrawingController.ts','utf8');
 const toolbarSource=readFileSync('vendor/vela/src/renderers/native/drawings/DrawingToolbar.ts','utf8');
-assert.match(native,/new DrawingToolbar\(/);assert.match(native,/loadAdvancedDrawingCatalog/);assert.match(toolbarSource,/this\.toolbarDefinition/);
+assert.match(native,/new DrawingToolbar\(/);assert.match(native,/loadAdvancedDrawingCatalog/);assert.match(toolbarSource,/setDefinition\(/);
 await loadAdvancedDrawingCatalog();
 const registered=new Set(drawingTypes().map(m=>m.type));const reachable=new Set(defaultToolbar().groups.flatMap(g=>g.tools.map(t=>t.type)));
 const inventory=CORE_SPIRIT_DRAWING_TOOL_CATALOG.map(type=>({type,implemented:!!getDrawingType(type),registered:registered.has(type),toolbarReachable:reachable.has(type),family:drawingFamilyForType(type)??'core'}));
