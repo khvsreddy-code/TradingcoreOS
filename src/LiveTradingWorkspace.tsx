@@ -1,5 +1,4 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
-import { Activity, Bot, BrainCircuit, BriefcaseBusiness, ChevronDown, Code2, Gauge, LayoutDashboard, Settings2, SlidersHorizontal, Sparkles, Star, UserCircle } from 'lucide-react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, tcoVelaPerformanceKey } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
@@ -15,20 +14,6 @@ const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
 type VelaWorkspaceInstance = InstanceType<Awaited<ReturnType<typeof loadVelaWorkspace>>>;
-
-function navigateLiveRoute(path: string): void {
-  if (!path.startsWith('/')) return;
-  if (window.location.pathname !== path) window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-}
-
-function readBrokerBadge(): { label: string; connected: boolean } {
-  const info = tradingCoreRuntime.getPrimaryBrokerInfo();
-  return {
-    label: info?.brokerId ? String(info.brokerId).toUpperCase() : "BROKER",
-    connected: info?.status === "Connected",
-  };
-}
 
 function readCoreSpiritManifest() {
   try {
@@ -50,26 +35,6 @@ export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
-  const [brokerBadge, setBrokerBadge] = useState(() => readBrokerBadge());
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!workspaceMenuOpen) return;
-    const dismissOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !workspaceMenuRef.current?.contains(target)) setWorkspaceMenuOpen(false);
-    };
-    const dismissEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setWorkspaceMenuOpen(false);
-    };
-    window.addEventListener('pointerdown', dismissOutside);
-    window.addEventListener('keydown', dismissEscape);
-    return () => {
-      window.removeEventListener('pointerdown', dismissOutside);
-      window.removeEventListener('keydown', dismissEscape);
-    };
-  }, [workspaceMenuOpen]);
-
   useEffect(() => {
     if (!host.current) return;
 
@@ -211,8 +176,6 @@ export function LiveTradingWorkspace() {
     const perfTimer = window.setInterval(() => {
       const stats = workspaceRef.current?.getPerformanceStats?.() ?? [];
       const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
-      const nextBrokerBadge = readBrokerBadge();
-      setBrokerBadge(previous => previous.label === nextBrokerBadge.label && previous.connected === nextBrokerBadge.connected ? previous : nextBrokerBadge);
       const activePipelineKeys = new Set<string>();
       if (brokerId) {
         for (const sample of stats) {
@@ -243,132 +206,18 @@ export function LiveTradingWorkspace() {
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-      <div className="tco-live-shell fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141518] text-[#d1d4dc]" aria-label="TradingCoreOS live trading terminal">
-        <header className="relative z-[120] flex h-[42px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#1b1d24] px-3 sm:px-4">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-md border border-[#6a5e89]/40 bg-[#282432] text-[#d7c7ff]">
-              <Activity size={16} strokeWidth={2.2} />
-            </span>
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-[12px] font-semibold tracking-[-0.02em] text-[#f3f4f6]">TradingCoreOS</span>
-              <span className="hidden rounded border border-[#089981]/25 bg-[#089981]/10 px-1.5 py-[3px] font-mono text-[8px] font-bold tracking-[0.12em] text-[#50c6a7] sm:inline">LIVE</span>
-            </div>
-            <span className="mx-1 hidden h-5 w-px bg-white/[0.09] sm:block" />
-            <span className="hidden items-center gap-1.5 rounded-md border border-[#8571c4]/25 bg-[#8571c4]/[0.08] px-2 py-1 text-[10px] font-medium text-[#c9baff] sm:inline-flex">
-              <Sparkles size={12} />
-              Quant
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="relative" ref={workspaceMenuRef}>
-              <button
-                type="button"
-                aria-expanded={workspaceMenuOpen}
-                aria-haspopup="menu"
-                onClick={() => setWorkspaceMenuOpen(open => !open)}
-                className="inline-flex h-[28px] items-center gap-2 rounded-md px-2.5 text-[10px] font-medium text-[#c4cad5] transition-colors hover:bg-white/[0.04] hover:text-white"
-                title="Workspace layouts and save options"
-              >
-                <LayoutDashboard size={13} className="text-[#8d95a5]" />
-                <span className="hidden sm:inline">My workspace</span>
-                <ChevronDown size={12} className={workspaceMenuOpen ? "rotate-180 text-[#9a8ad1] transition-transform" : "text-[#778093] transition-transform"} />
-              </button>
-              {workspaceMenuOpen && (
-                <div role="menu" aria-label="Workspace options" className="absolute right-0 top-full z-[240] mt-2 w-[216px] overflow-hidden rounded-lg border border-white/[0.10] bg-[#191b22] p-1.5 shadow-[0_18px_55px_rgba(0,0,0,.55)]">
-                  <div className="px-2 pb-1.5 pt-1 font-mono text-[8px] font-semibold uppercase tracking-[0.15em] text-[#697284]">Chart layout</div>
-                  <button role="menuitem" type="button" onClick={() => { workspaceRef.current?.setLayout('1'); workspaceRef.current?.saveNow(); setWorkspaceMenuOpen(false); }} className="tco-live-menu-item">
-                    <span>Single chart</span><span className="font-mono text-[8px] text-[#697284]">1 × 1</span>
-                  </button>
-                  <button role="menuitem" type="button" onClick={() => { workspaceRef.current?.setLayout('4'); workspaceRef.current?.saveNow(); setWorkspaceMenuOpen(false); }} className="tco-live-menu-item">
-                    <span>Four charts</span><span className="font-mono text-[8px] text-[#697284]">2 × 2</span>
-                  </button>
-                  <button role="menuitem" type="button" onClick={() => { workspaceRef.current?.setLayout('8'); workspaceRef.current?.saveNow(); setWorkspaceMenuOpen(false); }} className="tco-live-menu-item">
-                    <span>Eight charts</span><span className="font-mono text-[8px] text-[#697284]">2 × 4</span>
-                  </button>
-                  <div className="my-1.5 h-px bg-white/[0.07]" />
-                  <button role="menuitem" type="button" onClick={() => { workspaceRef.current?.saveNow(); setWorkspaceMenuOpen(false); }} className="tco-live-menu-item">
-                    <span>Save workspace</span><span className="text-[#6cbd9e]">↗</span>
-                  </button>
-                </div>
-              )}
-            </div>
-            <span className="hidden font-mono text-[8px] tracking-[0.12em] text-[#687080] xl:inline">MARKET WORKSPACE</span>
-            <button
-              type="button"
-              onClick={() => setBrokerStatusOpen(true)}
-              title={brokerBadge.connected ? "Manage broker connection" : "Connect a broker"}
-              aria-label={brokerBadge.connected ? "Manage broker connection" : "Connect a broker"}
-              className="inline-flex h-[28px] max-w-[108px] items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.025] px-2 text-[10px] sm:max-w-[185px] sm:gap-2 sm:px-2.5 text-[#c4cad5] transition-colors hover:border-white/[0.16] hover:bg-white/[0.05] hover:text-white"
-            >
-              <span className={brokerBadge.connected ? "h-1.5 w-1.5 shrink-0 rounded-full bg-[#30c59a] shadow-[0_0_9px_rgba(48,197,154,.45)]" : "h-1.5 w-1.5 shrink-0 rounded-full bg-[#e4a34d]"} />
-              <span className="max-w-[58px] truncate sm:max-w-none">{brokerBadge.connected ? brokerBadge.label : <><span className="hidden sm:inline">Connect broker</span><span className="sm:hidden">Connect</span></>}</span>
-              <ChevronDown size={12} className="shrink-0 text-[#778093]" />
-            </button>
-            <button
-              type="button"
-              title="Broker settings"
-              aria-label="Broker settings"
-              onClick={() => setBrokerStatusOpen(true)}
-              className="flex h-[28px] w-[28px] items-center justify-center rounded-md border border-transparent text-[#8d95a5] transition-colors hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white"
-            >
-              <Settings2 size={15} />
-            </button>
-          </div>
-        </header>
-        <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[#141518]">
-          <aside className="z-[110] flex w-[46px] shrink-0 flex-col items-center border-r border-white/[0.055] bg-[#1b1d24] py-2" aria-label="TradingCoreOS navigation">
-            <div className="mb-2 h-px w-6 bg-white/[0.07]" />
-            <button type="button" title="Command center" aria-label="Command center" onClick={() => navigateLiveRoute('/dashboard')} className="tco-live-rail-button">
-              <LayoutDashboard size={17} />
-            </button>
-            <button type="button" title="Live chart" aria-label="Live chart" aria-current="page" onClick={() => setWorkspaceMenuOpen(false)} className="tco-live-rail-button tco-live-rail-button-active">
-              <Activity size={17} />
-            </button>
-            <button type="button" title="Indicators" aria-label="Indicators" onClick={() => navigateLiveRoute('/indicators')} className="tco-live-rail-button">
-              <Gauge size={17} />
-            </button>
-            <button type="button" title="AI models" aria-label="AI models" onClick={() => navigateLiveRoute('/models')} className="tco-live-rail-button">
-              <BrainCircuit size={17} />
-            </button>
-            <button type="button" title="Predictions" aria-label="Predictions" onClick={() => navigateLiveRoute('/predictions')} className="tco-live-rail-button">
-              <Sparkles size={17} />
-            </button>
-            <button type="button" title="Automations" aria-label="Automations" onClick={() => navigateLiveRoute('/automations')} className="tco-live-rail-button">
-              <Bot size={17} />
-            </button>
-            <button type="button" title="CoreSpirit IDE" aria-label="CoreSpirit IDE" onClick={() => navigateLiveRoute('/corespirit')} className="tco-live-rail-button">
-              <Code2 size={17} />
-            </button>
-            <div className="my-2 h-px w-6 bg-white/[0.07]" />
-            <button type="button" title="Watchlist" aria-label="Watchlist" onClick={() => workspaceRef.current?.togglePanel('tco.bookmarks', true)} className="tco-live-rail-button">
-              <Star size={17} />
-            </button>
-            <button type="button" title="Portfolio" aria-label="Portfolio" onClick={() => navigateLiveRoute('/portfolio')} className="tco-live-rail-button">
-              <BriefcaseBusiness size={17} />
-            </button>
-            <div className="flex-1" />
-            <button type="button" title="Broker connection" aria-label="Broker connection" onClick={() => setBrokerStatusOpen(true)} className="tco-live-rail-button">
-              <SlidersHorizontal size={17} />
-            </button>
-            <button type="button" title="Profile" aria-label="Profile" onClick={() => navigateLiveRoute('/profile')} className="tco-live-rail-button">
-              <UserCircle size={17} />
-            </button>
-          </aside>
-          <main className="relative min-w-0 min-h-0 flex-1 overflow-hidden bg-[#141518]">
-            <div
-              ref={host}
-              className="tco-live-surface absolute inset-0 bg-[#141518]"
-              aria-label="TradingCoreOS Vela live trading chart"
-            />
-          </main>
-          {brokerStatusOpen && (
-            <BrokerSettingsModal
-              isOpen={brokerStatusOpen}
-              onClose={() => setBrokerStatusOpen(false)}
-            />
-          )}
-        </div>
-      </div>
+    <div
+      ref={host}
+      className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
+      aria-label="TradingCoreOS Vela live trading chart"
+    >
+      {brokerStatusOpen && (
+        <BrokerSettingsModal
+          isOpen={brokerStatusOpen}
+          onClose={() => setBrokerStatusOpen(false)}
+        />
+      )}
+    </div>
     </Profiler>
   );
 }
