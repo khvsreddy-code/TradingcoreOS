@@ -101,7 +101,7 @@ assert(drawingDefaults.includes('captureToolDefaults') && drawingDefaults.includ
   'drawing defaults and style templates must use Vela 0.8.4 defaults contracts');
 assert(drawingController.includes('setToolDefaults') && drawingController.includes('setToolTemplates'),
   'the drawing controller must expose tool-default and template persistence');
-assert(workspaceState.includes('DrawingToolsState') && workspaceState.includes('toolDefaults') && workspaceState.includes('toolTemplates'),
+assert(workspaceState.includes('DrawingToolsState') && workspaceState.includes('drawingTools') && workspaceState.includes('defaults') && workspaceState.includes('templates'),
   'drawing defaults/templates must be represented in workspace-persisted state');
 assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('blockState') && drawingPriceAction.includes('liquidityState'),
   'Vela 0.8.4 price-action analysis must include FVG, order-block and liquidity state');
