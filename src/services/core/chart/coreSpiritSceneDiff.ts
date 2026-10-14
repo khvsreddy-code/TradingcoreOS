@@ -7,10 +7,13 @@ type TcoDrawingPolyline = { id:string; paneId:string; points:Array<{xloc:'bar_ti
 type TcoBackground = { id:string; paneId:string; from:number; to:number; color:string; overlay?:boolean };
 type TcoRectInstance = { id:string; xloc:'bar_time'; left:number; right:number; top:number; bottom:number; fill:string };
 type TcoRectBatch = { id:string; paneId:string; overlay?:boolean; indexOffset?:number; instances:TcoRectInstance[] };
-type ScenePatch = any;
-type ValuePatch = any;
-
-
+import type {
+    CollectionValueDelta,
+    SchemaPatch,
+    ScenePatch,
+    SeriesValueDelta,
+} from '../../../../vendor/vela/src/core/model/patch';
+import type { HighCardinalityRectDelta } from '../../../../vendor/vela/src/core/model/instances';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
 
 type Identified = { id: string };
@@ -127,7 +130,13 @@ export function outputDirtySpan(output: CoreSpiritObject): DirtySpan | null {
     }
     return metadataSpan;
 }
-type SceneDiffEmission = any;
+type SceneDiffEmission = {
+    schema?: SchemaPatch;
+    delta?: SeriesValueDelta;
+    deltas?: SeriesValueDelta[];
+    collection?: CollectionValueDelta;
+    instanceDelta?: HighCardinalityRectDelta;
+} | null;
 function removed(output: CoreSpiritObject): boolean {
     return output.metadata?.removed === true;
 }
@@ -264,9 +273,9 @@ export class CoreSpiritSceneDiff {
     }
 
     apply(outputs: CoreSpiritObject[], dirty: { from: number; to: number }): ScenePatch[] {
-        const series: any[] = [];
-        const collections: any[] = [];
-        const instanceBatches: any[] = [];
+        const series: SeriesValueDelta[] = [];
+        const collections: CollectionValueDelta[] = [];
+        const instanceBatches: HighCardinalityRectDelta[] = [];
         const out: ScenePatch[] = [];
         // Track the actual time extent of emitted changes. Initializing this to the
         // requested range silently widened every small patch back to the full range.
