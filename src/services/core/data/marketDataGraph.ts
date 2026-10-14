@@ -276,7 +276,12 @@ export class MarketDataGraph{
     const row={time:t,open:candle.open,high:candle.high,low:candle.low,close:candle.close,volume:candle.volume};
     if(t===lastTime)node.plane.updateLast(row);
     else if(t>lastTime||!Number.isFinite(lastTime))node.plane.append(row);
-    else node.plane.replaceHistoricalCandleRows([candle]);
+    else {
+      // A live delta older than this shared graph's tail is stale, not a new
+      // one-row dataset. Historical corrections have an explicit reconciliation
+      // API; they must never replace the entire graph snapshot.
+      return;
+    }
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
     this.rebuildDependentTails(node.descriptor.key);
     this.revision+=1;
