@@ -615,6 +615,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     header.setTitle('Watchlist');
     const root = panelRoot(body);
     root.classList.add('tco-frame-panel');
+    root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
     const meta = document.createElement('div');
     meta.style.cssText = 'font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);text-transform:uppercase;letter-spacing:.08em;';
     root.appendChild(meta);
