@@ -45,6 +45,7 @@ const contracts = [
   ['architecture', ['src/architecture/architectureContract.test.mjs', false]],
   ['canonical-market-data', ['src/canonicalMarketDataTransportContract.test.mjs', false]],
   ['canonical-market-data-transport-runtime', ['src/services/core/data/canonicalMarketDataTransport.test.ts', true]],
+  ['market-data-history-reconciliation', ['src/services/core/data/marketDataStoreReconciliation.test.ts', true]],
   ['semantic-series-type', ['src/coreSpiritSemanticSeriesTypeContract.test.mjs', false]],
   ['semantic-series-type-runtime', ['src/services/coreSpirit/semanticSeriesTypeRuntime.test.ts', true]],
   ['corescript-typed-quant-values-and-hmm', ['src/services/coreSpirit/typedQuantAndHmm.test.ts', true]],
