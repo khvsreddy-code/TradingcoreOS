@@ -114,6 +114,7 @@ type PlaneState = {
   recoveryPending: boolean;
   recoveryInFlight: boolean;
   lastRecoveryAt: number;
+  recoveryRetryTimer?: ReturnType<typeof setTimeout>;
 };
 
 const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
@@ -460,7 +461,21 @@ export class ChartDataPlane {
 
   private maybeRecoverAfterReconnect(): void {
     if (!this.state.recoveryPending || this.state.recoveryInFlight || this.disposed) return;
+    if (this.state.consumers <= 0 || this.state.feedStatus !== 'connected') return;
+    if (this.state.recoveryRetryTimer) return;
     if (!this.state.historyReady || this.state.historyLoading || this.canonicalPlane.length === 0) return;
+
+    // A flapping socket must not turn every reconnect into another history request.
+    // Keep the recovery pending and retry once the bounded cooldown expires.
+    const retryDelay = Math.max(0, 5_000 - (Date.now() - this.state.lastRecoveryAt));
+    if (this.state.lastRecoveryAt > 0 && retryDelay > 0) {
+      this.state.recoveryRetryTimer = setTimeout(() => {
+        this.state.recoveryRetryTimer = undefined;
+        this.maybeRecoverAfterReconnect();
+      }, retryDelay);
+      return;
+    }
+
     this.state.recoveryPending = false;
     this.state.recoveryInFlight = true;
     this.state.lastRecoveryAt = Date.now();
@@ -599,6 +614,7 @@ export class ChartDataPlane {
       // status and the most recent tick cannot be lost during subscription setup.
       syncMarketSnapshot();
       this.state.feedStop = acquireSharedChartMarketFeed(this.brokerId, this.instrumentKey);
+      if (this.state.recoveryPending) this.maybeRecoverAfterReconnect();
       const cachedTick = chartMarketStore.getTick(marketKey) ?? tradingCoreRuntime.getMarketSnapshot(this.instrumentKey);
       if (cachedTick) this.onTick(cachedTick);
     }
@@ -611,6 +627,8 @@ export class ChartDataPlane {
     if (this.state.idleTimer) clearTimeout(this.state.idleTimer);
     this.state.idleTimer = setTimeout(() => {
       if (this.state.consumers > 0) return;
+      if (this.state.recoveryRetryTimer) clearTimeout(this.state.recoveryRetryTimer);
+      this.state.recoveryRetryTimer = undefined;
       this.state.marketStop?.();
       this.state.marketStop = undefined;
       this.state.feedStop?.();
@@ -988,6 +1006,8 @@ export class ChartDataPlane {
     this.state.consumers = 0;
     this.state.subscribers.clear();
     if (this.state.idleTimer) clearTimeout(this.state.idleTimer);
+    if (this.state.recoveryRetryTimer) clearTimeout(this.state.recoveryRetryTimer);
+    this.state.recoveryRetryTimer = undefined;
     this.disposed = true;
     // Invalidate every in-flight load/recovery before tearing down subscriptions.
     this.liveCandle.beginHistoryLoad('recovery');
