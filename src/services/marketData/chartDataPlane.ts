@@ -235,6 +235,8 @@ export class ChartDataPlane {
 
   private setCandles(rows: HistoricalCandle[], reason: 'cache' | 'history' | 'older-history'): void {
     this.state.candles = normalizeHistory(rows);
+    this.state.columns = undefined;
+    this.state.compatibilityCandles = this.state.candles;
     if (this.state.candles.length) {
       marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
 
@@ -242,6 +244,13 @@ export class ChartDataPlane {
       this.syncCanonical();
       this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
     }
+  }
+
+  /** Activate a validated cached history snapshot and replay any pre-history trades in time order. */
+  private activateCachedHistory(): void {
+    const activation = this.liveCandle.activateCachedHistory();
+    this.state.lastAcceptedTradeTimestampMs = undefined;
+    this.replayBufferedTicks(activation.ticks);
   }
 
   private columnarSnapshot(): ChartColumnarSnapshot {
@@ -905,6 +914,9 @@ export class ChartDataPlane {
     this.state.consumers = 0;
     this.state.subscribers.clear();
     if (this.state.idleTimer) clearTimeout(this.state.idleTimer);
+    this.disposed = true;
+    // Invalidate every in-flight load/recovery before tearing down subscriptions.
+    this.liveCandle.beginHistoryLoad('recovery');
     this.state.marketStop?.();
     this.state.feedStop?.();
     this.state.marketStop = undefined;
