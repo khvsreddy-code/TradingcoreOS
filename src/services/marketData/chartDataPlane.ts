@@ -244,9 +244,16 @@ export class ChartDataPlane {
     const timestampMs = Date.parse(rawTimestamp);
     if (!Number.isFinite(timestampMs) || timestampMs <= 0) return { changed: false, bucketChanged: false, latest: null };
     const intervalSeconds = CHART_TIMEFRAME_SECONDS[this.timeframe] || 300;
-    const bucketTime = Math.floor(timestampMs / (intervalSeconds * 1000)) * intervalSeconds;
     const lastIndex = view.length - 1;
     const lastTime = lastIndex >= 0 ? Number(view.time[lastIndex]) : Number.NaN;
+    // Historical bars may be aligned to a trading-session anchor rather than
+    // Unix epoch boundaries (for example Indian sessions beginning at 09:15).
+    // Keep the live bucket on the same grid as the last loaded historical bar.
+    const anchorSeconds = Number.isFinite(lastTime)
+      ? ((lastTime % intervalSeconds) + intervalSeconds) % intervalSeconds
+      : 0;
+    const tradeSeconds = timestampMs / 1000;
+    const bucketTime = Math.floor((tradeSeconds - anchorSeconds) / intervalSeconds) * intervalSeconds + anchorSeconds;
     const previousOpen = lastIndex >= 0 ? Number(view.open[lastIndex]) : Number.NaN;
     const previousHigh = lastIndex >= 0 ? Number(view.high[lastIndex]) : Number.NaN;
     const previousLow = lastIndex >= 0 ? Number(view.low[lastIndex]) : Number.NaN;
