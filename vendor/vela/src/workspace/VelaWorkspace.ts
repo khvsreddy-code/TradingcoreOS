@@ -1445,7 +1445,7 @@ export class VelaWorkspace {
         document.documentElement.dataset.tcoActiveSymbol = cell.symbol;
         document.documentElement.dataset.tcoActiveTimeframe = /^(?:[DWM])$/i.test(cell.timeframe)
             ? `1${cell.timeframe.toUpperCase()}`
-            : /^\\d+$/.test(cell.timeframe) ? `${cell.timeframe}m` : cell.timeframe;
+            : /^\d+$/.test(cell.timeframe) ? `${cell.timeframe}m` : cell.timeframe;
         this.topbar.setPriceStyle(cell.priceStyle);
         this.topbar.setIndicatorCount(cell.indicatorCount);
         this.topbar.renderActions(); // contributed `when()` gates may depend on the active cell
@@ -2254,6 +2254,10 @@ export class VelaWorkspace {
         if (!cell) return;
         this.topbar.setSymbol(cell.symbol);
         this.topbar.setTimeframe(cell.timeframe);
+        document.documentElement.dataset.tcoActiveSymbol = cell.symbol;
+        document.documentElement.dataset.tcoActiveTimeframe = /^(?:[DWM])$/i.test(cell.timeframe)
+            ? `1${cell.timeframe.toUpperCase()}`
+            : /^\d+$/.test(cell.timeframe) ? `${cell.timeframe}m` : cell.timeframe;
         this.mobileBar?.setSymbol(cell.symbol);
         this.mobileBar?.setTimeframe(cell.timeframe);
         this.objectTree.setSymbol(cell.symbol);
