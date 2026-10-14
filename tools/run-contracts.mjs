@@ -64,6 +64,7 @@ const contracts = [
   ['runtime-hot-vm', ['src/coreSpiritRuntimeHotVmContract.test.mjs', false]],
   ['vela-runtime-export', ['src/velaFacadeRuntimeExportContract.test.mjs', false]],
   ['vela-drawing', ['src/velaDrawingCapabilityContract.test.mjs', false]],
+  ['vela-active-preview-drawing-tool', ['src/velaActivePreviewDrawingToolContract.test.mjs', false]],
   ['vela-drawing-persistence-roundtrip', ['src/velaDrawingPersistenceRoundTripContract.test.mjs', true]],
   ['vela-incremental-patch', ['src/velaIncrementalPatchContract.test.mjs', false]],
   ['vela-v108-boundary', ['src/velaV108BoundaryContract.test.mjs', false]],
