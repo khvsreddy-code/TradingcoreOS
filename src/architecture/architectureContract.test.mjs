@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { TRADINGCOREOS_ARCHITECTURE, TRADINGCOREOS_ARCHITECTURE_VERSION, validateTradingCoreOSDependency } from './architectureContract.ts';
+import { TRADINGCOREOS_ARCHITECTURE, TRADINGCOREOS_ARCHITECTURE_VERSION, TRADINGCOREOS_BOUNDARY_CONTRACTS, validateTradingCoreOSDependency } from './architectureContract.ts';
 assert.equal(TRADINGCOREOS_ARCHITECTURE_VERSION, 2);
 assert.deepEqual(TRADINGCOREOS_ARCHITECTURE.map((plane) => plane.id), ['marketData', 'coreSpirit', 'compute', 'vela', 'trading']);
 assert.equal(validateTradingCoreOSDependency('coreSpirit', 'marketData'), true);
@@ -10,4 +10,17 @@ assert.equal(validateTradingCoreOSDependency('coreSpirit', 'trading'), false);
 assert.equal(validateTradingCoreOSDependency('vela', 'trading'), false);
 assert.equal(validateTradingCoreOSDependency('marketData', 'vela'), false);
 assert.equal(validateTradingCoreOSDependency('compute', 'vela'), false);
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.marketDataSnapshot.owner, 'marketData');
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.marketDataSnapshot.timeUnit, 'epoch-seconds');
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.canonicalDirtyRange.coordinate, 'bar-index');
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.canonicalDirtyRange.bounds, 'half-open');
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.velaDirtyRange.coordinate, 'epoch-milliseconds');
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.velaDirtyRange.bounds, 'inclusive');
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.visibleRange.authoritative, true);
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.indicatorOutputPatch.sourceRevisionRequired, true);
+assert.deepEqual(TRADINGCOREOS_BOUNDARY_CONTRACTS.chartSeriesPatch.liveOperations, ['append', 'replace-last']);
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.orderIntent.signalIsOrder, false);
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.orderIntent.riskApprovalRequired, true);
+assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.orderStateTransition.reconcileSnapshotBeforePublish, true);
+
 console.log('TRADINGCOREOS_ARCHITECTURE_CONTRACT_OK');
