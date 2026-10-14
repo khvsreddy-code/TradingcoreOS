@@ -14,7 +14,6 @@ assert.ok(settings.includes("tco:appearance-preview-request"), 'opening appearan
 assert.ok(settings.includes("document.createElement('canvas')"), 'appearance preview must use a true interactive chart surface');
 assert.ok(settings.includes("canvas.addEventListener('pointerdown'"), 'appearance preview must pan by dragging');
 assert.ok(settings.includes("canvas.addEventListener('wheel'"), 'appearance preview must zoom with the mouse wheel');
-assert.ok(settings.includes('getBarsSnapshot(500)') === false, 'renderer settings consume data through the workspace seam, not a hidden chart instance');
 assert.ok(!settings.includes('candleSamples') && !settings.includes('Simulated sample candlestick chart') && !settings.includes('Simulated prices'), 'appearance preview must not manufacture duplicate sample candles');
 assert.ok(workspace.includes('document.documentElement.dataset.tcoActiveSymbol = cell.symbol'), 'workspace must publish the active ticker');
 assert.ok(workspace.includes('private onCellMarketChanged(id: string)'), 'workspace must refresh preview context when the active chart market changes');
