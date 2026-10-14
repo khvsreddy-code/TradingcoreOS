@@ -2000,6 +2000,15 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     updateBarColumns(update: ColumnarBarUpdate): void {
+        if (update.operation === 'replace-history' && update.columns) {
+            // Recovery/backfill corrections may change historical indices, not just
+            // the latest candle. Reconcile the owned columnar tape as one explicit
+            // history operation; ordinary ticks still use the scalar O(1) path below.
+            this.setBarsColumns(update.columns, {
+                preserveView: update.preserveView ?? true,
+            });
+            return;
+        }
         const unit = update.timeUnit ?? this.columnarBars?.timeUnit ?? 'milliseconds';
         // LiveSession may select the compact columnar transport even when the initial
         // history had to fall back to the object-bar path. In that case there is no
