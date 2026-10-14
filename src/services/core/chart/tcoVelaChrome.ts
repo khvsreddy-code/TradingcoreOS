@@ -653,12 +653,15 @@ const drawingToolsPanel: SidePanelDescriptor = {
     let groups: CatalogGroup[] = [];
     let selected: string | null = null;
     let disposed = false;
-    let activeChart = ctx.chart;
+    type VelaChart = import('../../../../vendor/vela/src/Vela').Vela;
+    // The workspace creates panel chrome before its first cell. Do not read ctx.chart
+    // during mount; wait for the shell's onChart projection after a cell is active.
+    let activeChart: VelaChart | null = null;
     let activeToolUnsubscribe: (() => void) | undefined;
     const toolButtons = new Map<string, HTMLButtonElement>();
 
     const paintSelected = (): void => {
-      selected = activeChart.drawings.getTool();
+      selected = activeChart?.drawings.getTool() ?? null;
       pointer.dataset.selected = selected ? '0' : '1';
       pointer.style.background = selected ? 'var(--vela-surface-sunken)' : 'var(--tco-frame-accent-soft,rgba(124,92,255,.14))';
       pointer.style.borderColor = selected ? 'var(--vela-border)' : 'var(--tco-frame-accent,#8b7cff)';
@@ -671,7 +674,7 @@ const drawingToolsPanel: SidePanelDescriptor = {
       }
     };
 
-    const bindChart = (chart: import('../../../../vendor/vela/src/Vela').Vela): void => {
+    const bindChart = (chart: VelaChart): void => {
       activeToolUnsubscribe?.();
       activeChart = chart;
       activeToolUnsubscribe = chart.on('drawing:tool', ({ type }) => {
@@ -682,6 +685,10 @@ const drawingToolsPanel: SidePanelDescriptor = {
     };
 
     const selectTool = (type: import('../../../../vendor/vela/src/core/drawings/Drawing').DrawingTypeKey | null): void => {
+      if (!activeChart) {
+        ctx.toast('The active chart is still loading', 'info');
+        return;
+      }
       activeChart.drawings.setTool(type);
       selected = type;
       paintSelected();
