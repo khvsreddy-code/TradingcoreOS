@@ -303,6 +303,8 @@ export class CoreSpiritVelaEngine {
     const workerDatasetVersions=new Map<string,number>();
     // Global canonical-data revision across main/history/viewport worker contexts.
     let canonicalDatasetRevision = 0;
+    let canonicalDatasetFingerprint = '';
+    let canonicalTailFingerprint = '';
     type RuntimeSnapshot={barIndex?:number;locals?:Record<string,unknown>};
     let lastExecutionState:RuntimeSnapshot|undefined;
     let liveStarted = false;
@@ -416,6 +418,25 @@ export class CoreSpiritVelaEngine {
     const barValueSignature=(bar:CoreSpiritMarketBar|undefined):string=>bar?JSON.stringify([
       bar.timestamp,bar.open,bar.high,bar.low,bar.close,bar.volume??0,
     ]):'empty';
+    const tailDatasetFingerprint=(candidateBars:readonly CoreSpiritMarketBar[]):string=>[
+      candidateBars.length,
+      candidateBars.length?barTimeMillis(candidateBars[0]?.timestamp):'empty',
+      barValueSignature(candidateBars.at(-1)),
+    ].join('|');
+    // Full history hashing is reserved for completion/backfill boundaries; ordinary live updates
+    // only compare length, first timestamp, and the forming candle so the hot path stays bounded.
+    const fullDatasetFingerprint=(candidateBars:readonly CoreSpiritMarketBar[]):string=>{
+      let hash=2166136261;
+      const mix=(value:unknown):void=>{
+        const text=String(value??'');
+        for(let i=0;i<text.length;i+=1){hash=Math.imul(hash^text.charCodeAt(i),16777619);}
+        hash=Math.imul(hash^124,16777619);
+      };
+      for(const bar of candidateBars){
+        mix(barTimeMillis(bar.timestamp));mix(bar.open);mix(bar.high);mix(bar.low);mix(bar.close);mix(bar.volume??0);
+      }
+      return `${candidateBars.length}:${hash>>>0}`;
+    };
 
     const evaluateLiveSnapshot=async(startingBars:CoreSpiritMarketBar[],generation:number)=>{
       let currentBars=startingBars;
@@ -573,6 +594,8 @@ export class CoreSpiritVelaEngine {
     };
 
     const initialBars = getCurrentBars();
+    canonicalDatasetFingerprint=fullDatasetFingerprint(initialBars);
+    canonicalTailFingerprint=tailDatasetFingerprint(initialBars);
     const initialUpdateVersion = updateVersion;
     let secondaryReady = secondaryDependencies.length
       ? loadSecondaryData(true).then(() => true)
@@ -725,9 +748,18 @@ export class CoreSpiritVelaEngine {
       },
       notifyBars(reason,dirtyRange) {
         if(stopped)return;
-        canonicalDatasetRevision += 1;
-        lastViewportComputationKey=undefined;
         const currentBars=getCurrentBars(reason==='backfill');
+        if(reason==='backfill'||reason==='complete'){
+          const snapshotFingerprint=fullDatasetFingerprint(currentBars);
+          if(reason==='backfill'||snapshotFingerprint!==canonicalDatasetFingerprint)canonicalDatasetRevision+=1;
+          canonicalDatasetFingerprint=snapshotFingerprint;
+          canonicalTailFingerprint=tailDatasetFingerprint(currentBars);
+        }else{
+          const nextTailFingerprint=tailDatasetFingerprint(currentBars);
+          if(nextTailFingerprint!==canonicalTailFingerprint)canonicalDatasetRevision+=1;
+          canonicalTailFingerprint=nextTailFingerprint;
+        }
+        lastViewportComputationKey=undefined;
 
         if(reason==='backfill'){
           const wasHistoryInitialized=historyInitialized;

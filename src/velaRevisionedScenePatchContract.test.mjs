@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { applyScenePatch } from '../vendor/vela/src/core/model/scenePatch.ts';
 const model={series:[{id:'test:close',kind:'line',points:Array.from({length:5000},(_,time)=>({time,value:time}))}],fills:[],instanceBatches:[]};
 const changed=Array.from({length:6},(_,i)=>({time:1050+i,value:20000+i}));
@@ -10,4 +11,8 @@ applyScenePatch(model,{...patch,series:[{...patch.series[0],points:[{time:1050,v
 assert.deepEqual(model.series[0].points,stable,'an older dataset patch must not overwrite the latest scene');
 applyScenePatch(model,{...patch,series:[{...patch.series[0],points:[{time:1050,value:21000}],remove:6}],revision:{streamId:'test-stream',datasetRevision:12,outputRevision:2}});
 assert.deepEqual(model.series[0].points,stable,'a duplicate output revision must be ignored');
+const engine=readFileSync('src/CoreSpiritVelaEngine.ts','utf8');
+assert.match(engine,/fullDatasetFingerprint\(currentBars\)/,'history completion/backfill must fingerprint history changes');
+assert.match(engine,/tailDatasetFingerprint\(currentBars\)/,'normal tick revisions must use a bounded tail signature, not full-history comparison');
+assert.match(engine,/datasetRevision < canonicalDatasetRevision/,'stale results must be dropped before mutating retained scene state');
 console.log('VELA_REVISIONED_SCENE_PATCH_OK');
