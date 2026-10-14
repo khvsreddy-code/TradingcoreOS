@@ -734,7 +734,10 @@ const bookmarksPanel: SidePanelDescriptor = {
           changePercent: Number.isFinite(Number(event.tick.changePercent)) ? Number(event.tick.changePercent) : undefined,
           receivedAt: Date.now(),
         });
-        updateRows();
+        // Keep live price/change sorts stable while the feed updates, without rebuilding
+        // every DOM row on the default custom-order path.
+        if (sortMode === 'price' || sortMode === 'change') buildRows();
+        else updateRows();
       });
     };
 
