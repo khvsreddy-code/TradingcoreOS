@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { TRADINGCOREOS_ARCHITECTURE, TRADINGCOREOS_ARCHITECTURE_VERSION, TRADINGCOREOS_BOUNDARY_CONTRACTS, validateTradingCoreOSDependency } from './architectureContract.ts';
-import { canonicalBarIndexRange, canonicalDirtyRange, toVelaSceneDirtyRange, velaTimeRange } from './crossPlaneContracts.ts';
+import { canonicalBarIndexRange, canonicalDirtyRange, executionBarRange, toVelaSceneDirtyRange, velaTimeRange } from './crossPlaneContracts.ts';
 assert.equal(TRADINGCOREOS_ARCHITECTURE_VERSION, 2);
 assert.deepEqual(TRADINGCOREOS_ARCHITECTURE.map((plane) => plane.id), ['marketData', 'coreSpirit', 'compute', 'vela', 'trading']);
 assert.equal(validateTradingCoreOSDependency('coreSpirit', 'marketData'), true);
@@ -25,6 +25,8 @@ assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.orderIntent.riskApprovalRequired, 
 assert.equal(TRADINGCOREOS_BOUNDARY_CONTRACTS.orderStateTransition.reconcileSnapshotBeforePublish, true);
 
 assert.deepEqual(canonicalBarIndexRange(3, 5), { from: 3, to: 5 });
+assert.deepEqual(executionBarRange(0, 3), { from: 0, to: 3 });
+assert.throws(() => executionBarRange(3, 2), RangeError);
 assert.throws(() => canonicalBarIndexRange(2, 1), RangeError);
 assert.deepEqual(canonicalDirtyRange('NSE:NIFTY:5m', 7, 4, 8), {
   timelineKey: 'NSE:NIFTY:5m', revision: 7, from: 4, to: 8,
