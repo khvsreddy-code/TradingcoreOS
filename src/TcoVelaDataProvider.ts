@@ -472,6 +472,7 @@ export class TcoVelaDataProvider implements DataProvider {
     let cancelled = false;
     let fingerprint = '';
     let pendingSequence = 0;
+    let pendingHistoryReplacement = false;
     const timelineKey = `${symbol}|${tcoTimeframe}`;
     let scheduled = false;
     let dirty = false;
@@ -489,10 +490,42 @@ export class TcoVelaDataProvider implements DataProvider {
       const volume = Number.isFinite(view.volume[i]!) ? view.volume[i]! : undefined;
       const sequence = plane.canonicalDataPlane().revision;
       const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
-      if (nextKey === fingerprint) return;
-      fingerprint = nextKey;
       const patchStartedAt = performanceNow();
       const lastPacketAt = chartPerformanceTelemetry.getLastPacketAt(performanceKey);
+
+      if (pendingHistoryReplacement) {
+        pendingHistoryReplacement = false;
+        fingerprint = nextKey;
+        // Corrections, backfills and reconnect recovery can change bars BEFORE
+        // the tail. A scalar replace-last update would leave Vela's historical
+        // columns stale, so publish one explicit columnar dataset replacement.
+        // This is off the ordinary tick path and keeps Vela the single chart owner.
+        const columns: ColumnarBars = Object.freeze({
+          time: view.time,
+          open: view.open,
+          high: view.high,
+          low: view.low,
+          close: view.close,
+          volume: view.volume,
+          length: view.length,
+          timeUnit: 'seconds',
+        });
+        onBar({
+          time, open, high, low, close, volume,
+          timeUnit: 'seconds',
+          sequence,
+          timelineKey,
+          operation: 'replace-history',
+          columns,
+          dirtyRange: { from: view.dirtyFrom, to: view.dirtyTo },
+          preserveView: true,
+        });
+        recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
+        return;
+      }
+
+      if (nextKey === fingerprint) return;
+      fingerprint = nextKey;
       onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
       recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
     };
@@ -515,6 +548,7 @@ export class TcoVelaDataProvider implements DataProvider {
       performanceKey = '';
       plane = undefined;
       fingerprint = '';
+      pendingHistoryReplacement = false;
       dirty = false;
       if (raf) {
         if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(raf);
@@ -532,7 +566,13 @@ export class TcoVelaDataProvider implements DataProvider {
       plane = getChartDataPlane(brokerId, symbol, tcoTimeframe);
       stopPlane = plane.subscribe((event) => {
         if (event.type !== 'snapshot' && event.type !== 'tick') return;
-        pendingSequence = event.snapshot.revision;
+        pendingSequence = event.snapshot.marketDataRevision;
+        if (
+          event.type === 'snapshot' &&
+          (event.reason === 'cache' || event.reason === 'history' || event.reason === 'older-history' || event.reason === 'recovery')
+        ) {
+          pendingHistoryReplacement = true;
+        }
         schedule();
       });
       schedule();
