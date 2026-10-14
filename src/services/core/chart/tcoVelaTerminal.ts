@@ -33,6 +33,7 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
     'tco.research',
     'tco.automation',
     'tco.trading',
+    'tco.workspace-frame',
   ],
 } as const);
 
@@ -83,6 +84,7 @@ export function createTcoVelaTerminalOptions(
         'tco.journal',
         'tco.positions',
         'tco.corespirit-code',
+        'tco.workspace-frame',
         'tco.chart-settings',
         'alerts',
       ],
