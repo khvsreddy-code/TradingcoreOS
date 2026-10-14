@@ -7,6 +7,7 @@ const contracts = [
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
   ['live-candle-state-machine', ['src/services/marketData/liveCandleStateMachine.test.ts', true]],
   ['chart-cold-start-real-candles', ['src/chartColdStartAndRealCandleContract.test.mjs', false]],
+  ['live-candle-lifecycle', ['src/liveCandleLifecycleContract.test.mjs', false]],
   ['live-candle-timestamp-toolbar', ['src/liveCandleTimestampAndToolbarContract.test.mjs', false]],
   ['vela-084-foundation', ['src/vela083FoundationContract.test.mjs', false]],
   ['vela-live-ui-corespirit', ['src/velaLiveUiCoreSpiritContract.test.mjs', false]],
