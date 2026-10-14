@@ -26,6 +26,8 @@ assert.ok(watchlist.includes("['changeValue', 'Change']") && watchlist.includes(
 assert.ok(watchlist.includes("['high', 'Day high']") && watchlist.includes("['low', 'Day low']"), 'watchlist detail must expose day high and low');
 assert.ok(watchlist.includes('font:700 12px Inter,ui-sans-serif,system-ui,sans-serif'), 'watchlist typography must match the TradingCoreOS system font');
 assert.ok(watchlist.includes('daily?.high') && watchlist.includes('daily?.low'), 'watchlist must read high/low from daily broker OHLC when available');
+assert.ok(watchlist.includes('const ltp = asFinite(tick.ltp);'), 'watchlist must not treat normalized previous close as the live last price');
+assert.ok(watchlist.includes('snapshot.prevClose, snapshot.close'), 'watchlist must derive absolute change from the normalized previous close when needed');
 assert.ok(workspace.includes('this.globalTool = type;'), 'shared drawing toolbar must update its tool mirror before focus restoration');
 assert.ok(workspace.includes('this.active.chart.drawings.setTool(type);'), 'shared drawing toolbar must arm the active chart drawing controller');
 
