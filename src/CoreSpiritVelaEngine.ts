@@ -1,4 +1,5 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel.ts';
+import { canonicalBarIndexRange, velaTimeRange, type CanonicalBarIndexRange, type VelaTimeRange } from './architecture/crossPlaneContracts.ts';
 import type { InputValue } from './services/core/chart/velaNativeChartKernel.ts';
 import { loadOrCompileCoreSpiritArtifact } from './services/coreSpirit/artifactCache.ts';
 import { compileCoreSpiritArtifactOffThread } from './services/coreSpirit/coreSpiritCompilerClient.ts';
@@ -14,8 +15,6 @@ import { normalizeCoreSpiritTimeframe } from './services/core/data/marketDataGra
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
-
-type DirtyRange = { from: number; to: number };
 
 type PreparedToken = {
   sourceId: string;
@@ -344,8 +343,8 @@ export class CoreSpiritVelaEngine {
       currentBars:CoreSpiritMarketBar[],
       contextKey:string,
       readOnly:boolean,
-      dirtyRange:DirtyRange,
-      visibleRange?:{from:number;to:number},
+      dirtyBarRange:CanonicalBarIndexRange,
+      visibleRange?:VelaTimeRange,
     )=>{
       const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
       workerDatasetVersions.set(contextKey,datasetVersion);
@@ -363,7 +362,7 @@ export class CoreSpiritVelaEngine {
       return runCoreSpiritArtifactInWorker(token.artifact,currentBars,token.sourceId,{
         contextKey,
         datasetVersion,
-        dirtyRange,
+        dirtyRange:dirtyBarRange,
         baseSymbol:req.market.symbol,
         baseTimeframe:req.market.timeframe,
         graphSnapshot:makeSecondaryGraphSnapshot(),
@@ -377,7 +376,7 @@ export class CoreSpiritVelaEngine {
         ? outputs.filter(output => output.kind !== 'signal' && output.kind !== 'orderIntent')
         : outputs;
 
-    const emitModel = (dirty?: DirtyRange): void => {
+    const emitModel = (dirty?: VelaTimeRange): void => {
       const snapshot = scene.snapshot();
       handlers.onModel(buildCoreSpiritVelaIndicatorModel(
         token.sourceId,
@@ -401,7 +400,7 @@ export class CoreSpiritVelaEngine {
       ));
     };
 
-    const emitScenePatches = (outputs: CoreSpiritObject[], dirty: DirtyRange): void => {
+    const emitScenePatches = (outputs: CoreSpiritObject[], dirty: VelaTimeRange): void => {
       const patches = scene.apply(outputs, dirty);
       if (patches.length) handlers.onScenePatches?.(patches);
     };
@@ -419,7 +418,7 @@ export class CoreSpiritVelaEngine {
       let tail:Awaited<ReturnType<typeof executeInWorker>>|undefined;
       for(let attempt=0;attempt<3;attempt+=1){
         const historical=currentBars.slice(0,-1);
-        baseline=await executeInWorker(historical,mainContextKey,true,{from:0,to:historical.length});
+        baseline=await executeInWorker(historical,mainContextKey,true,canonicalBarIndexRange(0,historical.length));
         if(stopped||generation!==mainRunGeneration)return undefined;
 
         // If a new candle was appended while history was warming, warm again so
@@ -436,9 +435,9 @@ export class CoreSpiritVelaEngine {
         let tailBars=currentBars;
         for(let tailAttempt=0;tailAttempt<4;tailAttempt+=1){
           tailBars=currentBars;
-          tail=await executeInWorker(tailBars,mainContextKey,false,{
-            from:Math.max(0,tailBars.length-1),to:tailBars.length,
-          });
+          tail=await executeInWorker(tailBars,mainContextKey,false,canonicalBarIndexRange(
+            Math.max(0,tailBars.length-1),tailBars.length,
+          ));
           if(stopped||generation!==mainRunGeneration)return undefined;
           const afterTail=getCurrentBars();
           if(afterTail.length!==tailBars.length||afterTail.at(-2)?.timestamp!==tailBars.at(-2)?.timestamp){
@@ -474,7 +473,7 @@ export class CoreSpiritVelaEngine {
       const generation=++mainRunGeneration;
       initializationOwnerGeneration=generation;
       try{
-        const result=await executeInWorker(currentBars,mainContextKey,true,{from:0,to:currentBars.length});
+        const result=await executeInWorker(currentBars,mainContextKey,true,canonicalBarIndexRange(0,currentBars.length));
         if(stopped||generation!==mainRunGeneration)return;
         const outputs=safeOutputs(result.outputs);
         viewportRunGeneration+=1;
@@ -485,7 +484,7 @@ export class CoreSpiritVelaEngine {
         firstSeriesTime=currentBars.length?barTimeMillis(currentBars[0]?.timestamp):Number.NaN;
         lastTime=currentBars.length?barTimeMillis(currentBars.at(-1)?.timestamp):Number.NaN;
         historyInitialized=true;
-        emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined);
+        emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?velaTimeRange(firstSeriesTime,lastTime):undefined);
         handlers.onDone?.();
       }catch(error){
         if(!stopped&&generation===mainRunGeneration)handlers.onError?.(error instanceof Error?error:new Error(String(error)));
@@ -514,13 +513,13 @@ export class CoreSpiritVelaEngine {
         scene.seed(warmOutputs);
         const latest=execution.currentBars.at(-1)!;
         const latestTime=barTimeMillis(latest.timestamp);
-        if(Number.isFinite(latestTime))emitScenePatches(tailOutputs,{from:latestTime,to:latestTime});
+        if(Number.isFinite(latestTime))emitScenePatches(tailOutputs,velaTimeRange(latestTime,latestTime));
         rememberWorkerState(execution.tail.state);
         firstSeriesTime=barTimeMillis(execution.currentBars[0]?.timestamp);
         lastTime=latestTime;
         historyInitialized=true;
         liveStarted=true;
-        emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined);
+        emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?velaTimeRange(firstSeriesTime,lastTime):undefined);
       }catch(error){
         if(!stopped&&generation===mainRunGeneration)handlers.onError?.(error instanceof Error?error:new Error(String(error)));
       }finally{
@@ -628,7 +627,7 @@ export class CoreSpiritVelaEngine {
             !sameInputRecord(presentationProps(previousMetadata.propValues),presentationProps(nextMetadata.propValues));
           currentMetadata=nextMetadata;
           if(presentationChanged&&historyInitialized)emitModel(
-            Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined,
+            Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?velaTimeRange(firstSeriesTime,lastTime):undefined,
           );
           return;
         }
@@ -659,13 +658,13 @@ export class CoreSpiritVelaEngine {
             const latest=execution.currentBars.at(-1)!;
             const latestTime=barTimeMillis(latest.timestamp);
             outputs=safeOutputs(execution.tail.outputs);
-            if(Number.isFinite(latestTime))emitScenePatches(outputs,{from:latestTime,to:latestTime});
+            if(Number.isFinite(latestTime))emitScenePatches(outputs,velaTimeRange(latestTime,latestTime));
             rememberWorkerState(execution.tail.state);
             firstSeriesTime=barTimeMillis(execution.currentBars[0]?.timestamp);
             lastTime=latestTime;
             liveStarted=true;
           }else{
-            const result=await executeInWorker(currentBars,mainContextKey,true,{from:0,to:currentBars.length});
+            const result=await executeInWorker(currentBars,mainContextKey,true,canonicalBarIndexRange(0,currentBars.length));
             if(stopped||updateGeneration!==updateVersion||executionGeneration!==mainRunGeneration)return;
             outputs=safeOutputs(result.outputs);
             scene.reset();
@@ -675,7 +674,7 @@ export class CoreSpiritVelaEngine {
             lastTime=barTimeMillis(currentBars.at(-1)?.timestamp);
           }
           historyInitialized=true;
-          emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?{from:firstSeriesTime,to:lastTime}:undefined);
+          emitModel(Number.isFinite(firstSeriesTime)&&Number.isFinite(lastTime)?velaTimeRange(firstSeriesTime,lastTime):undefined);
         };
 
         void runUpdate().catch(error=>{
@@ -707,10 +706,10 @@ export class CoreSpiritVelaEngine {
         // Reserve the cache key before scheduling the async worker so repeated
         // identical pan/zoom notifications cannot queue duplicate history runs.
         lastViewportComputationKey=viewportKey;
-        void executeInWorker(rangeBars,rangeContextKey,true,{from:0,to:rangeBars.length},{from:viewportFrom,to:viewportTo})
+        void executeInWorker(rangeBars,rangeContextKey,true,canonicalBarIndexRange(0,rangeBars.length),velaTimeRange(viewportFrom,viewportTo))
           .then(result=>{
             if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
-            emitScenePatches(safeOutputs(result.outputs),{from:viewportFrom,to:viewportTo});
+            emitScenePatches(safeOutputs(result.outputs),velaTimeRange(viewportFrom,viewportTo));
           })
           .catch(error=>{
             if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion){
@@ -747,10 +746,10 @@ export class CoreSpiritVelaEngine {
           if(!rangeBars.length)return;
           const generation=++viewportRunGeneration;
           const updateGeneration=updateVersion;
-          void executeInWorker(rangeBars,backfillContextKey,true,{from:0,to:rangeBars.length},{from:dirtyRange.from,to:dirtyRange.to})
+          void executeInWorker(rangeBars,backfillContextKey,true,canonicalBarIndexRange(0,rangeBars.length),velaTimeRange(dirtyRange.from,dirtyRange.to))
             .then(result=>{
               if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
-              emitScenePatches(safeOutputs(result.outputs),dirtyRange);
+              emitScenePatches(safeOutputs(result.outputs),velaTimeRange(dirtyRange.from,dirtyRange.to));
             })
             .catch(error=>{
               if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion)
@@ -785,13 +784,13 @@ export class CoreSpiritVelaEngine {
         const latestTime=barTimeMillis(latest.timestamp);
         const generation=++liveRunGeneration;
         const sessionGeneration=mainRunGeneration;
-        void executeInWorker(currentBars,mainContextKey,false,{
-          from:Math.max(0,currentBars.length-1),to:currentBars.length,
-        }).then(result=>{
+        void executeInWorker(currentBars,mainContextKey,false,canonicalBarIndexRange(
+          Math.max(0,currentBars.length-1),currentBars.length,
+        )).then(result=>{
           if(stopped||generation!==liveRunGeneration||sessionGeneration!==mainRunGeneration)return;
           const latestOutputs=safeOutputs(result.outputs);
           if(Number.isFinite(latestTime)){
-            emitScenePatches(latestOutputs,{from:latestTime,to:latestTime});
+            emitScenePatches(latestOutputs,velaTimeRange(latestTime,latestTime));
             lastTime=latestTime;
           }
           rememberWorkerState(result.state);
