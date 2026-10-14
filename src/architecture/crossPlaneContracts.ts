@@ -3,6 +3,7 @@
  * Brands are compile-time only; runtime values remain compatible with Vela APIs.
  */
 declare const canonicalBarIndexRangeBrand: unique symbol;
+declare const executionBarIndexRangeBrand: unique symbol;
 declare const velaTimeRangeBrand: unique symbol;
 
 export interface MarketDataRevision {
@@ -18,6 +19,16 @@ export type CanonicalBarIndexRange = Readonly<{
 }>;
 
 export type CanonicalDirtyRange = MarketDataRevision & CanonicalBarIndexRange;
+
+/**
+ * A bar interval relative to the specific bars array handed to a worker.
+ * This is intentionally not interchangeable with absolute canonical indices.
+ */
+export type ExecutionBarRange = Readonly<{
+  from: number;
+  to: number;
+  readonly [executionBarIndexRangeBrand]: true;
+}>;
 
 /** Inclusive epoch-millisecond bounds used by Vela scene/viewport contracts. */
 export type VelaTimeRange = Readonly<{
@@ -47,6 +58,13 @@ export function canonicalBarIndexRange(from: number, to: number): CanonicalBarIn
     throw new RangeError('Canonical bar-index range must use non-negative integer half-open bounds.');
   }
   return Object.freeze({ from, to }) as CanonicalBarIndexRange;
+}
+
+export function executionBarRange(from: number, to: number): ExecutionBarRange {
+  if (!validIndex(from) || !validIndex(to) || to < from) {
+    throw new RangeError('Execution bar range must use non-negative integer half-open bounds.');
+  }
+  return Object.freeze({ from, to }) as ExecutionBarRange;
 }
 
 export function canonicalDirtyRange(
