@@ -100,6 +100,9 @@ export class LiveCandleStateMachine {
   /** Mark a cached, already-normalized dataset usable without starting a request. */
   activateCachedHistory(): { generation: number; ticks: NormalizedMarketTick[] } {
     this.historyGenerationValue += 1;
+    this.phaseValue = 'ready';
+    this.lastAcceptedTradeTimestampMs = undefined;
+    this.seenIdentities.clear();
     return { generation: this.historyGenerationValue, ticks: this.takePendingTicks() };
   }
 
