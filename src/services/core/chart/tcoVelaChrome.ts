@@ -35,6 +35,7 @@ const TCO_CHROME_ICONS: Record<string, string> = {
   table: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M1.5 6h13M6 2v12M10 6v8"/>'),
   user: svg16('<circle cx="8" cy="4.5" r="2.5"/><path d="M2 14c.3-3 2.3-4.5 6-4.5s5.7 1.5 6 4.5"/>'),
   layout: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M7 2v12M7 7h7"/>'),
+  sliders: svg16('<path d="M2 4h4m4 0h4M2 8h8m4 0h0M2 12h2m4 0h6"/><circle cx="7" cy="4" r="1.5"/><circle cx="12" cy="8" r="1.5"/><circle cx="5" cy="12" r="1.5"/>'),
   play: svg16('<path d="M4 2.5 13.5 8 4 13.5z"/>'),
   search: svg16('<circle cx="6.8" cy="6.8" r="4.4"/><path d="m10 10 4 4"/>'),
   replay: svg16('<path d="M3 5V1.8L1 4M3 5h5a5 5 0 1 1-4.6 7"/>'),
@@ -592,7 +593,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
 };
 
 const workspaceFrameAction:WidgetActionDescriptor={
-  id:'tco.workspace-frame',target:'topbar',label:'Workspace',icon:'layout',iconOnly:true,align:'right',order:19,mobile:'menu',
+  id:'tco.workspace-frame',target:'topbar',label:'Workspace',icon:'sliders',iconOnly:true,align:'right',order:19,mobile:'menu',
   run(ctx){ctx.togglePanel('tco.workspace-frame');},
 };
 
