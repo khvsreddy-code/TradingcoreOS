@@ -73,6 +73,8 @@ const contracts = [
   ['vela-active-preview-drawing-tool', ['src/velaActivePreviewDrawingToolContract.test.mjs', false]],
   ['vela-drawing-persistence-roundtrip', ['src/velaDrawingPersistenceRoundTripContract.test.mjs', true]],
   ['vela-incremental-patch', ['src/velaIncrementalPatchContract.test.mjs', false]],
+  ['vela-revisioned-scene-patch', ['src/velaRevisionedScenePatchContract.test.mjs', true]],
+  ['revisioned-range-patch', ['src/revisionedRangePatchContract.test.mjs', true]],
   ['vela-v108-boundary', ['src/velaV108BoundaryContract.test.mjs', false]],
   ['corespirit-vela-full-capability', ['src/coreSpiritVelaCapabilityContract.test.mjs', true]],
   ['corespirit-live-startup-single-pass', ['src/coreSpiritLiveStartupContract.test.mjs', true]],
@@ -90,6 +92,8 @@ const contracts = [
   ['fyers-order-reconciliation-state-machine', ['src/fyersOrderStateReconciliationContract.test.mjs', true]],
   ['fyers-multi-class-domain-events', ['src/fyersMultiClassDomainEventsContract.test.mjs', true]],
   ['vela-advanced-drawing-family-lazy', ['src/velaAdvancedDrawingFamilyLazyContract.test.mjs', true]],
+  ['vela-drawing-capability-inventory', ['src/velaDrawingCapabilityInventoryContract.test.mjs', true]],
+  ['vela-overlay-and-layout-dismiss', ['src/velaOverlayAndLayoutDismissContract.test.mjs', false]],
   ['corespirit-kernel-snapshots', ['src/coreSpiritKernelSnapshotContract.test.mjs', true]],
 
   ['vela-fyers-motion', ['src/velaFyers5kMotionContract.test.mjs', false]],

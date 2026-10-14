@@ -57,7 +57,7 @@ type ShowMode = 'all' | 'intraday' | 'higher' | 'custom';
 const openFolds = new Map<string, Set<string>>();
 
 const STYLE_ID = 'vela-dsp-styles';
-const STYLE_REV = '1';
+const STYLE_REV = '2';
 
 const CHEVRON = '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 2.5 3.5 3.5-3.5 3.5"/></svg>';
 const CHEVRON_DOWN = '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2.5 4.5 3.5 3.5 3.5-3.5"/></svg>';
@@ -81,7 +81,10 @@ function ensureStyles(): void {
     s.dataset.rev = STYLE_REV;
     s.textContent = `
 .vela-dsp-pass { pointer-events: none !important; }
-.vela-dialog.vela-dsp { pointer-events: auto; width: 360px; min-width: 0; max-width: calc(100% - 24px); max-height: calc(100% - 24px); font-size: 13px; }
+/* Settings are a workspace-level floating surface, not a chart-clipped child. */
+.vela-dialog-backdrop.vela-dsp-backdrop { z-index: 11999; pointer-events: none !important; }
+.vela-dialog-positioner.vela-dsp-positioner { z-index: 12000; pointer-events: none !important; }
+.vela-dialog.vela-dsp { pointer-events: auto; width: 360px; min-width: 0; max-width: min(92vw, 420px); max-height: min(82dvh, calc(100dvh - 24px)); font-size: 13px; }
 .vela-dsp .vela-dialog-header { padding: 8px 8px 8px 16px; gap: 6px; }
 .vela-dsp .vela-dialog-title { font-size: 15px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vela-dsp .vela-dialog-footer { padding: 10px 12px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--vela-border); }
@@ -248,10 +251,11 @@ export class DrawingSettingsPanel {
             this.close();
         };
         const ui = new Dialog({
-            host: this.host,
+            // Escape the active chart's stacking context and overflow clipping in multi-chart layouts.
+            host: this.host.ownerDocument.body,
             title: meta?.label ?? 'Settings',
             modal: false,
-            contained: true,
+            contained: false,
             align: 'center',
             draggable: true,
             flush: true,
@@ -263,8 +267,8 @@ export class DrawingSettingsPanel {
             },
         });
         applyChromeTokens(ui.panel, this.theme);
-        ui.backdrop.classList.add('vela-dsp-pass');
-        ui.positioner.classList.add('vela-dsp-pass');
+        ui.backdrop.classList.add('vela-dsp-pass', 'vela-dsp-backdrop');
+        ui.positioner.classList.add('vela-dsp-pass', 'vela-dsp-positioner');
         // Open on the side of the chart away from the drawing, so the drawing stays in view.
         const hostW = this.host.clientWidth;
         const leftHalf = anchor != null && hostW > 0 && anchor.x + anchor.w / 2 < hostW / 2;

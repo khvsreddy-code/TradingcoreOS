@@ -38,6 +38,8 @@ function isPriceOverlay(output: CoreSpiritObject): boolean {
 
 type DirtySpan = { from: number; to: number };
 
+let nextScenePatchStreamId = 1;
+
 function finiteSpan(from: unknown, to: unknown = from): DirtySpan | null {
     const a = Number(from), b = Number(to);
     if (Number.isFinite(a) && Number.isFinite(b)) return { from: Math.min(a, b), to: Math.max(a, b) };
@@ -227,8 +229,12 @@ export class CoreSpiritSceneDiff {
         lines: [], boxes: [], labels: [], polylines: [], backgrounds: [], priceLines: [],
     };
     private markerSeriesMounted = false;
+    private outputRevision = 0;
+    private readonly patchStreamId: string;
 
-    constructor(readonly indicatorId: string) {}
+    constructor(readonly indicatorId: string) {
+        this.patchStreamId = `${indicatorId}:scene:${nextScenePatchStreamId++}`;
+    }
 
     get markerSeriesId(): string { return `${this.indicatorId}:signals`; }
 
@@ -273,7 +279,7 @@ export class CoreSpiritSceneDiff {
         };
     }
 
-    apply(outputs: CoreSpiritObject[], dirty: VelaTimeRange): ScenePatch[] {
+    apply(outputs: CoreSpiritObject[], dirty: VelaTimeRange, datasetRevision?: number): ScenePatch[] {
         const series: SeriesValueDelta[] = [];
         const collections: CollectionValueDelta[] = [];
         const instanceBatches: HighCardinalityRectDelta[] = [];
@@ -332,7 +338,17 @@ export class CoreSpiritSceneDiff {
                 ...(instanceBatches.length ? { instanceBatches } : {}),
             });
         }
-        return out;
+        // Stamp emitted schema/value patches so delayed worker replies cannot overwrite a
+        // scene after a newer canonical data revision has committed.
+        if (!Number.isSafeInteger(datasetRevision) || datasetRevision! < 0) return out;
+        return out.map(patch => ({
+            ...patch,
+            revision: {
+                streamId: this.patchStreamId,
+                datasetRevision: datasetRevision!,
+                outputRevision: ++this.outputRevision,
+            },
+        }));
     }
 
     private retainedSpanKey(output: CoreSpiritObject): string | null {

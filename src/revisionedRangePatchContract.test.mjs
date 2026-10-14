@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {applyRangePatch,createRangePatch,RangePatchRevisionGate} from './architecture/revisionedRangePatch.ts';
+const baseline=Array.from({length:5000},(_,i)=>i);const next=baseline.slice();for(let i=1050;i<=1055;i++)next[i]=90000+i;
+const patch=createRangePatch(baseline,next,{streamId:'nifty:close',datasetRevision:7,outputRevision:1});
+assert.equal(patch.indexSpace,'absolute-history');assert.equal(patch.operation,'replace-range');assert.equal(patch.from,1050);assert.equal(patch.to,1056);
+assert.deepEqual(patch.values,next.slice(1050,1056));
+const gate=new RangePatchRevisionGate();const applied=gate.apply(baseline,patch,7);assert.equal(applied.accepted,true);assert.deepEqual(applied.values,next);
+assert.deepEqual(applied.values.slice(0,1050),baseline.slice(0,1050));assert.deepEqual(applied.values.slice(1056),baseline.slice(1056));
+const newerValues=next.map((v,i)=>i===1053?v+1:v);const newer=createRangePatch(next,newerValues,{streamId:'nifty:close',datasetRevision:8,outputRevision:2});
+const afterNewer=gate.apply(applied.values,newer,8);assert.equal(afterNewer.accepted,true);
+const stale=createRangePatch(next,next.map((v,i)=>i===1050?-1:v),{streamId:'nifty:close',datasetRevision:7,outputRevision:3});
+const rejected=gate.apply(afterNewer.values,stale,8);assert.equal(rejected.accepted,false);assert.deepEqual(rejected.values,afterNewer.values);
+const noChange=createRangePatch(newerValues,newerValues,{streamId:'nifty:close',datasetRevision:8,outputRevision:3});
+assert.equal(noChange.from,noChange.to);assert.deepEqual(noChange.values,[]);assert.deepEqual(applyRangePatch(newerValues,noChange),newerValues);
+console.log('REVISIONED_RANGE_PATCH_OK');

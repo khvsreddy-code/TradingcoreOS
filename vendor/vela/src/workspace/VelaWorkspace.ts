@@ -947,6 +947,8 @@ export class VelaWorkspace {
 
     setActiveCell(id: string | null): void {
         if (id === this.activeId || this.destroyed) return;
+        // Prevent stale layout chrome from remaining above a different chart cell.
+        this.topbar.closeLayoutPicker();
         const prev = this.activeId;
         if (prev) {
             const el = this.cellsById.get(prev)?.host;

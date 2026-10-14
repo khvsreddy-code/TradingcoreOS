@@ -301,6 +301,8 @@ export class CoreSpiritVelaEngine {
     const rangeContextKey=`${mainContextKey}:range`;
     const backfillContextKey=`${mainContextKey}:backfill`;
     const workerDatasetVersions=new Map<string,number>();
+    // Global canonical-data revision across main/history/viewport worker contexts.
+    let canonicalDatasetRevision = 0;
     type RuntimeSnapshot={barIndex?:number;locals?:Record<string,unknown>};
     let lastExecutionState:RuntimeSnapshot|undefined;
     let liveStarted = false;
@@ -348,6 +350,7 @@ export class CoreSpiritVelaEngine {
     )=>{
       const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
       workerDatasetVersions.set(contextKey,datasetVersion);
+      const sourceDatasetRevision = canonicalDatasetRevision;
       const runtimeOptions:CoreSpiritWorkerRuntimeOptions={
         symbol:req.market.symbol,
         timeframe:req.market.timeframe,
@@ -368,7 +371,7 @@ export class CoreSpiritVelaEngine {
         graphSnapshot:makeSecondaryGraphSnapshot(),
         readOnly,
         runtimeOptions,
-      });
+      }).then(result => ({ ...result, datasetVersion, sourceDatasetRevision }));
     };
 
     const safeOutputs = (outputs: CoreSpiritObject[]): CoreSpiritObject[] =>
@@ -400,8 +403,8 @@ export class CoreSpiritVelaEngine {
       ));
     };
 
-    const emitScenePatches = (outputs: CoreSpiritObject[], dirty: VelaTimeRange): void => {
-      const patches = scene.apply(outputs, dirty);
+    const emitScenePatches = (outputs: CoreSpiritObject[], dirty: VelaTimeRange, datasetRevision?: number): void => {
+      const patches = scene.apply(outputs, dirty, datasetRevision);
       if (patches.length) handlers.onScenePatches?.(patches);
     };
 
@@ -513,7 +516,7 @@ export class CoreSpiritVelaEngine {
         scene.seed(warmOutputs);
         const latest=execution.currentBars.at(-1)!;
         const latestTime=barTimeMillis(latest.timestamp);
-        if(Number.isFinite(latestTime))emitScenePatches(tailOutputs,velaTimeRange(latestTime,latestTime));
+        if(Number.isFinite(latestTime))emitScenePatches(tailOutputs,velaTimeRange(latestTime,latestTime),execution.tail.sourceDatasetRevision);
         rememberWorkerState(execution.tail.state);
         firstSeriesTime=barTimeMillis(execution.currentBars[0]?.timestamp);
         lastTime=latestTime;
@@ -658,7 +661,7 @@ export class CoreSpiritVelaEngine {
             const latest=execution.currentBars.at(-1)!;
             const latestTime=barTimeMillis(latest.timestamp);
             outputs=safeOutputs(execution.tail.outputs);
-            if(Number.isFinite(latestTime))emitScenePatches(outputs,velaTimeRange(latestTime,latestTime));
+            if(Number.isFinite(latestTime))emitScenePatches(outputs,velaTimeRange(latestTime,latestTime),execution.tail.sourceDatasetRevision);
             rememberWorkerState(execution.tail.state);
             firstSeriesTime=barTimeMillis(execution.currentBars[0]?.timestamp);
             lastTime=latestTime;
@@ -709,7 +712,7 @@ export class CoreSpiritVelaEngine {
         void executeInWorker(rangeBars,rangeContextKey,true,executionBarRange(0,rangeBars.length),velaTimeRange(viewportFrom,viewportTo))
           .then(result=>{
             if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
-            emitScenePatches(safeOutputs(result.outputs),velaTimeRange(viewportFrom,viewportTo));
+            emitScenePatches(safeOutputs(result.outputs),velaTimeRange(viewportFrom,viewportTo),result.sourceDatasetRevision);
           })
           .catch(error=>{
             if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion){
@@ -720,6 +723,7 @@ export class CoreSpiritVelaEngine {
       },
       notifyBars(reason,dirtyRange) {
         if(stopped)return;
+        canonicalDatasetRevision += 1;
         lastViewportComputationKey=undefined;
         const currentBars=getCurrentBars(reason==='backfill');
 
@@ -749,7 +753,7 @@ export class CoreSpiritVelaEngine {
           void executeInWorker(rangeBars,backfillContextKey,true,executionBarRange(0,rangeBars.length),velaTimeRange(dirtyRange.from,dirtyRange.to))
             .then(result=>{
               if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
-              emitScenePatches(safeOutputs(result.outputs),velaTimeRange(dirtyRange.from,dirtyRange.to));
+              emitScenePatches(safeOutputs(result.outputs),velaTimeRange(dirtyRange.from,dirtyRange.to),result.sourceDatasetRevision);
             })
             .catch(error=>{
               if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion)

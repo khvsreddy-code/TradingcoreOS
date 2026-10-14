@@ -546,6 +546,11 @@ export class Topbar {
         this.layoutPicker?.refresh();
     }
 
+    /** Dismiss layout chrome when focus moves to another chart cell. */
+    closeLayoutPicker(): void {
+        this.layoutPicker?.close();
+    }
+
     private renderLayoutButton(doc: Document): void {
         if (!this.layoutButton) return;
         this.layoutButton.replaceChildren();

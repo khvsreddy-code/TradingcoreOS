@@ -12,11 +12,11 @@ import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
 import { holdForExit, type SurfaceExit } from '../ui/surface-exit';
 
-const STYLE_ID = 'vela-widget-layout-picker-v15';
+const STYLE_ID = 'vela-widget-layout-picker-v16';
 // One monochrome selection language across the panel: lit cells and sync ON
 // switches both speak --vela-selected-*.
 const CSS = `
-.vela-lp-layer { position: absolute; z-index: var(--vela-z-menu); }
+.vela-lp-layer { position: absolute; z-index: var(--vela-z-popover); }
 .vela-lp {
     background: var(--vela-surface);
     color: var(--vela-fg);
@@ -191,6 +191,13 @@ export class LayoutPicker {
         if (t && (this.layer.contains(t) || this.opts.trigger.contains(t))) return;
         this.close();
     };
+    // Fallback when a chart host cancels or retargets pointerdown. The trigger is
+    // excluded so its own click handler can toggle an already-open picker closed.
+    private readonly onDocClick = (e: MouseEvent): void => {
+        const t = e.target as Node | null;
+        if (t && (this.layer.contains(t) || this.opts.trigger.contains(t))) return;
+        this.close();
+    };
     private readonly onDocKeydown = (e: KeyboardEvent): void => {
         if (e.key === 'Escape') this.close();
     };
@@ -301,6 +308,7 @@ export class LayoutPicker {
         this.position();
         this.opts.trigger.setAttribute('aria-expanded', 'true');
         this.doc.addEventListener('pointerdown', this.onDocPointerDown, true);
+        this.doc.addEventListener('click', this.onDocClick, true);
         this.doc.addEventListener('keydown', this.onDocKeydown, true);
         this.opts.onOpenChange?.(true);
     }
@@ -314,6 +322,7 @@ export class LayoutPicker {
         });
         this.opts.trigger.setAttribute('aria-expanded', 'false');
         this.doc.removeEventListener('pointerdown', this.onDocPointerDown, true);
+        this.doc.removeEventListener('click', this.onDocClick, true);
         this.doc.removeEventListener('keydown', this.onDocKeydown, true);
         this.opts.onOpenChange?.(false);
     }

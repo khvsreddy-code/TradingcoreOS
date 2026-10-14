@@ -11,6 +11,13 @@ export interface DirtyRange {
 }
 
 /** Exact retained-series mutation. Full replacement is explicit and remains the compatibility path. */
+/** Monotonic source revisions for rejecting delayed patches from an older worker run. */
+export interface ScenePatchRevision {
+    streamId: string;
+    datasetRevision: number;
+    outputRevision: number;
+}
+
 export type SeriesPatchOperation = 'replace' | 'append' | 'prepend' | 'replace-last' | 'replace-range';
 
 /** A value delta carries only the values affected by the operation. */
@@ -71,6 +78,8 @@ export interface CollectionValueDelta {
 export interface ValuePatch {
     kind: 'value';
     indicatorId: string;
+    /** Optional so legacy and third-party patch producers remain compatible. */
+    revision?: ScenePatchRevision;
     dirty: DirtyRange;
     anchorTime?: Millis | null;
     series: SeriesValueDelta[];
@@ -97,6 +106,8 @@ export interface ValuePatch {
 export interface SchemaPatch {
     kind: 'schema';
     indicatorId: string;
+    /** Schema additions/removals share the value-patch stale-response gate. */
+    revision?: ScenePatchRevision;
     added: SeriesSpec[];
     removed: string[];
     changed: Array<{ seriesId: string; reason: 'kind' | 'pane' }>;

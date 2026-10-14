@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { applyScenePatch } from '../vendor/vela/src/core/model/scenePatch.ts';
+const model={series:[{id:'test:close',kind:'line',points:Array.from({length:5000},(_,time)=>({time,value:time}))}],fills:[],instanceBatches:[]};
+const changed=Array.from({length:6},(_,i)=>({time:1050+i,value:20000+i}));
+const patch={kind:'value',indicatorId:'test',dirty:{from:1000,to:1100},series:[{seriesId:'test:close',kind:'points',op:'replace-range',start:1050,remove:6,points:changed}],revision:{streamId:'test-stream',datasetRevision:12,outputRevision:2}};
+applyScenePatch(model,patch);
+assert.deepEqual(model.series[0].points.slice(1049,1057).map(p=>p.value),[1049,20000,20001,20002,20003,20004,20005,1056]);
+const stable=model.series[0].points.slice();
+applyScenePatch(model,{...patch,series:[{...patch.series[0],points:[{time:1050,value:-999}],remove:6}],revision:{streamId:'test-stream',datasetRevision:11,outputRevision:3}});
+assert.deepEqual(model.series[0].points,stable,'an older dataset patch must not overwrite the latest scene');
+applyScenePatch(model,{...patch,series:[{...patch.series[0],points:[{time:1050,value:21000}],remove:6}],revision:{streamId:'test-stream',datasetRevision:12,outputRevision:2}});
+assert.deepEqual(model.series[0].points,stable,'a duplicate output revision must be ignored');
+console.log('VELA_REVISIONED_SCENE_PATCH_OK');

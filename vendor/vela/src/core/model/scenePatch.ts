@@ -1,13 +1,36 @@
 import type { IndicatorModel } from './indicator';
-import type { ScenePatch, SeriesPatchOperation } from './patch';
+import type { ScenePatch, ScenePatchRevision, SeriesPatchOperation } from './patch';
 
+type AppliedRevision = { datasetRevision: number; outputRevision: number };
+const appliedRevisions = new WeakMap<IndicatorModel, Map<string, AppliedRevision>>();
+
+function canApplyRevision(model: IndicatorModel, revision: ScenePatchRevision | undefined): boolean {
+    if (!revision) return true;
+    if (!revision.streamId.trim()
+        || !Number.isSafeInteger(revision.datasetRevision) || revision.datasetRevision < 0
+        || !Number.isSafeInteger(revision.outputRevision) || revision.outputRevision < 0) return false;
+    const previous = appliedRevisions.get(model)?.get(revision.streamId);
+    return !previous || (revision.datasetRevision >= previous.datasetRevision
+        && revision.outputRevision > previous.outputRevision);
+}
+
+function commitRevision(model: IndicatorModel, revision: ScenePatchRevision | undefined): void {
+    if (!revision) return;
+    let byStream = appliedRevisions.get(model);
+    if (!byStream) { byStream = new Map(); appliedRevisions.set(model, byStream); }
+    byStream.set(revision.streamId, { datasetRevision: revision.datasetRevision, outputRevision: revision.outputRevision });
+}
+
+/** Apply only patches newer than the last applied revision for that runtime stream. */
 export function applyScenePatch(model: IndicatorModel, patch: ScenePatch): void {
+    if (!canApplyRevision(model, patch.revision)) return;
     if (patch.kind === 'schema') {
         for (const id of patch.removed) {
             const index = model.series.findIndex((candidate) => candidate.id === id);
             if (index >= 0) model.series.splice(index, 1);
         }
         for (const spec of patch.added) model.series.push(spec);
+        commitRevision(model, patch.revision);
         return;
     }
 
@@ -87,6 +110,7 @@ export function applyScenePatch(model: IndicatorModel, patch: ScenePatch): void 
             target[delta.collection] = applyArrayDelta(current, delta.values, delta.op ?? 'replace', delta.start, delta.remove);
         }
     }
+    commitRevision(model, patch.revision);
 }
 
 function isLineLike(series: IndicatorModel['series'][number]): series is Extract<IndicatorModel['series'][number], { points: unknown[] }> {
