@@ -74,16 +74,17 @@ export function createTcoVelaTerminalOptions(
     // Vela owns the chart chrome. Keep its native editing/history, alerts and screenshot
     // actions visible, while TCO integrations use compact icon actions with tooltips.
     topbar:{
-      left:['symbol','timeframes','style','layout','indicators','tco.replay-action','undo-redo'],
+      left:['symbol','timeframes','style','layout','indicators'],
       right:[
         'tco.watchlist',
         'tco.research',
         'tco.automation',
         'tco.trading',
+        'tco.journal',
+        'tco.positions',
         'tco.corespirit-code',
         'tco.chart-settings',
         'alerts',
-        'screenshot',
       ],
     },
     sync:{
