@@ -786,6 +786,7 @@ export class SettingsDialog {
         let dragStartX = 0;
         let dragStartOffset = 0;
         canvas.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
             if (event.button !== 0 || this.previewBars.length < 2) return;
             dragging = true;
             dragStartX = event.clientX;
@@ -794,6 +795,7 @@ export class SettingsDialog {
             canvas.setPointerCapture(event.pointerId);
         });
         canvas.addEventListener('pointermove', (event) => {
+            event.stopPropagation();
             if (!dragging || !this.previewCanvas) return;
             const bounds = canvas.getBoundingClientRect();
             if (bounds.width <= 0) return;
@@ -801,7 +803,8 @@ export class SettingsDialog {
             this.previewPanOffset = Math.max(0, Math.min(Math.max(0, this.previewBars.length - 1), dragStartOffset + delta));
             this.drawAppearancePreview(this.previewConfig ?? config);
         });
-        const stopDragging = () => {
+        const stopDragging = (event: Event) => {
+            event.stopPropagation();
             dragging = false;
             canvas.style.cursor = 'grab';
         };
@@ -809,6 +812,7 @@ export class SettingsDialog {
         canvas.addEventListener('pointercancel', stopDragging);
         canvas.addEventListener('lostpointercapture', stopDragging);
         canvas.addEventListener('wheel', (event) => {
+            event.stopPropagation();
             if (this.previewBars.length < 2) return;
             event.preventDefault();
             const bounds = canvas.getBoundingClientRect();
