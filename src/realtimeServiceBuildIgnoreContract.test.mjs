@@ -6,6 +6,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isRealtimeRuntimePath, shouldBuildRealtime } from '../tools/ignore-realtime-build.mjs';
 
+const deploymentConfig = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+assert.ok(deploymentConfig.services?.realtimegateway, 'the Vercel Services config must declare the fresh realtime gateway service');
+assert.equal(deploymentConfig.services.realtimegateway.ignoreCommand, 'node tools/ignore-realtime-build.mjs', 'the gateway service must retain its per-service build-skip command');
+assert.deepEqual(
+  deploymentConfig.rewrites
+    .filter((route) => ['/api/realtime/healthz', '/api/realtime/ws'].includes(route.source))
+    .map((route) => [route.source, route.destination.service])
+    .sort((a, b) => a[0].localeCompare(b[0])),
+  [['/api/realtime/healthz', 'realtimegateway'], ['/api/realtime/ws', 'realtimegateway']],
+  'public realtime endpoints must route to the renamed gateway service',
+);
+
 assert.equal(isRealtimeRuntimePath('src/TcoVelaDataProvider.ts'), false, 'Vela UI/data-provider changes must not rebuild the realtime container');
 assert.equal(isRealtimeRuntimePath('src/services/coreSpirit/compiler.ts'), false, 'CoreSpirit-only changes must not consume a realtime image');
 assert.equal(isRealtimeRuntimePath('src/server/routes/trading.routes.ts'), false, 'HTTP order route changes are not imported by the realtime process');
