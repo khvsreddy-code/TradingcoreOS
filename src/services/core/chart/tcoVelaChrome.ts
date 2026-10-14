@@ -777,23 +777,36 @@ const drawingToolsPanel: SidePanelDescriptor = {
       import('../../../../vendor/vela/src/core/drawings/toolbar'),
       import('../../../../vendor/vela/src/core/drawings/registry'),
     ]).then(async ([toolbarModule, drawingRegistry]) => {
-      // The toolbar module is the source of truth. It enumerates every registered and
-      // lazy drawing, then we load the advanced implementation families after the panel
-      // is requested so their real names/icons replace lazy placeholders here.
-      await drawingRegistry.loadAdvancedDrawingCatalog();
+      // Render Vela's full metadata inventory immediately (including the lazy-family
+      // entries), so the menu never appears empty while heavier drawing implementations
+      // are imported. Opening this panel is the opt-in point for richer advanced icons.
+      const readCanonical = (): void => {
+        const canonical = toolbarModule.defaultToolbar();
+        groups = canonical.groups.map((group) => ({
+          id: group.id,
+          label: group.label,
+          tools: group.tools,
+          sections: group.sections?.map((section) => ({
+            label: section.label,
+            tools: section.tools,
+          })),
+        }));
+        render();
+      };
       if (disposed) return;
-      const canonical = toolbarModule.defaultToolbar();
-      groups = canonical.groups.map((group) => ({
-        id: group.id,
-        label: group.label,
-        tools: group.tools,
-        sections: group.sections?.map((section) => ({
-          label: section.label,
-          tools: section.tools,
-        })),
-      }));
-      count.textContent = 'Vela drawing tools loaded';
-      render();
+      readCanonical();
+      count.textContent = `${groups.reduce((total, group) => total + (group.sections ?? [{ tools: group.tools }]).reduce((sum, section) => sum + section.tools.length, 0), 0)} Vela drawing tools · loading advanced icons…`;
+      try {
+        await drawingRegistry.loadAdvancedDrawingCatalog();
+        if (disposed) return;
+        readCanonical();
+        count.textContent = `${groups.reduce((total, group) => total + (group.sections ?? [{ tools: group.tools }]).reduce((sum, section) => sum + section.tools.length, 0), 0)} Vela drawing tools`;
+      } catch (error) {
+        // Keep the complete selectable metadata list even if an advanced icon chunk fails;
+        // setTool() still retries that particular family through Vela's own lazy loader.
+        count.textContent = 'Vela drawing tools · advanced icons unavailable';
+        ctx.toast(error instanceof Error ? error.message : 'Some advanced drawing icons could not load', 'error');
+      }
     }).catch((error) => {
       count.textContent = 'Drawing catalogue unavailable';
       ctx.toast(error instanceof Error ? error.message : 'Unable to load Vela drawing tools', 'error');
