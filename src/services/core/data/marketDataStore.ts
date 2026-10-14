@@ -189,6 +189,86 @@ export class MarketDataStore {
     this.markDirty(0, this._length);
   }
 
+  /**
+   * Reconcile an overlapping REST snapshot into canonical history without
+   * replacing the backing arrays or building a second full OHLCV object mirror.
+   * Corrected bars patch in place; missing bars are inserted in timestamp order.
+   * One union dirty span/revision is published for the complete reconciliation.
+   */
+  reconcileHistoricalCandleRows(rows: readonly { timestamp: string; open: number; high: number; low: number; close: number; volume: number }[]): void {
+    if (!rows.length) return;
+    const byTime = new Map<number, { time: number; open: number; high: number; low: number; close: number; volume: number }>();
+    for (const row of rows) {
+      const parsed = Date.parse(String(row.timestamp));
+      const time = Math.floor(parsed / 1000);
+      const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
+      const volume = Number(row.volume);
+      if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isSafeInteger(time) || time <= 0
+        || ![open, high, low, close].every(Number.isFinite)) continue;
+      byTime.set(time, { time, open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 });
+    }
+    const ordered = [...byTime.values()].sort((a, b) => a.time - b.time);
+    if (!ordered.length) return;
+
+    let dirtyFrom = this._length;
+    let dirtyTo = 0;
+    let changed = false;
+    const arrays = [
+      this._time, this._open, this._high, this._low, this._close, this._volume,
+      this._oi, this._bid, this._ask, this._bidVolume, this._askVolume, this._trades, this._session,
+    ];
+    for (const row of ordered) {
+      let lo = 0, hi = this._length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (this._time[mid]! < row.time) lo = mid + 1;
+        else hi = mid;
+      }
+      const index = lo;
+      if (index < this._length && this._time[index] === row.time) {
+        const same = this._open[index] === row.open && this._high[index] === row.high
+          && this._low[index] === row.low && this._close[index] === row.close
+          && this._volume[index] === row.volume;
+        if (same) continue;
+        this._open[index] = row.open;
+        this._high[index] = row.high;
+        this._low[index] = row.low;
+        this._close[index] = row.close;
+        this._volume[index] = row.volume;
+        dirtyFrom = Math.min(dirtyFrom, index);
+        dirtyTo = Math.max(dirtyTo, index + 1);
+        changed = true;
+        continue;
+      }
+
+      this.ensure(this._length + 1);
+      const writableArrays = [
+        this._time, this._open, this._high, this._low, this._close, this._volume,
+        this._oi, this._bid, this._ask, this._bidVolume, this._askVolume, this._trades, this._session,
+      ];
+      for (const array of writableArrays) array.copyWithin(index + 1, index, this._length);
+      this._length += 1;
+      this._time[index] = row.time;
+      this._open[index] = row.open;
+      this._high[index] = row.high;
+      this._low[index] = row.low;
+      this._close[index] = row.close;
+      this._volume[index] = row.volume;
+      this._oi[index] = Number.NaN;
+      this._bid[index] = Number.NaN;
+      this._ask[index] = Number.NaN;
+      this._bidVolume[index] = Number.NaN;
+      this._askVolume[index] = Number.NaN;
+      this._trades[index] = Number.NaN;
+      this._session[index] = Number.NaN;
+      dirtyFrom = Math.min(dirtyFrom, index);
+      // An insert shifts all later bar indices and invalidates through the tail.
+      dirtyTo = this._length;
+      changed = true;
+    }
+    if (changed) this.markDirty(dirtyFrom, dirtyTo);
+  }
+
   append(row: MarketDataPoint): void {
     this.ensure(this._length + 1);
     const index = this._length;
