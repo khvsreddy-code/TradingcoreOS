@@ -241,6 +241,7 @@ export class ChartDataPlane {
       marketDataGraph.syncBase(this.instrumentKey, this.timeframe, this.state.candles);
 
       this.state.revision += 1;
+      this.state.compatibilityRevision = this.state.revision;
       this.syncCanonical();
       this.emit({ type: 'snapshot', reason, snapshot: this.snapshot() });
     }
@@ -738,37 +739,62 @@ export class ChartDataPlane {
     const fresh = historyStore.get(this.brokerId, this.instrumentKey, interval);
     if (fresh?.length) {
       const active = this.activeWindow(fresh, requestedLimit);
-      this.state.historyReady = true; this.state.olderHistoryExhausted = false; this.setCandles(active, 'cache');
-      return active;
+      this.state.historyReady = true;
+      this.state.olderHistoryExhausted = false;
+      this.setCandles(active, 'cache');
+      this.activateCachedHistory();
+      return this.state.candles;
     }
     const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
     if (stale?.length) {
       const active = this.activeWindow(stale, requestedLimit);
-      this.state.historyReady = true; this.state.olderHistoryExhausted = false; this.setCandles(active, 'cache');
+      this.state.historyReady = true;
+      this.state.olderHistoryExhausted = false;
+      this.setCandles(active, 'cache');
+      this.activateCachedHistory();
       // SWR: stale candles paint immediately; network refresh proceeds in the same single-flight.
     }
     this.state.historyLoading = true;
+    const generation = this.liveCandle.beginHistoryLoad('history');
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     const requestKey = `${this.key}:initial-columns:${requestedLimit}`;
     const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requestedLimit), 'initial')
       .then(columns => {
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          return this.getCompatibilityCandles(requestedLimit);
+        }
         if (!columns || columns.time.length === 0) {
+          // Let the object-history fallback own its own generation. The outer
+          // finally block is generation-guarded and cannot clear the new request.
           this.state.historyPromise = undefined;
           return this.ensureHistory(requestedLimit);
         }
         const active = this.setColumnarHistory(columns, requestedLimit, 'history');
         if (!active.length) throw new Error('No historical candles available');
+        const buffered = this.liveCandle.drainPendingTicks(generation);
+        this.state.lastAcceptedTradeTimestampMs = undefined;
+        this.replayBufferedTicks(buffered);
         chartPerformanceTelemetry.recordHistoryLoad(this.key, 'initial', Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - historyStartedAt), active.length);
         this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         return active;
       })
       .catch(error => {
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          return this.getCompatibilityCandles(requestedLimit);
+        }
         const message = String((error as any)?.message || error || 'Historical candles unavailable');
+        this.liveCandle.failHistoryLoad(generation, true);
         this.emit({ type: 'status', status: 'error', error: message, snapshot: this.snapshot() });
         throw error;
       })
-      .finally(() => { this.state.historyLoading = false; this.state.historyPromise = undefined; });
+      .finally(() => {
+        if (!this.liveCandle.isCurrentGeneration(generation)) return;
+        this.state.historyLoading = false;
+        this.state.historyPromise = undefined;
+        if (this.state.historyReady) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        if (this.state.recoveryPending && this.state.feedStatus === 'connected') this.maybeRecoverAfterReconnect();
+      });
     this.state.historyPromise = promise;
     return promise;
   }
