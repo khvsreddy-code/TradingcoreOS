@@ -453,7 +453,7 @@ export class ChartDataPlane {
     if (status === 'connected' && this.state.recoveryPending) this.maybeRecoverAfterReconnect();
     this.emit({
       type: 'status',
-      status: status === 'connected' && !this.state.recoveryPending ? 'ready' : 'loading',
+      status: status === 'connected' && !this.state.recoveryPending && !this.state.recoveryInFlight ? 'ready' : 'loading',
       snapshot: this.snapshot(),
     });
   }
@@ -575,7 +575,10 @@ export class ChartDataPlane {
       const syncMarketSnapshot = () => {
         const marketSnapshot = chartMarketStore.getSnapshot(marketKey);
         const statusRevision = Number(marketSnapshot.statusRevision) || 0;
-        if (statusRevision > this.state.marketStatusRevision) {
+        // The shared store can be cleared/recreated when a broker session changes.
+        // Accept a lower positive revision as a new status epoch instead of silently
+        // ignoring every status from the replacement entry.
+        if (statusRevision > 0 && statusRevision !== this.state.marketStatusRevision) {
           this.state.marketStatusRevision = statusRevision;
           if (marketSnapshot.status) this.onFeedStatus(marketSnapshot.status);
         }
