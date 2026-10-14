@@ -1816,8 +1816,12 @@ export class VelaWorkspace {
         // The settings appearance preview listens to the same active chart's REAL bars.
         // Ship one detached history snapshot on load/symbol change, then only the forming
         // candle on live updates so the preview never rebuilds the whole series per tick.
-        const publishPreviewBar = (bar: { time: number; open: number; high: number; low: number; close: number; volume?: number }): void => {
+        const publishPreviewBar = (): void => {
             if (cell.id !== this.activeId || this.destroyed) return;
+            // Read the active price-style view (e.g. Heikin Ashi when selected), not the
+            // raw feed event, so the live forming candle matches the bars already shown.
+            const bar = chart.getBarsSnapshot(1)[0];
+            if (!bar) return;
             this.root.ownerDocument.dispatchEvent(new CustomEvent('tco:appearance-preview-data', {
                 detail: { symbol: cell.symbol, timeframe: cell.timeframe, bar },
             }));
