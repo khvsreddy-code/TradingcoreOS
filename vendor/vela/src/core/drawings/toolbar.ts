@@ -91,7 +91,7 @@ interface ToolbarGroupLayout {
     sections: readonly SectionSource[];
 }
 
-/** Canonical toolbar layout — seven top-level buttons, each with labelled flyout sections. */
+/** Canonical toolbar layout — eight top-level buttons, each with labelled flyout sections. */
 const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
     {
         id: 'lines-channels-pitchforks',
@@ -111,6 +111,11 @@ const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
             { label: 'Gann', types: GANN_TYPES },
             { label: 'Geometry', types: GEOMETRY_TYPES },
         ],
+    },
+    {
+        id: 'price-action',
+        label: 'Price Action',
+        sections: [{ label: 'Price Action', types: PRICE_ACTION_TYPES }],
     },
     {
         id: 'patterns-waves-harmonics',

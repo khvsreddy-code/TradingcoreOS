@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './services/core/chart/velaDrawingCatalog.ts';
+
 import {
   ADVANCED_DRAWING_FAMILIES,
   drawingFamilyForType,
@@ -56,6 +58,19 @@ assert.equal(patternsAfter.has('fibretracement'), false, 'loading patterns must 
 await loadDrawingFamily('fibonacci');
 await loadAdvancedDrawingCatalog();
 const hydratedToolbar = defaultToolbar();
+const hydratedTools = hydratedToolbar.groups.flatMap((group) => [
+  ...group.tools.map((tool) => tool.type),
+  ...(group.sections ?? []).flatMap((section) => section.tools.map((tool) => tool.type)),
+]);
+const availableTools = new Set(hydratedTools);
+for (const type of CORE_SPIRIT_DRAWING_TOOL_CATALOG) {
+  assert.ok(availableTools.has(type), 'Vela drawing tool missing from toolbar: ' + type);
+}
+const priceAction = hydratedToolbar.groups.find((group) => group.id === 'price-action');
+assert.ok(priceAction, 'Vela 0.8.4 Price Action group must be directly accessible');
+for (const type of ['fairvaluegap', 'orderblock', 'liquidity']) {
+  assert.ok(priceAction.tools.some((tool) => tool.type === type), 'Price Action toolbar group missing ' + type);
+}
 const hydratedIcons = hydratedToolbar.groups.flatMap((group) => group.tools.map((tool) => tool.icon));
 assert.ok(new Set(hydratedIcons).size > 20, 'advanced drawing tools must expose distinct recognisable SVG icons');
 
