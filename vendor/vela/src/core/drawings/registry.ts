@@ -352,9 +352,19 @@ export function lazyDrawingTypes(family?: AdvancedDrawingFamily): DrawingTypeMet
             if (REGISTRY.has(type)) continue;
             out.push({
                 type,
-                group: currentFamily === 'channels' ? (['parallelchannel','disjointchannel','flattopbottom','regressionchannel'].includes(type) ? 'channels' : 'pitchforks')
-                    : currentFamily === 'fibonacci' ? (type.startsWith('fib') || type.startsWith('trendfib') || type.startsWith('gann') || ['dedekind','sonic','supersonic','goldensonic','goldensupersonic'].includes(type) ? 'fibonacci' : 'measure')
-                    : ['xabcd','abcd','headshoulders','elliottimpulse','elliottcorrection','gartley','bat','butterfly','crab','shark','cypher'].includes(type) ? 'patterns' : 'harmonics',
+                // Keep every lazy-family tool in its real canonical toolbar section. A former
+                // catch-all assigned arrows, shapes, brushes and glyphs to "pitchforks",
+                // duplicating them in the Lines flyout and making the 0.8.4 palette appear
+                // incomplete/mis-grouped even though the registry knew about those types.
+                group: currentFamily === 'channels'
+                    ? (['parallelchannel','disjointchannel','flattopbottom','regressionchannel'].includes(type) ? 'channels'
+                        : ['pitchfork','schiffpitchfork','modifiedschiffpitchfork','insidepitchfork'].includes(type) ? 'pitchforks'
+                            : ['arrow','arrowmarkup','arrowmarkdown'].includes(type) ? 'arrows'
+                                : ['flagmark','iconstamp'].includes(type) ? 'icons' : 'shapes')
+                    : currentFamily === 'fibonacci'
+                        ? (['anchoredvwap','fixedrangevp'].includes(type) ? 'volume'
+                            : ['position','datepricerange','magnifier'].includes(type) ? 'measure' : 'fibonacci')
+                        : ['xabcd','abcd','headshoulders','elliottimpulse','elliottcorrection'].includes(type) ? 'patterns' : 'harmonics',
                 label: prettyLazyDrawingLabel(type),
                 icon: lazyDrawingIcon(type),
                 defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
