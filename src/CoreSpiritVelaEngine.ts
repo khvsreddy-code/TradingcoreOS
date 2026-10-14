@@ -1,5 +1,5 @@
 import type { EngineCapabilities, ExecutionHandlers, ExecutionRequest, ExecutionSession, PreparedScript } from './services/core/chart/velaNativeChartKernel.ts';
-import { canonicalBarIndexRange, velaTimeRange, type CanonicalBarIndexRange, type VelaTimeRange } from './architecture/crossPlaneContracts.ts';
+import { executionBarRange, velaTimeRange, type ExecutionBarRange, type VelaTimeRange } from './architecture/crossPlaneContracts.ts';
 import type { InputValue } from './services/core/chart/velaNativeChartKernel.ts';
 import { loadOrCompileCoreSpiritArtifact } from './services/coreSpirit/artifactCache.ts';
 import { compileCoreSpiritArtifactOffThread } from './services/coreSpirit/coreSpiritCompilerClient.ts';
@@ -343,7 +343,7 @@ export class CoreSpiritVelaEngine {
       currentBars:CoreSpiritMarketBar[],
       contextKey:string,
       readOnly:boolean,
-      dirtyBarRange:CanonicalBarIndexRange,
+      dirtyBarRange:ExecutionBarRange,
       visibleRange?:VelaTimeRange,
     )=>{
       const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
@@ -418,7 +418,7 @@ export class CoreSpiritVelaEngine {
       let tail:Awaited<ReturnType<typeof executeInWorker>>|undefined;
       for(let attempt=0;attempt<3;attempt+=1){
         const historical=currentBars.slice(0,-1);
-        baseline=await executeInWorker(historical,mainContextKey,true,canonicalBarIndexRange(0,historical.length));
+        baseline=await executeInWorker(historical,mainContextKey,true,executionBarRange(0,historical.length));
         if(stopped||generation!==mainRunGeneration)return undefined;
 
         // If a new candle was appended while history was warming, warm again so
@@ -435,7 +435,7 @@ export class CoreSpiritVelaEngine {
         let tailBars=currentBars;
         for(let tailAttempt=0;tailAttempt<4;tailAttempt+=1){
           tailBars=currentBars;
-          tail=await executeInWorker(tailBars,mainContextKey,false,canonicalBarIndexRange(
+          tail=await executeInWorker(tailBars,mainContextKey,false,executionBarRange(
             Math.max(0,tailBars.length-1),tailBars.length,
           ));
           if(stopped||generation!==mainRunGeneration)return undefined;
@@ -473,7 +473,7 @@ export class CoreSpiritVelaEngine {
       const generation=++mainRunGeneration;
       initializationOwnerGeneration=generation;
       try{
-        const result=await executeInWorker(currentBars,mainContextKey,true,canonicalBarIndexRange(0,currentBars.length));
+        const result=await executeInWorker(currentBars,mainContextKey,true,executionBarRange(0,currentBars.length));
         if(stopped||generation!==mainRunGeneration)return;
         const outputs=safeOutputs(result.outputs);
         viewportRunGeneration+=1;
@@ -664,7 +664,7 @@ export class CoreSpiritVelaEngine {
             lastTime=latestTime;
             liveStarted=true;
           }else{
-            const result=await executeInWorker(currentBars,mainContextKey,true,canonicalBarIndexRange(0,currentBars.length));
+            const result=await executeInWorker(currentBars,mainContextKey,true,executionBarRange(0,currentBars.length));
             if(stopped||updateGeneration!==updateVersion||executionGeneration!==mainRunGeneration)return;
             outputs=safeOutputs(result.outputs);
             scene.reset();
@@ -706,7 +706,7 @@ export class CoreSpiritVelaEngine {
         // Reserve the cache key before scheduling the async worker so repeated
         // identical pan/zoom notifications cannot queue duplicate history runs.
         lastViewportComputationKey=viewportKey;
-        void executeInWorker(rangeBars,rangeContextKey,true,canonicalBarIndexRange(0,rangeBars.length),velaTimeRange(viewportFrom,viewportTo))
+        void executeInWorker(rangeBars,rangeContextKey,true,executionBarRange(0,rangeBars.length),velaTimeRange(viewportFrom,viewportTo))
           .then(result=>{
             if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
             emitScenePatches(safeOutputs(result.outputs),velaTimeRange(viewportFrom,viewportTo));
@@ -746,7 +746,7 @@ export class CoreSpiritVelaEngine {
           if(!rangeBars.length)return;
           const generation=++viewportRunGeneration;
           const updateGeneration=updateVersion;
-          void executeInWorker(rangeBars,backfillContextKey,true,canonicalBarIndexRange(0,rangeBars.length),velaTimeRange(dirtyRange.from,dirtyRange.to))
+          void executeInWorker(rangeBars,backfillContextKey,true,executionBarRange(0,rangeBars.length),velaTimeRange(dirtyRange.from,dirtyRange.to))
             .then(result=>{
               if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
               emitScenePatches(safeOutputs(result.outputs),velaTimeRange(dirtyRange.from,dirtyRange.to));
@@ -784,7 +784,7 @@ export class CoreSpiritVelaEngine {
         const latestTime=barTimeMillis(latest.timestamp);
         const generation=++liveRunGeneration;
         const sessionGeneration=mainRunGeneration;
-        void executeInWorker(currentBars,mainContextKey,false,canonicalBarIndexRange(
+        void executeInWorker(currentBars,mainContextKey,false,executionBarRange(
           Math.max(0,currentBars.length-1),currentBars.length,
         )).then(result=>{
           if(stopped||generation!==liveRunGeneration||sessionGeneration!==mainRunGeneration)return;
