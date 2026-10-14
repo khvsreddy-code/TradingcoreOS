@@ -711,8 +711,8 @@ const bookmarksPanel: SidePanelDescriptor = {
     detailHint.style.marginTop = '9px';
     detailHint.textContent = 'Select a row to switch the chart to that instrument.';
     detailCard.append(detailHead, metrics, detailHint);
-    root.appendChild(detailCard);
     root.appendChild(rows);
+    root.appendChild(detailCard);
 
     type Quote = { ltp: number; changePercent?: number; receivedAt: number };
     const quotes = new Map<string, Quote>();
