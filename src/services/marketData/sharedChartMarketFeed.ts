@@ -27,6 +27,10 @@ export const sharedChartMarketFeed = new PersistentMarketSubscriptionManager(run
 export function acquireSharedChartMarketFeed(brokerId: string, instrumentKey: string): () => void {
   const key = chartMarketKey(brokerId, instrumentKey);
   return sharedChartMarketFeed.subscribeSharedSymbol(brokerId, instrumentKey, event => {
+    if (event.type === 'status') {
+      chartMarketStore.publishStatus(key, event.status);
+      return;
+    }
     if (event.type !== 'tick' || !event.tick) return;
     if (String(event.tick.instrumentKey || '') !== String(instrumentKey)) return;
     chartMarketStore.publish(key, event.tick);
