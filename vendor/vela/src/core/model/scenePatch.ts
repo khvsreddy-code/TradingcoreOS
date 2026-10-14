@@ -21,6 +21,9 @@ export function applyScenePatch(model: IndicatorModel, patch: ScenePatch): void 
             series.points = applyArrayDelta(series.points, delta.points, op, delta.start, delta.remove);
         } else if (delta.kind === 'bars' && (series.kind === 'candle' || series.kind === 'bar')) {
             series.bars = applyArrayDelta(series.bars, delta.bars, op, delta.start, delta.remove);
+            if (delta.barColors !== undefined) {
+                series.barColors = applyArrayDelta(series.barColors ?? [], delta.barColors, op, delta.start, delta.remove);
+            }
         } else if (delta.kind === 'markers' && series.kind === 'markers') {
             series.markers = applyArrayDelta(series.markers, delta.markers, op, delta.start, delta.remove);
         }
