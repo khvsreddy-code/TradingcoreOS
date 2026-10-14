@@ -130,9 +130,17 @@ function applyArrayDelta<T>(current: T[], incoming: T[], op: SeriesPatchOperatio
             if (current.length === 0) current.push(...incoming);
             else current[current.length - 1] = incoming[incoming.length - 1]!;
             return current;
-        case 'replace-range':
-            current.splice(Math.max(0, start ?? 0), Math.max(0, remove ?? incoming.length), ...incoming);
+        case 'replace-range': {
+            const index = Math.max(0, start ?? 0);
+            const count = Math.max(0, remove ?? incoming.length);
+            // Localized forming-candle/dirty-span patches should touch only changed slots.
+            if (count === incoming.length && index + count <= current.length) {
+                for (let i = 0; i < incoming.length; i += 1) current[index + i] = incoming[i]!;
+                return current;
+            }
+            current.splice(index, count, ...incoming);
             return current;
+        }
         default:
             return incoming;
     }

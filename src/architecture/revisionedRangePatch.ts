@@ -52,27 +52,29 @@ export function createStructuralRangePatch<T>(context:RangePatchContext,operatio
  return makePatch(context,from,to,operation,values);
 }
 
-export function applyRangePatch<T>(current:readonly T[],patch:RangePatch<T>):T[]{
- const next=[...current];
+export function applyRangePatch<T>(current:T[],patch:RangePatch<T>):T[]{
+ // Preserve retained storage and unaffected element identities for localized updates.
  switch(patch.operation){
   case'replace-range':
-   if(patch.from>next.length||patch.to>next.length)throw new RangeError('replace-range is outside the retained series.');
-   next.splice(patch.from,patch.to-patch.from,...patch.values);break;
+   if(patch.from>current.length||patch.to>current.length)throw new RangeError('replace-range is outside the retained series.');
+   if(patch.to-patch.from===patch.values.length){for(let i=0;i<patch.values.length;i++)current[patch.from+i]=patch.values[i]!;}
+   else current.splice(patch.from,patch.to-patch.from,...patch.values);
+   break;
   case'append':
-   if(patch.from!==next.length)throw new RangeError('append start must equal current series length.');
-   next.push(...patch.values);break;
-  case'prepend':next.splice(0,0,...patch.values);break;
+   if(patch.from!==current.length)throw new RangeError('append start must equal current series length.');
+   for(const value of patch.values)current.push(value);break;
+  case'prepend':for(let i=patch.values.length-1;i>=0;i--)current.unshift(patch.values[i]!);break;
   case'remove-range':
-   if(patch.to>next.length)throw new RangeError('remove-range is outside the retained series.');
-   next.splice(patch.from,patch.to-patch.from);break;
-  case'full-refresh':return [...patch.values];
+   if(patch.to>current.length)throw new RangeError('remove-range is outside the retained series.');
+   current.splice(patch.from,patch.to-patch.from);break;
+  case'full-refresh':current.length=0;for(const value of patch.values)current.push(value);break;
  }
- return next;
+ return current;
 }
 
 export class RangePatchRevisionGate{
  private readonly accepted=new Map<string,RangePatchStamp>();
- apply<T>(current:readonly T[],patch:RangePatch<T>,currentDatasetRevision:number):{accepted:boolean;values:T[]}{
+ apply<T>(current:T[],patch:RangePatch<T>,currentDatasetRevision:number):{accepted:boolean;values:T[]}{
   if(!validRevision(currentDatasetRevision)||patch.indexSpace!=='absolute-history'||patch.datasetRevision!==currentDatasetRevision
    ||!validRevision(patch.datasetRevision)||!validRevision(patch.outputRevision)||!patch.streamId.trim())return {accepted:false,values:[...current]};
   const prev=this.accepted.get(patch.streamId);

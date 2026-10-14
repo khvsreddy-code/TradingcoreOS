@@ -6,7 +6,7 @@ let comparisons=0;
 const patch=createRangePatch(baseline,next,{streamId:'nifty:close',datasetRevision:7,outputRevision:1,dirtyRange:{from:1000,to:1101},incrementalTrusted:true},(a,b)=>{comparisons++;return a===b;});
 assert.equal(patch.indexSpace,'absolute-history');assert.equal(patch.operation,'replace-range');assert.equal(patch.from,1050);assert.equal(patch.to,1056,'to is exclusive');
 assert.deepEqual(patch.values,next.slice(1050,1056));assert.ok(comparisons<500,'small dirty span must not compare all 5,000 values');
-const gate=new RangePatchRevisionGate();const applied=gate.apply(baseline,patch,7);assert.equal(applied.accepted,true);assert.deepEqual(applied.values,next);
+const gate=new RangePatchRevisionGate();const retained=baseline.slice();const retainedArray=retained;const untouchedBefore=retained[1049];const untouchedAfter=retained[1056];const applied=gate.apply(retained,patch,7);assert.equal(applied.accepted,true);assert.strictEqual(applied.values,retainedArray,'range updates mutate retained storage instead of cloning the whole series');assert.deepEqual(applied.values,next);assert.strictEqual(retained[1049],untouchedBefore);assert.strictEqual(retained[1056],untouchedAfter);
 assert.deepEqual(applied.values.slice(0,1050),baseline.slice(0,1050));assert.deepEqual(applied.values.slice(1056),baseline.slice(1056));
 const newerValues=next.slice();newerValues[1053]+=1;
 const newer=createRangePatch(next,newerValues,{streamId:'nifty:close',datasetRevision:8,outputRevision:2,dirtyRange:{from:1053,to:1054},incrementalTrusted:true});

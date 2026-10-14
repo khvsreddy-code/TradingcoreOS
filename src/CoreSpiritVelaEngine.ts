@@ -796,7 +796,7 @@ export class CoreSpiritVelaEngine {
           if(stopped||generation!==liveRunGeneration||sessionGeneration!==mainRunGeneration)return;
           const latestOutputs=safeOutputs(result.outputs);
           if(Number.isFinite(latestTime)){
-            emitScenePatches(latestOutputs,velaTimeRange(latestTime,latestTime));
+            emitScenePatches(latestOutputs,velaTimeRange(latestTime,latestTime),result.sourceDatasetRevision);
             lastTime=latestTime;
           }
           rememberWorkerState(result.state);
