@@ -91,7 +91,7 @@ interface ToolbarGroupLayout {
     sections: readonly SectionSource[];
 }
 
-/** Canonical toolbar layout — seven top-level buttons, each with labelled flyout sections. */
+/** Canonical toolbar layout — eight top-level buttons, each with labelled flyout sections. */
 const TOOLBAR_LAYOUT: readonly ToolbarGroupLayout[] = [
     {
         id: 'lines-channels-pitchforks',
