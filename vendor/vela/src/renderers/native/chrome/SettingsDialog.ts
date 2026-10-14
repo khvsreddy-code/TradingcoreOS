@@ -532,17 +532,23 @@ export class SettingsDialog {
         meta.className = 'vela-sd-preview-meta';
         const sampleLabel = document.createElement('span');
         sampleLabel.textContent = 'Sample data';
+        // The preview uses synthetic candles, but its instrument label must follow the
+        // active workspace chart so users can tell which chart's appearance they are editing.
+        const previewTicker = (document.documentElement.dataset.tcoActiveSymbol || 'NSE:NIFTY50-INDEX')
+            .split(':').pop()!.trim() || 'NIFTY50-INDEX';
+        const previewTimeframe = document.documentElement.dataset.tcoActiveTimeframe || '5m';
+        const previewBadge = previewTicker.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || 'TC';
         const sampleSymbol = document.createElement('span');
-        sampleSymbol.textContent = 'BTCUSDT';
+        sampleSymbol.textContent = previewTicker;
         meta.append(sampleLabel, sampleSymbol);
 
         const symbol = document.createElement('div');
         symbol.className = 'vela-sd-preview-symbol';
         const badge = document.createElement('span');
         badge.className = 'vela-sd-preview-badge';
-        badge.textContent = 'BT';
+        badge.textContent = previewBadge;
         const symbolText = document.createElement('span');
-        symbolText.textContent = 'BTCUSDT · 15m';
+        symbolText.textContent = `${previewTicker} · ${previewTimeframe}`;
         const statusDot = document.createElement('span');
         statusDot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#0f9b8e;flex:0 0 auto;';
         symbol.append(badge, symbolText, statusDot);
