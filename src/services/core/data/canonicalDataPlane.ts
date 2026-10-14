@@ -66,6 +66,10 @@ export class CanonicalDataPlane {
 
   /** Direct OHLCV compatibility ingress; avoids a second row-object allocation pass. */
   replaceHistoricalCandleRows(rows: readonly { timestamp: string; open: number; high: number; low: number; close: number; volume: number }[], from = 0, to = rows.length): void { this.market.replaceHistoricalCandleRows(rows, from, to); }
+  /** Patch broker corrections into the canonical timeline and publish one dirty span. */
+  reconcileHistoricalCandleRows(rows: readonly { timestamp: string; open: number; high: number; low: number; close: number; volume: number }[]): void {
+    this.market.reconcileHistoricalCandleRows(rows);
+  }
   append(row: MarketDataPoint): void { this.market.append(row); }
   updateLast(row: MarketDataPoint): void { this.market.updateLast(row); }
   clear(): void { this.market.clear(); }
