@@ -1,6 +1,7 @@
 import type { VelaWorkspaceOptions } from './velaWorkspaceLoader';
 import { createTcoVelaDataProvider } from '../../../TcoVelaDataProvider';
 import type { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
+import { CORE_SPIRIT_DRAWING_TOOL_CATALOG } from './velaDrawingCatalog';
 
 export type TcoVelaTerminalDependencies = {
   symbol:string;
@@ -69,7 +70,9 @@ export function createTcoVelaTerminalOptions(
       corespirit:()=>deps.createCoreSpiritEngine(),
     },
     indicators:deps.resolveIndicatorManifest,
-    drawings:true,
+    // Explicit complete Vela 0.8.4 inventory. Vela groups these into native flyouts;
+    // advanced families stay lazy-loaded when their group/tool is opened.
+    drawings:{ tools:[...CORE_SPIRIT_DRAWING_TOOL_CATALOG] },
     drawingToolbar:true,
     indicatorPicker:true,
     // Vela owns the chart chrome. Keep its native editing/history, alerts and screenshot
