@@ -23,6 +23,7 @@ export interface ColumnarBars {
  * to detect gaps instead of silently rendering stale or out-of-order market state.
  */
 export interface ColumnarBarUpdate {
+    /** Bar opening timestamp for the normal append/replace-last path. */
     readonly time: number;
     readonly open: number;
     readonly high: number;
@@ -30,8 +31,19 @@ export interface ColumnarBarUpdate {
     readonly close: number;
     readonly volume?: number;
     readonly timeUnit?: ColumnarTimeUnit;
+    /** Canonical market-data revision; monotonic for this timeline. */
     readonly sequence?: number;
+    /** Symbol/timeframe identity for rejecting updates from a previously selected dataset. */
     readonly timelineKey?: string;
+    /**
+     * Explicit correction/backfill path. The active dataset is already selected;
+     * replace the retained columnar history while preserving its current viewport.
+     * Normal market ticks must continue to use the scalar O(1) forming-bar path.
+     */
+    readonly operation?: 'replace-history';
+    readonly columns?: ColumnarBars;
+    readonly dirtyRange?: Readonly<{ from: number; to: number }>;
+    readonly preserveView?: boolean;
 }
 
 export interface ColumnarLodIndex {
