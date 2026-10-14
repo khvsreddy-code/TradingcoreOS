@@ -83,6 +83,8 @@ type PlaneState = {
   compatibilityCandles: HistoricalCandle[];
   compatibilityRevision: number;
   latestTick?: NormalizedMarketTick;
+  /** Latest accepted exchange trade time; blocks out-of-order forming-bar regressions. */
+  lastAcceptedTradeTimestampMs?: number;
   revision: number;
   historyReady: boolean;
   historyLoading: boolean;
@@ -264,11 +266,29 @@ export class ChartDataPlane {
         volume: 0,
       });
     } else if (bucketTime === lastTime) {
+      const nextHigh = Math.max(previousHigh, price);
+      const nextLow = Math.min(previousLow, price);
+      // Repeated LTP packets with no OHLC effect are quote updates, not market-data
+      // commits. Do not bump the canonical revision or dirty the series for them.
+      if (price === previousClose && nextHigh === previousHigh && nextLow === previousLow) {
+        return {
+          changed: false,
+          bucketChanged: false,
+          latest: {
+            timestamp: new Date(lastTime * 1000).toISOString(),
+            open: Number(view.open[lastIndex]),
+            high: previousHigh,
+            low: previousLow,
+            close: previousClose,
+            volume: Number(view.volume[lastIndex]) || 0,
+          },
+        };
+      }
       this.canonicalPlane.updateLast({
         time: lastTime,
         open: Number(view.open[lastIndex]),
-        high: Math.max(Number(view.high[lastIndex]), price),
-        low: Math.min(Number(view.low[lastIndex]), price),
+        high: nextHigh,
+        low: nextLow,
         close: price,
         volume: Number(view.volume[lastIndex]) || 0,
       });
@@ -323,14 +343,40 @@ export class ChartDataPlane {
 
   private onTick = (tick: NormalizedMarketTick): void => {
     if (String(tick.instrumentKey || '') !== String(this.instrumentKey)) return;
-    this.state.latestTick = tick;
+
     const price = Number(tick.ltp);
+    const tradeTime = tradeTimestamp(tick);
+    const tradeTimestampMs = tradeTime == null ? Number.NaN : Date.parse(tradeTime);
+    const hasHistory = Boolean(this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length);
+
+    // A trade from before the current chart tail is stale even when no live tick
+    // has been accepted yet (for example immediately after a history refresh).
+    let latestBarStartMs = Number.NaN;
+    if (this.state.columns?.time.length) {
+      const times = this.state.columns.time;
+      const rawTime = Number(times[times.length - 1]);
+      latestBarStartMs = rawTime * (this.state.columns.timeUnit === 'seconds' ? 1000 : 1);
+    } else {
+      const rows = this.state.candles.length ? this.state.candles : this.state.compatibilityCandles;
+      const tail = rows[rows.length - 1];
+      if (tail) latestBarStartMs = Date.parse(String(tail.timestamp));
+    }
+
+    if (hasHistory && Number.isFinite(tradeTimestampMs) && (
+      (Number.isFinite(latestBarStartMs) && tradeTimestampMs < latestBarStartMs) ||
+      (this.state.lastAcceptedTradeTimestampMs != null && tradeTimestampMs < this.state.lastAcceptedTradeTimestampMs)
+    )) {
+      // Ignore the stale packet entirely: it must not regress the chart LTP or
+      // overwrite a newer forming-bar close.
+      return;
+    }
+
+    this.state.latestTick = tick;
     if (!Number.isFinite(price)) return;
 
     // Quotes can keep the LTP UI current, but only trusted exchange trade times
     // and already-loaded broker history may update a candle.
-    const hasHistory = Boolean(this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length);
-    if (!hasHistory || tradeTimestamp(tick) == null) {
+    if (!hasHistory || tradeTime == null || !Number.isFinite(tradeTimestampMs)) {
       this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
     }
@@ -347,6 +393,7 @@ export class ChartDataPlane {
     if (this.state.columns && this.state.candles.length === 0) {
       const result = this.onColumnarTick(tick, price);
       chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
+      if (result.latest) this.state.lastAcceptedTradeTimestampMs = tradeTimestampMs;
       if (!result.latest || !result.changed) {
         // Keep last-price/header subscribers fresh without mutating candles for a stale or duplicate trade bucket.
         this.emit({ type: 'quote', snapshot: this.snapshot() });
@@ -374,7 +421,7 @@ export class ChartDataPlane {
       compatibility,
       {
         price,
-        timestamp: tradeTimestamp(tick)!,
+        timestamp: tradeTime,
       },
       CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
       MAX_HISTORY_CANDLES,
@@ -393,14 +440,29 @@ export class ChartDataPlane {
     this.state.compatibilityRevision = -1;
     const latest = result.candles[result.candles.length - 1];
     if (latest) {
-      const latestPoint = { time: Math.floor(Date.parse(latest.timestamp) / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 };
+      const latestTimeMs = Date.parse(String(latest.timestamp));
+      const intervalMs = (CHART_TIMEFRAME_SECONDS[this.timeframe] || 300) * 1000;
+      // Record ordering only when the exchange timestamp belongs to the visible
+      // tail bar. Older bars are never allowed to become the new ordering anchor.
+      if (Number.isFinite(latestTimeMs) && tradeTimestampMs >= latestTimeMs && tradeTimestampMs < latestTimeMs + intervalMs) {
+        this.state.lastAcceptedTradeTimestampMs = tradeTimestampMs;
+      }
+
+      const latestPoint = { time: Math.floor(latestTimeMs / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 };
       const canonicalLength = this.canonicalPlane.market.length;
       const canonicalLastTime = canonicalLength ? this.canonicalPlane.market.time[canonicalLength - 1] : NaN;
       const canonicalNeedsReplace = canonicalLength !== previousLength && canonicalLength !== previousLength - 1;
       if (canonicalNeedsReplace || (!Number.isFinite(canonicalLastTime) && previousLength > 0)) this.syncCanonical();
       else if (!Number.isFinite(canonicalLastTime) || latestPoint.time > canonicalLastTime) this.canonicalPlane.append(latestPoint);
-      else if (latestPoint.time === canonicalLastTime) this.canonicalPlane.updateLast(latestPoint);
-      else this.syncCanonical();
+      else if (latestPoint.time === canonicalLastTime) {
+        const index = canonicalLength - 1;
+        const unchanged = this.canonicalPlane.market.open[index] === latestPoint.open
+          && this.canonicalPlane.market.high[index] === latestPoint.high
+          && this.canonicalPlane.market.low[index] === latestPoint.low
+          && this.canonicalPlane.market.close[index] === latestPoint.close
+          && this.canonicalPlane.market.volume[index] === latestPoint.volume;
+        if (!unchanged) this.canonicalPlane.updateLast(latestPoint);
+      } else this.syncCanonical();
     }
     if (latest) marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, latest);
     if (result.bucketChanged || result.candles.length !== previousLength || Number(previousClose) !== Number(result.candles[result.candles.length - 1]?.close)) {
