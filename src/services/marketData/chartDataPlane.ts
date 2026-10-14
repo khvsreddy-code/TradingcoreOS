@@ -357,7 +357,7 @@ export class ChartDataPlane {
 
     // A quote may update the header while history is cold/recovering, but it must
     // never become a candle until a canonical historical baseline is available.
-    if (!hasHistory || this.state.historyLoading || this.state.recoveryPending || this.state.recoveryInFlight) {
+    if (!hasHistory || (!replaying && (this.state.historyLoading || this.state.recoveryPending || this.state.recoveryInFlight))) {
       if (Number.isFinite(price) && this.rememberLatestTick(tick, tradeTimeMs)) {
         this.emit({ type: 'quote', snapshot: this.snapshot() });
       }
@@ -461,9 +461,6 @@ export class ChartDataPlane {
   private maybeRecoverAfterReconnect(): void {
     if (!this.state.recoveryPending || this.state.recoveryInFlight || this.disposed) return;
     if (!this.state.historyReady || this.state.historyLoading || this.canonicalPlane.length === 0) return;
-    const now = Date.now();
-    if (now - this.state.lastRecoveryAt < 5_000) return;
-
     this.state.recoveryPending = false;
     this.state.recoveryInFlight = true;
     this.state.lastRecoveryAt = now;
