@@ -626,8 +626,86 @@ const bookmarksPanel: SidePanelDescriptor = {
     controls.append(addCurrent, search);
     root.appendChild(controls);
 
+    const filterInput = document.createElement('input');
+    filterInput.className = 'tco-watch-search';
+    filterInput.type = 'search';
+    filterInput.placeholder = 'Search this watchlist…';
+    filterInput.setAttribute('aria-label', 'Filter watchlist by symbol');
+    root.appendChild(filterInput);
+
+    let filterMode: 'all' | 'gainers' | 'losers' = 'all';
+    let sortMode: 'default' | 'symbol' | 'change' | 'price' = 'default';
+    const filters = document.createElement('div');
+    filters.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap;';
+    const filterButtons = new Map<string, HTMLButtonElement>();
+    for (const [mode, label] of [['all', 'All'], ['gainers', 'Gainers'], ['losers', 'Losers']] as const) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tco-watch-filter';
+      button.textContent = label;
+      button.setAttribute('aria-pressed', mode === filterMode ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        filterMode = mode;
+        for (const [key, element] of filterButtons) element.setAttribute('aria-pressed', key === filterMode ? 'true' : 'false');
+        updateRows();
+      });
+      filterButtons.set(mode, button);
+      filters.appendChild(button);
+    }
+    const sort = document.createElement('select');
+    sort.className = 'tco-frame-select';
+    sort.style.cssText = 'margin-left:auto;width:112px;max-width:112px;padding:5px 6px;font-size:10px;';
+    sort.setAttribute('aria-label', 'Sort watchlist');
+    for (const [value, label] of [['default', 'Custom order'], ['symbol', 'Symbol A–Z'], ['change', 'Day change'], ['price', 'Last price']] as const) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      sort.appendChild(option);
+    }
+    sort.addEventListener('change', () => { sortMode = sort.value as typeof sortMode; buildRows(); });
+    filters.appendChild(sort);
+    root.appendChild(filters);
+
     const rows = document.createElement('div');
     rows.style.cssText = 'display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto;';
+    rows.style.flex = '1 1 auto';
+
+    const detailCard = document.createElement('section');
+    detailCard.className = 'tco-watch-detail';
+    const detailHead = document.createElement('div');
+    detailHead.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;';
+    const detailTitleWrap = document.createElement('div');
+    const detailTitle = document.createElement('div');
+    detailTitle.style.cssText = 'font-size:12px;font-weight:750;color:var(--vela-fg-bright);overflow-wrap:anywhere;';
+    const detailSubtitle = document.createElement('div');
+    detailSubtitle.style.cssText = 'margin-top:4px;font-size:10px;color:var(--vela-fg-muted);';
+    detailTitleWrap.append(detailTitle, detailSubtitle);
+    const liveBadge = document.createElement('span');
+    liveBadge.style.cssText = 'flex:none;padding:3px 6px;border:1px solid var(--vela-border);border-radius:5px;color:var(--vela-fg-muted);font-size:9px;font-weight:700;';
+    liveBadge.textContent = 'MARKET';
+    detailHead.append(detailTitleWrap, liveBadge);
+    const metrics = document.createElement('div');
+    metrics.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;';
+    const metricRefs = new Map<string, HTMLSpanElement>();
+    for (const [key, label] of [['ltp', 'Last price'], ['change', 'Day change'], ['high', 'Day high'], ['low', 'Day low']] as const) {
+      const cell = document.createElement('div');
+      cell.className = 'tco-watch-metric';
+      const caption = document.createElement('div');
+      caption.className = 'tco-watch-metric-label';
+      caption.textContent = label;
+      const value = document.createElement('div');
+      value.className = 'tco-watch-metric-value';
+      value.textContent = '—';
+      cell.append(caption, value);
+      metrics.appendChild(cell);
+      metricRefs.set(key, value);
+    }
+    const detailHint = document.createElement('div');
+    detailHint.className = 'tco-frame-help';
+    detailHint.style.marginTop = '9px';
+    detailHint.textContent = 'Select a row to switch the chart to that instrument.';
+    detailCard.append(detailHead, metrics, detailHint);
+    root.appendChild(detailCard);
     root.appendChild(rows);
 
     type Quote = { ltp: number; changePercent?: number; receivedAt: number };
@@ -661,13 +739,51 @@ const bookmarksPanel: SidePanelDescriptor = {
     };
     const rowRefs = new Map<string, RowRef>();
 
+    const updateDetails = (): void => {
+      const current = String(ctx.symbol || '').trim();
+      const snapshot = (tradingCoreRuntime.getMarketSnapshot(current) || {}) as Record<string, unknown>;
+      const cached = quotes.get(current.toUpperCase());
+      const ticker = current.includes(':') ? current.split(':', 2)[1] || current : current;
+      const ltp = Number(snapshot.ltp ?? snapshot.close ?? cached?.ltp);
+      const change = Number(snapshot.changePercent ?? cached?.changePercent);
+      const high = Number(snapshot.high ?? snapshot.dayHigh);
+      const low = Number(snapshot.low ?? snapshot.dayLow);
+      detailTitle.textContent = ticker || 'Active instrument';
+      detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${snapshot.exchange || snapshot.venue || 'Active chart'}`;
+      liveBadge.textContent = Number.isFinite(ltp) ? 'QUOTE' : 'WAITING';
+      const setMetric = (key: string, value: string, tone?: string) => {
+        const element = metricRefs.get(key);
+        if (!element) return;
+        element.textContent = value;
+        element.style.color = tone || 'var(--vela-fg-bright)';
+      };
+      setMetric('ltp', Number.isFinite(ltp) ? ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+      setMetric('change', Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : '—',
+        Number.isFinite(change) ? change >= 0 ? '#22c55e' : '#f23645' : undefined);
+      setMetric('high', Number.isFinite(high) ? high.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+      setMetric('low', Number.isFinite(low) ? low.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
+      detailHint.textContent = Number.isFinite(ltp)
+        ? 'Snapshot from the active market-data feed; chart selection stays in sync.'
+        : 'Waiting for a market quote for this instrument. No sample price is shown.';
+    };
+
     const updateRows = (): void => {
       const current = String(ctx.symbol || '').toUpperCase();
       meta.textContent = `${current} · ${ctx.timeframe} · ${watchlist.length} symbols`;
-
+      const query = filterInput.value.trim().toUpperCase();
+      const filtered = watchlist.filter((item) => {
+        const text = `${item.symbol} ${item.short} ${item.label}`.toUpperCase();
+        if (query && !text.includes(query)) return false;
+        const pct = quotes.get(item.symbol)?.changePercent;
+        if (filterMode === 'gainers' && !(Number.isFinite(pct) && Number(pct) > 0)) return false;
+        if (filterMode === 'losers' && !(Number.isFinite(pct) && Number(pct) < 0)) return false;
+        return true;
+      });
+      const visible = new Set(filtered.map((item) => item.symbol));
       for (const item of watchlist) {
         const ref = rowRefs.get(item.symbol);
         if (!ref) continue;
+        ref.row.hidden = !visible.has(item.symbol);
         const isSelected = item.symbol === current;
         ref.row.style.background = isSelected ? 'rgba(124,92,255,.10)' : 'transparent';
         ref.row.style.borderColor = isSelected ? 'rgba(155,138,255,.22)' : 'transparent';
@@ -683,7 +799,10 @@ const bookmarksPanel: SidePanelDescriptor = {
           ? (pct! >= 0 ? '#4ade80' : '#fb7185')
           : '#64748b';
       }
+      updateDetails();
     };
+
+    filterInput.addEventListener('input', updateRows);
 
     const buildRows = (): void => {
       const current = String(ctx.symbol || '').toUpperCase();
@@ -695,7 +814,11 @@ const bookmarksPanel: SidePanelDescriptor = {
         }
       }
 
-      for (const item of watchlist) {
+      const ordered = [...watchlist];
+      if (sortMode === 'symbol') ordered.sort((a, b) => a.short.localeCompare(b.short));
+      if (sortMode === 'price') ordered.sort((a, b) => (quotes.get(b.symbol)?.ltp ?? -Infinity) - (quotes.get(a.symbol)?.ltp ?? -Infinity));
+      if (sortMode === 'change') ordered.sort((a, b) => (quotes.get(b.symbol)?.changePercent ?? -Infinity) - (quotes.get(a.symbol)?.changePercent ?? -Infinity));
+      for (const item of ordered) {
         let ref = rowRefs.get(item.symbol);
         if (!ref) {
           const row = document.createElement('div');
@@ -749,6 +872,7 @@ const bookmarksPanel: SidePanelDescriptor = {
           ref = { row, button, value, change };
           rowRefs.set(item.symbol, ref);
         }
+        rows.appendChild(ref.row);
         ref.button.dataset.selected = item.symbol === current ? '1' : '';
       }
 
