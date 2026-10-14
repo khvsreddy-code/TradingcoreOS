@@ -637,8 +637,11 @@ export class ChartDataPlane {
   }
 
   private mergeOlder(rows: HistoricalCandle[], reason: 'older-history', requestedLimit?: number): HistoricalCandle[] {
-    const previousLength = this.state.candles.length;
-    const merged = normalizeHistory([...rows, ...this.state.candles]);
+    const currentRows = this.state.candles.length
+      ? this.state.candles
+      : this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
+    const previousLength = currentRows.length;
+    const merged = normalizeHistory([...rows, ...currentRows]);
     if (!merged.length) return this.state.candles;
     this.state.candles = merged;
     this.state.columns = undefined;
@@ -895,7 +898,9 @@ export class ChartDataPlane {
   }
 
   async loadOlderHistory(priority: 'visible' | 'warm' = 'visible', demand?: { visibleBars?: number }): Promise<HistoricalCandle[]> {
-    if (this.state.historyReady && !this.state.candles.length && this.state.columns) this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
+    const currentRows = this.state.candles.length
+      ? this.state.candles
+      : this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
     if (this.state.olderHistoryPromise) {
       if (priority === 'visible' && this.state.olderHistoryPriority === 'warm' && this.state.olderHistoryRequestKey) {
         chartHistoryCoordinator.promote(this.state.olderHistoryRequestKey, 'visible');
@@ -903,11 +908,11 @@ export class ChartDataPlane {
       }
       return this.state.olderHistoryPromise;
     }
-    if (!this.state.historyReady || this.state.olderHistoryExhausted || this.state.candles.length >= MAX_HISTORY_CANDLES) {
-      return this.state.candles;
+    if (!this.state.historyReady || this.state.olderHistoryExhausted || currentRows.length >= MAX_HISTORY_CANDLES) {
+      return currentRows;
     }
-    const oldest = this.state.candles[0];
-    if (!oldest?.timestamp) return this.state.candles;
+    const oldest = currentRows[0];
+    if (!oldest?.timestamp) return currentRows;
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
     const visibleBars = Math.max(1, Math.ceil(Number(demand?.visibleBars) || historyPageCandles(this.timeframe)));
     const limit = demand?.visibleBars ? historyDemandPageCandles(this.timeframe, visibleBars) : historyPageCandles(this.timeframe);
