@@ -748,9 +748,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       const snapshot = (tradingCoreRuntime.getMarketSnapshot(symbol) || {}) as unknown as Record<string, unknown>;
       const cached = quotes.get(symbol.toUpperCase());
       const daily = dayCandle(snapshot);
-      const ltp = asFinite(snapshot.ltp, snapshot.close, cached?.ltp);
+      const ltp = asFinite(snapshot.ltp, cached?.ltp);
       const percent = asFinite(snapshot.changePercent, cached?.changePercent);
-      const previousClose = asFinite(snapshot.previousClose, snapshot.prevClose, snapshot.prev_close, snapshot.previous_close);
+      const previousClose = asFinite(snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close);
       let change = asFinite(snapshot.change, snapshot.changeValue, snapshot.netChange, cached?.change);
       if (change === undefined && ltp !== undefined && previousClose !== undefined) change = ltp - previousClose;
       if (change === undefined && ltp !== undefined && percent !== undefined && percent > -100) {
@@ -776,11 +776,11 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (event.type !== 'tick' || !event.tick) return;
         const tick = event.tick as unknown as Record<string, unknown>;
         const symbol = String(tick.instrumentKey || '').trim().toUpperCase();
-        const ltp = asFinite(tick.ltp, tick.close);
+        const ltp = asFinite(tick.ltp);
         if (!symbol || ltp === undefined) return;
         const daily = dayCandle(tick);
         const percent = asFinite(tick.changePercent);
-        const previousClose = asFinite(tick.previousClose, tick.prevClose, tick.prev_close, tick.previous_close);
+        const previousClose = asFinite(tick.previousClose, tick.prevClose, tick.close, tick.prev_close, tick.previous_close);
         let change = asFinite(tick.change, tick.changeValue, tick.netChange);
         if (change === undefined && previousClose !== undefined) change = ltp - previousClose;
         if (change === undefined && percent !== undefined && percent > -100) change = ltp - ltp / (1 + percent / 100);
