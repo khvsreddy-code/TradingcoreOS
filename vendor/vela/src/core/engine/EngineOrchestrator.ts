@@ -3293,18 +3293,34 @@ function rangeSeriesDelta(
         while (lo < hi) { const mid = (lo + hi) >>> 1; if (Number(items[mid]!.time) <= target) lo = mid + 1; else hi = mid; }
         return lo;
     };
+    if ((previous.kind === 'candle' || previous.kind === 'bar') && (current.kind === 'candle' || current.kind === 'bar')
+        && Boolean(previous.barColors?.length) !== Boolean(current.barColors?.length)) {
+        // Switching between a colorless series and an index-aligned color array changes the
+        // entire mapping. Replace the series atomically so old colors cannot drift by index.
+        return fullSeriesDelta(current);
+    }
     const start = lower(prev.items, dirty.from);
     const remove = upper(prev.items, dirty.to) - start;
     const incomingStart = lower(next.items, dirty.from);
     const incomingEnd = upper(next.items, dirty.to);
     const incoming = next.items.slice(incomingStart, incomingEnd);
     if (next.kind === 'points') return { seriesId: current.id, kind: 'points', points: incoming as SeriesPoint[], op: 'replace-range', start, remove };
-    if (next.kind === 'bars') return { seriesId: current.id, kind: 'bars', bars: incoming as OHLCV[], op: 'replace-range', start, remove };
+    if (next.kind === 'bars') {
+        const delta: Extract<SeriesValueDelta, { kind: 'bars' }> = {
+            seriesId: current.id, kind: 'bars', bars: incoming as OHLCV[], op: 'replace-range', start, remove,
+        };
+        if ((current.kind === 'candle' || current.kind === 'bar') && current.barColors?.length) {
+            delta.barColors = current.barColors.slice(incomingStart, incomingEnd);
+        }
+        return delta;
+    }
     return { seriesId: current.id, kind: 'markers', markers: incoming as MarkerPoint[], op: 'replace-range', start, remove };
 }
 
 function fullSeriesDelta(series: IndicatorModel['series'][number]): SeriesValueDelta {
-    if (series.kind === 'candle' || series.kind === 'bar') return { seriesId: series.id, kind: 'bars', bars: series.bars, op: 'replace' };
+    if (series.kind === 'candle' || series.kind === 'bar') {
+        return { seriesId: series.id, kind: 'bars', bars: series.bars, barColors: series.barColors ?? [], op: 'replace' };
+    }
     if (series.kind === 'markers') return { seriesId: series.id, kind: 'markers', markers: series.markers, op: 'replace' };
     if (isLineLikeSeries(series)) return { seriesId: series.id, kind: 'points', points: series.points, op: 'replace' };
     throw new Error(`Unsupported series kind: ${String(series.kind)}`);
@@ -3315,6 +3331,7 @@ function incrementalSeriesDelta(previous: IndicatorModel['series'][number], curr
     if (current.kind === 'markers' && previous.kind === 'markers') return incrementalMarkerDelta(previous.markers, current.markers, current.id);
     if (current.kind === 'candle' || current.kind === 'bar') {
         if (previous.kind !== 'candle' && previous.kind !== 'bar') return null;
+        if (Boolean(previous.barColors?.length) !== Boolean(current.barColors?.length)) return fullSeriesDelta(current);
         return incrementalValuesDelta(previous.bars, current.bars, current, cause);
     }
     if (isLineLikeSeries(current) && isLineLikeSeries(previous)) return incrementalValuesDelta(previous.points, current.points, current, cause);
@@ -3355,7 +3372,16 @@ function markerEqual(a: { time: number; position: string; shape: string; color: 
 }
 
 function tailSeriesDelta(series: IndicatorModel['series'][number], op: 'append' | 'replace-last', values: any[]): SeriesValueDelta {
-    if (series.kind === 'candle' || series.kind === 'bar') return { seriesId: series.id, kind: 'bars', bars: values, op };
+    if (series.kind === 'candle' || series.kind === 'bar') {
+        const start = Math.max(0, series.bars.length - values.length);
+        return {
+            seriesId: series.id,
+            kind: 'bars',
+            bars: values,
+            ...(series.barColors?.length ? { barColors: series.barColors.slice(start) } : {}),
+            op,
+        };
+    }
     if (series.kind === 'markers') return { seriesId: series.id, kind: 'markers', markers: values, op };
     return { seriesId: series.id, kind: 'points', points: values, op };
 }
