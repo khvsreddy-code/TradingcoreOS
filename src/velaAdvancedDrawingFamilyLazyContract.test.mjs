@@ -59,6 +59,30 @@ const hydratedToolbar = defaultToolbar();
 const hydratedIcons = hydratedToolbar.groups.flatMap((group) => group.tools.map((tool) => tool.icon));
 assert.ok(new Set(hydratedIcons).size > 20, 'advanced drawing tools must expose distinct recognisable SVG icons');
 
+// The 0.8.4 palette is grouped for discovery, not truncated to whichever lazy family
+// happened to register first. Every available tool appears exactly once across visible
+// toolbar sections, and the known advanced families stay reachable from their Vela groups.
+const visibleTools = hydratedToolbar.groups.flatMap((group) =>
+  group.sections ? group.sections.flatMap((section) => section.tools) : group.tools
+);
+const visibleTypes = visibleTools.map((tool) => tool.type);
+assert.equal(new Set(visibleTypes).size, visibleTypes.length, 'the canonical toolbar must not duplicate tools across categories');
+for (const type of [
+  'parallelchannel','pitchfork','arrow','ellipse','freehand','flagmark','iconstamp',
+  'fibretracement','fibspiral','gannfan','anchoredvwap','fixedrangevp',
+  'position','magnifier','fairvaluegap','orderblock','liquidity',
+  'elliottimpulse','gartley','cypher',
+]) {
+  assert.ok(visibleTypes.includes(type), 'Vela 0.8.4 drawing tool missing from toolbar: ' + type);
+}
+const visibleGroup = (type) => hydratedToolbar.groups.find((group) =>
+  (group.sections ? group.sections.flatMap((section) => section.tools) : group.tools).some((tool) => tool.type === type)
+)?.id;
+assert.equal(visibleGroup('pitchfork'), 'lines-channels-pitchforks');
+assert.equal(visibleGroup('arrow'), 'brushes-arrows-shapes');
+assert.equal(visibleGroup('flagmark'), 'icons');
+assert.equal(visibleGroup('fibretracement'), 'fibonacci-gann');
+
 assert.deepEqual([...ADVANCED_DRAWING_FAMILIES], ['channels', 'fibonacci', 'patterns']);
 
 console.log('VELA_ADVANCED_DRAWING_FAMILY_LAZY_CONTRACT_OK');
