@@ -518,25 +518,28 @@ export class SettingsDialog {
 
         // ══ SYMBOL — chart type + per-style cosmetics + time zone (the reference tab) ══
         body.append(sid(this.section('Symbol'), 'symbol'));
-        body.append(sid(this.sectionTitle('Chart type'), 'symbol.type'));
+        const chartStyleCard = document.createElement('div');
+        chartStyleCard.className = 'vela-sd-card vela-sd-card-type';
+        chartStyleCard.append(sid(this.sectionTitle('Chart style'), 'symbol.type'));
         const groups: Partial<Record<string, HTMLElement>> = {};
         const showActive = (style: string): void => {
             const active = style === 'heikinashi' ? 'candles' : style; // heikin-ashi is candle-drawn
-            // Gate via the !important class, not inline display: the field-grid pass
-            // rewrites every group's display to 'contents' AFTER this visibility pass.
             for (const key of priceStyleIds()) {
                 groups[key]?.classList.toggle('vela-sd-hide', key !== active);
             }
         };
-        body.append(
+        chartStyleCard.append(
             sid(this.selectRowLabeled('Type', config.series.style, priceStyleIds().map((id) => [id, styleLabel(id)] as const), (v) => {
                 this.emit({ series: { style: v } });
                 showActive(v);
                 this.syncTypeTabs?.(v);
             }), 'symbol.type'),
         );
+        body.append(chartStyleCard);
         // Candles — the reference compact rows: one toggle + an up/down swatch pair each.
         const candles = sid(this.group(), 'symbol.style.candles');
+        candles.classList.add('vela-sd-card', 'vela-sd-style-card');
+        candles.style.cssText = '';
         candles.append(this.sectionTitle('Candles'));
         candles.append(sid(this.toggleRow('Body', config.candles.bodyVisible, (v) => this.emit({ candles: { bodyVisible: v } }), [
             this.swatch(config.candles.upColor, (v) => this.emit({ candles: { upColor: v } })),
@@ -555,6 +558,8 @@ export class SettingsDialog {
         body.append(candles);
 
         const bars = sid(this.group(), 'symbol.style.bars');
+        bars.classList.add('vela-sd-card', 'vela-sd-style-card');
+        bars.style.cssText = '';
         bars.append(this.sectionTitle('Bars'));
         bars.append(sid(this.colorRow('Color Up', config.bars.upColor, (v) => this.emit({ bars: { upColor: v } })), 'symbol.style.bars.up-color'));
         bars.append(sid(this.colorRow('Color Down', config.bars.downColor, (v) => this.emit({ bars: { downColor: v } })), 'symbol.style.bars.down-color'));
@@ -563,6 +568,8 @@ export class SettingsDialog {
         body.append(bars);
 
         const line = sid(this.group(), 'symbol.style.line');
+        line.classList.add('vela-sd-card', 'vela-sd-style-card');
+        line.style.cssText = '';
         line.append(this.sectionTitle('Line'));
         line.append(sid(this.colorRow('Color', config.line.color, (v) => this.emit({ line: { color: v } })), 'symbol.style.line.color'));
         line.append(sid(this.numberRow('Width', config.line.width, 1, 10, 1, (v) => this.emit({ line: { width: v } })), 'symbol.style.line.width'));
@@ -570,6 +577,8 @@ export class SettingsDialog {
         body.append(line);
 
         const area = sid(this.group(), 'symbol.style.area');
+        area.classList.add('vela-sd-card', 'vela-sd-style-card');
+        area.style.cssText = '';
         area.append(this.sectionTitle('Area'));
         area.append(sid(this.colorRow('Line color', config.area.lineColor, (v) => this.emit({ area: { lineColor: v } })), 'symbol.style.area.line-color'));
         area.append(sid(this.numberRow('Width', config.area.width, 1, 10, 1, (v) => this.emit({ area: { width: v } })), 'symbol.style.area.width'));
@@ -579,6 +588,8 @@ export class SettingsDialog {
         body.append(area);
 
         const baseline = sid(this.group(), 'symbol.style.baseline');
+        baseline.classList.add('vela-sd-card', 'vela-sd-style-card');
+        baseline.style.cssText = '';
         baseline.append(this.sectionTitle('Baseline'));
         baseline.append(sid(this.rowWith('Top line', [this.swatch(config.baseline.topLineColor, (v) => this.emit({ baseline: { topLineColor: v } }))]), 'symbol.style.baseline.top-line'));
         baseline.append(sid(this.rowWith('Bottom line', [this.swatch(config.baseline.bottomLineColor, (v) => this.emit({ baseline: { bottomLineColor: v } }))]), 'symbol.style.baseline.bottom-line'));
@@ -624,61 +635,66 @@ export class SettingsDialog {
         }
         showActive(config.series.style);
 
-        // Style-independent (every motion applies to every price style), so it gets its own
-        // group. On/off switches only — the durations stay the host's.
-        body.append(sid(this.sectionTitle('Animation'), 'symbol.animation'));
-        body.append(sid(this.boolRow(
+        // Animation switches and the timezone/host settings stay live; cards only
+        // group their existing controls visually.
+        const animationCard = document.createElement('div');
+        animationCard.className = 'vela-sd-card vela-sd-card-animation';
+        animationCard.append(sid(this.sectionTitle('Animation'), 'symbol.animation'));
+        animationCard.append(sid(this.boolRow(
             'Animate zoom',
             config.animations.zoom,
             (v) => this.emit({ animations: { zoom: v } }),
             this.hint('Glide the chart to each zoom step instead of jumping.'),
         ), 'symbol.animation.zoom'));
-        body.append(sid(this.boolRow(
+        animationCard.append(sid(this.boolRow(
             'Pan momentum',
             config.animations.pan,
             (v) => this.emit({ animations: { pan: v } }),
             this.hint('Keep gliding briefly after a drag release, and ease scroll-to-latest and keyboard pans.'),
         ), 'symbol.animation.pan'));
-        body.append(sid(this.boolRow(
+        animationCard.append(sid(this.boolRow(
             'Animate price scale',
             config.animations.autoscale,
             (v) => this.emit({ animations: { autoscale: v } }),
             this.hint('Glide the price scale to its new range while zooming or panning.'),
         ), 'symbol.animation.autoscale'));
-        body.append(sid(this.boolRow(
+        animationCard.append(sid(this.boolRow(
             'Animate price changes',
             config.priceScale.animateLastPrice,
             (v) => this.emit({ priceScale: { animateLastPrice: v } }),
             this.hint('Glide the live bar to each new price instead of snapping.'),
         ), 'symbol.animation.price-changes'));
-        body.append(sid(this.boolRow(
+        animationCard.append(sid(this.boolRow(
             'Reveal on load',
             config.animations.intro,
             (v) => this.emit({ animations: { intro: v } }),
             this.hint('Draw the candles in when a chart first loads. Takes effect on the next load.'),
         ), 'symbol.animation.intro'));
+        body.append(animationCard);
 
-        body.append(sid(this.sectionTitle('Time zone'), 'symbol.timezone'));
-        body.append(sid(this.selectRowLabeled('Time zone', normalizeTimezone(config.timeScale.timezone), timezoneOptions(config.timeScale.timezone), (v) => this.emit({ timeScale: { timezone: v } })), 'symbol.timezone'));
+        const timezoneCard = document.createElement('div');
+        timezoneCard.className = 'vela-sd-card vela-sd-card-timezone';
+        timezoneCard.append(sid(this.sectionTitle('Time zone'), 'symbol.timezone'));
+        timezoneCard.append(sid(this.selectRowLabeled('Time zone', normalizeTimezone(config.timeScale.timezone), timezoneOptions(config.timeScale.timezone), (v) => this.emit({ timeScale: { timezone: v } })), 'symbol.timezone'));
+        body.append(timezoneCard);
 
         // ══ HOST SECTIONS — tabs contributed by the embedding app (widget Status line…) ══
         const renderHostSections = (placement: 'after-symbol' | 'end' | 'symbol'): void => {
+            const target = placement === 'symbol' ? timezoneCard : body;
             for (const hs of this.hostSections) {
                 if ((hs.placement ?? 'after-symbol') !== placement) continue;
-                // The visibility policy filters at the DESCRIPTOR level: a hidden
-                // section (or one whose rows are all hidden) never renders, hidden
-                // rows drop out, a hidden heading takes its group with it.
                 const scope = hostSectionId(hs);
                 if (settingsIdHidden(scope, this.hiddenSettings)) continue;
                 const rows = filterHiddenHostRows(hs.rows, scope, this.hiddenSettings);
                 if (rows.length === 0) continue;
-                // 'symbol' inlines rows into the CURRENT pane (a section title, no tab).
-                body.append(placement === 'symbol' ? this.sectionTitle(hs.title) : this.section(hs.title));
+                // Host-owned Symbol options (for example watermarks) stay editable inside
+                // the same card; they are not replaced by a decorative preview control.
+                target.append(placement === 'symbol' ? this.sectionTitle(hs.title) : this.section(hs.title));
                 for (const hr of rows) {
-                    if (hr.kind === 'heading') body.append(this.sectionTitle(hr.label));
-                    else if (hr.kind === 'toggle') body.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
-                    else if (hr.kind === 'color') body.append(this.colorRow(hr.label, hr.get(), (v) => hr.set(v)));
-                    else body.append(this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), (v) => hr.set(v)));
+                    if (hr.kind === 'heading') target.append(this.sectionTitle(hr.label));
+                    else if (hr.kind === 'toggle') target.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
+                    else if (hr.kind === 'color') target.append(this.colorRow(hr.label, hr.get(), (v) => hr.set(v)));
+                    else target.append(this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), (v) => hr.set(v)));
                 }
             }
         };
