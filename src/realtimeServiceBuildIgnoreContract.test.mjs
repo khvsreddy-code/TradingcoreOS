@@ -61,14 +61,14 @@ try {
   write('src/server/marketData/FyersMarketDataTransport.ts', 'export const transportRevision = 1;\n');
   write('src/server/routes/trading.routes.ts', 'export const routeRevision = 1;\n');
   write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 1;\n');
-  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimefresh: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web' } }] }, null, 2) + '\n');
+  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web' } }] }, null, 2) + '\n');
   const base = commit('base');
 
   write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 2;\n');
   const frontendOnly = commit('frontend only');
   assert.equal(runIgnore(base, frontendOnly).status, 0, 'unrelated frontend change must skip the realtime image');
 
-  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimefresh: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web', path: '/index.html' } }] }, null, 2) + '\n');
+  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web', path: '/index.html' } }] }, null, 2) + '\n');
   const spaRoutingOnly = commit('SPA route only');
   assert.equal(runIgnore(frontendOnly, spaRoutingOnly).status, 0, 'SPA routing-only config change must skip the realtime image');
 
@@ -83,12 +83,12 @@ try {
   assert.match(rebuilt.stdout, /Realtime runtime dependency changes detected/);
 
   const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8'));
-  config.services.realtimefresh.entrypoint = 'Dockerfile.gateway';
+  config.services.realtimegateway.entrypoint = 'Dockerfile.gateway';
   write('vercel.json', JSON.stringify(config, null, 2) + '\n');
   const realtimeConfigChange = commit('realtime service config change');
   const configRebuilt = runIgnore(runtimeChange, realtimeConfigChange);
   assert.equal(configRebuilt.status, 1, 'realtime service config change must rebuild the image');
-  assert.match(configRebuilt.stdout, /realtimefresh service configuration/);
+  assert.match(configRebuilt.stdout, /realtimegateway service configuration/);
 
   assert.equal(runIgnore('', frontendOnly).status, 0, 'missing previous SHA should compare against the commit parent for frontend-only changes');
   assert.equal(runIgnore('', runtimeChange).status, 1, 'missing previous SHA must still rebuild when the commit changes realtime runtime code');
