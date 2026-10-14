@@ -10,6 +10,19 @@ const base=[
 ];
 graph.syncBase('NIFTY','1m',base);
 
+// A delayed live packet from an older bar must not replace the entire
+// graph with a single candle. Recovery/corrections use an explicit history API.
+graph.updateBaseLast('NIFTY','1m',{
+  timestamp:'2026-10-06T03:44:00.000Z',open:99,high:100,low:98,close:99.5,volume:5,
+});
+const baseAfterStale=graph.ensureNode('NIFTY','1m');
+if(!baseAfterStale||baseAfterStale.plane.market.length!==base.length){
+  throw new Error('stale live graph ticks must preserve the canonical history length');
+}
+if(baseAfterStale.plane.market.time[0]!==Date.parse(base[0]!.timestamp)/1000){
+  throw new Error('stale live graph ticks must not replace the oldest retained timestamp');
+}
+
 const derived=graph.ensureNode('NIFTY','5m');
 if(!derived)throw new Error('5m graph node was not derived from NIFTY 1m');
 const view=derived.plane.market.views();
