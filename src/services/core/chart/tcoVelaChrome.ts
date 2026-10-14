@@ -45,6 +45,7 @@ const TCO_CHROME_ICONS: Record<string, string> = {
   gear: svg16('<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/>'),
   objects: svg16('<rect x="1.5" y="1.5" width="5" height="5" rx=".5"/><rect x="9.5" y="1.5" width="5" height="5" rx=".5"/><rect x="1.5" y="9.5" width="5" height="5" rx=".5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/>'),
   indicators: svg16('<path d="M1.5 12.5 5 8.5l2.5 2 5-7 2 2"/>'),
+  drawingtools: svg16('<path d="M2 12.5 10.5 4l2.5 2.5L5.5 14H2z"/><path d="m8.5 6 2.5 2.5M2 14v1h3"/><path d="M2 2h4M2 4h2"/>'),
 };
 for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
@@ -590,6 +591,254 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     });
     return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, onChart() { target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`; }, destroy() { disposed = true; compileGeneration += 1; monacoAdapter?.dispose(); monacoAdapter = undefined; } };
   },
+};
+
+/**
+ * Complete Vela 0.8.4 drawings surface.
+ *
+ * The legacy TCO toolbar only exposed a hand-picked subset. Build this menu from Vela's
+ * own canonical toolbar registry so new/vendor tools appear automatically, with Vela's
+ * group and section labels. The catalog and implementations are loaded only when opened.
+ */
+const drawingToolsPanel: SidePanelDescriptor = {
+  id: 'tco.drawing-tools',
+  title: 'Drawing tools',
+  icon: 'drawingtools',
+  order: 2,
+  width: 390,
+  resizable: true,
+  minWidth: 320,
+  maxWidth: 520,
+  mount(ctx, body, header) {
+    header.setTitle('Vela drawing tools');
+    const root = panelRoot(body);
+    root.classList.add('tco-frame-panel');
+    root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
+    root.style.gap = '10px';
+
+    const intro = document.createElement('div');
+    intro.className = 'tco-frame-help';
+    intro.textContent = 'Full Vela 0.8.4 drawing catalogue. Pick a tool, then place it directly on the active chart.';
+    root.appendChild(intro);
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'tco-watch-search';
+    search.placeholder = 'Search all drawing tools…';
+    search.setAttribute('aria-label', 'Search Vela drawing tools');
+    search.style.width = '100%';
+    root.appendChild(search);
+
+    const pointer = document.createElement('button');
+    pointer.type = 'button';
+    pointer.className = 'tco-frame-button';
+    pointer.setAttribute('aria-label', 'Pointer / select');
+    pointer.title = 'Exit drawing mode and select existing drawings';
+    pointer.textContent = '↖  Pointer / Select';
+    pointer.style.cssText = 'width:100%;display:flex;align-items:center;justify-content:flex-start;border:1px solid var(--vela-border);border-radius:7px;padding:8px 10px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:600 12px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
+    root.appendChild(pointer);
+
+    const count = document.createElement('div');
+    count.style.cssText = 'font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);text-transform:uppercase;letter-spacing:.07em;';
+    count.textContent = 'Loading Vela drawing catalogue…';
+    root.appendChild(count);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;';
+    root.appendChild(list);
+
+    type CatalogTool = { type: string; label: string; icon: string };
+    type CatalogSection = { label: string; tools: CatalogTool[] };
+    type CatalogGroup = { id: string; label: string; tools: CatalogTool[]; sections?: CatalogSection[] };
+    let groups: CatalogGroup[] = [];
+    let selected: string | null = null;
+    let disposed = false;
+    let activeChart = ctx.chart;
+    let activeToolUnsubscribe: (() => void) | undefined;
+    const toolButtons = new Map<string, HTMLButtonElement>();
+
+    const paintSelected = (): void => {
+      selected = activeChart.drawings.getTool();
+      pointer.dataset.selected = selected ? '0' : '1';
+      pointer.style.background = selected ? 'var(--vela-surface-sunken)' : 'var(--tco-frame-accent-soft,rgba(124,92,255,.14))';
+      pointer.style.borderColor = selected ? 'var(--vela-border)' : 'var(--tco-frame-accent,#8b7cff)';
+      for (const [type, button] of toolButtons) {
+        const on = type === selected;
+        button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        button.style.background = on ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.14))' : 'var(--vela-surface-sunken)';
+        button.style.borderColor = on ? 'var(--tco-frame-accent,#8b7cff)' : 'var(--vela-border)';
+        button.style.color = on ? 'var(--vela-fg-bright)' : 'var(--vela-fg)';
+      }
+    };
+
+    const bindChart = (chart: import('../../../../vendor/vela/src/Vela').Vela): void => {
+      activeToolUnsubscribe?.();
+      activeChart = chart;
+      activeToolUnsubscribe = chart.on('drawing:tool', ({ type }) => {
+        selected = type;
+        paintSelected();
+      });
+      paintSelected();
+    };
+
+    const selectTool = (type: string | null): void => {
+      activeChart.drawings.setTool(type as any);
+      selected = type;
+      paintSelected();
+    };
+    pointer.addEventListener('click', () => selectTool(null));
+
+    const render = (): void => {
+      if (disposed) return;
+      const query = search.value.trim().toLocaleLowerCase();
+      list.replaceChildren();
+      toolButtons.clear();
+      let shown = 0;
+      for (const group of groups) {
+        const sourceSections: CatalogSection[] = group.sections?.length
+          ? group.sections
+          : [{ label: group.label, tools: group.tools }];
+        const groupDetails = document.createElement('details');
+        groupDetails.open = true;
+        groupDetails.style.cssText = 'border:1px solid var(--vela-border);border-radius:8px;background:color-mix(in srgb,var(--vela-surface-sunken) 30%,transparent);overflow:hidden;';
+        const groupSummary = document.createElement('summary');
+        groupSummary.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;cursor:pointer;list-style-position:inside;font:700 11px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-bright);';
+        groupSummary.textContent = group.label;
+        groupDetails.appendChild(groupSummary);
+        let groupShown = 0;
+        for (const section of sourceSections) {
+          const matching = section.tools.filter((tool) => {
+            if (!query) return true;
+            return `${tool.label} ${tool.type} ${group.label} ${section.label}`.toLocaleLowerCase().includes(query);
+          });
+          if (!matching.length) continue;
+          const sectionWrap = document.createElement('div');
+          sectionWrap.style.cssText = 'padding:3px 8px 8px;';
+          if (sourceSections.length > 1) {
+            const heading = document.createElement('div');
+            heading.style.cssText = 'padding:5px 2px 6px;font:600 9px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);text-transform:uppercase;letter-spacing:.08em;';
+            heading.textContent = section.label;
+            sectionWrap.appendChild(heading);
+          }
+          const grid = document.createElement('div');
+          grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;';
+          for (const tool of matching) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tco-frame-button tco-drawing-catalog-tool';
+            button.setAttribute('aria-label', tool.label);
+            button.setAttribute('aria-pressed', tool.type === selected ? 'true' : 'false');
+            button.title = tool.label;
+            button.style.cssText = 'display:flex;align-items:center;gap:7px;min-width:0;min-height:34px;border:1px solid var(--vela-border);border-radius:6px;padding:6px 7px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:500 10px Inter,ui-sans-serif,system-ui,sans-serif;text-align:left;cursor:pointer;';
+            const glyph = document.createElement('span');
+            glyph.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex:0 0 17px;width:17px;height:17px;color:var(--vela-fg-bright);';
+            // SVG icon markup comes from Vela's own trusted drawing registry.
+            glyph.innerHTML = tool.icon;
+            const svg = glyph.querySelector('svg');
+            if (svg) {
+              svg.setAttribute('width', '17');
+              svg.setAttribute('height', '17');
+              svg.setAttribute('aria-hidden', 'true');
+            }
+            const label = document.createElement('span');
+            label.textContent = tool.label;
+            label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;';
+            button.append(glyph, label);
+            button.addEventListener('click', () => selectTool(tool.type));
+            toolButtons.set(tool.type, button);
+            grid.appendChild(button);
+            groupShown += 1;
+            shown += 1;
+          }
+          sectionWrap.appendChild(grid);
+          groupDetails.appendChild(sectionWrap);
+        }
+        if (groupShown) {
+          const groupCount = document.createElement('span');
+          groupCount.style.cssText = 'margin-left:auto;color:var(--vela-fg-muted);font-size:10px;font-weight:500;';
+          groupCount.textContent = String(groupShown);
+          groupSummary.appendChild(groupCount);
+          if (query) groupDetails.open = true;
+          list.appendChild(groupDetails);
+        }
+      }
+      count.textContent = query ? `${shown} matching tools` : `${shown} Vela drawing tools`;
+      if (!shown) {
+        const empty = document.createElement('div');
+        empty.className = 'tco-frame-help';
+        empty.textContent = 'No drawing tools match that search.';
+        list.appendChild(empty);
+      }
+      paintSelected();
+    };
+
+    search.addEventListener('input', render);
+    void Promise.all([
+      import('../../../../vendor/vela/src/core/drawings/toolbar'),
+      import('../../../../vendor/vela/src/core/drawings/registry'),
+    ]).then(async ([toolbarModule, drawingRegistry]) => {
+      // The toolbar module is the source of truth. It enumerates every registered and
+      // lazy drawing, then we load the advanced implementation families after the panel
+      // is requested so their real names/icons replace lazy placeholders here.
+      await drawingRegistry.loadAdvancedDrawingCatalog();
+      if (disposed) return;
+      const canonical = toolbarModule.defaultToolbar();
+      const seen = new Set<string>();
+      groups = canonical.groups.map((group) => ({
+        id: group.id,
+        label: group.label,
+        tools: group.tools.filter((tool) => {
+          if (seen.has(tool.type)) return false;
+          seen.add(tool.type);
+          return true;
+        }),
+        sections: group.sections?.map((section) => ({
+          label: section.label,
+          tools: section.tools.filter((tool) => !seen.has(tool.type) && (seen.add(tool.type), true)),
+        })),
+      })).map((group) => ({
+        ...group,
+        tools: group.tools.length ? group.tools : (group.sections ?? []).flatMap((section) => section.tools),
+      })).filter((group) => group.tools.length || group.sections?.some((section) => section.tools.length));
+      // Rebuild each group from its canonical sections without duplicate tools. Group lists
+      // are retained as the flat metadata Vela exposes; the visible sections control layout.
+      groups = canonical.groups.map((group) => ({
+        id: group.id,
+        label: group.label,
+        tools: group.tools,
+        sections: group.sections?.map((section) => ({ label: section.label, tools: section.tools })),
+      }));
+      count.textContent = 'Vela drawing tools loaded';
+      render();
+    }).catch((error) => {
+      count.textContent = 'Drawing catalogue unavailable';
+      ctx.toast(error instanceof Error ? error.message : 'Unable to load Vela drawing tools', 'error');
+    });
+
+    return {
+      onChart: bindChart,
+      onOpen() {
+        search.focus({ preventScroll: true });
+        paintSelected();
+      },
+      destroy() {
+        disposed = true;
+        activeToolUnsubscribe?.();
+      },
+    };
+  },
+};
+
+const drawingToolsAction: WidgetActionDescriptor = {
+  id: 'tco.drawing-tools',
+  target: 'topbar',
+  label: 'Drawings',
+  icon: 'drawingtools',
+  iconOnly: true,
+  align: 'left',
+  order: 6,
+  mobile: 'menu',
+  run(ctx) { ctx.togglePanel('tco.drawing-tools'); },
 };
 
 const workspaceFrameAction:WidgetActionDescriptor={
@@ -1844,6 +2093,7 @@ const journalAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
+registerSidePanel(drawingToolsPanel);
 registerSidePanel(workspaceFramePanel);
 registerSidePanel(coreSpiritCodePanel);
 registerSidePanel(bookmarksPanel);
@@ -1859,6 +2109,7 @@ registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
 registerWidgetAttachment(tradeMarksAttachment);
+registerWidgetAction(drawingToolsAction);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
