@@ -1,10 +1,11 @@
 import type { HistoricalCandle } from '../brokers/BrokerAdapter';
 export type { HistoricalCandle } from '../brokers/BrokerAdapter';
-import type { NormalizedMarketTick } from '../../types/market';
+import type { MarketFeedStatus, NormalizedMarketTick } from '../../types/market';
+import { LiveCandleStateMachine, liveTradeTimestampMs, type LiveCandleTransitionKind } from './liveCandleStateMachine';
 import { tradingCoreRuntime } from '../runtime/TradingCoreRuntime';
 import { getCanonicalDataPlane, type CanonicalDataPlane } from '../core/data/canonicalDataPlane';
 import { chartMarketKey, chartMarketStore } from './chartMarketStore';
-import { historyStore, reconcileRealtimeCandle } from './HistoryStore';
+import { historyStore } from './HistoryStore';
 import { acquireSharedChartMarketFeed } from './sharedChartMarketFeed';
 import { chartHistoryCoordinator, historyPageCandles, historyDemandPageCandles, historyWarmTarget, initialHistoryCandles, shouldLoadOlderHistory } from './chartHistoryCoordinator';
 import { marketDataGraph } from '../core/data/marketDataGraph';
@@ -66,11 +67,16 @@ export type ChartDataPlaneSnapshot = Readonly<{
   historyReady: boolean;
   historyLoading: boolean;
   olderHistoryLoading: boolean;
+  marketDataRevision: number;
+  datasetGeneration: number;
+  dirtyRange: Readonly<{ from: number; to: number }>;
+  feedStatus?: MarketFeedStatus;
+  recovering: boolean;
 }>;
 
 export type DataPlaneEvent =
-  | { type: 'snapshot'; reason: 'cache' | 'history' | 'older-history'; snapshot: ChartDataPlaneSnapshot; olderAdded?: number; requestedLimit?: number }
-  | { type: 'tick'; bucketChanged: boolean; snapshot: ChartDataPlaneSnapshot }
+  | { type: 'snapshot'; reason: 'cache' | 'history' | 'older-history' | 'recovery'; snapshot: ChartDataPlaneSnapshot; olderAdded?: number; requestedLimit?: number; correctedBars?: number }
+  | { type: 'tick'; bucketChanged: boolean; snapshot: ChartDataPlaneSnapshot; transition?: LiveCandleTransitionKind }
   /** A quote whose exchange trade time is unknown. Consumers may update quote UI, but must not mutate candles. */
   | { type: 'quote'; snapshot: ChartDataPlaneSnapshot }
   | { type: 'status'; status: 'loading' | 'ready' | 'error'; error?: string; snapshot: ChartDataPlaneSnapshot };
@@ -103,6 +109,11 @@ type PlaneState = {
   warmHistoryRequested: boolean;
   lastOlderRequestKey?: string;
   olderRequestCooldownUntil: number;
+  feedStatus?: MarketFeedStatus;
+  marketStatusRevision: number;
+  recoveryPending: boolean;
+  recoveryInFlight: boolean;
+  lastRecoveryAt: number;
 };
 
 const registry = new Map<ChartDataPlaneKey, ChartDataPlane>();
@@ -163,10 +174,14 @@ function columnarHistoryToCandles(columns: {
 export class ChartDataPlane {
   readonly key: ChartDataPlaneKey;
   private readonly canonicalPlane: CanonicalDataPlane;
+  private readonly liveCandle: LiveCandleStateMachine;
+  private disposed = false;
   private readonly state: PlaneState = {
     candles: [], columns: undefined, compatibilityCandles: [], compatibilityRevision: -1, revision: 0, historyReady: false, historyLoading: false,
     olderHistoryLoading: false, subscribers: new Set(), consumers: 0, lastHistoryLoadAt: 0, olderHistoryExhausted: false, warmHistoryRequested: false, olderRequestCooldownUntil: 0,
+    marketStatusRevision: 0, recoveryPending: false, recoveryInFlight: false, lastRecoveryAt: 0,
   };
+  
 
   constructor(
     readonly brokerId: string,
@@ -175,9 +190,11 @@ export class ChartDataPlane {
   ) {
     this.key = chartDataPlaneKey(brokerId, instrumentKey, timeframe);
     this.canonicalPlane = getCanonicalDataPlane(this.key);
+    this.liveCandle = new LiveCandleStateMachine(this.instrumentKey, this.timeframe);
   }
 
   private snapshot(): ChartDataPlaneSnapshot {
+    const canonical = this.canonicalPlane.read();
     return Object.freeze({
       key: this.key,
       brokerId: this.brokerId,
@@ -190,6 +207,11 @@ export class ChartDataPlane {
       historyReady: this.state.historyReady,
       historyLoading: this.state.historyLoading,
       olderHistoryLoading: this.state.olderHistoryLoading,
+      marketDataRevision: canonical.revision,
+      datasetGeneration: this.liveCandle.generation,
+      dirtyRange: Object.freeze({ from: canonical.dirtyFrom, to: canonical.dirtyTo }),
+      feedStatus: this.state.feedStatus,
+      recovering: this.state.recoveryPending || this.state.recoveryInFlight,
     });
   }
 
@@ -235,255 +257,309 @@ export class ChartDataPlane {
     });
   }
 
-  private onColumnarTick(tick: NormalizedMarketTick, price: number): { changed: boolean; bucketChanged: boolean; latest: HistoricalCandle | null } {
+  private latestCanonicalCandle(): HistoricalCandle | undefined {
     const view = this.canonicalPlane.read();
-    const rawTimestamp = tradeTimestamp(tick);
-    if (rawTimestamp == null) return { changed: false, bucketChanged: false, latest: null };
-    // tradeTimestamp() returns only a validated ISO exchange timestamp. Never
-    // turn malformed broker data into a packet-receive-time candle.
-    const timestampMs = Date.parse(rawTimestamp);
-    if (!Number.isFinite(timestampMs) || timestampMs <= 0) return { changed: false, bucketChanged: false, latest: null };
-    const intervalSeconds = CHART_TIMEFRAME_SECONDS[this.timeframe] || 300;
-    const lastIndex = view.length - 1;
-    const lastTime = lastIndex >= 0 ? Number(view.time[lastIndex]) : Number.NaN;
-    // Historical bars may be aligned to a trading-session anchor rather than
-    // Unix epoch boundaries (for example Indian sessions beginning at 09:15).
-    // Keep the live bucket on the same grid as the last loaded historical bar.
-    const anchorSeconds = Number.isFinite(lastTime)
-      ? ((lastTime % intervalSeconds) + intervalSeconds) % intervalSeconds
-      : 0;
-    const tradeSeconds = timestampMs / 1000;
-    const bucketTime = Math.floor((tradeSeconds - anchorSeconds) / intervalSeconds) * intervalSeconds + anchorSeconds;
-    const previousOpen = lastIndex >= 0 ? Number(view.open[lastIndex]) : Number.NaN;
-    const previousHigh = lastIndex >= 0 ? Number(view.high[lastIndex]) : Number.NaN;
-    const previousLow = lastIndex >= 0 ? Number(view.low[lastIndex]) : Number.NaN;
-    const previousClose = lastIndex >= 0 ? Number(view.close[lastIndex]) : Number.NaN;
-
-    if (Number.isFinite(lastTime) && bucketTime < lastTime) {
-      return { changed: false, bucketChanged: false, latest: null };
-    }
-
-    if (lastIndex < 0 || !Number.isFinite(lastTime)) {
-      this.canonicalPlane.append({
-        time: bucketTime,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-        volume: 0,
-      });
-    } else if (bucketTime === lastTime) {
-      const nextHigh = Math.max(previousHigh, price);
-      const nextLow = Math.min(previousLow, price);
-      // Repeated LTP packets with no OHLC effect are quote updates, not market-data
-      // commits. Do not bump the canonical revision or dirty the series for them.
-      if (price === previousClose && nextHigh === previousHigh && nextLow === previousLow) {
-        return {
-          changed: false,
-          bucketChanged: false,
-          latest: {
-            timestamp: new Date(lastTime * 1000).toISOString(),
-            open: Number(view.open[lastIndex]),
-            high: previousHigh,
-            low: previousLow,
-            close: previousClose,
-            volume: Number(view.volume[lastIndex]) || 0,
-          },
-        };
-      }
-      this.canonicalPlane.updateLast({
-        time: lastTime,
-        open: Number(view.open[lastIndex]),
-        high: nextHigh,
-        low: nextLow,
-        close: price,
-        volume: Number(view.volume[lastIndex]) || 0,
-      });
-    } else {
-      this.canonicalPlane.append({
-        time: bucketTime,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-        volume: 0,
-      });
-    }
-
-    const next = this.canonicalPlane.read();
-    const i = next.length - 1;
-    if (i < 0) return { changed: false, bucketChanged: false, latest: null };
-    const latest: HistoricalCandle = {
-      timestamp: new Date(Number(next.time[i]) * 1000).toISOString(),
-      open: Number(next.open[i]),
-      high: Number(next.high[i]),
-      low: Number(next.low[i]),
-      close: Number(next.close[i]),
-      volume: Number(next.volume[i]) || 0,
+    const index = view.length - 1;
+    if (index < 0) return undefined;
+    return {
+      timestamp: new Date(Number(view.time[index]) * 1000).toISOString(),
+      open: Number(view.open[index]),
+      high: Number(view.high[index]),
+      low: Number(view.low[index]),
+      close: Number(view.close[index]),
+      volume: Number(view.volume[index]) || 0,
     };
-    const changed = lastIndex < 0
-      || bucketTime !== lastTime
-      || Number(next.open[i]) !== previousOpen
-      || Number(next.high[i]) !== previousHigh
-      || Number(next.low[i]) !== previousLow
-      || Number(next.close[i]) !== previousClose;
-    const bucketChanged = lastIndex < 0 || bucketTime > lastTime;
-
-    // Keep Vela on the typed canonical path. Only the compatibility tail is touched;
-    // never rebuild a 5k candle object array on every tick.
-    const compat = this.state.compatibilityCandles;
-    if (!compat.length) compat.push(latest);
-    else {
-      const lastCompat = compat[compat.length - 1]!;
-      const lastCompatTime = Date.parse(lastCompat.timestamp);
-      if (Date.parse(latest.timestamp) === lastCompatTime) compat[compat.length - 1] = latest;
-      else if (Date.parse(latest.timestamp) > lastCompatTime) {
-        compat.push(latest);
-        if (compat.length > MAX_HISTORY_CANDLES) compat.shift();
-      }
-    }
-    this.state.compatibilityCandles = compat;
-    this.state.columns = this.columnarSnapshot();
-    this.state.candles = [];
-    return { changed, bucketChanged, latest };
   }
 
-  private onTick = (tick: NormalizedMarketTick): void => {
+  private updateCompatibilityTail(bar: HistoricalCandle, bucketChanged: boolean, previousRevision: number): boolean {
+    const hasColumnarHistory = Boolean(this.state.columns);
+    const compatibleCacheIsCurrent = this.state.compatibilityCandles.length > 0
+      && this.state.compatibilityRevision === previousRevision;
+
+    if (this.state.candles.length > 0) {
+      const rows = this.state.candles;
+      const last = rows[rows.length - 1];
+      if (bucketChanged || !last || Date.parse(last.timestamp) !== Date.parse(bar.timestamp)) rows.push(bar);
+      else rows[rows.length - 1] = bar;
+      if (rows.length > MAX_HISTORY_CANDLES) rows.splice(0, rows.length - MAX_HISTORY_CANDLES);
+      this.state.compatibilityCandles = rows;
+      return true;
+    }
+
+    if (hasColumnarHistory && !compatibleCacheIsCurrent) {
+      // A one-candle tail is not a valid full-history compatibility mirror.
+      // Invalidate it instead of letting object consumers mistake it for history.
+      this.state.compatibilityCandles = [];
+      this.state.compatibilityRevision = -1;
+      return false;
+    }
+
+    const rows = this.state.compatibilityCandles;
+    if (rows.length > 0 && compatibleCacheIsCurrent) {
+      const last = rows[rows.length - 1];
+      if (bucketChanged || !last || Date.parse(last.timestamp) !== Date.parse(bar.timestamp)) rows.push(bar);
+      else rows[rows.length - 1] = bar;
+      if (rows.length > MAX_HISTORY_CANDLES) rows.splice(0, rows.length - MAX_HISTORY_CANDLES);
+      return true;
+    }
+
+    if (!hasColumnarHistory) {
+      // Defensive recovery for a typed canonical timeline whose compatibility
+      // owner has not yet been materialized.
+      this.state.compatibilityCandles = [bar];
+      this.state.compatibilityRevision = -1;
+    }
+    return false;
+  }
+
+  private replayBufferedTicks(ticks: readonly NormalizedMarketTick[]): void {
+    if (!ticks.length) return;
+    // The state machine drains in exchange-time order and resets its ordering
+    // watermark, so the accepted post-history deltas can rebuild the forming bar.
+    this.state.lastAcceptedTradeTimestampMs = undefined;
+    for (const tick of ticks) this.handleTick(tick, true);
+    this.state.lastAcceptedTradeTimestampMs = this.liveCandle.lastAcceptedTimestampMs;
+  }
+
+  private onTick = (tick: NormalizedMarketTick): void => this.handleTick(tick, false);
+
+  private rememberLatestTick(tick: NormalizedMarketTick, tradeTimeMs?: number): boolean {
+    const previousTimeMs = this.state.latestTick
+      ? liveTradeTimestampMs(this.state.latestTick)
+      : undefined;
+    if (tradeTimeMs != null && previousTimeMs != null && tradeTimeMs < previousTimeMs) return false;
+    this.state.latestTick = tick;
+    return true;
+  }
+
+  private handleTick(tick: NormalizedMarketTick, replaying: boolean): void {
     if (String(tick.instrumentKey || '') !== String(this.instrumentKey)) return;
 
     const price = Number(tick.ltp);
-    const tradeTime = tradeTimestamp(tick);
-    const tradeTimestampMs = tradeTime == null ? Number.NaN : Date.parse(tradeTime);
-    const hasHistory = Boolean(this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length);
+    const tradeTimeMs = liveTradeTimestampMs(tick);
+    const hasHistory = this.state.historyReady && this.canonicalPlane.length > 0;
+    const lifecyclePending = !this.state.historyReady
+      || this.state.historyLoading
+      || this.state.recoveryPending
+      || this.state.recoveryInFlight;
 
-    // A trade from before the current chart tail is stale even when no live tick
-    // has been accepted yet (for example immediately after a history refresh).
-    let latestBarStartMs = Number.NaN;
-    if (this.state.columns?.time.length) {
-      const times = this.state.columns.time;
-      const rawTime = Number(times[times.length - 1]);
-      latestBarStartMs = rawTime * (this.state.columns.timeUnit === 'seconds' ? 1000 : 1);
-    } else {
-      const rows = this.state.candles.length ? this.state.candles : this.state.compatibilityCandles;
-      const tail = rows[rows.length - 1];
-      if (tail) latestBarStartMs = Date.parse(String(tail.timestamp));
-    }
+    if (!replaying && lifecyclePending) this.liveCandle.bufferTick(tick);
 
-    if (hasHistory && Number.isFinite(tradeTimestampMs) && (
-      (Number.isFinite(latestBarStartMs) && tradeTimestampMs < latestBarStartMs) ||
-      (this.state.lastAcceptedTradeTimestampMs != null && tradeTimestampMs < this.state.lastAcceptedTradeTimestampMs)
-    )) {
-      // Ignore the stale packet entirely: it must not regress the chart LTP or
-      // overwrite a newer forming-bar close.
+    // A quote may update the header while history is cold/recovering, but it must
+    // never become a candle until a canonical historical baseline is available.
+    if (!hasHistory || this.state.recoveryPending || this.state.recoveryInFlight) {
+      if (Number.isFinite(price) && this.rememberLatestTick(tick, tradeTimeMs)) {
+        this.emit({ type: 'quote', snapshot: this.snapshot() });
+      }
       return;
     }
-
-    this.state.latestTick = tick;
-    if (!Number.isFinite(price)) return;
-
-    // Quotes can keep the LTP UI current, but only trusted exchange trade times
-    // and already-loaded broker history may update a candle.
-    if (!hasHistory || tradeTime == null || !Number.isFinite(tradeTimestampMs)) {
-      this.emit({ type: 'quote', snapshot: this.snapshot() });
+    if (!Number.isFinite(price) || tradeTimeMs == null) {
+      if (this.rememberLatestTick(tick, tradeTimeMs)) this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
     }
 
     const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
-    // The global transport is instrument-only; this per-plane counter joins the
-    // packet to the timeframe-specific history, compute, and Vela update metrics.
     chartPerformanceTelemetry.recordPacket(this.key);
-
-    // Preserve the columnar render path after live updates. The previous implementation
-    // reconciled against the entire compatibility candle array and then replaced the
-    // typed state with OHLCV[]; that was the remaining zero-object hot-path leak and could
-    // also delay first paint when history was temporarily empty.
-    if (this.state.columns && this.state.candles.length === 0) {
-      const result = this.onColumnarTick(tick, price);
-      chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
-      if (result.latest) this.state.lastAcceptedTradeTimestampMs = tradeTimestampMs;
-      if (!result.latest || !result.changed) {
-        // Keep last-price/header subscribers fresh without mutating candles for a stale or duplicate trade bucket.
-        this.emit({ type: 'quote', snapshot: this.snapshot() });
-        return;
-      }
-      if (!result.bucketChanged) chartPerformanceTelemetry.recordFormingBarReplaceLast(this.key);
-
-      this.state.revision += 1;
-      this.state.compatibilityRevision = this.state.revision;
-      marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, result.latest);
-      historyStore.upsertLatest(
-        this.brokerId,
-        this.instrumentKey,
-        CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe,
-        result.latest,
-      );
-      this.emit({ type: 'tick', bucketChanged: result.bucketChanged, snapshot: this.snapshot() });
-      return;
-    }
-
-    // Cold/compatibility path used only when the plane was bootstrapped from OHLCV rows
-    // or after an older-history merge. This path preserves the mature candle reconciler.
-    const compatibility = this.state.candles.length ? this.state.candles : this.getCompatibilityCandles();
-    // Capture the pre-mutation values before reconcileRealtimeCandle updates the
-    // forming row in place. Reading these after reconciliation hides real bar
-    // changes and leaves the published chart revision stale.
-    const previousLength = compatibility.length;
-    const previousClose = compatibility[previousLength - 1]?.close;
-    const result = reconcileRealtimeCandle(
-      compatibility,
-      {
-        price,
-        timestamp: tradeTime,
-      },
+    const view = this.canonicalPlane.read();
+    const index = view.length - 1;
+    const latest: HistoricalCandle | undefined = index < 0 ? undefined : {
+      timestamp: new Date(Number(view.time[index]) * 1000).toISOString(),
+      open: Number(view.open[index]),
+      high: Number(view.high[index]),
+      low: Number(view.low[index]),
+      close: Number(view.close[index]),
+      volume: Number(view.volume[index]) || 0,
+    };
+    const transition = this.liveCandle.transition(
+      tick,
+      latest,
       CHART_TIMEFRAME_SECONDS[this.timeframe] || 300,
-      MAX_HISTORY_CANDLES,
-      true,
     );
-    chartPerformanceTelemetry.recordCompute(this.key, Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt), this.state.revision + 1);
-    if (!result.candles.length) {
-      this.emit({ type: 'quote', snapshot: this.snapshot() });
+    chartPerformanceTelemetry.recordCompute(
+      this.key,
+      Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - computeStartedAt),
+      this.state.revision + 1,
+    );
+    this.state.lastAcceptedTradeTimestampMs = this.liveCandle.lastAcceptedTimestampMs;
+
+    if (transition.kind === 'out-of-order') return;
+    if (transition.kind === 'invalid') {
+      if (this.rememberLatestTick(tick, tradeTimeMs)) this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
     }
-    this.state.candles = result.candles;
-    this.state.columns = undefined;
-    this.state.compatibilityCandles = result.candles;
-    this.state.compatibilityRevision = -1;
-    const latest = result.candles[result.candles.length - 1];
-    if (latest) {
-      const latestTimeMs = Date.parse(String(latest.timestamp));
-      const intervalMs = (CHART_TIMEFRAME_SECONDS[this.timeframe] || 300) * 1000;
-      // Record ordering only when the exchange timestamp belongs to the visible
-      // tail bar. Older bars are never allowed to become the new ordering anchor.
-      if (Number.isFinite(latestTimeMs) && tradeTimestampMs >= latestTimeMs && tradeTimestampMs < latestTimeMs + intervalMs) {
-        this.state.lastAcceptedTradeTimestampMs = tradeTimestampMs;
-      }
+    if (!transition.accepted || !transition.changed || !transition.bar) {
+      if (this.rememberLatestTick(tick, tradeTimeMs)) this.emit({ type: 'quote', snapshot: this.snapshot() });
+      return;
+    }
 
-      const latestPoint = { time: Math.floor(latestTimeMs / 1000), open: Number(latest.open), high: Number(latest.high), low: Number(latest.low), close: Number(latest.close), volume: Number(latest.volume) || 0 };
-      const canonicalLength = this.canonicalPlane.market.length;
-      const canonicalLastTime = canonicalLength ? this.canonicalPlane.market.time[canonicalLength - 1] : NaN;
-      const canonicalNeedsReplace = canonicalLength !== previousLength && canonicalLength !== previousLength - 1;
-      if (canonicalNeedsReplace || (!Number.isFinite(canonicalLastTime) && previousLength > 0)) this.syncCanonical();
-      else if (!Number.isFinite(canonicalLastTime) || latestPoint.time > canonicalLastTime) this.canonicalPlane.append(latestPoint);
-      else if (latestPoint.time === canonicalLastTime) {
-        const index = canonicalLength - 1;
-        const unchanged = this.canonicalPlane.market.open[index] === latestPoint.open
-          && this.canonicalPlane.market.high[index] === latestPoint.high
-          && this.canonicalPlane.market.low[index] === latestPoint.low
-          && this.canonicalPlane.market.close[index] === latestPoint.close
-          && this.canonicalPlane.market.volume[index] === latestPoint.volume;
-        if (!unchanged) this.canonicalPlane.updateLast(latestPoint);
-      } else this.syncCanonical();
+    const bar = transition.bar;
+    const canonicalPoint = {
+      time: Math.floor(Date.parse(bar.timestamp) / 1000),
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: Number(bar.volume) || 0,
+    };
+    if (transition.bucketChanged || this.canonicalPlane.length === 0) this.canonicalPlane.market.append(canonicalPoint);
+    else this.canonicalPlane.market.updateLast(canonicalPoint);
+
+    const previousRevision = this.state.revision;
+    const wasColumnar = Boolean(this.state.columns);
+    this.rememberLatestTick(tick, tradeTimeMs);
+    const fullCompatibility = this.updateCompatibilityTail(bar, transition.bucketChanged, previousRevision);
+
+    if (wasColumnar) {
+      this.state.columns = this.columnarSnapshot();
+      this.state.candles = [];
+    } else {
+      this.state.columns = undefined;
+      if (this.state.candles.length > 0) this.state.compatibilityCandles = this.state.candles;
     }
-    if (latest) marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, latest);
-    if (result.bucketChanged || result.candles.length !== previousLength || Number(previousClose) !== Number(result.candles[result.candles.length - 1]?.close)) {
-      this.state.revision += 1;
-      historyStore.upsertLatest(this.brokerId, this.instrumentKey, CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe, result.candles[result.candles.length - 1]);
-    }
-    if (result.bucketChanged || Number(previousClose) !== Number(result.candles[result.candles.length - 1]?.close)) {
-      if (!result.bucketChanged) chartPerformanceTelemetry.recordFormingBarReplaceLast(this.key);
-      this.emit({ type: 'tick', bucketChanged: result.bucketChanged, snapshot: this.snapshot() });
-    }
-  };
+
+    this.state.revision += 1;
+    this.state.compatibilityRevision = fullCompatibility ? this.state.revision : -1;
+    if (!transition.bucketChanged) chartPerformanceTelemetry.recordFormingBarReplaceLast(this.key);
+    marketDataGraph.updateBaseLast(this.instrumentKey, this.timeframe, bar);
+    historyStore.upsertLatest(
+      this.brokerId,
+      this.instrumentKey,
+      CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe,
+      bar,
+    );
+    this.emit({
+      type: 'tick',
+      bucketChanged: transition.bucketChanged,
+      transition: transition.kind,
+      snapshot: this.snapshot(),
+    });
+  }
+
+  private onFeedStatus(status: MarketFeedStatus): void {
+    const previous = this.state.feedStatus;
+    if (previous === status) return;
+    this.state.feedStatus = status;
+    if (previous === 'connected' && status !== 'connected') this.state.recoveryPending = true;
+    if (status === 'connected' && this.state.recoveryPending) this.maybeRecoverAfterReconnect();
+    this.emit({
+      type: 'status',
+      status: status === 'connected' && !this.state.recoveryPending ? 'ready' : 'loading',
+      snapshot: this.snapshot(),
+    });
+  }
+
+  private maybeRecoverAfterReconnect(): void {
+    if (!this.state.recoveryPending || this.state.recoveryInFlight || this.disposed) return;
+    if (!this.state.historyReady || this.state.historyLoading || this.canonicalPlane.length === 0) return;
+    const now = Date.now();
+    if (now - this.state.lastRecoveryAt < 5_000) return;
+
+    this.state.recoveryPending = false;
+    this.state.recoveryInFlight = true;
+    this.state.lastRecoveryAt = now;
+    const generation = this.liveCandle.beginHistoryLoad('recovery');
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    const requested = Math.max(100, Math.min(500, initialHistoryCandles(this.timeframe)));
+    this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
+
+    void tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requested)
+      .then(columns => {
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) return;
+        const correctedBars = columns?.time.length ? this.reconcileRecentColumnarHistory(columns) : 0;
+        const pending = this.liveCandle.drainPendingTicks(generation);
+        this.state.recoveryInFlight = false;
+        this.state.historyReady = this.canonicalPlane.length > 0;
+        this.state.lastAcceptedTradeTimestampMs = undefined;
+        this.replayBufferedTicks(pending);
+        this.emit({ type: 'snapshot', reason: 'recovery', correctedBars, snapshot: this.snapshot() });
+        this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+      })
+      .catch(() => {
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) return;
+        const pending = this.liveCandle.drainPendingTicks(generation);
+        this.state.recoveryInFlight = false;
+        this.state.lastAcceptedTradeTimestampMs = undefined;
+        this.replayBufferedTicks(pending);
+        // Keep the last valid canonical snapshot. Reconnect recovery failure must
+        // not blank the chart or replace it with an LTP-only candle.
+        this.emit({ type: 'snapshot', reason: 'recovery', correctedBars: 0, snapshot: this.snapshot() });
+        this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+      })
+      .finally(() => {
+        if (this.liveCandle.isCurrentGeneration(generation)) this.state.recoveryInFlight = false;
+      });
+  }
+
+  /** Reconcile recent broker corrections directly into canonical columns, preserving the live tail. */
+  private reconcileRecentColumnarHistory(columns: {
+    time: ArrayLike<number>;
+    open: ArrayLike<number>;
+    high: ArrayLike<number>;
+    low: ArrayLike<number>;
+    close: ArrayLike<number>;
+    volume: ArrayLike<number>;
+    timeUnit?: 'milliseconds' | 'seconds';
+  }): number {
+    const incoming = normalizeHistory(columnarHistoryToCandles(columns, 500));
+    if (!incoming.length) return 0;
+
+    const before = this.canonicalPlane.revision;
+    const view = this.canonicalPlane.read();
+    const tailIndex = view.length - 1;
+    const tailTimeSeconds = tailIndex >= 0 ? Number(view.time[tailIndex]) : Number.NaN;
+    let correctedBars = 0;
+    const reconciled = incoming.map(row => {
+      const timestampSeconds = Math.floor(Date.parse(row.timestamp) / 1000);
+      let lo = 0, hi = view.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (Number(view.time[mid]) < timestampSeconds) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo >= view.length || Number(view.time[lo]) !== timestampSeconds) return row;
+
+      const isTail = lo === tailIndex && timestampSeconds === tailTimeSeconds;
+      const old = {
+        open: Number(view.open[lo]), high: Number(view.high[lo]), low: Number(view.low[lo]),
+        close: Number(view.close[lo]), volume: Number(view.volume[lo]) || 0,
+      };
+      if (isTail) {
+        return {
+          ...row,
+          open: old.open,
+          high: Math.max(old.high, row.high),
+          low: Math.min(old.low, row.low),
+          close: old.close,
+          volume: Math.max(old.volume, row.volume),
+        };
+      }
+      if (old.open !== row.open || old.high !== row.high || old.low !== row.low
+        || old.close !== row.close || old.volume !== row.volume) correctedBars += 1;
+      return row;
+    });
+
+    this.canonicalPlane.reconcileHistoricalCandleRows(reconciled);
+    if (this.canonicalPlane.revision === before) return 0;
+
+    this.state.columns = this.columnarSnapshot();
+    this.state.candles = [];
+    this.state.compatibilityCandles = [];
+    this.state.compatibilityRevision = -1;
+    this.state.revision += 1;
+    const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    historyStore.mergeInto(this.brokerId, this.instrumentKey, interval, reconciled, MAX_HISTORY_CANDLES);
+    const latest = this.latestCanonicalCandle();
+    if (latest) historyStore.upsertLatest(this.brokerId, this.instrumentKey, interval, latest);
+
+    // Secondary-timeframe/CoreSpirit graph consumers have an object-row bridge.
+    // Rebuild it once for a recovery revision, not on each live tick; immediately
+    // discard the compatibility mirror so the canonical typed tape stays primary.
+    const mirror = this.getCompatibilityCandles(MAX_HISTORY_CANDLES);
+    marketDataGraph.syncBase(this.instrumentKey, this.timeframe, mirror);
+    this.state.compatibilityCandles = [];
+    this.state.compatibilityRevision = -1;
+    return correctedBars;
+  }
 
   private start(): void {
     if (this.state.idleTimer) { clearTimeout(this.state.idleTimer); this.state.idleTimer = undefined; }
