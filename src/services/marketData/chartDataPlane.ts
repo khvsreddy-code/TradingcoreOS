@@ -523,7 +523,12 @@ export class ChartDataPlane {
         if (Number(view.time[mid]) < timestampSeconds) lo = mid + 1;
         else hi = mid;
       }
-      if (lo >= view.length || Number(view.time[lo]) !== timestampSeconds) return row;
+      if (lo >= view.length || Number(view.time[lo]) !== timestampSeconds) {
+        // Backfill may recover bars entirely missed during a websocket outage,
+        // not just corrections to timestamps already present in the chart.
+        correctedBars += 1;
+        return row;
+      }
 
       const isTail = lo === tailIndex && timestampSeconds === tailTimeSeconds;
       const old = {
