@@ -31,7 +31,7 @@
         }
       }
     },
-    "realtimefresh": {
+    "realtimegateway": {
       "root": ".",
       "entrypoint": "Dockerfile",
       "runtime": "container",
@@ -45,13 +45,13 @@
     {
       "source": "/api/realtime/healthz",
       "destination": {
-        "service": "realtimefresh"
+        "service": "realtimegateway"
       }
     },
     {
       "source": "/api/realtime/ws",
       "destination": {
-        "service": "realtimefresh"
+        "service": "realtimegateway"
       }
     },
     {

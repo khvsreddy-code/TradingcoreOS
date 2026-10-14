@@ -6,6 +6,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isRealtimeRuntimePath, shouldBuildRealtime } from '../tools/ignore-realtime-build.mjs';
 
+const deploymentConfig = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+assert.ok(deploymentConfig.services?.realtimegateway, 'the Vercel Services config must declare the fresh realtime gateway service');
+assert.equal(deploymentConfig.services.realtimegateway.ignoreCommand, 'node tools/ignore-realtime-build.mjs', 'the gateway service must retain its per-service build-skip command');
+assert.deepEqual(
+  deploymentConfig.rewrites
+    .filter((route) => ['/api/realtime/healthz', '/api/realtime/ws'].includes(route.source))
+    .map((route) => [route.source, route.destination.service])
+    .sort((a, b) => a[0].localeCompare(b[0])),
+  [['/api/realtime/healthz', 'realtimegateway'], ['/api/realtime/ws', 'realtimegateway']],
+  'public realtime endpoints must route to the renamed gateway service',
+);
+
 assert.equal(isRealtimeRuntimePath('src/TcoVelaDataProvider.ts'), false, 'Vela UI/data-provider changes must not rebuild the realtime container');
 assert.equal(isRealtimeRuntimePath('src/services/coreSpirit/compiler.ts'), false, 'CoreSpirit-only changes must not consume a realtime image');
 assert.equal(isRealtimeRuntimePath('src/server/routes/trading.routes.ts'), false, 'HTTP order route changes are not imported by the realtime process');
@@ -14,6 +26,7 @@ assert.equal(isRealtimeRuntimePath('src/server/marketData/FyersMarketDataTranspo
 assert.equal(isRealtimeRuntimePath('realtime-gateway/server.ts'), true, 'Realtime gateway entrypoint changes must rebuild');
 assert.equal(isRealtimeRuntimePath('package-lock.json'), true, 'Dependency lock changes must rebuild');
 assert.equal(isRealtimeRuntimePath('vercel.json'), false, 'Route-only Vercel config changes must not rebuild the realtime image');
+assert.equal(isRealtimeRuntimePath('tools/ignore-realtime-build.mjs'), false, 'updating the ignore policy itself must not consume a container image slot');
 assert.equal(shouldBuildRealtime(['src/TcoVelaDataProvider.ts', 'src/services/coreSpirit/compiler.ts']), false);
 assert.equal(shouldBuildRealtime(['vercel.json']), false, 'Vercel rewrites are not a gateway runtime dependency by themselves');
 assert.equal(shouldBuildRealtime(['src/TcoVelaDataProvider.ts', 'realtime-gateway/server.ts']), true);
@@ -60,14 +73,14 @@ try {
   write('src/server/marketData/FyersMarketDataTransport.ts', 'export const transportRevision = 1;\n');
   write('src/server/routes/trading.routes.ts', 'export const routeRevision = 1;\n');
   write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 1;\n');
-  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimefresh: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web' } }] }, null, 2) + '\n');
+  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web' } }] }, null, 2) + '\n');
   const base = commit('base');
 
   write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 2;\n');
   const frontendOnly = commit('frontend only');
   assert.equal(runIgnore(base, frontendOnly).status, 0, 'unrelated frontend change must skip the realtime image');
 
-  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimefresh: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web', path: '/index.html' } }] }, null, 2) + '\n');
+  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web', path: '/index.html' } }] }, null, 2) + '\n');
   const spaRoutingOnly = commit('SPA route only');
   assert.equal(runIgnore(frontendOnly, spaRoutingOnly).status, 0, 'SPA routing-only config change must skip the realtime image');
 
@@ -82,14 +95,17 @@ try {
   assert.match(rebuilt.stdout, /Realtime runtime dependency changes detected/);
 
   const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8'));
-  config.services.realtimefresh.entrypoint = 'Dockerfile.gateway';
+  config.services.realtimegateway.entrypoint = 'Dockerfile.gateway';
   write('vercel.json', JSON.stringify(config, null, 2) + '\n');
   const realtimeConfigChange = commit('realtime service config change');
   const configRebuilt = runIgnore(runtimeChange, realtimeConfigChange);
   assert.equal(configRebuilt.status, 1, 'realtime service config change must rebuild the image');
-  assert.match(configRebuilt.stdout, /realtimefresh service configuration/);
+  assert.match(configRebuilt.stdout, /realtimegateway service configuration/);
 
-  assert.equal(runIgnore('', runtimeChange).status, 1, 'missing previous SHA must fail open and build');
+  assert.equal(runIgnore('', frontendOnly).status, 0, 'missing previous SHA should compare against the commit parent for frontend-only changes');
+  assert.equal(runIgnore('', runtimeChange).status, 1, 'missing previous SHA must still rebuild when the commit changes realtime runtime code');
+  assert.equal(runIgnore('', frontendOnly, { VERCEL_GIT_COMMIT_SHA: '' }).status, 0, 'missing Vercel SHA variables should fall back to checked-out HEAD for frontend-only changes');
+  assert.equal(runIgnore('', runtimeChange, { VERCEL_GIT_COMMIT_SHA: '' }).status, 1, 'checked-out HEAD fallback must still rebuild for runtime changes');
   assert.equal(runIgnore(httpRouteOnly, runtimeChange, { TCO_REALTIME_FORCE_BUILD: '1' }).status, 1, 'explicit force flag must build');
 
   console.log('REALTIME_SERVICE_BUILD_SKIP_CONTRACT_OK');
