@@ -195,7 +195,11 @@ export class ChartDataPlane {
   }
 
   private snapshot(): ChartDataPlaneSnapshot {
-    const canonical = this.canonicalPlane.read();
+    // Read only the authoritative revision/range metadata on the hot path. Building
+    // every column view for each quote/tick used to allocate a dozen ArrayBuffer
+    // views even when no candle changed.
+    const market = this.canonicalPlane.market;
+    const dirty = market.dirtyRange;
     return Object.freeze({
       key: this.key,
       brokerId: this.brokerId,
@@ -208,9 +212,9 @@ export class ChartDataPlane {
       historyReady: this.state.historyReady,
       historyLoading: this.state.historyLoading,
       olderHistoryLoading: this.state.olderHistoryLoading,
-      marketDataRevision: canonical.revision,
+      marketDataRevision: market.revision,
       datasetGeneration: this.liveCandle.generation,
-      dirtyRange: Object.freeze({ from: canonical.dirtyFrom, to: canonical.dirtyTo }),
+      dirtyRange: Object.freeze({ from: dirty.from, to: dirty.to }),
       feedStatus: this.state.feedStatus,
       recovering: this.state.recoveryPending || this.state.recoveryInFlight,
     });
@@ -256,14 +260,14 @@ export class ChartDataPlane {
   }
 
   private columnarSnapshot(): ChartColumnarSnapshot {
-    const view = this.canonicalPlane.read();
+    const market = this.canonicalPlane.market;
     return Object.freeze({
-      time: view.time,
-      open: view.open,
-      high: view.high,
-      low: view.low,
-      close: view.close,
-      volume: view.volume,
+      time: market.time,
+      open: market.open,
+      high: market.high,
+      low: market.low,
+      close: market.close,
+      volume: market.volume,
       timeUnit: 'seconds',
     });
   }
@@ -371,16 +375,17 @@ export class ChartDataPlane {
 
     const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
     chartPerformanceTelemetry.recordPacket(this.key);
-    const view = this.canonicalPlane.read();
-    const index = view.length - 1;
-    const latest: HistoricalCandle | undefined = index < 0 ? undefined : {
-      timestamp: new Date(Number(view.time[index]) * 1000).toISOString(),
-      open: Number(view.open[index]),
-      high: Number(view.high[index]),
-      low: Number(view.low[index]),
-      close: Number(view.close[index]),
-      volume: Number(view.volume[index]) || 0,
-    };
+    const market = this.canonicalPlane.market;
+    const index = market.length - 1;
+    const latestPoint = index < 0 ? undefined : market.get(index);
+    const latest: HistoricalCandle | undefined = latestPoint ? {
+      timestamp: new Date(Number(latestPoint.time) * 1000).toISOString(),
+      open: Number(latestPoint.open),
+      high: Number(latestPoint.high),
+      low: Number(latestPoint.low),
+      close: Number(latestPoint.close),
+      volume: Number(latestPoint.volume) || 0,
+    } : undefined;
     const transition = this.liveCandle.transition(
       tick,
       latest,
