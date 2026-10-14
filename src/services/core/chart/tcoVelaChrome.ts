@@ -647,7 +647,7 @@ const drawingToolsPanel: SidePanelDescriptor = {
     list.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;';
     root.appendChild(list);
 
-    type CatalogTool = { type: string; label: string; icon: string };
+    type CatalogTool = { type: import('../../../../vendor/vela/src/core/drawings/Drawing').DrawingTypeKey; label: string; icon: string };
     type CatalogSection = { label: string; tools: CatalogTool[] };
     type CatalogGroup = { id: string; label: string; tools: CatalogTool[]; sections?: CatalogSection[] };
     let groups: CatalogGroup[] = [];
@@ -682,7 +682,7 @@ const drawingToolsPanel: SidePanelDescriptor = {
     };
 
     const selectTool = (type: string | null): void => {
-      activeChart.drawings.setTool(type as any);
+      activeChart.drawings.setTool(type);
       selected = type;
       paintSelected();
     };
@@ -783,30 +783,14 @@ const drawingToolsPanel: SidePanelDescriptor = {
       await drawingRegistry.loadAdvancedDrawingCatalog();
       if (disposed) return;
       const canonical = toolbarModule.defaultToolbar();
-      const seen = new Set<string>();
-      groups = canonical.groups.map((group) => ({
-        id: group.id,
-        label: group.label,
-        tools: group.tools.filter((tool) => {
-          if (seen.has(tool.type)) return false;
-          seen.add(tool.type);
-          return true;
-        }),
-        sections: group.sections?.map((section) => ({
-          label: section.label,
-          tools: section.tools.filter((tool) => !seen.has(tool.type) && (seen.add(tool.type), true)),
-        })),
-      })).map((group) => ({
-        ...group,
-        tools: group.tools.length ? group.tools : (group.sections ?? []).flatMap((section) => section.tools),
-      })).filter((group) => group.tools.length || group.sections?.some((section) => section.tools.length));
-      // Rebuild each group from its canonical sections without duplicate tools. Group lists
-      // are retained as the flat metadata Vela exposes; the visible sections control layout.
       groups = canonical.groups.map((group) => ({
         id: group.id,
         label: group.label,
         tools: group.tools,
-        sections: group.sections?.map((section) => ({ label: section.label, tools: section.tools })),
+        sections: group.sections?.map((section) => ({
+          label: section.label,
+          tools: section.tools,
+        })),
       }));
       count.textContent = 'Vela drawing tools loaded';
       render();
