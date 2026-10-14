@@ -2269,6 +2269,16 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.events.emit('theme:changed', theme);
     }
 
+    /**
+     * A bounded, detached snapshot of the chart's actual OHLCV view. Consumers such as
+     * the settings appearance preview must paint the active instrument, never a synthetic
+     * sample series, and must not be able to mutate the renderer's internal bar array.
+     */
+    getBarsSnapshot(limit = 500): OHLCV[] {
+        const count = Number.isFinite(limit) ? Math.max(1, Math.min(5000, Math.floor(limit))) : 500;
+        return this.bars.slice(-count).map((bar) => ({ ...bar }));
+    }
+
     /** The current visible time range (left/right bar times), or null before data loads. */
     getVisibleRange(): VisibleRange | null {
         return this.renderer.getVisibleRange();

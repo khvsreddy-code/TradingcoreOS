@@ -5,6 +5,7 @@ import type { VisibleRangePreset } from './core/visible-range';
 import type { VelaOptions, VelaTheme, ThemeName, MarketSwitch, MarketSnapshot, AddIndicatorOptions } from './core/options';
 import { resolveAnimations } from './core/options';
 import type { InputValue } from './core/model/inputs';
+import type { OHLCV } from './core/model/ohlcv';
 import type { IndicatorHandle } from './core/IndicatorHandle';
 import type { EngineContextSnapshot } from './core/ports/ScriptingEngine';
 import type { NativeIndicatorInfo } from './core/native-indicators';
@@ -419,6 +420,11 @@ export class Vela {
 
     on<K extends keyof VelaEventMap>(event: K, handler: (payload: VelaEventMap[K]) => void): () => void {
         return this.orchestrator.events.on(event, handler);
+    }
+
+    /** Detached, bounded OHLCV from this chart's real active series, including its forming bar. */
+    getBarsSnapshot(limit = 500): OHLCV[] {
+        return this.orchestrator.getBarsSnapshot(limit);
     }
 
     /** The current visible time range (`from`/`to` in epoch-ms), or null before data loads. */

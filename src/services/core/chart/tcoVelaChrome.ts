@@ -614,8 +614,10 @@ const bookmarksPanel: SidePanelDescriptor = {
   mount(ctx, body, header) {
     header.setTitle('Watchlist');
     const root = panelRoot(body);
+    root.classList.add('tco-frame-panel');
+    root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
     const meta = document.createElement('div');
-    meta.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;';
+    meta.style.cssText = 'font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);text-transform:uppercase;letter-spacing:.08em;';
     root.appendChild(meta);
 
     const controls = document.createElement('div');
@@ -624,12 +626,14 @@ const bookmarksPanel: SidePanelDescriptor = {
     addCurrent.type = 'button';
     addCurrent.textContent = '+ Add current';
     addCurrent.title = 'Add the active symbol to the watchlist';
-    addCurrent.style.cssText = 'border:1px solid rgba(155,138,255,.24);border-radius:6px;padding:5px 8px;background:rgba(124,92,255,.10);color:#ddd6fe;font:600 9px ui-monospace;cursor:pointer;';
+    addCurrent.className = 'tco-frame-button tco-frame-button-primary';
+    addCurrent.style.cssText = 'border:1px solid var(--tco-frame-accent,#8b7cff);border-radius:7px;padding:7px 10px;background:var(--tco-frame-accent-soft,rgba(124,92,255,.10));color:var(--vela-fg-bright);font:650 11px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
     const search = document.createElement('button');
     search.type = 'button';
     search.textContent = 'Search';
     search.title = 'Open Vela symbol search';
-    search.style.cssText = 'border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:5px 8px;background:#0c111a;color:#cbd5e1;font:600 9px ui-monospace;cursor:pointer;';
+    search.className = 'tco-frame-button';
+    search.style.cssText = 'border:1px solid var(--vela-border);border-radius:7px;padding:7px 10px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:600 11px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
     controls.append(addCurrent, search);
     root.appendChild(controls);
 
@@ -694,7 +698,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     const metrics = document.createElement('div');
     metrics.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;';
     const metricRefs = new Map<string, HTMLSpanElement>();
-    for (const [key, label] of [['ltp', 'Last price'], ['change', 'Day change'], ['high', 'Day high'], ['low', 'Day low']] as const) {
+    for (const [key, label] of [['ltp', 'Last price'], ['changeValue', 'Change'], ['changePercent', 'Change %'], ['high', 'Day high'], ['low', 'Day low']] as const) {
       const cell = document.createElement('div');
       cell.className = 'tco-watch-metric';
       const caption = document.createElement('div');
@@ -715,9 +719,53 @@ const bookmarksPanel: SidePanelDescriptor = {
     root.appendChild(rows);
     root.appendChild(detailCard);
 
-    type Quote = { ltp: number; changePercent?: number; receivedAt: number };
+    type Quote = {
+      ltp: number;
+      change?: number;
+      changePercent?: number;
+      high?: number;
+      low?: number;
+      receivedAt: number;
+    };
+    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number };
     const quotes = new Map<string, Quote>();
     let quoteStop: (() => void) | undefined;
+
+    const asFinite = (...values: unknown[]): number | undefined => {
+      for (const value of values) {
+        if (value == null || value === '') continue;
+        const number = Number(value);
+        if (Number.isFinite(number)) return number;
+      }
+      return undefined;
+    };
+    const dayCandle = (snapshot: Record<string, unknown>): Record<string, unknown> | undefined => {
+      const rows = Array.isArray(snapshot.ohlc) ? snapshot.ohlc as Array<Record<string, unknown>> : [];
+      return rows.find((row) => /^(?:D|1D|1day|day|daily)$/i.test(String(row.interval || '').trim()))
+        ?? rows.find((row) => /day|daily|1d/i.test(String(row.interval || '')));
+    };
+    const quoteView = (symbol: string): MarketQuoteView => {
+      const snapshot = (tradingCoreRuntime.getMarketSnapshot(symbol) || {}) as unknown as Record<string, unknown>;
+      const cached = quotes.get(symbol.toUpperCase());
+      const daily = dayCandle(snapshot);
+      const ltp = asFinite(snapshot.ltp, cached?.ltp);
+      const percent = asFinite(snapshot.changePercent, cached?.changePercent);
+      const previousClose = asFinite(snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close);
+      let change = asFinite(snapshot.change, snapshot.changeValue, snapshot.netChange, cached?.change);
+      if (change === undefined && ltp !== undefined && previousClose !== undefined) change = ltp - previousClose;
+      if (change === undefined && ltp !== undefined && percent !== undefined && percent > -100) {
+        // Broker feeds that expose only rounded percent change still provide a useful
+        // value-change estimate; prefer the broker's absolute change whenever present.
+        change = ltp - ltp / (1 + percent / 100);
+      }
+      return {
+        ltp,
+        change,
+        changePercent: percent,
+        high: asFinite(snapshot.dayHigh, snapshot.high, daily?.high, cached?.high),
+        low: asFinite(snapshot.dayLow, snapshot.low, daily?.low, cached?.low),
+      };
+    };
 
     const quoteSubscribe = (): void => {
       quoteStop?.();
@@ -726,12 +774,22 @@ const bookmarksPanel: SidePanelDescriptor = {
       if (!symbols.length) return;
       quoteStop = tradingCoreRuntime.subscribeMarketData(symbols, (event) => {
         if (event.type !== 'tick' || !event.tick) return;
-        const symbol = String(event.tick.instrumentKey || '').trim();
-        const ltp = Number(event.tick.ltp ?? event.tick.close);
-        if (!symbol || !Number.isFinite(ltp)) return;
+        const tick = event.tick as unknown as Record<string, unknown>;
+        const symbol = String(tick.instrumentKey || '').trim().toUpperCase();
+        const ltp = asFinite(tick.ltp);
+        if (!symbol || ltp === undefined) return;
+        const daily = dayCandle(tick);
+        const percent = asFinite(tick.changePercent);
+        const previousClose = asFinite(tick.previousClose, tick.prevClose, tick.close, tick.prev_close, tick.previous_close);
+        let change = asFinite(tick.change, tick.changeValue, tick.netChange);
+        if (change === undefined && previousClose !== undefined) change = ltp - previousClose;
+        if (change === undefined && percent !== undefined && percent > -100) change = ltp - ltp / (1 + percent / 100);
         quotes.set(symbol, {
           ltp,
-          changePercent: Number.isFinite(Number(event.tick.changePercent)) ? Number(event.tick.changePercent) : undefined,
+          change,
+          changePercent: percent,
+          high: asFinite(tick.dayHigh, tick.high, daily?.high),
+          low: asFinite(tick.dayLow, tick.low, daily?.low),
           receivedAt: Date.now(),
         });
         // Keep live price/change sorts stable while the feed updates, without rebuilding
@@ -751,29 +809,29 @@ const bookmarksPanel: SidePanelDescriptor = {
 
     const updateDetails = (): void => {
       const current = String(ctx.symbol || '').trim();
-      const snapshot = (tradingCoreRuntime.getMarketSnapshot(current) || {}) as Record<string, unknown>;
-      const cached = quotes.get(current.toUpperCase());
+      const quote = quoteView(current);
       const ticker = current.includes(':') ? current.split(':', 2)[1] || current : current;
-      const ltp = Number(snapshot.ltp ?? snapshot.close ?? cached?.ltp);
-      const change = Number(snapshot.changePercent ?? cached?.changePercent);
-      const high = Number(snapshot.high ?? snapshot.dayHigh);
-      const low = Number(snapshot.low ?? snapshot.dayLow);
+      const { ltp, change, changePercent, high, low } = quote;
       detailTitle.textContent = ticker || 'Active instrument';
-      detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${snapshot.exchange || snapshot.venue || 'Active chart'}`;
-      liveBadge.textContent = Number.isFinite(ltp) ? 'QUOTE' : 'WAITING';
+      detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${(tradingCoreRuntime.getMarketSnapshot(current) as any)?.exchange || (tradingCoreRuntime.getMarketSnapshot(current) as any)?.venue || 'Active chart'}`;
+      liveBadge.textContent = ltp !== undefined ? 'LIVE' : 'WAITING';
       const setMetric = (key: string, value: string, tone?: string) => {
         const element = metricRefs.get(key);
         if (!element) return;
         element.textContent = value;
         element.style.color = tone || 'var(--vela-fg-bright)';
       };
-      setMetric('ltp', Number.isFinite(ltp) ? ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
-      setMetric('change', Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : '—',
-        Number.isFinite(change) ? change >= 0 ? '#22c55e' : '#f23645' : undefined);
-      setMetric('high', Number.isFinite(high) ? high.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
-      setMetric('low', Number.isFinite(low) ? low.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—');
-      detailHint.textContent = Number.isFinite(ltp)
-        ? 'Snapshot from the active market-data feed; chart selection stays in sync.'
+      const fmt = (value: number | undefined) => value === undefined ? '—' : value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+      const tone = (value: number | undefined) => value === undefined ? undefined : value >= 0 ? '#22c55e' : '#f23645';
+      setMetric('ltp', fmt(ltp));
+      setMetric('changeValue', change === undefined ? '—' : `${change >= 0 ? '+' : ''}${fmt(change)}`, tone(change));
+      setMetric('changePercent', changePercent === undefined ? '—' : `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`, tone(changePercent));
+      setMetric('high', fmt(high));
+      setMetric('low', fmt(low));
+      detailHint.textContent = ltp !== undefined
+        ? high !== undefined && low !== undefined
+          ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
+          : 'Live broker quote · waiting for complete day-range fields from the market feed.'
         : 'Waiting for a market quote for this instrument. No sample price is shown.';
     };
 
@@ -784,7 +842,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       const filtered = watchlist.filter((item) => {
         const text = `${item.symbol} ${item.short} ${item.label}`.toUpperCase();
         if (query && !text.includes(query)) return false;
-        const pct = quotes.get(item.symbol)?.changePercent;
+        const pct = quoteView(item.symbol).changePercent;
         if (filterMode === 'gainers' && !(Number.isFinite(pct) && Number(pct) > 0)) return false;
         if (filterMode === 'losers' && !(Number.isFinite(pct) && Number(pct) < 0)) return false;
         return true;
@@ -795,19 +853,20 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (!ref) continue;
         ref.row.hidden = !visible.has(item.symbol);
         const isSelected = item.symbol === current;
-        ref.row.style.background = isSelected ? 'rgba(124,92,255,.10)' : 'transparent';
-        ref.row.style.borderColor = isSelected ? 'rgba(155,138,255,.22)' : 'transparent';
-        const quote = quotes.get(item.symbol);
-        const pct = quote?.changePercent;
-        ref.value.textContent = quote
-          ? quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })
-          : '—';
-        ref.change.textContent = Number.isFinite(pct)
-          ? `${pct! >= 0 ? '+' : ''}${pct!.toFixed(2)}%`
-          : 'LIVE —';
-        ref.change.style.color = Number.isFinite(pct)
-          ? (pct! >= 0 ? '#4ade80' : '#fb7185')
-          : '#64748b';
+        ref.row.style.background = isSelected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
+        ref.row.style.borderColor = isSelected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
+        const quote = quoteView(item.symbol);
+        const pct = quote.changePercent;
+        const absolute = quote.change;
+        ref.value.textContent = quote.ltp === undefined
+          ? '—'
+          : quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+        const changeParts: string[] = [];
+        if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
+        if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
+        ref.change.textContent = changeParts.length ? changeParts.join(' · ') : 'LIVE —';
+        const changeTone = absolute !== undefined ? absolute : pct;
+        ref.change.style.color = changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
       }
       updateDetails();
     };
@@ -836,24 +895,24 @@ const bookmarksPanel: SidePanelDescriptor = {
 
           const button = document.createElement('button');
           button.type = 'button';
-          button.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;border:0;border-radius:5px;padding:7px 6px;background:transparent;color:#e2e8f0;text-align:left;cursor:pointer;';
+          button.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;border:0;border-radius:6px;padding:8px 7px;background:transparent;color:var(--vela-fg);font:inherit;text-align:left;cursor:pointer;';
 
           const left = document.createElement('span');
           left.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:2px;';
           const label = document.createElement('span');
           label.textContent = item.short;
-          label.style.cssText = 'font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          label.style.cssText = 'font:700 12px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
           const detail = document.createElement('span');
           detail.textContent = item.label;
-          detail.style.cssText = 'font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          detail.style.cssText = 'font:400 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
           left.append(label, detail);
 
           const right = document.createElement('span');
           right.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 0 auto;';
           const value = document.createElement('span');
-          value.style.cssText = 'font-size:11px;font-weight:700;color:#cbd5e1;font-variant-numeric:tabular-nums;';
+          value.style.cssText = 'font:650 12px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-bright);font-variant-numeric:tabular-nums;';
           const change = document.createElement('span');
-          change.style.cssText = 'font-size:9px;color:#64748b;font-variant-numeric:tabular-nums;';
+          change.style.cssText = 'font:500 10px Inter,ui-sans-serif,system-ui,sans-serif;color:var(--vela-fg-muted);font-variant-numeric:tabular-nums;';
           right.append(value, change);
           button.append(left, right);
 
