@@ -93,7 +93,7 @@ function styleLabel(id: string): string {
 }
 
 const SD_STYLE_ID = 'vela-settings-controls';
-const SD_STYLE_REV = '6';
+const SD_STYLE_REV = '7';
 
 /**
  * The dialog's surface palette. It follows the STABLE chrome surface (the tokens written on
@@ -191,7 +191,71 @@ ${overlayScrollbarCss('.vela-sd-pane')}
    alignment device; on mobile the trigger hugs its value instead (the grid's control
    column is max-content), capped so a long option still ellipsizes before the label. */
 .vela-sd-mobile .vela-select-trigger .vela-select-label{white-space:nowrap !important;}
-.vela-sd-mobile .vela-select:not([data-fill]){width:auto;min-width:100px;max-width:min(220px,55vw);}`;
+.vela-sd-mobile .vela-select:not([data-fill]){width:auto;min-width:100px;max-width:min(220px,55vw);}
+
+.vela-dialog.vela-dialog--settings {
+    width: min(980px, calc(100vw - 32px));
+    min-width: min(850px, calc(100vw - 32px));
+    max-width: min(980px, calc(100vw - 32px));
+    max-height: 82vh;
+    box-sizing: border-box;
+}
+.vela-dialog.vela-dialog--settings .vela-dialog-body[data-flush] { min-height: 0; overflow: hidden; }
+.vela-dialog.vela-dialog--settings .vela-dialog-footer { border-top: 1px solid var(--vela-border); }
+.vela-sd-desktop-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 284px;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 430px;
+    max-height: calc(82vh - 112px);
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+.vela-sd-desktop-shell > .vela-sd-rail {
+    grid-column: 1 / -1; grid-row: 1;
+    display: flex; flex-direction: row; align-items: center; gap: 4px;
+    padding: 8px 14px; border-right: 0; border-bottom: 1px solid var(--vela-border);
+    overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: thin;
+}
+.vela-sd-desktop-shell > .vela-sd-rail .vela-sd-tab { flex: 0 0 auto; padding: 9px 12px; font-size: 12px; }
+.vela-sd-desktop-shell > .vela-sd-pane {
+    grid-column: 1; grid-row: 2; min-width: 0; min-height: 0;
+    overflow-y: auto; overflow-x: hidden; padding: 10px 14px 14px;
+}
+.vela-sd-preview {
+    grid-column: 2; grid-row: 2; min-width: 0; min-height: 0;
+    display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
+    padding: 14px 14px 12px; border-left: 1px solid var(--vela-border);
+    background: var(--vela-surface);
+}
+.vela-sd-preview-heading { color: var(--vela-fg-muted); font-size: 9px; line-height: 1.4; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+.vela-sd-preview-card { overflow: hidden; border: 1px solid var(--vela-border); border-radius: 9px; background: var(--vela-preview-bg, #080a0d); }
+.vela-sd-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 4px; color: #8c95a4; font-size: 9px; }
+.vela-sd-preview-symbol { display: flex; align-items: center; gap: 6px; padding: 5px 10px 2px; color: #e5e7eb; font-size: 11px; font-weight: 650; }
+.vela-sd-preview-badge { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; flex: 0 0 auto; border-radius: 50%; color: #fff; background: #c94a91; font-size: 8px; font-weight: 700; }
+.vela-sd-preview-price { padding: 0 10px 8px; color: var(--vela-preview-up, #089981); font-size: 10px; font-variant-numeric: tabular-nums; }
+.vela-sd-preview-chart { display: block; width: 100%; height: auto; }
+.vela-sd-preview-note { color: var(--vela-fg-muted); font-size: 9px; line-height: 1.5; }
+.vela-sd-symbol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 12px; }
+.vela-sd-card { min-width: 0; padding: 11px 12px; border: 1px solid var(--vela-border); border-radius: 9px; background: color-mix(in srgb, var(--vela-surface-sunken) 34%, transparent); }
+.vela-sd-style-card.vela-sd-hide { display: none !important; }
+.vela-sd-card-type { grid-column: 1 / -1; padding: 4px 2px 8px; border: 0; background: transparent; }
+.vela-sd-card-type .vela-field-section { margin: 0; padding: 0; }
+.vela-sd-card .vela-field-grid[data-variant='settings'] { width: 100%; grid-template-columns: minmax(110px, 1fr) max-content; column-gap: 12px; }
+.vela-sd-card-type .vela-field-grid[data-variant='settings'] { grid-template-columns: minmax(120px, 1fr) minmax(140px, 190px); align-items: center; }
+.vela-sd-card .vela-field-section { margin-top: 4px; padding-top: 2px; }
+.vela-sd-card-timezone { grid-column: 1 / -1; }
+.vela-dialog.vela-dialog--settings .vela-sd-btn-primary { color: var(--vela-selected-fg); border-color: var(--vela-selected-bg); background: var(--vela-selected-bg); font-weight: 650; }
+.vela-dialog.vela-dialog--settings .vela-sd-btn-primary:hover { opacity: .88; }
+.vela-sd-footer-note { color: var(--vela-fg-muted); font-size: 9px; line-height: 1.4; text-align: center; }
+.vela-sd-header-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-right: 10px; border: 1px solid var(--vela-border); border-radius: 7px; color: var(--vela-fg-muted); }
+.vela-sd-mobile .vela-dialog.vela-dialog--settings { width: 100%; min-width: 0; max-width: none; max-height: none; border-radius: 0; }
+@media (max-width: 880px) {
+    .vela-dialog.vela-dialog--settings:not(.vela-sd-mobile-dialog) { width: calc(100vw - 24px); min-width: calc(100vw - 24px); max-width: calc(100vw - 24px); }
+    .vela-sd-desktop-shell { grid-template-columns: minmax(0, 1fr) 240px; }
+    .vela-sd-preview { padding: 10px; }
+}
+`;
     if (!existing) document.head.appendChild(st);
 }
 
@@ -227,6 +291,8 @@ export class SettingsDialog {
     /** Opens/closes the mobile section sidebar of the CURRENT build (the burger in the
      *  shell header outlives pane rebuilds, so it reaches the rail through here). */
     private toggleRail: ((open?: boolean) => void) | null = null;
+    /** Live appearance preview shown only in the desktop settings presentation. */
+    private previewPanel: HTMLElement | null = null;
 
     /** The visibility policy: setting ids hidden by the host (subtree semantics). */
     private hiddenSettings: ReadonlySet<string> = new Set();
@@ -261,6 +327,7 @@ export class SettingsDialog {
      *  snapshot. */
     refreshConfig(config: ChartConfig): void {
         if (this.config) this.config = config;
+        this.syncPreview(config);
     }
 
     constructor(
@@ -327,14 +394,21 @@ export class SettingsDialog {
         // to catch the click-outside-to-close.
         ensureControlStyles();
         const mobile = this.mobileLayout;
-        let burger: HTMLButtonElement | undefined;
+        let headerStart: HTMLElement | undefined;
         if (mobile) {
-            burger = document.createElement('button');
+            const burger = document.createElement('button');
             burger.type = 'button';
             burger.className = 'vela-sd-burger';
             burger.innerHTML = iconAt('burger', 16);
             burger.title = 'Sections';
             burger.addEventListener('click', () => this.toggleRail?.());
+            headerStart = burger;
+        } else {
+            const gear = document.createElement('span');
+            gear.className = 'vela-sd-header-icon';
+            gear.innerHTML = iconAt('gear', 16);
+            gear.setAttribute('aria-hidden', 'true');
+            headerStart = gear;
         }
         const ui = new Dialog({
             host: this.container,
@@ -348,16 +422,26 @@ export class SettingsDialog {
             draggable: !mobile,
             flush: true,
             className: 'vela-dialog--settings',
-            headerStart: burger,
+            headerStart,
             closeOnBackdrop: true,
             footer: (foot) => {
-                foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
+                foot.style.cssText = 'padding:10px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;';
                 const resetBtn = document.createElement('button');
                 resetBtn.type = 'button';
                 resetBtn.textContent = 'Reset defaults';
                 resetBtn.className = 'vela-sd-btn';
+                resetBtn.style.justifySelf = 'start';
                 resetBtn.addEventListener('click', () => this.onReset?.());
-                foot.appendChild(resetBtn);
+                const note = document.createElement('span');
+                note.className = 'vela-sd-footer-note';
+                note.textContent = 'Changes apply instantly';
+                const doneBtn = document.createElement('button');
+                doneBtn.type = 'button';
+                doneBtn.textContent = 'Done';
+                doneBtn.className = 'vela-sd-btn vela-sd-btn-primary';
+                doneBtn.style.justifySelf = 'end';
+                doneBtn.addEventListener('click', () => this.close());
+                foot.append(resetBtn, note, doneBtn);
             },
             // A close signal may only close ITS OWN dialog: the machine reports the exit
             // asynchronously, so a close-then-reopen in one tick would otherwise see the
@@ -366,6 +450,13 @@ export class SettingsDialog {
         });
         if (mobile) ui.positioner.classList.add('vela-sd-mobile');
         ui.positioner.style.paddingTop = mobile ? '0' : '8vh';
+        if (!mobile) {
+            ui.panel.style.width = 'min(980px, calc(100vw - 32px))';
+            ui.panel.style.minWidth = 'min(850px, calc(100vw - 32px))';
+            ui.panel.style.maxWidth = 'min(980px, calc(100vw - 32px))';
+            ui.panel.style.maxHeight = '82vh';
+            ui.panel.style.boxSizing = 'border-box';
+        }
 
         this.root = ui.positioner;
         this.ui = ui;
@@ -390,6 +481,7 @@ export class SettingsDialog {
         this.config = config;
         ui.body.replaceChildren();
         this.layoutPanes(this.buildContent(ui, config, this.activeSection ?? undefined, this.mobileLayout));
+        this.syncPreview(config);
     }
 
     /** Structured chart-type panes (instance strip / group TOC) own their layout and
