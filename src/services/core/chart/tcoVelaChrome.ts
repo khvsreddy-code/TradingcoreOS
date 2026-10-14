@@ -346,25 +346,27 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   mount(ctx, body, header) {
     header.setTitle('CoreSpirit Studio');
     const root = panelRoot(body);
+    root.classList.add('tco-core-studio');
     root.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
-    root.style.gap = '10px';
+    root.style.gap = '12px';
     const top = document.createElement('div');
     top.style.cssText = 'display:flex;align-items:center;gap:8px;';
     const language = document.createElement('span');
     language.textContent = 'CORESCRIPT';
-    language.style.cssText = 'font:700 10px ui-monospace,monospace;letter-spacing:.14em;color:#a5b4fc;border:1px solid rgba(129,140,248,.25);border-radius:5px;padding:5px 7px;';
+    language.style.cssText = 'font:750 10px ui-monospace,monospace;letter-spacing:.14em;color:var(--tco-frame-accent,#a5b4fc);border:1px solid var(--vela-border);background:var(--tco-frame-accent-soft,rgba(129,140,248,.12));border-radius:6px;padding:6px 8px;';
     const target = document.createElement('span');
-    target.textContent = 'Live chart · worker compiler';
-    target.style.cssText = 'margin-left:auto;font-size:10px;color:#64748b;';
+    target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler`;
+    target.style.cssText = 'margin-left:auto;max-width:66%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--vela-fg-muted);font-variant-numeric:tabular-nums;';
     top.append(language, target);
     const examples = document.createElement('select');
     examples.setAttribute('aria-label', 'CoreSpirit starter examples');
-    examples.style.cssText = 'width:100%;padding:7px 8px;border:1px solid #263043;border-radius:6px;background:#0b1019;color:#cbd5e1;font-size:11px;';
+    examples.style.cssText = 'width:100%;padding:8px 9px;border:1px solid var(--vela-border);border-radius:7px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:11px Inter,ui-sans-serif,system-ui,sans-serif;';
     for (const [value, label] of [['starter','Trend crossover'],['rsi','RSI recovery'],['levels','Range levels']]) {
       const option = document.createElement('option'); option.value = value; option.textContent = label; examples.appendChild(option);
     }
     const editorFrame = document.createElement('div');
-    editorFrame.style.cssText = 'display:flex;min-height:320px;flex:1;overflow:hidden;border:1px solid #292d36;border-radius:7px;background:#141519;';
+    editorFrame.className = 'tco-core-editor-frame';
+    editorFrame.style.cssText = 'display:flex;min-height:280px;flex:1;overflow:hidden;border:1px solid var(--vela-border);border-radius:9px;background:var(--vela-surface-sunken);';
     const editorHost = document.createElement('div');
     editorHost.setAttribute('aria-label', 'CoreSpirit code editor');
     editorHost.style.cssText = 'display:none;flex:1;min-width:0;min-height:320px;width:100%;';
@@ -375,21 +377,25 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     fallbackEditor.setAttribute('autocomplete', 'off');
     fallbackEditor.setAttribute('autocorrect', 'off');
     fallbackEditor.wrap = 'off';
-    fallbackEditor.style.cssText = 'display:block;flex:1;min-width:0;min-height:320px;resize:vertical;border:0;outline:0;padding:12px;background:#141519;color:#d7d9df;caret-color:#089981;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:4;white-space:pre;overflow:auto;';
+    fallbackEditor.style.cssText = 'display:block;flex:1;min-width:0;min-height:280px;resize:vertical;border:0;outline:0;padding:14px;background:var(--vela-surface-sunken);color:var(--vela-fg-bright);caret-color:var(--tco-frame-accent,#14b8a6);font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:4;white-space:pre;overflow:auto;';
     const status = document.createElement('div');
     status.setAttribute('role', 'status');
-    status.style.cssText = 'min-height:34px;white-space:pre-wrap;border:1px solid #202938;border-radius:6px;padding:8px;color:#94a3b8;background:#0b1018;font:10px/1.5 ui-monospace,monospace;';
+    status.className = 'tco-core-status';
+    status.style.cssText = 'min-height:34px;white-space:pre-wrap;border:1px solid var(--vela-border);border-radius:7px;padding:9px 10px;color:var(--vela-fg-muted);background:var(--vela-surface);font:10px/1.55 ui-monospace,monospace;';
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:7px;align-items:center;';
     const compile = document.createElement('button');
     compile.type = 'button'; compile.textContent = 'Validate';
-    compile.style.cssText = 'border:1px solid #303b50;border-radius:6px;padding:8px 12px;background:#111827;color:#cbd5e1;font-size:11px;font-weight:600;cursor:pointer;';
+    compile.className = 'tco-frame-button';
+    compile.style.cssText = 'border:1px solid var(--vela-border);border-radius:7px;padding:8px 12px;background:var(--vela-surface-sunken);color:var(--vela-fg);font-size:11px;font-weight:650;cursor:pointer;';
     const run = document.createElement('button');
     run.type = 'button'; run.textContent = 'Compile & Run';
-    run.style.cssText = 'border:1px solid rgba(129,140,248,.42);border-radius:6px;padding:8px 12px;background:rgba(99,102,241,.15);color:#c7d2fe;font-size:11px;font-weight:700;cursor:pointer;';
+    run.className = 'tco-frame-button tco-frame-button-primary';
+    run.style.cssText = 'border:1px solid var(--tco-frame-accent,#8b7cff);border-radius:7px;padding:8px 12px;background:var(--tco-frame-accent-soft,rgba(99,102,241,.15));color:var(--vela-fg-bright);font-size:11px;font-weight:750;cursor:pointer;';
     const openFull = document.createElement('button');
     openFull.type = 'button'; openFull.textContent = 'Full IDE ↗';
-    openFull.style.cssText = 'margin-left:auto;border:1px solid #263043;border-radius:6px;padding:8px 10px;background:transparent;color:#94a3b8;font-size:10px;cursor:pointer;';
+    openFull.className = 'tco-frame-button';
+    openFull.style.cssText = 'margin-left:auto;border:1px solid var(--vela-border);border-radius:7px;padding:8px 10px;background:transparent;color:var(--vela-fg-muted);font-size:10px;cursor:pointer;';
     actions.append(compile, run, openFull);
     editorFrame.append(editorHost, fallbackEditor);
     root.append(top, examples, editorFrame, status, actions);
@@ -406,7 +412,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     let monacoAdapter: CoreSpiritMonacoAdapter | undefined;
     let disposed = false;
     const syncEditor = () => {
-      target.textContent = `Live chart · worker compiler · ${source.split('\n').length} lines`;
+      target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`;
       fallbackEditor.value = source;
       try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, source); } catch {}
     };
@@ -581,7 +587,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       window.dispatchEvent(new PopStateEvent('popstate'));
       ctx.toast('Opened the full CoreSpirit IDE', 'success');
     });
-    return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, destroy() { disposed = true; compileGeneration += 1; monacoAdapter?.dispose(); monacoAdapter = undefined; } };
+    return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, onChart() { target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`; }, destroy() { disposed = true; compileGeneration += 1; monacoAdapter?.dispose(); monacoAdapter = undefined; } };
   },
 };
 
