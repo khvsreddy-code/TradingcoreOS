@@ -1822,6 +1822,7 @@ export class VelaWorkspace {
                 detail: { symbol: cell.symbol, timeframe: cell.timeframe, bar },
             }));
         };
+        chart.on('load:start', () => { if (cell.id === this.activeId) this.publishAppearancePreview(); });
         chart.on('bar', publishPreviewBar);
         chart.on('load:end', () => { if (cell.id === this.activeId) this.publishAppearancePreview(); });
         chart.on('market:changed', () => { if (cell.id === this.activeId) this.publishAppearancePreview(); });
