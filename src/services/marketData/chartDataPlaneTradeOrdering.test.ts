@@ -12,6 +12,7 @@ type InternalPlane = {
     latestTick?: NormalizedMarketTick;
     lastAcceptedTradeTimestampMs?: number;
     revision: number;
+    historyReady: boolean;
   };
   canonicalPlane: {
     revision: number;
@@ -48,6 +49,7 @@ function prepare(mode: 'columnar' | 'compatibility'): InternalPlane {
   internal.state.compatibilityCandles = [{ ...history }];
   internal.state.compatibilityRevision = 1;
   internal.state.revision = 1;
+  internal.state.historyReady = true;
   internal.syncCanonical();
 
   if (mode === 'columnar') {
@@ -100,6 +102,7 @@ hourly.state.candles = [{
 hourly.state.compatibilityCandles = [...hourly.state.candles];
 hourly.state.compatibilityRevision = 1;
 hourly.state.revision = 1;
+hourly.state.historyReady = true;
 hourly.syncCanonical();
 hourly.state.columns = hourly.columnarSnapshot();
 hourly.state.candles = [];
