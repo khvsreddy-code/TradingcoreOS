@@ -808,52 +808,72 @@ export class ChartDataPlane {
     const stale = historyStore.getStale(this.brokerId, this.instrumentKey, interval);
     if (fresh?.length) {
       const active = this.activeWindow(fresh, requestedLimit);
-      if (!this.state.historyReady || this.state.candles.length < active.length) {
-        this.state.historyReady = true;
+      if (!this.state.historyReady || this.state.candles.length < active.length || !this.canonicalPlane.length) {
         this.state.olderHistoryExhausted = false;
         this.setCandles(active, 'cache');
+      }
+      this.state.historyReady = this.canonicalPlane.length > 0;
+      if (this.state.historyReady) {
+        this.activateCachedHistory();
         this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
       }
-      return active;
+      return this.state.candles.length ? this.state.candles : active;
     }
     if (stale?.length && !this.state.candles.length) {
-      this.state.historyReady = true;
       this.state.olderHistoryExhausted = false;
       this.setCandles(this.activeWindow(stale, requestedLimit), 'cache');
+      this.state.historyReady = this.canonicalPlane.length > 0;
+      if (this.state.historyReady) this.activateCachedHistory();
     }
 
     this.state.historyLoading = true;
+    const generation = this.liveCandle.beginHistoryLoad('history');
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
     const requestKey = `${this.key}:initial:${initialLimit}`;
     const historyStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, initialLimit), 'initial')
       .then(rows => {
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          return this.getCompatibilityCandles(initialLimit);
+        }
         const normalized = normalizeHistory(rows);
         if (!normalized.length) throw new Error('No historical candles available');
         historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, Math.min(MAX_HISTORY_CANDLES, Math.max(initialLimit, normalized.length)));
         this.state.lastHistoryLoadAt = Date.now();
         this.state.olderHistoryExhausted = false;
-        this.state.historyReady = true;
         const active = this.activeWindow(normalized);
         this.setCandles(active, 'history');
+        this.state.historyReady = this.canonicalPlane.length > 0;
+        const buffered = this.liveCandle.drainPendingTicks(generation);
+        this.state.lastAcceptedTradeTimestampMs = undefined;
+        this.replayBufferedTicks(buffered);
         chartPerformanceTelemetry.recordHistoryLoad(this.key, 'initial', Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - historyStartedAt), active.length);
         this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
         return active;
       })
       .catch(error => {
-        const message = String((error as any)?.message || error || 'Historical candles unavailable');
-        if (this.state.candles.length) {
-          this.state.historyReady = true;
-          this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
-          return this.state.candles;
+        if (this.disposed || !this.liveCandle.isCurrentGeneration(generation)) {
+          return this.getCompatibilityCandles(initialLimit);
         }
+        const message = String((error as any)?.message || error || 'Historical candles unavailable');
+        if (this.state.historyReady && this.canonicalPlane.length > 0) {
+          const buffered = this.liveCandle.drainPendingTicks(generation);
+          this.state.lastAcceptedTradeTimestampMs = undefined;
+          this.replayBufferedTicks(buffered);
+          this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+          return this.state.candles.length ? this.state.candles : this.getCompatibilityCandles(initialLimit);
+        }
+        this.state.historyReady = false;
+        this.liveCandle.failHistoryLoad(generation, true);
         this.emit({ type: 'status', status: 'error', error: message, snapshot: this.snapshot() });
         throw error;
       })
       .finally(() => {
+        if (!this.liveCandle.isCurrentGeneration(generation)) return;
         this.state.historyLoading = false;
         this.state.historyPromise = undefined;
-        if (this.state.candles.length) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        if (this.state.historyReady) this.emit({ type: 'status', status: 'ready', snapshot: this.snapshot() });
+        if (this.state.recoveryPending && this.state.feedStatus === 'connected') this.maybeRecoverAfterReconnect();
       });
     this.state.historyPromise = promise;
     return promise;
