@@ -85,4 +85,27 @@ for (const mode of ['columnar', 'compatibility'] as const) {
   assert.equal(plane.canonicalPlane.revision, dataRevisionAfterPriceMove, `${mode}: stale packet must not advance canonical revision`);
 }
 
+// A historical hourly bar starting at 09:15 IST (03:45 UTC) must retain its
+// session-aligned boundary. Unix-epoch flooring would incorrectly select 09:00
+// and cause the active hourly candle to ignore valid live prices.
+const hourly = new ChartDataPlane('ordering-contract-hourly', 'NSE:ORDERING-TEST', '60m') as unknown as InternalPlane;
+hourly.state.candles = [{
+  timestamp: '2026-10-14T03:45:00.000Z',
+  open: 100,
+  high: 101,
+  low: 99,
+  close: 100,
+  volume: 100,
+}];
+hourly.state.compatibilityCandles = [...hourly.state.candles];
+hourly.state.compatibilityRevision = 1;
+hourly.state.revision = 1;
+hourly.syncCanonical();
+hourly.state.columns = hourly.columnarSnapshot();
+hourly.state.candles = [];
+hourly.state.compatibilityCandles = [];
+hourly.onTick(makeTick('2026-10-14T03:46:00.000Z', 102));
+assert.equal(hourly.canonicalPlane.read().time.at(-1), Date.parse('2026-10-14T03:45:00.000Z') / 1000);
+assert.equal(hourly.canonicalPlane.read().close.at(-1), 102, 'session-aligned hourly candle should accept current-session price updates');
+
 console.log('CHART_DATA_PLANE_TRADE_ORDERING_CONTRACT_OK');
