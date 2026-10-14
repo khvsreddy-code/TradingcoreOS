@@ -356,7 +356,7 @@ export class ChartDataPlane {
 
     // A quote may update the header while history is cold/recovering, but it must
     // never become a candle until a canonical historical baseline is available.
-    if (!hasHistory || this.state.recoveryPending || this.state.recoveryInFlight) {
+    if (!hasHistory || this.state.historyLoading || this.state.recoveryPending || this.state.recoveryInFlight) {
       if (Number.isFinite(price) && this.rememberLatestTick(tick, tradeTimeMs)) {
         this.emit({ type: 'quote', snapshot: this.snapshot() });
       }
@@ -574,10 +574,20 @@ export class ChartDataPlane {
     if (this.state.idleTimer) { clearTimeout(this.state.idleTimer); this.state.idleTimer = undefined; }
     if (!this.state.marketStop) {
       const marketKey = chartMarketKey(this.brokerId, this.instrumentKey);
-      this.state.marketStop = chartMarketStore.subscribe(marketKey, () => {
+      const syncMarketSnapshot = () => {
+        const marketSnapshot = chartMarketStore.getSnapshot(marketKey);
+        const statusRevision = Number(marketSnapshot.statusRevision) || 0;
+        if (statusRevision > this.state.marketStatusRevision) {
+          this.state.marketStatusRevision = statusRevision;
+          if (marketSnapshot.status) this.onFeedStatus(marketSnapshot.status);
+        }
         const tick = chartMarketStore.getTick(marketKey);
         if (tick) this.onTick(tick);
-      });
+      };
+      this.state.marketStop = chartMarketStore.subscribe(marketKey, syncMarketSnapshot);
+      // Attach the listener before acquiring the socket so synchronous connection
+      // status and the most recent tick cannot be lost during subscription setup.
+      syncMarketSnapshot();
       this.state.feedStop = acquireSharedChartMarketFeed(this.brokerId, this.instrumentKey);
       const cachedTick = chartMarketStore.getTick(marketKey) ?? tradingCoreRuntime.getMarketSnapshot(this.instrumentKey);
       if (cachedTick) this.onTick(cachedTick);
