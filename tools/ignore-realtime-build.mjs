@@ -83,17 +83,33 @@ export function runRealtimeIgnoreCommand(env = process.env) {
     return 1;
   }
 
-  const previousSha = String(env.VERCEL_GIT_PREVIOUS_SHA || '').trim();
+  let previousSha = String(env.VERCEL_GIT_PREVIOUS_SHA || '').trim();
   const currentSha = String(env.VERCEL_GIT_COMMIT_SHA || '').trim();
 
-  if (!previousSha || !currentSha) {
-    console.warn('[realtime-ignore] Previous/current deployment SHA unavailable; rebuilding safely.');
+  if (!currentSha) {
+    console.warn('[realtime-ignore] Current deployment SHA unavailable; rebuilding safely.');
     return 1;
   }
 
+  // Some Vercel multi-service builds do not expose VERCEL_GIT_PREVIOUS_SHA to a
+  // service-level ignore command. For that case, compare the deployed commit with
+  // its first parent. This still rebuilds for a runtime change in this commit (or
+  // a realtimefresh service-config change), while frontend-only commits can reuse
+  // the last successful gateway image instead of consuming another registry slot.
+  // If the parent cannot be proved locally, fail open and rebuild.
+  if (!previousSha) {
+    try {
+      previousSha = execFileSync('git', ['rev-parse', '--verify', `${currentSha}^1`], { encoding: 'utf8' }).trim();
+      console.warn('[realtime-ignore] Previous deployment SHA missing; comparing with the current commit parent.');
+    } catch (error) {
+      console.warn('[realtime-ignore] Previous deployment SHA and current parent unavailable; rebuilding safely.', error instanceof Error ? error.message : '');
+      return 1;
+    }
+  }
+
   try {
-    // Ensure both commits exist locally before trusting a path-only diff. A shallow
-    // checkout or missing previous object must never silently skip the service build.
+    // Ensure both commits exist locally before trusting a path-only diff. A supplied
+    // previous SHA that is absent from the shallow checkout still fails open.
     execFileSync('git', ['cat-file', '-e', `${previousSha}^{commit}`], { stdio: 'ignore' });
     execFileSync('git', ['cat-file', '-e', `${currentSha}^{commit}`], { stdio: 'ignore' });
     const changed = readChangedPaths(previousSha, currentSha);
