@@ -67,6 +67,12 @@ const visibleTools = hydratedToolbar.groups.flatMap((group) =>
 );
 const visibleTypes = visibleTools.map((tool) => tool.type);
 assert.equal(new Set(visibleTypes).size, visibleTypes.length, 'the canonical toolbar must not duplicate tools across categories');
+const registeredTypes = drawingTypes().map((meta) => meta.type);
+assert.deepEqual(
+  registeredTypes.filter((type) => !visibleTypes.includes(type)),
+  [],
+  'every registered Vela drawing type must appear in the canonical toolbar',
+);
 for (const type of [
   'parallelchannel','pitchfork','arrow','ellipse','freehand','flagmark','iconstamp',
   'fibretracement','fibspiral','gannfan','anchoredvwap','fixedrangevp',
