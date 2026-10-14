@@ -14,6 +14,7 @@ assert.equal(isRealtimeRuntimePath('src/server/marketData/FyersMarketDataTranspo
 assert.equal(isRealtimeRuntimePath('realtime-gateway/server.ts'), true, 'Realtime gateway entrypoint changes must rebuild');
 assert.equal(isRealtimeRuntimePath('package-lock.json'), true, 'Dependency lock changes must rebuild');
 assert.equal(isRealtimeRuntimePath('vercel.json'), false, 'Route-only Vercel config changes must not rebuild the realtime image');
+assert.equal(isRealtimeRuntimePath('tools/ignore-realtime-build.mjs'), false, 'updating the ignore policy itself must not consume a container image slot');
 assert.equal(shouldBuildRealtime(['src/TcoVelaDataProvider.ts', 'src/services/coreSpirit/compiler.ts']), false);
 assert.equal(shouldBuildRealtime(['vercel.json']), false, 'Vercel rewrites are not a gateway runtime dependency by themselves');
 assert.equal(shouldBuildRealtime(['src/TcoVelaDataProvider.ts', 'realtime-gateway/server.ts']), true);
