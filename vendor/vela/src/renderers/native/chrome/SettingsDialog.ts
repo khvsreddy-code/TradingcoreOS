@@ -1,5 +1,6 @@
 import type { VelaTheme, ThemeName } from '../../../core/options';
 import type { ChartConfig } from '../core/chartConfig';
+import type { OHLCV } from '../../../core/model/ohlcv';
 import {
     chartType,
     chartTypes,
@@ -293,6 +294,69 @@ export class SettingsDialog {
     private toggleRail: ((open?: boolean) => void) | null = null;
     /** Live appearance preview shown only in the desktop settings presentation. */
     private previewPanel: HTMLElement | null = null;
+    private previewCanvas: HTMLCanvasElement | null = null;
+    private previewResizeObserver: ResizeObserver | null = null;
+    private previewFeedDocument: Document | null = null;
+    private previewConfig: ChartConfig | null = null;
+    private previewBars: OHLCV[] = [];
+    private previewSymbol = '';
+    private previewTimeframe = '';
+    private previewPanOffset = 0;
+    private previewVisibleBars = 56;
+    private readonly onPreviewData = (event: Event): void => {
+        const detail = (event as CustomEvent<{ symbol?: string; timeframe?: string; bars?: OHLCV[]; bar?: OHLCV }>).detail;
+        if (!detail || !this.previewPanel) return;
+        const symbol = String(detail.symbol || this.previewSymbol || '').trim();
+        const timeframe = String(detail.timeframe || this.previewTimeframe || '').trim();
+        const symbolChanged = !!symbol && symbol !== this.previewSymbol;
+        if (symbolChanged) {
+            this.previewPanOffset = 0;
+            this.previewVisibleBars = 56;
+            this.previewBars = [];
+        }
+        if (symbol) this.previewSymbol = symbol;
+        if (timeframe) this.previewTimeframe = timeframe;
+        const validBar = (value: unknown): value is OHLCV => {
+            if (!value || typeof value !== 'object') return false;
+            const bar = value as OHLCV;
+            return Number.isFinite(Number(bar.time)) &&
+                [bar.open, bar.high, bar.low, bar.close].every((n) => Number.isFinite(Number(n)));
+        };
+        if (Array.isArray(detail.bars)) {
+            this.previewBars = detail.bars.filter(validBar).map((bar) => ({
+                time: Number(bar.time), open: Number(bar.open), high: Number(bar.high),
+                low: Number(bar.low), close: Number(bar.close),
+                ...(Number.isFinite(Number(bar.volume)) ? { volume: Number(bar.volume) } : {}),
+            })).slice(-5000);
+            this.previewPanOffset = Math.min(this.previewPanOffset, Math.max(0, this.previewBars.length - 1));
+        } else if (validBar(detail.bar)) {
+            const bar = detail.bar;
+            const next = { time: Number(bar.time), open: Number(bar.open), high: Number(bar.high),
+                low: Number(bar.low), close: Number(bar.close), ...(Number.isFinite(Number(bar.volume)) ? { volume: Number(bar.volume) } : {}) };
+            const last = this.previewBars[this.previewBars.length - 1];
+            if (last && last.time === next.time) this.previewBars[this.previewBars.length - 1] = next;
+            else if (!last || next.time > last.time) this.previewBars.push(next);
+            else {
+                const index = this.previewBars.findIndex((candidate) => candidate.time >= next.time);
+                if (index >= 0 && this.previewBars[index]!.time === next.time) this.previewBars[index] = next;
+                else if (index >= 0) this.previewBars.splice(index, 0, next);
+            }
+            if (this.previewBars.length > 5000) this.previewBars.splice(0, this.previewBars.length - 5000);
+        }
+        const ticker = this.previewSymbol.split(':').pop()?.trim() || this.previewSymbol || 'Active chart';
+        const symbolLabel = this.previewPanel.querySelector<HTMLElement>('.vela-sd-preview-symbol-text');
+        const metaSymbol = this.previewPanel.querySelector<HTMLElement>('.vela-sd-preview-meta-symbol');
+        const quote = this.previewPanel.querySelector<HTMLElement>('.vela-sd-preview-price');
+        const dot = this.previewPanel.querySelector<HTMLElement>('.vela-sd-preview-live-dot');
+        if (symbolLabel) symbolLabel.textContent = `${ticker} · ${this.previewTimeframe || '—'}`;
+        if (metaSymbol) metaSymbol.textContent = ticker;
+        const last = this.previewBars[this.previewBars.length - 1];
+        if (quote) quote.textContent = last
+            ? `O ${last.open.toLocaleString('en-IN', { maximumFractionDigits: 2 })}  H ${last.high.toLocaleString('en-IN', { maximumFractionDigits: 2 })}  L ${last.low.toLocaleString('en-IN', { maximumFractionDigits: 2 })}  C ${last.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+            : 'Waiting for real market bars…';
+        if (dot) dot.style.background = last ? '#0f9b8e' : '#64748b';
+        if (this.previewCanvas && this.previewConfig) this.drawAppearancePreview(this.previewConfig);
+    };
 
     /** The visibility policy: setting ids hidden by the host (subtree semantics). */
     private hiddenSettings: ReadonlySet<string> = new Set();
