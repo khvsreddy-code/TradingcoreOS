@@ -6,6 +6,20 @@ const live = read('src/LiveTradingWorkspace.tsx');
 const topology = read('src/services/core/chart/tcoVelaTerminal.ts');
 const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const settingsDialog = read('vendor/vela/src/renderers/native/chrome/SettingsDialog.ts');
+const drawingSettingsPanel = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPanel.ts');
+const drawingSettingsPopup = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPopup.ts');
+const multiProviderFeed = read('vendor/vela/src/data/MultiProviderFeed.ts');
+const corePatch = read('vendor/vela/src/core/model/patch.ts');
+const scenePatch = read('vendor/vela/src/core/model/scenePatch.ts');
+const velaEngineOrchestrator = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
+const velaCanvasBackend = read('vendor/vela/src/renderers/native/backend/Canvas2dBackend.ts');
+const velaWebGLBackend = read('vendor/vela/src/renderers/native/backend/WebGL2Backend.ts');
+const drawingDefaults = read('vendor/vela/src/core/drawings/defaults.ts');
+const drawingPriceAction = read('vendor/vela/src/core/drawings/priceAction.ts');
+const drawingController = read('vendor/vela/src/core/drawings/DrawingController.ts');
+const drawingRegistry = read('vendor/vela/src/core/drawings/registry.ts');
+const workspaceState = read('vendor/vela/src/state/document.ts');
+const upstream = read('vendor/vela/UPSTREAM.md');
 const topbar = read('vendor/vela/src/widget/topbar.ts');
 const wheel = read('vendor/vela/src/widget/alt-wheel.ts');
 const provider = read('src/TcoVelaDataProvider.ts');
@@ -81,4 +95,41 @@ assert(!provider.includes("tradingCoreRuntime.getHistoricalDataColumns"), "Vela 
 
 assert(plane.includes("columns.time.length === 0"));
 
+
+// Vela 0.8.4 provenance and API surface must stay aligned with the official rebase.
+assert(upstream.includes('**0.8.4**') && upstream.includes('850fa1f431e2065e9b0074c4b0555a48a2999eaf'),
+  'the vendored Vela provenance must identify official 0.8.4');
+// Keep the Vela 0.8.4 drawing experience: live-edit/cancel panel, reusable styles, and timeframe filtering.
+assert(drawingSettingsPanel.includes('export class DrawingSettingsPanel'), 'Vela 0.8.4 drawing settings panel must be present');
+assert(drawingSettingsPanel.includes('this.showOnFold(b)') && drawingSettingsPanel.includes('saveTemplate?.(name)'),
+  'drawing settings must retain timeframe visibility and saved-style actions');
+assert(drawingSettingsPanel.includes("actions.preview?.(null)"), 'drawing style preview must be clearable on cancel/close');
+assert(drawingDefaults.includes('captureToolDefaults') && drawingDefaults.includes('sanitizeToolTemplates') && drawingDefaults.includes('builtinToolTemplates'),
+  'drawing defaults and style templates must use Vela 0.8.4 defaults contracts');
+assert(drawingController.includes('setToolDefaults') && drawingController.includes('setToolTemplates'),
+  'the drawing controller must expose tool-default and template persistence');
+assert(workspaceState.includes('DrawingToolsState') && workspaceState.includes('drawingTools') && workspaceState.includes('defaults') && workspaceState.includes('templates'),
+  'drawing defaults/templates must be represented in workspace-persisted state');
+assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('blockState') && drawingPriceAction.includes('liquidityState'),
+  'Vela 0.8.4 price-action analysis must include FVG, order-block and liquidity state');
+assert(drawingRegistry.includes('fairvaluegap') && drawingRegistry.includes('orderblock') && drawingRegistry.includes('liquidity'),
+  'the drawing registry must expose all 0.8.4 price-action tools');
+// The unified drawing gear must launch the 0.8.4 panel, not the old split controls.
+assert(drawingSettingsPopup.includes("iconBtn('Settings'") && drawingSettingsPopup.includes('this.openPanel()'),
+  'the drawing toolbar settings gear must open the unified Vela 0.8.4 settings panel');
+assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPopup.includes("iconBtn('Position size'"),
+  'the retired split Levels/Position size buttons must not return');
+// Offline bars must remain immutable until a real provider supplies a bar update.
+assert(!multiProviderFeed.includes('Math.random()') && !multiProviderFeed.includes('intervalMs(timeframe)'),
+  'Vela offline history must not be mutated by synthetic ticks');
+// Vela 0.8.4 candle-color patches must pass through TCO's custom incremental scene pipeline.
+assert(corePatch.includes('barColors?: Array<CandleBarColor | null>'),
+  'series value patches must carry per-bar candle colors together with the changed bars');
+assert(scenePatch.includes('series.barColors = applyArrayDelta'),
+  'scene patch application must update candle colors using the same range/append operation as bars');
+assert(velaEngineOrchestrator.includes('barColors: series.barColors ?? []') &&
+  velaEngineOrchestrator.includes('current.barColors.slice(incomingStart, incomingEnd)'),
+  'TCO full, ranged and incremental series patches must preserve correctly aligned Vela candle colors');
+assert(velaCanvasBackend.includes('s.barColors?.[i - off]') && velaWebGLBackend.includes('s.barColors?.[i - off]'),
+  'both native renderers must consume per-bar plotcandle/plotbar colors');
 console.log('TRADINGCORE_V132_VELA_WORKSPACE_UX_AND_CANDLE_FALLBACK_CONTRACT_OK');

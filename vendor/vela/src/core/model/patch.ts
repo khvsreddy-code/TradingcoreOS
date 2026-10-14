@@ -1,6 +1,6 @@
 import type { Millis } from './time';
 import type { OHLCV } from './ohlcv';
-import type { SeriesPoint, SeriesSpec, MarkerPoint, LineLikeStyle } from './series';
+import type { SeriesPoint, SeriesSpec, MarkerPoint, LineLikeStyle, CandleBarColor } from './series';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
 import type { Fill, FillGradientStop } from './scene';
@@ -16,7 +16,16 @@ export type SeriesPatchOperation = 'replace' | 'append' | 'prepend' | 'replace-l
 /** A value delta carries only the values affected by the operation. */
 export type SeriesValueDelta =
     | { seriesId: string; kind: 'points'; points: SeriesPoint[]; op?: SeriesPatchOperation; start?: number; remove?: number }
-    | { seriesId: string; kind: 'bars'; bars: OHLCV[]; op?: SeriesPatchOperation; start?: number; remove?: number }
+    | {
+          seriesId: string;
+          kind: 'bars';
+          bars: OHLCV[];
+          /** Per-bar candle colors aligned to `bars`; omitted preserves the current array. */
+          barColors?: Array<CandleBarColor | null>;
+          op?: SeriesPatchOperation;
+          start?: number;
+          remove?: number;
+      }
     | { seriesId: string; kind: 'markers'; markers: MarkerPoint[]; op?: SeriesPatchOperation; start?: number; remove?: number };
 
 /** Style/display mutation with no data payload. */
