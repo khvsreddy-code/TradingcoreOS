@@ -432,18 +432,6 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
   },
 };
 
-const replayTopbarAction: WidgetActionDescriptor = {
-  id: 'tco.replay-action',
-  target: 'topbar',
-  label: 'Replay',
-  icon: 'replay',
-  iconOnly: false,
-  align: 'left',
-  order: 0,
-  mobile: 'menu',
-  run(ctx) { ctx.togglePanel('tco.replay'); },
-};
-
 const coreSpiritCodeAction: WidgetActionDescriptor = {
   id: 'tco.corespirit-code',
   target: 'topbar',
@@ -1450,17 +1438,17 @@ registerLegendCallout(coreSpiritStatusCallout);
 registerSidePanel(accountPanel);
 
 const researchAction:WidgetActionDescriptor={
-  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:true, align:'right', order:1.5, mobile:'menu',
+  id:'tco.research', target:'topbar', label:'Research', icon:'search', iconOnly:false, align:'right', order:1.5, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.research');},
 };
 
 const automationAction:WidgetActionDescriptor={
-  id:'tco.automation', target:'topbar', label:'Automation', icon:'activity', iconOnly:true, align:'right', order:1.6, mobile:'menu',
+  id:'tco.automation', target:'topbar', label:'Automation', icon:'replay', iconOnly:false, align:'right', order:1.6, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.automation');},
 };
 
 const tradingAction:WidgetActionDescriptor={
-  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:true, align:'right', order:1.7, mobile:'menu',
+  id:'tco.trading', target:'topbar', label:'Trading', icon:'datawindow', iconOnly:false, align:'right', order:1.7, mobile:'menu',
   run(ctx){ctx.togglePanel('tco.trading');},
 };
 
@@ -1496,12 +1484,12 @@ const chartSettingsAction: WidgetActionDescriptor = {
 };
 
 const watchlistAction: WidgetActionDescriptor = {
-  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: true, align: 'right', order: 0, mobile: 'menu',
+  id: 'tco.watchlist', target: 'topbar', label: 'Watchlist', icon: 'star', iconOnly: false, align: 'right', order: 0, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.bookmarks'); },
 };
 
 const journalAction: WidgetActionDescriptor = {
-  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: true, align: 'right', order: 1, mobile: 'menu',
+  id: 'tco.journal', target: 'topbar', label: 'Journal', icon: 'calendar', iconOnly: false, align: 'right', order: 1, mobile: 'menu',
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
@@ -1519,7 +1507,6 @@ registerSidePanel(riskPanel);
 registerSidePanel(orderBookPanel);
 registerSidePanel(optionsPanel);
 registerWidgetAttachment(tradeMarksAttachment);
-registerWidgetAction(replayTopbarAction);
 registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
