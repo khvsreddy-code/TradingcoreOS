@@ -681,7 +681,7 @@ const drawingToolsPanel: SidePanelDescriptor = {
       paintSelected();
     };
 
-    const selectTool = (type: string | null): void => {
+    const selectTool = (type: import('../../../../vendor/vela/src/core/drawings/Drawing').DrawingTypeKey | null): void => {
       activeChart.drawings.setTool(type);
       selected = type;
       paintSelected();
