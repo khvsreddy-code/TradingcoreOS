@@ -7,6 +7,8 @@ export const CORE_SPIRIT_DRAWING_TOOL_CATALOG = Object.freeze([
   'trendline','hline','ray','extendedline','vline','hray','crossline','infoline','trendangle',
   'box','text','note','pricenote','comment','pricelabel','signpost',
   'parallelchannel','disjointchannel','flattopbottom','regressionchannel','anchoredvwap','fixedrangevp',
+  // Vela 0.8.4 price-action tools: keep these in the canonical workspace picker.
+  'fairvaluegap','orderblock','liquidity',
   'pitchfork','schiffpitchfork','modifiedschiffpitchfork','insidepitchfork',
   'arrow','callout','ellipse','triangle','polyline','freehand','highlighter','circle','rotatedrect','path','arc','curve',
   'arrowmarkup','arrowmarkdown','flagmark','iconstamp',
