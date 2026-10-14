@@ -15,6 +15,7 @@ export const CORE_SPIRIT_DRAWING_TOOL_CATALOG = Object.freeze([
   'gannfan','gannbox','gannsquare',
   'dedekind','sonic','supersonic','goldensonic','goldensupersonic',
   'datepricerange','position','magnifier',
+  'fairvaluegap','orderblock','liquidity',
   'xabcd','abcd','elliottimpulse','elliottcorrection','headshoulders',
   'gartley','bat','butterfly','crab','shark','cypher',
 ] as const);
