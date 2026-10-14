@@ -11,7 +11,7 @@ const provider = read('./TcoVelaDataProvider.ts');
 const vela = read('../vendor/vela/src/Vela.ts');
 const options = read('../vendor/vela/src/core/options.ts');
 
-assert.match(provenance, /0\.8\.3/, 'vendored Vela foundation must identify upstream version 0.8.4');
+assert.match(provenance, /0\.8\.4/, 'vendored Vela foundation must identify upstream version 0.8.4');
 assert.match(provenance, /850fa1f431e2065e9b0074c4b0555a48a2999eaf/, 'record the exact upstream source commit');
 assert.match(vela, /priceAxis\?\.ticks|priceAxisTicks/, 'carry the upstream custom price-axis ticks API');
 assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option contract');
