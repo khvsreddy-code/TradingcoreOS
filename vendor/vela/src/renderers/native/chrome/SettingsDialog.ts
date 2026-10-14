@@ -574,14 +574,165 @@ export class SettingsDialog {
 
     private syncPreview(config: ChartConfig): void {
         const panel = this.previewPanel;
+        this.previewConfig = config;
         if (!panel) return;
         panel.style.setProperty('--vela-preview-up', config.candles.upColor);
         panel.style.setProperty('--vela-preview-down', config.candles.downColor);
         panel.style.setProperty('--vela-preview-bg', config.layout.background);
+        this.drawAppearancePreview(config);
     }
 
-    /** A simulated sample chart for preview only; it never requests broker data. */
+    /** Draw only bars supplied by the active Vela chart. No synthetic candle data is used. */
+    private drawAppearancePreview(config: ChartConfig): void {
+        const canvas = this.previewCanvas;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const width = Math.max(1, rect.width);
+        const height = Math.max(1, rect.height || 232);
+        const dpr = Math.max(1, Math.min(3, canvas.ownerDocument.defaultView?.devicePixelRatio || 1));
+        const pixelWidth = Math.round(width * dpr);
+        const pixelHeight = Math.round(height * dpr);
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+            canvas.width = pixelWidth;
+            canvas.height = pixelHeight;
+        }
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const background = config.layout.background || '#080a0d';
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, width, height);
+
+        const left = 8;
+        const right = Math.max(left + 40, width - 47);
+        const top = 11;
+        const volumeHeight = 28;
+        const bottom = height - 23;
+        const volumeTop = bottom - volumeHeight;
+        const priceBottom = volumeTop - 12;
+        const plotWidth = right - left;
+        const all = this.previewBars;
+        const end = Math.max(0, all.length - this.previewPanOffset);
+        const start = Math.max(0, end - this.previewVisibleBars);
+        const visible = all.slice(start, end);
+
+        ctx.font = '10px Inter, system-ui, sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#ffffff15';
+        for (let i = 0; i <= 4; i++) {
+            const y = top + ((priceBottom - top) * i) / 4;
+            ctx.beginPath();
+            ctx.moveTo(left, y);
+            ctx.lineTo(right, y);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = '#ffffff20';
+        ctx.beginPath();
+        ctx.moveTo(right + 1, top);
+        ctx.lineTo(right + 1, bottom + 3);
+        ctx.stroke();
+
+        if (visible.length === 0) {
+            ctx.fillStyle = '#9ca3af';
+            ctx.textAlign = 'center';
+            ctx.fillText('Waiting for real chart history…', Math.max(40, width / 2), Math.max(40, height / 2));
+            ctx.textAlign = 'left';
+            return;
+        }
+
+        let min = Number.POSITIVE_INFINITY;
+        let max = Number.NEGATIVE_INFINITY;
+        let maxVolume = 0;
+        for (const bar of visible) {
+            min = Math.min(min, Number(bar.low));
+            max = Math.max(max, Number(bar.high));
+            maxVolume = Math.max(maxVolume, Number(bar.volume) || 0);
+        }
+        let range = max - min;
+        if (!Number.isFinite(range) || range <= 0) range = Math.max(Math.abs(max) * 0.002, 1);
+        min -= range * 0.07;
+        max += range * 0.07;
+        range = max - min;
+        const yOf = (price: number) => top + ((max - price) / range) * (priceBottom - top);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#8b95a5';
+        for (let i = 0; i <= 4; i++) {
+            const price = max - (range * i) / 4;
+            const y = top + ((priceBottom - top) * i) / 4;
+            ctx.fillText(price.toLocaleString('en-IN', { maximumFractionDigits: 2 }), right + 5, y);
+        }
+
+        const slot = plotWidth / visible.length;
+        const bodyWidth = Math.max(1, Math.min(8, slot * 0.66));
+        const up = config.candles.upColor || '#089981';
+        const down = config.candles.downColor || '#f23645';
+        visible.forEach((bar, index) => {
+            const x = left + (index + 0.5) * slot;
+            const bullish = bar.close >= bar.open;
+            const color = bullish ? up : down;
+            const highY = yOf(bar.high);
+            const lowY = yOf(bar.low);
+            const openY = yOf(bar.open);
+            const closeY = yOf(bar.close);
+            ctx.strokeStyle = config.candles.wickVisible === false ? color : color;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, highY);
+            ctx.lineTo(x, lowY);
+            ctx.stroke();
+            if (config.candles.bodyVisible !== false) {
+                ctx.fillStyle = color;
+                const bodyTop = Math.min(openY, closeY);
+                const bodyHeight = Math.max(1.2, Math.abs(closeY - openY));
+                ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
+            }
+            const volume = Math.max(0, Number(bar.volume) || 0);
+            if (maxVolume > 0 && volumeHeight > 0) {
+                const barHeight = (volume / maxVolume) * (volumeHeight - 2);
+                ctx.globalAlpha = 0.48;
+                ctx.fillStyle = color;
+                ctx.fillRect(x - bodyWidth / 2, bottom - barHeight, bodyWidth, barHeight);
+                ctx.globalAlpha = 1;
+            }
+        });
+
+        const last = visible[visible.length - 1]!;
+        const liveY = yOf(last.close);
+        ctx.save();
+        ctx.strokeStyle = up === config.candles.upColor && last.close >= last.open ? up : (last.close >= last.open ? up : down);
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(left, liveY);
+        ctx.lineTo(right, liveY);
+        ctx.stroke();
+        ctx.restore();
+        const timeLabel = (value: number) => {
+            const date = new Date(value > 1e12 ? value : value * 1000);
+            return Number.isFinite(date.getTime())
+                ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : '';
+        };
+        ctx.fillStyle = '#8b95a5';
+        ctx.textAlign = 'left';
+        ctx.fillText(timeLabel(visible[0]!.time), left, height - 8);
+        ctx.textAlign = 'right';
+        ctx.fillText(timeLabel(last.time), right, height - 8);
+        ctx.textAlign = 'left';
+    }
+
+    private stopAppearancePreviewFeed(): void {
+        this.previewFeedDocument?.removeEventListener('tco:appearance-preview-data', this.onPreviewData);
+        this.previewFeedDocument = null;
+        this.previewResizeObserver?.disconnect();
+        this.previewResizeObserver = null;
+        this.previewCanvas = null;
+    }
+
+    /** Native settings preview bound to the active chart's real history and forming candle. */
     private buildAppearancePreview(config: ChartConfig): HTMLElement {
+        this.stopAppearancePreviewFeed();
         const panel = document.createElement('aside');
         panel.className = 'vela-sd-preview';
         panel.setAttribute('aria-label', 'Chart appearance preview');
@@ -594,86 +745,104 @@ export class SettingsDialog {
         card.className = 'vela-sd-preview-card';
         const meta = document.createElement('div');
         meta.className = 'vela-sd-preview-meta';
-        const sampleLabel = document.createElement('span');
-        sampleLabel.textContent = 'Sample data';
-        // The preview uses synthetic candles, but its instrument label must follow the
-        // active workspace chart so users can tell which chart's appearance they are editing.
-        const previewTicker = (document.documentElement.dataset.tcoActiveSymbol || 'NSE:NIFTY50-INDEX')
-            .split(':').pop()!.trim() || 'NIFTY50-INDEX';
-        const previewTimeframe = document.documentElement.dataset.tcoActiveTimeframe || '5m';
-        const previewBadge = previewTicker.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || 'TC';
-        const sampleSymbol = document.createElement('span');
-        sampleSymbol.textContent = previewTicker;
-        meta.append(sampleLabel, sampleSymbol);
+        const liveLabel = document.createElement('span');
+        liveLabel.textContent = 'LIVE OHLC';
+        const metaSymbol = document.createElement('span');
+        metaSymbol.className = 'vela-sd-preview-meta-symbol';
+        metaSymbol.textContent = this.previewSymbol.split(':').pop() || 'Active chart';
+        meta.append(liveLabel, metaSymbol);
 
         const symbol = document.createElement('div');
         symbol.className = 'vela-sd-preview-symbol';
         const badge = document.createElement('span');
         badge.className = 'vela-sd-preview-badge';
-        badge.textContent = previewBadge;
+        const ticker = this.previewSymbol.split(':').pop()?.trim() || document.documentElement.dataset.tcoActiveSymbol?.split(':').pop()?.trim() || 'ACTIVE';
+        badge.textContent = ticker.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase() || 'TC';
         const symbolText = document.createElement('span');
-        symbolText.textContent = `${previewTicker} · ${previewTimeframe}`;
+        symbolText.className = 'vela-sd-preview-symbol-text';
+        this.previewTimeframe = this.previewTimeframe || document.documentElement.dataset.tcoActiveTimeframe || '5m';
+        symbolText.textContent = `${ticker} · ${this.previewTimeframe}`;
         const statusDot = document.createElement('span');
-        statusDot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#0f9b8e;flex:0 0 auto;';
+        statusDot.className = 'vela-sd-preview-live-dot';
+        statusDot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#64748b;flex:0 0 auto;';
         symbol.append(badge, symbolText, statusDot);
 
         const quote = document.createElement('div');
         quote.className = 'vela-sd-preview-price';
-        quote.textContent = 'C 85,700.76   +58.00 (+0.07%)';
+        const last = this.previewBars[this.previewBars.length - 1];
+        quote.textContent = last
+            ? `O ${last.open.toLocaleString('en-IN', { maximumFractionDigits: 2 })}  H ${last.high.toLocaleString('en-IN', { maximumFractionDigits: 2 })}  L ${last.low.toLocaleString('en-IN', { maximumFractionDigits: 2 })}  C ${last.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+            : 'Waiting for real market bars…';
 
-        const ns = 'http://www.w3.org/2000/svg';
-        const svg = document.createElementNS(ns, 'svg');
-        svg.setAttribute('viewBox', '0 0 270 280');
-        svg.setAttribute('role', 'img');
-        svg.setAttribute('aria-label', 'Simulated sample candlestick chart');
-        svg.classList.add('vela-sd-preview-chart');
-        const add = (tag: string, attrs: Record<string, string>, parent: SVGElement = svg): SVGElement => {
-            const el = document.createElementNS(ns, tag) as SVGElement;
-            for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
-            parent.appendChild(el);
-            return el;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'vela-sd-preview-chart';
+        canvas.setAttribute('role', 'img');
+        canvas.setAttribute('aria-label', 'Live candles from the active chart. Drag to pan and use the mouse wheel to zoom.');
+        canvas.title = 'Drag to pan · Scroll to zoom';
+        this.previewCanvas = canvas;
+        card.append(meta, symbol, quote, canvas);
+
+        let dragging = false;
+        let dragStartX = 0;
+        let dragStartOffset = 0;
+        canvas.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0 || this.previewBars.length < 2) return;
+            dragging = true;
+            dragStartX = event.clientX;
+            dragStartOffset = this.previewPanOffset;
+            canvas.style.cursor = 'grabbing';
+            canvas.setPointerCapture(event.pointerId);
+        });
+        canvas.addEventListener('pointermove', (event) => {
+            if (!dragging || !this.previewCanvas) return;
+            const bounds = canvas.getBoundingClientRect();
+            if (bounds.width <= 0) return;
+            const delta = Math.round(((event.clientX - dragStartX) / bounds.width) * this.previewVisibleBars);
+            this.previewPanOffset = Math.max(0, Math.min(Math.max(0, this.previewBars.length - 1), dragStartOffset + delta));
+            this.drawAppearancePreview(config);
+        });
+        const stopDragging = () => {
+            dragging = false;
+            canvas.style.cursor = 'grab';
         };
-        const gridYs = [18, 58, 98, 138, 178, 218];
-        const priceLabels = ['86,200','86,000','85,800','85,600','85,400','85,200'];
-        gridYs.forEach((y,i) => {
-            add('line', { x1:'0', y1:String(y), x2:'211', y2:String(y), stroke:'#252a33', 'stroke-width':'1' });
-            const label = add('text', { x:'217', y:String(y+3), fill:'#7f8998', 'font-size':'8.5', 'font-family':'system-ui,sans-serif' });
-            label.textContent = priceLabels[i]!;
-        });
-        add('line', { x1:'211', y1:'8', x2:'211', y2:'247', stroke:'#252a33', 'stroke-width':'1' });
-        const candleSamples: Array<[number,number,number,number,number]> = [
-            [36,48,55,30,12],[48,42,55,37,10],[42,53,58,38,13],[53,60,69,47,15],
-            [60,50,65,45,18],[50,46,57,39,11],[46,61,67,41,13],[61,55,68,51,12],
-            [55,70,76,50,20],[70,64,78,59,14],[64,58,70,54,12],[58,47,62,40,21],
-            [47,55,62,43,13],[55,67,72,51,16],[67,60,72,56,12],[60,73,80,57,19],
-            [73,82,89,68,23],[82,77,86,71,17],[77,69,81,64,14],[69,75,81,66,12],
-            [75,87,92,72,18],[87,80,90,75,15],[80,86,94,77,14],[86,91,98,82,20],
-            [91,84,96,79,14],[84,94,100,81,17]
-        ];
-        const yOf = (price: number): number => 218 - price * 2;
-        candleSamples.forEach(([open,close,high,low,volume],i) => {
-            const x = 4 + i * 7.7;
-            const bullish = close >= open;
-            const color = bullish ? 'var(--vela-preview-up)' : 'var(--vela-preview-down)';
-            add('line', { x1:String(x+2.5), y1:String(yOf(high)), x2:String(x+2.5), y2:String(yOf(low)), stroke:color, 'stroke-width':'1.2' });
-            const bodyY = Math.min(yOf(open), yOf(close));
-            const bodyH = Math.max(2, Math.abs(yOf(open)-yOf(close)));
-            add('rect', { x:String(x), y:String(bodyY), width:'5', height:String(bodyH), fill:color, rx:'0.4' });
-            const volH = volume * 1.15;
-            add('rect', { x:String(x), y:String(250-volH), width:'5', height:String(volH), fill:color, opacity:'.58' });
-        });
-        add('line', { x1:'0', y1:'250', x2:'211', y2:'250', stroke:'#252a33', 'stroke-width':'1' });
-        const timeOne = add('text',{x:'4',y:'271',fill:'#87909f','font-size':'8.5','font-family':'system-ui,sans-serif'});
-        timeOne.textContent = '20:00';
-        const timeTwo = add('text',{x:'89',y:'271',fill:'#87909f','font-size':'8.5','font-family':'system-ui,sans-serif'});
-        timeTwo.textContent = '22:00';
+        canvas.addEventListener('pointerup', stopDragging);
+        canvas.addEventListener('pointercancel', stopDragging);
+        canvas.addEventListener('lostpointercapture', stopDragging);
+        canvas.addEventListener('wheel', (event) => {
+            if (this.previewBars.length < 2) return;
+            event.preventDefault();
+            const bounds = canvas.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / Math.max(1, bounds.width - 47)));
+            const length = this.previewBars.length;
+            const oldCount = this.previewVisibleBars;
+            const oldEnd = Math.max(1, length - this.previewPanOffset);
+            const oldStart = Math.max(0, oldEnd - oldCount);
+            const anchor = oldStart + ratio * (oldEnd - oldStart);
+            this.previewVisibleBars = Math.max(12, Math.min(240, Math.round(oldCount * (event.deltaY > 0 ? 1.18 : 0.84))));
+            const nextStart = Math.max(0, Math.round(anchor - ratio * this.previewVisibleBars));
+            const nextEnd = Math.min(length, Math.max(1, nextStart + this.previewVisibleBars));
+            this.previewPanOffset = Math.max(0, length - nextEnd);
+            this.drawAppearancePreview(config);
+        }, { passive: false });
 
-        card.append(meta, symbol, quote, svg);
         const note = document.createElement('div');
         note.className = 'vela-sd-preview-note';
-        note.textContent = 'Simulated prices · scroll to zoom, drag to pan.';
+        note.textContent = 'Real active-chart candles · drag to pan · scroll to zoom.';
         panel.append(heading, card, note);
+
+        const doc = panel.ownerDocument;
+        this.previewFeedDocument = doc;
+        doc.addEventListener('tco:appearance-preview-data', this.onPreviewData);
+        const ResizeObserverCtor = doc.defaultView?.ResizeObserver;
+        if (ResizeObserverCtor) {
+            this.previewResizeObserver = new ResizeObserverCtor(() => this.drawAppearancePreview(config));
+            this.previewResizeObserver.observe(canvas);
+        }
         this.syncPreview(config);
+        // Request a fresh chart snapshot after subscribing, so opening settings on an
+        // already-loaded chart immediately paints that instrument instead of stale data.
+        doc.dispatchEvent(new CustomEvent('tco:appearance-preview-request'));
+        this.drawAppearancePreview(config);
         return panel;
     }
 
