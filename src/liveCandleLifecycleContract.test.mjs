@@ -12,6 +12,8 @@ const sharedFeed = read('src/services/marketData/sharedChartMarketFeed.ts');
 const marketStoreHub = read('src/services/marketData/chartMarketStore.ts');
 const provider = read('src/TcoVelaDataProvider.ts');
 const velaKernel = read('src/services/core/chart/velaNativeChartKernel.ts');
+const columnarUpdate = read('vendor/vela/src/core/model/columnar-bars.ts');
+const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
 
 assert.match(plane, /new LiveCandleStateMachine\(this\.instrumentKey, this\.timeframe\)/);
 assert.match(plane, /beginHistoryLoad\('history'\)/, 'history response must be scoped to a dataset generation');
@@ -31,6 +33,12 @@ assert.match(lifecycle, /MAX_PENDING_TICKS = 4096/, 'recovery tick memory must b
 assert.match(lifecycle, /MAX_SEEN_TICKS = 8192/, 'deduplication state must be bounded');
 assert.match(lifecycle, /timestampMs < this\.lastAcceptedTradeTimestampMs/, 'out-of-order exchange timestamps must be rejected');
 assert.match(velaKernel, /ColumnarBars|ColumnarBarUpdate/, 'Vela remains the columnar chart boundary');
+assert.match(provider, /pendingHistoryReplacement = true/, 'historical correction and recovery events must schedule a history publication');
+assert.match(provider, /operation: 'replace-history'/, 'reconnect/history fixes must reach Vela instead of only changing the backend cache');
+assert.match(provider, /dirtyRange: \{ from: view\.dirtyFrom, to: view\.dirtyTo \}/, 'history replacement carries canonical dirty bounds');
+assert.match(columnarUpdate, /operation\?: 'replace-history'/, 'columnar ABI exposes an explicit reconciliation operation');
+assert.match(nativeRenderer, /update\.operation === 'replace-history'/, 'Vela native renderer applies historical corrections as a dataset replacement');
+assert.match(nativeRenderer, /this\.setBarsColumns\(update\.columns/, 'history reconciliation stays on the native columnar renderer');
 assert.match(provider, /plane\.readCanonical\(\)/, 'Vela history and live updates consume the shared canonical data plane');
 
 console.log('LIVE_CANDLE_LIFECYCLE_CONTRACT_OK');
