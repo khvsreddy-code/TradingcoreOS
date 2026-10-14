@@ -1,4 +1,4 @@
-import type { NormalizedMarketTick } from '../../types/market';
+import type { MarketFeedStatus, NormalizedMarketTick } from '../../types/market';
 import { chartPerformanceTelemetry } from './chartPerformanceTelemetry';
 import { TickRingBuffer } from './TickRingBuffer';
 
@@ -7,6 +7,8 @@ export type ChartMarketSnapshot = {
   tick?: NormalizedMarketTick;
   revision: number;
   marketSequence: number;
+  status?: MarketFeedStatus;
+  statusRevision?: number;
 };
 
 type Listener = () => void;
@@ -19,7 +21,7 @@ type Entry = ChartMarketSnapshot & {
   reactNotifyScheduled: boolean;
 };
 
-const EMPTY_SNAPSHOT: ChartMarketSnapshot = { revision: 0, marketSequence: 0 };
+const EMPTY_SNAPSHOT: ChartMarketSnapshot = { revision: 0, marketSequence: 0, statusRevision: 0 };
 
 class ChartMarketStore {
   private entries = new Map<ChartMarketKey, Entry>();
@@ -34,7 +36,8 @@ class ChartMarketStore {
         tick,
         revision: 0,
         marketSequence: 0,
-        snapshot: { tick, revision: 0, marketSequence: 0 },
+        statusRevision: 0,
+        snapshot: { tick, revision: 0, marketSequence: 0, statusRevision: 0 },
         tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE, key),
         reactNotifyScheduled: false,
       };
@@ -43,8 +46,37 @@ class ChartMarketStore {
     entry.tick = tick;
     entry.revision += 1;
     entry.marketSequence = entry.tickRing.push(tick);
-    entry.snapshot = { tick, revision: entry.revision, marketSequence: entry.marketSequence };
+    entry.snapshot = { tick, revision: entry.revision, marketSequence: entry.marketSequence, status: entry.status, statusRevision: entry.statusRevision ?? 0 };
 
+    this.listeners.get(key)?.forEach(listener => listener());
+    if (this.reactListeners.get(key)?.size) chartPerformanceTelemetry.recordReactNotificationRequest(key);
+    this.scheduleReactNotification(key, entry);
+  }
+
+  /** Publish transport lifecycle separately from tick revisions. Status edges are never inferred from quote silence. */
+  publishStatus(key: ChartMarketKey, status: MarketFeedStatus): void {
+    let entry = this.entries.get(key);
+    if (!entry) {
+      entry = {
+        revision: 0,
+        marketSequence: 0,
+        statusRevision: 0,
+        tickRing: new TickRingBuffer(DEFAULT_TICK_RING_SIZE, key),
+        reactNotifyScheduled: false,
+        snapshot: { revision: 0, marketSequence: 0, statusRevision: 0 },
+      };
+      this.entries.set(key, entry);
+    }
+    if (entry.status === status) return;
+    entry.status = status;
+    entry.statusRevision = (entry.statusRevision ?? 0) + 1;
+    entry.snapshot = {
+      tick: entry.tick,
+      revision: entry.revision,
+      marketSequence: entry.marketSequence,
+      status,
+      statusRevision: entry.statusRevision,
+    };
     this.listeners.get(key)?.forEach(listener => listener());
     if (this.reactListeners.get(key)?.size) chartPerformanceTelemetry.recordReactNotificationRequest(key);
     this.scheduleReactNotification(key, entry);
