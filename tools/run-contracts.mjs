@@ -6,7 +6,7 @@ const contracts = [
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-cold-start-real-candles', ['src/chartColdStartAndRealCandleContract.test.mjs', false]],
   ['live-candle-timestamp-toolbar', ['src/liveCandleTimestampAndToolbarContract.test.mjs', false]],
-  ['vela-083-foundation', ['src/vela083FoundationContract.test.mjs', false]],
+  ['vela-084-foundation', ['src/vela083FoundationContract.test.mjs', false]],
   ['vela-live-ui-corespirit', ['src/velaLiveUiCoreSpiritContract.test.mjs', false]],
   ['fyers-option-search-token', ['src/fyersOptionSearchTokenContract.test.mjs', true]],
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
