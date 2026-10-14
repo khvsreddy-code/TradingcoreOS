@@ -7,6 +7,8 @@ const topology = read('src/services/core/chart/tcoVelaTerminal.ts');
 const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const settingsDialog = read('vendor/vela/src/renderers/native/chrome/SettingsDialog.ts');
 const drawingSettingsPanel = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPanel.ts');
+const drawingSettingsPopup = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPopup.ts');
+const multiProviderFeed = read('vendor/vela/src/data/MultiProviderFeed.ts');
 const drawingDefaults = read('vendor/vela/src/core/drawings/defaults.ts');
 const drawingPriceAction = read('vendor/vela/src/core/drawings/priceAction.ts');
 const drawingController = read('vendor/vela/src/core/drawings/DrawingController.ts');
@@ -107,4 +109,12 @@ assert(drawingPriceAction.includes('gapState') && drawingPriceAction.includes('b
   'Vela 0.8.4 price-action analysis must include FVG, order-block and liquidity state');
 assert(drawingRegistry.includes('fairvaluegap') && drawingRegistry.includes('orderblock') && drawingRegistry.includes('liquidity'),
   'the drawing registry must expose all 0.8.4 price-action tools');
+// The unified drawing gear must launch the 0.8.4 panel, not the old split controls.
+assert(drawingSettingsPopup.includes("iconBtn('Settings'") && drawingSettingsPopup.includes('this.openPanel()'),
+  'the drawing toolbar settings gear must open the unified Vela 0.8.4 settings panel');
+assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPopup.includes("iconBtn('Position size'"),
+  'the retired split Levels/Position size buttons must not return');
+// Offline bars must remain immutable until a real provider supplies a bar update.
+assert(!multiProviderFeed.includes('Math.random()') && !multiProviderFeed.includes('intervalMs(timeframe)'),
+  'Vela offline history must not be mutated by synthetic ticks');
 console.log('TRADINGCORE_V132_VELA_WORKSPACE_UX_AND_CANDLE_FALLBACK_CONTRACT_OK');
