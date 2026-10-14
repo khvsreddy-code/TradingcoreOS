@@ -15,6 +15,7 @@ import type {
 } from '../../../../vendor/vela/src/core/model/patch';
 import type { HighCardinalityRectDelta } from '../../../../vendor/vela/src/core/model/instances';
 import type { CoreSpiritObject } from '../../coreSpirit/types';
+import type { VelaTimeRange } from '../../../architecture/crossPlaneContracts';
 
 type Identified = { id: string };
 type CollectionName = 'lines' | 'boxes' | 'labels' | 'polylines' | 'backgrounds' | 'priceLines';
@@ -272,7 +273,7 @@ export class CoreSpiritSceneDiff {
         };
     }
 
-    apply(outputs: CoreSpiritObject[], dirty: { from: number; to: number }): ScenePatch[] {
+    apply(outputs: CoreSpiritObject[], dirty: VelaTimeRange): ScenePatch[] {
         const series: SeriesValueDelta[] = [];
         const collections: CollectionValueDelta[] = [];
         const instanceBatches: HighCardinalityRectDelta[] = [];

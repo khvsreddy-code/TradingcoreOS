@@ -1,22 +1,18 @@
 import type { CanonicalMarketView } from './canonicalDataPlane';
+import type { CanonicalDirtyRange, MarketDataSnapshot } from '../../../architecture/crossPlaneContracts';
 
 /**
  * Binary transport envelope for worker compute.
  *
- * The canonical MarketDataStore remains owned by the main thread. A worker never
- * receives that backing store directly; it receives a bounded typed-array copy of
- * the requested window whose ArrayBuffers are transferred, not structured-cloned.
- * This makes ownership explicit and leaves SharedArrayBuffer as a later optimization.
+ * Canonical storage stays main-thread owned. A worker receives an explicit,
+ * bounded typed-array copy, with exact timeline revision and absolute source
+ * offsets so a clipped or stale packet cannot masquerade as another window.
  */
 export const CANONICAL_MARKET_DATA_PACKET_VERSION = 1 as const;
 
-export type CanonicalMarketDataPacket = Readonly<{
+export type CanonicalMarketDataPacket = MarketDataSnapshot & Readonly<{
   version: typeof CANONICAL_MARKET_DATA_PACKET_VERSION;
-  timelineKey: string;
-  revision: number;
-  sourceFrom: number;
   sourceTo: number;
-  length: number;
   time: Float64Array;
   open: Float64Array;
   high: Float64Array;
@@ -25,9 +21,37 @@ export type CanonicalMarketDataPacket = Readonly<{
   volume: Float64Array;
 }>;
 
+function clampIndex(value: number, length: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(length, Math.floor(value)));
+}
+
+function clipDirtyBounds(from: number, to: number, start: number, length: number): { from: number; to: number } {
+  const dirtyFrom = Math.max(0, Math.min(length, from - start));
+  const dirtyTo = Math.max(dirtyFrom, Math.max(0, Math.min(length, to - start)));
+  return { from: dirtyFrom, to: dirtyTo };
+}
+
+function assertRevisionRange(range: CanonicalDirtyRange, snapshot: MarketDataSnapshot): void {
+  if (range.timelineKey !== snapshot.timelineKey || range.revision !== snapshot.revision) {
+    throw new Error('Canonical dirty range does not belong to the packet timeline revision.');
+  }
+  if (
+    !Number.isSafeInteger(range.from) ||
+    !Number.isSafeInteger(range.to) ||
+    range.from < 0 ||
+    range.to < range.from
+  ) {
+    throw new Error('Canonical dirty range must be a valid half-open bar-index interval.');
+  }
+}
+
+/** Slice a borrowed view without losing its absolute position in the source timeline. */
 export function sliceCanonicalMarketView(view: CanonicalMarketView, from = 0, to = view.length): CanonicalMarketView {
-  const start = Math.max(0, Math.min(view.length, Math.floor(from)));
-  const end = Math.max(start, Math.min(view.length, Math.ceil(to)));
+  const start = clampIndex(from, view.length, 0);
+  const end = Math.max(start, clampIndex(to, view.length, view.length));
+  const length = end - start;
+  const dirty = clipDirtyBounds(view.dirtyFrom, view.dirtyTo, start, length);
   return Object.freeze({
     time: view.time.subarray(start, end),
     open: view.open.subarray(start, end),
@@ -44,22 +68,27 @@ export function sliceCanonicalMarketView(view: CanonicalMarketView, from = 0, to
     session: view.session.subarray(start, end),
     timelineKey: view.timelineKey,
     revision: view.revision,
-    length: end - start,
-    dirtyFrom: Math.max(0, view.dirtyFrom - start),
-    dirtyTo: Math.max(0, Math.min(end - start, view.dirtyTo - start)),
+    sourceFrom: view.sourceFrom + start,
+    length,
+    timeUnit: view.timeUnit,
+    dirtyRange: view.dirtyRange,
+    dirtyFrom: dirty.from,
+    dirtyTo: dirty.to,
   });
 }
 
-/** Copy exactly once at the worker ownership boundary. */
+/** Copy once at the worker ownership boundary. */
 export function createCanonicalMarketDataPacket(view: CanonicalMarketView, from = 0, to = view.length): CanonicalMarketDataPacket {
   const sliced = sliceCanonicalMarketView(view, from, to);
-  return Object.freeze({
+  const packet: CanonicalMarketDataPacket = Object.freeze({
     version: CANONICAL_MARKET_DATA_PACKET_VERSION,
     timelineKey: sliced.timelineKey,
     revision: sliced.revision,
-    sourceFrom: Math.max(0, Math.floor(from)),
-    sourceTo: Math.max(0, Math.floor(from)) + sliced.length,
+    sourceFrom: sliced.sourceFrom,
+    sourceTo: sliced.sourceFrom + sliced.length,
     length: sliced.length,
+    timeUnit: sliced.timeUnit,
+    dirtyRange: sliced.dirtyRange,
     time: new Float64Array(sliced.time),
     open: new Float64Array(sliced.open),
     high: new Float64Array(sliced.high),
@@ -67,6 +96,8 @@ export function createCanonicalMarketDataPacket(view: CanonicalMarketView, from 
     close: new Float64Array(sliced.close),
     volume: new Float64Array(sliced.volume),
   });
+  assertCanonicalMarketDataPacket(packet);
+  return packet;
 }
 
 export function packetTransferables(packet: CanonicalMarketDataPacket): Transferable[] {
@@ -80,14 +111,40 @@ export function packetTransferables(packet: CanonicalMarketDataPacket): Transfer
   ];
 }
 
+/** Validate transport shape and revision metadata at the worker boundary. */
 export function assertCanonicalMarketDataPacket(packet: CanonicalMarketDataPacket): void {
-  if (packet.version !== CANONICAL_MARKET_DATA_PACKET_VERSION) throw new Error(`Unsupported canonical market packet version: ${String(packet.version)}`);
+  if (packet.version !== CANONICAL_MARKET_DATA_PACKET_VERSION) {
+    throw new Error(`Unsupported canonical market packet version: ${String(packet.version)}`);
+  }
+  if (typeof packet.timelineKey !== 'string' || !packet.timelineKey.trim()) {
+    throw new Error('Canonical market packet requires a timeline key.');
+  }
+  if (!Number.isSafeInteger(packet.revision) || packet.revision < 0) {
+    throw new Error('Canonical market packet revision must be a non-negative safe integer.');
+  }
+  if (packet.timeUnit !== 'epoch-seconds') {
+    throw new Error('Canonical market packet timestamps must use epoch seconds.');
+  }
+  if (
+    !Number.isSafeInteger(packet.length) ||
+    packet.length < 0 ||
+    !Number.isSafeInteger(packet.sourceFrom) ||
+    !Number.isSafeInteger(packet.sourceTo) ||
+    packet.sourceFrom < 0 ||
+    packet.sourceTo < packet.sourceFrom ||
+    packet.sourceTo - packet.sourceFrom !== packet.length
+  ) {
+    throw new Error('Canonical market packet source bounds do not match its column length.');
+  }
+  assertRevisionRange(packet.dirtyRange, packet);
   const fields = [packet.time, packet.open, packet.high, packet.low, packet.close, packet.volume];
-  if (fields.some(field => field.length !== packet.length)) throw new Error('Canonical market packet columns have different lengths.');
+  if (fields.some((field) => !(field instanceof Float64Array) || field.length !== packet.length)) {
+    throw new Error('Canonical market packet columns must be Float64Array values of the declared length.');
+  }
 }
 
-
-/** Transfer a canonical packet without structured-cloning its numeric buffers. Ownership moves to the worker. */
+/** Transfer a canonical packet without structured-cloning numeric buffers. */
 export function transferCanonicalMarketDataPacket(worker: Worker, packet: CanonicalMarketDataPacket, message: Record<string, unknown> = {}): void {
+  assertCanonicalMarketDataPacket(packet);
   worker.postMessage({ ...message, market: packet }, packetTransferables(packet));
 }

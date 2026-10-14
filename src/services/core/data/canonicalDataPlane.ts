@@ -1,3 +1,4 @@
+import { canonicalDirtyRange, type MarketDataSnapshot } from '../../../architecture/crossPlaneContracts';
 import {
   MarketDataStore,
   type MarketDataPoint,
@@ -19,10 +20,8 @@ export type CanonicalConsumer = Readonly<{
   attachedRevision: number;
 }>;
 
-export type CanonicalMarketView = MarketDataViews & Readonly<{
-  timelineKey: string;
-  revision: number;
-  length: number;
+export type CanonicalMarketView = MarketDataViews & MarketDataSnapshot & Readonly<{
+  /** Dirty bounds clipped to this view and expressed relative to its first bar. */
   dirtyFrom: number;
   dirtyTo: number;
 }>;
@@ -76,6 +75,12 @@ export class CanonicalDataPlane {
     const start = Math.max(0, Math.min(this.market.length, Math.floor(from)));
     const end = Math.max(start, Math.min(this.market.length, Math.ceil(to)));
     const all = this.market.views();
+    const length = end - start;
+    const dirty = this.market.dirtyRange;
+    const clipOffset = (value: number) => Math.max(0, Math.min(length, value - start));
+    const dirtyFrom = clipOffset(dirty.from);
+    const dirtyTo = Math.max(dirtyFrom, clipOffset(dirty.to));
+    const revision = this.market.revision;
     return Object.freeze({
       time: all.time.subarray(start, end),
       open: all.open.subarray(start, end),
@@ -91,10 +96,13 @@ export class CanonicalDataPlane {
       trades: all.trades.subarray(start, end),
       session: all.session.subarray(start, end),
       timelineKey: this.timelineKey,
-      revision: this.market.revision,
-      length: end - start,
-      dirtyFrom: Math.max(0, this.market.dirtyRange.from - start),
-      dirtyTo: Math.max(0, Math.min(end - start, this.market.dirtyRange.to - start)),
+      revision,
+      sourceFrom: start,
+      length,
+      timeUnit: 'epoch-seconds' as const,
+      dirtyRange: canonicalDirtyRange(this.timelineKey, revision, dirty.from, dirty.to),
+      dirtyFrom,
+      dirtyTo,
     });
   }
 

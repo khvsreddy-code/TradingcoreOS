@@ -17,6 +17,10 @@ const marketStore = fs.readFileSync(path.join(root, 'src/services/core/data/mark
 assert.match(transport, /CanonicalMarketDataPacket/);
 assert.match(transport, /Float64Array/);
 assert.match(transport, /packetTransferables/);
+assert.match(transport, /sourceFrom: sliced\.sourceFrom/);
+assert.match(transport, /sourceTo: sliced\.sourceFrom \+ sliced\.length/);
+assert.match(transport, /timeUnit: 'epoch-seconds'/);
+assert.match(transport, /assertRevisionRange\(packet\.dirtyRange, packet\)/);
 assert.match(transport, /new Float64Array\(sliced\.time\)/);
 assert.match(coordinator, /market\?: CanonicalMarketDataPacket/);
 assert.doesNotMatch(coordinator, /market\?: HistoricalCandle\[\]/);
@@ -39,4 +43,4 @@ const velaWorkspace = fs.readFileSync(path.join(root, 'vendor/vela/src/workspace
 assert.match(velaWorkspace, /AltDrawingWheel/);
 assert.match(velaWorkspace, /new AltDrawingWheel/);
 
-console.log('TRADINGCORE_V115_CANONICAL_MARKET_TRANSPORT_CONTRACT_OK');
+console.log('TRADINGCORE_CANONICAL_MARKET_TRANSPORT_CONTRACT_OK');
