@@ -723,6 +723,9 @@ export class ChartDataPlane {
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
     if (this.state.historyReady && (this.state.candles.length || this.state.columns?.time.length)) {
+      if (!this.state.historyLoading && !this.state.recoveryPending && !this.state.recoveryInFlight && this.liveCandle.buffering) {
+        this.activateCachedHistory();
+      }
       if (this.state.candles.length) return this.activeWindow(this.state.candles, limitOverride);
       if (this.state.columns?.time.length) {
         // Keep Vela on the typed representation; only materialize the compatibility
@@ -931,7 +934,7 @@ export class ChartDataPlane {
     const promise = chartHistoryCoordinator.request(requestKey, () => tradingCoreRuntime.getHistoricalDataBefore(this.instrumentKey, interval, oldest.timestamp, limit), priority)
       .then(rows => {
         const older = normalizeHistory(rows).filter(row => Date.parse(row.timestamp) < Date.parse(oldest.timestamp));
-        if (!older.length) { this.state.olderHistoryExhausted = true; return this.state.candles; }
+        if (!older.length) { this.state.olderHistoryExhausted = true; return currentRows; }
         historyStore.mergeInto(this.brokerId, this.instrumentKey, interval, older, MAX_HISTORY_CANDLES);
         this.state.olderHistoryExhausted = false;
         const merged = this.mergeOlder(older, 'older-history', limit);
@@ -952,7 +955,8 @@ export class ChartDataPlane {
   }
 
   requestWarmHistory(visibleBars?: number): void {
-    if (this.state.warmHistoryRequested || !this.state.historyReady || this.state.olderHistoryExhausted || this.state.candles.length >= historyWarmTarget(this.timeframe)) return;
+    const retainedLength = this.state.candles.length || this.state.columns?.time.length || this.state.compatibilityCandles.length;
+    if (this.state.warmHistoryRequested || !this.state.historyReady || this.state.olderHistoryExhausted || retainedLength >= historyWarmTarget(this.timeframe)) return;
     this.state.warmHistoryRequested = true;
     void this.loadOlderHistory('warm', visibleBars ? { visibleBars } : undefined).catch(() => {
       // Warm history is opportunistic. A failed request must not permanently
