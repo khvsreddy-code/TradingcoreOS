@@ -160,6 +160,104 @@ function panelRoot(body: HTMLElement): HTMLDivElement {
   return root;
 }
 
+type TcoFramePreferences = {
+  sidebar: 'left' | 'right';
+  density: 'comfortable' | 'compact';
+  accent: 'violet' | 'teal' | 'blue' | 'amber';
+  topbar: Record<string, boolean>;
+};
+const TCO_FRAME_STORAGE_KEY = 'tradingcore:vela:frame-preferences:v1';
+const DEFAULT_FRAME_PREFERENCES: TcoFramePreferences = {
+  sidebar: 'right', density: 'comfortable', accent: 'violet',
+  topbar: { watchlist:true, research:true, automation:true, trading:true, journal:true, positions:true, code:true },
+};
+const TCO_FRAME_ACCENTS: Record<TcoFramePreferences['accent'], { solid:string; soft:string }> = {
+  violet:{solid:'#8b7cff',soft:'rgba(139,124,255,.18)'},
+  teal:{solid:'#14b8a6',soft:'rgba(20,184,166,.18)'},
+  blue:{solid:'#60a5fa',soft:'rgba(96,165,250,.18)'},
+  amber:{solid:'#f59e0b',soft:'rgba(245,158,11,.18)'},
+};
+function readTcoFramePreferences(): TcoFramePreferences {
+  try {
+    const raw=JSON.parse(localStorage.getItem(TCO_FRAME_STORAGE_KEY)||'{}') as Partial<TcoFramePreferences>;
+    return {
+      sidebar:raw.sidebar==='left'?'left':'right',
+      density:raw.density==='compact'?'compact':'comfortable',
+      accent:raw.accent && raw.accent in TCO_FRAME_ACCENTS ? raw.accent : 'violet',
+      topbar:{...DEFAULT_FRAME_PREFERENCES.topbar,...(raw.topbar||{})},
+    };
+  } catch { return {...DEFAULT_FRAME_PREFERENCES,topbar:{...DEFAULT_FRAME_PREFERENCES.topbar}}; }
+}
+function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePreferences): void {
+  const doc=host.ownerDocument;
+  const workspace=(host.closest('.vela-workspace') as HTMLElement|null)??(doc.querySelector('.vela-workspace') as HTMLElement|null)??host;
+  let style=doc.getElementById('tco-workspace-frame-style') as HTMLStyleElement|null;
+  if(!style){style=doc.createElement('style');style.id='tco-workspace-frame-style';doc.head.appendChild(style);}
+  style.textContent=`
+    .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-toolbar { order:0; }
+    .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-panel:not([hidden]):not([data-overlay="1"]) { order:1;border-left:0;border-right:1px solid var(--vela-border); }
+    .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-grid { order:2; }
+    .vela-workspace[data-tco-sidebar="right"] .vela-ws-main > .vela-ws-toolbar { order:0; }
+    .vela-workspace[data-tco-sidebar="right"] .vela-ws-main > .vela-ws-grid { order:1; }
+    .vela-workspace[data-tco-sidebar="right"] .vela-ws-main > .vela-panel:not([hidden]):not([data-overlay="1"]) { order:2;border-left:1px solid var(--vela-border);border-right:0; }
+    .vela-workspace[data-tco-density="compact"] .vela-widget-topbar { gap:2px;padding:2px 5px;min-height:32px; }
+    .vela-workspace[data-tco-density="compact"] .vela-widget-symbol,
+    .vela-workspace[data-tco-density="compact"] .vela-widget-tf,
+    .vela-workspace[data-tco-density="compact"] .vela-widget-style,
+    .vela-workspace[data-tco-density="compact"] .vela-widget-indicators,
+    .vela-workspace[data-tco-density="compact"] .vela-widget-action,
+    .vela-workspace[data-tco-density="compact"] .vela-widget-action-left,
+    .vela-workspace[data-tco-density="compact"] .vela-widget-tool { height:27px;padding-top:0;padding-bottom:0; }
+    .vela-workspace[data-tco-hide-watchlist="1"] [data-action-id="tco.watchlist"],
+    .vela-workspace[data-tco-hide-research="1"] [data-action-id="tco.research"],
+    .vela-workspace[data-tco-hide-automation="1"] [data-action-id="tco.automation"],
+    .vela-workspace[data-tco-hide-trading="1"] [data-action-id="tco.trading"],
+    .vela-workspace[data-tco-hide-journal="1"] [data-action-id="tco.journal"],
+    .vela-workspace[data-tco-hide-positions="1"] [data-action-id="tco.positions"],
+    .vela-workspace[data-tco-hide-code="1"] [data-action-id="tco.corespirit-code"] { display:none!important; }
+    .tco-frame-panel { gap:12px;font-family:Inter,ui-sans-serif,system-ui,sans-serif!important; }
+    .tco-frame-eyebrow { color:var(--vela-fg-muted);font-size:10px;font-weight:750;letter-spacing:.13em;text-transform:uppercase; }
+    .tco-frame-card { padding:11px 12px;border:1px solid var(--vela-border);border-radius:9px;background:color-mix(in srgb,var(--vela-surface-sunken) 40%,transparent); }
+    .tco-frame-row { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+    .tco-frame-label { color:var(--vela-fg);font-size:12px;font-weight:600; }
+    .tco-frame-help { color:var(--vela-fg-muted);font-size:10px;line-height:1.55; }
+    .tco-frame-select { width:142px;max-width:48%;padding:7px 8px;border:1px solid var(--vela-border);border-radius:6px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:11px Inter,ui-sans-serif,system-ui,sans-serif; }
+    .tco-frame-toggle { display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--vela-border-soft);color:var(--vela-fg);font-size:11px; }
+    .tco-frame-toggle:last-child { border-bottom:0; }
+    .tco-frame-toggle input { accent-color:var(--tco-frame-accent,#8b7cff); }
+    .tco-frame-button { border:1px solid var(--vela-border);border-radius:6px;padding:7px 10px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer; }
+    .tco-frame-button-primary { border-color:var(--tco-frame-accent,#8b7cff);background:var(--tco-frame-accent-soft,rgba(139,124,255,.18)); }
+    .tco-watch-search { width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--vela-border);border-radius:7px;outline:none;background:var(--vela-surface-sunken);color:var(--vela-fg);font:11px Inter,ui-sans-serif,system-ui,sans-serif; }
+    .tco-watch-search:focus { border-color:var(--tco-frame-accent,#8b7cff); }
+    .tco-watch-filter { border:1px solid var(--vela-border);border-radius:6px;background:transparent;color:var(--vela-fg-muted);padding:5px 9px;font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer; }
+    .tco-watch-filter[aria-pressed="true"] { color:var(--vela-fg-bright);border-color:var(--tco-frame-accent,#8b7cff);background:var(--tco-frame-accent-soft,rgba(139,124,255,.18)); }
+    .tco-watch-detail { flex:0 0 auto;margin-top:auto;padding:12px;border:1px solid var(--vela-border);border-radius:9px;background:var(--vela-surface); }
+    .tco-watch-metric { min-width:0;padding:8px 9px;border:1px solid var(--vela-border-soft);border-radius:7px;background:var(--vela-surface-sunken); }
+    .tco-watch-metric-label { color:var(--vela-fg-muted);font-size:9px;margin-bottom:4px; }
+    .tco-watch-metric-value { color:var(--vela-fg-bright);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere; }
+    .tco-core-studio { min-height:0; }
+    .tco-core-editor-frame { min-height:280px!important;flex:1 1 auto;border-color:var(--vela-border)!important;border-radius:9px!important;background:var(--vela-surface-sunken)!important; }
+    .tco-core-editor-frame textarea { background:var(--vela-surface-sunken)!important; }
+    .tco-core-status { border-radius:7px!important;border-color:var(--vela-border)!important;background:var(--vela-surface)!important; }
+  `;
+  workspace.dataset.tcoSidebar=preferences.sidebar;
+  workspace.dataset.tcoDensity=preferences.density;
+  for(const key of Object.keys(DEFAULT_FRAME_PREFERENCES.topbar))
+    workspace.dataset[`tcoHide${key[0]!.toUpperCase()}${key.slice(1)}`]=preferences.topbar[key]?'0':'1';
+  const accent=TCO_FRAME_ACCENTS[preferences.accent];
+  workspace.style.setProperty('--tco-frame-accent',accent.solid);
+  workspace.style.setProperty('--tco-frame-accent-soft',accent.soft);
+  workspace.style.setProperty('--vela-active',accent.soft);
+  workspace.style.setProperty('--vela-hover-strong',accent.soft);
+  workspace.style.setProperty('--vela-selected-bg',accent.solid);
+  try{localStorage.setItem(TCO_FRAME_STORAGE_KEY,JSON.stringify(preferences));}catch{}
+}
+function createFrameSelect(options:Array<[string,string]>,value:string):HTMLSelectElement {
+  const select=document.createElement('select');select.className='tco-frame-select';
+  for(const [key,label] of options){const option=document.createElement('option');option.value=key;option.textContent=label;option.selected=key===value;select.appendChild(option);}
+  return select;
+}
+
 const CORESPIRIT_LIVE_EDITOR_KEY = 'tradingcore:corespirit:chart-source';
 const CORESPIRIT_STARTER = `indicator("CoreSpirit Trend") {
     overlay: true
@@ -179,6 +277,61 @@ if fast crossesAbove slow {
 if fast crossesBelow slow {
     signal "SELL"
 }`;
+
+const workspaceFramePanel: SidePanelDescriptor = {
+  id:'tco.workspace-frame', title:'Workspace', icon:'layout', order:1, width:340, resizable:true, minWidth:300, maxWidth:480,
+  mount(ctx,body,header){
+    header.setTitle('Workspace appearance');
+    const root=panelRoot(body);root.classList.add('tco-frame-panel');
+    const intro=document.createElement('div');intro.className='tco-frame-card';
+    const eyebrow=document.createElement('div');eyebrow.className='tco-frame-eyebrow';eyebrow.textContent='TradingCoreOS frame';
+    const copy=document.createElement('div');copy.className='tco-frame-help';copy.style.marginTop='7px';
+    copy.textContent='Customize the single Vela command bar and chart workspace. Preferences stay in this browser; the chart engine and market-data pipeline are unchanged.';
+    intro.append(eyebrow,copy);root.appendChild(intro);
+    let prefs=readTcoFramePreferences();
+    const addSetting=(label:string,description:string,control:HTMLElement)=>{
+      const card=document.createElement('div');card.className='tco-frame-card';
+      const row=document.createElement('div');row.className='tco-frame-row';
+      const text=document.createElement('div');const title=document.createElement('div');title.className='tco-frame-label';title.textContent=label;
+      const help=document.createElement('div');help.className='tco-frame-help';help.style.marginTop='4px';help.textContent=description;
+      text.append(title,help);row.append(text,control);card.appendChild(row);root.appendChild(card);
+    };
+    const sidebar=createFrameSelect([['right','Right sidebar'],['left','Left sidebar']],prefs.sidebar);sidebar.setAttribute('aria-label','Sidebar position');
+    sidebar.addEventListener('change',()=>{prefs={...prefs,sidebar:sidebar.value as TcoFramePreferences['sidebar']};applyTcoFramePreferences(ctx.host,prefs);});
+    addSetting('Sidebar position','Dock panels on either side of the chart.',sidebar);
+    const density=createFrameSelect([['comfortable','Comfortable'],['compact','Compact']],prefs.density);density.setAttribute('aria-label','Top bar density');
+    density.addEventListener('change',()=>{prefs={...prefs,density:density.value as TcoFramePreferences['density']};applyTcoFramePreferences(ctx.host,prefs);});
+    addSetting('Top bar density','Choose a roomier bar or a compact trading-terminal strip.',density);
+    const accent=createFrameSelect([['violet','Violet'],['teal','Teal'],['blue','Blue'],['amber','Amber']],prefs.accent);accent.setAttribute('aria-label','Workspace accent color');
+    accent.addEventListener('change',()=>{prefs={...prefs,accent:accent.value as TcoFramePreferences['accent']};applyTcoFramePreferences(ctx.host,prefs);});
+    addSetting('Accent color','Change focus, selected controls and active panel highlights.',accent);
+    const tools=document.createElement('div');tools.className='tco-frame-card';
+    const title=document.createElement('div');title.className='tco-frame-label';title.textContent='Top bar tools';
+    const help=document.createElement('div');help.className='tco-frame-help';help.style.margin='4px 0 8px';
+    help.textContent='Hide the actions you do not use. Symbol, timeframe, chart style, Indicators, drawing tools and settings remain available.';
+    tools.append(title,help);
+    const toolOptions:Array<[keyof TcoFramePreferences['topbar'],string]>=[
+      ['watchlist','Watchlist'],['research','Research'],['automation','Automation'],['trading','Trading'],['journal','Journal'],['positions','Positions'],['code','CoreSpirit Studio'],
+    ];
+    for(const [key,label] of toolOptions){
+      const row=document.createElement('label');row.className='tco-frame-toggle';
+      const input=document.createElement('input');input.type='checkbox';input.checked=prefs.topbar[key]!==false;
+      const text=document.createElement('span');text.textContent=label;row.append(input,text);tools.appendChild(row);
+      input.addEventListener('change',()=>{prefs={...prefs,topbar:{...prefs.topbar,[key]:input.checked}};applyTcoFramePreferences(ctx.host,prefs);});
+    }
+    root.appendChild(tools);
+    const reset=document.createElement('button');reset.type='button';reset.className='tco-frame-button tco-frame-button-primary';reset.textContent='Reset workspace appearance';
+    reset.addEventListener('click',()=>{
+      prefs={...DEFAULT_FRAME_PREFERENCES,topbar:{...DEFAULT_FRAME_PREFERENCES.topbar}};
+      sidebar.value=prefs.sidebar;density.value=prefs.density;accent.value=prefs.accent;
+      tools.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input,index)=>{input.checked=prefs.topbar[toolOptions[index]![0]]!==false;});
+      applyTcoFramePreferences(ctx.host,prefs);ctx.toast('Workspace appearance reset','success');
+    });
+    root.appendChild(reset);
+    applyTcoFramePreferences(ctx.host,prefs);
+    return {onOpen:()=>applyTcoFramePreferences(ctx.host,prefs)};
+  },
+};
 
 const coreSpiritCodePanel: SidePanelDescriptor = {
   id: 'tco.corespirit-code',
@@ -430,6 +583,11 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     });
     return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, destroy() { disposed = true; compileGeneration += 1; monacoAdapter?.dispose(); monacoAdapter = undefined; } };
   },
+};
+
+const workspaceFrameAction:WidgetActionDescriptor={
+  id:'tco.workspace-frame',target:'topbar',label:'Workspace',icon:'layout',iconOnly:true,align:'right',order:19,mobile:'menu',
+  run(ctx){ctx.togglePanel('tco.workspace-frame');},
 };
 
 const coreSpiritCodeAction: WidgetActionDescriptor = {
@@ -1493,6 +1651,7 @@ const journalAction: WidgetActionDescriptor = {
   run(ctx) { ctx.togglePanel('tco.journal'); },
 };
 
+registerSidePanel(workspaceFramePanel);
 registerSidePanel(coreSpiritCodePanel);
 registerSidePanel(bookmarksPanel);
 registerSidePanel(researchPanel);
@@ -1511,6 +1670,7 @@ registerWidgetAction(researchAction);
 registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
 registerWidgetAction(positionsAction);
+registerWidgetAction(workspaceFrameAction);
 registerWidgetAction(coreSpiritCodeAction);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(chartSettingsAction);
