@@ -346,7 +346,13 @@ export class SettingsDialog {
      *  the tab rail behind a burger sidebar and the TOC as top tabs. An open dialog
      *  re-presents in place, on the same tab. */
     setLayoutMode(mode: 'mobile' | 'desktop'): void {
-        const mobile = mode === 'mobile';
+        // The workspace may switch its chrome to mobile because the chart cell is narrow
+        // (for example, when TCO's dock and side panels are open) even on a desktop monitor.
+        // Chart settings are a desktop-level surface in that case: use the viewport to
+        // choose the wide, tabbed dialog with its appearance preview, not the phone sidebar.
+        // Keep the compact/fullscreen presentation for genuinely narrow viewports.
+        const viewportWidth = this.container.ownerDocument.defaultView?.innerWidth ?? 1024;
+        const mobile = mode === 'mobile' && viewportWidth < 880;
         if (mobile === this.mobileLayout) return;
         this.mobileLayout = mobile;
         this.reopenIfLive();
