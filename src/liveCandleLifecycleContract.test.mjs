@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const plane = read('src/services/marketData/chartDataPlane.ts');
+const lifecycle = read('src/services/marketData/liveCandleStateMachine.ts');
+const marketStore = read('src/services/core/data/marketDataStore.ts');
+const canonicalPlane = read('src/services/core/data/canonicalDataPlane.ts');
+const sharedFeed = read('src/services/marketData/sharedChartMarketFeed.ts');
+const marketStoreHub = read('src/services/marketData/chartMarketStore.ts');
+const provider = read('src/TcoVelaDataProvider.ts');
+const velaKernel = read('src/services/core/chart/velaNativeChartKernel.ts');
+
+assert.match(plane, /new LiveCandleStateMachine\(this\.instrumentKey, this\.timeframe\)/);
+assert.match(plane, /beginHistoryLoad\('history'\)/, 'history response must be scoped to a dataset generation');
+assert.match(plane, /isCurrentGeneration\(generation\)/, 'late REST responses must not overwrite the active dataset');
+assert.match(plane, /this\.liveCandle\.bufferTick\(tick\)/, 'trades arriving while history is loading must be buffered');
+assert.match(plane, /drainPendingTicks\(generation\)/, 'buffered trades must be drained only by the current generation');
+assert.match(plane, /replayBufferedTicks\(buffered\)/, 'buffered trades must be replayed after history installs');
+assert.match(plane, /private maybeRecoverAfterReconnect\(\)/, 'socket recovery needs an explicit REST reconciliation path');
+assert.match(plane, /reconcileRecentColumnarHistory\(columns\)/, 'reconnect recovery must reconcile recent history');
+assert.match(plane, /transition: transition\.kind/, 'tick events must distinguish forming-bar replacement from new-bar append');
+assert.doesNotMatch(plane, /reconcileRealtimeCandle/, 'all chart data modes must use one live-candle transition model');
+assert.match(sharedFeed, /publishStatus\(key, event\.status\)/, 'feed state changes must reach the shared chart dataset');
+assert.match(marketStoreHub, /publishStatus\(key: ChartMarketKey, status: MarketFeedStatus\)/);
+assert.match(marketStore, /reconcileHistoricalCandleRows\(/, 'broker corrections must patch canonical typed columns');
+assert.match(canonicalPlane, /reconcileHistoricalCandleRows\(rows\)/);
+assert.match(lifecycle, /MAX_PENDING_TICKS = 4096/, 'recovery tick memory must be bounded');
+assert.match(lifecycle, /MAX_SEEN_TICKS = 8192/, 'deduplication state must be bounded');
+assert.match(lifecycle, /timestampMs < this\.lastAcceptedTradeTimestampMs/, 'out-of-order exchange timestamps must be rejected');
+assert.match(velaKernel, /ColumnarBars|ColumnarBarUpdate/, 'Vela remains the columnar chart boundary');
+assert.match(provider, /plane\.readCanonical\(\)/, 'Vela history and live updates consume the shared canonical data plane');
+
+console.log('LIVE_CANDLE_LIFECYCLE_CONTRACT_OK');
