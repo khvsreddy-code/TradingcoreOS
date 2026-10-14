@@ -235,7 +235,7 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 .vela-sd-preview-symbol { display: flex; align-items: center; gap: 6px; padding: 5px 10px 2px; color: #e5e7eb; font-size: 11px; font-weight: 650; }
 .vela-sd-preview-badge { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; flex: 0 0 auto; border-radius: 50%; color: #fff; background: #c94a91; font-size: 8px; font-weight: 700; }
 .vela-sd-preview-price { padding: 0 10px 8px; color: var(--vela-preview-up, #089981); font-size: 10px; font-variant-numeric: tabular-nums; }
-.vela-sd-preview-chart { display: block; width: 100%; height: auto; }
+.vela-sd-preview-chart { display: block; width: 100%; height: 232px; touch-action: none; cursor: grab; outline: none; }
 .vela-sd-preview-note { color: var(--vela-fg-muted); font-size: 9px; line-height: 1.5; }
 .vela-sd-symbol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 12px; }
 .vela-sd-card { min-width: 0; padding: 11px 12px; border: 1px solid var(--vela-border); border-radius: 9px; background: color-mix(in srgb, var(--vela-surface-sunken) 34%, transparent); }
@@ -676,7 +676,7 @@ export class SettingsDialog {
             const lowY = yOf(bar.low);
             const openY = yOf(bar.open);
             const closeY = yOf(bar.close);
-            ctx.strokeStyle = config.candles.wickVisible === false ? color : color;
+            ctx.strokeStyle = color;
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(x, highY);
@@ -799,7 +799,7 @@ export class SettingsDialog {
             if (bounds.width <= 0) return;
             const delta = Math.round(((event.clientX - dragStartX) / bounds.width) * this.previewVisibleBars);
             this.previewPanOffset = Math.max(0, Math.min(Math.max(0, this.previewBars.length - 1), dragStartOffset + delta));
-            this.drawAppearancePreview(config);
+            this.drawAppearancePreview(this.previewConfig ?? config);
         });
         const stopDragging = () => {
             dragging = false;
@@ -822,7 +822,7 @@ export class SettingsDialog {
             const nextStart = Math.max(0, Math.round(anchor - ratio * this.previewVisibleBars));
             const nextEnd = Math.min(length, Math.max(1, nextStart + this.previewVisibleBars));
             this.previewPanOffset = Math.max(0, length - nextEnd);
-            this.drawAppearancePreview(config);
+            this.drawAppearancePreview(this.previewConfig ?? config);
         }, { passive: false });
 
         const note = document.createElement('div');
@@ -835,7 +835,7 @@ export class SettingsDialog {
         doc.addEventListener('tco:appearance-preview-data', this.onPreviewData);
         const ResizeObserverCtor = doc.defaultView?.ResizeObserver;
         if (ResizeObserverCtor) {
-            this.previewResizeObserver = new ResizeObserverCtor(() => this.drawAppearancePreview(config));
+            this.previewResizeObserver = new ResizeObserverCtor(() => this.drawAppearancePreview(this.previewConfig ?? config));
             this.previewResizeObserver.observe(canvas);
         }
         this.syncPreview(config);
@@ -1280,6 +1280,7 @@ export class SettingsDialog {
         this.ui = null;
         this.root = null;
         this.toggleRail = null;
+        this.stopAppearancePreviewFeed();
         this.previewPanel = null;
         this.tabs = [];
         for (const dispose of this.hintTips) dispose(); // a tip open at close time must not outlive its row
