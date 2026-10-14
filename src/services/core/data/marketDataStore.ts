@@ -213,10 +213,6 @@ export class MarketDataStore {
     let dirtyFrom = this._length;
     let dirtyTo = 0;
     let changed = false;
-    const arrays = [
-      this._time, this._open, this._high, this._low, this._close, this._volume,
-      this._oi, this._bid, this._ask, this._bidVolume, this._askVolume, this._trades, this._session,
-    ];
     for (const row of ordered) {
       let lo = 0, hi = this._length;
       while (lo < hi) {
