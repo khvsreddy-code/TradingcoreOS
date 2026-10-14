@@ -9,6 +9,11 @@ const settingsDialog = read('vendor/vela/src/renderers/native/chrome/SettingsDia
 const drawingSettingsPanel = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPanel.ts');
 const drawingSettingsPopup = read('vendor/vela/src/renderers/native/drawings/DrawingSettingsPopup.ts');
 const multiProviderFeed = read('vendor/vela/src/data/MultiProviderFeed.ts');
+const corePatch = read('vendor/vela/src/core/model/patch.ts');
+const scenePatch = read('vendor/vela/src/core/model/scenePatch.ts');
+const velaEngineOrchestrator = read('vendor/vela/src/core/engine/EngineOrchestrator.ts');
+const velaCanvasBackend = read('vendor/vela/src/renderers/native/backend/Canvas2dBackend.ts');
+const velaWebGLBackend = read('vendor/vela/src/renderers/native/backend/WebGL2Backend.ts');
 const drawingDefaults = read('vendor/vela/src/core/drawings/defaults.ts');
 const drawingPriceAction = read('vendor/vela/src/core/drawings/priceAction.ts');
 const drawingController = read('vendor/vela/src/core/drawings/DrawingController.ts');
@@ -117,4 +122,14 @@ assert(!drawingSettingsPopup.includes("iconBtn('Levels'") && !drawingSettingsPop
 // Offline bars must remain immutable until a real provider supplies a bar update.
 assert(!multiProviderFeed.includes('Math.random()') && !multiProviderFeed.includes('intervalMs(timeframe)'),
   'Vela offline history must not be mutated by synthetic ticks');
+// Vela 0.8.4 candle-color patches must pass through TCO's custom incremental scene pipeline.
+assert(corePatch.includes('barColors?: Array<CandleBarColor | null>'),
+  'series value patches must carry per-bar candle colors together with the changed bars');
+assert(scenePatch.includes('series.barColors = applyArrayDelta'),
+  'scene patch application must update candle colors using the same range/append operation as bars');
+assert(velaEngineOrchestrator.includes('barColors: series.barColors ?? []') &&
+  velaEngineOrchestrator.includes('current.barColors.slice(incomingStart, incomingEnd)'),
+  'TCO full, ranged and incremental series patches must preserve correctly aligned Vela candle colors');
+assert(velaCanvasBackend.includes('s.barColors?.[i - off]') && velaWebGLBackend.includes('s.barColors?.[i - off]'),
+  'both native renderers must consume per-bar plotcandle/plotbar colors');
 console.log('TRADINGCORE_V132_VELA_WORKSPACE_UX_AND_CANDLE_FALLBACK_CONTRACT_OK');
