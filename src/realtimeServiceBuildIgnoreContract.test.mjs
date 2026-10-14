@@ -89,7 +89,8 @@ try {
   assert.equal(configRebuilt.status, 1, 'realtime service config change must rebuild the image');
   assert.match(configRebuilt.stdout, /realtimefresh service configuration/);
 
-  assert.equal(runIgnore('', runtimeChange).status, 1, 'missing previous SHA must fail open and build');
+  assert.equal(runIgnore('', frontendOnly).status, 0, 'missing previous SHA should compare against the commit parent for frontend-only changes');
+  assert.equal(runIgnore('', runtimeChange).status, 1, 'missing previous SHA must still rebuild when the commit changes realtime runtime code');
   assert.equal(runIgnore(httpRouteOnly, runtimeChange, { TCO_REALTIME_FORCE_BUILD: '1' }).status, 1, 'explicit force flag must build');
 
   console.log('REALTIME_SERVICE_BUILD_SKIP_CONTRACT_OK');
