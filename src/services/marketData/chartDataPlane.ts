@@ -583,9 +583,13 @@ export class ChartDataPlane {
         // The shared store can be cleared/recreated when a broker session changes.
         // Accept a lower positive revision as a new status epoch instead of silently
         // ignoring every status from the replacement entry.
-        if (statusRevision > 0 && statusRevision !== this.state.marketStatusRevision) {
+        if (
+          marketSnapshot.status &&
+          statusRevision > 0 &&
+          (statusRevision !== this.state.marketStatusRevision || marketSnapshot.status !== this.state.feedStatus)
+        ) {
           this.state.marketStatusRevision = statusRevision;
-          if (marketSnapshot.status) this.onFeedStatus(marketSnapshot.status);
+          this.onFeedStatus(marketSnapshot.status);
         }
         const tick = chartMarketStore.getTick(marketKey);
         if (tick) this.onTick(tick);
