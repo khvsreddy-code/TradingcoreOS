@@ -413,6 +413,7 @@ export class VelaWorkspace {
     /** The single grid-wide attribution mark — re-inked on a live theme swap. */
     private attributionMark: HTMLElement | null = null;
     private readonly onRootKeydown = (ev: KeyboardEvent): void => this.routeTyping(ev);
+    private readonly onAppearancePreviewRequest = (): void => this.publishAppearancePreview();
 
     constructor(container: HTMLElement | string, opts: VelaWorkspaceOptions = {}) {
         registerBuiltinLayouts(); // idempotent — pickers and `layout` ids resolve from the registry
@@ -481,6 +482,7 @@ export class VelaWorkspace {
         this.root = doc.createElement('div');
         this.root.className = 'vela-workspace';
         ensureUIHost(this.root, resolveTheme(opts.theme));
+        doc.addEventListener('tco:appearance-preview-request', this.onAppearancePreviewRequest);
 
         // ONE shared feed: providers registered once; every cell's `chart.data` operates
         // on the same registry, symbol index, and closed-bar cache.
@@ -965,6 +967,7 @@ export class VelaWorkspace {
         if (id) {
             this.projectActiveCell(); // trigger ① — the chrome rebinds to the new active cell
             this.events.emit('cell:active', { id, prev });
+            this.publishAppearancePreview();
             this.markStateDirty();
         }
     }
@@ -1371,6 +1374,7 @@ export class VelaWorkspace {
         if (this.destroyed) return;
         this.flushPendingState(); // the user's last edit, before anything is torn down
         this.destroyed = true;
+        this.root.ownerDocument.removeEventListener('tco:appearance-preview-request', this.onAppearancePreviewRequest);
         this.replay.destroy();
         if (this.persistKey !== null && typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload);
         this.resizeObserver?.disconnect();
@@ -1809,6 +1813,18 @@ export class VelaWorkspace {
         // workspace covers a grid whose cells come and go. Each cell runs its own engine
         // session, so the `cell` field is what tells two identical scripts apart.
         chart.on('script:run', (run) => this.events.emit('script:run', { ...run, cell: cell.id }));
+        // The settings appearance preview listens to the same active chart's REAL bars.
+        // Ship one detached history snapshot on load/symbol change, then only the forming
+        // candle on live updates so the preview never rebuilds the whole series per tick.
+        const publishPreviewBar = (bar: { time: number; open: number; high: number; low: number; close: number; volume?: number }): void => {
+            if (cell.id !== this.activeId || this.destroyed) return;
+            this.root.ownerDocument.dispatchEvent(new CustomEvent('tco:appearance-preview-data', {
+                detail: { symbol: cell.symbol, timeframe: cell.timeframe, bar },
+            }));
+        };
+        chart.on('bar', publishPreviewBar);
+        chart.on('load:end', () => { if (cell.id === this.activeId) this.publishAppearancePreview(); });
+        chart.on('market:changed', () => { if (cell.id === this.activeId) this.publishAppearancePreview(); });
         chart.on('priceStyle:change', ({ from, to }) => this.events.emit('cell:priceStyle', { id: cell.id, from, to }));
         chart.on('alert', (alert) => {
             // Provenance the way a user reads it — symbol, timeframe, and the indicator
@@ -2267,6 +2283,17 @@ export class VelaWorkspace {
         // change (cell API, contribution context, sync link) leaves range mode and a
         // direct `applyRange` enters it — the bar follows the cell's own record.
         this.bottombar?.setActiveRange(cell.activeRangeId);
+        this.publishAppearancePreview();
+    }
+
+    /** Send real bars from the active Vela chart to the native settings preview. */
+    private publishAppearancePreview(): void {
+        if (this.destroyed || !this.activeId) return;
+        const cell = this.cellsById.get(this.activeId);
+        if (!cell) return;
+        this.root.ownerDocument.dispatchEvent(new CustomEvent('tco:appearance-preview-data', {
+            detail: { symbol: cell.symbol, timeframe: cell.timeframe, bars: cell.chart.getBarsSnapshot(500) },
+        }));
     }
 
     /** Trigger ② — a cell's price style changed: the topbar button/menu only if active.
