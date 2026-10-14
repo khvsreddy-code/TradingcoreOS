@@ -17,6 +17,55 @@ export const TRADINGCOREOS_ARCHITECTURE: readonly TradingCoreOSPlaneContract[] =
   { id: 'trading', responsibilities: ['strategy', 'risk', 'execution', 'portfolio', 'AI'], mayDependOn: ['marketData', 'coreSpirit', 'compute'] },
 ]);
 
+/**
+ * Canonical boundary rules. Adapters implement these contracts rather than
+ * grow parallel stores, schedulers, renderers, or order state machines.
+ */
+export const TRADINGCOREOS_BOUNDARY_CONTRACTS = Object.freeze({
+  marketDataSnapshot: Object.freeze({
+    owner: 'marketData',
+    identity: 'timelineKey+revision',
+    timeUnit: 'epoch-seconds',
+    canonicalBuffers: 'borrowed',
+  }),
+  canonicalDirtyRange: Object.freeze({
+    owner: 'marketData',
+    coordinate: 'bar-index',
+    bounds: 'half-open',
+  }),
+  velaDirtyRange: Object.freeze({
+    owner: 'vela',
+    coordinate: 'epoch-milliseconds',
+    bounds: 'inclusive',
+  }),
+  visibleRange: Object.freeze({
+    owner: 'vela',
+    coordinate: 'epoch-milliseconds',
+    authoritative: true,
+  }),
+  indicatorOutputPatch: Object.freeze({
+    owner: 'coreSpirit',
+    semanticAuthority: 'coreSpirit-runtime',
+    sourceRevisionRequired: true,
+  }),
+  chartSeriesPatch: Object.freeze({
+    owner: 'vela',
+    liveOperations: Object.freeze(['append', 'replace-last']),
+    fullReplacementOnlyFor: Object.freeze(['bootstrap', 'symbol-timeframe-change', 'history-reconciliation']),
+  }),
+  orderIntent: Object.freeze({
+    owner: 'trading',
+    signalIsOrder: false,
+    riskApprovalRequired: true,
+    policyApprovalRequired: true,
+  }),
+  orderStateTransition: Object.freeze({
+    owner: 'trading',
+    deduplicateBeforePublish: true,
+    reconcileSnapshotBeforePublish: true,
+  }),
+} as const);
+
 const byId = new Map(TRADINGCOREOS_ARCHITECTURE.map((plane) => [plane.id, plane]));
 export function validateTradingCoreOSDependency(from: TradingCoreOSPlane, to: TradingCoreOSPlane): boolean {
   return byId.get(from)?.mayDependOn.includes(to) ?? false;
