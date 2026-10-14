@@ -66,6 +66,7 @@ for (const mode of ['columnar', 'compatibility'] as const) {
 
   const dataRevisionAfterPriceMove = plane.canonicalPlane.revision;
   const chartRevisionAfterPriceMove = plane.state.revision;
+  assert.ok(chartRevisionAfterPriceMove > 1, `${mode}: actual forming-bar mutation must advance the chart revision`);
   const closeAfterPriceMove = plane.canonicalPlane.read().close.at(-1);
   assert.equal(closeAfterPriceMove, 101.5, `${mode}: latest valid trade should update the forming bar`);
 
