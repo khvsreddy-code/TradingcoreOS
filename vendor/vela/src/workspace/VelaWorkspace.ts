@@ -661,6 +661,12 @@ export class VelaWorkspace {
                   toolbarHost,
                   resolveTheme(opts.theme),
                   (type) => {
+                      // Publish the intended tool BEFORE restoring chart focus. Advanced
+                      // drawing families load asynchronously; refocusing can re-project
+                      // the active cell while that load is pending. Keeping the workspace
+                      // mirror current prevents that projection from re-arming the old tool.
+                      this.globalTool = type;
+                      this.drawToolbar?.setActiveTool(type);
                       this.active.chart.drawings.setTool(type);
                       this.refocusActive();
                   },
@@ -1433,6 +1439,13 @@ export class VelaWorkspace {
         if (!cell) return;
         this.topbar.setSymbol(cell.symbol);
         this.topbar.setTimeframe(cell.timeframe);
+        // Share the active market context with renderer-owned dialogs such as Vela's
+        // Appearance Preview. The preview data stays synthetic; only its instrument
+        // identity follows the chart.
+        document.documentElement.dataset.tcoActiveSymbol = cell.symbol;
+        document.documentElement.dataset.tcoActiveTimeframe = /^(?:[DWM])$/i.test(cell.timeframe)
+            ? `1${cell.timeframe.toUpperCase()}`
+            : /^\\d+$/.test(cell.timeframe) ? `${cell.timeframe}m` : cell.timeframe;
         this.topbar.setPriceStyle(cell.priceStyle);
         this.topbar.setIndicatorCount(cell.indicatorCount);
         this.topbar.renderActions(); // contributed `when()` gates may depend on the active cell
