@@ -491,11 +491,120 @@ export class SettingsDialog {
         for (const el of panes) {
             const hosts = [...el.querySelectorAll('[data-sd-rows-host]')] as HTMLElement[];
             if (hosts.length === 0) {
-                this.layoutSettingsGrids(el);
+                if (!this.mobileLayout && el.dataset.sdPanel === 'Symbol') this.layoutSymbolPane(el);
+                else this.layoutSettingsGrids(el);
                 continue;
             }
             for (const h of hosts) this.layoutSettingsGrids(h);
         }
+    }
+
+    /** Arrange the native Symbol settings into cards while keeping all real Vela controls. */
+    private layoutSymbolPane(pane: HTMLElement): void {
+        const grid = document.createElement('div');
+        grid.className = 'vela-sd-symbol-grid';
+        while (pane.firstChild) grid.appendChild(pane.firstChild);
+        pane.appendChild(grid);
+        for (const card of [...grid.children] as HTMLElement[]) this.layoutSettingsGrids(card);
+    }
+
+    private syncPreview(config: ChartConfig): void {
+        const panel = this.previewPanel;
+        if (!panel) return;
+        panel.style.setProperty('--vela-preview-up', config.candles.upColor);
+        panel.style.setProperty('--vela-preview-down', config.candles.downColor);
+        panel.style.setProperty('--vela-preview-bg', config.layout.background);
+    }
+
+    /** A simulated sample chart for preview only; it never requests broker data. */
+    private buildAppearancePreview(config: ChartConfig): HTMLElement {
+        const panel = document.createElement('aside');
+        panel.className = 'vela-sd-preview';
+        panel.setAttribute('aria-label', 'Chart appearance preview');
+        this.previewPanel = panel;
+
+        const heading = document.createElement('div');
+        heading.className = 'vela-sd-preview-heading';
+        heading.textContent = 'Appearance preview';
+        const card = document.createElement('div');
+        card.className = 'vela-sd-preview-card';
+        const meta = document.createElement('div');
+        meta.className = 'vela-sd-preview-meta';
+        const sampleLabel = document.createElement('span');
+        sampleLabel.textContent = 'Sample data';
+        const sampleSymbol = document.createElement('span');
+        sampleSymbol.textContent = 'BTCUSDT';
+        meta.append(sampleLabel, sampleSymbol);
+
+        const symbol = document.createElement('div');
+        symbol.className = 'vela-sd-preview-symbol';
+        const badge = document.createElement('span');
+        badge.className = 'vela-sd-preview-badge';
+        badge.textContent = 'BT';
+        const symbolText = document.createElement('span');
+        symbolText.textContent = 'BTCUSDT · 15m';
+        const statusDot = document.createElement('span');
+        statusDot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#0f9b8e;flex:0 0 auto;';
+        symbol.append(badge, symbolText, statusDot);
+
+        const quote = document.createElement('div');
+        quote.className = 'vela-sd-preview-price';
+        quote.textContent = 'C 85,700.76   +58.00 (+0.07%)';
+
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('viewBox', '0 0 270 280');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', 'Simulated sample candlestick chart');
+        svg.classList.add('vela-sd-preview-chart');
+        const add = (tag: string, attrs: Record<string, string>, parent: SVGElement = svg): SVGElement => {
+            const el = document.createElementNS(ns, tag) as SVGElement;
+            for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+            parent.appendChild(el);
+            return el;
+        };
+        const gridYs = [18, 58, 98, 138, 178, 218];
+        const priceLabels = ['86,200','86,000','85,800','85,600','85,400','85,200'];
+        gridYs.forEach((y,i) => {
+            add('line', { x1:'0', y1:String(y), x2:'211', y2:String(y), stroke:'#252a33', 'stroke-width':'1' });
+            const label = add('text', { x:'217', y:String(y+3), fill:'#7f8998', 'font-size':'8.5', 'font-family':'system-ui,sans-serif' });
+            label.textContent = priceLabels[i]!;
+        });
+        add('line', { x1:'211', y1:'8', x2:'211', y2:'247', stroke:'#252a33', 'stroke-width':'1' });
+        const candleSamples: Array<[number,number,number,number,number]> = [
+            [36,48,55,30,12],[48,42,55,37,10],[42,53,58,38,13],[53,60,69,47,15],
+            [60,50,65,45,18],[50,46,57,39,11],[46,61,67,41,13],[61,55,68,51,12],
+            [55,70,76,50,20],[70,64,78,59,14],[64,58,70,54,12],[58,47,62,40,21],
+            [47,55,62,43,13],[55,67,72,51,16],[67,60,72,56,12],[60,73,80,57,19],
+            [73,82,89,68,23],[82,77,86,71,17],[77,69,81,64,14],[69,75,81,66,12],
+            [75,87,92,72,18],[87,80,90,75,15],[80,86,94,77,14],[86,91,98,82,20],
+            [91,84,96,79,14],[84,94,100,81,17]
+        ];
+        const yOf = (price: number): number => 218 - price * 2;
+        candleSamples.forEach(([open,close,high,low,volume],i) => {
+            const x = 4 + i * 7.7;
+            const bullish = close >= open;
+            const color = bullish ? 'var(--vela-preview-up)' : 'var(--vela-preview-down)';
+            add('line', { x1:String(x+2.5), y1:String(yOf(high)), x2:String(x+2.5), y2:String(yOf(low)), stroke:color, 'stroke-width':'1.2' });
+            const bodyY = Math.min(yOf(open), yOf(close));
+            const bodyH = Math.max(2, Math.abs(yOf(open)-yOf(close)));
+            add('rect', { x:String(x), y:String(bodyY), width:'5', height:String(bodyH), fill:color, rx:'0.4' });
+            const volH = volume * 1.15;
+            add('rect', { x:String(x), y:String(250-volH), width:'5', height:String(volH), fill:color, opacity:'.58' });
+        });
+        add('line', { x1:'0', y1:'250', x2:'211', y2:'250', stroke:'#252a33', 'stroke-width':'1' });
+        const timeOne = add('text',{x:'4',y:'271',fill:'#87909f','font-size':'8.5','font-family':'system-ui,sans-serif'});
+        timeOne.textContent = '20:00';
+        const timeTwo = add('text',{x:'89',y:'271',fill:'#87909f','font-size':'8.5','font-family':'system-ui,sans-serif'});
+        timeTwo.textContent = '22:00';
+
+        card.append(meta, symbol, quote, svg);
+        const note = document.createElement('div');
+        note.className = 'vela-sd-preview-note';
+        note.textContent = 'Simulated prices · scroll to zoom, drag to pan.';
+        panel.append(heading, card, note);
+        this.syncPreview(config);
+        return panel;
     }
 
     /**
@@ -823,18 +932,19 @@ export class SettingsDialog {
             }
         }
 
-        // ── Split the linear sections into a left tab rail + one pane per section ──
+        // ── Desktop: horizontal tabs + settings pane + Appearance Preview. ──
+        // Mobile retains Vela's fullscreen, touch-first sidebar layout.
         const shell = document.createElement('div');
+        shell.className = mobile ? 'vela-sd-mobile-shell' : 'vela-sd-desktop-shell';
         shell.style.cssText = mobile
             ? 'display:flex;min-height:0;flex:1 1 auto;position:relative;overflow:hidden;'
-            : 'display:flex;min-height:360px;max-height:calc(70vh - 100px);flex:1 1 auto;';
+            : '';
         const rail = document.createElement('div');
         rail.className = 'vela-sd-rail';
-        // Mobile: the class rules turn the rail into the slide-in sidebar; the inline
-        // styles here carry only its inner layout. Desktop keeps the fixed column.
         rail.style.cssText = mobile
             ? 'display:flex;flex-direction:column;gap:2px;padding:10px 8px;overflow-y:auto;'
-            : `flex:0 0 170px;display:flex;flex-direction:column;gap:2px;padding:10px 8px;border-right:1px solid ${SETTINGS_BORDER};overflow-y:auto;`;
+            : 'grid-column:1 / -1;grid-row:1;display:flex;flex-direction:row;align-items:center;gap:4px;padding:8px 14px;border-bottom:1px solid var(--vela-border);overflow-x:auto;overflow-y:hidden;white-space:nowrap;';
+
         let railScrim: HTMLElement | null = null;
         if (mobile) {
             railScrim = document.createElement('div');
@@ -850,7 +960,7 @@ export class SettingsDialog {
         paneHost.className = 'vela-sd-pane';
         // overflow-anchor off: Chrome's scroll anchoring can jump this scroller when a
         // body-portaled popover (select list, color picker) is swapped in one gesture.
-        paneHost.style.cssText = mobile ? 'flex:1;min-width:0;overflow-y:auto;overflow-anchor:none;padding:6px 14px calc(14px + env(safe-area-inset-bottom, 0px));' : 'flex:1;overflow-y:auto;overflow-anchor:none;padding:6px 18px 14px;';
+        paneHost.style.cssText = mobile ? 'flex:1;min-width:0;overflow-y:auto;overflow-anchor:none;padding:6px 14px calc(14px + env(safe-area-inset-bottom, 0px));' : 'grid-column:1;grid-row:2;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;overflow-anchor:none;padding:10px 14px 14px;';
 
         const panes: Array<{ title: string; el: HTMLElement; tab: HTMLButtonElement; style?: string; visibility?: string }> = [];
         let current: HTMLElement | null = null;
@@ -858,6 +968,7 @@ export class SettingsDialog {
             const title = child.dataset.sdTab;
             if (title !== undefined) {
                 const el = document.createElement('div');
+                el.dataset.sdPanel = title;
                 el.style.display = 'none';
                 const tab = document.createElement('button');
                 tab.type = 'button';
@@ -915,7 +1026,9 @@ export class SettingsDialog {
         activate(wanted >= 0 ? wanted : 0);
         this.syncTypeTabs?.(config.series.style);
 
-        shell.append(rail, paneHost);
+        const preview = mobile ? null : this.buildAppearancePreview(config);
+        if (preview) shell.append(rail, paneHost, preview);
+        else shell.append(rail, paneHost);
         if (railScrim) shell.append(railScrim);
         ui.body.appendChild(shell);
         return panes.map((p) => p.el);
@@ -928,6 +1041,7 @@ export class SettingsDialog {
         this.ui = null;
         this.root = null;
         this.toggleRail = null;
+        this.previewPanel = null;
         this.tabs = [];
         for (const dispose of this.hintTips) dispose(); // a tip open at close time must not outlive its row
         this.hintTips = [];
