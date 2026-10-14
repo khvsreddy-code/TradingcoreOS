@@ -417,6 +417,11 @@ export class ChartDataPlane {
     // Cold/compatibility path used only when the plane was bootstrapped from OHLCV rows
     // or after an older-history merge. This path preserves the mature candle reconciler.
     const compatibility = this.state.candles.length ? this.state.candles : this.getCompatibilityCandles();
+    // Capture the pre-mutation values before reconcileRealtimeCandle updates the
+    // forming row in place. Reading these after reconciliation hides real bar
+    // changes and leaves the published chart revision stale.
+    const previousLength = compatibility.length;
+    const previousClose = compatibility[previousLength - 1]?.close;
     const result = reconcileRealtimeCandle(
       compatibility,
       {
@@ -432,8 +437,6 @@ export class ChartDataPlane {
       this.emit({ type: 'quote', snapshot: this.snapshot() });
       return;
     }
-    const previousLength = this.state.candles.length;
-    const previousClose = this.state.candles[previousLength - 1]?.close;
     this.state.candles = result.candles;
     this.state.columns = undefined;
     this.state.compatibilityCandles = result.candles;
