@@ -19,6 +19,7 @@ export const TCO_VELA_TERMINAL_TOPOLOGY = Object.freeze({
     'objectTree',
     'dataWindow',
     'drawingToolbar',
+    'drawingToolsCatalog',
     'workspaceReplay',
     'panelDock',
   ],
@@ -75,7 +76,7 @@ export function createTcoVelaTerminalOptions(
     // Vela owns the chart chrome. Keep its native editing/history, alerts and screenshot
     // actions visible, while TCO integrations use compact icon actions with tooltips.
     topbar:{
-      left:['symbol','timeframes','style','layout','indicators'],
+      left:['symbol','timeframes','style','layout','indicators','tco.drawing-tools'],
       right:[
         'tco.watchlist',
         'tco.research',
