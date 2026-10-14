@@ -84,11 +84,19 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   }
 
   let previousSha = String(env.VERCEL_GIT_PREVIOUS_SHA || '').trim();
-  const currentSha = String(env.VERCEL_GIT_COMMIT_SHA || '').trim();
+  let currentSha = String(env.VERCEL_GIT_COMMIT_SHA || '').trim();
 
+  // Service-level ignore commands may not receive Vercel's Git SHA variables on
+  // every Services build path. Prefer the exact Vercel SHA, but use the checked-out
+  // commit as a verifiable fallback rather than forcing an unnecessary container build.
   if (!currentSha) {
-    console.warn('[realtime-ignore] Current deployment SHA unavailable; rebuilding safely.');
-    return 1;
+    try {
+      currentSha = execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { encoding: 'utf8' }).trim();
+      console.warn('[realtime-ignore] Current deployment SHA unavailable; using checked-out HEAD.');
+    } catch (error) {
+      console.warn('[realtime-ignore] Current deployment SHA and checked-out HEAD unavailable; rebuilding safely.', error instanceof Error ? error.message : '');
+      return 1;
+    }
   }
 
   // Some Vercel multi-service builds do not expose VERCEL_GIT_PREVIOUS_SHA to a
