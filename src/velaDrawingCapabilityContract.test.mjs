@@ -7,6 +7,8 @@ const channel = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings/a
 const fibonacci = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings/advancedRegistryFibonacci.ts'), 'utf8');
 const patterns = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings/advancedRegistryPatterns.ts'), 'utf8');
 const controller = fs.readFileSync(path.join(root, 'vendor/vela/src/renderers/native/drawings/UserDrawingController.ts'), 'utf8');
+const tcoCatalog = fs.readFileSync(path.join(root, 'src/services/core/chart/velaDrawingCatalog.ts'), 'utf8');
+const tcoTerminal = fs.readFileSync(path.join(root, 'src/services/core/chart/tcoVelaTerminal.ts'), 'utf8');
 
 const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 
@@ -24,5 +26,10 @@ assert(controller.includes('loadAdvancedDrawingCatalog'),'drawing controller mus
 assert(controller.includes('this.customToolbar = !isCanonicalToolbarDefinition(def);'),'canonical and custom toolbars must be classified separately');
 assert(controller.includes('for (const group of this.toolbarDefinition.groups)'),'advanced icon hydration must update the current toolbar definition');
 assert(controller.includes('this.toolbar.setDefinition(this.toolbarDefinition);'),'hydrated icons must repaint the current toolbar');
+assert(tcoTerminal.includes('drawings:{ tools:[...CORE_SPIRIT_DRAWING_TOOL_CATALOG] }'),'TCO workspace must pass the complete Vela drawing inventory to the native toolbar');
+for (const type of ['fairvaluegap','orderblock','liquidity','fibretracement','fibextension','gannfan','position','magnifier','gartley','elliottimpulse','parallelchannel']) {
+  assert(tcoCatalog.includes(`'${type}'`), `TCO drawing catalog is missing Vela tool: ${type}`);
+}
+assert(registry.includes("type:'fairvaluegap'") && registry.includes("type:'orderblock'") && registry.includes("type:'liquidity'"), 'Vela 0.8.4 price-action drawing implementations must be registered');
 
 console.log('VELA_DRAWING_CAPABILITY_SPLIT_OK');
