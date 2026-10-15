@@ -105,4 +105,17 @@ const inferred = buildCoreSpiritDirtyGraph({ version: 1, sourceId: 'lookback-inf
 assert.equal(inferred.find(n => n.id === 'sma').lookback, 19, '20-bar rolling window should invalidate 19 future bars');
 assert.equal(inferred.find(n => n.id === 'rising').lookback, 3, 'rising(length) examines that many previous bars');
 assert.equal(inferred.find(n => n.id === 'dynamic-sma').lookback, Number.POSITIVE_INFINITY, 'a non-constant window length must conservatively invalidate the tail');
+
+assert.equal(correction.allHistory, true, 'recursive historical corrections without a checkpoint must be an explicit full replay');
+assert.deepEqual(correction.ranges.get('i:ema'), { from: 0, to: 520 }, 'full replay ranges must agree with replayFrom=0');
+assert.equal(correction.instructions.size, nodes.length, 'full replay includes every graph instruction to rebuild all hidden state');
+assert.deepEqual(checkpointCorrection.ranges.get('i:ema'), { from: 450, to: 520 }, 'checkpoint replay must evaluate affected state from the checkpoint, not only the corrected bar');
+assert.deepEqual(checkpointCorrection.ranges.get('i:signal'), { from: 450, to: 520 }, 'dependent outputs must be replayed from the checkpoint too');
+
+const volumeCorrection = graph.planCorrection(['volume'], { from: 500, to: 501 }, 520, 450);
+assert.equal(volumeCorrection.allHistory, false, 'a valid checkpoint keeps correction replay scoped to the affected subgraph');
+assert.equal(volumeCorrection.nodes.has('i:vwap'), true);
+assert.equal(volumeCorrection.nodes.has('i:ema'), false, 'unrelated recursive indicators must remain reusable');
+assert.deepEqual(volumeCorrection.ranges.get('i:vwap'), { from: 450, to: 520 });
+
 console.log('CORESPIRIT_DIRTY_GRAPH_CONTRACT_OK');
