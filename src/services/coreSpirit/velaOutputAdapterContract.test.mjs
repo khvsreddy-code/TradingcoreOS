@@ -112,7 +112,7 @@ assert.match(outputController, /chart\.renderer\.setNativeData\(this\.overlayCha
   'CoreSpirit publishes immutable rich-output data into Vela native state');
 assert.match(outputController, /chart\.renderer\.mountIndicator\(/,
   'the rich-output layer must be attached to Vela as a renderer-owned model');
-assert.doesNotMatch(outputController, /requestAnimationFrame|document\.createElement\(['"]canvas['"]\)/,
+assert.doesNotMatch(outputController, /requestAnimationFrame\\s*\\(|document\\.createElement\\(['"]canvas['"]\\)/,
   'the adapter must not create a competing canvas or a second render-frame scheduler');
 assert.doesNotMatch(outputController, /runCoreSpiritArtifactInWorker|CoreSpiritRuntime|compileCoreSpirit/,
   'the output/render adapter must not own or trigger script evaluation');
@@ -126,8 +126,12 @@ assert.match(outputLayer, /args\.coords\.logicalToX\(/,
   'bar-index visual coordinates must use Vela’s logical-index transform');
 assert.match(velaKernel, /import '\.\/coreSpiritVelaOutputLayer'/,
   'the layer must register before native renderers are constructed');
-assert.match(chartController, /getBars:\(\)=>candles\.current as any/,
-  'CoreSpirit reads the active chart history through the canonical host accessor without cloning the full history per read');
+assert.match(velaEngine, /const getCurrentBars=\\(forceFullNormalization=false\\)=>/,
+  'Vela history is read through one normalized host-data boundary');
+assert.match(velaEngine, /return normalizedBarsCache\\.slice\\(\\)/,
+  'asynchronous execution receives an isolated array snapshot rather than a mutable reference to the adapter cache');
+assert.match(chartController, /const bars=\\[\\.\\.\\.candles\\.current\\]/,
+  'chart-indicator execution captures one stable source snapshot per run instead of copying history on render');
 assert.match(sceneDiff, /outputDirtySpan/,
   'the Vela scene diff remains the native rendering consumer of declarative output');
 
