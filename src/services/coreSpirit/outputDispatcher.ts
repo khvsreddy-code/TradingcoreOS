@@ -32,13 +32,21 @@ function signalIdentity(output: Extract<CoreSpiritObject, { kind: 'signal' }>): 
 
 function visualIdentity(output: CoreSpiritObject, fallback: string): string {
   const value = output as any;
-  const id = String(value.id ?? fallback);
-  // These kinds are emitted once per bar under a stable series-style identifier:
-  // upsert by (id,time) so a forming-bar replacement does not erase prior bars.
-  if (['band','shape','background','barcolor','footprint'].includes(output.kind) && Number.isFinite(Number(value.time))) {
-    return `${id}@${canonicalSecondsTime(value.time)}`;
+  const explicitId = typeof value.id === 'string' && value.id.length ? value.id : undefined;
+  const kind = output.kind;
+  const time = Number.isFinite(Number(value.time)) ? canonicalSecondsTime(value.time) : undefined;
+  // Per-bar visuals carry an identity for the bar as well as their script ID.
+  // Without this, one developing bar can overwrite every previous background or band.
+  if (['band','shape','background','barcolor','footprint'].includes(kind) && time !== undefined) {
+    return `${explicitId ?? `${kind}:${time}`}@${time}`;
   }
-  return id;
+  if (explicitId) return explicitId;
+  if (kind === 'marker') return `marker:${time ?? ''}:${Number(value.price)}`;
+  if (kind === 'line' || kind === 'arrow') return `${kind}:${value.start?.time ?? ''}:${value.start?.price ?? ''}:${value.end?.time ?? ''}:${value.end?.price ?? ''}`;
+  if (kind === 'zone' || kind === 'box') return `${kind}:${value.left ?? ''}:${value.right ?? ''}:${value.top ?? ''}:${value.bottom ?? ''}`;
+  if (kind === 'hline') return `hline:${Number(value.price)}`;
+  if (kind === 'polyline') return `polyline:${JSON.stringify(value.points ?? [])}`;
+  return fallback;
 }
 
 export type CoreSpiritOutputFrame = {
