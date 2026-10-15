@@ -324,7 +324,7 @@ export function planCoreSpiritExecution(
   const pureNodes = nodes.filter(node => node.pure && !node.effectful);
   const kernelNodeIds = new Set(kernelCalls.map(call => call.nodeId));
   const offloadableNodes = pureNodes.filter(node => kernelNodeIds.has(`i:${node.instruction}`));
-  let backend = pickBackend(profiles, workload, { requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits }, backendCapabilityPlans);
+  let backend = pickBackend(profiles, workload, { ...options, requireDeterministic, allowSplitPureWork, minGpuWorkUnits, minWasmWorkUnits, resultNeededImmediately: options.resultNeededImmediately ?? backendPurpose === 'live' }, backendCapabilityPlans);
   // This registry describes numerical-kernel executors, not a general Core IR
   // machine. Keep unsupported IR instructions on CPU and make the split explicit.
   if (backend.backend !== 'cpu' && offloadableNodes.length === 0) {
