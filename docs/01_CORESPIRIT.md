@@ -423,3 +423,30 @@ The canonical compiler contract remains the existing source → parser/name reso
 
 Contract coverage: `canonicalCompilerPipelineContract.test.mjs` and `dirtyGraphContract.test.mjs`.
 
+
+## Stateful kernel parity, backend cost, and editor revision contract
+
+### Stateful smoothing kernels
+
+`CoreSpiritIncrementalSmoother` is the explicit incremental path for EMA and Wilder RMA. It tracks absolute bar identity and the state immediately before a forming bar, so repeated updates to that bar restore the prior state and replace the observation rather than advancing the recurrence multiple times. It also supports deterministic replay, reset, and versioned checkpoint snapshots.
+
+- Batch kernels remain the numerical reference implementation.
+- Non-finite inputs follow the existing batch contract: EMA resets to the next finite seed; RMA resets and requires a full finite seed period.
+- A historical correction should replay the corrected history or restore a compatible pre-correction checkpoint before replaying forward; never patch a recursive output alone.
+- Checkpoints are versioned and validate operation, period, state shape, and bar position before restore.
+- The incremental stateful contract compares EMA/RMA against batch output across deterministic randomized histories, invalid gaps, repeated forming-bar replacements, reset, and checkpoint restore. Broader numerical-kernel parity remains covered by `numericalKernelsContract.test.mjs`.
+
+### Backend planner is cost-aware, not backend-first
+
+The execution planner first requires a registered, exact kernel adapter and respects deterministic/stateful constraints. It then compares estimated CPU work with end-to-end accelerated cost, including transfer volume, backend startup/warmup, and immediate-result handoff. Optional throughput/latency inputs let browser telemetry replace conservative defaults.
+
+- Small or latency-sensitive work stays on CPU when offload overhead dominates.
+- Large historical pure workloads can use a compatible registered WASM kernel when measured/estimated savings exceed transfer and startup costs.
+- GPU remains unavailable unless an actual registered adapter supports the exact operation; stateful recurrences and effects are not sent to GPU by this planner.
+- These values are estimates, not benchmark claims. Tune them using real workload telemetry and numerical parity tests, not marketing throughput.
+
+### Editor-to-output revision identity
+
+Run is bound to the exact current editor source and compiled artifact. A prepared artifact whose source hash differs from the current draft is rejected. If the source changes while an asynchronous chart run is in flight, that run's result is discarded rather than being shown beside newer code. Successful run metadata carries source version, source hash, and artifact hash so the UI can expose which revision produced the visible output.
+
+Contract coverage: `incrementalStatefulKernelContract.test.mjs`, `numericalKernelsContract.test.mjs`, `backendPlannerIntegrationContract.test.mjs`, and `coreSpiritEditorCompilerContract.test.mjs`.
