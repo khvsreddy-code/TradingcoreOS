@@ -11,6 +11,7 @@ import { CoreSpiritVelaOutputRevisionGate, type CoreSpiritVelaOutputRevision } f
  * maps output snapshots into Vela-native series/markers and publishes rich visual
  * data through Vela's registered renderer layer. It creates no canvas, owns no
  * coordinate transforms, and never invokes compilation or evaluation from a frame.
+ */
 let coreSpiritOutputControllerSerial = 0;
 
 export class CoreSpiritChartOutputController {
