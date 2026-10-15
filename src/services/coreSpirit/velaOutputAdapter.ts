@@ -190,3 +190,42 @@ export function adaptCoreSpiritOutputsForVela(
     timeUnit: 'epoch-milliseconds' as const,
   });
 }
+
+export type CoreSpiritVelaOutputRevision = Readonly<{
+  streamId: string;
+  datasetRevision: number;
+  outputRevision: number;
+}>;
+
+/** Latest-wins gate shared by the host-side Vela output adapter. */
+export class CoreSpiritVelaOutputRevisionGate {
+  private readonly latest = new Map<string, { datasetRevision: number; outputRevision: number }>();
+
+  accept(revision: CoreSpiritVelaOutputRevision): boolean {
+    if (!revision.streamId.trim() ||
+        !Number.isSafeInteger(revision.datasetRevision) || revision.datasetRevision < 0 ||
+        !Number.isSafeInteger(revision.outputRevision) || revision.outputRevision < 0) return false;
+    const previous = this.latest.get(revision.streamId);
+    if (previous && (
+      revision.datasetRevision < previous.datasetRevision ||
+      (revision.datasetRevision === previous.datasetRevision && revision.outputRevision <= previous.outputRevision)
+    )) return false;
+    this.latest.set(revision.streamId, {
+      datasetRevision: revision.datasetRevision,
+      outputRevision: revision.outputRevision,
+    });
+    return true;
+  }
+
+  isCurrent(revision: CoreSpiritVelaOutputRevision): boolean {
+    const current = this.latest.get(revision.streamId);
+    return Boolean(current &&
+      current.datasetRevision === revision.datasetRevision &&
+      current.outputRevision === revision.outputRevision);
+  }
+
+  clear(streamId?: string): void {
+    if (streamId === undefined) this.latest.clear();
+    else this.latest.delete(streamId);
+  }
+}
