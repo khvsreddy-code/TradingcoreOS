@@ -101,6 +101,7 @@ export * from './executionPlanner';
 export * from './backendRegistry';
 export * from './numericalKernels';
 export * from './incrementalStatefulKernel';
+export * from './velaOutputAdapter';
 export * from './wasmBackend';
 export * from './numericalKernelExecutor';
 export { CORE_SPIRIT_SANDBOX_LIMITS, CoreSpiritCapabilityDeniedError, CoreSpiritSandboxQuotaError, CoreSpiritCapabilitySandbox, createCoreSpiritSandbox, validateCoreSpiritSandboxArchitecture, computeCapabilityForBackend } from './capabilitySandbox';
