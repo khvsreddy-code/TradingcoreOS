@@ -160,7 +160,7 @@ export function adaptCoreSpiritOutputsForVela(
       if (found) {
         // Snap second-normalized CoreSpirit time to the exact chart-open timestamp.
         normalized = { ...normalized, time: found.timeMs };
-        const claimedIndex = Number(raw.metadata?.barIndex);
+        const claimedIndex = raw.metadata?.barIndex == null ? Number.NaN : Number(raw.metadata.barIndex);
         if (Number.isSafeInteger(claimedIndex) && claimedIndex >= 0 && claimedIndex !== found.index) {
           throw new CoreSpiritVelaAlignmentError(
             `Output ${outputIndex} claims bar index ${claimedIndex}, but its timestamp maps to canonical bar ${found.index}.`,
