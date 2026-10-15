@@ -43,6 +43,47 @@ if (convertedLine.kind === 'line') {
 }
 assert.equal(adapted.outputs[3]!.time, (t0 + 300) * 1000);
 
+// CoreScript geometry declares its own coordinate space. Time-space x coordinates
+// are converted to Vela milliseconds while screen/normalized coordinates stay pixels.
+const geometryAdapted = adaptCoreSpiritOutputsForVela([
+  {
+    kind: 'customVisual', id: 'time-geometry',
+    geometry: {
+      kind: 'line',
+      from: { kind: 'point', space: 'time', x: t0 + 300, y: 101 },
+      to: { kind: 'point', space: 'time', x: t0 + 600, y: 104 },
+    },
+  },
+  {
+    kind: 'customVisual', id: 'normalized-geometry',
+    geometry: { kind: 'point', point: { kind: 'point', space: 'normalized', x: 0.5, y: 0.25 } },
+  },
+], bars);
+assert.equal(geometryAdapted.outputs[0]!.kind, 'customVisual');
+if (geometryAdapted.outputs[0]!.kind === 'customVisual') {
+  assert.equal(geometryAdapted.outputs[0]!.geometry.from?.x, (t0 + 300) * 1000);
+  assert.equal(geometryAdapted.outputs[0]!.geometry.to?.x, (t0 + 600) * 1000);
+}
+if (geometryAdapted.outputs[1]!.kind === 'customVisual') {
+  assert.equal(geometryAdapted.outputs[1]!.geometry.point?.x, 0.5, 'normalized coordinates must never be interpreted as timestamps');
+  assert.equal(geometryAdapted.outputs[1]!.geometry.point?.y, 0.25);
+}
+
+// Opening-time alignment must survive overnight/session gaps; infer the index
+// from the canonical timestamp map, never from a constant timeframe duration.
+const sessionTimes = [
+  Date.parse('2026-10-15T03:45:00Z'), // 09:15 India
+  Date.parse('2026-10-15T10:00:00Z'), // 15:30 India
+  Date.parse('2026-10-16T03:45:00Z'), // next session open
+];
+const sessionBars = normalizeVelaBarsToCoreSpirit(sessionTimes.map((time, index) => ({
+  time, open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 1000,
+})));
+const afterSessionGap = adaptCoreSpiritOutputsForVela([
+  { kind: 'series', time: sessionTimes[2]! / 1000, value: 103, seriesId: 'session', metadata: { barIndex: 2 } },
+], sessionBars);
+assert.deepEqual(afterSessionGap.alignment.map(item => [item.barIndex, item.aligned]), [[2, true]]);
+
 assert.throws(() => adaptCoreSpiritOutputsForVela([
   { kind: 'series', time: t0 + 301, value: 1, seriesId: 'misaligned' },
 ], bars), (error) => error instanceof CoreSpiritVelaAlignmentError && error.outputIndex === 0);
@@ -64,6 +105,8 @@ const rev2 = { streamId: 'chart-1', datasetRevision: 5, outputRevision: 1 };
 assert.equal(revisions.accept(rev2), true, 'a newer data revision may restart its output sequence');
 assert.equal(revisions.isCurrent(rev1), false);
 assert.equal(revisions.accept({ ...rev2, datasetRevision: 4, outputRevision: 99 }), false, 'a stale dataset cannot win with a larger output revision');
+assert.equal(revisions.accept({ ...rev2, streamId: 'chart-1:NIFTY:15m' }), true,
+  'a timeframe change has an independent chart stream and revision sequence');
 
 // CoreSpiritOutputDispatcher is a retained output cache, not an append-only tick log.
 // A forming bar reuses the timestamp and historical inserts maintain sorted time order.
