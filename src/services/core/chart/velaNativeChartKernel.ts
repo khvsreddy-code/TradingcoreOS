@@ -4,6 +4,8 @@
  * markers, fills and incremental series patches terminate in Vela's NativeRenderer.
  */
 import { NativeRenderer } from '../../../../vendor/vela/src/renderers/native/NativeRenderer';
+// Register the CoreSpirit scene consumer before any Vela renderer is constructed.
+import './coreSpiritVelaOutputLayer';
 import type { IndicatorRenderHandle, ClickEvent, CrosshairEvent, VisibleRange } from '../../../../vendor/vela/src/core/ports/IChartRenderer';
 import type { Unsubscribe } from '../../../../vendor/vela/src/core/util/types';
 import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
