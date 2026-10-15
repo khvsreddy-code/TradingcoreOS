@@ -450,3 +450,57 @@ The execution planner first requires a registered, exact kernel adapter and resp
 Run is bound to the exact current editor source and compiled artifact. A prepared artifact whose source hash differs from the current draft is rejected. If the source changes while an asynchronous chart run is in flight, that run's result is discarded rather than being shown beside newer code. Successful run metadata carries source version, source hash, and artifact hash so the UI can expose which revision produced the visible output.
 
 Contract coverage: `incrementalStatefulKernelContract.test.mjs`, `numericalKernelsContract.test.mjs`, `backendPlannerIntegrationContract.test.mjs`, and `coreSpiritEditorCompilerContract.test.mjs`.
+
+## CoreSpirit ↔ Vela ownership and time contract
+
+### One execution owner, one chart renderer
+
+CoreSpirit owns CoreScript compilation, artifact identity, runtime state, chronological evaluation, signal creation, and numerical truth. Vela owns chart series, panes, time/price scales, drawing models, scene retention, and pixels. The TCO adapter is a translation boundary, not a second evaluator:
+
+```text
+Canonical chart history / Vela DataProvider
+                 |
+                 v
+        CoreSpirit data snapshot
+                 |
+                 v
+     CoreScript → validated artifact
+                 |
+                 v
+      CoreSpirit worker execution
+                 |
+                 v
+      normalized output revision
+                 |
+                 v
+        Vela native scene patches
+                 |
+                 v
+          Vela render frame
+```
+
+A render/frame notification must not compile or evaluate a script. A viewport notification may request a separately declared viewport-dependent calculation from CoreSpirit, but repainting, resizing, crosshair movement, and patch application do not implicitly request a full calculation. No CoreSpirit VM code draws directly to a canvas.
+
+### Canonical data ownership
+
+The active chart/data provider and TradingCoreOS canonical data plane own the source timeline. CoreSpirit receives an immutable run snapshot and owns only its artifact, execution state/checkpoints, and derived outputs. A runtime snapshot is not an independently mutable second history store; refresh it only when the host's dataset revision changes.
+
+For high-frequency updates, read the host's current bar accessor once to form a stable worker request. Do not repeatedly clone the complete candle array just to paint a frame. Historical completion/backfill may fingerprint or normalize full history; a normal forming-bar tick should use bounded tail/revision checks.
+
+### Timestamp and index boundary
+
+- CoreSpirit normalized OHLCV bars use ISO timestamps; numerical market-frame columns use epoch seconds.
+- Vela native chart time is epoch milliseconds.
+- `velaOutputAdapter.ts` owns time conversion and canonical-bar alignment before the output enters a retained Vela scene.
+- Series points are required to resolve to a bar in the current input timeline. A point with an unknown timestamp or a claimed `metadata.barIndex` inconsistent with that timestamp is rejected rather than rendered one candle off.
+- Drawing geometry that uses bar-time coordinates is normalized at the same boundary. Viewport coordinates remain viewport coordinates and must not be interpreted as epoch time.
+- Dirty spans passed to Vela's retained scene are expressed in Vela's time unit. Never compare CoreSpirit epoch seconds directly with Vela millisecond dirty bounds.
+- A bar prepend/backfill starts a new dataset revision. A forming-candle update retains that candle's canonical opening timestamp and replaces its prior value.
+
+### Compute and render have separate schedules
+
+Worker execution produces a fully validated output snapshot. Vela-facing adapters compare its `streamId`, `datasetRevision`, and `outputRevision` before committing it. Delayed or duplicate responses cannot overwrite a newer scene. The chart-output controller coalesces pending snapshots and performs one render-boundary commit; if the commit fails, it attempts to restore the previous committed snapshot. The rendering path performs no compiler or VM work.
+
+The CoreSpirit output dispatcher upserts series values by timestamp rather than treating every update to the forming candle as an append. Stable signal and visual identities similarly replace their developing-bar value rather than accumulating duplicate chart objects.
+
+Regression coverage: `velaOutputAdapterContract.test.mjs`, `velaRevisionedScenePatchContract.test.mjs`, `velaIncrementalPatchContract.test.mjs`, `revisionedRangePatchContract.test.mjs`, and `coreSpiritVelaCapabilityContract.test.mjs`.
