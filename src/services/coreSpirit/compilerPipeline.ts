@@ -58,7 +58,8 @@ export const CORE_SPIRIT_COMPILER_STAGE_ORDER = Object.freeze([
 ] as const);
 export type CoreSpiritCompilerStage =
   | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER[number]
-  | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V1[number];
+  | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V1[number]
+  | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V2[number];
 export type CoreSpiritCompilerPipelineTrace = Readonly<{
   version: 1 | 2 | typeof CORE_SPIRIT_COMPILER_PIPELINE_VERSION;
   stages: readonly CoreSpiritCompilerStage[];
