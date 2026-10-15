@@ -64,5 +64,9 @@ assert.ok(runStart>=0&&copilotStart>runStart,'editor Run/Copilot handlers must e
 assert.doesNotMatch(editor.slice(runStart,copilotStart),/editorModel\.compile\(\)/,'Run must not recompile on the UI thread');
 assert.match(editor,/ideBridge\.runActiveChart\(source,'coreSpirit-editor',result\)/,'Run must use the prepared artifact');
 assert.match(bridge,/target\.updateCode && compiled\.artifact/,'bridge must use transactional artifact update seam');
+assert.match(bridge,/source !== this\.editor\.getSource\(\)/,'Run must reject source that is not the current editor revision');
+assert.match(bridge,/compiled\.artifact\.abi\.sourceHash !== expectedSourceHash/,'Run must reject a prepared artifact compiled from another source revision');
+assert.match(bridge,/sourceVersion !== this\.editor\.getVersion\(\)/,'outputs must be discarded if the source changes during asynchronous execution');
+assert.match(bridge,/artifactHash: compiled\.artifact\?\.abi\.artifactHash/,'runtime output must expose the exact artifact identity that produced it');
 assert.match(editor,/artifactHash/,'editor must retain/expose verified artifact identity');
 console.log('CORESPIRIT_EDITOR_OFF_THREAD_PIPELINE_OK');
