@@ -64,8 +64,10 @@ export class PersistentMarketSubscriptionManager {
         normalizedBroker,
         [normalizedSymbol],
         event => {
+          // A retired socket can emit after unsubscribe/reconnect. It must never
+          // fan out through a newer entry that happens to reuse the same symbol key.
           const current = this.sharedSymbols.get(key);
-          if (!current) return;
+          if (!current || current !== entry) return;
           current.listeners.forEach(nextListener => {
             try { nextListener(event); } catch { /* one consumer must not affect the shared feed */ }
           });

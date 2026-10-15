@@ -5,6 +5,7 @@ const contracts = [
   ['frontend-bundle-architecture', ['src/frontendBundleArchitectureContract.test.mjs', false]],
   ['live-chart-controller-store', ['src/liveChartControllerStoreContract.test.mjs', false]],
   ['chart-data-plane-trade-ordering', ['src/services/marketData/chartDataPlaneTradeOrdering.test.ts', true]],
+  ['market-feed-lifecycle', ['src/services/marketData/marketFeedLifecycle.test.ts', true]],
   ['live-candle-state-machine', ['src/services/marketData/liveCandleStateMachine.test.ts', true]],
   ['chart-cold-start-real-candles', ['src/chartColdStartAndRealCandleContract.test.mjs', false]],
   ['live-candle-lifecycle', ['src/liveCandleLifecycleContract.test.mjs', false]],
