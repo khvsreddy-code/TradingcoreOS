@@ -95,9 +95,12 @@ const sceneDiff = readFileSync('src/services/core/chart/coreSpiritSceneDiff.ts',
 
 assert.match(engineSource, /adaptCoreSpiritOutputsForVela\(result\.outputs,\s*currentBars\)/,
   'Vela scripting engine must use the shared timestamp adapter before diffing output into Vela');
-assert.ok(engineSource.indexOf('adaptCoreSpiritOutputsForVela(result.outputs, currentBars)') <
-  engineSource.indexOf('scene.apply(outputs, dirty, datasetRevision)'),
-  'Vela time normalization must happen before retained scene state is mutated');
+const workerBridgeStart = engineSource.indexOf('const executeInWorker=async(');
+const workerBridgeEnd = engineSource.indexOf('const safeOutputs =', workerBridgeStart);
+const workerBridge = engineSource.slice(workerBridgeStart, workerBridgeEnd);
+assert.ok(workerBridge.indexOf('adaptCoreSpiritOutputsForVela(result.outputs, currentBars)') <
+  workerBridge.indexOf('outputs: adapted.outputs'),
+  'Vela time normalization must happen before adapted outputs leave the worker bridge and reach retained scene state');
 assert.match(chartController, /adaptCoreSpiritOutputsForVela\(result\.outputs,\s*bars\)/,
   'chart-indicator execution must share the exact same output adapter');
 assert.match(chartController, /scheduleObjects\(adapted\.outputs/,
