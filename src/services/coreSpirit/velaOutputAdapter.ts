@@ -40,6 +40,7 @@ export class CoreSpiritVelaAlignmentError extends Error {
  * market/runtime contract uses epoch seconds; Vela's native scene uses millis.
  */
 export function coreSpiritTimeToVelaMillis(value: unknown): number {
+  if (value == null || value === '') return Number.NaN;
   if (typeof value === 'string' && value.trim() !== '') {
     const numeric = Number(value);
     if (Number.isFinite(numeric)) return numeric >= 1e11 ? numeric : numeric * 1000;
@@ -173,7 +174,7 @@ export function adaptCoreSpiritOutputsForVela(
         outputIndex, kind: item.kind, ...(found ? { barIndex: found.index } : {}),
         timestampMs: found?.timeMs ?? epochMs, aligned: Boolean(found),
       }));
-    } else if (Number.isFinite(Number(raw.time))) {
+    } else if (raw.time != null && Number.isFinite(Number(raw.time))) {
       alignment.push(Object.freeze({
         outputIndex, kind: item.kind,
         timestampMs: coreSpiritTimeToVelaMillis(raw.time),
