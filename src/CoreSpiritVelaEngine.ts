@@ -299,7 +299,6 @@ export class CoreSpiritVelaEngine {
     const scene = new CoreSpiritSceneDiff(token.sourceId);
     const mainContextKey=`vela:${token.sourceId}:${req.market.symbol}:${req.market.timeframe}:main`;
     const rangeContextKey=`${mainContextKey}:range`;
-    const backfillContextKey=`${mainContextKey}:backfill`;
     const workerDatasetVersions=new Map<string,number>();
     // Global canonical-data revision across main/history/viewport worker contexts.
     let canonicalDatasetRevision = 0;
@@ -763,36 +762,23 @@ export class CoreSpiritVelaEngine {
 
         if(reason==='backfill'){
           const wasHistoryInitialized=historyInitialized;
-          // The runtime's rolling state was built against the pre-backfill history.
-          // Invalidate the active baseline so the next live run performs the
-          // explicit read-only warm-up + forming-bar pass, even without dirty bounds.
-          if(historyInitialized){
+          // A history prepend can change the recursive state of every later bar.
+          // Invalidate any in-flight main/viewport runs and rebuild from the canonical
+          // full history; maxLookback is not a safe bound for EMA/RMA/RSI/VWAP state.
+          if(wasHistoryInitialized){
             workerDatasetVersions.delete(mainContextKey);
             mainRunGeneration+=1;
             liveRunGeneration+=1;
+            viewportRunGeneration+=1;
             historyInitialized=false;
             liveStarted=false;
             initializationInFlight=false;
           }
-          // Vela may backfill older pages before the initial complete snapshot.
-          if(!wasHistoryInitialized||!currentBars.length||!dirtyRange||!Number.isFinite(dirtyRange.from)||!Number.isFinite(dirtyRange.to))return;
-          const start=lowerBoundBarTime(currentBars,dirtyRange.from);
-          const end=Math.min(currentBars.length,upperBoundBarTime(currentBars,dirtyRange.to));
-          const maxLookback=Math.max(0,Number(token.ir.maxLookback)||0);
-          const executionStart=Math.max(0,start-maxLookback);
-          const rangeBars=currentBars.slice(executionStart,end);
-          if(!rangeBars.length)return;
-          const generation=++viewportRunGeneration;
-          const updateGeneration=updateVersion;
-          void executeInWorker(rangeBars,backfillContextKey,true,executionBarRange(0,rangeBars.length),velaTimeRange(dirtyRange.from,dirtyRange.to))
-            .then(result=>{
-              if(stopped||generation!==viewportRunGeneration||updateGeneration!==updateVersion)return;
-              emitScenePatches(safeOutputs(result.outputs),velaTimeRange(dirtyRange.from,dirtyRange.to),result.sourceDatasetRevision);
-            })
-            .catch(error=>{
-              if(!stopped&&generation===viewportRunGeneration&&updateGeneration===updateVersion)
-                handlers.onError?.(error instanceof Error?error:new Error(String(error)));
-            });
+          // Before initial history completion, the normal "complete" event owns startup.
+          // Otherwise initializeLive warms all confirmed history and reapplies the forming
+          // candle in the same main context, then emits a full-range scene refresh.
+          if(!wasHistoryInitialized||!currentBars.length)return;
+          initializeFromBars(currentBars);
           return;
         }
 
