@@ -20,6 +20,15 @@ export interface CoreSpiritDirtyNode {
 
 export interface CoreSpiritDirtyRange { readonly from: number; readonly to: number; }
 
+export interface CoreSpiritHistoricalCorrection {
+  readonly changedRange: CoreSpiritDirtyRange;
+  /** State snapshot contains bars strictly before this next execution index. */
+  readonly replayFrom: number;
+  readonly checkpointNextBarIndex?: number;
+  readonly requiresStateRestore: boolean;
+  readonly reason: 'stateless-range' | 'checkpoint-replay' | 'full-replay-no-safe-checkpoint';
+}
+
 export interface CoreSpiritDirtyExecutionPlan {
   readonly sourceFields: readonly CoreSpiritDirtySource[];
   readonly nodes: ReadonlySet<string>;
@@ -28,6 +37,7 @@ export interface CoreSpiritDirtyExecutionPlan {
   readonly earliest: number;
   readonly latest: number;
   readonly allHistory: boolean;
+  readonly correction?: CoreSpiritHistoricalCorrection;
 }
 
 const RECURSIVE_TAIL_CALLS = new Set(['ema', 'rma', 'wilder', 'rsi', 'atr', 'vwap']);
@@ -103,19 +113,32 @@ export class CoreSpiritDirtyGraph {
     return undefined;
   }
 
-  planTail(sources: readonly CoreSpiritDirtySource[], barIndex: number, executionEnd = barIndex): CoreSpiritDirtyExecutionPlan {
+  /** A live candle update is the half-open range [barIndex, barIndex + 1). */
+  planTail(sources: readonly CoreSpiritDirtySource[], barIndex: number, executionEnd?: number): CoreSpiritDirtyExecutionPlan {
     const start = Math.max(0, Math.floor(Number.isFinite(barIndex) ? barIndex : 0));
-    const requestedEnd = Number.isFinite(executionEnd) ? Math.floor(executionEnd) : start;
-    const end = Math.max(start, requestedEnd);
+    const end = Math.max(start + 1, Number.isFinite(executionEnd) ? Math.floor(executionEnd as number) : start + 1);
+    return this.planRange(sources, { from: start, to: start + 1 }, end);
+  }
+
+  /** Propagate an arbitrary changed absolute-history interval through the graph. */
+  planRange(
+    sources: readonly CoreSpiritDirtySource[],
+    changedRange: CoreSpiritDirtyRange,
+    executionEnd: number,
+  ): CoreSpiritDirtyExecutionPlan {
+    const end = Math.max(0, Math.floor(Number.isFinite(executionEnd) ? executionEnd : 0));
+    const start = Math.min(end, Math.max(0, Math.floor(Number.isFinite(changedRange.from) ? changedRange.from : 0)));
+    const finish = Math.min(end, Math.max(start, Math.floor(Number.isFinite(changedRange.to) ? changedRange.to : start)));
     const dirty = new Map<string, CoreSpiritDirtyRange>();
     const queue: string[] = [];
     let queueCursor = 0;
     const mark = (id: string, from: number, inputTo: number): void => {
       const node = this.nodesById.get(id);
       if (!node) return;
-      const nextFrom = Math.max(0, Math.floor(from));
+      const nextFrom = Math.min(end, Math.max(0, Math.floor(Number.isFinite(from) ? from : 0)));
       const clampedInputTo = Math.max(nextFrom, Math.min(end, Math.floor(Number.isFinite(inputTo) ? inputTo : end)));
-      // Expand the span when calculating this node's outputs, not one edge later.
+      // Input/output coordinates are absolute-history and half-open. Finite lookback
+      // expands the final affected output bar; recursive nodes extend to executionEnd.
       const nextTo = node.lookback < 0 || !Number.isFinite(node.lookback)
         ? end
         : Math.min(end, clampedInputTo + Math.max(0, Math.floor(node.lookback)));
@@ -126,13 +149,17 @@ export class CoreSpiritDirtyGraph {
         : { from: nextFrom, to: nextTo });
       queue.push(id);
     };
-    for (const source of sources) {
-      for (const id of this.sourceDependents.get(source) || []) mark(id, start, start);
+
+    if (finish > start) {
+      for (const source of sources) {
+        for (const id of this.sourceDependents.get(source) || []) mark(id, start, finish);
+      }
+      for (const node of this.nodesById.values()) {
+        if (node.alwaysRecompute) mark(node.id, start, finish);
+      }
     }
-    for (const node of this.nodesById.values()) {
-      if (node.alwaysRecompute) mark(node.id, start, start);
-    }
-    // A cursor avoids repeated O(n) copies from Array.shift() on large graphs.
+
+    // Cursor traversal avoids Array.shift() copies and tolerates converging dependencies.
     while (queueCursor < queue.length) {
       const id = queue[queueCursor++]!;
       const node = this.nodesById.get(id);
@@ -140,29 +167,68 @@ export class CoreSpiritDirtyGraph {
       if (!node || !range) continue;
       for (const dependent of node.dependents) mark(dependent, range.from, range.to);
     }
+
     const instructions = new Set<number>();
     for (const id of dirty.keys()) {
       const node = this.nodesById.get(id);
       if (node) instructions.add(node.instruction);
     }
     const ranges = new Map<string, CoreSpiritDirtyRange>(dirty);
-    const values = [...ranges.values()];
+    let earliest = start;
+    let latest = start;
+    if (ranges.size) {
+      const values = [...ranges.values()];
+      earliest = Math.min(...values.map(range => range.from));
+      latest = Math.max(...values.map(range => range.to));
+    }
     return {
       sourceFields: Object.freeze([...new Set(sources)]),
       nodes: new Set(dirty.keys()),
       instructions,
       ranges,
-      earliest: values.length ? Math.min(...values.map(range => range.from)) : start,
-      latest: values.length ? Math.max(...values.map(range => range.to)) : start,
+      earliest,
+      latest,
       allHistory: false,
     };
   }
 
-  planFull(executionEnd:number): CoreSpiritDirtyExecutionPlan {
-    const nodes=new Set<string>(this.nodesById.keys());
-    const instructions=new Set<number>([...this.nodesById.values()].map((node)=>node.instruction));
-    const ranges=new Map<string,CoreSpiritDirtyRange>([...this.nodesById.keys()].map((id)=>[id,{from:0,to:executionEnd}] as const));
-    return {sourceFields:Object.freeze([]),nodes,instructions,ranges,earliest:0,latest:executionEnd,allHistory:true};
+  /**
+   * Historical corrections invalidate all causally affected downstream ranges.
+   * Stateful computations restore a snapshot from before the corrected interval;
+   * without a safe snapshot, the safe fallback is deterministic replay from bar zero.
+   */
+  planCorrection(
+    sources: readonly CoreSpiritDirtySource[],
+    changedRange: CoreSpiritDirtyRange,
+    executionEnd: number,
+    checkpointNextBarIndex?: number,
+  ): CoreSpiritDirtyExecutionPlan {
+    const base = this.planRange(sources, changedRange, executionEnd);
+    const end = Math.max(0, Math.floor(Number.isFinite(executionEnd) ? executionEnd : 0));
+    const from = Math.min(end, Math.max(0, Math.floor(Number.isFinite(changedRange.from) ? changedRange.from : 0)));
+    const to = Math.min(end, Math.max(from, Math.floor(Number.isFinite(changedRange.to) ? changedRange.to : from)));
+    const requiresStateRestore = [...base.nodes].some(id => this.nodesById.get(id)?.stateful === true);
+    const checkpointIsSafe = Number.isSafeInteger(checkpointNextBarIndex)
+      && (checkpointNextBarIndex as number) >= 0
+      && (checkpointNextBarIndex as number) <= from;
+    const replayFrom = !requiresStateRestore ? from : checkpointIsSafe ? checkpointNextBarIndex as number : 0;
+    const correction: CoreSpiritHistoricalCorrection = Object.freeze({
+      changedRange: Object.freeze({ from, to }),
+      replayFrom,
+      ...(requiresStateRestore && checkpointIsSafe ? { checkpointNextBarIndex: checkpointNextBarIndex as number } : {}),
+      requiresStateRestore,
+      reason: !requiresStateRestore ? 'stateless-range'
+        : checkpointIsSafe ? 'checkpoint-replay' : 'full-replay-no-safe-checkpoint',
+    });
+    return { ...base, correction };
+  }
+
+  planFull(executionEnd: number): CoreSpiritDirtyExecutionPlan {
+    const end = Math.max(0, Math.floor(Number.isFinite(executionEnd) ? executionEnd : 0));
+    const nodes = new Set<string>(this.nodesById.keys());
+    const instructions = new Set<number>([...this.nodesById.values()].map(node => node.instruction));
+    const ranges = new Map<string, CoreSpiritDirtyRange>([...this.nodesById.keys()].map(id => [id, { from: 0, to: end }] as const));
+    return { sourceFields: Object.freeze([]), nodes, instructions, ranges, earliest: 0, latest: end, allHistory: true };
   }
 }
 

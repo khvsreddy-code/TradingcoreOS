@@ -16,7 +16,7 @@ import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreSpiritComponents';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
-import { createCoreSpiritCompilationUnit, makeCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
+import { makeCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
 import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import { planCoreSpiritExecution } from './executionPlanner';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
@@ -40,6 +40,13 @@ export type CoreSpiritCompileResult = {
   /** Serializable semantic names for IDE completion/hover, never runtime authority. */
   symbols?: readonly CoreSpiritCompileSymbol[];
 };
+
+function symbolsFromSemantic(semantic: { symbols: ReadonlyMap<string, unknown>; udts: ReadonlyMap<string, unknown> }): CoreSpiritCompileSymbol[] {
+  return [
+    ...[...semantic.symbols.entries()].map(([name, type]) => ({ name, type: String(type), kind: 'variable' as const })),
+    ...[...semantic.udts.keys()].map(name => ({ name, type: `type ${name}`, kind: 'type' as const })),
+  ];
+}
 export type CoreSpiritCompilerOptions = {
   layer?: CoreSpiritProgramLayer;
   surface?: CoreSpiritSurfaceMetadata;
@@ -63,17 +70,29 @@ export class CoreSpiritCompiler {
     sourceId = 'coreSpirit',
     options: CoreSpiritCompilerOptions = {},
   ): CoreSpiritCompileResult {
-    const unit = createCoreSpiritCompilationUnit(source, options);
-    const symbols:CoreSpiritCompileSymbol[] = unit.semantic ? [
-      ...[...unit.semantic.symbols.entries()].map(([name,type])=>({name,type:String(type),kind:'variable' as const})),
-      ...[...unit.semantic.udts.keys()].map(name=>({name,type:`type ${name}`,kind:'type' as const})),
-    ] : [];
-    if (unit.diagnostics.some(d => d.severity === 'error') || !unit.semantic) {
-      return { diagnostics:unit.diagnostics, symbols };
+    const original = String(source ?? '');
+    const normalizedSource = normalizeCoreSpiritSource(original);
+    let parsed: ReturnType<CoreSpiritParser['parseDetailed']>;
+    try {
+      parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
+    } catch (error) {
+      const failure = error as { message?: string; position?: { offset?: number; line?: number; column?: number } };
+      const start = Math.max(0, Number(failure?.position?.offset) || 0);
+      return { diagnostics: [{ severity: 'error', code: 'SYNTAX_ERROR', message: failure?.message || String(error), start, end: start + 1, line: failure?.position?.line ?? 1, column: failure?.position?.column ?? 1 }], symbols: [] };
     }
-    const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(source);
-    const result=this.compile(unit.ast, sourceId, { ...options, surface, researchSource:source, artifactContext:{ source:unit.source, normalizedSource:unit.normalizedSource, semanticFingerprint:this.semanticFingerprint(options) } });
-    return { ...result, symbols };
+    if (parsed.diagnostics.length) {
+      return {
+        diagnostics: parsed.diagnostics.map(d => ({ severity: 'error' as const, code: 'SYNTAX_ERROR', message: d.message, line: d.line, column: d.column, start: d.start, end: d.end })),
+        symbols: [],
+      };
+    }
+    const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(original);
+    return this.compile(parsed.ast, sourceId, {
+      ...options,
+      surface,
+      researchSource: original,
+      artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options) },
+    });
   }
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {
@@ -81,8 +100,9 @@ export class CoreSpiritCompiler {
     const componentSource = options.components ?? coreSpiritComponentRegistry;
     const names = resolveCoreSpiritNames(ast, { components: componentSource });
     const semantic = analyzeCoreSpirit(ast, { layer, surface: options.surface, components: componentSource });
+    const symbols = symbolsFromSemantic(semantic);
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
-    if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics };
+    if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics, symbols };
     const surface = options.surface ?? makeCoreSpiritSurfaceMetadata([]);
     const semanticDependencyGraph = buildCoreSpiritSemanticDependencyGraph(ast, semantic, surface);
     const instructions: CoreSpiritIrInstruction[] = [];
@@ -411,12 +431,18 @@ export class CoreSpiritCompiler {
       const sourceText = options.researchSource ?? options.artifactContext?.source ?? '';
       const hasModel = researchPlan.models.length > 0 || semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output');
       const hasResearch = researchPlan.backtests.length > 0 || researchPlan.modelSpecs.length > 0;
-      const hasMatrix = /\b(?:matrix|matrix<)/i.test(sourceText);
-      const hasTensor = /\b(?:tensor|tensor<)/i.test(sourceText);
+      // Capability flags come from typed semantic values, not strings/comments in source.
+      const semanticTypeNames = [
+        ...[...semantic.symbols.values()].map(type => String(type)),
+        ...[...semantic.udts.values()].flatMap(declaration => declaration.fields.map(field => String(field.type))),
+      ];
+      const semanticContainers = [...semantic.semanticSymbols.values()].map(type => type.container).filter(Boolean);
+      const hasMatrix = semanticContainers.includes('matrix') || semanticTypeNames.some(type => /^matrix(?:<|$)/i.test(type));
+      const hasTensor = semanticContainers.includes('tensor') || semanticTypeNames.some(type => /^tensor(?:<|$)/i.test(type));
       const hasMultiSymbol = tradingNativePlan.dataDependencies.map(dep => dep.symbol).filter(symbol => symbol !== 'current').filter((symbol, index, all) => all.indexOf(symbol) === index).length > 1;
-      const hasMultiTimeframe = /(?:\.timeframe\s*\(|\btimeframe\s*\()/i.test(sourceText) || tradingNativePlan.dataDependencies.some(dep => dep.timeframe !== 'chart');
-      const hasSystemEvent = /\bon\s+(?:market\.tick|order\.fill|position\.update)\b/i.test(sourceText);
-      const hasAutomation = layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation') || /\bautomate\s+/i.test(sourceText);
+      const hasMultiTimeframe = tradingNativePlan.dataDependencies.some(dep => dep.timeframe !== 'chart');
+      const hasSystemEvent = semanticDependencyGraph.nodes.some(node => node.kind === 'event');
+      const hasAutomation = layer === 'automation' || semanticDependencyGraph.nodes.some(node => node.kind === 'automation');
       const hasOrderIntent = semanticDependencyGraph.nodes.some(node => node.kind === 'order-intent');
       const languageFeatures:CoreScriptLanguageFeature[] = ['beginner'];
       if (hasMultiSymbol) languageFeatures.push('trader','multi-symbol');
@@ -476,10 +502,10 @@ export class CoreSpiritCompiler {
         capabilityRequirements:capabilityCheck.requirements,
       });
       const ir = { ...graphInput, graphs, executionPlan, specializedPlan, tradingNativePlan, researchPlan, authoringLevel, languageCapabilities, languageFeatures:uniqueLanguageFeatures, requiredCapabilities, capabilityRequirements:capabilityCheck.requirements, languagePolicy, language:'CoreScript' as const, languageVersion:1 as const, repaintSafety, causalityAnalysis:causalityReport, executionPlanVisualization, compilerPipeline: makeCoreSpiritCompilerPipelineTrace() } as CoreSpiritIrProgram;
-      if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}] };
-      return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext)};
+      if (!validateCoreSpiritIr(ir)) return { diagnostics:[...allDiagnostics,{severity:'error',message:'Generated CoreSpirit IR failed the stable VM contract.'}], symbols };
+      return {ir,diagnostics:allDiagnostics,artifact:makeExecutableArtifact(ir, options.artifactContext),symbols};
     } catch(error) {
-      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error ? `${error.message}\\n${error.stack ?? ''}` : String(error)}]};
+      return {diagnostics:[...stageDiagnostics,{severity:'error',message:error instanceof Error ? `${error.message}\\n${error.stack ?? ''}` : String(error)}], symbols};
     }
   }
   private semanticFingerprint(options: CoreSpiritCompilerOptions): string {

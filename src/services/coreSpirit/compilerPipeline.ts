@@ -41,19 +41,26 @@ export function createCoreSpiritCompilationUnit(
 }
 
 
-export const CORE_SPIRIT_COMPILER_PIPELINE_VERSION = 2 as const;
+export const CORE_SPIRIT_COMPILER_PIPELINE_VERSION = 3 as const;
 const CORE_SPIRIT_COMPILER_STAGE_ORDER_V1 = Object.freeze([
   'source','cst','ast','semantic-analysis','semantic-graph','typed-ir','dependency-graph','optimizer','execution-plan',
 ] as const);
-export const CORE_SPIRIT_COMPILER_STAGE_ORDER = Object.freeze([
+const CORE_SPIRIT_COMPILER_STAGE_ORDER_V2 = Object.freeze([
   'source','lexer','parser','typed-ast','name-resolution','semantic-analysis','semantic-graph',
   'dependency-graph','core-ir','optimizer','backend-planner','execution-plan',
+] as const);
+// The trace follows the actual implementation: semantic facts precede lowering;
+// reactive/dependency graphs are derived from optimized IR before backend planning.
+export const CORE_SPIRIT_COMPILER_STAGE_ORDER = Object.freeze([
+  'source','lexer','parser','name-resolution','semantic-analysis','semantic-graph','core-ir',
+  'optimizer','dependency-graph','specialized-planner','trading-native-planner','research-analysis',
+  'safety-analysis','backend-planner','execution-plan',
 ] as const);
 export type CoreSpiritCompilerStage =
   | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER[number]
   | typeof CORE_SPIRIT_COMPILER_STAGE_ORDER_V1[number];
 export type CoreSpiritCompilerPipelineTrace = Readonly<{
-  version: 1 | typeof CORE_SPIRIT_COMPILER_PIPELINE_VERSION;
+  version: 1 | 2 | typeof CORE_SPIRIT_COMPILER_PIPELINE_VERSION;
   stages: readonly CoreSpiritCompilerStage[];
   runtimeBoundary: 'CoreSpiritExecutionVM';
 }>;
@@ -67,6 +74,7 @@ export function validateCoreSpiritCompilerPipelineTrace(value: unknown): value i
   const trace=value as CoreSpiritCompilerPipelineTrace|undefined;
   if(!trace || trace.runtimeBoundary!=='CoreSpiritExecutionVM' || !Array.isArray(trace.stages)) return false;
   if(trace.version===1) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER_V1);
+  if(trace.version===2) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER_V2);
   if(trace.version===CORE_SPIRIT_COMPILER_PIPELINE_VERSION) return sameStages(trace.stages,CORE_SPIRIT_COMPILER_STAGE_ORDER);
   return false;
 }

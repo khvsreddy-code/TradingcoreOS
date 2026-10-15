@@ -23,7 +23,7 @@ assert.ok(closePlan.nodes.has('i:signal'));
 assert.ok(closePlan.nodes.has('i:plot'));
 assert.ok(closePlan.nodes.has('i:vwap'));
 assert.equal(closePlan.earliest,500);
-assert.equal(closePlan.latest,500);
+assert.equal(closePlan.latest,501, 'a one-bar mutation is [500, 501), not an empty point');
 
 const volumePlan=graph.planTail(['volume'],500);
 assert.ok(volumePlan.nodes.has('i:vwap'));
@@ -48,14 +48,33 @@ const boundedReactive = {
   alwaysRecompute: [],
 };
 const boundedPlan = new CoreSpiritDirtyGraph(boundedNodes, boundedReactive).planTail(['close'], 500, 520);
-assert.deepEqual(boundedPlan.ranges.get('window:sma'), { from: 500, to: 504 });
-assert.deepEqual(boundedPlan.ranges.get('window:signal'), { from: 500, to: 504 });
-assert.equal(boundedPlan.latest, 504);
+assert.deepEqual(boundedPlan.ranges.get('window:sma'), { from: 500, to: 505 }, 'a changed bar affects the full 5-bar output window');
+assert.deepEqual(boundedPlan.ranges.get('window:signal'), { from: 500, to: 505 });
+assert.equal(boundedPlan.latest, 505);
 
 const recursivePlan = graph.planTail(['close'], 500, 520);
 assert.deepEqual(recursivePlan.ranges.get('i:ema'), { from: 500, to: 520 });
 assert.deepEqual(recursivePlan.ranges.get('i:rsi'), { from: 500, to: 520 });
 assert.equal(recursivePlan.latest, 520);
+
+const correction = graph.planCorrection(['close'], { from: 500, to: 501 }, 520);
+assert.deepEqual(correction.ranges.get('i:ema'), { from: 500, to: 520 }, 'historical EMA correction invalidates the recursive tail');
+assert.deepEqual(correction.ranges.get('i:signal'), { from: 500, to: 520 }, 'downstream outputs receive propagated tail ranges');
+assert.equal(correction.correction?.requiresStateRestore, true);
+assert.equal(correction.correction?.replayFrom, 0, 'without a safe checkpoint, stateful correction replays from zero');
+assert.equal(correction.correction?.reason, 'full-replay-no-safe-checkpoint');
+const checkpointCorrection = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, 450);
+assert.equal(checkpointCorrection.correction?.replayFrom, 450);
+assert.equal(checkpointCorrection.correction?.checkpointNextBarIndex, 450);
+assert.equal(checkpointCorrection.correction?.reason, 'checkpoint-replay');
+const unsafeCheckpoint = graph.planCorrection(['close'], { from: 500, to: 502 }, 520, 510);
+assert.equal(unsafeCheckpoint.correction?.replayFrom, 0, 'a checkpoint after changed data is never safe');
+const statelessOnly = [node('input:open', 20, ['open'], [], ['simple:condition']), node('simple:condition', 21, ['t20'], ['input:open'], [], { stateful:false, lookback:0 })];
+const statelessReactive = { ...reactive, sourceDependents:{close:[],open:['input:open'],volume:[]}, dependencies:{'input:open':[],'simple:condition':['input:open']}, dependents:{'input:open':['simple:condition'],'simple:condition':[]}, alwaysRecompute:[] };
+const statelessCorrection = new CoreSpiritDirtyGraph(statelessOnly, statelessReactive).planCorrection(['open'], { from:150, to:151 }, 300);
+assert.equal(statelessCorrection.correction?.requiresStateRestore, false);
+assert.equal(statelessCorrection.correction?.replayFrom, 150);
+assert.equal(statelessCorrection.correction?.reason, 'stateless-range');
 
 const sameBar = { time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 20 };
 assert.deepEqual(dirtySourcesForBar(sameBar, { ...sameBar }), []);
