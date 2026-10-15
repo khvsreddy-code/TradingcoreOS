@@ -56,6 +56,7 @@ const contracts = [
   ['corespirit-model-artifact-provenance', ['src/services/coreSpirit/modelArtifacts.test.ts', true]],
   ['corespirit-numerical-kernels', ['src/services/coreSpirit/numericalKernelsContract.test.mjs', true]],
   ['corespirit-incremental-stateful-kernels', ['src/services/coreSpirit/incrementalStatefulKernelContract.test.mjs', true]],
+  ['corespirit-vela-canonical-boundary', ['src/services/coreSpirit/velaOutputAdapterContract.test.mjs', true]],
   ['corespirit-multibackend-kernel-executor', ['src/services/coreSpirit/multiBackendKernelExecutorContract.test.mjs', true]],
   ['corespirit-multibackend-capabilities', ['src/services/coreSpirit/backendRegistryContract.test.mjs', true]],
   ['corespirit-multibackend-execution-planner', ['src/services/coreSpirit/backendPlannerIntegrationContract.test.mjs', true]],
