@@ -94,6 +94,7 @@ const outputLayer = readFileSync('src/services/core/chart/coreSpiritVelaOutputLa
 const velaKernel = readFileSync('src/services/core/chart/velaNativeChartKernel.ts', 'utf8');
 const chartController = readFileSync('src/services/core/chart/controllers/ChartCoreSpiritController.ts', 'utf8');
 const sceneDiff = readFileSync('src/services/core/chart/coreSpiritSceneDiff.ts', 'utf8');
+const velaEngine = readFileSync('src/CoreSpiritVelaEngine.ts', 'utf8');
 
 assert.match(engineSource, /adaptCoreSpiritOutputsForVela\(result\.outputs,\s*currentBars\)/,
   'Vela scripting engine must use the shared timestamp adapter before diffing output into Vela');
