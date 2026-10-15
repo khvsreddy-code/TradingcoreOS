@@ -29,8 +29,15 @@ const wasm = {
   hasKernel: (name) => name === 'rollingMean',
   kernelVariant: (name) => name === 'rollingMean' ? 'simd' : undefined,
 };
-const historical = planCoreSpiritExecution(program, {
+const smallHistorical = planCoreSpiritExecution(program, {
   barCount: 20_000,
+  backendPurpose: 'historical',
+  backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
+});
+assert.equal(smallHistorical.strategy, 'cpu-fallback', 'small workloads should stay local when startup cost outweighs compute savings');
+
+const historical = planCoreSpiritExecution(program, {
+  barCount: 200_000,
   backendPurpose: 'historical',
   backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
 });
@@ -52,7 +59,7 @@ const mixedProgram = {
   ] },
 };
 const mixedPlan = planCoreSpiritExecution(mixedProgram, {
-  barCount: 20_000,
+  barCount: 200_000,
   backendPurpose: 'historical',
   backendRegistry: createCoreSpiritBackendRegistry({ wasm }),
 });
