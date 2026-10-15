@@ -8,6 +8,7 @@ import type { CoreSpiritExecutableArtifact } from '../../../coreSpirit/artifact'
 import { createCoreSpiritSandbox, validateCoreScriptCapabilitiesAgainstSandbox, validateCoreSpiritSandboxArchitecture } from '../../../coreSpirit/capabilitySandbox';
 import type { IChartApi, ISeriesApi } from '../velaNativeChartKernel';
 import { CoreSpiritStore } from '../../../coreSpirit/CoreSpiritStore';
+import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis } from '../../../coreSpirit/velaOutputAdapter';
 
 type Ref<T>={current:T};
 
@@ -48,8 +49,8 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
     if(!bars.length)throw new Error('Chart has no candles yet; wait for the first history paint.');
     publishLifecycle('updating');
     try{
-      datasetVersion+=1;
-      const options={contextKey:chartId,datasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe};
+      const runDatasetVersion=++datasetVersion;
+      const options={contextKey:chartId,datasetVersion:runDatasetVersion,dirtyRange:{from:0,to:bars.length},baseSymbol:resolvedInstrumentKey,baseTimeframe:timeframe};
       const result=artifact
         ? await runCoreSpiritArtifactInWorker(artifact,bars,sourceId,options)
         : await runCoreSpiritInWorker(source,bars,sourceId,options);
@@ -58,11 +59,16 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
       // commit partial output when the replacement failed semantically/runtime-wise.
       const fatalDiagnostic=result.diagnostics.find(isFatalCoreSpiritDiagnostic);
       if(fatalDiagnostic)throw new Error(`CoreSpirit replacement failed; existing chart output was preserved. ${fatalDiagnostic}`);
-      // Commit only after the complete worker result passes the diagnostics gate.
+      // Validate timestamps and translate into Vela's millisecond scene contract
+      // before touching visible state. A bad series timestamp preserves the old scene.
+      const adapted=adaptCoreSpiritOutputsForVela(result.outputs,bars);
       const output=ensureOutput();
-      output?.reset();
-      output?.applyObjects(result.outputs);
-      coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:Date.now(),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
+      if(output){
+        const applied=await output.scheduleObjects(adapted.outputs,{streamId:chartId,datasetRevision:runDatasetVersion,outputRevision:runId});
+        if(runId!==coreSpiritRunId.current||!applied)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit render revision ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
+      }
+      if(runId!==coreSpiritRunId.current)return {barsProcessed:0,plotsEmitted:0,signalsEmitted:0,diagnostics:['stale CoreSpirit run ignored'],runId:`${sourceId}:${runId}`,outputs:[]};
+      coreEventBus.emit('market.calculation',{symbol:resolvedInstrumentKey,timeframe,mode:'bar',timestamp:coreSpiritTimeToVelaMillis(bars[bars.length-1]!.timestamp),barIndex:bars.length-1,isBarClose:true,values:{coreSpiritOutputs:result.outputs.length}});
       publishLifecycle('ready');
       return {barsProcessed:bars.length,plotsEmitted:result.outputs.filter(x=>x.kind==='series').length,signalsEmitted:result.outputs.filter(x=>x.kind==='signal').length,diagnostics:result.diagnostics,runId:`${sourceId}:${runId}`,outputs:result.outputs};
     }catch(error){
@@ -78,7 +84,7 @@ export function createChartCoreSpiritController(deps:ChartCoreSpiritControllerDe
       chartId,
       symbol:resolvedInstrumentKey,
       timeframe,
-      getBars:()=>[...candles.current] as any,
+      getBars:()=>candles.current as any,
       run:(source,sourceId='coreSpirit-editor')=>executeCode(source,sourceId),
       updateCode:(source,artifact,sourceId='coreSpirit-editor')=>executeCode(source,sourceId,artifact),
     });
