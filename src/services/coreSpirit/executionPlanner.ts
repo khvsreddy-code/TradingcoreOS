@@ -62,6 +62,18 @@ export interface CoreSpiritExecutionPlannerOptions {
   backendPurpose?: CoreSpiritBackendPurpose;
   backendRegistry?: CoreSpiritBackendRegistry;
   allowRemoteResearchBackend?: boolean;
+  /** Optional measured cost model; conservative defaults avoid tiny-workload offload. */
+  estimatedCpuWorkUnitsPerMs?: number;
+  estimatedWasmWorkUnitsPerMs?: number;
+  estimatedGpuWorkUnitsPerMs?: number;
+  estimatedTransferBytesPerMs?: number;
+  wasmStartupMs?: number;
+  gpuStartupMs?: number;
+  estimatedTransferBytes?: number;
+  /** True when the caller can overlap execution with other work and amortize setup. */
+  workloadAlreadyAsync?: boolean;
+  /** Live chart output is latency-sensitive; include result handoff in the offload decision. */
+  resultNeededImmediately?: boolean;
 }
 
 export interface CoreSpiritWorkloadEstimate {
@@ -201,7 +213,7 @@ function makeBatches(workload: CoreSpiritWorkloadEstimate, maxBatchSize: number)
 function pickBackend(
   profiles: readonly CoreSpiritComputeBackendProfile[],
   workload: CoreSpiritWorkloadEstimate,
-  options: Required<Pick<CoreSpiritExecutionPlannerOptions, 'requireDeterministic'|'allowSplitPureWork'|'minGpuWorkUnits'|'minWasmWorkUnits'>>,
+  options: Required<Pick<CoreSpiritExecutionPlannerOptions, 'requireDeterministic'|'allowSplitPureWork'|'minGpuWorkUnits'|'minWasmWorkUnits'>> & CoreSpiritExecutionPlannerOptions,
   capabilityPlans: readonly CoreSpiritBackendPlan[],
 ): CoreSpiritComputeBackendProfile {
   const cpu = profiles.find(profile => profile.backend === 'cpu') ??
@@ -224,6 +236,24 @@ function pickBackend(
   // WebGPU is for stateless historical kernels only. Stateful recurrences stay
   // in chronological CPU execution unless a separately validated path is added.
   if (legacyBackend === 'gpu' && capabilityPlans.some(plan => ['ema', 'rma', 'atr', 'rsi'].includes(plan.operation))) return cpu;
+
+  // Compare estimated end-to-end costs, not just arithmetic throughput. These
+  // are conservative defaults and can be replaced with measured host telemetry.
+  // Stateful recurrences and effects remain CPU-owned regardless of this score.
+  const cpuThroughput = Math.max(1, options.estimatedCpuWorkUnitsPerMs ?? 25_000);
+  const acceleratedThroughput = Math.max(1, legacyBackend === 'gpu'
+    ? options.estimatedGpuWorkUnitsPerMs ?? 500_000
+    : options.estimatedWasmWorkUnitsPerMs ?? 150_000);
+  const transferRate = Math.max(1, options.estimatedTransferBytesPerMs ?? 100_000_000);
+  const inferredTransferBytes = Math.max(0, options.estimatedTransferBytes ??
+    workload.bars * workload.symbols * workload.timeframes * Float64Array.BYTES_PER_ELEMENT * Math.max(1, capabilityPlans.length));
+  const startupMs = options.workloadAlreadyAsync ? 0 : legacyBackend === 'gpu'
+    ? Math.max(0, options.gpuStartupMs ?? 5)
+    : Math.max(0, options.wasmStartupMs ?? 1.5);
+  const handoffMs = options.resultNeededImmediately ? inferredTransferBytes / transferRate : 0;
+  const cpuCostMs = workload.workUnits / cpuThroughput;
+  const acceleratedCostMs = workload.workUnits / acceleratedThroughput + inferredTransferBytes / transferRate + startupMs + handoffMs;
+  if (acceleratedCostMs >= cpuCostMs) return cpu;
   return profile;
 }
 
@@ -449,5 +479,13 @@ export function validateCoreSpiritExecutionPlannerInputs(options: CoreSpiritExec
   if (options.symbolCount != null && (!Number.isInteger(options.symbolCount) || options.symbolCount < 1)) errors.push('symbolCount must be positive');
   if (options.timeframeCount != null && (!Number.isInteger(options.timeframeCount) || options.timeframeCount < 1)) errors.push('timeframeCount must be positive');
   if (options.barCount != null && (!Number.isInteger(options.barCount) || options.barCount < 1)) errors.push('barCount must be positive');
+  for (const key of ['estimatedCpuWorkUnitsPerMs','estimatedWasmWorkUnitsPerMs','estimatedGpuWorkUnitsPerMs','estimatedTransferBytesPerMs'] as const) {
+    const value = options[key];
+    if (value != null && (!Number.isFinite(value) || value <= 0)) errors.push(`${key} must be finite and positive`);
+  }
+  for (const key of ['wasmStartupMs','gpuStartupMs','estimatedTransferBytes'] as const) {
+    const value = options[key];
+    if (value != null && (!Number.isFinite(value) || value < 0)) errors.push(`${key} must be finite and non-negative`);
+  }
   return errors;
 }
