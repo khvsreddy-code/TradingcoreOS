@@ -251,8 +251,9 @@ function pickBackend(
     ? Math.max(0, options.gpuStartupMs ?? 5)
     : Math.max(0, options.wasmStartupMs ?? 1.5);
   const handoffMs = options.resultNeededImmediately ? inferredTransferBytes / transferRate : 0;
+  const eligibleWorkUnits = workload.workUnits * Math.min(1, capabilityPlans.length / Math.max(1, workload.pureInstructionCount));
   const cpuCostMs = workload.workUnits / cpuThroughput;
-  const acceleratedCostMs = workload.workUnits / acceleratedThroughput + inferredTransferBytes / transferRate + startupMs + handoffMs;
+  const acceleratedCostMs = eligibleWorkUnits / acceleratedThroughput + inferredTransferBytes / transferRate + startupMs + handoffMs;
   if (acceleratedCostMs >= cpuCostMs) return cpu;
   return profile;
 }
