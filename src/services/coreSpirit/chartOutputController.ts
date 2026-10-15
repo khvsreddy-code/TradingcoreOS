@@ -5,13 +5,12 @@ import { CORE_SPIRIT_VELA_OUTPUT_LAYER_ID, type CoreSpiritVelaOutputLayerData } 
 import { CoreSpiritVelaOutputRevisionGate, type CoreSpiritVelaOutputRevision } from './velaOutputAdapter';
 
 /**
- * Stage 3 rich renderer.
+ * Thin CoreSpirit → Vela adapter.
  *
- * CoreSpirit emits declarative visual intents; this controller owns the browser-only
- * projection. The Vela renderer owns price/time scales and native series.
- * CoreSpirit stays renderer-neutral and only projects declarative output. A single canvas overlay handles high-cardinality fills, boxes,
- * bands, arrows and symbols so 10k+ visual elements do not become 10k chart series.
- */
+ * CoreSpirit owns compilation, evaluation, state and output truth. This controller
+ * maps output snapshots into Vela-native series/markers and publishes rich visual
+ * data through Vela's registered renderer layer. It creates no canvas, owns no
+ * coordinate transforms, and never invokes compilation or evaluation from a frame.
 let coreSpiritOutputControllerSerial = 0;
 
 export class CoreSpiritChartOutputController {
@@ -197,13 +196,13 @@ export class CoreSpiritChartOutputController {
     try {
       // One synchronous state commit. NativeRenderer owns frame timing, so a
       // second requestAnimationFrame here would only add avoidable latency.
-      this.reset();
+      // applyFrame diffs against the current retained series and replaces the
+      // layer's immutable payload. Avoid tearing down native series on every run.
       this.applyObjects([...objects]);
       return Promise.resolve(true);
     } catch (error) {
       try {
-        this.reset();
-        if (previousObjects.length && !this.disposed) this.applyObjects(previousObjects);
+        if (!this.disposed) this.applyObjects(previousObjects as CoreSpiritObject[]);
       } catch (restoreError) {
         return Promise.reject(new AggregateError([error, restoreError], 'Vela output commit and rollback both failed'));
       }
