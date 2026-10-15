@@ -147,18 +147,41 @@ function drawShape(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: 
   ctx.beginPath();
   if (kind === 'square') ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
   else if (kind === 'diamond') { ctx.moveTo(x, y - radius * 1.3); ctx.lineTo(x + radius, y); ctx.lineTo(x, y + radius * 1.3); ctx.lineTo(x - radius, y); ctx.closePath(); }
-  else if (kind === 'triangleUp' || kind === 'triangleDown' || kind === 'triangleup' || kind === 'triangledown') {
-    const sign = kind.toLowerCase().includes('down') ? 1 : -1;
-    ctx.moveTo(x, y + sign * radius); ctx.lineTo(x + radius, y - sign * radius); ctx.lineTo(x - radius, y - sign * radius); ctx.closePath();
+  else if (['triangleUp', 'triangleDown', 'triangleup', 'triangledown', 'arrowUp', 'arrowDown'].includes(kind)) {
+    const isDown = kind.toLowerCase().includes('down');
+    if (kind === 'arrowUp' || kind === 'arrowDown') {
+      const direction = isDown ? 1 : -1;
+      ctx.moveTo(x, y + direction * radius * 1.45);
+      ctx.lineTo(x + radius * 0.72, y + direction * radius * 0.2);
+      ctx.lineTo(x + radius * 0.28, y + direction * radius * 0.2);
+      ctx.lineTo(x + radius * 0.28, y - direction * radius);
+      ctx.lineTo(x - radius * 0.28, y - direction * radius);
+      ctx.lineTo(x - radius * 0.28, y + direction * radius * 0.2);
+      ctx.lineTo(x - radius * 0.72, y + direction * radius * 0.2);
+      ctx.closePath();
+    } else {
+      const sign = isDown ? 1 : -1;
+      ctx.moveTo(x, y + sign * radius);
+      ctx.lineTo(x + radius, y - sign * radius);
+      ctx.lineTo(x - radius, y - sign * radius);
+      ctx.closePath();
+    }
   } else if (kind === 'cross') {
-    ctx.moveTo(x - radius, y); ctx.lineTo(x + radius, y); ctx.moveTo(x, y - radius); ctx.lineTo(x, y + radius);
+    ctx.moveTo(x - radius, y); ctx.lineTo(x + radius, y);
+    ctx.moveTo(x, y - radius); ctx.lineTo(x, y + radius);
   } else if (kind === 'star') {
-    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5; const r = i % 2 ? radius * 0.45 : radius; const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; if (!i) ctx.moveTo(px, py); else ctx.lineTo(px, py); } ctx.closePath();
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      const pointRadius = i % 2 ? radius * 0.45 : radius;
+      const px = x + Math.cos(angle) * pointRadius, py = y + Math.sin(angle) * pointRadius;
+      if (!i) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
   } else ctx.arc(x, y, radius, 0, Math.PI * 2);
-  if (kind !== 'cross') { ctx.fill(); ctx.stroke(); } else ctx.stroke();
+  if (kind === 'cross') ctx.stroke(); else { ctx.fill(); ctx.stroke(); }
   const text = String(st.text ?? obj.text ?? '');
   if (text) {
-    ctx.font = `${st.fontWeight ?? '600'} ${Math.max(8, Number(st.fontSize ?? 10))}px ${st.fontFamily ?? 'sans-serif'}`;
+    ctx.font = `${st.fontStyle === 'italic' ? 'italic ' : ''}${st.fontWeight ?? '600'} ${Math.max(8, Number(st.fontSize ?? 10))}px ${st.fontFamily ?? 'sans-serif'}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = String(st.textColor ?? '#fff');
     ctx.fillText(text, x, y + radius + 9);
   }
@@ -206,14 +229,17 @@ function drawHLine(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: 
 function drawBarTint(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: Record<string, any>): void {
   const x = timeX(args, obj.time);
   if (x == null) return;
-  const right = obj.kind === 'background' && obj.metadata?.endTime != null
-    ? timeX(args, obj.metadata.endTime)
-    : x + Math.max(1, args.coords.pxPerBar());
-  const toX = right ?? x + Math.max(1, args.coords.pxPerBar());
   const st = objectValue(obj.style) ?? {};
-  ctx.save(); ctx.globalAlpha = alpha(ctx, obj.opacity ?? st.opacity ?? 0.18);
+  const explicitRight = obj.kind === 'background' && obj.metadata?.endTime != null
+    ? timeX(args, obj.metadata.endTime)
+    : null;
+  const width = Math.max(1, args.coords.pxPerBar());
+  const left = explicitRight == null ? x - width / 2 : Math.min(x, explicitRight);
+  const right = explicitRight == null ? x + width / 2 : Math.max(x, explicitRight);
+  ctx.save();
+  ctx.globalAlpha = alpha(ctx, obj.opacity ?? st.opacity ?? 0.18);
   ctx.fillStyle = String(obj.color ?? st.fillColor ?? st.color ?? 'rgba(56,189,248,0.12)');
-  ctx.fillRect(Math.min(x, toX), 0, Math.max(1, Math.abs(toX - x)), args.coords.height);
+  ctx.fillRect(left, 0, Math.max(1, right - left), args.coords.height);
   ctx.restore();
 }
 
@@ -301,27 +327,61 @@ function drawFootprint(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, o
   ctx.restore();
 }
 
+function labelPadding(style: Record<string, any>): { x: number; y: number } {
+  const explicitX = Number(style.paddingX), explicitY = Number(style.paddingY);
+  if (Number.isFinite(explicitX) || Number.isFinite(explicitY)) {
+    return {
+      x: Math.max(0, Math.min(40, Number.isFinite(explicitX) ? explicitX : 6)),
+      y: Math.max(0, Math.min(40, Number.isFinite(explicitY) ? explicitY : 3)),
+    };
+  }
+  const raw = style.padding;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const value = Math.max(0, Math.min(40, raw));
+    return { x: value, y: value };
+  }
+  if (typeof raw === 'string') {
+    const values = raw.trim().split(/\\s+/).map(value => Number.parseFloat(value));
+    if (values.length && values.every(Number.isFinite)) {
+      const y = Math.max(0, Math.min(40, values[0]!));
+      const x = Math.max(0, Math.min(40, values[1] ?? y));
+      return { x, y };
+    }
+  }
+  return { x: 6, y: 3 };
+}
+
 function drawLabel(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: Record<string, any>): void {
   const x = timeX(args, obj.time), y = priceY(args, obj.price);
   if (x == null || y == null) return;
   const st = objectValue(obj.style) ?? {};
   const fontSize = Math.max(8, Math.min(32, Number(st.fontSize ?? 12)));
+  const padding = labelPadding(st);
   ctx.save();
-  ctx.font = `${st.fontWeight ?? '600'} ${fontSize}px ${st.fontFamily ?? 'sans-serif'}`;
+  ctx.font = `${st.fontStyle === 'italic' ? 'italic ' : ''}${st.fontWeight ?? '600'} ${fontSize}px ${st.fontFamily ?? 'sans-serif'}`;
   ctx.textAlign = st.textAlign === 'left' ? 'left' : st.textAlign === 'right' ? 'right' : 'center';
   ctx.textBaseline = 'middle';
   const text = String(obj.text ?? '');
   const metrics = ctx.measureText(text);
-  const padX = Number(st.paddingX ?? 6), padY = Number(st.paddingY ?? 3);
-  const width = metrics.width + padX * 2, height = fontSize + padY * 2;
+  const width = metrics.width + padding.x * 2, height = fontSize + padding.y * 2;
   const offset = obj.position === 'above' ? -height / 2 - 6 : obj.position === 'below' ? height / 2 + 6 : 0;
   const left = ctx.textAlign === 'left' ? x : ctx.textAlign === 'right' ? x - width : x - width / 2;
   ctx.globalAlpha = alpha(ctx, st.opacity);
   ctx.fillStyle = String(st.background ?? '#2563eb');
-  ctx.fillRect(left, y + offset - height / 2, width, height);
-  ctx.strokeStyle = String(st.borderColor ?? 'rgba(255,255,255,0.18)'); ctx.lineWidth = 1; ctx.strokeRect(left, y + offset - height / 2, width, height);
+  if (st.shape === 'pill' && typeof ctx.roundRect === 'function') {
+    ctx.beginPath(); ctx.roundRect(left, y + offset - height / 2, width, height, height / 2); ctx.fill();
+  } else {
+    ctx.fillRect(left, y + offset - height / 2, width, height);
+  }
+  ctx.strokeStyle = String(st.borderColor ?? st.border ?? 'rgba(255,255,255,0.18)');
+  ctx.lineWidth = 1;
+  if (st.shape === 'pill' && typeof ctx.roundRect === 'function') {
+    ctx.beginPath(); ctx.roundRect(left, y + offset - height / 2, width, height, height / 2); ctx.stroke();
+  } else {
+    ctx.strokeRect(left, y + offset - height / 2, width, height);
+  }
   ctx.fillStyle = String(st.color ?? st.textColor ?? '#fff');
-  ctx.fillText(text, ctx.textAlign === 'left' ? left + padX : ctx.textAlign === 'right' ? left + width - padX : x, y + offset);
+  ctx.fillText(text, ctx.textAlign === 'left' ? left + padding.x : ctx.textAlign === 'right' ? left + width - padding.x : x, y + offset);
   ctx.restore();
 }
 
