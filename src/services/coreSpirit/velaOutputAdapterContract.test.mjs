@@ -128,7 +128,7 @@ assert.ok(velaKernel.includes("import './coreSpiritVelaOutputLayer'"),
   'the layer must register before native renderers are constructed');
 assert.ok(velaEngine.includes('const getCurrentBars=(forceFullNormalization=false)=>'),
   'Vela history is read through one normalized host-data boundary');
-assert.ok(velaEngine.includes('return normalizedBarsCache.slice()'),
+assert.ok(velaEngine.includes('return Object.freeze(normalizedBarsCache.slice())'),
   'asynchronous execution receives an isolated array snapshot rather than a mutable reference to the adapter cache');
 assert.ok(chartController.includes('const bars=[...candles.current]'),
   'chart-indicator execution captures one stable source snapshot per run rather than copying history on render');
