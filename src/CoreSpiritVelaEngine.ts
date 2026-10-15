@@ -12,6 +12,7 @@ import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreS
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import { normalizeCoreSpiritTimeframe } from './services/core/data/marketDataGraph.ts';
+import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarsToCoreSpirit, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
@@ -23,51 +24,10 @@ type PreparedToken = {
   artifact: CoreSpiritExecutableArtifact;
 };
 
-type VelaOhlcv = {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume?: number;
-  timestamp?: string | number;
-};
+type VelaOhlcv = CoreSpiritVelaOhlcv;
 
 function barTimeMillis(value: unknown): number {
-  const numeric = Number(value);
-  if (Number.isFinite(numeric)) return numeric >= 1e11 ? numeric : numeric * 1000;
-  const parsed = Date.parse(String(value ?? ''));
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
-function normalizeVelaBar(raw: VelaOhlcv, index: number): CoreSpiritMarketBar {
-  const time = barTimeMillis(raw.time ?? raw.timestamp);
-  const open = Number(raw.open);
-  const high = Number(raw.high);
-  const low = Number(raw.low);
-  const close = Number(raw.close);
-  const volume = raw.volume == null ? 0 : Number(raw.volume);
-  if (!Number.isFinite(time) || time <= 0) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: invalid epoch timestamp.`);
-  for (const [name, value] of Object.entries({open,high,low,close,volume})) {
-    if (!Number.isFinite(value)) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: ${name} is not finite.`);
-  }
-  if (high < Math.max(open, close, low)) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: high is below OHLC range.`);
-  if (low > Math.min(open, close, high)) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: low is above OHLC range.`);
-  if (volume < 0) throw new Error(`CoreSpirit Vela data adapter rejected bar ${index}: volume is negative.`);
-  return {timestamp:new Date(time).toISOString(),open,high,low,close,volume};
-}
-
-function normalizeVelaBars(rows: readonly VelaOhlcv[]): CoreSpiritMarketBar[] {
-  const out=new Array<CoreSpiritMarketBar>(rows.length);
-  let previous=0;
-  for(let i=0;i<rows.length;i+=1){
-    const row=normalizeVelaBar(rows[i]!,i);
-    const time=barTimeMillis(row.timestamp);
-    if(i>0&&time<previous) throw new Error(`CoreSpirit Vela data adapter rejected non-chronological bar sequence at index ${i}.`);
-    previous=time;
-    out[i]=row;
-  }
-  return out;
+  return coreSpiritTimeToVelaMillis(value);
 }
 
 function secondaryRowsMatch(existing:readonly CoreSpiritMarketBar[]|undefined,rows:readonly VelaOhlcv[]):boolean{
@@ -174,7 +134,7 @@ export class CoreSpiritVelaEngine {
     // With Vela's live accessor the initial bars argument is only a snapshot;
     // normalize the canonical getBars() data once instead of materializing the
     // same history twice on the UI thread.
-    const bars = req.getBars ? [] : normalizeVelaBars(req.bars as unknown as VelaOhlcv[]);
+    const bars = req.getBars ? [] : normalizeVelaBarsToCoreSpirit(req.bars as unknown as VelaOhlcv[]);
     const currentBarCount=():number=>{
       try{return req.getBars?.().length??bars.length;}catch{return initialBarCount;}
     };
@@ -225,7 +185,7 @@ export class CoreSpiritVelaEngine {
       if (!force && secondaryRefreshPromise) return secondaryRefreshPromise;
       if (!force && now-secondaryLastRefreshAt<1500) return;
       const requestVersion = ++secondaryRequestVersion;
-      const latestBars = req.getBars ? normalizeVelaBars(req.getBars() as unknown as VelaOhlcv[]) : bars;
+      const latestBars = req.getBars ? normalizeVelaBarsToCoreSpirit(req.getBars() as unknown as VelaOhlcv[]) : bars;
       const endTime=latestBars.length?barTimeMillis(latestBars[latestBars.length-1]?.timestamp):undefined;
       const limit=Math.min(50000,Math.max(5000,latestBars.length+token.ir.maxLookback+64));
       const task=Promise.all(secondaryDependencies.map(async dep=>{
@@ -240,7 +200,7 @@ export class CoreSpiritVelaEngine {
             // on consecutive refreshes. Avoid reallocating object bars and
             // retransferring identical graph columns when nothing changed.
             if(!secondaryRowsMatch(existing,rows as unknown as VelaOhlcv[])){
-              secondaryData.set(key,normalizeVelaBars(rows as unknown as VelaOhlcv[]));
+              secondaryData.set(key,normalizeVelaBarsToCoreSpirit(rows as unknown as VelaOhlcv[]));
               secondaryGraphDirty=true;
             }
             secondaryFailed.delete(key);
@@ -374,7 +334,16 @@ export class CoreSpiritVelaEngine {
         readOnly,
         suppressExternalEffectsForRun,
         runtimeOptions,
-      }).then(result => ({ ...result, datasetVersion, sourceDatasetRevision }));
+      }).then(result => {
+        // One adapter owns the CoreSpirit(epoch-seconds) → Vela(epoch-milliseconds)
+        // boundary. Validate plot timestamps against the exact input timeline before
+        // the retained scene is mutated; a stale/misaligned point must never be rendered.
+        const adapted = adaptCoreSpiritOutputsForVela(result.outputs, currentBars);
+        for (const warning of adapted.warnings) {
+          handlers.onWarning?.({ message: warning, method: 'output-alignment', bar: Math.max(0, currentBars.length - 1) });
+        }
+        return { ...result, outputs: adapted.outputs, datasetVersion, sourceDatasetRevision };
+      });
     };
 
     const safeOutputs = (outputs: CoreSpiritObject[]): CoreSpiritObject[] =>
