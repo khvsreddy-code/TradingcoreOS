@@ -94,8 +94,8 @@ function barTimeMillis(bar: Pick<CoreSpiritMarketBar, 'timestamp'>): number {
   return coreSpiritTimeToVelaMillis(bar.timestamp);
 }
 
-function normalizeTimeFields(value: unknown, parent?: Record<string, unknown>): unknown {
-  if (Array.isArray(value)) return value.map(item => normalizeTimeFields(item, parent));
+function normalizeTimeFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(item => normalizeTimeFields(item));
   if (!value || typeof value !== 'object') return value;
   const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
@@ -110,7 +110,7 @@ function normalizeTimeFields(value: unknown, parent?: Record<string, unknown>): 
       const normalized = coreSpiritTimeToVelaMillis(child);
       output[key] = Number.isFinite(normalized) ? normalized : child;
     } else {
-      output[key] = normalizeTimeFields(child, input);
+      output[key] = normalizeTimeFields(child);
     }
   }
   return output;
