@@ -40,12 +40,37 @@ function priceY(args: RendererLayerArgs, value: unknown): number | null {
   return Number.isFinite(y) ? y : null;
 }
 
-function canvasWidth(args: RendererLayerArgs): number {
-  return Math.max(0, args.coords.width);
+type MappedPoint = Readonly<{ x: number; y: number }>;
+
+/** Use Vela's shared transforms for time/bar/price, with explicit pixel-space support. */
+function visualPoint(args: RendererLayerArgs, raw: unknown): MappedPoint | null {
+  const point = objectValue(raw);
+  if (!point) return null;
+  const x = Number(point.x), y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const space = String(point.space ?? 'time');
+  let px: number | null, py: number | null;
+  if (space === 'screen') {
+    px = x; py = y;
+  } else if (space === 'normalized') {
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    px = x * args.coords.width; py = y * args.coords.height;
+  } else if (space === 'percentage') {
+    if (x < 0 || x > 100 || y < 0 || y > 100) return null;
+    px = x * args.coords.width / 100; py = y * args.coords.height / 100;
+  } else if (space === 'bar') {
+    px = args.coords.logicalToX(x); py = priceY(args, y);
+  } else if (space === 'time' || space === 'price') {
+    px = timeX(args, x); py = priceY(args, y);
+  } else {
+    return null;
+  }
+  if (px == null || py == null || !Number.isFinite(px) || !Number.isFinite(py)) return null;
+  return { x: px, y: py };
 }
 
-function barWidth(args: RendererLayerArgs): number {
-  return Math.max(1, Math.min(36, args.coords.bodySpacing() || args.coords.pxPerBar() || 6));
+function canvasWidth(args: RendererLayerArgs): number {
+  return Math.max(0, args.coords.width);
 }
 
 function alpha(ctx: CanvasRenderingContext2D, value: unknown): number {
@@ -192,16 +217,60 @@ function drawBarTint(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj
   ctx.restore();
 }
 
-function drawBand(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: Record<string, any>): void {
-  const x = timeX(args, obj.time);
-  const top = priceY(args, obj.top), bottom = priceY(args, obj.bottom);
-  if (x == null || top == null || bottom == null) return;
-  const width = Math.max(1, args.coords.pxPerBar());
-  const st = objectValue(obj.style) ?? {};
-  ctx.save(); ctx.globalAlpha = alpha(ctx, st.fillOpacity ?? st.opacity ?? 0.18);
-  ctx.fillStyle = String(st.fillColor ?? st.color ?? '#60a5fa');
-  ctx.fillRect(x - width / 2, Math.min(top, bottom), width, Math.abs(bottom - top));
-  ctx.restore();
+function drawBands(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, bands: readonly Record<string, any>[]): void {
+  const grouped = new Map<string, Record<string, any>[]>();
+  for (const band of bands) {
+    const key = String(band.id ?? 'band');
+    const list = grouped.get(key) ?? [];
+    list.push(band);
+    grouped.set(key, list);
+  }
+  for (const items of grouped.values()) {
+    items.sort((a, b) => timeMillis(a.time) - timeMillis(b.time));
+    const mapped = items.flatMap(item => {
+      const x = timeX(args, item.time);
+      const top = item.top == null ? null : priceY(args, item.top);
+      const bottom = item.bottom == null ? null : priceY(args, item.bottom);
+      return x == null || top == null || bottom == null ? [] : [{ x, top, bottom, item }];
+    });
+    if (!mapped.length) continue;
+    const style = objectValue(mapped[0]!.item.style) ?? {};
+    if (mapped.length === 1) {
+      const point = mapped[0]!;
+      const width = Math.max(1, args.coords.pxPerBar());
+      ctx.save();
+      ctx.globalAlpha = alpha(ctx, style.fillOpacity ?? style.opacity ?? 0.18);
+      ctx.fillStyle = String(style.fillColor ?? style.color ?? '#60a5fa');
+      ctx.fillRect(point.x - width / 2, Math.min(point.top, point.bottom), width, Math.abs(point.top - point.bottom));
+      ctx.restore();
+      continue;
+    }
+    ctx.save();
+    ctx.beginPath();
+    mapped.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.top) : ctx.lineTo(point.x, point.top));
+    for (let index = mapped.length - 1; index >= 0; index--) ctx.lineTo(mapped[index]!.x, mapped[index]!.bottom);
+    ctx.closePath();
+    const ys = mapped.flatMap(point => [point.top, point.bottom]);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (style.fillColor2 && style.fillColor && maxY > minY) {
+      const gradient = ctx.createLinearGradient(0, minY, 0, maxY);
+      gradient.addColorStop(0, String(style.fillColor));
+      gradient.addColorStop(1, String(style.fillColor2));
+      ctx.fillStyle = gradient;
+    } else ctx.fillStyle = String(style.fillColor ?? style.color ?? '#60a5fa');
+    ctx.globalAlpha = alpha(ctx, style.fillOpacity ?? style.opacity ?? 0.18);
+    ctx.fill();
+    ctx.globalAlpha = alpha(ctx, style.opacity);
+    ctx.strokeStyle = String(style.color ?? style.fillColor ?? '#60a5fa');
+    ctx.lineWidth = Math.max(1, Number(style.lineWidth ?? 1));
+    ctx.beginPath();
+    mapped.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.top) : ctx.lineTo(point.x, point.top));
+    ctx.stroke();
+    ctx.beginPath();
+    mapped.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.bottom) : ctx.lineTo(point.x, point.bottom));
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawFootprint(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: Record<string, any>): void {
@@ -223,7 +292,7 @@ function drawFootprint(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, o
     ctx.fillRect(x - width, y - h / 2, width * Math.max(0.04, buy / maximum), h);
     ctx.fillStyle = '#dc2626'; ctx.globalAlpha = 0.18 + 0.72 * sell / total;
     ctx.fillRect(x, y - h / 2, width * Math.max(0.04, sell / maximum), h);
-    ctx.globalAlpha = 0.95; ctx.fillStyle = args.theme.foreground;
+    ctx.globalAlpha = 0.95; ctx.fillStyle = String((args.theme as any).foreground ?? '#fff');
     ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(String(Math.round(buy - sell)), x + width * Math.max(0.04, sell / maximum) + 2, y);
   }
@@ -289,20 +358,73 @@ function drawTables(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, tabl
   }
 }
 
+function drawMappedShape(ctx: CanvasRenderingContext2D, point: MappedPoint, style: Record<string, any>): void {
+  const radius = Math.max(2, Math.min(18, Number(style.size ?? 6)));
+  const kind = String(style.shape ?? 'circle');
+  ctx.save();
+  ctx.globalAlpha = alpha(ctx, style.opacity);
+  ctx.fillStyle = String(style.fillColor ?? style.background ?? style.color ?? '#9b8aff');
+  ctx.strokeStyle = String(style.borderColor ?? style.color ?? '#9b8aff');
+  ctx.lineWidth = Math.max(1, Number(style.borderWidth ?? style.lineWidth ?? 1));
+  ctx.beginPath();
+  if (kind === 'square') ctx.rect(point.x - radius, point.y - radius, radius * 2, radius * 2);
+  else if (kind === 'diamond') { ctx.moveTo(point.x, point.y - radius * 1.3); ctx.lineTo(point.x + radius, point.y); ctx.lineTo(point.x, point.y + radius * 1.3); ctx.lineTo(point.x - radius, point.y); ctx.closePath(); }
+  else if (kind === 'cross') { ctx.moveTo(point.x - radius, point.y); ctx.lineTo(point.x + radius, point.y); ctx.moveTo(point.x, point.y - radius); ctx.lineTo(point.x, point.y + radius); }
+  else ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  if (kind === 'cross') ctx.stroke(); else { ctx.fill(); ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawMappedLine(ctx: CanvasRenderingContext2D, from: MappedPoint, to: MappedPoint, style: Record<string, any>): void {
+  ctx.save();
+  ctx.strokeStyle = String(style.color ?? '#9b8aff');
+  ctx.lineWidth = Math.max(1, Math.min(8, Number(style.lineWidth ?? 2)));
+  ctx.globalAlpha = alpha(ctx, style.opacity);
+  ctx.setLineDash(style.lineStyle === 1 ? [6, 4] : style.lineStyle === 2 ? [2, 3] : []);
+  ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+  ctx.restore();
+}
+
 function drawCustomVisual(ctx: CanvasRenderingContext2D, args: RendererLayerArgs, obj: Record<string, any>): void {
   const geometry = objectValue(obj.geometry);
   if (!geometry) return;
+  const style = objectValue(obj.style) ?? {};
   if (geometry.kind === 'point') {
-    const point = objectValue(geometry.point);
-    if (point) drawShape(ctx, args, { kind: 'shape', time: point.time ?? point.x, price: point.price ?? point.y, shape: 'circle', style: obj.style, metadata: obj.metadata });
-  } else if (geometry.kind === 'line') {
-    const from = objectValue(geometry.from), to = objectValue(geometry.to);
-    if (from && to) drawArrow(ctx, args, { kind: 'arrow', start: { time: from.time ?? from.x, price: from.price ?? from.y }, end: { time: to.time ?? to.x, price: to.price ?? to.y }, style: obj.style });
-  } else if (geometry.kind === 'box') {
-    const from = objectValue(geometry.from), to = objectValue(geometry.to);
-    if (from && to) drawRect(ctx, args, { kind: 'box', left: from.time ?? from.x, right: to.time ?? to.x, top: Math.max(Number(from.price ?? from.y), Number(to.price ?? to.y)), bottom: Math.min(Number(from.price ?? from.y), Number(to.price ?? to.y)), style: obj.style });
+    const point = visualPoint(args, geometry.point);
+    if (point) drawMappedShape(ctx, point, style);
+  } else if (geometry.kind === 'line' || geometry.kind === 'box') {
+    const from = visualPoint(args, geometry.from), to = visualPoint(args, geometry.to);
+    if (!from || !to) return;
+    if (geometry.kind === 'line') drawMappedLine(ctx, from, to, style);
+    else {
+      const x = Math.min(from.x, to.x), y = Math.min(from.y, to.y);
+      const width = Math.abs(to.x - from.x), height = Math.abs(to.y - from.y);
+      ctx.save();
+      ctx.globalAlpha = alpha(ctx, style.fillOpacity ?? style.opacity ?? 0.14);
+      ctx.fillStyle = String(style.fillColor ?? style.color ?? '#2563eb');
+      ctx.fillRect(x, y, width, height);
+      ctx.globalAlpha = alpha(ctx, style.opacity);
+      ctx.strokeStyle = String(style.borderColor ?? style.color ?? '#2563eb');
+      ctx.lineWidth = Math.max(1, Number(style.borderWidth ?? style.lineWidth ?? 1));
+      ctx.strokeRect(x, y, width, height);
+      ctx.restore();
+    }
   } else if (geometry.kind === 'polygon' && Array.isArray(geometry.points)) {
-    drawPolyline(ctx, args, { kind: 'polygon', points: geometry.points, style: obj.style, closed: true }, true);
+    const points = geometry.points.map((point: unknown) => visualPoint(args, point));
+    if (points.length < 3 || points.some(point => point == null)) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(points[0]!.x, points[0]!.y);
+    for (let index = 1; index < points.length; index++) ctx.lineTo(points[index]!.x, points[index]!.y);
+    ctx.closePath();
+    ctx.fillStyle = String(style.fillColor ?? 'rgba(155,138,255,0.12)');
+    ctx.globalAlpha = alpha(ctx, style.fillOpacity ?? style.opacity ?? 0.12);
+    ctx.fill();
+    ctx.globalAlpha = alpha(ctx, style.opacity);
+    ctx.strokeStyle = String(style.color ?? style.borderColor ?? '#9b8aff');
+    ctx.lineWidth = Math.max(1, Number(style.lineWidth ?? 1));
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -323,10 +445,10 @@ export function paintCoreSpiritVelaOutputLayer(
     else if (obj.kind === 'polyline' || obj.kind === 'polygon') drawPolyline(ctx, args, obj, obj.kind === 'polygon');
     else if (obj.kind === 'hline') drawHLine(ctx, args, obj);
     else if (obj.kind === 'background' || obj.kind === 'barcolor') drawBarTint(ctx, args, obj);
-    else if (obj.kind === 'band') drawBand(ctx, args, obj);
     else if (obj.kind === 'footprint') drawFootprint(ctx, args, obj);
     else if (obj.kind === 'customVisual') drawCustomVisual(ctx, args, obj);
   }
+  drawBands(ctx, data.visuals.filter((item): item is Extract<CoreSpiritObject, { kind: 'band' }> => item.kind === 'band') as readonly Record<string, any>[]);
   for (const label of data.labels) drawLabel(ctx, args, label as unknown as Record<string, any>);
   drawTables(ctx, args, data.tables as readonly Record<string, any>[]);
   ctx.restore();
