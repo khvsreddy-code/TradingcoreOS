@@ -90,7 +90,17 @@ export class CoreSpiritIncrementalSmoother {
         !Number.isFinite(snapshot.seedSum) ||
         (snapshot.previous !== null && !Number.isFinite(snapshot.previous)) ||
         (snapshot.currentBarIndex !== null && (!Number.isSafeInteger(snapshot.currentBarIndex) || snapshot.currentBarIndex < 0)) ||
-        (snapshot.currentValue !== null && !Number.isFinite(snapshot.currentValue) && !Number.isNaN(snapshot.currentValue))) {
+        (snapshot.currentValue !== null && !Number.isFinite(snapshot.currentValue) && !Number.isNaN(snapshot.currentValue)) ||
+        ((snapshot.currentBarIndex === null) !== (snapshot.stateBeforeCurrent === null)) ||
+        ((snapshot.currentBarIndex === null) !== (snapshot.currentValue === null)) ||
+        (snapshot.currentBarIndex !== null && snapshot.nextBarIndex !== snapshot.currentBarIndex + 1) ||
+        (snapshot.stateBeforeCurrent !== null && (
+          !Number.isInteger(snapshot.stateBeforeCurrent.seedCount) ||
+          snapshot.stateBeforeCurrent.seedCount < 0 ||
+          snapshot.stateBeforeCurrent.seedCount >= this.period ||
+          !Number.isFinite(snapshot.stateBeforeCurrent.seedSum) ||
+          (snapshot.stateBeforeCurrent.previous !== null && !Number.isFinite(snapshot.stateBeforeCurrent.previous))
+        ))) {
       throw new Error('incompatible or invalid smoother checkpoint');
     }
     this.nextBarIndex = snapshot.nextBarIndex;
@@ -98,7 +108,6 @@ export class CoreSpiritIncrementalSmoother {
     this.currentBarIndex = snapshot.currentBarIndex;
     this.currentValue = snapshot.currentValue;
     this.stateBeforeCurrent = snapshot.stateBeforeCurrent ? { ...snapshot.stateBeforeCurrent } : null;
-    if ((this.currentBarIndex === null) !== (this.stateBeforeCurrent === null)) throw new Error('checkpoint has inconsistent forming-bar state');
   }
 
   reset(): void {
