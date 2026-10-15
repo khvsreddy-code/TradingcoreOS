@@ -4,6 +4,43 @@ import { CoreDrawingDispatcher } from '../core/drawing/drawingDispatcher';
 import { CoreSpiritObject } from './types';
 
 export type CoreSpiritPlotPoint = { time: number; value: number | null };
+function canonicalSecondsTime(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return Number.NaN;
+  return Math.abs(numeric) >= 1e11 ? numeric / 1000 : numeric;
+}
+
+function upsertPlotPoint(points: CoreSpiritPlotPoint[], point: CoreSpiritPlotPoint): void {
+  if (!Number.isFinite(point.time)) return;
+  let low = 0, high = points.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (points[middle]!.time < point.time) low = middle + 1;
+    else high = middle;
+  }
+  if (low < points.length && points[low]!.time === point.time) points[low] = point;
+  else points.splice(low, 0, point);
+}
+
+function signalIdentity(output: Extract<CoreSpiritObject, { kind: 'signal' }>): string {
+  const metadata = output.metadata ?? {};
+  const stableId = metadata.signalId ?? metadata.outputId ?? metadata.intentId;
+  return stableId != null
+    ? `id:${String(stableId)}`
+    : `bar:${canonicalSecondsTime(output.time)}:${String(output.type)}:${String(metadata.barIndex ?? '')}`;
+}
+
+function visualIdentity(output: CoreSpiritObject, fallback: string): string {
+  const value = output as any;
+  const id = String(value.id ?? fallback);
+  // These kinds are emitted once per bar under a stable series-style identifier:
+  // upsert by (id,time) so a forming-bar replacement does not erase prior bars.
+  if (['band','shape','background','barcolor','footprint'].includes(output.kind) && Number.isFinite(Number(value.time))) {
+    return `${id}@${canonicalSecondsTime(value.time)}`;
+  }
+  return id;
+}
+
 export type CoreSpiritOutputFrame = {
   /** Plot arrays are dispatcher-owned and retained across frames. Consumers must treat them as read-only. */
   plots: Map<string, CoreSpiritPlotPoint[]>;
@@ -40,14 +77,14 @@ export class CoreSpiritOutputDispatcher {
       if (output.kind === 'series') {
         const key = output.seriesId || output.name || `${sourceId}:plot:0`;
         const points = this.plots.get(key) || [];
-        points.push({ time: output.time, value: output.value });
+        upsertPlotPoint(points, { time: canonicalSecondsTime(output.time), value: output.value });
         if (points.length > 50000) points.splice(0, points.length - 50000);
         this.plots.set(key, points);
         if (output.style) this.plotStyles.set(key, output.style);
       } else if (output.kind === 'line' || output.kind === 'zone' || output.kind === 'marker' || output.kind === 'polyline' || output.kind === 'hline') {
-        const id = (output as any).id || `${output.kind}:${this.outputDrawings.length}`;
-        const idx = this.outputDrawings.findIndex(x => (x as any).id === id);
-        if (idx >= 0 && output.kind !== 'marker') this.outputDrawings[idx] = output; else this.outputDrawings.push(output);
+        const id = visualIdentity(output, `${output.kind}:${(output as any).time ?? this.outputDrawings.length}`);
+        const idx = this.outputDrawings.findIndex(x => visualIdentity(x, '') === id);
+        if (idx >= 0) this.outputDrawings[idx] = output; else this.outputDrawings.push(output);
         if (output.kind === 'line' || output.kind === 'zone' || output.kind === 'marker') this.drawingDispatcher.accept(output, sourceId, 'script');
       } else if (output.kind === 'label') {
         const idx = this.labels.findIndex(x => x.id === output.id);
@@ -63,18 +100,24 @@ export class CoreSpiritOutputDispatcher {
         if (idx >= 0 && !['band','shape','background','barcolor'].includes(output.kind)) this.visuals[idx] = output; else this.visuals.push(output);
         if (this.visuals.length > 25000) this.visuals.splice(0, this.visuals.length - 25000);
       } else if (output.kind === 'signal') {
-        this.signals.push(output);
+        const identity = signalIdentity(output);
+        const existing = this.signals.findIndex(item => item.kind === 'signal' && signalIdentity(item as Extract<CoreSpiritObject,{kind:'signal'}>) === identity);
+        if (existing >= 0) this.signals[existing] = output;
+        else this.signals.push(output);
         if (this.signals.length > 10000) this.signals.splice(0, this.signals.length - 10000);
       } else if (output.kind === 'orderIntent') {
         // Execution remains outside the chart renderer. The visual projection shows
         // the intent as a marker while the event bus/execution layer decides whether
         // anything may actually be sent to a broker.
-        this.signals.push({
+        const projected: Extract<CoreSpiritObject, { kind: 'signal' }> = {
           kind: 'signal',
           time: output.time,
           type: output.side === 'flat' ? 'EXIT' : output.side === 'long' ? 'ENTRY LONG' : 'ENTRY SHORT',
           metadata: { ...(output.metadata || {}), intentId: output.id, confidence: output.confidence, position: output.side === 'short' ? 'above' : 'below', shape: output.side === 'short' ? 'arrowDown' : 'arrowUp', color: output.side === 'short' ? '#ef4444' : '#22c55e' },
-        });
+        };
+        const identity = signalIdentity(projected);
+        const existing = this.signals.findIndex(item => item.kind === 'signal' && signalIdentity(item as Extract<CoreSpiritObject,{kind:'signal'}>) === identity);
+        if (existing >= 0) this.signals[existing] = projected; else this.signals.push(projected);
         if (this.signals.length > 10000) this.signals.splice(0, this.signals.length - 10000);
       }
     }
