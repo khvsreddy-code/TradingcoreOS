@@ -327,6 +327,42 @@ export class CoreSpiritRuntime {
       : undefined;
   }
 
+  /**
+   * Detect a historical correction before executeIr resets state. Index-stable edits
+   * get an explicit causal plan; structural timeline changes stay on full replay.
+   * When no safe restore point is being used, execution deliberately replays from bar zero.
+   */
+  private planHistoricalCorrection(
+    previousIr: CoreSpiritIrProgram | undefined,
+    previousBars: readonly HistoricalCandle[],
+    nextIr: CoreSpiritIrProgram,
+    nextBars: readonly HistoricalCandle[],
+  ): CoreSpiritDirtyExecutionPlan | undefined {
+    if (previousIr !== nextIr || previousBars.length === 0 || previousBars.length !== nextBars.length || !this.dirtyGraph) {
+      return undefined;
+    }
+    let from = nextBars.length;
+    let to = -1;
+    const changedSources = new Set<ReturnType<typeof dirtySourcesForBar>[number]>();
+    for (let i = 0; i < nextBars.length; i += 1) {
+      const previous = previousBars[i]!;
+      const current = nextBars[i]!;
+      // Timestamp changes or reordering invalidate index identity; executeIr still
+      // rebuilds the complete dataset, but we do not advertise a localized range.
+      if (this.toEpoch(previous.timestamp) !== this.toEpoch(current.timestamp)) return undefined;
+      const changed = dirtySourcesForBar(
+        { time:this.toEpoch(previous.timestamp), open:Number(previous.open), high:Number(previous.high), low:Number(previous.low), close:Number(previous.close), volume:Number(previous.volume) },
+        { time:this.toEpoch(current.timestamp), open:Number(current.open), high:Number(current.high), low:Number(current.low), close:Number(current.close), volume:Number(current.volume) },
+      );
+      if (!changed.length) continue;
+      from = Math.min(from, i);
+      to = Math.max(to, i + 1);
+      for (const source of changed) changedSources.add(source);
+    }
+    if (to <= from) return undefined;
+    return this.dirtyGraph.planCorrection([...changedSources], { from, to }, nextBars.length);
+  }
+
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
     const compiled = this.profiler.measureCompile(() => this.compiler.compile(program.ast, program.id || this.options.sourceId, { layer:this.layer, surface:program.surface }));
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
@@ -690,11 +726,19 @@ export class CoreSpiritRuntime {
   }
 
   executeIr(ir: CoreSpiritIrProgram, bars: HistoricalCandle[]): CoreSpiritExecutionResult {
+    const previousIr = this.compiledIr;
+    const previousBars = this.history.map(bar => ({ ...bar }));
     this.viewportMemo.clear();
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
     this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.installDirtyGraph(ir); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan);
+    const historicalCorrectionPlan = this.planHistoricalCorrection(previousIr, previousBars, ir, bars);
+    const priorEffectSuppression = this.suppressExternalEffects;
+    // Corrections rebuild semantic state without firing the same order intents,
+    // alerts, webhooks, or host events a second time.
+    if (historicalCorrectionPlan) this.suppressExternalEffects = true;
+    try {
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
       this.profiler.beginBar('historical', ir.entry.instructions.length);
@@ -715,7 +759,11 @@ export class CoreSpiritRuntime {
       finally { this.profiler.endBar(); }
     }
     if (this.history.length) this.snapshotKernelsForBar(this.history.length - 1);
+    if (historicalCorrectionPlan) this.lastDirtyPlan = historicalCorrectionPlan;
     return { outputs, state: this.getState(), diagnostics };
+    } finally {
+      this.suppressExternalEffects = priorEffectSuppression;
+    }
   }
 
   getProfilerSnapshot(): CoreSpiritProfilerSnapshot { return this.profiler.snapshot(); }

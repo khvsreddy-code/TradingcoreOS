@@ -16,7 +16,7 @@ export function buildCoreSpiritSemanticFingerprint(options:{layer?:string;compon
   const componentContracts=componentSource && typeof componentSource==='object' && 'listContracts' in componentSource
     ? (componentSource as any).listContracts()
     : componentSource;
-  return JSON.stringify({compilerPipeline:'semantic-v2',layer:options.layer || 'script',components:componentContracts});
+  return JSON.stringify({compilerPipeline:'semantic-v3',layer:options.layer || 'script',components:componentContracts});
 }
 
 export function buildCoreSpiritArtifactLookupIdentity(
