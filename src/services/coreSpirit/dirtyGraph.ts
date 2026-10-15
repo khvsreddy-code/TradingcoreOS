@@ -220,6 +220,30 @@ export class CoreSpiritDirtyGraph {
       reason: !requiresStateRestore ? 'stateless-range'
         : checkpointIsSafe ? 'checkpoint-replay' : 'full-replay-no-safe-checkpoint',
     });
+    if (requiresStateRestore && !checkpointIsSafe) {
+      // A recursive kernel's internal state cannot be reconstructed by patching
+      // only the corrected output range. Without a pre-correction checkpoint,
+      // replay every graph node from bar zero; never expose a partial plan that
+      // looks incremental but leaves downstream state stale.
+      const full = this.planFull(end);
+      return { ...full, sourceFields: base.sourceFields, correction };
+    }
+
+    if (requiresStateRestore && checkpointIsSafe) {
+      // Replaying from a checkpoint means affected nodes must be evaluated from
+      // that checkpoint, not merely from the corrected candle. Restrict this to
+      // the causally affected subgraph so unrelated indicators remain reusable.
+      const ranges = new Map<string, CoreSpiritDirtyRange>();
+      for (const id of base.nodes) ranges.set(id, { from: replayFrom, to: end });
+      return {
+        ...base,
+        ranges,
+        earliest: ranges.size ? replayFrom : base.earliest,
+        latest: ranges.size ? end : base.latest,
+        correction,
+      };
+    }
+
     return { ...base, correction };
   }
 
