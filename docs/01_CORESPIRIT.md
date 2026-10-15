@@ -483,7 +483,7 @@ A render/frame notification must not compile or evaluate a script. A viewport no
 
 ### Canonical data ownership
 
-The active chart/data provider and TradingCoreOS canonical data plane own the source timeline. CoreSpirit receives an immutable run snapshot and owns only its artifact, execution state/checkpoints, and derived outputs. A runtime snapshot is not an independently mutable second history store; refresh it only when the host's dataset revision changes.
+The active chart/data provider and TradingCoreOS canonical data plane own the source timeline. CoreSpirit receives an immutable run snapshot and owns only its artifact, execution state/checkpoints, and derived outputs. The Vela engine's normalized-bar cache is a derived adapter cache, not an authoritative market-data store; its rows and returned snapshot are immutable to asynchronous run consumers. A runtime snapshot is not an independently mutable second history store; refresh it only when the host's dataset revision changes. The adapter normalizes the forming bar and newly appended rows incrementally, then returns a frozen snapshot so an in-flight worker cannot observe later cache edits.
 
 For high-frequency updates, read the host's current bar accessor once to form a stable worker request. Do not repeatedly clone the complete candle array just to paint a frame. Historical completion/backfill may fingerprint or normalize full history; a normal forming-bar tick should use bounded tail/revision checks.
 
@@ -499,7 +499,7 @@ For high-frequency updates, read the host's current bar accessor once to form a 
 
 ### Compute and render have separate schedules
 
-Worker execution produces a fully validated output snapshot. Vela-facing adapters compare its `streamId`, `datasetRevision`, and `outputRevision` before committing it. Delayed or duplicate responses cannot overwrite a newer scene. The chart-output controller coalesces pending snapshots and performs one render-boundary commit; if the commit fails, it attempts to restore the previous committed snapshot. The rendering path performs no compiler or VM work.
+Worker execution produces a fully validated output snapshot. Vela-facing adapters compare its `streamId`, `datasetRevision`, and `outputRevision` before committing it. Delayed or duplicate responses cannot overwrite a newer scene. The chart-output controller atomically publishes the newest accepted snapshot into Vela's native model; Vela's own renderer scheduler coalesces repaint work into its next frame. The TCO adapter does not add a second `requestAnimationFrame` loop, create an overlay canvas, or evaluate scripts from a render callback. If a model update fails, the adapter attempts to restore the previous committed snapshot.
 
 The CoreSpirit output dispatcher upserts series values by timestamp rather than treating every update to the forming candle as an append. Stable signal and visual identities similarly replace their developing-bar value rather than accumulating duplicate chart objects.
 
