@@ -68,5 +68,7 @@ assert.match(bridge,/source !== this\.editor\.getSource\(\)/,'Run must reject so
 assert.match(bridge,/compiled\.artifact\.abi\.sourceHash !== expectedSourceHash/,'Run must reject a prepared artifact compiled from another source revision');
 assert.match(bridge,/sourceVersion !== this\.editor\.getVersion\(\)/,'outputs must be discarded if the source changes during asynchronous execution');
 assert.match(bridge,/artifactHash: compiled\.artifact\?\.abi\.artifactHash/,'runtime output must expose the exact artifact identity that produced it');
+assert.match(editor,/Executed artifact/,'runtime inspector must surface the exact executed source and artifact revision');
+assert.match(editor,/runtimeInspector\.run\.sourceHash/,'runtime inspector must show the source hash associated with chart outputs');
 assert.match(editor,/artifactHash/,'editor must retain/expose verified artifact identity');
 console.log('CORESPIRIT_EDITOR_OFF_THREAD_PIPELINE_OK');
