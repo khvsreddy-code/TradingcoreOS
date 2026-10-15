@@ -74,6 +74,7 @@ type WorkerJob = {
   graphBaseTimeframe?:string;
   hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
   readOnly:boolean;
+  suppressExternalEffectsForRun?:boolean;
   runtimeOptions?:CoreSpiritWorkerRuntimeOptions;
 };
 
@@ -95,6 +96,7 @@ type WorkerRunEnvelope = {
   dirtyTo:number;
   mode:'historical'|'incremental';
   readOnly:boolean;
+  suppressExternalEffectsForRun?:boolean;
   sharedMarket?:CoreSpiritSharedMarketDescriptor;
   bars?:CoreSpiritMarketBar[];
   graphSnapshot?:CoreSpiritGraphSnapshot;
@@ -147,7 +149,7 @@ export class CoreSpiritWorkerPool {
     source:string,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
   ):Promise<CoreSpiritWorkerRunResult> {
     const [{loadOrCompileCoreSpiritArtifact},{compileCoreSpiritArtifactOffThread}]=await Promise.all([
       import('./artifactCache'),
@@ -165,7 +167,7 @@ export class CoreSpiritWorkerPool {
     source:string|undefined,
     bars:CoreSpiritMarketBar[],
     sourceId='coreSpirit',
-    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
+    options?:{contextKey?:string;datasetVersion?:number;dirtyRange?:DirtyRange;graphSnapshot?:CoreSpiritGraphSnapshot;graphBaseSymbol?:string;graphBaseTimeframe?:string;hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];readOnly?:boolean;suppressExternalEffectsForRun?:boolean;runtimeOptions?:CoreSpiritWorkerRuntimeOptions},
   ):Promise<CoreSpiritWorkerRunResult> {
     if(this.disposed) return Promise.reject(new Error('CoreSpirit worker pool disposed'));
     if(typeof Worker==='undefined'){
@@ -179,7 +181,7 @@ export class CoreSpiritWorkerPool {
         artifact,bars,sourceId,options?.contextKey||sourceId,
         Math.max(1,Math.floor(options?.datasetVersion||1)),options?.dirtyRange,
         options?.graphSnapshot,options?.graphBaseSymbol,options?.graphBaseTimeframe,
-        options?.hmmArtifacts,options?.runtimeOptions,options?.readOnly===true,
+        options?.hmmArtifacts,options?.runtimeOptions,options?.readOnly===true,options?.suppressExternalEffectsForRun===true,
       );
     }
 
@@ -205,6 +207,7 @@ export class CoreSpiritWorkerPool {
         graphBaseTimeframe:options?.graphBaseTimeframe,
         hmmArtifacts:options?.hmmArtifacts,
         readOnly:options?.readOnly===true,
+        suppressExternalEffectsForRun:options?.suppressExternalEffectsForRun===true,
         runtimeOptions:options?.runtimeOptions,
       };
 
@@ -384,6 +387,7 @@ export class CoreSpiritWorkerPool {
       dirtyTo:job.dirtyRange?.to ?? job.bars.length,
       mode,
       readOnly:job.readOnly,
+      suppressExternalEffectsForRun:job.suppressExternalEffectsForRun===true,
       ...(sharedMarket?{sharedMarket}:{bars:job.bars}),
     };
 
@@ -425,6 +429,7 @@ export class CoreSpiritWorkerPool {
     hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[],
     runtimeOptions?:CoreSpiritWorkerRuntimeOptions,
     readOnly=false,
+    suppressExternalEffectsForRun=false,
   ):Promise<CoreSpiritWorkerRunResult>{
     const { CoreSpiritRuntime } = await import('./runtime');
     const artifactId=artifactIdFor(artifact);
@@ -479,7 +484,9 @@ export class CoreSpiritWorkerPool {
     if(incremental){
       const latest=bars.at(-1);
       if(!latest)throw new Error('CoreSpirit worker received an empty market dataset');
-      result=context.runtime.executeBar(latest,'realtime');
+      result=suppressExternalEffectsForRun
+        ? context.runtime.executeBarReadOnly(latest,'realtime')
+        : context.runtime.executeBar(latest,'realtime');
     }else{
       // An incremental tick can be the first request after a runtime-settings
       // change. Its full-history reconstruction is a baseline, not a live run.

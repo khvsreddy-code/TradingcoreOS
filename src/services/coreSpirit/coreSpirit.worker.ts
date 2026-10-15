@@ -76,6 +76,7 @@ type RunMessage={
   dirtyTo:number;
   mode:'historical'|'incremental';
   readOnly:boolean;
+  suppressExternalEffectsForRun?:boolean;
   sharedMarket?:CoreSpiritSharedMarketDescriptor;
   bars?:CoreSpiritMarketBar[];
 };
@@ -252,7 +253,9 @@ self.onmessage=(event:MessageEvent<Message>)=>{
     }else{
       const latest=context.bars.at(-1);
       if(!latest)throw new Error('CoreSpirit worker received an empty market dataset');
-      result=context.runtime.executeBar(latest,'realtime');
+      result=message.suppressExternalEffectsForRun
+        ? context.runtime.executeBarReadOnly(latest,'realtime')
+        : context.runtime.executeBar(latest,'realtime');
     }
 
     context.datasetVersion=message.datasetVersion;

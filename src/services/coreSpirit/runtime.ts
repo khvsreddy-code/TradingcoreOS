@@ -465,6 +465,17 @@ export class CoreSpiritRuntime {
   }
 
   /** Execute a host-supplied tick against the current realtime bar. The VM remains socket-free. */
+  /** Re-evaluate the live bar during recovery without replaying orders or external events. */
+  executeBarReadOnly(bar: HistoricalCandle, profilePhase: 'historical'|'realtime' = 'realtime'): CoreSpiritExecutionResult {
+    const previous = this.suppressExternalEffects;
+    this.suppressExternalEffects = true;
+    try {
+      return this.executeBar(bar, profilePhase);
+    } finally {
+      this.suppressExternalEffects = previous;
+    }
+  }
+
   executeTick(tick: CoreSpiritTick, baseBar: HistoricalCandle, historicalTick = false): CoreSpiritExecutionResult {
     const price = Number(tick.price);
     if (!Number.isFinite(price)) throw new Error('invalid realtime tick price');

@@ -19,6 +19,8 @@ export type CoreSpiritWorkerRunOptions = {
   hmmArtifacts?:readonly CoreSpiritHMMArtifactBinding[];
   /** Read-only history/range evaluation must suppress side effects. */
   readOnly?:boolean;
+  /** Suppress effects for one incremental bar while retaining its runtime context. */
+  suppressExternalEffectsForRun?:boolean;
   /** Serializable Vela session configuration; changes reset the persistent runtime. */
   runtimeOptions?:CoreSpiritWorkerRuntimeOptions;
 };
@@ -63,6 +65,7 @@ export async function runCoreSpiritArtifactInWorker(
     graphBaseTimeframe:options.baseTimeframe,
     hmmArtifacts:options.hmmArtifacts,
     readOnly:options.readOnly,
+    suppressExternalEffectsForRun:options.suppressExternalEffectsForRun,
     runtimeOptions:options.runtimeOptions,
   });
 }

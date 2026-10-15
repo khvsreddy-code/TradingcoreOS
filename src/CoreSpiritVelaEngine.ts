@@ -348,6 +348,7 @@ export class CoreSpiritVelaEngine {
       readOnly:boolean,
       dirtyBarRange:ExecutionBarRange,
       visibleRange?:VelaTimeRange,
+      suppressExternalEffectsForRun=false,
     )=>{
       const datasetVersion=(workerDatasetVersions.get(contextKey)??0)+1;
       workerDatasetVersions.set(contextKey,datasetVersion);
@@ -371,6 +372,7 @@ export class CoreSpiritVelaEngine {
         baseTimeframe:req.market.timeframe,
         graphSnapshot:makeSecondaryGraphSnapshot(),
         readOnly,
+        suppressExternalEffectsForRun,
         runtimeOptions,
       }).then(result => ({ ...result, datasetVersion, sourceDatasetRevision }));
     };
@@ -437,7 +439,7 @@ export class CoreSpiritVelaEngine {
       return `${candidateBars.length}:${hash>>>0}`;
     };
 
-    const evaluateLiveSnapshot=async(startingBars:CoreSpiritMarketBar[],generation:number)=>{
+    const evaluateLiveSnapshot=async(startingBars:CoreSpiritMarketBar[],generation:number,suppressTailEffectsForRun=false)=>{
       let currentBars=startingBars;
       let baseline:Awaited<ReturnType<typeof executeInWorker>>|undefined;
       let tail:Awaited<ReturnType<typeof executeInWorker>>|undefined;
@@ -462,7 +464,7 @@ export class CoreSpiritVelaEngine {
           tailBars=currentBars;
           tail=await executeInWorker(tailBars,mainContextKey,false,executionBarRange(
             Math.max(0,tailBars.length-1),tailBars.length,
-          ));
+          ),undefined,suppressTailEffectsForRun);
           if(stopped||generation!==mainRunGeneration)return undefined;
           const afterTail=getCurrentBars();
           if(afterTail.length!==tailBars.length||afterTail.at(-2)?.timestamp!==tailBars.at(-2)?.timestamp){
@@ -518,14 +520,14 @@ export class CoreSpiritVelaEngine {
       }
     };
 
-    const initializeLive = async(currentBars:CoreSpiritMarketBar[]):Promise<void>=>{
+    const initializeLive = async(currentBars:CoreSpiritMarketBar[],suppressTailEffectsForRun=false):Promise<void>=>{
       if(stopped||liveStarted||initializationInFlight)return;
       if(!currentBars.length){historyInitialized=false;liveStarted=false;return;}
       initializationInFlight=true;
       const generation=++mainRunGeneration;
       initializationOwnerGeneration=generation;
       try{
-        const execution=await evaluateLiveSnapshot(currentBars,generation);
+        const execution=await evaluateLiveSnapshot(currentBars,generation,suppressTailEffectsForRun);
         if(!execution||stopped||generation!==mainRunGeneration)return;
         if(!execution.currentBars.length||!execution.tail){historyInitialized=false;liveStarted=false;return;}
         const warmOutputs=safeOutputs(execution.baseline.outputs);
@@ -552,9 +554,9 @@ export class CoreSpiritVelaEngine {
       }
     };
 
-    const initializeFromBars = (currentBars:CoreSpiritMarketBar[]):void=>{
+    const initializeFromBars = (currentBars:CoreSpiritMarketBar[],suppressCurrentBarEffects=false):void=>{
       if(stopped||historyInitialized||initializationInFlight)return;
-      if(req.mode==='live')void initializeLive(currentBars);
+      if(req.mode==='live')void initializeLive(currentBars,suppressCurrentBarEffects);
       else void initializeStatic(currentBars);
     };
 
@@ -778,7 +780,7 @@ export class CoreSpiritVelaEngine {
           // Otherwise initializeLive warms all confirmed history and reapplies the forming
           // candle in the same main context, then emits a full-range scene refresh.
           if(!wasHistoryInitialized||!currentBars.length)return;
-          initializeFromBars(currentBars);
+          initializeFromBars(currentBars,true);
           return;
         }
 
