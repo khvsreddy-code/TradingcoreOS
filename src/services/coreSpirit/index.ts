@@ -159,3 +159,6 @@ export * from './semanticTypeSystem';
 export * from './indicatorPresetSystem';
 
 export * from './executionPlanVisualizer';
+
+/** Revision-aware invalidation contract shared by historical, replay and realtime hosts. */
+export * from './invalidationPlanner';
