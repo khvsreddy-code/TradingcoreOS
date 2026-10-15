@@ -196,7 +196,7 @@ export class CoreSpiritChartOutputController {
     const previousObjects = [...this.committedObjects];
     try {
       // One synchronous state commit. NativeRenderer owns frame timing, so a
-      // second requestAnimationFrame here would only add avoidable latency.
+      // second scheduled frame here would only add avoidable latency.
       // applyFrame diffs against the current retained series and replaces the
       // layer's immutable payload. Avoid tearing down native series on every run.
       this.applyObjects([...objects]);
