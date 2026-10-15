@@ -103,9 +103,10 @@ export class CoreSpiritOutputDispatcher {
         if (idx >= 0) this.tables[idx] = output; else this.tables.push(output);
         if (this.tables.length > 1000) this.tables.splice(0, this.tables.length - 1000);
       } else if (output.kind === 'box' || output.kind === 'band' || output.kind === 'arrow' || output.kind === 'shape' || output.kind === 'background' || output.kind === 'barcolor') {
-        const id = (output as any).id || `${output.kind}:${this.visuals.length}`;
-        const idx = this.visuals.findIndex(x => (x as any).id === id);
-        if (idx >= 0 && !['band','shape','background','barcolor'].includes(output.kind)) this.visuals[idx] = output; else this.visuals.push(output);
+        const id = visualIdentity(output, `${output.kind}:${this.visuals.length}`);
+        const idx = this.visuals.findIndex(x => visualIdentity(x, '') === id);
+        if (idx >= 0) this.visuals[idx] = output;
+        else this.visuals.push(output);
         if (this.visuals.length > 25000) this.visuals.splice(0, this.visuals.length - 25000);
       } else if (output.kind === 'signal') {
         const identity = signalIdentity(output);
