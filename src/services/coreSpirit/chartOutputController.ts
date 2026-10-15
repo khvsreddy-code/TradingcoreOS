@@ -1,6 +1,7 @@
 import { IChartApi, ISeriesApi, VelaNativeSeriesKernel, LineSeries, Time, createSeriesMarkers } from '../core/chart/velaNativeChartKernel';
 import { CoreSpiritOutputFrame } from './outputDispatcher';
 import { CoreSpiritObject, CoreSpiritVisualStyle } from './types';
+import { CoreSpiritVelaOutputRevisionGate, type CoreSpiritVelaOutputRevision } from './velaOutputAdapter';
 
 /**
  * Stage 3 rich renderer.
@@ -10,6 +11,22 @@ import { CoreSpiritObject, CoreSpiritVisualStyle } from './types';
  * CoreSpirit stays renderer-neutral and only projects declarative output. A single canvas overlay handles high-cardinality fills, boxes,
  * bands, arrows and symbols so 10k+ visual elements do not become 10k chart series.
  */
+type ScheduledObjects = {
+  objects: readonly CoreSpiritObject[];
+  revision: CoreSpiritVelaOutputRevision;
+  resolve: (applied: boolean) => void;
+  reject: (error: unknown) => void;
+};
+
+function scheduleNextFrame(callback: () => void): () => void {
+  if (typeof requestAnimationFrame === 'function') {
+    const handle = requestAnimationFrame(callback);
+    return () => cancelAnimationFrame(handle);
+  }
+  const handle = setTimeout(callback, 0);
+  return () => clearTimeout(handle);
+}
+
 export class CoreSpiritChartOutputController {
   private plotSeries = new Map<string, ISeriesApi<'Line'>>();
   private lineSeries = new Map<string, ISeriesApi<'Line'>>();
@@ -24,6 +41,9 @@ export class CoreSpiritChartOutputController {
   private lastLabels: Extract<CoreSpiritObject,{kind:'label'}>[] = [];
   private lastFrame?: CoreSpiritOutputFrame;
   private disposed = false;
+  private readonly outputRevisionGate = new CoreSpiritVelaOutputRevisionGate();
+  private pendingScheduledObjects?: ScheduledObjects;
+  private cancelScheduledFrame?: () => void;
 
   constructor(private readonly chart: IChartApi, candle?: ISeriesApi<'Candlestick'>, host?: HTMLElement) {
     this.candle = candle;
@@ -167,6 +187,42 @@ export class CoreSpiritChartOutputController {
     series.setData(replacement as any);
   }
 
+  /**
+   * Commit a complete CoreSpirit result on the next render frame. Compute never
+   * happens here: this is a latest-wins presentation queue only. The old scene
+   * remains visible until the new, already-validated snapshot is applied atomically.
+   */
+  scheduleObjects(
+    objects: readonly CoreSpiritObject[],
+    revision: CoreSpiritVelaOutputRevision,
+  ): Promise<boolean> {
+    if (this.disposed || !this.outputRevisionGate.accept(revision)) return Promise.resolve(false);
+    return new Promise<boolean>((resolve, reject) => {
+      if (this.pendingScheduledObjects) this.pendingScheduledObjects.resolve(false);
+      this.pendingScheduledObjects = { objects: [...objects], revision, resolve, reject };
+      if (this.cancelScheduledFrame) return;
+
+      this.cancelScheduledFrame = scheduleNextFrame(() => {
+        this.cancelScheduledFrame = undefined;
+        const pending = this.pendingScheduledObjects;
+        this.pendingScheduledObjects = undefined;
+        if (!pending) return;
+        if (this.disposed || !this.outputRevisionGate.isCurrent(pending.revision)) {
+          pending.resolve(false);
+          return;
+        }
+        try {
+          // Vela chart series + drawing layers are updated together in this frame.
+          this.reset();
+          this.applyObjects([...pending.objects]);
+          pending.resolve(true);
+        } catch (error) {
+          pending.reject(error);
+        }
+      });
+    });
+  }
+
   applyObjects(objects: CoreSpiritObject[]): void {
     const frame: CoreSpiritOutputFrame = { plots: new Map(), plotStyles: new Map(), drawingCount: 0, signals: [], drawings: [], visuals: [], labels: [], tables: [] };
     const groups = new Map<string, Array<{ time: number; value: number | null }>>();
@@ -183,7 +239,7 @@ export class CoreSpiritChartOutputController {
     this.applyFrame(frame);
   }
 
-  dispose(): void { this.disposed = true; this.reset(); this.labelLayer?.remove(); this.labelLayer = undefined; this.tableLayer?.remove(); this.tableLayer = undefined; this.visualCanvas?.remove(); this.visualCanvas = undefined; this.visualContext = undefined; }
+  dispose(): void { this.disposed = true; this.cancelScheduledFrame?.(); this.cancelScheduledFrame = undefined; this.pendingScheduledObjects?.resolve(false); this.pendingScheduledObjects = undefined; this.outputRevisionGate.clear(); this.reset(); this.labelLayer?.remove(); this.labelLayer = undefined; this.tableLayer?.remove(); this.tableLayer = undefined; this.visualCanvas?.remove(); this.visualCanvas = undefined; this.visualContext = undefined; }
 
   private ensureVisualLayers() {
     if (this.disposed || !this.host) return;
