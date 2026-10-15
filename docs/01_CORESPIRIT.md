@@ -405,3 +405,21 @@ broker
 ```
 
 Vela remains a visualization consumer. It can project CoreSpirit signals and order intents into its scene graph, but it cannot authorize or submit broker execution.
+
+## Canonical incremental invalidation and correction replay
+
+CoreSpirit uses the existing `CoreSpiritDirtyGraph` as the shared dirty-range planner. Do not introduce a second invalidation graph in the renderer, individual indicators, or runtime adapters.
+
+- Dirty ranges are absolute-history, half-open intervals: `[from, to)`.
+- A forming candle update is a replacement of the current bar, not an append.
+- Bounded-window nodes expand the affected range by their proven forward horizon.
+- Recursive/stateful nodes invalidate through the execution tail.
+- Historical correction planning must restore state from a checkpoint strictly before the changed interval.
+- When no safe checkpoint exists, the plan explicitly becomes a full graph replay from bar zero. A partial dirty-range plan must never be returned while the stateful runtime still requires full replay.
+- With a safe checkpoint, only the causally affected subgraph is replayed, starting at the checkpoint and continuing to the execution end. Unrelated indicator branches remain reusable.
+- The execution plan's ranges, replay origin, and instruction set must agree; adapters must not infer a narrower range than the planner emits.
+
+The canonical compiler contract remains the existing source → parser/name resolution/semantic analysis → semantic graph → Core IR → optimizer/dependency graph → backend and execution plans → `CoreSpiritExecutionVM` boundary. The semantic graph describes meaning; the instruction dependency graph describes scheduling. They are related views of one executable artifact, not separate compilers or runtimes.
+
+Contract coverage: `canonicalCompilerPipelineContract.test.mjs` and `dirtyGraphContract.test.mjs`.
+
