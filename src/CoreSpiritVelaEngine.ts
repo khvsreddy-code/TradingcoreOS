@@ -560,7 +560,7 @@ export class CoreSpiritVelaEngine {
         normalizedBarsCache.push(row);
       }
       normalizedInputLength=length;
-      return normalizedBarsCache.slice();
+      return Object.freeze(normalizedBarsCache.slice()) as CoreSpiritMarketBar[];
     };
 
     const initialBars = getCurrentBars();
