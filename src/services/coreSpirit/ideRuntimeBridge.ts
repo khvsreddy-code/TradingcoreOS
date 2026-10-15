@@ -10,6 +10,7 @@ import { buildCoreSpiritSceneFromDeclarativeVisuals } from './declarativeVisual'
 import type { CoreSpiritWorkspaceState } from './workspaceRuntime';
 import type { CoreSpiritUiState } from './uiRuntime';
 import { CoreSpiritVisualDebuggerSession, type CoreSpiritVisualDebuggerSnapshot } from './visualDebugger';
+import { sha256HexSync } from './artifactIdentity';
 
 export type CoreSpiritIdeRuntimeStatus = 'idle' | 'compiling' | 'running' | 'ready' | 'error';
 
@@ -27,7 +28,7 @@ export interface CoreSpiritIdeRuntimeSnapshot {
   sourceVersion: number;
   target?: { chartId: string; symbol: string; timeframe: string };
   compile?: { irVersion: number; diagnostics: CoreSpiritDiagnostic[] };
-  run?: { runId: string; barsProcessed: number; plotsEmitted: number; signalsEmitted: number; diagnostics: string[] };
+  run?: { runId: string; sourceVersion: number; sourceHash: string; artifactHash: string; barsProcessed: number; plotsEmitted: number; signalsEmitted: number; diagnostics: string[] };
   outputs: readonly CoreSpiritObject[];
   scene?: CoreSpiritScene;
   uiState?: CoreSpiritUiState;
@@ -76,7 +77,17 @@ export class CoreSpiritIdeRuntimeBridge {
   }
 
   async runActiveChart(source:string,sourceId='coreSpirit-ide',prepared?:CoreSpiritCompileResult):Promise<CoreSpiritIdeRuntimeSnapshot>{
+    const sourceVersion = this.editor.getVersion();
+    if (source !== this.editor.getSource()) {
+      this.patch({ status: 'error', sourceVersion, error: 'Run cancelled: the editor source does not match the requested source revision.' });
+      return this.getSnapshot();
+    }
     const compiled=prepared ?? this.editor.compile();
+    const expectedSourceHash = sha256HexSync(source);
+    if (compiled.artifact && compiled.artifact.abi.sourceHash !== expectedSourceHash) {
+      this.patch({ status: 'error', sourceVersion, error: 'Run cancelled: compiled artifact belongs to a different source revision. Compile the current editor contents and run again.' });
+      return this.getSnapshot();
+    }
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (errors.length || !compiled.ir) {
       this.patch({ status: 'error', compile: { irVersion: compiled.ir?.version ?? 1, diagnostics: compiled.diagnostics }, error: 'Fix compile errors before running.' });
@@ -91,12 +102,16 @@ export class CoreSpiritIdeRuntimeBridge {
     const runId = `${sourceId}:run:${generation}`;
     const chartBars = target.getBars ? [...target.getBars()] : [];
     this.debuggerSession = compiled.artifact && chartBars.length ? new CoreSpiritVisualDebuggerSession({ artifact: compiled.artifact, bars: chartBars, symbol: target.symbol, timeframe: target.timeframe, sourceText: source, sourceId }) : undefined;
-    this.patch({ status: 'running', target: { chartId: target.chartId, symbol: target.symbol, timeframe: target.timeframe }, error: undefined });
+    this.patch({ status: 'running', sourceVersion, target: { chartId: target.chartId, symbol: target.symbol, timeframe: target.timeframe }, error: undefined });
     try {
       const result = target.updateCode && compiled.artifact
         ? await target.updateCode(source,compiled.artifact,sourceId)
         : await target.run(source, sourceId);
       if (generation !== this.runGeneration) return this.getSnapshot();
+      if (sourceVersion !== this.editor.getVersion() || source !== this.editor.getSource()) {
+        this.patch({ status: 'idle', sourceVersion: this.editor.getVersion(), outputs: [], scene: undefined, run: undefined, error: 'Run result discarded because the script changed while it was executing. Run the current revision to refresh outputs.' });
+        return this.getSnapshot();
+      }
       const outputs = [...(result.outputs ?? [])];
       const identity = { chartId: target.chartId, symbol: target.symbol, timeframe: target.timeframe, pane: 'main' as const };
       const outputScene = buildCoreSpiritScene(identity, outputs, sourceId, generation);
@@ -129,7 +144,7 @@ export class CoreSpiritIdeRuntimeBridge {
       });
       this.patch({
         status: result.diagnostics.length ? 'error' : 'ready',
-        run: { runId, barsProcessed: result.barsProcessed, plotsEmitted: result.plotsEmitted, signalsEmitted: result.signalsEmitted, diagnostics: result.diagnostics },
+        run: { runId, sourceVersion, sourceHash: expectedSourceHash, artifactHash: compiled.artifact?.abi.artifactHash ?? compiled.artifact?.checksum ?? '', barsProcessed: result.barsProcessed, plotsEmitted: result.plotsEmitted, signalsEmitted: result.signalsEmitted, diagnostics: result.diagnostics },
         outputs,
         scene,
         uiState: result.state?.uiState,
