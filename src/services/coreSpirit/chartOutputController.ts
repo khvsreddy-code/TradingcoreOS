@@ -40,6 +40,7 @@ export class CoreSpiritChartOutputController {
   private labelNodes = new Map<string, HTMLDivElement>();
   private lastLabels: Extract<CoreSpiritObject,{kind:'label'}>[] = [];
   private lastFrame?: CoreSpiritOutputFrame;
+  private committedObjects: readonly CoreSpiritObject[] = [];
   private disposed = false;
   private readonly outputRevisionGate = new CoreSpiritVelaOutputRevisionGate();
   private pendingScheduledObjects?: ScheduledObjects;
@@ -68,6 +69,7 @@ export class CoreSpiritChartOutputController {
     for (const node of this.labelNodes.values()) node.remove();
     this.labelNodes.clear(); this.lastLabels = [];
     this.lastFrame = undefined;
+    this.committedObjects = [];
     this.tableLayer?.replaceChildren();
     this.clearCanvas();
   }
@@ -211,12 +213,21 @@ export class CoreSpiritChartOutputController {
           pending.resolve(false);
           return;
         }
+        const previousObjects = [...this.committedObjects];
         try {
-          // Vela chart series + drawing layers are updated together in this frame.
+          // No browser paint can interleave this synchronous frame commit. If a
+          // Vela operation fails unexpectedly, restore the prior committed snapshot.
           this.reset();
           this.applyObjects([...pending.objects]);
           pending.resolve(true);
         } catch (error) {
+          try {
+            this.reset();
+            if (previousObjects.length && !this.disposed) this.applyObjects(previousObjects);
+          } catch (restoreError) {
+            pending.reject(new AggregateError([error, restoreError], 'Vela output commit and rollback both failed'));
+            return;
+          }
           pending.reject(error);
         }
       });
@@ -237,6 +248,7 @@ export class CoreSpiritChartOutputController {
     }
     frame.plots = groups;
     this.applyFrame(frame);
+    this.committedObjects = Object.freeze([...objects]);
   }
 
   dispose(): void { this.disposed = true; this.cancelScheduledFrame?.(); this.cancelScheduledFrame = undefined; this.pendingScheduledObjects?.resolve(false); this.pendingScheduledObjects = undefined; this.outputRevisionGate.clear(); this.reset(); this.labelLayer?.remove(); this.labelLayer = undefined; this.tableLayer?.remove(); this.tableLayer = undefined; this.visualCanvas?.remove(); this.visualCanvas = undefined; this.visualContext = undefined; }
