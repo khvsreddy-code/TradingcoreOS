@@ -108,30 +108,30 @@ assert.match(chartController, /adaptCoreSpiritOutputsForVela\(result\.outputs,\s
   'chart-indicator execution must share the exact same output adapter');
 assert.match(chartController, /scheduleObjects\(adapted\.outputs/,
   'chart indicator result commits must go through a latest-wins render boundary');
-assert.match(outputController, /chart\.renderer\.setNativeData\(this\.overlayChannel, data\)/,
+assert.ok(outputController.includes('chart.renderer.setNativeData(this.overlayChannel, data)'),
   'CoreSpirit publishes immutable rich-output data into Vela native state');
-assert.match(outputController, /chart\.renderer\.mountIndicator\(/,
+assert.ok(outputController.includes('chart.renderer.mountIndicator('),
   'the rich-output layer must be attached to Vela as a renderer-owned model');
-assert.doesNotMatch(outputController, /requestAnimationFrame\\s*\\(|document\\.createElement\\(['"]canvas['"]\\)/,
+assert.ok(!outputController.includes('requestAnimationFrame(') && !outputController.includes("document.createElement('canvas')") && !outputController.includes('document.createElement("canvas")'),
   'the adapter must not create a competing canvas or a second render-frame scheduler');
 assert.doesNotMatch(outputController, /runCoreSpiritArtifactInWorker|CoreSpiritRuntime|compileCoreSpirit/,
   'the output/render adapter must not own or trigger script evaluation');
-assert.match(outputLayer, /registerRendererLayer\(/,
+assert.ok(outputLayer.includes('registerRendererLayer('),
   'rich CoreSpirit visuals must be painted by Vela’s renderer-layer extension seam');
-assert.match(outputLayer, /args\.coords\.timeToX\(/,
+assert.ok(outputLayer.includes('args.coords.timeToX('),
   'Vela’s canonical time-to-pixel transform must place time-anchored outputs');
-assert.match(outputLayer, /args\.coords\.priceToY\(/,
+assert.ok(outputLayer.includes('args.coords.priceToY('),
   'Vela’s canonical pane price transform must place price-anchored outputs');
-assert.match(outputLayer, /args\.coords\.logicalToX\(/,
+assert.ok(outputLayer.includes('args.coords.logicalToX('),
   'bar-index visual coordinates must use Vela’s logical-index transform');
-assert.match(velaKernel, /import '\.\/coreSpiritVelaOutputLayer'/,
+assert.ok(velaKernel.includes("import './coreSpiritVelaOutputLayer'"),
   'the layer must register before native renderers are constructed');
-assert.match(velaEngine, /const getCurrentBars=\\(forceFullNormalization=false\\)=>/,
+assert.ok(velaEngine.includes('const getCurrentBars=(forceFullNormalization=false)=>'),
   'Vela history is read through one normalized host-data boundary');
-assert.match(velaEngine, /return normalizedBarsCache\\.slice\\(\\)/,
+assert.ok(velaEngine.includes('return normalizedBarsCache.slice()'),
   'asynchronous execution receives an isolated array snapshot rather than a mutable reference to the adapter cache');
-assert.match(chartController, /const bars=\\[\\.\\.\\.candles\\.current\\]/,
-  'chart-indicator execution captures one stable source snapshot per run instead of copying history on render');
+assert.ok(chartController.includes('const bars=[...candles.current]'),
+  'chart-indicator execution captures one stable source snapshot per run rather than copying history on render');
 assert.match(sceneDiff, /outputDirtySpan/,
   'the Vela scene diff remains the native rendering consumer of declarative output');
 
