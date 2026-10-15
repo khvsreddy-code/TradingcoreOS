@@ -338,9 +338,22 @@ export class CoreSpiritRuntime {
     nextIr: CoreSpiritIrProgram,
     nextBars: readonly HistoricalCandle[],
   ): CoreSpiritDirtyExecutionPlan | undefined {
-    if (previousIr !== nextIr || previousBars.length === 0 || previousBars.length !== nextBars.length || !this.dirtyGraph) {
-      return undefined;
-    }
+    if (previousIr !== nextIr || previousBars.length === 0 || !this.dirtyGraph) return undefined;
+    const fullReplayPlan = (): CoreSpiritDirtyExecutionPlan => {
+      const plan = this.dirtyGraph!.planFull(nextBars.length);
+      const requiresStateRestore = [...plan.nodes].some(id => this.dirtyGraph!.nodesById.get(id)?.stateful === true);
+      return {
+        ...plan,
+        correction: Object.freeze({
+          changedRange: Object.freeze({ from:0, to:nextBars.length }),
+          replayFrom:0,
+          requiresStateRestore,
+          reason: requiresStateRestore ? 'full-replay-no-safe-checkpoint' : 'stateless-range',
+        }),
+      };
+    };
+    // Structural history edits change index identity. Full replay is the only safe fallback.
+    if (previousBars.length !== nextBars.length) return fullReplayPlan();
     let from = nextBars.length;
     let to = -1;
     const changedSources = new Set<ReturnType<typeof dirtySourcesForBar>[number]>();
@@ -349,7 +362,7 @@ export class CoreSpiritRuntime {
       const current = nextBars[i]!;
       // Timestamp changes or reordering invalidate index identity; executeIr still
       // rebuilds the complete dataset, but we do not advertise a localized range.
-      if (this.toEpoch(previous.timestamp) !== this.toEpoch(current.timestamp)) return undefined;
+      if (this.toEpoch(previous.timestamp) !== this.toEpoch(current.timestamp)) return fullReplayPlan();
       const changed = dirtySourcesForBar(
         { time:this.toEpoch(previous.timestamp), open:Number(previous.open), high:Number(previous.high), low:Number(previous.low), close:Number(previous.close), volume:Number(previous.volume) },
         { time:this.toEpoch(current.timestamp), open:Number(current.open), high:Number(current.high), low:Number(current.low), close:Number(current.close), volume:Number(current.volume) },
@@ -1149,7 +1162,9 @@ export class CoreSpiritRuntime {
       const action=name==='automation.notify' ? 'automation.notify' : 'automation.route';
       const message=String(args[0]??'');
       const target=args[1]==null ? undefined : String(args[1]);
-      this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time:this.toEpoch(bar.timestamp),name:action,metadata:{message,target,barIndex:index,action}});
+      if (!this.suppressExternalEffects) {
+        this.eventRouter.scriptEvent({scriptId:this.options.sourceId,time:this.toEpoch(bar.timestamp),name:action,metadata:{message,target,barIndex:index,action}});
+      }
       return finish({__coreSpiritAutomationEvent:true,action,message,target});
     }
     if(name==='background.when') {
