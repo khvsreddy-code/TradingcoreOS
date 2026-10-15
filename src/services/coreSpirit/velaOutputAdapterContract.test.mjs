@@ -4,7 +4,6 @@ import {
   adaptCoreSpiritOutputsForVela,
   coreSpiritTimeToVelaMillis,
   normalizeVelaBarsToCoreSpirit,
-  CoreSpiritAlignmentError,
   CoreSpiritVelaAlignmentError,
   CoreSpiritVelaOutputRevisionGate,
 } from './velaOutputAdapter.ts';
