@@ -364,9 +364,10 @@ export function planCoreSpiritExecution(
       nodeIds: nodes.map(node => node.id),
       workUnits: workload.workUnits,
       deterministic: true,
-      reason: effectNodes.length ? 'effectful/stateful operations require the ordered CPU runtime' : 'GPU/WASM thresholds or availability did not qualify an alternate backend',
+      reason: effectNodes.length ? 'effectful/stateful operations require the ordered CPU runtime' : 'backend unavailable, below threshold, nondeterministic, or estimated transfer/startup/handoff cost exceeds the CPU baseline',
     });
     explanation.push('CPU is the deterministic baseline and remains the semantic fallback.');
+    if (backendCapabilityPlans.length && backendCapabilityPlans.every(plan => !plan.fallback)) explanation.push('Offload was not selected because the eligible workload did not beat the estimated end-to-end CPU cost after setup and data-transfer overhead.');
   } else if (cpuNodes.length > 0) {
     strategy = 'hybrid-pure-offload';
     assignments.push({
