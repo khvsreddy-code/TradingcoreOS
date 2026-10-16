@@ -1,5 +1,15 @@
 import { Router, type Response } from 'express';
-import { compileCoreSpirit } from '../../services/coreSpirit/coreSpiritPipeline.js';
+import { compileCoreSpirit, parseCoreSpirit } from '../../services/coreSpirit/coreSpiritPipeline.js';
+import { analyzeCoreSpiritCausality } from '../../services/coreSpirit/causalityAnalysis.js';
+import { analyzeCoreSpiritRepaintSafety } from '../../services/coreSpirit/repaintSafety.js';
+import {
+  assertNoKnownLabelLeakage,
+  summarizeResearchSafety,
+  validateConfirmedResearchRows,
+  DEFAULT_RESEARCH_VALIDATION_FRACTION,
+  MIN_RESEARCH_VALIDATION_ROWS,
+  type ResearchFeatureRow,
+} from '../../services/coreSpirit/researchValidation.js';
 import {
   createResearchArtifact,
   coreSpiritSha256,
@@ -7,7 +17,7 @@ import {
   verifyModelArtifactIntegrity,
   type ResearchArtifact,
 } from '../../services/coreSpirit/modelArtifacts.js';
-import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION } from '../../services/coreSpirit/VERSION.js';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION, CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
 import { extractCoreSpiritSurfaceMetadata } from '../../services/coreSpirit/languageConcepts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
@@ -124,19 +134,21 @@ function parseRows(value: unknown, featureNames: readonly string[], range: { fro
     throw new Error('Training snapshot must contain 12–1024 historical rows.');
   }
   const bounds = rangeBounds(range);
-  let previous = Number.NEGATIVE_INFINITY;
-  return value.map((raw, index) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid training row at index ' + index + '.');
-    const row = raw as Record<string, unknown>;
-    if (typeof row.timestamp !== 'number' || !Number.isFinite(row.timestamp) ||
-        row.timestamp < bounds.from || row.timestamp > bounds.to ||
-        !Array.isArray(row.values) || row.values.length !== featureNames.length ||
-        row.values.some(item => typeof item !== 'number' || !Number.isFinite(item))) {
-      throw new Error('Training row ' + index + ' must have an in-range timestamp and finite values matching the feature schema.');
+  const confirmedRows = validateConfirmedResearchRows(
+    value as ResearchFeatureRow[],
+    featureNames,
+  );
+  return confirmedRows.map((row, index) => {
+    if (row.timestamp < bounds.from || row.timestamp > bounds.to) {
+      throw new Error('Training row ' + index + ' must fall inside the supplied research range.');
     }
-    if (row.timestamp <= previous) throw new Error('Training rows must be strictly chronological and contain no duplicate timestamps.');
-    previous = row.timestamp;
-    return { timestamp: row.timestamp, values: [...row.values] as number[] };
+    return {
+      timestamp: row.timestamp,
+      availableAt: row.availableAt,
+      confirmed: true as const,
+      phase: row.phase,
+      values: [...row.values] as number[],
+    };
   });
 }
 
