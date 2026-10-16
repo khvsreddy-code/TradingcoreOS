@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { countdownText, indiaSessionCountdownText } from '../../vendor/vela/src/renderers/native/chrome/countdown.ts';
+import { countdownText, indiaSessionCountdownText } from '../vendor/vela/src/renderers/native/chrome/countdown.ts';
 
 const open = Date.parse('2026-10-14T03:45:00.000Z'); // 09:15 Asia/Kolkata
 const fiveMinutes = 5 * 60 * 1000;
