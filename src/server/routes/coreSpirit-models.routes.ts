@@ -459,7 +459,7 @@ coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRe
     const validation = provenance.validationResults;
     const safety = provenance.researchSafety;
     const parseBoundary = (value: string): number => {
-      const dateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+      const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
       return Date.parse(value) + (dateOnly ? 86_399_999 : 0);
     };
     const trainingEnd = parseBoundary(provenance.trainingRange.to);
