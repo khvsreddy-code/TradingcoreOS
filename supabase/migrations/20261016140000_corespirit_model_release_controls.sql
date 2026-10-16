@@ -77,7 +77,7 @@ begin
   if p_owner_user_id is null
      or p_actor_user_id is null
      or p_artifact_hash is null or p_artifact_hash !~ '^[a-f0-9]{64}$'
-     or p_target_status not in ('approved','revoked','retired')
+     or p_target_status is null or p_target_status not in ('approved','revoked','retired')
      or nullif(trim(p_reason), '') is null or length(p_reason) > 1000
      or jsonb_typeof(coalesce(p_approval_checks, '{}'::jsonb)) <> 'object'
      or jsonb_typeof(coalesce(p_validation_report, '{}'::jsonb)) <> 'object' then
@@ -142,3 +142,17 @@ $$;
 
 revoke all on function public.transition_corespirit_model_release(uuid,text,text,uuid,text,jsonb,jsonb) from public, anon, authenticated;
 grant execute on function public.transition_corespirit_model_release(uuid,text,text,uuid,text,jsonb,jsonb) to service_role;
+
+-- The release history is append-only; releases are changed through the audited RPC.
+create or replace function public.reject_corespirit_release_event_mutation()
+returns trigger language plpgsql as $
+begin
+  if TG_OP = 'DELETE' and pg_trigger_depth() > 1 then return OLD; end if;
+  raise exception 'CoreSpirit model release events are immutable';
+end;
+$;
+
+drop trigger if exists corespirit_model_release_events_immutable on public.corespirit_model_release_events;
+create trigger corespirit_model_release_events_immutable
+  before update or delete on public.corespirit_model_release_events
+  for each row execute function public.reject_corespirit_release_event_mutation();
