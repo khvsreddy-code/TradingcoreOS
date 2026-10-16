@@ -48,6 +48,10 @@ rejects(() => validateConfirmedResearchRows(
   featureNames,
 ), 'features becoming available after the decision timestamp must be rejected');
 rejects(() => validateConfirmedResearchRows(
+  rows.map((row, index) => index === 5 ? { ...row, label: 1 } as ResearchFeatureRow : row),
+  featureNames,
+), 'rows containing hidden labels/extra metadata must be rejected instead of silently hashed');
+rejects(() => validateConfirmedResearchRows(
   rows.map((row, index) => index === 5 ? { ...row, timestamp: rows[4]!.timestamp } : row),
   featureNames,
 ), 'duplicate decision timestamps must be rejected');
