@@ -98,6 +98,7 @@ const contracts = [
   ['realtime-service-build-skip', ['src/realtimeServiceBuildIgnoreContract.test.mjs', false]],
   ['fyers-plan-capabilities', ['src/fyersCapabilitiesContract.test.mjs', true]],
   ['fyers-order-reconciliation-state-machine', ['src/fyersOrderStateReconciliationContract.test.mjs', true]],
+  ['external-automation-trading', ['src/externalAutomationTradingContract.test.mjs', false]],
   ['fyers-multi-class-domain-events', ['src/fyersMultiClassDomainEventsContract.test.mjs', true]],
   ['vela-advanced-drawing-family-lazy', ['src/velaAdvancedDrawingFamilyLazyContract.test.mjs', true]],
   ['vela-drawing-capability-inventory', ['src/velaDrawingCapabilityInventoryContract.test.mjs', true]],

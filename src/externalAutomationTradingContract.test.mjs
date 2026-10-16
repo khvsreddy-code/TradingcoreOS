@@ -1,0 +1,114 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const integrationRoutes = read('./server/routes/automation-integration.routes.ts');
+const ingestRoutes = read('./server/routes/automation-signal-ingest.routes.ts');
+const integrations = read('./server/automation/AutomationIntegrationRepository.ts');
+const risk = read('./server/trading/AutomationPreTradeRiskEngine.ts');
+const sharedExecution = read('./server/trading/fyersOrderExecution.ts');
+const manualTrading = read('./server/routes/trading.routes.ts');
+const stateEngine = read('./server/fyers/trading/FyersOrderStateEngine.ts');
+const migration = read('../supabase/migrations/20261016130000_external_automation_gateway.sql');
+const automationUi = read('./pages/AutomationsPage.tsx');
+const app = read('../server.ts');
+const envExample = read('../.env.example');
+const docs = read('../docs/EXTERNAL_AUTOMATION_GATEWAY.md');
+
+assert.match(integrationRoutes, /AutomationIntegrationRepository\.authenticateToken/);
+assert.match(integrations, /createHash\('sha256'\)\.update\(token\)\.digest\('hex'\)/);
+assert.match(integrations, /token_hash/);
+assert.match(integrationRoutes, /tokenShownOnce: true/);
+assert.match(integrationRoutes, /allowLiveOrders: req\.body\.allowLiveOrders === true/);
+assert.match(integrationRoutes, /function publicIntegration\(/);
+assert.match(integrationRoutes, /allowedScopes = new Set/);
+assert.match(integrationRoutes, /requireAutomationScope\('market:read'\)/);
+assert.match(integrationRoutes, /requireAutomationScope\('signals:read'\)/);
+assert.match(integrationRoutes, /requireAutomationScope\('orders:request'\)/);
+assert.match(integrationRoutes, /AutomationIntegrationRepository\.revoke/);
+assert.match(integrationRoutes, /Active integration was not found/);
+assert.match(integrationRoutes, /automation\.integration\.revoked/);
+
+assert.match(migration, /unique \(integration_id, external_request_id\)/);
+assert.match(migration, /unique \(integration_id, event_id\)/);
+assert.match(migration, /for update;/i);
+assert.match(migration, /claim_automation_order_request/);
+assert.match(migration, /payload->>'mode' = 'LIVE'/);
+assert.match(migration, /enable row level security/i);
+assert.match(migration, /revoke all on table public\.automation_order_requests from anon, authenticated/i);
+assert.match(migration, /grant execute on function public\.claim_automation_order_request[\s\S]*to service_role/i);
+
+assert.match(integrations, /request_hash/);
+assert.match(integrations, /conflict: 'request_mismatch'/);
+assert.match(integrations, /static async getBrokerOrderState/);
+assert.match(integrationRoutes, /Idempotency-Key header must be 8–128 safe characters/);
+assert.match(integrationRoutes, /String\(req\.body\.mode \?\? 'PAPER'\)/, 'order requests must default to paper, even when the credential is live-capable');
+assert.ok(integrationRoutes.indexOf('AutomationIntegrationRepository.claimOrderRequest') <
+  integrationRoutes.indexOf('placeFyersOrderViaFixedIpGateway(accessToken, submitPayload'),
+  'The durable external request claim must precede broker order placement.');
+assert.ok(integrationRoutes.indexOf("state: 'INTENT'") <
+  integrationRoutes.indexOf("placeFyersOrderViaFixedIpGateway(accessToken, submitPayload"),
+  'INTENT must be persisted before the broker side effect.');
+assert.ok(integrationRoutes.indexOf("state: 'SUBMITTED'") <
+  integrationRoutes.indexOf("placeFyersOrderViaFixedIpGateway(accessToken, submitPayload"),
+  'SUBMITTED must be persisted before the broker side effect.');
+assert.match(integrationRoutes, /recoveryRequired: true/);
+assert.match(integrationRoutes, /orderSubmitted: 'unknown'/);
+assert.match(integrationRoutes, /filled: false/);
+assert.match(integrationRoutes, /state: 'ACKNOWLEDGED'/);
+assert.match(integrationRoutes, /Broker acknowledged the order request[\s\S]*not a fill confirmation/);
+assert.match(integrationRoutes, /brokerStateUpdatedAt/);
+assert.match(integrationRoutes, /internalIdempotencyKey/);
+
+assert.match(risk, /input\.integration\.allowedSymbols\.includes/);
+assert.match(risk, /maxOrderQuantity/);
+assert.match(risk, /maxOrderNotional/);
+assert.match(risk, /maxPositionNotional/);
+assert.match(risk, /maxAccountExposureNotional/);
+assert.match(risk, /projected-account-exposure-cap/);
+assert.match(risk, /getMarketQuotes/);
+assert.match(risk, /getFunds/);
+assert.match(risk, /getPositions/);
+assert.match(risk, /20_000/);
+assert.match(risk, /multiorder\/margin/);
+assert.match(risk, /marginBufferPercent/);
+assert.match(risk, /No order was submitted/);
+assert.match(sharedExecution, /validateFyersManualOrderPreflight/);
+assert.match(sharedExecution, /FYERS_EXECUTION_GATEWAY_SECRET/);
+assert.match(manualTrading, /from '\.\.\/trading\/fyersOrderExecution\.js'/);
+
+assert.match(integrationRoutes, /automation\.lifecycleStatus === 'live' \|\| automation\.lifecycleState === 'LIVE'/);
+assert.match(integrationRoutes, /automation\.allowOrderExecution/);
+assert.match(integrationRoutes, /!automation\.requireConfirmation/);
+assert.match(integrationRoutes, /signal\.mode !== 'realtime'/);
+assert.match(integrationRoutes, /if \(signalId\) \{[\s\S]*getSignal\(integration\.id, signalId\)/, 'when present, a signal link must be validated within its integration');
+assert.match(integrationRoutes, /This integration is paper-only/);
+assert.match(integrationRoutes, /FYERS_EXECUTION_GATEWAY_URL/);
+
+assert.match(integrationRoutes, /browser-supplied realtime events cannot authorize orders/);
+assert.match(ingestRoutes, /createHmac\('sha256', secret\)/);
+assert.match(ingestRoutes, /timingSafeEqual/);
+assert.match(ingestRoutes, /TCO_CORESPIRIT_SIGNAL_SECRET/);
+assert.match(ingestRoutes, /Math\.abs\(Date\.now\(\) - timestamp\) > 60_000/);
+assert.match(ingestRoutes, /trustedProducer: true/);
+assert.match(integrations, /input\.trustedProducer !== true/);
+assert.match(integrations, /Canonical event identity always wins/);
+assert.match(app, /app\.use\('\/api\/automation-integrations', automationIntegrationRoutes\)/);
+assert.match(app, /app\.use\('\/api\/automation-gateway', automationSignalIngestRoutes\)/);
+assert.match(app, /app\.use\('\/api\/automation-gateway', automationGatewayRoutes\)/);
+
+assert.match(stateEngine, /'INTENT' \| 'SUBMITTED' \| 'ACKNOWLEDGED' \| 'OPEN' \| 'PARTIAL' \| 'FILLED'/);
+assert.match(stateEngine, /'CANCEL_PENDING' \| 'CANCELLED' \| 'REJECTED' \| 'EXPIRED' \| 'UNKNOWN'/);
+assert.match(stateEngine, /apply_broker_order_event/);
+assert.match(automationUi, /External AI & automation gateway/);
+assert.match(automationUi, /allowLiveIntegration,setAllowLiveIntegration\]=useState\(false\)/);
+assert.match(automationUi, /Require order confirmation/);
+assert.match(automationUi, /Create scoped credential/);
+assert.match(automationUi, /Revoke credential/);
+assert.match(automationUi, /tokenShownOnce/);
+assert.match(automationUi, /lifecycle_status:cloudLifecycleStatus/);
+assert.match(envExample, /TCO_CORESPIRIT_SIGNAL_SECRET/);
+assert.match(docs, /Broker acknowledgement is not a fill/);
+assert.match(docs, /same key and same body/);
+
+console.log('EXTERNAL_AUTOMATION_TRADING_BOUNDARY_OK');

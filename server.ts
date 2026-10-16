@@ -12,6 +12,8 @@ import { fyersAccountRoutes } from './src/server/routes/fyers-account.routes.js'
 import { fyersSymbolRoutes } from './src/server/routes/fyers-symbol.routes.js';
 import { portfolioSnapshotRoutes } from './src/server/routes/portfolio-snapshot.routes.js';
 import { tradingRoutes } from './src/server/routes/trading.routes.js';
+import { automationIntegrationRoutes, automationGatewayRoutes } from './src/server/routes/automation-integration.routes.js';
+import { automationSignalIngestRoutes } from './src/server/routes/automation-signal-ingest.routes.js';
 import { productionPredictionRoutes } from './src/server/routes/production-prediction.routes.js';
 import { newsRoutes } from './src/server/routes/news.routes.js';
 import { backgroundJobRoutes } from './src/server/routes/background-jobs.routes.js';
@@ -164,6 +166,10 @@ app.use('/api/trading', brokerMarketDataRoutes);
 // serialized/cached implementation is used instead of the old Promise.all fan-out.
 app.use('/api/trading', portfolioSnapshotRoutes);
 app.use('/api/trading', tradingRoutes);
+// Signed CoreSpirit ingress is mounted before bearer-token workflow endpoints.
+app.use('/api/automation-integrations', automationIntegrationRoutes);
+app.use('/api/automation-gateway', automationSignalIngestRoutes);
+app.use('/api/automation-gateway', automationGatewayRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
 app.use('/api/jobs', backgroundJobRoutes);
 app.use('/api/corespirit/copilot', coreSpiritCopilotRoutes);

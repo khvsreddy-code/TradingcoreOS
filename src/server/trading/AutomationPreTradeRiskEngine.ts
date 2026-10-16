@@ -1,0 +1,295 @@
+import type { BaseBroker } from '../brokers/adapters/BaseBroker.js';
+import type { BrokerOrderPayload } from '../brokers/contracts.js';
+import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
+import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
+import { validateFyersManualOrderPreflight } from './fyersOrderExecution.js';
+import type { AutomationIntegration } from '../automation/AutomationIntegrationRepository.js';
+
+export interface AutomationRiskVerdict {
+  approved: boolean;
+  reason: string;
+  checks: Record<string, unknown>[];
+  estimatedNotional: number;
+  quotedPrice: number;
+  projectedSymbolExposure: number;
+  projectedAccountExposure: number;
+  requiredMargin: number | null;
+}
+
+type JsonRecord = Record<string, unknown>;
+const isRecord = (value: unknown): value is JsonRecord =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+function findQuote(
+  values: Record<string, { ltp: number; timestamp: string }>,
+  symbol: string,
+): { ltp: number; timestamp: string } | undefined {
+  if (values[symbol]) return values[symbol];
+  const key = Object.keys(values).find(candidate => candidate.toUpperCase() === symbol.toUpperCase());
+  return key ? values[key] : undefined;
+}
+
+function readRequiredMargin(value: unknown, depth = 0): number | undefined {
+  if (depth > 5 || value === null || value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = readRequiredMargin(item, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) return undefined;
+  for (const key of ['totalMargin', 'total_margin', 'requiredMargin', 'required_margin', 'marginRequired', 'margin_required']) {
+    const raw = value[key];
+    const number = typeof raw === 'string' && raw.trim() ? Number(raw) : raw;
+    if (finite(number) && number >= 0) return number;
+  }
+  for (const key of ['data', 'result', 'marginDetails', 'margin_details', 'orders', 'order', 'margin']) {
+    if (key in value) {
+      const found = readRequiredMargin(value[key], depth + 1);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
+function fyersOrderType(value: unknown): number {
+  const type = String(value ?? 'MARKET').toUpperCase();
+  if (type === 'LIMIT') return 1;
+  if (type === 'SL') return 3;
+  if (type === 'SL-M' || type === 'SLM') return 4;
+  return 2;
+}
+
+function fyersProduct(value: unknown): string {
+  const product = String(value ?? '').toUpperCase();
+  return product === 'CNC' ? 'CNC' : product === 'NRML' ? 'MARGIN' : 'INTRADAY';
+}
+
+async function estimateFyersRequiredMargin(input: {
+  userId: string;
+  accessToken: string;
+  order: BrokerOrderPayload;
+}): Promise<number> {
+  const type = fyersOrderType(input.order.orderType);
+  const client = new FyersApiClient(
+    input.accessToken,
+    undefined,
+    resolveFyersCapabilities(input.userId),
+    input.userId,
+  );
+  const payload = await client.apiPost<unknown>('/multiorder/margin', {
+    data: [{
+      symbol: String(input.order.symbol),
+      qty: Number(input.order.quantity ?? input.order.qty),
+      type,
+      side: String(input.order.side).toUpperCase() === 'SELL' ? -1 : 1,
+      productType: fyersProduct(input.order.product),
+      limitPrice: type === 1 || type === 4 ? Number(input.order.price ?? input.order.limitPrice) : 0,
+      stopPrice: type === 3 || type === 4 ? Number(input.order.triggerPrice ?? input.order.stopPrice) : 0,
+      disclosedQty: 0,
+      validity: String(input.order.validity ?? 'DAY').toUpperCase() === 'IOC' ? 'IOC' : 'DAY',
+      offlineOrder: false,
+    }],
+  });
+  const required = readRequiredMargin(payload);
+  if (required === undefined) {
+    throw new Error('FYERS returned no usable order-margin estimate. Live automation is blocked until margin can be verified.');
+  }
+  return required;
+}
+
+function reject(reason: string, checks: Record<string, unknown>[], values: Partial<AutomationRiskVerdict> = {}): AutomationRiskVerdict {
+  return {
+    approved: false,
+    reason,
+    checks,
+    estimatedNotional: values.estimatedNotional ?? 0,
+    quotedPrice: values.quotedPrice ?? 0,
+    projectedSymbolExposure: values.projectedSymbolExposure ?? 0,
+    projectedAccountExposure: values.projectedAccountExposure ?? 0,
+    requiredMargin: values.requiredMargin ?? null,
+  };
+}
+
+/**
+ * Server-owned automation pre-trade policy. A workflow may request an order but
+ * cannot choose its risk limits, skip fresh account/position data, or manufacture
+ * a broker margin approval. Every failed/ambiguous prerequisite blocks live submission.
+ */
+export async function evaluateAutomationPreTradeRisk(input: {
+  userId: string;
+  accessToken: string;
+  broker: BaseBroker;
+  integration: AutomationIntegration;
+  order: BrokerOrderPayload;
+  live: boolean;
+}): Promise<AutomationRiskVerdict> {
+  const checks: Record<string, unknown>[] = [];
+  try {
+    validateFyersManualOrderPreflight(input.order);
+  } catch (error) {
+    return reject(error instanceof Error ? error.message : 'Order payload failed the canonical TradingCore preflight.', checks);
+  }
+
+  const symbol = String(input.order.symbol ?? '').trim().toUpperCase();
+  const side = String(input.order.side ?? '').trim().toUpperCase();
+  const product = String(input.order.product ?? '').trim().toUpperCase();
+  const quantity = Number(input.order.quantity ?? input.order.qty);
+  if (!input.integration.allowedSymbols.includes(symbol)) return reject('Symbol is outside the integration allowlist.', checks);
+  checks.push({ check: 'symbol-allowlist', passed: true });
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > input.integration.maxOrderQuantity) {
+    return reject(`Quantity exceeds this integration's per-order cap of ${input.integration.maxOrderQuantity}.`, checks);
+  }
+  checks.push({ check: 'quantity-cap', passed: true, quantity });
+
+  let quotes: Record<string, { ltp: number; timestamp: string }>;
+  let funds: Awaited<ReturnType<BaseBroker['getFunds']>>;
+  let positions: Awaited<ReturnType<BaseBroker['getPositions']>>;
+  try {
+    [quotes, funds, positions] = await Promise.all([
+      input.broker.getMarketQuotes(input.accessToken, [symbol]),
+      input.broker.getFunds(input.accessToken),
+      input.broker.getPositions(input.accessToken),
+    ]);
+  } catch {
+    return reject('Fresh broker quote, funds, and position snapshots are required. The broker risk snapshot could not be verified.', checks);
+  }
+
+  const quote = findQuote(quotes, symbol);
+  if (!quote || !finite(quote.ltp) || quote.ltp <= 0) return reject('No valid live broker quote is available for this symbol.', checks);
+  const quoteAt = Date.parse(quote.timestamp);
+  if (!Number.isFinite(quoteAt) || Date.now() - quoteAt > 20_000 || quoteAt > Date.now() + 2_000) {
+    return reject('Broker quote is stale or has an invalid timestamp. No order was submitted.', checks, { quotedPrice: quote.ltp });
+  }
+  checks.push({ check: 'fresh-broker-quote', passed: true, ageMs: Math.max(0, Date.now() - quoteAt) });
+
+  if (!finite(funds.availableMargin) || !finite(funds.totalCapital) || funds.availableMargin <= 0 || funds.totalCapital <= 0) {
+    return reject('Broker account funds are unavailable or non-positive. Live automation is blocked.', checks, { quotedPrice: quote.ltp });
+  }
+  checks.push({ check: 'account-funds-snapshot', passed: true });
+
+  const suppliedPrice = Number(input.order.price ?? input.order.limitPrice);
+  const orderType = String(input.order.orderType ?? 'MARKET').toUpperCase();
+  const basePrice = orderType === 'MARKET' ? quote.ltp : suppliedPrice;
+  if (!Number.isFinite(basePrice) || basePrice <= 0) return reject('A positive execution reference price is required.', checks, { quotedPrice: quote.ltp });
+  // Market-order risk reserves a 2% adverse-move buffer; limit orders use their
+  // hard limit price because the broker cannot execute them beyond that price.
+  const riskPrice = orderType === 'MARKET' ? basePrice * 1.02 : basePrice;
+  const estimatedNotional = riskPrice * quantity;
+  if (!Number.isFinite(estimatedNotional) || estimatedNotional <= 0 || estimatedNotional > input.integration.maxOrderNotional) {
+    return reject(`Estimated order notional exceeds the integration cap of ${input.integration.maxOrderNotional}.`, checks, {
+      estimatedNotional, quotedPrice: quote.ltp,
+    });
+  }
+  checks.push({ check: 'single-order-notional-cap', passed: true, estimatedNotional });
+
+  const signedQuantity = side === 'SELL' ? -quantity : quantity;
+  const existingNetQuantity = positions
+    .filter(position => String(position.symbol).toUpperCase() === symbol && finite(position.quantity))
+    .reduce((sum, position) => sum + position.quantity, 0);
+  const projectedSymbolExposure = Math.abs(existingNetQuantity + signedQuantity) * quote.ltp;
+  if (!Number.isFinite(projectedSymbolExposure) || projectedSymbolExposure > input.integration.maxPositionNotional) {
+    return reject(`Projected net exposure exceeds the per-symbol cap of ${input.integration.maxPositionNotional}.`, checks, {
+      estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure,
+    });
+  }
+  checks.push({ check: 'projected-position-cap', passed: true, projectedSymbolExposure });
+
+  // Enforce a separate account-wide gross exposure cap. Mark the requested
+  // symbol to the fresh quote and every other open position to its broker LTP;
+  // missing marks on an open position fail closed instead of silently undercounting.
+  let existingGrossExposure = 0;
+  let existingSymbolGrossExposure = 0;
+  for (const position of positions) {
+    if (!finite(position.quantity) || position.quantity === 0) continue;
+    const positionSymbol = String(position.symbol).toUpperCase();
+    const mark = positionSymbol === symbol ? quote.ltp : position.ltp;
+    if (!finite(mark) || mark <= 0) {
+      return reject('An open broker position has no valid mark price; account-wide exposure cannot be verified.', checks, {
+        estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure,
+      });
+    }
+    const exposure = Math.abs(position.quantity) * mark;
+    existingGrossExposure += exposure;
+    if (positionSymbol === symbol) existingSymbolGrossExposure += exposure;
+  }
+  const projectedAccountExposure = Math.max(0, existingGrossExposure - existingSymbolGrossExposure + projectedSymbolExposure);
+  const accountCapExceeded = projectedAccountExposure > input.integration.maxAccountExposureNotional;
+  const riskReducingWhileOverCap = projectedAccountExposure < existingGrossExposure;
+  if (!Number.isFinite(projectedAccountExposure) ||
+      (accountCapExceeded && !riskReducingWhileOverCap)) {
+    return reject(`Projected account exposure exceeds the integration cap of ${input.integration.maxAccountExposureNotional}.`, checks, {
+      estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
+    });
+  }
+  checks.push({
+    check: 'projected-account-exposure-cap',
+    passed: !accountCapExceeded || riskReducingWhileOverCap,
+    capExceeded: accountCapExceeded,
+    projectedAccountExposure,
+    existingGrossExposure,
+    riskReducingWhileOverCap,
+    reason: accountCapExceeded ? 'Risk-reducing order permitted while exposure is already above its cap.' : 'Projected exposure is within cap.',
+  });
+
+  if (product === 'CNC' && side === 'BUY' && estimatedNotional > funds.availableMargin) {
+    return reject('Available broker margin is below the conservative cash-delivery notional requirement.', checks, {
+      estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure,
+    });
+  }
+  if (product === 'CNC' && side === 'SELL') {
+    try {
+      const holdings = await input.broker.getHoldings(input.accessToken);
+      const ownedQuantity = holdings
+        .filter(holding => String(holding.symbol).toUpperCase() === symbol && finite(holding.quantity))
+        .reduce((sum, holding) => sum + Math.max(0, holding.quantity), 0);
+      if (ownedQuantity < quantity) {
+        return reject('Cash-delivery sell quantity exceeds the available settled holdings reported by the broker.', checks, {
+          estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure,
+        });
+      }
+      checks.push({ check: 'delivery-holdings', passed: true, ownedQuantity });
+    } catch {
+      return reject('Holdings could not be verified for a cash-delivery sell. No order was submitted.', checks, {
+        estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
+      });
+    }
+  }
+
+  let requiredMargin: number | null = null;
+  if (input.live) {
+    try {
+      requiredMargin = await estimateFyersRequiredMargin({ userId: input.userId, accessToken: input.accessToken, order: input.order });
+    } catch (error) {
+      return reject(error instanceof Error ? error.message : 'Broker order-margin check failed.', checks, {
+        estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
+      });
+    }
+    const bufferedMargin = requiredMargin * (1 + input.integration.marginBufferPercent / 100);
+    if (bufferedMargin > funds.availableMargin) {
+      return reject('Available broker margin does not cover the broker-calculated requirement plus the configured safety buffer.', checks, {
+        estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure, requiredMargin,
+      });
+    }
+    checks.push({
+      check: 'broker-calculated-margin',
+      passed: true,
+      marginBufferPercent: input.integration.marginBufferPercent,
+      requiredMargin,
+      bufferedMargin,
+    });
+  }
+
+  return {
+    approved: true,
+    reason: input.live ? 'Configured policy, fresh account/market snapshots, position limits, and broker margin checks passed.' : 'Paper request passed configured policy and fresh broker snapshot checks; no order will be submitted.',
+    checks,
+    estimatedNotional,
+    quotedPrice: quote.ltp,
+    projectedSymbolExposure,
+    projectedAccountExposure,
+    requiredMargin,
+  };
+}
