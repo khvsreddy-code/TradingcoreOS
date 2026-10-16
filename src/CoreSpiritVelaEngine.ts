@@ -16,6 +16,7 @@ import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVel
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
+import { LatestValueAsyncScheduler } from './services/coreSpirit/latestValueAsyncScheduler.ts';
 
 type PreparedToken = {
   sourceId: string;
@@ -558,6 +559,51 @@ export class CoreSpiritVelaEngine {
       return Object.freeze(normalizedBarsCache.slice()) as CoreSpiritMarketBar[];
     };
 
+    type LiveTailWork = {
+      bars: CoreSpiritMarketBar[];
+      generation: number;
+      sessionGeneration: number;
+      datasetRevision: number;
+      tailSignature: string;
+    };
+
+    // One main-tail worker run at a time; intermediate candle snapshots are
+    // superseded while that run is in flight. The data plane has already processed
+    // each raw trade, so coalescing here only skips redundant snapshot evaluations.
+    const liveTailScheduler = new LatestValueAsyncScheduler<LiveTailWork>(async (work) => {
+      if (stopped || work.generation !== liveRunGeneration ||
+          work.sessionGeneration !== mainRunGeneration ||
+          work.datasetRevision !== canonicalDatasetRevision) return;
+      try {
+        const tail = work.bars.at(-1);
+        if (!tail) return;
+        const result = await executeInWorker(work.bars, mainContextKey, false, executionBarRange(
+          Math.max(0, work.bars.length - 1), work.bars.length,
+        ));
+        if (stopped || work.generation !== liveRunGeneration ||
+            work.sessionGeneration !== mainRunGeneration ||
+            work.datasetRevision !== canonicalDatasetRevision) return;
+
+        // Never commit a calculation whose input tail was superseded during the await.
+        const currentTail = getCurrentBars().at(-1);
+        if (!currentTail || barValueSignature(currentTail) !== work.tailSignature) return;
+
+        const latestOutputs = safeOutputs(result.outputs);
+        const latestTime = barTimeMillis(tail.timestamp);
+        if (Number.isFinite(latestTime)) {
+          emitScenePatches(latestOutputs, velaTimeRange(latestTime, latestTime), result.sourceDatasetRevision);
+          lastTime = latestTime;
+        }
+        rememberWorkerState(result.state);
+      } catch (error) {
+        if (!stopped && work.generation === liveRunGeneration &&
+            work.sessionGeneration === mainRunGeneration &&
+            work.datasetRevision === canonicalDatasetRevision) {
+          handlers.onError?.(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+    });
+
     const initialBars = getCurrentBars();
     canonicalDatasetFingerprint=fullDatasetFingerprint(initialBars);
     canonicalTailFingerprint=tailDatasetFingerprint(initialBars);
@@ -597,6 +643,7 @@ export class CoreSpiritVelaEngine {
       },
       stop() {
         stopped = true;
+        liveTailScheduler.dispose();
         secondaryRequestVersion += 1;
         updateVersion += 1;
         mainRunGeneration += 1;
@@ -627,6 +674,7 @@ export class CoreSpiritVelaEngine {
 
         const updateGeneration=++updateVersion;
         const executionGeneration=++mainRunGeneration;
+        liveTailScheduler.clear();
         liveRunGeneration+=1;
         viewportRunGeneration+=1;
         initializationInFlight=true;
@@ -727,6 +775,7 @@ export class CoreSpiritVelaEngine {
         lastViewportComputationKey=undefined;
 
         if(reason==='backfill'){
+          liveTailScheduler.clear();
           const wasHistoryInitialized=historyInitialized;
           // A history prepend can change the recursive state of every later bar.
           // Invalidate any in-flight main/viewport runs and rebuild from the canonical
@@ -771,22 +820,14 @@ export class CoreSpiritVelaEngine {
         if(secondaryDependencies.length)void loadSecondaryData();
         const latest=currentBars.at(-1);
         if(!latest)return;
-        const latestTime=barTimeMillis(latest.timestamp);
         const generation=++liveRunGeneration;
         const sessionGeneration=mainRunGeneration;
-        void executeInWorker(currentBars,mainContextKey,false,executionBarRange(
-          Math.max(0,currentBars.length-1),currentBars.length,
-        )).then(result=>{
-          if(stopped||generation!==liveRunGeneration||sessionGeneration!==mainRunGeneration)return;
-          const latestOutputs=safeOutputs(result.outputs);
-          if(Number.isFinite(latestTime)){
-            emitScenePatches(latestOutputs,velaTimeRange(latestTime,latestTime),result.sourceDatasetRevision);
-            lastTime=latestTime;
-          }
-          rememberWorkerState(result.state);
-        }).catch(error=>{
-          if(!stopped&&generation===liveRunGeneration&&sessionGeneration===mainRunGeneration)
-            handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+        liveTailScheduler.enqueue({
+          bars: currentBars,
+          generation,
+          sessionGeneration,
+          datasetRevision: canonicalDatasetRevision,
+          tailSignature: barValueSignature(latest),
         });
       },    };
   }
