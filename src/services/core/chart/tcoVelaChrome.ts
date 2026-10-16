@@ -719,6 +719,7 @@ const bookmarksPanel: SidePanelDescriptor = {
     root.appendChild(rows);
     root.appendChild(detailCard);
 
+    const STALE_AFTER_MS = 15_000;
     type Quote = {
       ltp: number;
       change?: number;
@@ -727,7 +728,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       low?: number;
       receivedAt: number;
     };
-    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number };
+    type MarketQuoteView = { ltp?: number; change?: number; changePercent?: number; high?: number; low?: number; receivedAt?: number; stale: boolean };
     const quotes = new Map<string, Quote>();
     let quoteStop: (() => void) | undefined;
 
@@ -748,22 +749,34 @@ const bookmarksPanel: SidePanelDescriptor = {
       const snapshot = (tradingCoreRuntime.getMarketSnapshot(symbol) || {}) as unknown as Record<string, unknown>;
       const cached = quotes.get(symbol.toUpperCase());
       const daily = dayCandle(snapshot);
-      const ltp = asFinite(snapshot.ltp, cached?.ltp);
-      const percent = asFinite(snapshot.changePercent, cached?.changePercent);
+      const rawSnapshotTime = asFinite(snapshot.receivedAtEpoch, snapshot.lastReceivedAt);
+      const parsedSnapshotTime = rawSnapshotTime ?? (() => {
+        const parsed = Date.parse(String(snapshot.receivedAt ?? ''));
+        return Number.isFinite(parsed) ? parsed : undefined;
+      })();
+      // A cached row quote carries an explicit local receive time. Prefer it whenever
+      // the broker snapshot has no timestamp; never make an old retained LTP look live.
+      const cachedIsNewest = !!cached && (parsedSnapshotTime === undefined || cached.receivedAt >= parsedSnapshotTime);
+      const receivedAt = cachedIsNewest ? cached?.receivedAt : parsedSnapshotTime ?? cached?.receivedAt;
+      const ltp = asFinite(cachedIsNewest ? cached?.ltp : snapshot.ltp, cached?.ltp, snapshot.ltp);
+      const percent = asFinite(cachedIsNewest ? cached?.changePercent : snapshot.changePercent, cached?.changePercent, snapshot.changePercent);
       const previousClose = asFinite(snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close);
-      let change = asFinite(snapshot.change, snapshot.changeValue, snapshot.netChange, cached?.change);
+      let change = asFinite(cachedIsNewest ? cached?.change : snapshot.change, snapshot.changeValue, snapshot.netChange, cached?.change);
       if (change === undefined && ltp !== undefined && previousClose !== undefined) change = ltp - previousClose;
       if (change === undefined && ltp !== undefined && percent !== undefined && percent > -100) {
         // Broker feeds that expose only rounded percent change still provide a useful
         // value-change estimate; prefer the broker's absolute change whenever present.
         change = ltp - ltp / (1 + percent / 100);
       }
+      const hasFreshTimestamp = receivedAt !== undefined && Number.isFinite(receivedAt);
       return {
         ltp,
         change,
         changePercent: percent,
-        high: asFinite(snapshot.dayHigh, snapshot.high, daily?.high, cached?.high),
-        low: asFinite(snapshot.dayLow, snapshot.low, daily?.low, cached?.low),
+        high: asFinite(cachedIsNewest ? cached?.high : snapshot.dayHigh, snapshot.high, daily?.high, cached?.high),
+        low: asFinite(cachedIsNewest ? cached?.low : snapshot.dayLow, snapshot.low, daily?.low, cached?.low),
+        ...(hasFreshTimestamp ? { receivedAt } : {}),
+        stale: !hasFreshTimestamp || Date.now() - receivedAt! > STALE_AFTER_MS,
       };
     };
 
@@ -814,7 +827,9 @@ const bookmarksPanel: SidePanelDescriptor = {
       const { ltp, change, changePercent, high, low } = quote;
       detailTitle.textContent = ticker || 'Active instrument';
       detailSubtitle.textContent = `${current} · ${ctx.timeframe} · ${(tradingCoreRuntime.getMarketSnapshot(current) as any)?.exchange || (tradingCoreRuntime.getMarketSnapshot(current) as any)?.venue || 'Active chart'}`;
-      liveBadge.textContent = ltp !== undefined ? 'LIVE' : 'WAITING';
+      liveBadge.textContent = ltp === undefined ? 'WAITING' : quote.stale ? 'STALE' : 'LIVE';
+      liveBadge.setAttribute('aria-label', ltp === undefined ? 'Waiting for quote' : quote.stale ? 'Stale quote' : 'Live quote');
+      liveBadge.style.color = ltp === undefined ? 'var(--vela-fg-muted)' : quote.stale ? '#fbbf24' : '#34d399';
       const setMetric = (key: string, value: string, tone?: string) => {
         const element = metricRefs.get(key);
         if (!element) return;
@@ -829,9 +844,11 @@ const bookmarksPanel: SidePanelDescriptor = {
       setMetric('high', fmt(high));
       setMetric('low', fmt(low));
       detailHint.textContent = ltp !== undefined
-        ? high !== undefined && low !== undefined
-          ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
-          : 'Live broker quote · waiting for complete day-range fields from the market feed.'
+        ? quote.stale
+          ? 'STALE QUOTE · The last received price is older than 15 seconds. Recheck the live feed before acting.'
+          : high !== undefined && low !== undefined
+            ? 'Live broker quote · day range and absolute/percentage change use available market snapshot fields.'
+            : 'Live broker quote · waiting for complete day-range fields from the market feed.'
         : 'Waiting for a market quote for this instrument. No sample price is shown.';
     };
 
@@ -864,9 +881,15 @@ const bookmarksPanel: SidePanelDescriptor = {
         const changeParts: string[] = [];
         if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
         if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
-        ref.change.textContent = changeParts.length ? changeParts.join(' · ') : 'LIVE —';
+        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.stale ? 'stale' : 'live';
+        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
+        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.stale ? 'stale quote' : 'live quote'}`}`);
+        ref.value.style.color = quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
+        ref.change.textContent = quote.ltp === undefined
+          ? 'WAITING FOR QUOTE'
+          : `${quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
         const changeTone = absolute !== undefined ? absolute : pct;
-        ref.change.style.color = changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
+        ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
       }
       updateDetails();
     };
@@ -974,11 +997,15 @@ const bookmarksPanel: SidePanelDescriptor = {
 
     watchlistRefreshers.add(refresh);
     refresh();
+    // Refresh the stale marker while the market is quiet or closed; otherwise an old
+    // quote can remain visually LIVE simply because no later tick arrived to repaint it.
+    const freshnessTimer = window.setInterval(updateRows, 5000);
 
     return {
       onOpen: refresh,
       onChart: refresh,
       destroy() {
+        window.clearInterval(freshnessTimer);
         watchlistRefreshers.delete(refresh);
         quoteStop?.();
         quoteStop = undefined;
