@@ -18,8 +18,22 @@ type Props = {
   onBroker: () => void;
 };
 
-function fallback() {
-  return <LoadingScreen message="Loading Workspace..." submessage="Preparing trading module" />;
+const ROUTE_LOADING_COPY: Readonly<Record<WorkspaceRoute, { message: string; submessage: string }>> = {
+  '/dashboard': { message: 'Loading command center…', submessage: 'Preparing account, portfolio and risk summaries' },
+  '/live': { message: 'Loading live terminal…', submessage: 'Preparing the Vela chart workspace and market-data connection' },
+  '/models': { message: 'Loading model research…', submessage: 'Loading model artifacts and evaluation tools on demand' },
+  '/predictions': { message: 'Loading prediction research…', submessage: 'Preparing forecast and evaluation views' },
+  '/automations': { message: 'Loading automation workspace…', submessage: 'Preparing workflows and signal controls' },
+  '/indicators': { message: 'Loading indicator workspace…', submessage: 'Preparing the indicator catalog and authoring tools' },
+  '/portfolio': { message: 'Loading portfolio…', submessage: 'Retrieving account positions and portfolio state' },
+  '/profile': { message: 'Loading profile…', submessage: 'Preparing account preferences' },
+  '/corespirit': { message: 'Loading CoreSpirit IDE…', submessage: 'Loading the editor, compiler diagnostics and runtime inspector' },
+  '/corespirit/docs': { message: 'Loading CoreSpirit documentation…', submessage: 'Preparing language, runtime and research references' },
+};
+
+function fallback(route: WorkspaceRoute) {
+  const copy = ROUTE_LOADING_COPY[route];
+  return <LoadingScreen message={copy.message} submessage={copy.submessage} />;
 }
 
 export function TradingWorkspaceShell({ route, onNavigate, onBroker }: Props) {
@@ -30,7 +44,7 @@ export function TradingWorkspaceShell({ route, onNavigate, onBroker }: Props) {
   };
 
   return (
-    <Suspense key={route} fallback={fallback()}>
+    <Suspense key={route} fallback={fallback(route)}>
       {route === '/dashboard' && <DashboardPage onNavigate={onNavigate} onBroker={onBroker} />}
       {route === '/models' && <ModelsPage {...common} />}
       {route === '/predictions' && <PredictionCenterPage {...common} />}
