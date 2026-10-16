@@ -4,7 +4,9 @@ TradingCoreOS can expose allowlisted market context, CoreSpirit signal events, a
 
 ## Deployment prerequisites
 
-1. Apply `supabase/migrations/20261016130000_external_automation_gateway.sql` after the base schema and FYERS order-reconciliation migration. The migration creates the credential, signal, and order-request ledgers plus an atomic idempotency/daily-cap claim RPC. The tables are RLS-enabled, have no browser policies, and grant data access only to `service_role`.
+1. Apply `supabase/migrations/20261010120000_corespirit_model_artifact_lifecycle.sql` for immutable CoreSpirit research, dataset, training, and model artifacts.
+2. Apply `supabase/migrations/20261011100000_fyers_order_state_reconciliation.sql` before enabling broker-state reconciliation.
+3. Apply `supabase/migrations/20261016130000_external_automation_gateway.sql` after the base schema and FYERS order-state migration. It creates the scoped credential, signal, and order-request ledgers plus an atomic idempotency/daily-cap claim RPC, and upgrades the legacy shared order-idempotency table to retain client/broker IDs, expiry, attempts, and uncertain/recovery states. The gateway tables are RLS-enabled, have no browser policies, and grant data access only to `service_role`.
 2. Configure `SUPABASE_URL` and a server-only `SUPABASE_SERVICE_ROLE_KEY` (or the supported server secret key) on the API deployment. The API deliberately fails closed if durable storage is unavailable.
 3. Configure the existing FYERS fixed-IP execution gateway (`FYERS_EXECUTION_GATEWAY_URL` and `FYERS_EXECUTION_GATEWAY_SECRET`) before live orders can be requested. The API will never fall back to serverless egress for live order placement.
 4. Configure `TCO_CORESPIRIT_SIGNAL_SECRET` with at least 32 random characters in server secrets only. It is used by the trusted server-side CoreSpirit signal producer at `POST /api/automation-gateway/internal/v1/signals`; do not put this secret in a browser bundle, frontend environment variable, or external AI workflow.
