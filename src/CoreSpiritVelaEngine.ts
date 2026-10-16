@@ -817,7 +817,7 @@ export class CoreSpiritVelaEngine {
         // a competing tick that could supersede their required history warm-up.
         if(initializationInFlight)return;
         if(!historyInitialized||!liveStarted){
-          initializeFromBars(currentBars);
+          initializeFromBars(getCurrentBars());
           return;
         }
         if(secondaryDependencies.length)void loadSecondaryData();
