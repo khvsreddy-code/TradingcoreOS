@@ -470,6 +470,7 @@ coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRe
       artifactIntegrityVerified: true,
       hasChronologicalHoldout: validation.protocol === 'chronological-holdout-v1' &&
         validation.sampleCount >= MIN_RESEARCH_VALIDATION_ROWS && validation.trainingSampleCount >= 12,
+      nonDegenerateValidation: validation.distinctPredictedStates >= 2,
       temporalRangesDisjoint: Number.isFinite(trainingEnd) && Number.isFinite(validationStart) &&
         Number.isFinite(validationEnd) && trainingEnd < validationStart && validationStart <= validationEnd,
       forwardOnly: validation.forwardOnly === true,
@@ -486,7 +487,7 @@ coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRe
         safety.blockers.length === 0,
     };
     const checkNames = [
-      'hasChronologicalHoldout','temporalRangesDisjoint','forwardOnly','noTimestampOverlap',
+      'hasChronologicalHoldout','nonDegenerateValidation','temporalRangesDisjoint','forwardOnly','noTimestampOverlap',
       'featureSchemaMatched','labelLeakageCheckPassed','featureAvailabilityCheckPassed',
       'datasetHashVerified','sourceCausalityPassed','lookaheadCheckPassed','staticSafetyEligible',
     ];
