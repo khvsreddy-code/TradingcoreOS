@@ -62,7 +62,9 @@ export default defineConfig(() => {
             if (normalized.includes('@supabase')) return 'vendor-supabase';
             if (normalized.includes('lucide-react')) return 'vendor-icons';
             if (normalized.includes('@zag-js')) return 'vendor-zag';
-            return 'vendor-other';
+            // Leave unclassified dependencies to Rollup's graph-aware chunking.
+            // A catch-all vendor chunk makes unrelated optional packages share one
+            // file, so a single route can download research/AI code it never uses.
           },
         },
       },
