@@ -14,7 +14,7 @@ import type {
     SnapMode,
     ToolbarDefinition,
 } from '../../../core/drawings';
-import { applyToolDefaults, captureToolDefaults, deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnTimeframe, loadAdvancedDrawingCatalog, defaultToolbar, Callout, Magnifier, TextLabel } from '../../../core/drawings';
+import { applyToolDefaults, captureToolDefaults, deserializeDrawing, getDrawingType, resetDrawingSettings, shownOnTimeframe, defaultToolbar, Callout, Magnifier, TextLabel } from '../../../core/drawings';
 import type { Unsubscribe } from '../../../core/util/types';
 import { contrastColor, namedFontSize, labelLineHeight, TEXT_FRAME_INSET, TEXT_FRAME_RISE } from '../../shared/drawing-geometry';
 import { withAlpha } from '../core/chartConfig';
@@ -222,26 +222,9 @@ export class UserDrawingController implements IDrawingsRendererPort {
     showToolbar(visible: boolean): void {
         this.toolbarVisible = visible;
         this.toolbar.setVisible(visible && !this.mobileLayout);
-        if (visible) {
-            void loadAdvancedDrawingCatalog().then(() => {
-                // A host-supplied toolbar can contain the same lazy metadata placeholders
-                // as the default layout. Refresh every current group rather than assuming
-                // the canonical default toolbar owns these buttons.
-                const hydrate = (tool: { type: DrawingTypeKey; label: string; icon: string }) => {
-                    const metadata = getDrawingType(tool.type);
-                    if (!metadata) return;
-                    tool.label = metadata.label;
-                    tool.icon = metadata.icon;
-                };
-                for (const group of this.toolbarDefinition.groups) {
-                    group.tools.forEach(hydrate);
-                    group.sections?.forEach((section) => section.tools.forEach(hydrate));
-                }
-                this.toolbar.setDefinition(this.toolbarDefinition);
-            }).catch((error) => {
-                console.error('[vela] failed to hydrate chart drawing icons', error);
-            });
-        }
+        // Showing the lightweight toolbar is not permission to download every advanced
+        // drawing family. The toolbar resolves each family only when the user opens that
+        // group's flyout or arms one of its tools.
         this.syncToolbarGutter(); // reserve/release the left gutter so the bar never overlaps the plot
     }
 
