@@ -154,10 +154,24 @@ function normalizeInputType(type:string|undefined, defval:CoreSpiritSurfaceLiter
   return 'string';
 }
 
+const CORESPIRIT_SOURCE_DEFAULTS = new Set([
+  'open','high','low','close','volume','hl2','hlc3','ohlc4','hlcc4','typical','weighted',
+]);
+const CORESPIRIT_SOURCE_INPUT_KEYS = new Set(['source','src','pricesource','inputsource']);
+
 export function parseCoreSpiritInputDeclaration(line:string,start:number,end:number=start+line.length):CoreSpiritSurfaceInput|undefined {
   const match=line.trim().match(/^input\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*([A-Za-z_][A-Za-z0-9_]*))?\s*=\s*(.+)$/i);
   if(!match)return undefined;
-  const scanned=scanSurfaceAttributes(match[3]); const defval=parseSurfaceLiteral(scanned.base); const type=normalizeInputType(match[2],defval);
+  const scanned=scanSurfaceAttributes(match[3]);
+  const declaredType=String(match[2]??'').trim().toLowerCase();
+  const sourceDefault=scanned.base.trim().toLowerCase();
+  // Source selectors may default to canonical OHLCV fields. Detect this before
+  // literal parsing so a valid identifier is not rejected as an unquoted string.
+  const implicitSource= !declaredType && CORESPIRIT_SOURCE_INPUT_KEYS.has(match[1]!.toLowerCase().replace(/[_-]/g,'')) &&
+    CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
+  const isSourceDefault=(declaredType==='source'||implicitSource)&&CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
+  const defval:CoreSpiritSurfaceLiteral=isSourceDefault?sourceDefault:parseSurfaceLiteral(scanned.base);
+  const type:CoreSpiritSurfaceInputType=isSourceDefault?'source':normalizeInputType(match[2],defval);
   const attrNum=(name:string)=>scanned.attrs[name]!==undefined?Number(scanned.attrs[name]):undefined;
   const title=scanned.attrs.title ? String(parseSurfaceLiteral(scanned.attrs.title)) : prettySurfaceKey(match[1]);
   const out:CoreSpiritSurfaceInput={key:match[1],title,type,defval,start,end};
