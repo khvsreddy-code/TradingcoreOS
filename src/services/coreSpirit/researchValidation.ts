@@ -57,7 +57,7 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
       throw new Error('Research rows must be strictly chronological with unique decision timestamps.');
     }
     previousTimestamp = row.timestamp;
-    return { ...row, values: [...row.values] } as T;
+    return Object.freeze({ ...row, values: Object.freeze([...row.values]) }) as T;
   });
 }
 
