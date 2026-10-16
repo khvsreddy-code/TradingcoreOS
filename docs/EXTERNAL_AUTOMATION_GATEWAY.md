@@ -122,6 +122,8 @@ Paper request example:
 
 Paper requests record a validated simulation decision and explicitly return `orderSubmitted: false`; they do not call the broker order endpoint.
 
+The nested `order` object uses a strict allowlist: `symbol`, `quantity`, `side`, `orderType`, `product`, and supported price/protective-order fields. Unknown fields (including caller-supplied order tags and internal idempotency metadata) are rejected rather than forwarded to the broker. `side` must be `BUY` or `SELL`; if supplied, `validity` must be `DAY` or `IOC`. After-market orders are not accepted.
+
 Live requests use `"mode": "LIVE"`. When a request includes `signalId`, it must reference a recent server-authenticated `realtime` signal for the same integration and symbol, and the signal side must agree with the order. A direct AI decision may omit `signalId`, but receives no safety exemption: live orders are rejected unless **all** of the following are true:
 
 - the credential was explicitly created with `allowLiveOrders: true`;
@@ -148,6 +150,24 @@ This reads the durable automation request and reconciled broker state when avail
 - Broker timeout or uncertain acceptance becomes `UNKNOWN` / `RECOVERY_REQUIRED`. Those states are not retried automatically; reconcile with FYERS orders/trades first.
 - A success response with `state: "ACKNOWLEDGED"` means the broker accepted the request, **not** that it filled. Partial fill, fill price, cancel, rejection and terminal state are sourced from the existing FYERS order WebSocket/REST reconciliation.
 - Audit records include request/event correlation IDs, risk checks and the client/broker order identifiers. Credentials and broker access tokens are never written to the external response payload.
+
+## Persistent order state machine
+
+The canonical order ledger persists an event history and a per-order state; the automation request row separately preserves the original workflow request and its response. The deterministic client order ID is recorded before the broker call. The broker order ID is attached when returned by FYERS or discovered by reconciliation.
+
+| State | Meaning and permitted handling |
+| --- | --- |
+| `INTENT` | Validated order intent durably recorded; no broker acknowledgement yet. |
+| `SUBMITTED` | Submission is in flight or has been attempted; callers must not create a replacement key. |
+| `ACKNOWLEDGED` | FYERS returned an order ID. This is acceptance, not a fill. |
+| `OPEN` | Broker reports an active unfilled order. |
+| `PARTIAL` | Some quantity filled; keep tracking cumulative filled quantity and average price. |
+| `FILLED` | Filled quantity meets the canonical order quantity. |
+| `CANCEL_PENDING` | Cancellation requested but not confirmed; later fill events can still win the race. |
+| `CANCELLED`, `REJECTED`, `EXPIRED` | Broker-confirmed terminal outcomes. Never translate these into a successful fill. |
+| `UNKNOWN`, `RECOVERY_REQUIRED` | Submission outcome or persistence is uncertain. Block resubmission and reconcile the FYERS order/trade book first. |
+
+Order events are idempotently applied to the canonical ledger. Reconciliation may advance a stale local state, but should not reduce cumulative filled quantity based on a lagging snapshot. When the broker order ID is unknown, status lookup falls back to the stable client order ID and reports `reconciliationPending` until a broker record is visible.
 
 ## Security boundary
 
