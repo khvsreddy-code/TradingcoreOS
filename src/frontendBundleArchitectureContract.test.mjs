@@ -53,6 +53,10 @@ assert(tcoVelaChrome.includes('quoteUpdatedAt'), 'watchlist rows must retain an 
 assert(tcoVelaChrome.includes('STALE ·') && tcoVelaChrome.includes('WAITING FOR QUOTE'), 'watchlist must distinguish stale and missing quotes');
 assert(tcoVelaChrome.includes('previousClose?: number;'), 'watchlist quote normalization must retain previous close');
 assert(tcoVelaChrome.includes('Quote freshness'), 'Trading context must report active-chart quote freshness');
+assert(tcoVelaChrome.includes('Open chart replay controls'), 'research dock must expose the existing chart replay capability');
+assert(tcoVelaChrome.includes('Open market health & performance'), 'research dock must link to live renderer/market health diagnostics');
+assert(tcoVelaChrome.includes('Renderer metrics are warming up'), 'research dock must communicate when renderer telemetry is not ready');
+assert(tcoVelaChrome.includes(' · LTP ${Number.isFinite(ltp)?ltp.toLocaleString'), 'order-book context must show the active quote and its freshness state');
 assert(workspaceShell.includes('Skip to workspace content'), 'workspace shell must provide a keyboard skip link');
 assert(workspaceShell.includes('aria-label="Primary workspace navigation"'), 'workspace navigation must be named for assistive technology');
 assert(workspaceShell.includes("aria-current={active===path?'page':undefined}"), 'workspace navigation must expose the current page');
