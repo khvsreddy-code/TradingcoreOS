@@ -37,6 +37,16 @@ assert.throws(() => parseCoreSpiritInputDeclaration('input mode = Close'), /defa
 assert.equal(parseCoreSpiritDeclarationProperty('overlay = true')?.defval, true);
 assert.equal(parseCoreSpiritDeclarationProperty('title = "Trend"')?.defval, 'Trend');
 
+assert.equal(parseCoreSpiritInputDeclaration('input lineColor: color = color.green')?.defval, '#089981',
+  'typed color inputs should accept known CoreSpirit color constants and normalize them to CSS colors');
+assert.equal(parseCoreSpiritInputDeclaration('input lineColor: color = "#ff0000"')?.defval, '#ff0000',
+  'quoted CSS colors should remain supported');
+assert.equal(parseCoreSpiritDeclarationProperty('format = format.price')?.defval, 'price',
+  'format enum defaults should normalize to the property value expected by the renderer');
+assert.equal(parseCoreSpiritDeclarationProperty('format = format.volume')?.defval, 'volume');
+assert.throws(() => parseCoreSpiritInputDeclaration('input lineColor: color = color.notAColor'), /Unsupported CoreSpirit color default/);
+
+
 const surface = extractCoreSpiritSurfaceMetadata(`
 indicator "Source selector"
     input source = close
