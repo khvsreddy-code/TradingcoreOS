@@ -70,7 +70,7 @@ assert.match(engine, /liveTailScheduler\.dispose\(\)/,
   'stopped chart sessions must release the scheduled work lane');
 assert.doesNotMatch(engine, /void executeInWorker\(currentBars,mainContextKey,false,executionBarRange\(/,
   'notifyBars must not queue a separate full scheduling request for every forming candle');
-assert.match(engine, /return isolateSnapshot \? Object\.freeze\(normalizedBarsCache\.slice\(\)\)[\\s\\S]*: normalizedBarsCache/,
+assert.ok(engine.includes('return isolateSnapshot ? Object.freeze(normalizedBarsCache.slice()) as CoreSpiritMarketBar[] : normalizedBarsCache'),
   'the synchronous hot path can reuse the normalized cache; isolation is reserved for async compute');
 
 console.log('CORESPIRIT_LATEST_VALUE_ASYNC_SCHEDULER_CONTRACT_OK');
