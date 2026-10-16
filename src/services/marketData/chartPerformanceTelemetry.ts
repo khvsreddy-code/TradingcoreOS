@@ -215,6 +215,7 @@ class ChartPerformanceTelemetry {
     const duration = Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : 0;
     m.rendererUpdates += 1;
     m.totalRendererMs += duration;
+    m.stageMs.renderer += duration;
     m.worstRendererMs = Math.max(m.worstRendererMs, duration);
   }
 
@@ -235,7 +236,10 @@ class ChartPerformanceTelemetry {
   }): void {
     const m = this.entry(key);
     m.frames = Math.max(0, Number(snapshot.frames) || 0);
-    m.totalFrameMs = Math.max(0, Number(snapshot.totalFrameMs) || 0);
+    const nextTotalFrameMs = Math.max(0, Number(snapshot.totalFrameMs) || 0);
+    // Renderer snapshots are cumulative; add only the new observed frame time.
+    m.stageMs.frame += Math.max(0, nextTotalFrameMs - m.totalFrameMs);
+    m.totalFrameMs = nextTotalFrameMs;
     m.worstFrameMs = Math.max(0, Number(snapshot.worstFrameMs) || 0);
     m.p95FrameMs = Math.max(0, Number(snapshot.p95FrameMs) || 0);
     m.fps = Math.max(0, Number(snapshot.fps) || 0);
