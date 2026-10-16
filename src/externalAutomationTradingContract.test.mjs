@@ -48,7 +48,7 @@ assert.match(migration, /revoke all on table public\.automation_order_requests f
 assert.match(migration, /grant execute on function public\.claim_automation_order_request[\s\S]*to service_role/i);
 
 assert.match(integrations, /request_hash/);
-assert.match(integrations, /conflict: 'request_mismatch'/);
+assert.match(integrations, /result\.conflict === 'request_mismatch'/, 'the idempotency claim must distinguish a reused key with a different payload');
 assert.match(integrations, /static async getBrokerOrderState/);
 assert.match(integrations, /static async getBrokerOrderStateByClientOrderId/, 'uncertain submissions must be recoverable from the pre-submission client order ID');
 assert.match(integrations, /eq\('client_order_id', clientOrderId\)/);
@@ -132,7 +132,7 @@ assert.match(automationUi, /Revoke credential/);
 assert.match(automationUi, /tokenShownOnce/);
 assert.match(automationUi, /lifecycle_status:cloudLifecycleStatus/);
 assert.match(envExample, /TCO_CORESPIRIT_SIGNAL_SECRET/);
-assert.match(docs, /Broker acknowledgement is not a fill/);
+assert.match(docs, /A success response with `state: "ACKNOWLEDGED"` means the broker accepted the request, \*\*not\*\* that it filled/);
 assert.match(docs, /Persistent order state machine/);
 assert.match(docs, /UNKNOWN.*RECOVERY_REQUIRED/s);
 assert.match(docs, /strict allowlist/);
