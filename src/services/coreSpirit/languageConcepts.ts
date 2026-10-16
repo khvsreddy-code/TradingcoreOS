@@ -92,6 +92,28 @@ function prettySurfaceKey(key:string):string {
   return key.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim().replace(/(^|\s)\w/g,m=>m.toUpperCase());
 }
 
+const CORESPIRIT_COLOR_DEFAULTS: Readonly<Record<string,string>> = Object.freeze({
+  aqua:'#00BCD4', black:'#000000', blue:'#2962FF', fuchsia:'#E040FB', gray:'#787B86',
+  green:'#089981', lime:'#00C853', maroon:'#880E4F', navy:'#2962FF', olive:'#808000',
+  orange:'#FF9800', purple:'#9C27B0', red:'#F23645', silver:'#B2B5BE', teal:'#00897B',
+  white:'#FFFFFF', yellow:'#FDD835',
+});
+
+/** Resolve supported enum-style defaults without treating arbitrary identifiers as strings. */
+function parseTypedSurfaceDefault(value:string,type:string|undefined,context:'input'|'property'):CoreSpiritSurfaceLiteral {
+  const raw=value.trim();
+  const normalizedType=String(type??'').toLowerCase();
+  const colorMatch=raw.match(/^color\.([A-Za-z]+)$/i);
+  if(colorMatch && normalizedType==='color'){
+    const color=CORESPIRIT_COLOR_DEFAULTS[colorMatch[1]!.toLowerCase()];
+    if(color)return color;
+    throw new Error(`Unsupported CoreSpirit color default '${raw}'. Use a supported color constant or a quoted CSS color.`);
+  }
+  const formatMatch=raw.match(/^format\.(price|volume|percent|inherit)$/i);
+  if(formatMatch && context==='property')return formatMatch[1]!.toLowerCase();
+  return parseSurfaceLiteral(raw);
+}
+
 function parseSurfaceLiteral(value:string):CoreSpiritSurfaceLiteral {
   const raw=value.trim();
   if(/^[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/.test(raw)){const n=Number(raw);if(!Number.isFinite(n))throw new Error('CoreSpirit input/property literal is not finite.');return n;}
@@ -167,7 +189,7 @@ export function parseCoreSpiritInputDeclaration(line:string,start:number,end:num
   // literal parsing so a valid identifier is not rejected as an unquoted string.
   const implicitSource= !declaredType && CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
   const isSourceDefault=(declaredType==='source'||implicitSource)&&CORESPIRIT_SOURCE_DEFAULTS.has(sourceDefault);
-  const defval:CoreSpiritSurfaceLiteral=isSourceDefault?sourceDefault:parseSurfaceLiteral(scanned.base);
+  const defval:CoreSpiritSurfaceLiteral=isSourceDefault?sourceDefault:parseTypedSurfaceDefault(scanned.base,match[2], 'input');
   const type:CoreSpiritSurfaceInputType=isSourceDefault?'source':normalizeInputType(match[2],defval);
   const attrNum=(name:string)=>scanned.attrs[name]!==undefined?Number(scanned.attrs[name]):undefined;
   const title=scanned.attrs.title ? String(parseSurfaceLiteral(scanned.attrs.title)) : prettySurfaceKey(match[1]);
@@ -187,7 +209,7 @@ export function parseCoreSpiritDeclarationProperty(line:string,start:number,end:
   const match=line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
   if(!match)return undefined;
   const definition=CORESPIRIT_PROP_DEFINITIONS[match[1]]; if(!definition)return undefined;
-  const value=parseSurfaceLiteral(match[2]);
+  const value=parseTypedSurfaceDefault(match[2],definition.type,'property');
   if(definition.type==='int'&&typeof value==='number'&&!Number.isInteger(value))throw new Error(`CoreSpirit property '${match[1]}' requires an integer.`);
   if(definition.type==='bool'&&typeof value!=='boolean')throw new Error(`CoreSpirit property '${match[1]}' requires a boolean.`);
   if((definition.type==='float'||definition.type==='price'||definition.type==='int')&&typeof value!=='number')throw new Error(`CoreSpirit property '${match[1]}' requires a number.`);
