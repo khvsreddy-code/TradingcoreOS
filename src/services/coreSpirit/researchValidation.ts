@@ -90,7 +90,11 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
   const trainingCount = rows.length - validationCount;
   if (trainingCount < minimumTrainingRows || validationCount < minimumValidationRows) {
     throw new Error('Not enough rows for a chronological holdout: require at least ' +
-      Math.max(minimumTrainingRows + minimumValidationRows, Math.ceil(minimumValidationRows / validationFraction)) +
+      Math.max(
+        minimumTrainingRows + minimumValidationRows,
+        Math.ceil(minimumValidationRows / validationFraction),
+        Math.ceil(minimumTrainingRows / (1 - validationFraction)),
+      ) +
       ' rows at the selected validationFraction.');
   }
   const trainingRows = rows.slice(0, trainingCount);
