@@ -667,6 +667,47 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       return res.status(200).json(response);
     }
 
+    // Broker snapshots and risk evaluation can take seconds. Re-read authorization
+    // immediately before any live side effect so revocation, lifecycle pause, or
+    // a changed risk policy during that window fails closed.
+    if (requestedMode === 'LIVE') {
+      let currentIntegration: AutomationIntegration | undefined;
+      try {
+        currentIntegration = await AutomationIntegrationRepository.getById(integration.id);
+      } catch (error) {
+        return await rejectAndStore(503, getErrorMessage(error, 'Unable to revalidate live automation authorization; no order was submitted.'));
+      }
+      if (!currentIntegration || currentIntegration.revokedAt || Date.parse(currentIntegration.expiresAt) <= Date.now()) {
+        return await rejectAndStore(403, 'The automation credential was revoked or expired before order submission.');
+      }
+      if (!currentIntegration.scopes.includes('orders:request')) {
+        return await rejectAndStore(403, 'The automation credential no longer has order-request permission.');
+      }
+      const samePolicy =
+        currentIntegration.allowedSymbols.slice().sort().join('\\0') === integration.allowedSymbols.slice().sort().join('\\0') &&
+        currentIntegration.maxOrderQuantity === integration.maxOrderQuantity &&
+        currentIntegration.maxOrderNotional === integration.maxOrderNotional &&
+        currentIntegration.maxPositionNotional === integration.maxPositionNotional &&
+        currentIntegration.maxAccountExposureNotional === integration.maxAccountExposureNotional &&
+        currentIntegration.maxDailyOrders === integration.maxDailyOrders &&
+        currentIntegration.marginBufferPercent === integration.marginBufferPercent;
+      if (!samePolicy) {
+        return await rejectAndStore(409, 'The integration risk policy changed during evaluation. The request was not submitted; review the new limits and send a fresh decision.');
+      }
+      if (!currentIntegration.allowLiveOrders) {
+        return await rejectAndStore(403, 'Live permission was disabled before order submission.');
+      }
+      let currentAutomation: AutomationRecord | undefined;
+      try {
+        currentAutomation = await AutomationIntegrationRepository.getAutomationForIntegration(currentIntegration);
+      } catch (error) {
+        return await rejectAndStore(503, getErrorMessage(error, 'Unable to revalidate automation lifecycle; no order was submitted.'));
+      }
+      if (!currentAutomation || !liveExecutionEnabled(currentAutomation)) {
+        return await rejectAndStore(409, 'The automation lifecycle or confirmation policy changed before order submission.');
+      }
+    }
+
     // Required audit writes must succeed before the broker side effect begins.
     try {
       await AuditLogRepository.append({
