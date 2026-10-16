@@ -15,6 +15,9 @@ type TrainingPayload = Readonly<{
   trainingRunId: string;
   researchArtifactId: string;
   datasetVersion: string;
+  datasetSource: 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline';
+  datasetSourceVerified: boolean;
+  datasetSourceAttestationHash: string | null;
   rows: readonly TrainingRow[];
   featureNames: readonly string[];
   trainingRange: Readonly<{ from: string; to: string }>;
@@ -61,6 +64,21 @@ function parsePayload(value: unknown): TrainingPayload {
       }
       return row;
     });
+  const datasetSource = value.datasetSource;
+  const datasetSourceVerified = value.datasetSourceVerified;
+  const datasetSourceAttestationHash = value.datasetSourceAttestationHash;
+  if (!['user_supplied','broker_history','trusted_feature_pipeline'].includes(String(datasetSource)) ||
+      typeof datasetSourceVerified !== 'boolean') {
+    throw new Error('CoreSpirit training dataset must record source provenance separately from its content hash');
+  }
+  if (datasetSourceVerified) {
+    if (datasetSource === 'user_supplied' || typeof datasetSourceAttestationHash !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(datasetSourceAttestationHash)) {
+      throw new Error('Verified CoreSpirit dataset source requires a trusted source and an attestation hash');
+    }
+  } else if (datasetSourceAttestationHash !== null) {
+    throw new Error('Unverified CoreSpirit dataset must not carry a trusted attestation hash');
+  }
   const validationFraction = trainingParameters.validationFraction ?? 0.2;
   if (typeof validationFraction !== 'number' || !Number.isFinite(validationFraction) ||
       validationFraction < 0.1 || validationFraction > 0.4) {
@@ -70,6 +88,9 @@ function parsePayload(value: unknown): TrainingPayload {
     trainingRunId: value.trainingRunId,
     researchArtifactId: value.researchArtifactId,
     datasetVersion: value.datasetVersion,
+    datasetSource: datasetSource as TrainingPayload['datasetSource'],
+    datasetSourceVerified,
+    datasetSourceAttestationHash: datasetSourceAttestationHash as string | null,
     rows: normalizedRows,
     featureNames: [...featureNames] as string[],
     trainingRange: { from: trainingRange.from, to: trainingRange.to },
@@ -94,6 +115,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     rows: snapshot.rows,
     featureNames: snapshot.featureNames,
     trainingRange: snapshot.trainingRange,
+    datasetSource: snapshot.sourceProvenance,
+    datasetSourceVerified: snapshot.sourceVerified,
+    datasetSourceAttestationHash: snapshot.sourceAttestationHash,
   });
   await repository.updateTrainingRun(payload.trainingRunId, { status: 'running', progress: 5 });
 
@@ -225,6 +249,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       irVersion: research.irVersion,
       featureGraphHash: research.featureGraphHash,
       datasetVersion: payload.datasetVersion,
+      datasetSource: payload.datasetSource,
+      datasetSourceVerified: payload.datasetSourceVerified,
+      datasetSourceAttestationHash: payload.datasetSourceAttestationHash,
       trainingRange: split.trainingRange,
       validationRange: split.validationRange,
       validationResults,
