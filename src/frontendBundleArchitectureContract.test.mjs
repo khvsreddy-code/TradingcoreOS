@@ -57,6 +57,8 @@ assert(tcoVelaChrome.includes('quoteUpdatedAt'), 'watchlist rows must retain an 
 assert(tcoVelaChrome.includes('STALE ·') && tcoVelaChrome.includes('WAITING FOR QUOTE'), 'watchlist must distinguish stale and missing quotes');
 assert(tcoVelaChrome.includes('previousClose?: number;'), 'watchlist quote normalization must retain previous close');
 assert(tcoVelaChrome.includes('Quote freshness'), 'Trading context must report active-chart quote freshness');
+const watchlistPanelSource = tcoVelaChrome.slice(tcoVelaChrome.indexOf('const bookmarksPanel'), tcoVelaChrome.indexOf('const healthPanel'));
+assert(!watchlistPanelSource.includes('Open Vela symbol search'), 'watchlist must not add a duplicate global symbol selector beside the primary toolbar');
 assert(tcoVelaChrome.includes('Open chart replay controls'), 'research dock must expose the existing chart replay capability');
 assert(tcoVelaChrome.includes('Open market health & performance'), 'research dock must link to live renderer/market health diagnostics');
 assert(tcoVelaChrome.includes('Renderer metrics are warming up'), 'research dock must communicate when renderer telemetry is not ready');
