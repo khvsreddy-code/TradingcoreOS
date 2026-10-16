@@ -348,10 +348,18 @@ export class ChartDataPlane {
   }
 
   private handleTick(tick: NormalizedMarketTick, replaying: boolean): void {
+    const ingressStartedAt = globalThis.performance?.now?.() ?? Date.now();
     if (String(tick.instrumentKey || '') !== String(this.instrumentKey)) return;
+    if (!replaying) chartPerformanceTelemetry.recordPacket(this.key);
 
+    const normalizationStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const price = Number(tick.ltp);
     const tradeTimeMs = liveTradeTimestampMs(tick);
+    if (!replaying) {
+      const normalizedAt = globalThis.performance?.now?.() ?? Date.now();
+      chartPerformanceTelemetry.recordStage(this.key, 'transport', Math.max(0, normalizationStartedAt - ingressStartedAt));
+      chartPerformanceTelemetry.recordStage(this.key, 'normalization', Math.max(0, normalizedAt - normalizationStartedAt));
+    }
     const hasHistory = this.state.historyReady && this.canonicalPlane.length > 0;
     const lifecyclePending = !this.state.historyReady
       || this.state.historyLoading
@@ -374,7 +382,6 @@ export class ChartDataPlane {
     }
 
     const computeStartedAt = globalThis.performance?.now?.() ?? Date.now();
-    chartPerformanceTelemetry.recordPacket(this.key);
     const market = this.canonicalPlane.market;
     const index = market.length - 1;
     const latestPoint = index < 0 ? undefined : market.get(index);
@@ -408,6 +415,7 @@ export class ChartDataPlane {
       return;
     }
 
+    const ingestionStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const bar = transition.bar;
     const canonicalPoint = {
       time: Math.floor(Date.parse(bar.timestamp) / 1000),
@@ -449,6 +457,11 @@ export class ChartDataPlane {
       transition: transition.kind,
       snapshot: this.snapshot(),
     });
+    chartPerformanceTelemetry.recordStage(
+      this.key,
+      'ingestion',
+      Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - ingestionStartedAt),
+    );
   }
 
   private onFeedStatus(status: MarketFeedStatus): void {
