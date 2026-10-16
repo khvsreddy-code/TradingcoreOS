@@ -479,6 +479,12 @@ coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRe
       labelLeakageCheckPassed: validation.labelLeakageCheckPassed === true,
       featureAvailabilityCheckPassed: validation.featureAvailabilityCheckPassed === true,
       datasetHashVerified: validation.datasetHashVerified === true,
+      // Hashing proves the snapshot did not change; production promotion additionally
+      // requires a server/provider attestation for the exact dataset source.
+      datasetSourceVerified: provenance.datasetSourceVerified === true &&
+        provenance.datasetSource !== 'user_supplied' &&
+        typeof provenance.datasetSourceAttestationHash === 'string' &&
+        /^[a-f0-9]{64}$/.test(provenance.datasetSourceAttestationHash),
       sourceCausalityPassed: validation.sourceCausalityPassed === true,
       lookaheadCheckPassed: validation.lookaheadCheckPassed === true,
       staticSafetyEligible: safety.approvalEligible === true &&
@@ -489,13 +495,16 @@ coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRe
     const checkNames = [
       'hasChronologicalHoldout','nonDegenerateValidation','temporalRangesDisjoint','forwardOnly','noTimestampOverlap',
       'featureSchemaMatched','labelLeakageCheckPassed','featureAvailabilityCheckPassed',
-      'datasetHashVerified','sourceCausalityPassed','lookaheadCheckPassed','staticSafetyEligible',
+      'datasetHashVerified','datasetSourceVerified','sourceCausalityPassed','lookaheadCheckPassed','staticSafetyEligible',
     ];
     const productionEligible = checkNames.every(key => approvalChecks[key] === true);
     approvalChecks.productionEligible = productionEligible;
     const validationReport: Record<string, unknown> = {
       artifactHash: artifact.hash,
       runtimeVersion: provenance.runtimeVersion,
+      datasetSource: provenance.datasetSource,
+      datasetSourceVerified: provenance.datasetSourceVerified,
+      datasetSourceAttestationHash: provenance.datasetSourceAttestationHash,
       trainingRange: provenance.trainingRange,
       validationRange: provenance.validationRange,
       validationResults: validation,
