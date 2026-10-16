@@ -290,9 +290,15 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
   try {
     range = parseRange(req.body?.trainingRange);
     featureNames = parseFeatureNames(req.body?.featureNames);
+    assertNoKnownLabelLeakage(featureNames);
     rows = parseRows(req.body?.rows, featureNames, range);
   } catch (error) {
     return fail(res, 400, error instanceof Error ? error.message : 'Invalid training request.');
+  }
+  const validationFraction = req.body?.validationFraction ?? DEFAULT_RESEARCH_VALIDATION_FRACTION;
+  if (typeof validationFraction !== 'number' || !Number.isFinite(validationFraction) ||
+      validationFraction < 0.1 || validationFraction > 0.4) {
+    return fail(res, 400, 'validationFraction must be a number between 0.10 and 0.40.');
   }
   const randomSeed = req.body?.randomSeed ?? 42;
   if (!Number.isSafeInteger(randomSeed) || randomSeed < 0) return fail(res, 400, 'randomSeed must be a non-negative safe integer.');
@@ -300,7 +306,10 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
   if (rawParameters !== undefined && (!rawParameters || typeof rawParameters !== 'object' || Array.isArray(rawParameters))) {
     return fail(res, 400, 'trainingParameters must be an object.');
   }
-  const trainingParameters = (rawParameters ?? {}) as Record<string, string | number | boolean | null>;
+  const trainingParameters = {
+    ...((rawParameters ?? {}) as Record<string, string | number | boolean | null>),
+    validationFraction,
+  };
   if (trainingParameters.fitIterations !== undefined &&
       (typeof trainingParameters.fitIterations !== 'number' || !Number.isInteger(trainingParameters.fitIterations) ||
        trainingParameters.fitIterations < 1 || trainingParameters.fitIterations > 6)) {
@@ -331,9 +340,12 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
     if (graph.modelType !== 'HMM<float>' && graph.modelType !== 'HMM') {
       return fail(res, 422, 'No training backend is registered for this model family.');
     }
+    const validationCount = Math.floor(rows.length * validationFraction);
+    const trainingCount = rows.length - validationCount;
     if (!Number.isInteger(graph.states) || graph.states < 2 || graph.states > 12 ||
-        rows.length < Math.max(12, graph.states * 4)) {
-      return fail(res, 422, 'This HMM configuration needs at least max(12, states × 4) historical rows.');
+        validationCount < MIN_RESEARCH_VALIDATION_ROWS ||
+        trainingCount < Math.max(12, graph.states * 4)) {
+      return fail(res, 422, 'Chronological holdout requires at least 12 validation rows and max(12, states × 4) earlier training rows at this validationFraction.');
     }
     const datasetVersion = await coreSpiritSha256({ featureNames, rows, trainingRange: range });
     const snapshot = await repository.putDatasetSnapshot({
