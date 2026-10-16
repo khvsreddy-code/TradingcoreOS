@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { LatestValueAsyncScheduler } from './latestValueAsyncScheduler.ts';
 
 const pause = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
@@ -56,5 +57,20 @@ const resilient = new LatestValueAsyncScheduler(async () => { throw new Error('e
 resilient.enqueue(1);
 await waitFor(() => errors === 1 && !resilient.isRunning, 'error observer');
 assert.equal(errors, 1, 'a failed calculation does not wedge the scheduler');
+
+
+const engine = readFileSync(new URL('../../CoreSpiritVelaEngine.ts', import.meta.url), 'utf8');
+assert.match(engine, /new LatestValueAsyncScheduler<LiveTailWork>/,
+  'live CoreSpirit tail calculations must use the bounded single-flight scheduler');
+assert.match(engine, /liveTailScheduler\.enqueue\(\{/,
+  'new market revisions must update the latest pending calculation rather than spawn another worker');
+assert.match(engine, /liveTailScheduler\.clear\(\)/,
+  'backfills and runtime-affecting edits must invalidate queued tail calculations');
+assert.match(engine, /liveTailScheduler\.dispose\(\)/,
+  'stopped chart sessions must release the scheduled work lane');
+assert.doesNotMatch(engine, /void executeInWorker\(currentBars,mainContextKey,false,executionBarRange\(/,
+  'notifyBars must not queue a separate full scheduling request for every forming candle');
+assert.match(engine, /return isolateSnapshot \? Object\.freeze\(normalizedBarsCache\.slice\(\)\)[\\s\\S]*: normalizedBarsCache/,
+  'the synchronous hot path can reuse the normalized cache; isolation is reserved for async compute');
 
 console.log('CORESPIRIT_LATEST_VALUE_ASYNC_SCHEDULER_CONTRACT_OK');
