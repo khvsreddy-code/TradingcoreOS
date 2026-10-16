@@ -46,10 +46,23 @@ export async function fetchCoreSpiritHMMArtifact(
     const body = await response.json().catch(() => null) as { error?: string } | null;
     throw new Error(body?.error || 'Unable to load CoreSpirit model artifact (HTTP ' + response.status + ')');
   }
-  const body = await response.json() as { success?: boolean; data?: { artifact?: ModelArtifact<unknown> } };
+  const body = await response.json() as {
+    success?: boolean;
+    data?: {
+      artifact?: ModelArtifact<unknown>;
+      release?: { status?: string; approvalChecks?: Record<string, unknown> };
+    };
+  };
   const artifact = body?.data?.artifact;
+  const release = body?.data?.release;
   if (!body?.success || !artifact || artifact.hash !== hash || !(await verifyModelArtifactIntegrity(artifact))) {
     throw new Error('Loaded CoreSpirit model artifact failed its content hash or integrity check');
+  }
+  if (release?.status !== 'approved' || release.approvalChecks?.productionEligible !== true) {
+    throw new Error(
+      'CoreSpirit model ' + artifact.name + ' is not approved for production inference. ' +
+      'Review its chronological holdout, provenance, causality and lookahead report, then explicitly approve the exact artifact hash.',
+    );
   }
   const weights = artifact.weights as Partial<GaussianHMMWeights>;
   if (weights.modelType !== 'gaussian-hmm' || typeof weights.modelAlias !== 'string' ||
