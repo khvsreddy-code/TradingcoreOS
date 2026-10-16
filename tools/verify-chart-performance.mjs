@@ -19,6 +19,7 @@ const requireHeapMetrics = process.env.TCO_REQUIRE_HEAP_METRICS === 'true';
 const failOnWebglContextLoss = process.env.TCO_FAIL_ON_WEBGL_CONTEXT_LOSS !== 'false';
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
 const requiredPipelineFields = ['marketUpdatesPerSec','lastMarketUpdateAgeMs','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
+const requiredStageMs = ['transport','normalization','ingestion','compute','patch','renderer','frame'];
 
 function run(args) {
   const result = spawnSync('agent-browser', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -107,6 +108,14 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     for (const field of requiredPipelineFields) {
       if (!(field in sample)) throw new Error(`Browser verification: pipeline telemetry field missing: ${field}`);
       if (!Number.isFinite(Number(sample[field]))) throw new Error(`Browser verification: non-finite pipeline telemetry value: ${field}`);
+    }
+    if (!sample.stageMs || typeof sample.stageMs !== 'object') {
+      throw new Error(`Browser verification: per-stage timing breakdown missing for ${sample.key || url}`);
+    }
+    for (const stage of requiredStageMs) {
+      if (!(stage in sample.stageMs) || !Number.isFinite(Number(sample.stageMs[stage])) || Number(sample.stageMs[stage]) < 0) {
+        throw new Error(`Browser verification: invalid stage timing ${stage} for ${sample.key || url}`);
+      }
     }
     const marketRate = Number(sample.marketUpdatesPerSec) || 0;
     const lastMarketUpdateAgeMs = Number(sample.lastMarketUpdateAgeMs);
