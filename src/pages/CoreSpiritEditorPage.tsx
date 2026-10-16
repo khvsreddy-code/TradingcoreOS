@@ -175,7 +175,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
       setModelReleaseMessage('');
       return;
     }
-    setModelReleaseBusy(true);setModelReleaseError('');setModelReleaseMessage('');
+    setModelReleaseBusy(true);setModelReleaseError('');setModelReleaseMessage('');setModelReleaseInfo(null);
     try{
       const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
       if(sessionError||!session?.access_token)throw new Error('Sign in to review private CoreSpirit model artifacts.');
@@ -741,7 +741,7 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
           <div className="space-y-3">
             <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--tco-dim)]" htmlFor="corespirit-model-hash">Model artifact SHA-256</label>
             <div className="flex gap-2">
-              <input id="corespirit-model-hash" value={modelReleaseHash} onChange={e=>{setModelReleaseHash(e.target.value.trim().toLowerCase());setModelReleaseError('');}} maxLength={64} spellCheck={false} autoComplete="off" placeholder="64-character artifact hash" className="min-w-0 flex-1 rounded-md border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2 py-2 font-mono text-[9px] text-[var(--tco-code-text)] outline-none focus:border-[#60a5fa]/60" />
+              <input id="corespirit-model-hash" value={modelReleaseHash} onChange={e=>{setModelReleaseHash(e.target.value.trim().toLowerCase());setModelReleaseError('');setModelReleaseInfo(null);setModelReleaseMessage('');}} maxLength={64} spellCheck={false} autoComplete="off" placeholder="64-character artifact hash" className="min-w-0 flex-1 rounded-md border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2 py-2 font-mono text-[9px] text-[var(--tco-code-text)] outline-none focus:border-[#60a5fa]/60" />
               <button disabled={modelReleaseBusy} onClick={()=>void loadModelRelease()} className="premium-button disabled:opacity-50">{modelReleaseBusy?'Working…':'Load'}</button>
             </div>
             {modelReleaseInfo?.artifact&&modelReleaseInfo.release&&<div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3 space-y-2">
