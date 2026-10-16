@@ -11,6 +11,20 @@ function createServerClient() {
 }
 
 export type StoredResearchArtifact = Readonly<{ id: string; artifact: ResearchArtifact }>;
+export type CoreSpiritModelReleaseStatus = 'candidate' | 'approved' | 'revoked' | 'retired';
+export type CoreSpiritModelReleaseControl = Readonly<{
+  id: string;
+  ownerUserId: string;
+  artifactHash: string;
+  status: CoreSpiritModelReleaseStatus;
+  validationReport: Record<string, unknown>;
+  approvalChecks: Record<string, unknown>;
+  decisionReason: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}>;
 
 export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown> {
   private readonly db = createServerClient();
@@ -146,6 +160,81 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     return String(data.id);
   }
 
+  private fromReleaseControl(row: Record<string, unknown>): CoreSpiritModelReleaseControl {
+    return {
+      id: String(row.id),
+      ownerUserId: String(row.owner_user_id),
+      artifactHash: String(row.artifact_hash),
+      status: String(row.status) as CoreSpiritModelReleaseStatus,
+      validationReport: row.validation_report && typeof row.validation_report === 'object' ? row.validation_report as Record<string, unknown> : {},
+      approvalChecks: row.approval_checks && typeof row.approval_checks === 'object' ? row.approval_checks as Record<string, unknown> : {},
+      decisionReason: typeof row.decision_reason === 'string' ? row.decision_reason : null,
+      approvedBy: typeof row.approved_by === 'string' ? row.approved_by : null,
+      approvedAt: typeof row.approved_at === 'string' ? row.approved_at : null,
+      createdAt: String(row.created_at ?? ''),
+      updatedAt: String(row.updated_at ?? ''),
+    };
+  }
+
+  /** Ensures a new or legacy artifact has an explicit candidate release record. */
+  async ensureModelReleaseControl(hash: string): Promise<CoreSpiritModelReleaseControl> {
+    const normalizedHash = hash.toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(normalizedHash)) throw new Error('Model release hash must be a SHA-256 digest.');
+    const { data: model, error: modelError } = await this.db.from('corespirit_model_artifacts')
+      .select('id,artifact_hash,provenance')
+      .eq('owner_user_id', this.ownerUserId)
+      .eq('artifact_hash', normalizedHash)
+      .maybeSingle();
+    if (modelError) throw new Error('Unable to load model artifact for release control: ' + modelError.message);
+    if (!model) throw new Error('Model artifact not found for this owner.');
+    const provenance = model.provenance && typeof model.provenance === 'object'
+      ? model.provenance as Record<string, unknown>
+      : {};
+    const { error: insertError } = await this.db.from('corespirit_model_release_controls').insert({
+      owner_user_id: this.ownerUserId,
+      model_artifact_id: model.id,
+      artifact_hash: normalizedHash,
+      status: 'candidate',
+      validation_report: {
+        trainingRange: provenance.trainingRange ?? null,
+        validationRange: provenance.validationRange ?? null,
+        validationResults: provenance.validationResults ?? null,
+        researchSafety: provenance.researchSafety ?? null,
+      },
+      approval_checks: { productionEligible: false, reason: 'Explicit owner approval is required.' },
+    });
+    if (insertError && insertError.code !== '23505') {
+      throw new Error('Unable to initialize model release control: ' + insertError.message);
+    }
+    const { data, error } = await this.db.from('corespirit_model_release_controls')
+      .select('*').eq('owner_user_id', this.ownerUserId).eq('artifact_hash', normalizedHash).single();
+    if (error || !data) throw new Error('Unable to load model release control: ' + (error?.message ?? 'record was not returned'));
+    return this.fromReleaseControl(data as Record<string, unknown>);
+  }
+
+  async transitionModelRelease(input: {
+    artifactHash: string;
+    status: Exclude<CoreSpiritModelReleaseStatus, 'candidate'>;
+    actorUserId: string;
+    reason: string;
+    approvalChecks: Record<string, unknown>;
+    validationReport: Record<string, unknown>;
+  }): Promise<CoreSpiritModelReleaseControl> {
+    const { data, error } = await this.db.rpc('transition_corespirit_model_release', {
+      p_owner_user_id: this.ownerUserId,
+      p_artifact_hash: input.artifactHash.toLowerCase(),
+      p_target_status: input.status,
+      p_actor_user_id: input.actorUserId,
+      p_reason: input.reason,
+      p_approval_checks: input.approvalChecks,
+      p_validation_report: input.validationReport,
+    });
+    if (error || !data || typeof data !== 'object') {
+      throw new Error('Unable to persist CoreSpirit model release decision: ' + (error?.message ?? 'invalid result'));
+    }
+    return this.fromReleaseControl(data as Record<string, unknown>);
+  }
+
   async updateTrainingRun(id: string, patch: {
     status: 'running' | 'succeeded' | 'failed';
     progress?: number;
@@ -183,7 +272,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     let modelHash: string | null = null;
     if (typeof data.model_artifact_id === 'string') {
       const model = await this.db.from('corespirit_model_artifacts')
-        .select('name,artifact_hash')
+        .select('name,artifact_hash,provenance')
         .eq('id', data.model_artifact_id)
         .eq('owner_user_id', this.ownerUserId)
         .maybeSingle();
@@ -191,9 +280,20 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       if (model.data) {
         modelName = String(model.data.name);
         modelHash = String(model.data.artifact_hash);
+        const provenance = model.data.provenance && typeof model.data.provenance === 'object'
+          ? model.data.provenance as Record<string, unknown>
+          : {};
+        const release = await this.ensureModelReleaseControl(modelHash);
+        return {
+          ...(data as Record<string, unknown>), modelName, modelHash, release,
+          trainingRange: provenance.trainingRange ?? null,
+          validationRange: provenance.validationRange ?? null,
+          validationResults: provenance.validationResults ?? null,
+          researchSafety: provenance.researchSafety ?? null,
+        };
       }
     }
-    return { ...(data as Record<string, unknown>), modelName, modelHash };
+    return { ...(data as Record<string, unknown>), modelName, modelHash, release: null };
   }
 
   async put(artifact: ModelArtifact<unknown>): Promise<void> {
@@ -208,7 +308,10 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       artifact,
       metrics: artifact.metrics,
     });
-    if (!error) return;
+    if (!error) {
+      await this.ensureModelReleaseControl(artifact.hash);
+      return;
+    }
 
     // A retry after a queue redelivery is idempotent only for the exact same hash.
     if (error.code === '23505') {
@@ -218,7 +321,10 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
         .eq('name', artifact.name)
         .maybeSingle();
       if (!existing.error && existing.data?.artifact_hash === artifact.hash &&
-          await verifyModelArtifactIntegrity(existing.data.artifact as ModelArtifact<unknown>)) return;
+          await verifyModelArtifactIntegrity(existing.data.artifact as ModelArtifact<unknown>)) {
+        await this.ensureModelReleaseControl(artifact.hash);
+        return;
+      }
       throw new Error('Model name already exists with a different immutable hash; publish a new versioned name');
     }
     throw new Error('Unable to persist CoreSpirit model artifact: ' + error.message);
