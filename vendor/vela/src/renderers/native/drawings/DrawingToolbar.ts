@@ -897,7 +897,8 @@ function ensureStyles(): void {
 .vela-dtb-flyout::-webkit-scrollbar-button{display:none;width:0;height:0;}
 .vela-dtb-flyout::-webkit-scrollbar-track,.vela-dtb-flyout::-webkit-scrollbar-track-piece,.vela-dtb-flyout::-webkit-scrollbar-corner{background:transparent;}
 .vela-dtb-flyout::-webkit-scrollbar-thumb{background:var(--vela-scroll);border-radius:var(--vela-radius-sm);}
-.vela-dtb-flyout::-webkit-scrollbar-thumb:hover{background:var(--vela-fg-muted);}`;
+.vela-dtb-flyout::-webkit-scrollbar-thumb:hover{background:var(--vela-fg-muted);}
+@keyframes vela-dtb-spin{to{transform:rotate(360deg);}}`;
 }
 
 const CURSOR_ICON = icon('cursor');
