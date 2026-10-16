@@ -230,3 +230,47 @@ export class CoreSpiritVelaOutputRevisionGate {
     else this.latest.delete(streamId);
   }
 }
+
+
+/**
+ * Return the first safe index to re-normalize when Vela exposes a new history
+ * snapshot, or null when the cached timeline cannot be reused. This deliberately
+ * checks stable timestamp anchors: length alone cannot distinguish an append
+ * from a prepend or an in-place historical rewrite.
+ *
+ * A non-null result only permits reuse of the prefix. Callers still replace the
+ * forming candle and should force a full refresh for an explicit backfill event.
+ */
+export function safeVelaNormalizationStart(
+  rows: readonly CoreSpiritVelaOhlcv[],
+  normalized: readonly CoreSpiritMarketBar[],
+  previousLength: number,
+  forceFullNormalization = false,
+): number | null {
+  const length = rows.length;
+  if (forceFullNormalization || previousLength < 0 || length < previousLength ||
+      normalized.length !== previousLength || length === 0) return null;
+  if (previousLength === 0) return 0;
+
+  const sameOpeningTime = (raw: CoreSpiritVelaOhlcv | undefined, bar: CoreSpiritMarketBar | undefined): boolean => {
+    if (!raw || !bar) return false;
+    const rawMs = coreSpiritTimeToVelaMillis(raw.time ?? raw.timestamp);
+    const normalizedMs = coreSpiritTimeToVelaMillis(bar.timestamp);
+    return Number.isFinite(rawMs) && Number.isFinite(normalizedMs) &&
+      Math.floor(rawMs / 1000) === Math.floor(normalizedMs / 1000);
+  };
+
+  // The first anchor guards against a historical prepend even if the length grew.
+  if (!sameOpeningTime(rows[0], normalized[0])) return null;
+  if (length === previousLength) {
+    // Only the forming bar may be replaced on the same-length fast path.
+    const stableIndex = Math.max(0, length - 2);
+    if (!sameOpeningTime(rows[stableIndex], normalized[stableIndex])) return null;
+    return Math.max(0, length - 1);
+  }
+
+  // On append, the previous tail must remain at its old absolute index. If it
+  // moved, this is a prepend/insert and all absolute bar indices have shifted.
+  if (!sameOpeningTime(rows[previousLength - 1], normalized[previousLength - 1])) return null;
+  return Math.max(0, previousLength - 1);
+}
