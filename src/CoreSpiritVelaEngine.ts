@@ -263,6 +263,7 @@ export class CoreSpiritVelaEngine {
     const workerDatasetVersions=new Map<string,number>();
     // Global canonical-data revision across main/history/viewport worker contexts.
     let canonicalDatasetRevision = 0;
+    let lastCommittedDatasetRevision = -1;
     let canonicalDatasetFingerprint = '';
     let canonicalTailFingerprint = '';
     type RuntimeSnapshot={barIndex?:number;locals?:Record<string,unknown>};
@@ -376,11 +377,29 @@ export class CoreSpiritVelaEngine {
       ));
     };
 
-    const emitScenePatches = (outputs: CoreSpiritObject[], dirty: VelaTimeRange, datasetRevision?: number): void => {
-      // Drop stale replies before mutating the retained diff state, not only at Vela's patch applier.
-      if (datasetRevision !== undefined && datasetRevision < canonicalDatasetRevision) return;
+    const emitScenePatches = (
+      outputs: CoreSpiritObject[],
+      dirty: VelaTimeRange,
+      datasetRevision?: number,
+      options: { allowSameBarStale?: boolean; tailTimeMs?: number } = {},
+    ): void => {
+      // Revision checks happen before mutating retained scene state. A completed
+      // same-bar snapshot may be committed as the latest *completed* output while
+      // a newer calculation is pending, but never over a higher committed revision
+      // and never across a candle boundary or runtime/session reset.
+      if (datasetRevision !== undefined && datasetRevision < lastCommittedDatasetRevision) return;
+      const stale = datasetRevision !== undefined && datasetRevision < canonicalDatasetRevision;
+      if (stale && !options.allowSameBarStale) return;
+      if (stale && options.allowSameBarStale) {
+        const latestTail = getCurrentBars().at(-1);
+        if (!latestTail || options.tailTimeMs == null ||
+            barTimeMillis(latestTail.timestamp) !== options.tailTimeMs) return;
+      }
       const patches = scene.apply(outputs, dirty, datasetRevision);
-      if (patches.length) handlers.onScenePatches?.(patches);
+      if (patches.length) {
+        if (datasetRevision !== undefined) lastCommittedDatasetRevision = Math.max(lastCommittedDatasetRevision, datasetRevision);
+        handlers.onScenePatches?.(patches);
+      }
     };
 
     const rememberWorkerState=(value:unknown):void=>{
@@ -583,21 +602,27 @@ export class CoreSpiritVelaEngine {
         const result = await executeInWorker(workerBars, mainContextKey, false, executionBarRange(
           Math.max(0, workerBars.length - 1), workerBars.length,
         ));
-        if (stopped || work.generation !== liveRunGeneration ||
-            work.sessionGeneration !== mainRunGeneration ||
-            work.datasetRevision !== canonicalDatasetRevision) return;
+        if (stopped || work.sessionGeneration !== mainRunGeneration) return;
 
-        // Never commit a calculation whose input tail was superseded during the await.
         const currentTail = getCurrentBars().at(-1);
-        if (!currentTail || barValueSignature(currentTail) !== work.tailSignature) return;
-
-        const latestOutputs = safeOutputs(result.outputs);
         const latestTime = barTimeMillis(tail.timestamp);
-        if (Number.isFinite(latestTime)) {
-          emitScenePatches(latestOutputs, velaTimeRange(latestTime, latestTime), result.sourceDatasetRevision);
-          lastTime = latestTime;
-        }
-        rememberWorkerState(result.state);
+        // A finished computation on the still-forming bar is a valid completed
+        // snapshot even if a fresher tick arrived mid-run. Commit it only if no
+        // newer output revision already won; the scheduler immediately follows
+        // with the latest pending data. Cross-bar/backfill results are always dropped.
+        if (!currentTail || !Number.isFinite(latestTime) ||
+            barTimeMillis(currentTail.timestamp) !== latestTime) return;
+        const snapshotStillCurrent = work.datasetRevision === canonicalDatasetRevision &&
+          barValueSignature(currentTail) === work.tailSignature;
+        const latestOutputs = safeOutputs(result.outputs);
+        emitScenePatches(
+          latestOutputs,
+          velaTimeRange(latestTime, latestTime),
+          result.sourceDatasetRevision,
+          { allowSameBarStale: !snapshotStillCurrent, tailTimeMs: latestTime },
+        );
+        lastTime = latestTime;
+        if (snapshotStillCurrent) rememberWorkerState(result.state);
       } catch (error) {
         if (!stopped && work.generation === liveRunGeneration &&
             work.sessionGeneration === mainRunGeneration &&
