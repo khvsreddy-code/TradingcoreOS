@@ -19,9 +19,8 @@ import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineL
 import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
 import { getAutomations } from '../../workspace/workspaceState';
 import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
-import { compileCoreSpiritSourceOffThread } from '../../coreSpirit/coreSpiritCompilerClient';
-import { CoreSpiritEditorModel } from '../../coreSpirit/editorModel';
-import { mountCoreSpiritMonaco, type CoreSpiritMonacoAdapter } from '../../coreSpirit/monacoAdapter';
+import type { CoreSpiritEditorModel as CoreSpiritEditorModelType } from '../../coreSpirit/editorModel';
+import type { CoreSpiritMonacoAdapter } from '../../coreSpirit/monacoAdapter';
 import { versionedStorageKey } from '../../coreSpirit/storageSchema';
 
 // TCO-only topbar / panel actions need real registered SVGs. Unknown Vela ids otherwise
@@ -381,6 +380,8 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     fallbackEditor.style.cssText = 'display:block;flex:1;min-width:0;min-height:280px;resize:vertical;border:0;outline:0;padding:14px;background:var(--vela-surface-sunken);color:var(--vela-fg-bright);caret-color:var(--tco-frame-accent,#14b8a6);font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:4;white-space:pre;overflow:auto;';
     const status = document.createElement('div');
     status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.setAttribute('aria-atomic', 'true');
     status.className = 'tco-core-status';
     status.style.cssText = 'min-height:34px;white-space:pre-wrap;border:1px solid var(--vela-border);border-radius:7px;padding:9px 10px;color:var(--vela-fg-muted);background:var(--vela-surface);font:10px/1.55 ui-monospace,monospace;';
     const actions = document.createElement('div');
@@ -393,11 +394,22 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     run.type = 'button'; run.textContent = 'Compile & Run';
     run.className = 'tco-frame-button tco-frame-button-primary';
     run.style.cssText = 'border:1px solid var(--tco-frame-accent,#8b7cff);border-radius:7px;padding:8px 12px;background:var(--tco-frame-accent-soft,rgba(99,102,241,.15));color:var(--vela-fg-bright);font-size:11px;font-weight:750;cursor:pointer;';
+    const retryLoad = document.createElement('button');
+    retryLoad.type = 'button';
+    retryLoad.textContent = 'Retry loading';
+    retryLoad.className = 'tco-frame-button';
+    retryLoad.style.cssText = 'display:none;border:1px solid rgba(248,113,113,.4);border-radius:7px;padding:8px 10px;background:rgba(127,29,29,.10);color:#fca5a5;font-size:10px;cursor:pointer;';
+    retryLoad.setAttribute('aria-label', 'Retry loading CoreSpirit Studio capabilities');
     const openFull = document.createElement('button');
     openFull.type = 'button'; openFull.textContent = 'Full IDE ↗';
     openFull.className = 'tco-frame-button';
     openFull.style.cssText = 'margin-left:auto;border:1px solid var(--vela-border);border-radius:7px;padding:8px 10px;background:transparent;color:var(--vela-fg-muted);font-size:10px;cursor:pointer;';
-    actions.append(compile, run, openFull);
+    compile.disabled = true;
+    run.disabled = true;
+    compile.setAttribute('aria-label', 'Validate current CoreScript');
+    run.setAttribute('aria-label', 'Compile and run CoreScript on the active Vela chart');
+    retryLoad.setAttribute('hidden', '');
+    actions.append(compile, run, retryLoad, openFull);
     editorFrame.append(editorHost, fallbackEditor);
     root.append(top, examples, editorFrame, status, actions);
 
@@ -409,7 +421,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     let source = CORESPIRIT_STARTER;
     try { source = localStorage.getItem(CORESPIRIT_LIVE_EDITOR_KEY) || CORESPIRIT_STARTER; } catch {}
     fallbackEditor.value = source;
-    const editorModel = new CoreSpiritEditorModel(source);
+    let editorModel: CoreSpiritEditorModelType | undefined;
     let monacoAdapter: CoreSpiritMonacoAdapter | undefined;
     let disposed = false;
     const syncEditor = () => {
@@ -420,13 +432,13 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     fallbackEditor.addEventListener('input', () => {
       source = fallbackEditor.value;
       compileGeneration += 1;
-      editorModel.updateSource(source, '', { deferSemanticAnalysis: true });
+      editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
       syncEditor();
     });
     examples.addEventListener('change', () => {
       source = sourceFor(examples.value);
       compileGeneration += 1;
-      editorModel.updateSource(source, '', { deferSemanticAnalysis: true });
+      editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
       monacoAdapter?.setSource(source);
       syncEditor();
     });
@@ -464,30 +476,87 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         ctx.toast(hadWorkingVersion ? 'CoreSpirit update failed' : 'CoreSpirit indicator failed and was removed', 'error');
       });
     };
-    void mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
-      source = nextSource;
-      compileGeneration += 1;
-      editorModel.updateSource(source, '', { deferSemanticAnalysis: true });
-      fallbackEditor.value = source;
-      syncEditor();
-    }).then((adapter) => {
-      if (disposed) { adapter.dispose(); return; }
-      monacoAdapter = adapter;
-      adapter.setSource(source);
-      editorHost.style.display = 'block';
-      fallbackEditor.style.display = 'none';
-      status.textContent = 'CoreScript editor ready · worker compilation enabled';
-      status.style.color = '#94a3b8';
-    }).catch((error) => {
+    status.textContent = 'CoreSpirit Studio is optional. Loading editor capabilities…';
+    status.style.color = '#94a3b8';
+    editorFrame.setAttribute('aria-busy', 'true');
+
+    const loadEditorCapabilities = async (): Promise<void> => {
       if (disposed) return;
-      editorHost.style.display = 'none';
-      fallbackEditor.style.display = 'block';
-      status.textContent = `Monaco unavailable; accessible editor fallback active. ${error instanceof Error ? error.message : String(error)}`;
-      status.style.color = '#fbbf24';
-    });
+      retryLoad.hidden = true;
+      retryLoad.removeAttribute('hidden');
+      retryLoad.style.display = 'none';
+      compile.disabled = true;
+      run.disabled = true;
+      status.textContent = 'Loading CoreScript editor and worker-backed compiler…';
+      status.style.color = '#94a3b8';
+      try {
+        // These modules are intentionally not part of the live terminal's initial
+        // dependency graph. Import them only after the user opens CoreSpirit Studio.
+        const [modelModule, monacoModule] = await Promise.all([
+          import('../../coreSpirit/editorModel'),
+          import('../../coreSpirit/monacoAdapter'),
+        ]);
+        if (disposed) return;
+        editorModel = new modelModule.CoreSpiritEditorModel(source);
+        // The textarea fallback becomes a fully functional editor as soon as the model
+        // is ready; Monaco is an enhancement, not a dependency for writing or running code.
+        fallbackEditor.addEventListener('input', () => {
+          source = fallbackEditor.value;
+          compileGeneration += 1;
+          editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
+          syncEditor();
+        });
+        examples.addEventListener('change', () => {
+          source = sourceFor(examples.value);
+          compileGeneration += 1;
+          editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
+          monacoAdapter?.setSource(source);
+          syncEditor();
+        });
+        try {
+          const adapter = await monacoModule.mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
+            source = nextSource;
+            compileGeneration += 1;
+            editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
+            fallbackEditor.value = source;
+            syncEditor();
+          });
+          if (disposed) { adapter.dispose(); return; }
+          monacoAdapter = adapter;
+          adapter.setSource(source);
+          editorHost.style.display = 'block';
+          fallbackEditor.style.display = 'none';
+          status.textContent = 'CoreScript editor ready · worker compilation on demand';
+          status.style.color = '#94a3b8';
+        } catch (error) {
+          if (disposed) return;
+          editorHost.style.display = 'none';
+          fallbackEditor.style.display = 'block';
+          status.textContent = `Monaco unavailable; accessible editor fallback active. ${error instanceof Error ? error.message : String(error)}`;
+          status.style.color = '#fbbf24';
+        }
+        compile.disabled = false;
+        run.disabled = false;
+        editorFrame.setAttribute('aria-busy', 'false');
+        syncEditor();
+      } catch (error) {
+        if (disposed) return;
+        editorHost.style.display = 'none';
+        fallbackEditor.style.display = 'block';
+        editorFrame.setAttribute('aria-busy', 'false');
+        status.textContent = `CoreSpirit editor capabilities failed to load. ${error instanceof Error ? error.message : String(error)}`;
+        status.style.color = '#fca5a5';
+        retryLoad.style.display = 'inline-flex';
+        retryLoad.hidden = false;
+      }
+    };
+
+    retryLoad.addEventListener('click', () => { void loadEditorCapabilities(); });
+    void loadEditorCapabilities();
 
     const compileSource = async (shouldRun: boolean) => {
       const currentSource = source.trim();
+      if (!editorModel) { status.textContent = 'CoreSpirit editor is still loading. Retry if this message persists.'; status.style.color = '#fca5a5'; return; }
       if (!currentSource) { status.textContent = 'Enter a CoreScript indicator first.'; status.style.color = '#fca5a5'; return; }
       const generation = ++compileGeneration;
       compile.disabled = run.disabled = true;
@@ -496,6 +565,8 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       status.textContent = 'Parsing and type-checking in the CoreSpirit compiler worker…';
       status.style.color = '#94a3b8';
       try {
+        const { compileCoreSpiritSourceOffThread } = await import('../../coreSpirit/coreSpiritCompilerClient');
+        if (disposed || generation !== compileGeneration) return;
         const result = await compileCoreSpiritSourceOffThread(currentSource, generation, 'tco-live-studio', { layer: 'chart' });
         if (generation !== compileGeneration) return;
         editorModel.applyWorkerCompileResult(result, currentSource);
