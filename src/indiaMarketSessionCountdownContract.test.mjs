@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { countdownText, indiaSessionCountdownText } from '../vendor/vela/src/renderers/native/chrome/countdown.ts';
 
 const open = Date.parse('2026-10-14T03:45:00.000Z'); // 09:15 Asia/Kolkata
@@ -23,5 +24,24 @@ assert.equal(indiaSessionCountdownText(open, 24 * 60 * 60 * 1000, Date.parse('20
 
 assert.equal(countdownText(open, fiveMinutes, Date.parse('2026-10-14T03:47:00.000Z')), '03:00',
   'retain generic countdown behavior for non-TCO callers');
+
+const chromeRenderer = readFileSync(new URL('../vendor/vela/src/renderers/native/chrome/ChromeRenderer.ts', import.meta.url), 'utf8');
+const nativeRenderer = readFileSync(new URL('../vendor/vela/src/renderers/native/NativeRenderer.ts', import.meta.url), 'utf8');
+const sceneGraph = readFileSync(new URL('../vendor/vela/src/renderers/native/core/SceneGraph.ts', import.meta.url), 'utf8');
+const chartConfig = readFileSync(new URL('../vendor/vela/src/renderers/native/core/chartConfig.ts', import.meta.url), 'utf8');
+const settingsDialog = readFileSync(new URL('../vendor/vela/src/renderers/native/chrome/SettingsDialog.ts', import.meta.url), 'utf8');
+assert.match(chromeRenderer, /indiaSessionCountdownText\(lastTime, coords\.barInterval, Date\.now\(\)\)/,
+  'Vela chrome must use the India-session policy rather than the generic wall-clock countdown');
+assert.match(nativeRenderer, /this\.scene\.timezone = 'Asia\/Kolkata'/,
+  'native feature edits cannot switch the TCO chart out of India time');
+assert.match(nativeRenderer, /this\.scene\.timezone = 'Asia\/Kolkata';/,
+  'imported settings must be applied with the India timezone');
+assert.match(sceneGraph, /timezone = 'Asia\/Kolkata'/,
+  'fresh scenes must default to Asia/Kolkata');
+assert.match(chartConfig, /timezone: 'Asia\/Kolkata'/,
+  'saved and imported chart config must normalize to Asia/Kolkata');
+assert.match(settingsDialog, /return \[\['Asia\/Kolkata', 'Asia\/Kolkata \(IST\)'\] as const\]/,
+  'the chart settings timezone selector must offer only IST');
+
 
 console.log('INDIA_MARKET_SESSION_COUNTDOWN_CONTRACT_OK');
