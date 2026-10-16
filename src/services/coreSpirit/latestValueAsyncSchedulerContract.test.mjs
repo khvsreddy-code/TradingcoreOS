@@ -73,4 +73,12 @@ assert.doesNotMatch(engine, /void executeInWorker\(currentBars,mainContextKey,fa
 assert.ok(engine.includes('return isolateSnapshot ? Object.freeze(normalizedBarsCache.slice()) as CoreSpiritMarketBar[] : normalizedBarsCache'),
   'the synchronous hot path can reuse the normalized cache; isolation is reserved for async compute');
 
+
+assert.match(engine, /allowSameBarStale: !snapshotStillCurrent, tailTimeMs: latestTime/,
+  'the most recent completed same-bar output may render while a newer snapshot is queued');
+assert.match(engine, /datasetRevision < lastCommittedDatasetRevision/,
+  'an older same-bar output must not mutate retained scene state after a newer revision has committed');
+assert.match(engine, /barTimeMillis\(latestTail\.timestamp\) !== options\.tailTimeMs/,
+  'stale outputs are never committed across a bar boundary');
+
 console.log('CORESPIRIT_LATEST_VALUE_ASYNC_SCHEDULER_CONTRACT_OK');
