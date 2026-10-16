@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+const validation = read('./services/coreSpirit/researchValidation.ts');
+const artifact = read('./services/coreSpirit/modelArtifacts.ts');
+const artifactClient = read('./services/coreSpirit/modelArtifactClient.ts');
+const lifecycleTest = read('./services/coreSpirit/modelLifecycle.test.ts');
+const worker = read('./server/jobs/coreSpiritModelTraining.ts');
+const route = read('./server/routes/coreSpirit-models.routes.ts');
+const repository = read('./server/storage/CoreSpiritArtifactRepository.ts');
+const coreWorker = read('./services/coreSpirit/coreSpirit.worker.ts');
+const workerPool = read('./services/coreSpirit/coreSpiritWorkerPool.ts');
+const releaseMigration = read('../supabase/migrations/20261016140000_corespirit_model_release_controls.sql');
+const modelMigration = read('../supabase/migrations/20261010120000_corespirit_model_artifact_lifecycle.sql');
+const editor = read('./pages/CoreSpiritEditorPage.tsx');
+const docs = read('../docs/corespirit-model-artifacts-and-provenance.md');
+
+assert.match(validation, /availableAt > row\.timestamp/);
+assert.match(validation, /row\.confirmed !== true/);
+assert.match(validation, /row\.phase !== 'historical' && row\.phase !== 'confirmed'/);
+assert.match(validation, /Object\.keys\(row\)\.some/);
+assert.match(validation, /assertNoKnownLabelLeakage/);
+assert.match(validation, /splitChronologicalResearchRows/);
+assert.match(validation, /trainingRows = rows\.slice\(0, trainingCount\)/);
+assert.match(validation, /validationRows = rows\.slice\(trainingCount\)/);
+assert.match(validation, /CAUSALITY_FUTURE_INDEX/);
+assert.match(validation, /CAUSALITY_UNQUALIFIED_REQUEST/);
+assert.match(validation, /repaint\.backtestLiveEquivalent === true/);
+
+assert.match(artifact, /runtimeVersion: string/);
+assert.match(artifact, /validationRange: TrainingRange/);
+assert.match(artifact, /validationResults: ModelValidationResults/);
+assert.match(artifact, /researchSafety: import\('\.\/researchValidation\.js'\)\.ResearchSafetySummary/);
+assert.match(artifact, /Validation range must be strictly after the training range/);
+assert.match(artifact, /chronological holdout validation report/);
+
+assert.match(worker, /splitChronologicalResearchRows\(/);
+assert.match(worker, /const trainingRows = split\.trainingRows/);
+assert.match(worker, /const validationRows = split\.validationRows/);
+assert.match(worker, /index < trainingRows\.length/);
+assert.match(worker, /validationModel\.predict\(row\.values, payload\.featureNames, row\.timestamp\)/);
+assert.match(worker, /validationResults/);
+assert.match(worker, /runtimeVersion: CORE_SPIRIT_RUNTIME_VERSION/);
+assert.match(worker, /researchSafety: safety/);
+assert.match(worker, /dataset snapshot hash mismatch/i);
+assert.match(worker, /researchSafety\.version !== 1/);
+
+assert.match(route, /analyzeCoreSpiritCausality\(ast\)/);
+assert.match(route, /analyzeCoreSpiritRepaintSafety\(ast\)/);
+assert.match(route, /CoreSpirit model source failed the causal\/lookahead safety gate/);
+assert.match(route, /assertNoKnownLabelLeakage\(featureNames\)/);
+assert.match(route, /validationCount < MIN_RESEARCH_VALIDATION_ROWS/);
+assert.match(route, /confirm !== true/);
+assert.match(route, /Model is not eligible for production inference/);
+assert.match(route, /nonDegenerateValidation: validation\.distinctPredictedStates >= 2/);
+assert.match(route, /status: 'approved'/);
+assert.match(route, /release\.status !== 'approved'/);
+assert.match(route, /storedArtifact\.provenance\.validationRange\.to/);
+assert.match(route, /Inference timestamp must be after the chronological training and validation windows/);
+
+assert.match(repository, /ensureModelReleaseControl/);
+assert.match(repository, /transition_corespirit_model_release/);
+assert.match(repository, /validationResults: provenance\.validationResults/);
+assert.match(artifactClient, /release\?\.status !== 'approved'/);
+assert.match(artifactClient, /release\.approvalChecks\?\.productionEligible !== true/);
+assert.match(artifactClient, /artifact\.provenance\.validationRange\.to/);
+assert.match(artifactClient, /inferenceBoundaryTimestampMs: validationEndMs/);
+assert.match(artifactClient, /model\.setInferenceBoundaryExclusive\(runtimeInferenceBoundary\)/);
+assert.match(coreWorker, /inferenceBoundaryTimestampMs \?\? binding\.trainingEndTimestampMs/);
+assert.match(workerPool, /inferenceBoundaryTimestampMs \?\? binding\.trainingEndTimestampMs/);
+assert.match(lifecycleTest, /status: 'approved', approvalChecks: \{ productionEligible: true \}/);
+assert.match(lifecycleTest, /throughout the holdout validation period/);
+
+assert.match(modelMigration, /create table if not exists public\.corespirit_model_artifacts/);
+assert.match(releaseMigration, /create table if not exists public\.corespirit_model_release_controls/);
+assert.match(releaseMigration, /create table if not exists public\.corespirit_model_release_events/);
+assert.match(releaseMigration, /status in \('candidate','approved','revoked','retired'\)/);
+assert.match(releaseMigration, /productionEligible/);
+assert.match(releaseMigration, /for update/);
+assert.match(releaseMigration, /p_target_status is null/);
+assert.match(releaseMigration, /reject_corespirit_release_event_mutation/);
+assert.match(releaseMigration, /alter table public\.corespirit_model_release_controls enable row level security/);
+assert.match(releaseMigration, /revoke all on table public\.corespirit_model_release_controls from anon, authenticated/);
+assert.match(releaseMigration, /revoke all on function public\.transition_corespirit_model_release[\s\S]*from public, anon, authenticated/);
+assert.match(releaseMigration, /grant execute on function public\.transition_corespirit_model_release[\s\S]*to service_role/);
+
+assert.match(editor, /MODEL RELEASE/);
+assert.match(editor, /Review the exact immutable hash/);
+assert.match(editor, /Approve validated artifact/);
+assert.match(editor, /does not authorize trading/);
+assert.match(docs, /validationRange/);
+assert.match(docs, /Chronological holdout/);
+assert.match(docs, /production approval/i);
+assert.match(docs, /availableAt/);
+console.log('CORESPIRIT_MODEL_PROVENANCE_AND_RELEASE_OK');
