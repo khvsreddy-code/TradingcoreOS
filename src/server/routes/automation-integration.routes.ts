@@ -530,6 +530,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
     const parsed = parseBrokerOrderPayload(rawOrder);
     const symbol = String(parsed.symbol).trim().toUpperCase();
     const side = String(parsed.side).trim().toUpperCase();
+    if (side !== 'BUY' && side !== 'SELL') throw new Error('side must be BUY or SELL.');
     const type = String(parsed.orderType).trim().toUpperCase();
     const product = String(parsed.product).trim().toUpperCase();
     const normalizedType = type === 'MARKET' ? 'Market' : type === 'LIMIT' ? 'Limit' : type;
