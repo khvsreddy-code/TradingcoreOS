@@ -23,3 +23,73 @@ export function formatCountdown(ms: number): string {
     const pad = (v: number): string => String(v).padStart(2, '0');
     return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
+
+/**
+ * FYERS/Indian-exchange countdown policy. Candles are UTC epoch milliseconds,
+ * but eligibility is evaluated against the exchange's Asia/Kolkata session clock.
+ * The final intraday bar is capped at the regular-session close, even when its
+ * nominal timeframe would extend beyond 15:30 IST.
+ */
+export const INDIA_MARKET_SESSION = Object.freeze({
+    timeZone: 'Asia/Kolkata',
+    openMinute: 9 * 60 + 15,
+    closeMinute: 15 * 60 + 30,
+    weekdaysOnly: true,
+});
+
+type CountdownSessionPolicy = Readonly<{
+    timeZone: string;
+    openMinute: number;
+    closeMinute: number;
+    weekdaysOnly?: boolean;
+}>;
+
+function zonedClockParts(epochMs: number, timeZone: string): Record<string, string> | null {
+    if (!Number.isFinite(epochMs)) return null;
+    try {
+        const formatter = new Intl.DateTimeFormat('en-GB', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            weekday: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        });
+        return Object.fromEntries(formatter.formatToParts(new Date(epochMs))
+            .filter(part => part.type !== 'literal')
+            .map(part => [part.type, part.value]));
+    } catch {
+        return null;
+    }
+}
+
+/** Countdown capped to an actual intraday exchange session; returns null outside it. */
+export function indiaSessionCountdownText(barOpen: number, barMs: number, now: number): string | null {
+    const policy: CountdownSessionPolicy = INDIA_MARKET_SESSION;
+    if (!(barMs > 0) || !Number.isFinite(barOpen) || !Number.isFinite(now) || barMs >= 24 * 60 * 60 * 1000) return null;
+    const current = zonedClockParts(now, policy.timeZone);
+    const bar = zonedClockParts(barOpen, policy.timeZone);
+    if (!current || !bar) return null;
+
+    const currentDay = `${current.year}-${current.month}-${current.day}`;
+    const barDay = `${bar.year}-${bar.month}-${bar.day}`;
+    if (currentDay !== barDay) return null;
+    if (policy.weekdaysOnly && ['Sat', 'Sun'].includes(current.weekday ?? '')) return null;
+
+    const currentMinute = Number(current.hour) * 60 + Number(current.minute);
+    const barMinute = Number(bar.hour) * 60 + Number(bar.minute);
+    if (!Number.isFinite(currentMinute) || !Number.isFinite(barMinute)) return null;
+    if (currentMinute < policy.openMinute || currentMinute >= policy.closeMinute) return null;
+    if (barMinute < policy.openMinute || barMinute >= policy.closeMinute || barOpen > now) return null;
+
+    const closeParts = { year: Number(current.year), month: Number(current.month), day: Number(current.day) };
+    // India Standard Time is UTC+05:30 year-round. Build the session close in UTC
+    // explicitly instead of parsing a local-time string using the browser's zone.
+    const sessionCloseMs = Date.UTC(closeParts.year, closeParts.month - 1, closeParts.day, 15, 30) - (5 * 60 + 30) * 60_000;
+    const barCloseMs = Math.min(barOpen + barMs, sessionCloseMs);
+    const remaining = barCloseMs - now;
+    if (remaining <= 0) return null;
+    return formatCountdown(remaining);
+}
