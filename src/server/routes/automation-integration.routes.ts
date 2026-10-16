@@ -440,32 +440,47 @@ automationGatewayRoutes.get('/v1/orders/:externalRequestId', requireAutomationSc
     let actualState: string = record.state;
     let filledQuantity: number | null = null;
     let averagePrice: number | null = null;
-    if (record.brokerOrderId) {
-      const state = await AutomationIntegrationRepository.getBrokerOrderState(record.userId, record.brokerOrderId).catch(() => undefined);
-      if (state) {
-        actualState = state.status;
-        filledQuantity = state.filledQuantity;
-        averagePrice = state.averagePrice;
-        if (state.status !== record.state) {
-          await AutomationIntegrationRepository.updateOrderRequest(integration.id, requestId, {
-            state: state.status as AutomationRequestState,
-            response: {
-              ...(record.response ?? {}),
-              state: state.status,
-              filled: state.status === 'FILLED',
-              filledQuantity: state.filledQuantity,
-              averagePrice: state.averagePrice,
-              brokerStateUpdatedAt: state.updatedAt,
-            },
-            clientOrderId: record.clientOrderId,
-            brokerOrderId: record.brokerOrderId,
-            signalId: record.signalId,
-            estimatedNotional: record.estimatedNotional,
-            riskChecks: record.riskChecks,
-          }).catch(() => undefined);
-        }
+    let reconciledState: Awaited<ReturnType<typeof AutomationIntegrationRepository.getBrokerOrderState>> | undefined;
+    let reconciliationLookupFailed = false;
+    try {
+      // Prefer the broker ID when already known. If the submit HTTP call timed
+      // out after FYERS accepted it, the order may still be discoverable by the
+      // deterministic client order tag delivered before submission.
+      reconciledState = record.brokerOrderId
+        ? await AutomationIntegrationRepository.getBrokerOrderState(record.userId, record.brokerOrderId)
+        : record.clientOrderId
+          ? await AutomationIntegrationRepository.getBrokerOrderStateByClientOrderId(record.userId, record.clientOrderId)
+          : undefined;
+    } catch {
+      reconciliationLookupFailed = true;
+    }
+    if (reconciledState) {
+      actualState = reconciledState.status;
+      filledQuantity = reconciledState.filledQuantity;
+      averagePrice = reconciledState.averagePrice;
+      if (reconciledState.status !== record.state || reconciledState.brokerOrderId !== record.brokerOrderId) {
+        await AutomationIntegrationRepository.updateOrderRequest(integration.id, requestId, {
+          state: reconciledState.status as AutomationRequestState,
+          response: {
+            ...(record.response ?? {}),
+            state: reconciledState.status,
+            filled: reconciledState.status === 'FILLED',
+            filledQuantity: reconciledState.filledQuantity,
+            averagePrice: reconciledState.averagePrice,
+            brokerStateUpdatedAt: reconciledState.updatedAt,
+          },
+          clientOrderId: reconciledState.clientOrderId ?? record.clientOrderId,
+          brokerOrderId: reconciledState.brokerOrderId,
+          signalId: record.signalId,
+          estimatedNotional: record.estimatedNotional,
+          riskChecks: record.riskChecks,
+        }).catch(() => undefined);
       }
     }
+    const reconciliationPending = !reconciledState && (
+      reconciliationLookupFailed ||
+      ['INTENT','SUBMITTED','UNKNOWN','RECOVERY_REQUIRED','CANCEL_PENDING'].includes(record.state)
+    );
     res.setHeader('Cache-Control', 'private, no-store');
     res.json({
       success: true,
@@ -477,7 +492,9 @@ automationGatewayRoutes.get('/v1/orders/:externalRequestId', requireAutomationSc
         filledQuantity,
         averagePrice,
         clientOrderId: record.clientOrderId,
-        brokerOrderId: record.brokerOrderId,
+        brokerOrderId: reconciledState?.brokerOrderId ?? record.brokerOrderId,
+        reconciliationPending,
+        recoveryRequired: reconciliationPending && ['UNKNOWN','RECOVERY_REQUIRED'].includes(record.state),
         response: record.response,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
