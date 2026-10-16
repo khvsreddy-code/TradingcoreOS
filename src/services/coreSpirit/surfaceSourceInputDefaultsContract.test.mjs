@@ -3,7 +3,7 @@ import {
   extractCoreSpiritSurfaceMetadata,
   parseCoreSpiritInputDeclaration,
   parseCoreSpiritDeclarationProperty,
-} from './services/coreSpirit/languageConcepts.ts';
+} from './languageConcepts.ts';
 
 const bareSource = parseCoreSpiritInputDeclaration('input source = close');
 assert.equal(bareSource?.type, 'source');
