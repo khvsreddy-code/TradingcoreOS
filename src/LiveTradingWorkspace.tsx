@@ -42,6 +42,17 @@ export function LiveTradingWorkspace() {
     const workspaceListenerDisposers: Array<() => void> = [];
     let cancelled = false;
     const browserErrors: Array<{ type: 'error' | 'unhandledrejection'; message: string; time: number }> = [];
+    const browserRuntimeMetrics = {
+      longTaskCount: 0,
+      totalLongTaskMs: 0,
+      worstLongTaskMs: 0,
+      lastLongTaskAt: 0,
+      longTaskDurations: [] as number[],
+      webglContextLossCount: 0,
+      webglContextRestoreCount: 0,
+      heapSamples: [] as Array<{ capturedAt: number; usedBytes: number }>,
+    };
+    let longTaskObserver: PerformanceObserver | undefined;
     const pushBrowserError = (type: 'error' | 'unhandledrejection', message: string) => {
       browserErrors.push({ type, message: String(message).slice(0, 500), time: Date.now() });
       if (browserErrors.length > 50) browserErrors.shift();
@@ -56,9 +67,37 @@ export function LiveTradingWorkspace() {
       const reason = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unhandled rejection');
       pushBrowserError('unhandledrejection', reason);
     };
+    const onWebGLContextLost = (event: Event) => {
+      browserRuntimeMetrics.webglContextLossCount += 1;
+      const target = event.target as HTMLElement | null;
+      pushBrowserError('error', `WebGL context lost${target?.tagName ? ` on ${target.tagName}` : ''}`);
+    };
+    const onWebGLContextRestored = () => { browserRuntimeMetrics.webglContextRestoreCount += 1; };
     window.addEventListener('error', onWindowError);
     window.addEventListener('unhandledrejection', onUnhandledRejection);
+    document.addEventListener('webglcontextlost', onWebGLContextLost, true);
+    document.addEventListener('webglcontextrestored', onWebGLContextRestored, true);
     (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__ = [];
+    (window as Window & { __TCO_BROWSER_RUNTIME__?: unknown }).__TCO_BROWSER_RUNTIME__ = browserRuntimeMetrics;
+    try {
+      if (typeof PerformanceObserver !== 'undefined') {
+        longTaskObserver = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            const duration = Math.max(0, Number(entry.duration) || 0);
+            browserRuntimeMetrics.longTaskCount += 1;
+            browserRuntimeMetrics.totalLongTaskMs += duration;
+            browserRuntimeMetrics.worstLongTaskMs = Math.max(browserRuntimeMetrics.worstLongTaskMs, duration);
+            browserRuntimeMetrics.lastLongTaskAt = Date.now();
+            browserRuntimeMetrics.longTaskDurations.push(duration);
+            if (browserRuntimeMetrics.longTaskDurations.length > 120) browserRuntimeMetrics.longTaskDurations.shift();
+          }
+        });
+        longTaskObserver.observe({ entryTypes: ['longtask'] });
+      }
+    } catch {
+      longTaskObserver?.disconnect();
+      longTaskObserver = undefined;
+    }
 
     const mount = async () => {
       // Start session restoration immediately, but don't block Vela's first
@@ -142,10 +181,15 @@ export function LiveTradingWorkspace() {
       workspace?.destroy();
       window.removeEventListener('error', onWindowError);
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      document.removeEventListener('webglcontextlost', onWebGLContextLost, true);
+      document.removeEventListener('webglcontextrestored', onWebGLContextRestored, true);
+      longTaskObserver?.disconnect();
       if (typeof window !== 'undefined') {
         const exposed = (window as Window & { __TCO_VELA__?: { workspace?: unknown } }).__TCO_VELA__;
         if (exposed?.workspace === workspace) delete (window as Window & { __TCO_VELA__?: unknown }).__TCO_VELA__;
         delete (window as Window & { __TCO_VELA_ERRORS__?: unknown }).__TCO_VELA_ERRORS__;
+        const runtime = (window as Window & { __TCO_BROWSER_RUNTIME__?: unknown }).__TCO_BROWSER_RUNTIME__;
+        if (runtime === browserRuntimeMetrics) delete (window as Window & { __TCO_BROWSER_RUNTIME__?: unknown }).__TCO_BROWSER_RUNTIME__;
       }
     };
   }, []);
@@ -186,6 +230,21 @@ export function LiveTradingWorkspace() {
         }
       }
       if (typeof window !== 'undefined') {
+        const memory = (window.performance as Performance & { memory?: {
+          usedJSHeapSize?: number; totalJSHeapSize?: number; jsHeapSizeLimit?: number;
+        } }).memory;
+        const usedHeapBytes = Number.isFinite(Number(memory?.usedJSHeapSize)) ? Number(memory?.usedJSHeapSize) : null;
+        if (usedHeapBytes !== null) {
+          browserRuntimeMetrics.heapSamples.push({ capturedAt: Date.now(), usedBytes: usedHeapBytes });
+          if (browserRuntimeMetrics.heapSamples.length > 120) browserRuntimeMetrics.heapSamples.shift();
+        }
+        const heapFirst = browserRuntimeMetrics.heapSamples[0];
+        const heapLast = browserRuntimeMetrics.heapSamples.at(-1);
+        const heapWindowDeltaBytes = heapFirst && heapLast ? heapLast.usedBytes - heapFirst.usedBytes : null;
+        const recentLongTasks = [...browserRuntimeMetrics.longTaskDurations].sort((a, b) => a - b);
+        const longTaskP95Ms = recentLongTasks.length
+          ? recentLongTasks[Math.min(recentLongTasks.length - 1, Math.ceil(recentLongTasks.length * 0.95) - 1)]!
+          : 0;
         (window as Window & { __TCO_PERF__?: unknown }).__TCO_PERF__ = {
           capturedAt: Date.now(),
           cells: stats,
@@ -194,6 +253,29 @@ export function LiveTradingWorkspace() {
           sharedMemory: {
             crossOriginIsolated: Boolean(window.crossOriginIsolated),
             sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+          },
+          runtime: {
+            longTasks: {
+              count: browserRuntimeMetrics.longTaskCount,
+              totalMs: browserRuntimeMetrics.totalLongTaskMs,
+              worstMs: browserRuntimeMetrics.worstLongTaskMs,
+              recentP95Ms: longTaskP95Ms,
+              lastAt: browserRuntimeMetrics.lastLongTaskAt || null,
+              recentSampleCount: recentLongTasks.length,
+            },
+            memory: {
+              available: usedHeapBytes !== null,
+              usedBytes: usedHeapBytes,
+              totalBytes: Number.isFinite(Number(memory?.totalJSHeapSize)) ? Number(memory?.totalJSHeapSize) : null,
+              limitBytes: Number.isFinite(Number(memory?.jsHeapSizeLimit)) ? Number(memory?.jsHeapSizeLimit) : null,
+              sampleCount: browserRuntimeMetrics.heapSamples.length,
+              sampleWindowMs: heapFirst && heapLast ? heapLast.capturedAt - heapFirst.capturedAt : 0,
+              windowDeltaBytes: heapWindowDeltaBytes,
+            },
+            webgl: {
+              contextLossCount: browserRuntimeMetrics.webglContextLossCount,
+              contextRestoreCount: browserRuntimeMetrics.webglContextRestoreCount,
+            },
           },
         };
       }
