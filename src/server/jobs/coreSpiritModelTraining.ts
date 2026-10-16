@@ -1,8 +1,16 @@
 import { coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../../services/coreSpirit/modelArtifacts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
+import { CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
+import {
+  assertNoKnownLabelLeakage,
+  splitChronologicalResearchRows,
+  validateConfirmedResearchRows,
+  type ResearchFeatureRow,
+  type ResearchSafetySummary,
+} from '../../services/coreSpirit/researchValidation.js';
 
-type TrainingRow = Readonly<{ timestamp: number; values: readonly number[] }>;
+type TrainingRow = ResearchFeatureRow;
 type TrainingPayload = Readonly<{
   trainingRunId: string;
   researchArtifactId: string;
@@ -45,18 +53,19 @@ function parsePayload(value: unknown): TrainingPayload {
   }
   if (!Number.isSafeInteger(value.randomSeed) || Number(value.randomSeed) < 0) throw new Error('randomSeed must be a non-negative safe integer');
 
-  let previousTimestamp = Number.NEGATIVE_INFINITY;
-  const normalizedRows = rows.map((item, index) => {
-    if (!isRecord(item) || typeof item.timestamp !== 'number' || !Number.isFinite(item.timestamp) ||
-        item.timestamp < from || item.timestamp > to || !Array.isArray(item.values) ||
-        item.values.length !== featureNames.length ||
-        item.values.some(number => typeof number !== 'number' || !Number.isFinite(number))) {
-      throw new Error('Invalid feature row at index ' + index + ': timestamps must be in range and values must match the feature schema');
-    }
-    if (item.timestamp <= previousTimestamp) throw new Error('Training rows must be strictly chronological with no duplicate timestamps');
-    previousTimestamp = item.timestamp;
-    return { timestamp: item.timestamp, values: [...item.values] as number[] };
-  });
+  assertNoKnownLabelLeakage(featureNames as string[]);
+  const normalizedRows = validateConfirmedResearchRows(rows as TrainingRow[], featureNames as string[])
+    .map((row, index) => {
+      if (row.timestamp < from || row.timestamp > to) {
+        throw new Error('Invalid feature row at index ' + index + ': decision timestamp falls outside the immutable dataset range');
+      }
+      return row;
+    });
+  const validationFraction = trainingParameters.validationFraction ?? 0.2;
+  if (typeof validationFraction !== 'number' || !Number.isFinite(validationFraction) ||
+      validationFraction < 0.1 || validationFraction > 0.4) {
+    throw new Error('validationFraction must be between 0.10 and 0.40');
+  }
   return {
     trainingRunId: value.trainingRunId,
     researchArtifactId: value.researchArtifactId,
@@ -97,7 +106,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       throw new Error('Research artifact source or feature-graph integrity check failed');
     }
 
-    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown };
+    const featureGraph = research.featureGraph as { featureNames?: unknown; modelType?: unknown; states?: unknown; covariance?: unknown; researchSafety?: ResearchSafetySummary };
     if (!Array.isArray(featureGraph?.featureNames) ||
         featureGraph.featureNames.length !== payload.featureNames.length ||
         featureGraph.featureNames.some((name, index) => name !== payload.featureNames[index])) {
@@ -105,6 +114,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     }
     if (featureGraph.modelType !== 'HMM<float>' && featureGraph.modelType !== 'HMM') {
       throw new Error('The built-in background trainer currently supports Gaussian HMM artifacts; other model families need a registered training backend');
+    }
+    if (!featureGraph.researchSafety || featureGraph.researchSafety.version !== 1) {
+      throw new Error('Research artifact has no causal/lookahead safety manifest; recompile it with the current CoreSpirit research compiler.');
     }
     const expectedDatasetVersion = await coreSpiritSha256({
       featureNames: payload.featureNames,
@@ -114,6 +126,14 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     if (expectedDatasetVersion !== payload.datasetVersion) throw new Error('Dataset snapshot hash mismatch; refusing to train on changed data');
 
     const states = Number(featureGraph.states ?? 3);
+    const split = splitChronologicalResearchRows(
+      payload.rows,
+      Number(payload.trainingParameters.validationFraction ?? 0.2),
+      Math.max(12, states * 4),
+      12,
+    );
+    const trainingRows = split.trainingRows;
+    const validationRows = split.validationRows;
     const covariance = featureGraph.covariance === 'diagonal' ? 'diagonal' : 'full';
     const fitIterations = Number(payload.trainingParameters.fitIterations ?? 3);
     const fitEvery = Number(payload.trainingParameters.fitEvery ?? 64);
@@ -128,19 +148,19 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     const hmm = new CoreSpiritGaussianHMM({
       states,
       covariance,
-      maxObservations: payload.rows.length,
+      maxObservations: trainingRows.length,
       fitEvery,
       fitIterations,
     });
     const decoded = new Set<number>();
-    for (let index = 0; index < payload.rows.length; index += 1) {
-      const row = payload.rows[index]!;
+    for (let index = 0; index < trainingRows.length; index += 1) {
+      const row = trainingRows[index]!;
       const state = hmm.observe(row.values, row.timestamp, payload.featureNames);
       if (state !== null) decoded.add(state);
       if (index % 64 === 0) {
         await repository.updateTrainingRun(payload.trainingRunId, {
           status: 'running',
-          progress: Math.min(85, 15 + Math.floor((index / payload.rows.length) * 70)),
+          progress: Math.min(85, 15 + Math.floor((index / trainingRows.length) * 70)),
         });
       }
     }
@@ -148,27 +168,75 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     const hmmState: CoreSpiritGaussianHMMState = hmm.exportTrainedState();
     const finalPosterior = hmm.posterior();
     const confidence = hmm.probabilityLatest() ?? 0;
+
+    // Holdout evaluation uses the frozen fitted state and chronological validation
+    // rows only. predict() never calls fitBounded() and cannot update learned weights.
+    const validationModel = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
+    const trainingEndTimestamp = trainingRows[trainingRows.length - 1]!.timestamp;
+    validationModel.setInferenceBoundaryExclusive(trainingEndTimestamp);
+    const validationStates = new Set<number>();
+    const validationConfidences: number[] = [];
+    for (const row of validationRows) {
+      const prediction = validationModel.predict(row.values, payload.featureNames, row.timestamp);
+      validationStates.add(prediction.state);
+      validationConfidences.push(prediction.confidence);
+    }
+    if (validationConfidences.length !== validationRows.length ||
+        !validationConfidences.every(value => Number.isFinite(value) && value >= 0 && value <= 1)) {
+      throw new Error('Chronological holdout validation emitted invalid predictions.');
+    }
+    const meanValidationConfidence = validationConfidences.reduce((sum, value) => sum + value, 0) / validationConfidences.length;
+    const minValidationConfidence = Math.min(...validationConfidences);
+    const maxValidationConfidence = Math.max(...validationConfidences);
+    const safety = featureGraph.researchSafety;
+    const validationResults = {
+      protocol: 'chronological-holdout-v1' as const,
+      trainingSampleCount: trainingRows.length,
+      sampleCount: validationRows.length,
+      distinctPredictedStates: validationStates.size,
+      meanConfidence: meanValidationConfidence,
+      minConfidence: minValidationConfidence,
+      maxConfidence: maxValidationConfidence,
+      forwardOnly: true,
+      noTimestampOverlap: trainingEndTimestamp < validationRows[0]!.timestamp,
+      featureSchemaMatched: true,
+      labelLeakageCheckPassed: true,
+      featureAvailabilityCheckPassed: payload.rows.every(row => row.confirmed === true && row.availableAt <= row.timestamp),
+      datasetHashVerified: true,
+      sourceCausalityPassed: safety.blockers.length === 0,
+      lookaheadCheckPassed: safety.lookahead === 'false' && safety.causality === 'causal' && safety.blockers.length === 0,
+    };
     const metrics = {
-      observations: payload.rows.length,
+      observations: trainingRows.length,
+      validationSamples: validationRows.length,
       featureCount: payload.featureNames.length,
       stateCount: states,
       distinctDecodedStates: decoded.size,
       finalConfidence: confidence,
+      validationDistinctStates: validationStates.size,
+      validationMeanConfidence: meanValidationConfidence,
+      validationMinConfidence: minValidationConfidence,
+      validationMaxConfidence: maxValidationConfidence,
     };
     const provenance: ModelProvenance = {
       sourceHash: research.sourceHash,
       compilerVersion: research.compilerVersion,
+      runtimeVersion: CORE_SPIRIT_RUNTIME_VERSION,
       irVersion: research.irVersion,
       featureGraphHash: research.featureGraphHash,
       datasetVersion: payload.datasetVersion,
-      trainingRange: payload.trainingRange,
+      trainingRange: split.trainingRange,
+      validationRange: split.validationRange,
+      validationResults,
+      researchSafety: safety,
       trainingParameters: {
         ...payload.trainingParameters,
+        validationFraction: split.validationFraction,
         states,
         covariance,
         fitIterations,
         fitEvery,
-        maxObservations: payload.rows.length,
+        maxObservations: trainingRows.length,
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
       },
@@ -177,6 +245,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       backend: 'cpu',
       dependencyVersions: {
         corespiritCompiler: research.compilerVersion,
+        corespiritRuntime: CORE_SPIRIT_RUNTIME_VERSION,
         corespiritIr: research.irVersion,
         node: process.version,
       },
@@ -205,7 +274,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       trainingRunId: payload.trainingRunId,
       modelName: artifact.name,
       modelHash: artifact.hash,
-      observations: payload.rows.length,
+      observations: trainingRows.length,
+      validationSamples: validationRows.length,
+      validationRange: split.validationRange,
       metrics,
       posterior: finalPosterior ? Array.from(finalPosterior.data) : [],
     };
