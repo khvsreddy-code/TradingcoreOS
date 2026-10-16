@@ -17,6 +17,7 @@ const tcoVelaChrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const workspaceShell = read('src/components/workspace/WorkspaceModuleShell.tsx');
 const workspaceRoutes = read('src/appShells/TradingWorkspaceShell.tsx');
 const coreSpiritPage = read('src/pages/CoreSpiritEditorPage.tsx');
+const tcoVelaTerminal = read('src/services/core/chart/tcoVelaTerminal.ts');
 
 const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 
@@ -42,6 +43,9 @@ assert(bundleBudget.includes('advancedRegistryFibonacci.ts'), 'production graph 
 assert(liveWorkspace.includes('Loading chart engine') && liveWorkspace.includes('Retry chart loading'), 'optional chart capability loading must expose visible pending and retry states');
 
 
+assert(tcoVelaTerminal.includes("left:['symbol','timeframes','style','layout','indicators']"), 'Vela must retain ownership of the primary symbol/timeframe/style toolbar');
+assert(tcoVelaTerminal.includes("'tco.chart-settings'"), 'chart settings must stay in the existing terminal top bar');
+assert(tcoVelaChrome.includes("if (typeof renderer.openSettings === 'function')"), 'chart settings must delegate to the Vela chart adapter rather than maintain a duplicate settings model');
 assert(!tcoVelaChrome.includes("import { CoreSpiritEditorModel }"), 'CoreSpirit Studio model must not be loaded with the chart chrome');
 assert(!tcoVelaChrome.includes("import { mountCoreSpiritMonaco"), 'Monaco must not be loaded with the chart chrome');
 assert(!tcoVelaChrome.includes("import { compileCoreSpiritSourceOffThread"), 'CoreSpirit compiler client must not be loaded with the chart chrome');
