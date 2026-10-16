@@ -7,7 +7,7 @@
  */
 
 export const CORESPIRIT_RESEARCH_ARTIFACT_VERSION = '1';
-export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '1';
+export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '2';
 
 export type TrainingRange = Readonly<{ from: string; to: string }>;
 export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
