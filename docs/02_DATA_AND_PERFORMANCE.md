@@ -122,13 +122,13 @@ Dashboard / Live
 
 The landing page defers below-fold marketing modules until the page is near them or the short startup grace period has elapsed. This keeps the initial graph focused on the first viewport rather than paying for every section of the marketing page.
 
-The build now emits a Vite manifest, groups large third-party dependencies into explicit vendor chunks, and runs a graph-aware gzip budget across the landing, login, dashboard and live route roots. The strategic performance target remains:
+The production build emits the Vite manifest and runs a **static-graph gzip budget** against unique emitted JavaScript filenames. This avoids double-counting shared files while still charging every route for code reachable through static imports. Dynamic-import roots are reported separately; they do not count as initially requested code merely because the manifest knows about them.
 
-- **150–250 KB gzip** for first interactive landing/startup JavaScript.
-- **<300 KB gzip** for the live workspace's critical route graph once the live route has been fully measured and trimmed.
-- Editor, models, prediction, indicators and other non-critical modules remain route/on-demand chunks.
+The explicit hard ceilings are: **300 KB initial entry shell**, **320 KB landing**, **260 KB login**, **400 KB dashboard/workspace**, **650 KB live chart**, **1,200 KB CoreSpirit editor**, and **900 KB each** for Models, Predictions, Automations and Indicators. Optimization targets are tighter where most useful: **200 KB landing**, **350 KB dashboard/workspace**, and **550 KB live chart**. The build fails when a hard ceiling is exceeded. These are configured limits, not a claim that today's emitted bundles are beneath them; the build report must be checked to know the actual sizes.
 
-CI currently uses staged safety ceilings of 320 KB (landing), 260 KB (login), 400 KB (dashboard) and 650 KB (live) so regressions are blocked before the long-term targets are tightened. These are guardrails, not claims that the targets have already been achieved.
+The route audit also checks that the CoreSpirit compiler is not part of landing/dashboard initial static graphs and that Vela's channels, Fibonacci/Gann, and patterns/harmonics drawing-family files stay out of the live chart's initial static graph. Vite no longer forces every unclassified package into a single `vendor-other` chunk; Rollup can keep those dependency graphs separate rather than coupling unrelated optional features.
+
+This is a manifest-level safeguard—not a substitute for a real browser Network waterfall. Before release, load the landing page, dashboard, and a basic live chart on the built/deployed version with DevTools Network (disable cache, preserve log), then explicitly open the drawing toolbar/families, CoreSpirit editor and research pages. Confirm optional chunks first download on their associated user action, check the initiator chain, and inspect any shared chunk that is requested from the initial route. That real browser check is still a release verification step, not something the manifest test can honestly claim to have performed.
 
 
 ## Vela capability graph — prevent the fork from becoming one mandatory payload
@@ -204,7 +204,7 @@ open Draw / drawing UI
        └─ advanced drawing families on demand
 ```
 
-The next refinement is to split `registry.ts` itself into lean-core and advanced families so enabling one advanced family (for example Fibonacci) does not pull Gann, harmonics, Elliott and volume-profile classes into the same chunk.
+The drawing registry already has separate dynamic imports for channels, Fibonacci/Gann, and patterns/harmonics. Toolbar startup must not call the compatibility helper `loadAdvancedDrawingCatalog()`, because that would request every family as soon as the user merely opens a chart. The native toolbar now requests only the family associated with a clicked group/tool, shows a pending message while the chunk is loading, and exposes a retry action if import fails. Contracts protect both the no-eager-load rule and the independent family boundaries.
 
 ### Native-indicator policy
 
