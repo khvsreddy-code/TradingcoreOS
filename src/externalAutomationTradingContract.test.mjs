@@ -34,6 +34,12 @@ assert.match(migration, /unique \(integration_id, event_id\)/);
 assert.match(migration, /for update;/i);
 assert.match(migration, /claim_automation_order_request/);
 assert.ok(migration.includes("p_request_hash !~ '^[a-f0-9]{64}$'"), 'the idempotency hash guard must be valid SQL and require a complete SHA-256 hex digest');
+assert.match(migration, /add column if not exists lifecycle_status text not null default 'paused'/, 'credential authentication reads lifecycle_status');
+assert.match(migration, /add column if not exists broker_order_id text/);
+assert.match(migration, /add column if not exists attempts integer not null default 1/);
+assert.match(migration, /add column if not exists expires_at timestamptz/);
+assert.match(migration, /add column if not exists last_error text/);
+assert.match(migration, /'unknown','expired','recovery_required'/, 'the shared idempotency ledger must accept uncertain/recovery states');
 assert.equal((migration.match(/create or replace function public\.claim_automation_order_request/g) ?? []).length, 1, 'the migration must define the idempotency claim function exactly once');
 assert.equal((migration.match(/grant execute on function public\.claim_automation_order_request/g) ?? []).length, 1, 'the migration must grant the claim RPC exactly once');
 assert.match(migration, /payload->>'mode' = 'LIVE'/);
@@ -49,6 +55,11 @@ assert.match(integrations, /eq\('client_order_id', clientOrderId\)/);
 assert.match(integrationRoutes, /getBrokerOrderStateByClientOrderId\(record\.userId, record\.clientOrderId\)/, 'order status must look up by client ID when the broker order ID was not returned');
 assert.match(integrationRoutes, /reconciliationPending/);
 assert.match(integrationRoutes, /Idempotency-Key header must be 8–128 safe characters/);
+assert.match(integrationRoutes, /EXTERNAL_ORDER_FIELDS = new Set/);
+assert.match(integrationRoutes, /Object\.keys\(rawOrder\)\.some\(field => !EXTERNAL_ORDER_FIELDS\.has\(field\)\)/, 'external orders must reject broker-specific and user-supplied execution metadata');
+assert.doesNotMatch(integrationRoutes, /orderPayload = \{\s*\.\.\.parsed/, 'external order normalization must not forward arbitrary request properties');
+assert.match(integrationRoutes, /After-market orders are disabled for external automation/);
+assert.match(integrationRoutes, /validity must be DAY or IOC/);
 assert.match(integrationRoutes, /String\(req\.body\.mode \?\? 'PAPER'\)/, 'order requests must default to paper, even when the credential is live-capable');
 assert.ok(integrationRoutes.indexOf('AutomationIntegrationRepository.claimOrderRequest') <
   integrationRoutes.indexOf('placeFyersOrderViaFixedIpGateway(accessToken, submitPayload'),
