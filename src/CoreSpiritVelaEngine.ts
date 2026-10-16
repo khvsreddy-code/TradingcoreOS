@@ -12,7 +12,7 @@ import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreS
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import { normalizeCoreSpiritTimeframe } from './services/core/data/marketDataGraph.ts';
-import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarsToCoreSpirit, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
+import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarsToCoreSpirit, safeVelaNormalizationStart, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
@@ -539,23 +539,18 @@ export class CoreSpiritVelaEngine {
       const rows=req.getBars() as unknown as readonly VelaOhlcv[];
       if(!Array.isArray(rows))return bars;
       const length=rows.length;
-      let start=0;
-      if(forceFullNormalization||normalizedInputLength<0||length<normalizedInputLength||normalizedBarsCache.length!==normalizedInputLength){
-        normalizedBarsCache.length=0;
-      }else if(length===normalizedInputLength){
-        start=Math.max(0,length-1);
-        normalizedBarsCache.length=start;
-      }else{
-        // The previous forming candle is now confirmed; normalize it again and
-        // append only the new rows rather than rebuilding all history objects.
-        start=Math.max(0,normalizedInputLength-1);
-        normalizedBarsCache.length=start;
-      }
-      let previousTime=start>0?barTimeMillis(normalizedBarsCache[start-1]?.timestamp):0;
+      // A same-length snapshot may be a forming-bar replacement, while a
+      // longer snapshot may still be a historical prepend. Reuse the prefix only
+      // when stable opening-time anchors prove the old absolute indices survived.
+      const safeStart=safeVelaNormalizationStart(rows,normalizedBarsCache,normalizedInputLength,forceFullNormalization);
+      const start=safeStart===null?0:safeStart;
+      if(safeStart===null)normalizedBarsCache.length=0;
+      else normalizedBarsCache.length=start;
+      let previousTime=start>0?barTimeMillis(normalizedBarsCache[start-1]?.timestamp):Number.NEGATIVE_INFINITY;
       for(let i=start;i<length;i+=1){
         const row=normalizeVelaBar(rows[i]!,i);
         const time=barTimeMillis(row.timestamp);
-        if(i>0&&time<previousTime)throw new Error(`CoreSpirit Vela data adapter rejected non-chronological bar sequence at index ${i}.`);
+        if(i>0&&time<=previousTime)throw new Error(`CoreSpirit Vela data adapter rejected duplicate or non-chronological bar sequence at index ${i}.`);
         previousTime=time;
         normalizedBarsCache.push(row);
       }
