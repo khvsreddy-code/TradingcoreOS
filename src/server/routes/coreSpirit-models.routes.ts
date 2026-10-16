@@ -17,7 +17,7 @@ import {
   verifyModelArtifactIntegrity,
   type ResearchArtifact,
 } from '../../services/coreSpirit/modelArtifacts.js';
-import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION, CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION } from '../../services/coreSpirit/VERSION.js';
 import { extractCoreSpiritSurfaceMetadata } from '../../services/coreSpirit/languageConcepts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
