@@ -559,7 +559,7 @@ export class NativeRenderer implements IChartRenderer {
                 }
                 break;
             case 'timezone':
-                this.scene.timezone = typeof value === 'string' && value ? value : 'UTC';
+                this.scene.timezone = 'Asia/Kolkata';
                 break;
             case 'priceStyle':
                 this.setPriceStyle(isPriceStyle(value) ? value : 'candles');
@@ -979,7 +979,8 @@ export class NativeRenderer implements IChartRenderer {
             colors: { long: next.trades.longColor, short: next.trades.shortColor, exit: next.trades.exitColor },
         };
         // time scale
-        this.scene.timezone = next.timeScale.timezone;
+        // The FYERS/TCO workspace is India-market-only; stored/imported zones are ignored.
+        this.scene.timezone = 'Asia/Kolkata';
         // timeline marks (lane toggle + per-group visibility)
         this.scene.marks = { visible: next.marks.visible, groups: { ...next.marks.groups } };
         // candles
