@@ -178,6 +178,7 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
       olderHistoryLoadMs: sample.olderHistoryLoadMs,
       olderHistoryCandles: sample.olderHistoryCandles,
       frameBudgetMissRate: sample.frameBudgetMissRate,
+      stageMs: sample.stageMs,
     })),
     backends: perf.cells.map((cell) => ({ cellId: cell.cellId, backend: cell.backend, fps: cell.fps, p95FrameMs: cell.p95FrameMs, budgetMissRate: cell.frameBudgetMissRate })),
   }, null, 2));
