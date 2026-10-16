@@ -16,7 +16,7 @@ import { PriceAxisTickSource } from './priceAxisTicks';
 import { axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
 import { DARK_THEME } from '../../../core/theme';
 import { tzOffsetMs } from './tz';
-import { countdownText } from './countdown';
+import { indiaSessionCountdownText } from './countdown';
 import { tagTextColor } from './contrast';
 import { markGroupVisible } from '../../shared/marks-state';
 import { clusterTooltip, layoutMarkLane, markGlyphAt, markStackAt, type MarkLaneLayout, type PlacedGlyph } from './marks/layout';
@@ -402,7 +402,7 @@ export class ChromeRenderer {
         }
 
         // ── axis chips: last-price label and/or countdown ──
-        const cdText = scene.showCountdown ? countdownText(lastTime, coords.barInterval, Date.now()) : null;
+        const cdText = scene.showCountdown ? indiaSessionCountdownText(lastTime, coords.barInterval, Date.now()) : null;
         const showCountdown = cdText !== null;
         const showLabel = scene.showPriceLabel;
         if (!showLabel && !showCountdown) return;
