@@ -59,6 +59,7 @@ assert.match(integrationRoutes, /EXTERNAL_ORDER_FIELDS = new Set/);
 assert.match(integrationRoutes, /Object\.keys\(rawOrder\)\.some\(field => !EXTERNAL_ORDER_FIELDS\.has\(field\)\)/, 'external orders must reject broker-specific and user-supplied execution metadata');
 assert.doesNotMatch(integrationRoutes, /orderPayload = \{\s*\.\.\.parsed/, 'external order normalization must not forward arbitrary request properties');
 assert.match(integrationRoutes, /After-market orders are disabled for external automation/);
+assert.match(integrationRoutes, /side !== 'BUY' && side !== 'SELL'/, 'invalid or AI-invented sides must not be coerced into SELL');
 assert.match(integrationRoutes, /validity must be DAY or IOC/);
 assert.match(integrationRoutes, /String\(req\.body\.mode \?\? 'PAPER'\)/, 'order requests must default to paper, even when the credential is live-capable');
 assert.ok(integrationRoutes.indexOf('AutomationIntegrationRepository.claimOrderRequest') <
@@ -127,6 +128,9 @@ assert.match(automationUi, /tokenShownOnce/);
 assert.match(automationUi, /lifecycle_status:cloudLifecycleStatus/);
 assert.match(envExample, /TCO_CORESPIRIT_SIGNAL_SECRET/);
 assert.match(docs, /Broker acknowledgement is not a fill/);
+assert.match(docs, /Persistent order state machine/);
+assert.match(docs, /UNKNOWN.*RECOVERY_REQUIRED/s);
+assert.match(docs, /strict allowlist/);
 assert.match(docs, /same key and same body/);
 
 console.log('EXTERNAL_AUTOMATION_TRADING_BOUNDARY_OK');
