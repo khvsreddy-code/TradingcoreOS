@@ -33,7 +33,7 @@ assert.match(migration, /unique \(integration_id, external_request_id\)/);
 assert.match(migration, /unique \(integration_id, event_id\)/);
 assert.match(migration, /for update;/i);
 assert.match(migration, /claim_automation_order_request/);
-assert.ok(migration.includes("p_request_hash !~ '^[a-f0-9]{64}
+assert.ok(migration.includes("p_request_hash !~ '^[a-f0-9]{64}$'"), 'the idempotency hash guard must be valid SQL and require a complete SHA-256 hex digest');
 assert.match(migration, /payload->>'mode' = 'LIVE'/);
 assert.match(migration, /enable row level security/i);
 assert.match(migration, /revoke all on table public\.automation_order_requests from anon, authenticated/i);
