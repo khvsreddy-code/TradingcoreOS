@@ -12,13 +12,35 @@ export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '1';
 export type TrainingRange = Readonly<{ from: string; to: string }>;
 export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
 
+export type ModelValidationResults = Readonly<{
+  protocol: 'chronological-holdout-v1';
+  trainingSampleCount: number;
+  sampleCount: number;
+  distinctPredictedStates: number;
+  meanConfidence: number;
+  minConfidence: number;
+  maxConfidence: number;
+  forwardOnly: boolean;
+  noTimestampOverlap: boolean;
+  featureSchemaMatched: boolean;
+  labelLeakageCheckPassed: boolean;
+  featureAvailabilityCheckPassed: boolean;
+  datasetHashVerified: boolean;
+  sourceCausalityPassed: boolean;
+  lookaheadCheckPassed: boolean;
+}>;
+
 export type ModelProvenance = Readonly<{
   sourceHash: string;
   compilerVersion: string;
+  runtimeVersion: string;
   irVersion: string;
   featureGraphHash: string;
   datasetVersion: string;
   trainingRange: TrainingRange;
+  validationRange: TrainingRange;
+  validationResults: ModelValidationResults;
+  researchSafety: import('./researchValidation.js').ResearchSafetySummary;
   trainingParameters: Readonly<Record<string, string | number | boolean | null>>;
   randomSeed: number;
   modelImplementation: string;
@@ -166,7 +188,40 @@ function validateDateRange(range: TrainingRange): void {
 }
 
 function validateProvenance(provenance: ModelProvenance): void {
+  if (!provenance || typeof provenance !== 'object') throw new Error('Model provenance is required');
   validateDateRange(provenance.trainingRange);
+  validateDateRange(provenance.validationRange);
+  const trainingEnd = Date.parse(provenance.trainingRange.to) +
+    (/^\\d{4}-\\d{2}-\\d{2}$/.test(provenance.trainingRange.to) ? 86_399_999 : 0);
+  const validationStart = Date.parse(provenance.validationRange.from);
+  if (!Number.isFinite(trainingEnd) || !Number.isFinite(validationStart) || trainingEnd >= validationStart) {
+    throw new Error('Validation range must be strictly after the training range; overlapping time-series samples are not allowed');
+  }
+  const validation = provenance.validationResults;
+  if (!validation || validation.protocol !== 'chronological-holdout-v1' ||
+      !Number.isSafeInteger(validation.trainingSampleCount) || validation.trainingSampleCount < 12 ||
+      !Number.isSafeInteger(validation.sampleCount) || validation.sampleCount < 12 ||
+      !Number.isSafeInteger(validation.distinctPredictedStates) || validation.distinctPredictedStates < 1 ||
+      !Number.isFinite(validation.meanConfidence) || validation.meanConfidence < 0 || validation.meanConfidence > 1 ||
+      !Number.isFinite(validation.minConfidence) || validation.minConfidence < 0 || validation.minConfidence > 1 ||
+      !Number.isFinite(validation.maxConfidence) || validation.maxConfidence < 0 || validation.maxConfidence > 1 ||
+      validation.minConfidence > validation.meanConfidence || validation.meanConfidence > validation.maxConfidence ||
+      ['forwardOnly','noTimestampOverlap','featureSchemaMatched','labelLeakageCheckPassed',
+        'featureAvailabilityCheckPassed','datasetHashVerified','sourceCausalityPassed','lookaheadCheckPassed']
+        .some(key => typeof (validation as unknown as Record<string, unknown>)[key] !== 'boolean')) {
+    throw new Error('Model provenance must contain a valid chronological holdout validation report');
+  }
+  const safety = provenance.researchSafety;
+  if (!safety || safety.version !== 1 || typeof safety.approvalEligible !== 'boolean' ||
+      !Array.isArray(safety.blockers) || !Array.isArray(safety.warnings) ||
+      typeof safety.causality !== 'string' || typeof safety.lookahead !== 'string' ||
+      ![true, false, 'unknown'].includes(safety.realtimeSafe) ||
+      ![true, false, 'unknown'].includes(safety.backtestLiveEquivalent)) {
+    throw new Error('Model provenance must contain a complete static research-safety report');
+  }
+  if (!provenance.runtimeVersion || typeof provenance.runtimeVersion !== 'string') {
+    throw new Error('Model provenance must record the CoreSpirit runtime version');
+  }
   if (!/^[a-f0-9]{64}$/.test(provenance.sourceHash) ||
       !/^[a-f0-9]{64}$/.test(provenance.featureGraphHash) ||
       !/^[a-f0-9]{64}$/.test(provenance.datasetVersion) ||
