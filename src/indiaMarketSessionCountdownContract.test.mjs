@@ -16,6 +16,12 @@ assert.equal(indiaSessionCountdownText(open, fiveMinutes, Date.parse('2026-10-15
 assert.equal(indiaSessionCountdownText(Date.parse('2026-10-18T03:45:00.000Z'), fiveMinutes, Date.parse('2026-10-18T03:47:00.000Z')), null,
   'weekend should not display an intrabar countdown');
 
+assert.equal(indiaSessionCountdownText(Date.parse('2026-10-20T03:45:00.000Z'), fiveMinutes, Date.parse('2026-10-20T03:47:00.000Z')), null,
+  'NSE Dussehra holiday should not display an intrabar countdown even during normal weekday hours');
+assert.equal(indiaSessionCountdownText(Date.parse('2026-10-19T03:45:00.000Z'), fiveMinutes, Date.parse('2026-10-19T03:47:00.000Z')), '03:00',
+  'a regular trading weekday should still display the active bar countdown');
+
+
 const lateBar = Date.parse('2026-10-14T09:45:00.000Z'); // 15:15 Asia/Kolkata
 assert.equal(indiaSessionCountdownText(lateBar, 30 * 60 * 1000, Date.parse('2026-10-14T09:55:00.000Z')), '05:00',
   'a candle that nominally extends beyond 15:30 is capped at the regular market close');
