@@ -37,6 +37,10 @@ export type ModelProvenance = Readonly<{
   irVersion: string;
   featureGraphHash: string;
   datasetVersion: string;
+  /** Hash integrity is independent of whether a trusted provider attested the source. */
+  datasetSource: 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline';
+  datasetSourceVerified: boolean;
+  datasetSourceAttestationHash: string | null;
   trainingRange: TrainingRange;
   validationRange: TrainingRange;
   validationResults: ModelValidationResults;
@@ -227,6 +231,19 @@ function validateProvenance(provenance: ModelProvenance): void {
       !/^[a-f0-9]{64}$/.test(provenance.datasetVersion) ||
       !provenance.compilerVersion || !provenance.irVersion || !provenance.modelImplementation) {
     throw new Error('Model provenance is incomplete or contains an invalid SHA-256 identity');
+  }
+  if (!['user_supplied','broker_history','trusted_feature_pipeline'].includes(provenance.datasetSource) ||
+      typeof provenance.datasetSourceVerified !== 'boolean') {
+    throw new Error('Model provenance must distinguish dataset integrity from verified source provenance');
+  }
+  if (provenance.datasetSourceVerified) {
+    if (provenance.datasetSource === 'user_supplied' ||
+        typeof provenance.datasetSourceAttestationHash !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(provenance.datasetSourceAttestationHash)) {
+      throw new Error('Verified dataset source requires a non-user-supplied source and a SHA-256 attestation hash');
+    }
+  } else if (provenance.datasetSourceAttestationHash !== null) {
+    throw new Error('Unverified dataset sources must not contain a trusted-source attestation hash');
   }
   if (!['cpu', 'wasm', 'webgpu', 'remote'].includes(provenance.backend)) {
     throw new Error('Model provenance backend is unsupported');
