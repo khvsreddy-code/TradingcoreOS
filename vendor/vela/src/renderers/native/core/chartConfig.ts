@@ -716,7 +716,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             exitColor: isColor(trades.exitColor) ? trades.exitColor : base.trades.exitColor,
         },
         timeScale: {
-            timezone: typeof ts.timezone === 'string' && ts.timezone ? ts.timezone : base.timeScale.timezone,
+            timezone: 'Asia/Kolkata',
         },
         marks: {
             visible: isBool(marks.visible) ? marks.visible : base.marks.visible,
