@@ -504,3 +504,12 @@ Worker execution produces a fully validated output snapshot. Vela-facing adapter
 The CoreSpirit output dispatcher upserts series values by timestamp rather than treating every update to the forming candle as an append. Stable signal and visual identities similarly replace their developing-bar value rather than accumulating duplicate chart objects.
 
 Regression coverage: `velaOutputAdapterContract.test.mjs`, `velaRevisionedScenePatchContract.test.mjs`, `velaIncrementalPatchContract.test.mjs`, `revisionedRangePatchContract.test.mjs`, and `coreSpiritVelaCapabilityContract.test.mjs`.
+
+## CoreSpirit ↔ Vela ownership and scheduling contract
+
+- CoreSpirit is the sole owner of CoreScript compilation, semantic analysis, execution state, and indicator values. Vela is the sole owner of chart series, coordinate transforms, scene storage, and rendering. The output controller accepts completed output objects; it must not compile or execute scripts.
+- The canonical market-data source remains host/Vela-owned. CoreSpirit's adapter normalizes timestamps and creates isolated worker snapshots where asynchronous execution requires them; these snapshots are execution inputs, not a second mutable source of truth.
+- CoreSpirit uses epoch seconds internally and Vela uses epoch milliseconds at the rendering boundary. Bar-opening timestamps, not array length or an assumed fixed session duration, establish output alignment. A series point that cannot be mapped to the input timeline is rejected rather than drawn one bar late.
+- Incremental history reuse requires stable opening-time anchors. A prepend or index-shifting timeline change forces full normalization and downstream replay; duplicate or non-chronological opening timestamps are rejected. An explicit backfill event always takes the full-refresh path.
+- Compute and render scheduling remain separate. Worker results are revision-gated before they mutate retained scene state. The output controller commits immutable output data into Vela's renderer-owned model; Vela decides when the next frame paints. A render frame never initiates CoreSpirit evaluation.
+- Live forming-bar replacements, historical corrections, symbol/timeframe switches, and stale worker replies must be tested against timestamp-to-bar-index alignment as well as output values.
