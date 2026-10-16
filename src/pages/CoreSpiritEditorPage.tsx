@@ -60,6 +60,21 @@ const COPILOT_MODE_OPTIONS:ReadonlyArray<{value:CopilotMode;label:string}> = [
 ];
 const ANALYSIS_ONLY_COPILOT_MODES=new Set<CopilotMode>(['explain-error','generate-tests','generate-docs','explain-lookback','find-lookahead','find-repainting','find-unused-computation']);
 
+type ModelReleaseInfo = {
+  artifact?: {
+    hash?: string;
+    name?: string;
+    provenance?: Record<string, unknown>;
+  };
+  release?: {
+    status?: string;
+    validationReport?: Record<string, unknown>;
+    approvalChecks?: Record<string, unknown>;
+    decisionReason?: string | null;
+    approvedAt?: string | null;
+  };
+};
+
 type CopilotReplayGate = Readonly<{
   source:string;
   artifactHash:string;
@@ -147,6 +162,81 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
   const [copilotAssumptions,setCopilotAssumptions]=useState<string[]>([]);
   const [copilotArtifactHash,setCopilotArtifactHash]=useState<string|null>(null);
   const [copilotError,setCopilotError]=useState('');
+  const [modelReleaseHash,setModelReleaseHash]=useState('');
+  const [modelReleaseReason,setModelReleaseReason]=useState('Reviewed out-of-sample validation, provenance, and temporal-safety results.');
+  const [modelReleaseInfo,setModelReleaseInfo]=useState<ModelReleaseInfo|null>(null);
+  const [modelReleaseBusy,setModelReleaseBusy]=useState(false);
+  const [modelReleaseMessage,setModelReleaseMessage]=useState('');
+  const [modelReleaseError,setModelReleaseError]=useState('');
+  const loadModelRelease = async () => {
+    const hash=modelReleaseHash.trim().toLowerCase();
+    if(!/^[a-f0-9]{64}$/.test(hash)){
+      setModelReleaseError('Enter the exact 64-character SHA-256 model artifact hash.');
+      setModelReleaseMessage('');
+      return;
+    }
+    setModelReleaseBusy(true);setModelReleaseError('');setModelReleaseMessage('');
+    try{
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to review private CoreSpirit model artifacts.');
+      const response=await fetch('/api/corespirit/models/'+hash,{
+        headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},
+        cache:'no-store',
+      });
+      const payload=await response.json().catch(()=>null) as {success?:boolean;data?:ModelReleaseInfo;error?:string}|null;
+      if(!response.ok||!payload?.success||!payload.data?.artifact)throw new Error(payload?.error||'Unable to load the model artifact and validation report.');
+      setModelReleaseHash(hash);setModelReleaseInfo(payload.data);
+    }catch(error){
+      setModelReleaseInfo(null);
+      setModelReleaseError(error instanceof Error?error.message:'Unable to load model release details.');
+    }finally{setModelReleaseBusy(false);}
+  };
+
+  const transitionModelRelease = async (action:'approve'|'revoke'|'retire') => {
+    const hash=modelReleaseHash.trim().toLowerCase();
+    if(!/^[a-f0-9]{64}$/.test(hash)){setModelReleaseError('Load a model artifact before making a release decision.');return;}
+    if(modelReleaseReason.trim().length<8||modelReleaseReason.trim().length>1000){
+      setModelReleaseError('A release-decision reason must contain 8–1000 characters.');return;
+    }
+    if(!window.confirm(
+      action==='approve'
+        ? 'Approve this exact immutable artifact hash for production chart inference? This does not enable broker orders.'
+        : action==='revoke'
+          ? 'Revoke production approval for this model artifact? Existing runtimes must reload before using a new release decision.'
+          : 'Retire this immutable model artifact from future production use?'
+    ))return;
+    setModelReleaseBusy(true);setModelReleaseError('');setModelReleaseMessage('');
+    try{
+      const {data:{session},error:sessionError}=await getSupabaseClient().auth.getSession();
+      if(sessionError||!session?.access_token)throw new Error('Sign in to manage model releases.');
+      const response=await fetch('/api/corespirit/models/'+hash+'/approval',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'application/json'},
+        body:JSON.stringify({action,confirm:true,reason:modelReleaseReason.trim()}),
+        cache:'no-store',
+      });
+      const payload=await response.json().catch(()=>null) as {success?:boolean;data?:{release?:ModelReleaseInfo['release']};error?:string;approvalChecks?:Record<string,unknown>}|null;
+      if(!response.ok||!payload?.success)throw new Error(payload?.error||'Model release decision was rejected by the server.');
+      setModelReleaseMessage(
+        action==='approve'
+          ? 'Exact artifact approved. Chart inference still uses the pinned artifact hash; this does not authorize trading.'
+          : action==='revoke'?'Production approval revoked.':'Model artifact retired.'
+      );
+      // Re-read server-owned state rather than trusting the action response alone.
+      const refreshed=await fetch('/api/corespirit/models/'+hash,{
+        headers:{Authorization:'Bearer '+session.access_token,Accept:'application/json'},
+        cache:'no-store',
+      });
+      const refreshedPayload=await refreshed.json().catch(()=>null) as {success?:boolean;data?:ModelReleaseInfo;error?:string}|null;
+      if(!refreshed.ok||!refreshedPayload?.success||!refreshedPayload.data?.artifact){
+        throw new Error(refreshedPayload?.error||'Release changed, but its latest server state could not be reloaded.');
+      }
+      setModelReleaseInfo(refreshedPayload.data);
+    }catch(error){
+      setModelReleaseError(error instanceof Error?error.message:'Unable to persist model release decision.');
+    }finally{setModelReleaseBusy(false);}
+  };
+
   const lines = useMemo(() => Array.from({ length: lineCount(source) }, (_, i) => i + 1), [source]);
   const editorSnapshot = editorModel.getSnapshot();
   const highlighted = useMemo(() => highlightedLines(source, editorSnapshot.tokens), [source, editorSnapshot.tokens]);
@@ -647,6 +737,46 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
 <Panel title="VISUAL DEBUGGER" subtitle="Click a chart bar or signal to inspect source → IR → runtime state"><div className="space-y-2"><div className="flex items-center gap-2"><input value={debugBarInput} onChange={e=>setDebugBarInput(e.target.value)} type="number" min="0" className="w-24 rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] px-2 py-1.5 text-[9px] font-mono text-white outline-none"/><button onClick={()=>ideBridge.inspectDebugBar(Number(debugBarInput)||0)} className="rounded border border-[#3b82f6]/30 px-2 py-1.5 text-[9px] font-semibold text-[#3b82f6] hover:bg-[#3b82f6]/5">Inspect bar</button>{runtimeInspector.debugger && <span className="ml-auto text-[8px] text-[var(--tco-dim)]">trace {runtimeInspector.debugger.traceChecksum.slice(0,10)}</span>}</div>{runtimeInspector.debugger ? <div className="space-y-2"><div className="grid grid-cols-3 gap-1"><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] text-[var(--tco-dim)]">BAR</div><div className="text-[10px] font-bold text-white">{runtimeInspector.debugger.selectedBarIndex}</div></div><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] text-[var(--tco-dim)]">IR STEPS</div><div className="text-[10px] font-bold text-white">{runtimeInspector.debugger.executionPath.length}</div></div><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] text-[var(--tco-dim)]">SOURCE</div><div className="text-[10px] font-bold text-[#c084fc]">{runtimeInspector.debugger.sourceHighlight?.line ?? '—'}</div></div></div>{runtimeInspector.debugger.sourceHighlight&&<div className="rounded border border-[#c084fc]/20 bg-[#c084fc]/5 p-2"><div className="text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Source highlight</div><div className="mt-1 text-[9px] font-mono text-[var(--tco-text-2)]">Line {runtimeInspector.debugger.sourceHighlight.line}:{runtimeInspector.debugger.sourceHighlight.column}</div><div className="mt-1 truncate text-[9px] text-[var(--tco-text-2)]">{runtimeInspector.debugger.sourceHighlight.text||'source location resolved from Core IR map'}</div></div>}<div className="grid grid-cols-2 gap-2"><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2"><div className="mb-1 text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">State</div>{runtimeInspector.debugger.frames[0]?.state.slice(0,10).map(v=><div key={v.name} className="flex justify-between text-[8px]"><span className="text-[var(--tco-dim)]">{v.name}</span><span className="font-mono text-white">{String(v.value)}</span></div>)}</div><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2"><div className="mb-1 text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Outputs</div>{runtimeInspector.debugger.frames[0]?.outputs.map((o,i)=><div key={`${o.kind}-${i}`} className="rounded border border-[var(--tco-border)] px-2 py-1 text-[8px]"><div className="flex justify-between"><span className="font-mono text-[var(--tco-dim)]">{o.kind}</span><span className="text-white">{o.name||''}</span></div><div className="text-[var(--tco-code-muted)]">{o.message||String(o.value??'')}</div></div>)}</div></div><div className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2"><div className="mb-1 text-[8px] uppercase tracking-widest text-[var(--tco-dim)]">Execution trace</div><div className="max-h-40 space-y-1 overflow-auto">{runtimeInspector.debugger.executionPath.slice(-10).map(step=><div key={`${step.pc}-${step.opcode}`} className="rounded border border-[var(--tco-border)] px-2 py-1 text-[8px]"><div className="flex justify-between"><span className="font-mono text-[var(--tco-dim)]">PC {step.pc} · {step.opcode}</span><span className="text-[#3b82f6]">{String(step.value??'')}</span></div>{step.source&&<div className="text-[var(--tco-code-muted)]">Line {step.source.line}:{step.source.column}</div>}</div>)}{!runtimeInspector.debugger.executionPath.length&&<div className="text-[8px] text-[var(--tco-dim)]">No instruction trace available.</div>}</div></div></div> : <div className="rounded border border-dashed border-[var(--tco-border)] p-3 text-[9px] text-[var(--tco-dim)]">Run the script on an active chart, then inspect a bar or select a signal.</div>}</div></Panel>
 <Panel title="LANGUAGE UI" subtitle="Runtime-owned controls declared by CoreSpirit"><div className="space-y-2">{runtimeInspector.uiState?.panels?.length ? runtimeInspector.uiState.panels.map(panel=><div key={panel.id} className="rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold text-white">{panel.title}</span><span className="text-[8px] text-[var(--tco-dim)]">{panel.controls.length} controls</span></div><div className="mt-2 space-y-1">{panel.controls.map(control=><div key={control.id} className="flex items-center justify-between text-[8px]"><span className="text-[var(--tco-code-muted)]">{control.label}</span><span className="font-mono text-[#c084fc]">{String(control.value)}{control.actionId ? ` · ${control.actionId}` : ''}</span></div>)}</div></div>) : <div className="rounded border border-dashed border-[var(--tco-border)] p-3 text-[9px] text-[var(--tco-dim)]">Run a script using ui.panel(...) to populate runtime UI state.</div>}</div></Panel>
 <Panel title="SCENE GRAPH" subtitle="Same runtime outputs, persistent visual objects"><div className="space-y-2"><div className="grid grid-cols-3 gap-2"><div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] uppercase text-[var(--tco-dim)]">Nodes</div><div className="mt-1 text-[11px] font-bold text-white">{runtimeInspector.scene?.nodes.length ?? 0}</div></div><div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] uppercase text-[var(--tco-dim)]">Interactive</div><div className="mt-1 text-[11px] font-bold text-[#c084fc]">{runtimeInspector.scene?.nodes.filter(n=>n.interactive).length ?? 0}</div></div><div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-2"><div className="text-[8px] uppercase text-[var(--tco-dim)]">Revision</div><div className="mt-1 text-[11px] font-bold text-[#3b82f6]">{runtimeInspector.scene?.revision ?? 0}</div></div></div>{runtimeInspector.scene?.nodes.length ? <div className="space-y-1">{runtimeInspector.scene.nodes.slice(-8).reverse().map(node=><div key={node.id} className="flex items-center justify-between rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2 py-1.5"><div className="min-w-0"><div className="truncate text-[9px] font-mono text-white">{node.id}</div><div className="text-[8px] text-[var(--tco-dim)]">{node.kind} · {node.layer}{node.semanticRole ? ` · ${node.semanticRole}` : ''}</div></div><div className="ml-2 text-[8px] text-[var(--tco-dim)]">{node.interaction?.onClick?.actionId ? 'CLICK' : ''}</div></div>)}</div> : <div className="rounded border border-dashed border-[var(--tco-border)] p-3 text-[9px] text-[var(--tco-dim)]">Run the script to populate the renderer-neutral scene graph.</div>}</div></Panel>
+        <Panel title="MODEL RELEASE" subtitle="Review the exact immutable hash, holdout evidence, and temporal-safety checks before production inference.">
+          <div className="space-y-3">
+            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--tco-dim)]" htmlFor="corespirit-model-hash">Model artifact SHA-256</label>
+            <div className="flex gap-2">
+              <input id="corespirit-model-hash" value={modelReleaseHash} onChange={e=>{setModelReleaseHash(e.target.value.trim().toLowerCase());setModelReleaseError('');}} maxLength={64} spellCheck={false} autoComplete="off" placeholder="64-character artifact hash" className="min-w-0 flex-1 rounded-md border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2 py-2 font-mono text-[9px] text-[var(--tco-code-text)] outline-none focus:border-[#60a5fa]/60" />
+              <button disabled={modelReleaseBusy} onClick={()=>void loadModelRelease()} className="premium-button disabled:opacity-50">{modelReleaseBusy?'Working…':'Load'}</button>
+            </div>
+            {modelReleaseInfo?.artifact&&modelReleaseInfo.release&&<div className="rounded-md border border-[var(--tco-border)] bg-[var(--tco-surface-2)] p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-semibold text-[var(--tco-text-2)]">{modelReleaseInfo.artifact.name||'CoreSpirit model'}</span><span className={modelReleaseInfo.release.status==='approved'?'text-[9px] font-mono text-[#34d399]':modelReleaseInfo.release.status==='revoked'||modelReleaseInfo.release.status==='retired'?'text-[9px] font-mono text-[#f87171]':'text-[9px] font-mono text-[#fbbf24]'}>{(modelReleaseInfo.release.status||'unknown').toUpperCase()}</span></div>
+              <div className="truncate font-mono text-[8px] text-[var(--tco-dim)]" title={modelReleaseInfo.artifact.hash}>{modelReleaseInfo.artifact.hash}</div>
+              <div className="grid grid-cols-2 gap-2 text-[9px]">
+                <div><div className="text-[var(--tco-dim)]">Training samples</div><div className="font-semibold text-[var(--tco-text-2)]">{String((modelReleaseInfo.artifact.provenance?.validationResults as Record<string,unknown>|undefined)?.trainingSampleCount??'—')}</div></div>
+                <div><div className="text-[var(--tco-dim)]">Holdout samples</div><div className="font-semibold text-[var(--tco-text-2)]">{String((modelReleaseInfo.artifact.provenance?.validationResults as Record<string,unknown>|undefined)?.sampleCount??'—')}</div></div>
+                <div><div className="text-[var(--tco-dim)]">Compiler</div><div className="break-all font-mono text-[var(--tco-code-muted)]">{String(modelReleaseInfo.artifact.provenance?.compilerVersion??'—')}</div></div>
+                <div><div className="text-[var(--tco-dim)]">Runtime</div><div className="break-all font-mono text-[var(--tco-code-muted)]">{String(modelReleaseInfo.artifact.provenance?.runtimeVersion??'—')}</div></div>
+              </div>
+              {(()=>{const checks=modelReleaseInfo.release?.approvalChecks||{};const validation=modelReleaseInfo.artifact?.provenance?.validationResults as Record<string,unknown>|undefined;const safety=modelReleaseInfo.artifact?.provenance?.researchSafety as Record<string,unknown>|undefined;return <div className="space-y-1 border-t border-[var(--tco-border)] pt-2">
+                <div className="text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Safety evidence</div>
+                {[
+                  ['Chronological holdout',validation?.protocol==='chronological-holdout-v1'&&validation?.noTimestampOverlap===true],
+                  ['Feature availability',validation?.featureAvailabilityCheckPassed===true],
+                  ['Label leakage guard',validation?.labelLeakageCheckPassed===true],
+                  ['Causal source',safety?.causality==='causal'&&safety?.blockers instanceof Array&&safety.blockers.length===0],
+                  ['Lookahead safety',safety?.lookahead==='false'&&safety?.backtestLiveEquivalent===true],
+                  ['Production release checks',checks.productionEligible===true],
+                ].map(([label,pass])=><div key={String(label)} className="flex items-center justify-between gap-2 text-[9px]"><span className="text-[var(--tco-muted)]">{String(label)}</span><span className={pass===true?'text-[#34d399]':'text-[#fbbf24]'}>{pass===true?'PASS':'NOT PROVEN'}</span></div>)}
+                {safety?.warnings instanceof Array&&safety.warnings.length>0&&<div className="pt-1 text-[8px] leading-4 text-[#fbbf24]">{safety.warnings.slice(0,3).map(String).join(' ')}</div>}
+                {modelReleaseInfo.release?.decisionReason&&<div className="pt-1 text-[8px] leading-4 text-[var(--tco-dim)]">Last decision: {modelReleaseInfo.release.decisionReason}</div>}
+              </div>})()}
+            </div>}
+            <label className="block text-[9px] font-mono uppercase tracking-widest text-[var(--tco-dim)]" htmlFor="corespirit-release-reason">Decision reason</label>
+            <textarea id="corespirit-release-reason" value={modelReleaseReason} onChange={e=>setModelReleaseReason(e.target.value)} maxLength={1000} rows={2} className="w-full resize-y rounded-md border border-[var(--tco-border)] bg-[var(--tco-code-bg)] p-2 text-[9px] text-[var(--tco-code-text)] outline-none focus:border-[#60a5fa]/60" />
+            {modelReleaseInfo?.release?.status!=='approved'&&modelReleaseInfo?.release?.status!=='retired'&&<button disabled={modelReleaseBusy||!modelReleaseInfo?.artifact} onClick={()=>void transitionModelRelease('approve')} className="premium-button premium-button-primary w-full justify-center disabled:opacity-50">Approve validated artifact</button>}
+            {modelReleaseInfo?.release?.status==='approved'&&<button disabled={modelReleaseBusy} onClick={()=>void transitionModelRelease('revoke')} className="premium-button w-full justify-center disabled:opacity-50">Revoke production approval</button>}
+            {modelReleaseInfo?.release?.status!=='retired'&&modelReleaseInfo?.artifact&&<button disabled={modelReleaseBusy} onClick={()=>void transitionModelRelease('retire')} className="premium-button w-full justify-center disabled:opacity-50">Retire artifact</button>}
+            {modelReleaseError&&<div role="alert" className="rounded border border-[#f87171]/30 bg-[#f87171]/5 p-2 text-[9px] leading-4 text-[#fca5a5]">{modelReleaseError}</div>}
+            {modelReleaseMessage&&<div role="status" aria-live="polite" className="rounded border border-[#34d399]/20 bg-[#34d399]/5 p-2 text-[9px] leading-4 text-[#6ee7b7]">{modelReleaseMessage}</div>}
+            <div className="text-[8px] leading-4 text-[var(--tco-dim)]">Approval applies only to this exact immutable artifact hash. It enables model inference, not broker execution; every order remains subject to TradingCoreOS automation and risk controls.</div>
+          </div>
+        </Panel>
         <Panel title="CORESPIRIT ROADMAP" subtitle="The editor will grow with the runtime"><div className="space-y-2 text-[10px] leading-5 text-[var(--tco-muted)]"><div><Zap className="mr-2 inline h-3 w-3 text-[#3b82f6]"/>Compile + diagnostics <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Run on active chart <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Runtime inspector / explainability <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Syntax highlighting / autocomplete <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Hover / outline / quick fixes <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Inputs with instant hot reload <b className="text-[#f59e0b]">NEXT</b></div><div>• Plot / line / box / zone controls</div><div>• Webhooks + event handlers</div><div>• Models / feature calls</div><div>• Multi-symbol / multi-timeframe requests</div><div>• Replay / backtest / live execution modes</div><div>• Language-driven panels + controls <b className="text-[#3b82f6]">ACTIVE</b></div><div>• Data-rich visual metadata + inspect <b className="text-[#3b82f6]">ACTIVE</b></div></div></Panel>
         <Panel title="RESET"><button onClick={() => setEditorSource(DEFAULT_SOURCE)} className="premium-button w-full"><RotateCcw className="h-4 w-4"/> Reset starter script</button></Panel>
       </div>
