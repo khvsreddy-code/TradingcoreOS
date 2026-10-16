@@ -560,11 +560,11 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     if (release.status !== 'approved' || release.approvalChecks.productionEligible !== true) {
       return fail(res, 409, 'Model candidate is not approved for production inference. Review chronological holdout, source causality, lookahead and provenance before approving the exact artifact hash.');
     }
-    const rangeEnd = storedArtifact.provenance.trainingRange.to;
-    const rangeEndIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(rangeEnd);
-    const trainedThrough = Date.parse(rangeEnd) + (rangeEndIsDateOnly ? 86_399_999 : 0);
-    if (!Number.isFinite(trainedThrough) || timestamp <= trainedThrough) {
-      return fail(res, 422, 'Inference timestamp must be after the model training range to prevent in-sample leakage.');
+    const validationEnd = storedArtifact.provenance.validationRange.to;
+    const validationEndIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(validationEnd);
+    const validatedThrough = Date.parse(validationEnd) + (validationEndIsDateOnly ? 86_399_999 : 0);
+    if (!Number.isFinite(validatedThrough) || timestamp <= validatedThrough) {
+      return fail(res, 422, 'Inference timestamp must be after the chronological training and validation windows to prevent holdout contamination.');
     }
     const inference = await loadModelForInference<
       unknown,
@@ -582,7 +582,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
       }
       if (weights.featureNames.length !== values.length) throw new Error('Feature count does not match the trained model schema.');
       const hmm = CoreSpiritGaussianHMM.fromTrainedState(weights.hmm);
-      hmm.setInferenceBoundaryExclusive(trainedThrough);
+      hmm.setInferenceBoundaryExclusive(validatedThrough);
       return { predict: async (features: readonly number[]) => hmm.predict(features, weights.featureNames, timestamp) };
     });
     const prediction = await inference.predict(values as number[]);
