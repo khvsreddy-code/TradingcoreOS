@@ -138,7 +138,7 @@ The API does not accept a risk approval supplied by the workflow. It derives the
 
 `GET /api/automation-gateway/v1/orders/:externalRequestId`
 
-This reads the durable automation request and the reconciled broker state when available. Reuse the original `Idempotency-Key` as the request ID.
+This reads the durable automation request and reconciled broker state when available. Reuse the original `Idempotency-Key` as the request ID. If the order-placement HTTP call timed out before the broker order ID was returned, status lookup also searches by the deterministic client order ID written before submission. A response with `reconciliationPending: true` means the broker result is not yet visible in the canonical state store; do not retry with a new key. Poll this endpoint or reconcile the FYERS order book/trade book first.
 
 ## Idempotency and order semantics
 
