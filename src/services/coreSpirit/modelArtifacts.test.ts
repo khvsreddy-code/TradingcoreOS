@@ -30,6 +30,9 @@ async function main(): Promise<void> {
     irVersion: research.irVersion,
     featureGraphHash: research.featureGraphHash,
     datasetVersion: 'a'.repeat(64),
+    datasetSource: 'trusted_feature_pipeline',
+    datasetSourceVerified: true,
+    datasetSourceAttestationHash: 'b'.repeat(64),
     trainingRange: { from: '2018-01-01', to: '2025-12-31' },
     validationRange: { from: '2026-01-01', to: '2026-01-31' },
     validationResults: {
