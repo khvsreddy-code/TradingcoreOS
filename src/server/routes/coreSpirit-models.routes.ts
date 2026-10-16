@@ -181,8 +181,9 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
   let featureNames: string[];
   try {
     featureNames = parseFeatureNames(req.body?.featureNames);
+    assertNoKnownLabelLeakage(featureNames);
   } catch (error) {
-    return fail(res, 400, error instanceof Error ? error.message : 'Invalid feature schema.');
+    return fail(res, 422, error instanceof Error ? error.message : 'Invalid or leaky feature schema.');
   }
 
   let compiled: ReturnType<typeof compileCoreSpirit>;
@@ -221,14 +222,34 @@ coreSpiritModelRoutes.post('/research', async (req: AuthenticatedRequest, res: R
     return fail(res, 422, 'featureNames must exactly match the ordered feature names declared in the CoreScript dataset expression.');
   }
 
+  let researchSafety;
+  try {
+    const ast = parseCoreSpirit(source);
+    const causality = analyzeCoreSpiritCausality(ast);
+    const repaintSafety = analyzeCoreSpiritRepaintSafety(ast);
+    researchSafety = summarizeResearchSafety(causality, repaintSafety);
+    if (researchSafety.blockers.length) {
+      res.status(422).json({
+        success: false,
+        error: 'CoreSpirit model source failed the causal/lookahead safety gate. Resolve the diagnostics before training.',
+        diagnostics: researchSafety.blockers.slice(0, 30),
+        warnings: researchSafety.warnings.slice(0, 30),
+      });
+      return;
+    }
+  } catch (error) {
+    return fail(res, 422, error instanceof Error ? 'Unable to verify research causality: ' + error.message : 'Unable to verify research causality.');
+  }
+
   const featureGraphBase = {
-    version: 1,
+    version: 2,
     featureNames,
     declaredFeatureNames,
     modelName: declaration.name,
     modelType: (declaration.modelType ?? '').toLowerCase() === 'hmm' ? 'HMM' : 'HMM<float>',
     states,
     covariance: declaration.covariance ?? 'full',
+    researchSafety,
   };
   try {
     const featureGraph = { ...featureGraphBase, executionPlanHash: await coreSpiritSha256(compiled.ir) };
