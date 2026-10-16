@@ -679,20 +679,14 @@ const bookmarksPanel: SidePanelDescriptor = {
     root.appendChild(meta);
 
     const controls = document.createElement('div');
-    controls.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0 6px;';
+    controls.style.cssText = 'display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:2px 0 6px;';
     const addCurrent = document.createElement('button');
     addCurrent.type = 'button';
     addCurrent.textContent = '+ Add current';
     addCurrent.title = 'Add the active symbol to the watchlist';
     addCurrent.className = 'tco-frame-button tco-frame-button-primary';
     addCurrent.style.cssText = 'border:1px solid var(--tco-frame-accent,#8b7cff);border-radius:7px;padding:7px 10px;background:var(--tco-frame-accent-soft,rgba(124,92,255,.10));color:var(--vela-fg-bright);font:650 11px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
-    const search = document.createElement('button');
-    search.type = 'button';
-    search.textContent = 'Search';
-    search.title = 'Open Vela symbol search';
-    search.className = 'tco-frame-button';
-    search.style.cssText = 'border:1px solid var(--vela-border);border-radius:7px;padding:7px 10px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:600 11px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer;';
-    controls.append(addCurrent, search);
+    controls.append(addCurrent);
     root.appendChild(controls);
 
     const filterInput = document.createElement('input');
@@ -1104,8 +1098,6 @@ const bookmarksPanel: SidePanelDescriptor = {
       quoteSubscribe();
       ctx.toast(`${symbol} added to watchlist`, 'success');
     });
-
-    search.addEventListener('click', () => ctx.openSymbolSearch());
 
     watchlistRefreshers.add(refresh);
     refresh();
