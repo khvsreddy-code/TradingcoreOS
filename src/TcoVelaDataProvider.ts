@@ -3,6 +3,7 @@ import { chartDataPlaneKey, getChartDataPlane, CHART_TIMEFRAME_INTERVALS } from 
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import type { CanonicalMarketView } from './services/core/data/canonicalDataPlane';
 import type { HistoricalCandle } from './services/marketData/chartDataPlane';
+import type { MarketFeedStatus } from './types/market';
 import { marketLatencyTrace } from './services/core/performance/marketLatencyTrace';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { tradingApi, readTradingApiJson } from './services/http/tradingApi';
@@ -81,6 +82,152 @@ function runtimeTimeframe(timeframe: string): string {
 }
 export function tcoVelaPerformanceKey(brokerId: string, symbol: string, timeframe: string): string {
   return chartDataPlaneKey(brokerId, runtimeSymbol(symbol), runtimeTimeframe(timeframe));
+}
+
+export type TcoVelaChartStatusSnapshot = Readonly<{
+  symbol: string;
+  timeframe: string;
+  brokerConnected: boolean;
+  historyReady: boolean;
+  historyLoading: boolean;
+  historyBars: number;
+  recovering: boolean;
+  feedStatus?: MarketFeedStatus;
+  latestPrice?: number;
+  lastTickAt?: number;
+  eventStatus?: 'loading' | 'ready' | 'error';
+  error?: string;
+}>;
+
+export type TcoVelaChartStatusSubscription = Readonly<{
+  unsubscribe: () => void;
+  retryHistory: () => Promise<void>;
+}>;
+
+/**
+ * Observe the exact shared history/feed plane used by Vela. This is intentionally a
+ * status-only UI bridge: it never makes a second market-data subscription and never
+ * materializes candle objects on each tick.
+ */
+export function subscribeTcoVelaChartStatus(
+  ticker: string,
+  timeframe: string,
+  listener: (snapshot: TcoVelaChartStatusSnapshot) => void,
+): TcoVelaChartStatusSubscription {
+  const symbol = runtimeSymbol(ticker);
+  const normalizedTimeframe = runtimeTimeframe(timeframe);
+  let currentPlane: ReturnType<typeof getChartDataPlane> | undefined;
+  let currentPlaneKey = '';
+  let stopPlane: (() => void) | undefined;
+  let disposed = false;
+  let lastStatus: 'loading' | 'ready' | 'error' | undefined;
+  let lastError: string | undefined;
+  let observedTickAt: number | undefined;
+
+  const notifyWithoutBroker = () => {
+    listener({
+      symbol,
+      timeframe: normalizedTimeframe,
+      brokerConnected: false,
+      historyReady: false,
+      historyLoading: false,
+      historyBars: 0,
+      recovering: false,
+      eventStatus: 'loading',
+    });
+  };
+
+  const attach = () => {
+    if (disposed) return;
+    const brokerId = activeBrokerIdSync();
+    if (!brokerId) {
+      stopPlane?.();
+      stopPlane = undefined;
+      currentPlane = undefined;
+      currentPlaneKey = '';
+      lastStatus = undefined;
+      lastError = undefined;
+      observedTickAt = undefined;
+      notifyWithoutBroker();
+      return;
+    }
+
+    const nextKey = chartDataPlaneKey(brokerId, symbol, normalizedTimeframe);
+    if (currentPlane && currentPlaneKey === nextKey) return;
+    stopPlane?.();
+    stopPlane = undefined;
+    currentPlane = getChartDataPlane(brokerId, symbol, normalizedTimeframe);
+    currentPlaneKey = nextKey;
+    lastStatus = undefined;
+    lastError = undefined;
+    observedTickAt = undefined;
+
+    stopPlane = currentPlane.subscribe((event) => {
+      if (disposed) return;
+      if (event.type === 'status') {
+        lastStatus = event.status;
+        lastError = event.status === 'error' ? event.error : undefined;
+      } else if (event.type === 'tick') {
+        // Prefer the local observation time for a newly delivered event. Some broker
+        // compatibility feeds omit a receive timestamp even though we received it now.
+        observedTickAt = Date.now();
+        lastError = undefined;
+      } else if (event.type === 'snapshot' && event.reason === 'history') {
+        lastError = undefined;
+        if (lastStatus === 'error') lastStatus = 'ready';
+      }
+
+      const snapshot = event.snapshot;
+      const tick = snapshot.latestTick;
+      const tickTimestamp = Number(tick?.receivedAtEpoch)
+        || (tick?.receivedAt ? Date.parse(tick.receivedAt) : Number.NaN)
+        || (Number(tick?.timestamp) > 1e12 ? Number(tick?.timestamp) : Number.NaN);
+      const historyBars = snapshot.columns?.time.length ?? snapshot.candles.length;
+      const price = Number(tick?.ltp);
+      const lastBar = snapshot.columns?.close;
+      const lastClose = lastBar?.length ? Number(lastBar[lastBar.length - 1]) : snapshot.candles.at(-1)?.close;
+
+      listener({
+        symbol,
+        timeframe: normalizedTimeframe,
+        brokerConnected: true,
+        historyReady: snapshot.historyReady,
+        historyLoading: snapshot.historyLoading,
+        historyBars,
+        recovering: snapshot.recovering,
+        ...(snapshot.feedStatus ? { feedStatus: snapshot.feedStatus } : {}),
+        ...(Number.isFinite(price) && price > 0 ? { latestPrice: price } : Number.isFinite(lastClose) ? { latestPrice: lastClose } : {}),
+        ...((observedTickAt ?? (Number.isFinite(tickTimestamp) ? tickTimestamp : undefined)) !== undefined
+          ? { lastTickAt: observedTickAt ?? tickTimestamp }
+          : {}),
+        ...(lastStatus ? { eventStatus: lastStatus } : {}),
+        ...(lastError ? { error: lastError } : {}),
+      });
+    });
+  };
+
+  const offConnected = tradingCoreRuntime.on('BROKER_CONNECTED', attach);
+  const offDisconnected = tradingCoreRuntime.on('BROKER_DISCONNECTED', attach);
+  const offStatus = tradingCoreRuntime.on('STATUS_CHANGED', attach);
+  attach();
+
+  return {
+    unsubscribe() {
+      if (disposed) return;
+      disposed = true;
+      offConnected();
+      offDisconnected();
+      offStatus();
+      stopPlane?.();
+      stopPlane = undefined;
+      currentPlane = undefined;
+    },
+    async retryHistory() {
+      if (disposed) throw new Error('Chart status observer is no longer active');
+      if (!currentPlane) throw new Error('Connect a broker before retrying chart history');
+      await currentPlane.ensureReadyHistory(500);
+    },
+  };
 }
 
 function performanceNow(): number {
