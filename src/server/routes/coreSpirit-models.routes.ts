@@ -556,6 +556,10 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     const storedArtifact = await store.getByHash(hash);
     if (!storedArtifact) return fail(res, 404, 'Model artifact not found.');
     if (storedArtifact.hash.toLowerCase() !== hash || !(await verifyModelArtifactIntegrity(storedArtifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    const release = await store.ensureModelReleaseControl(hash);
+    if (release.status !== 'approved' || release.approvalChecks.productionEligible !== true) {
+      return fail(res, 409, 'Model candidate is not approved for production inference. Review chronological holdout, source causality, lookahead and provenance before approving the exact artifact hash.');
+    }
     const rangeEnd = storedArtifact.provenance.trainingRange.to;
     const rangeEndIsDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(rangeEnd);
     const trainedThrough = Date.parse(rangeEnd) + (rangeEndIsDateOnly ? 86_399_999 : 0);
