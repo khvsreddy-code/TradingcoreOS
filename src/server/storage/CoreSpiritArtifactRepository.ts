@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { ModelArtifact, ModelArtifactStore, ResearchArtifact } from '../../services/coreSpirit/modelArtifacts.js';
 import { verifyModelArtifactIntegrity } from '../../services/coreSpirit/modelArtifacts.js';
+import type { ResearchFeatureRow } from '../../services/coreSpirit/researchValidation.js';
 
 function createServerClient() {
   const url = process.env.SUPABASE_URL;
@@ -66,7 +67,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     datasetVersion: string;
     featureNames: readonly string[];
     trainingRange: Readonly<{ from: string; to: string }>;
-    rows: readonly Readonly<{ timestamp: number; values: readonly number[] }>[];
+    rows: readonly ResearchFeatureRow[];
   }): Promise<{ id: string; datasetVersion: string; rowCount: number }> {
     const { data, error } = await this.db.from('corespirit_dataset_snapshots')
       .upsert({
@@ -98,7 +99,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     datasetVersion: string;
     featureNames: string[];
     trainingRange: { from: string; to: string };
-    rows: Array<{ timestamp: number; values: number[] }>;
+    rows: Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>;
   } | null> {
     const { data, error } = await this.db.from('corespirit_dataset_snapshots')
       .select('id,dataset_hash,feature_names,training_range,rows,row_count')
@@ -115,7 +116,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       datasetVersion: String(data.dataset_hash),
       featureNames: data.feature_names as string[],
       trainingRange: data.training_range as { from: string; to: string },
-      rows: data.rows as Array<{ timestamp: number; values: number[] }>,
+      rows: data.rows as Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>,
     };
   }
 
