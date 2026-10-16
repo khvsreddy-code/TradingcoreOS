@@ -119,8 +119,8 @@ const budgets = {
 
 const targets = {
   landing: Number(process.env.TCO_TARGET_LANDING_GZIP_KB || 200),
-  workspace: Number(process.env.TCO_TARGET_WORKSPACE_GZIP_KB || 450),
-  chart: Number(process.env.TCO_TARGET_CHART_GZIP_KB || 650),
+  workspace: Number(process.env.TCO_TARGET_WORKSPACE_GZIP_KB || 350),
+  chart: Number(process.env.TCO_TARGET_CHART_GZIP_KB || 550),
 };
 
 const entryClosure = staticClosure([entryKey]);
