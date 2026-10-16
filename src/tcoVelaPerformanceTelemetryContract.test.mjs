@@ -8,6 +8,8 @@ const provider = read('src/TcoVelaDataProvider.ts');
 const dataPlane = read('src/services/marketData/chartDataPlane.ts');
 const workspace = read('src/LiveTradingWorkspace.tsx');
 const verifier = read('tools/verify-chart-performance.mjs');
+const telemetry = read('src/services/marketData/chartPerformanceTelemetry.ts');
+
 const vela = read('vendor/vela/src/workspace/VelaWorkspace.ts');
 
 if (!provider.includes('return chartDataPlaneKey(brokerId, runtimeSymbol(symbol), runtimeTimeframe(timeframe));')) {
@@ -39,6 +41,32 @@ if (!verifier.includes('lastMarketUpdateAgeMs') || !verifier.includes('maxMarket
 }
 if (!verifier.includes('if (perf.pipeline.length < 1)')) {
   throw new Error('Browser performance verification must require at least one active pipeline sample');
+}
+
+
+if (!telemetry.includes("normalization:number; ingestion:number")) {
+  throw new Error('Chart pipeline telemetry must report normalization and data ingestion as separate stages');
+}
+if (!dataPlane.includes("recordStage(this.key, 'normalization'")) {
+  throw new Error('Market tick normalization timing must be recorded on the canonical data plane');
+}
+if (!dataPlane.includes("'ingestion'")) {
+  throw new Error('Canonical candle ingestion timing must be measured separately from compute');
+}
+if (!provider.includes("recordStage(performanceKey, 'patch'")) {
+  throw new Error('Patch preparation timing must be measured before handing updates to Vela');
+}
+if (!workspace.includes("PerformanceObserver") || !workspace.includes("entryTypes: ['longtask']")) {
+  throw new Error('The live workspace must expose browser long-task performance samples');
+}
+if (!workspace.includes('usedJSHeapSize') || !workspace.includes('windowDeltaBytes')) {
+  throw new Error('The live workspace must expose heap usage and a bounded memory trend sample');
+}
+if (!workspace.includes("webglcontextlost") || !workspace.includes('webglContextLossCount')) {
+  throw new Error('The live workspace must count WebGL context loss and recovery events');
+}
+if (!verifier.includes('perf.runtime') || !verifier.includes('contextLossCount')) {
+  throw new Error('Browser performance verification must include runtime memory, long-task and WebGL telemetry');
 }
 
 console.log('TCO Vela end-to-end performance telemetry contract: OK');
