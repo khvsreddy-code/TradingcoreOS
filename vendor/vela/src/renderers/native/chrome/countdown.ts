@@ -59,7 +59,7 @@ function zonedClockParts(epochMs: number, timeZone: string): Record<string, stri
         });
         return Object.fromEntries(formatter.formatToParts(new Date(epochMs))
             .filter(part => part.type !== 'literal')
-            .map(part => [part.type, part.value]));
+            .map(part => [part.type, part.value] as const));
     } catch {
         return null;
     }
