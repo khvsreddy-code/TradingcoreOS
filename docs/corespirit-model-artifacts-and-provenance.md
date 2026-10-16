@@ -28,7 +28,7 @@ Versioned inference only after the holdout window
 Signal → automation → risk engine → order intent → broker
 ```
 
-The model artifact identity includes learned weights, metrics and provenance. Release status is stored separately: approving, revoking or retiring a release does not mutate the immutable artifact. New training produces a new artifact hash; old versions remain addressable for audit/replay.
+The model artifact identity includes learned weights, metrics and provenance. Release status is stored separately: approving, revoking or retiring a release does not mutate the immutable artifact. New training produces a new artifact hash; old versions remain addressable for audit/replay. The provenance contract is model-artifact schema **v2**: legacy schema-v1 artifacts without a real chronological holdout, runtime version, and static-safety manifest cannot pass integrity verification or be approved. Retrain them as a new versioned model name; the old release records remain candidates for audit and are not silently grandfathered into production.
 
 ## Research and training API
 
