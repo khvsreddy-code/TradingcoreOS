@@ -6,6 +6,7 @@ import {
   normalizeVelaBarsToCoreSpirit,
   CoreSpiritVelaAlignmentError,
   CoreSpiritVelaOutputRevisionGate,
+  safeVelaNormalizationStart,
 } from './velaOutputAdapter.ts';
 import { CoreSpiritOutputDispatcher } from './outputDispatcher.ts';
 
@@ -19,6 +20,30 @@ const bars = normalizeVelaBarsToCoreSpirit([
 assert.equal(coreSpiritTimeToVelaMillis(t0), t0 * 1000);
 assert.equal(coreSpiritTimeToVelaMillis(t0 * 1000), t0 * 1000);
 assert.equal(Date.parse(bars[1]!.timestamp), (t0 + 300) * 1000);
+
+assert.equal(safeVelaNormalizationStart([
+  { time: t0 * 1000, open: 100, high: 103, low: 99, close: 102, volume: 1000 },
+  { time: (t0 + 300) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
+  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
+], bars, 3), 2, 'same timeline only renormalizes the forming candle');
+assert.equal(safeVelaNormalizationStart([
+  { time: t0 * 1000, open: 100, high: 103, low: 99, close: 102, volume: 1000 },
+  { time: (t0 + 300) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
+  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
+  { time: (t0 + 900) * 1000, open: 104, high: 106, low: 103, close: 105, volume: 800 },
+], bars, 3), 2, 'append re-normalizes the former forming bar and the new tail');
+assert.equal(safeVelaNormalizationStart([
+  { time: (t0 - 300) * 1000, open: 99, high: 101, low: 98, close: 100, volume: 900 },
+  { time: t0 * 1000, open: 100, high: 103, low: 99, close: 102, volume: 1000 },
+  { time: (t0 + 300) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
+  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
+], bars, 3), null, 'history prepend must invalidate cached absolute indices');
+assert.equal(safeVelaNormalizationStart([
+  { time: (t0 + 300) * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
+  { time: (t0 + 600) * 1000, open: 103, high: 105, low: 102, close: 104, volume: 900 },
+  { time: (t0 + 900) * 1000, open: 104, high: 106, low: 103, close: 105, volume: 800 },
+], bars, 3), null, 'same-length timeline shift must force a full normalization');
+
 assert.throws(() => normalizeVelaBarsToCoreSpirit([
   { time: t0 * 1000, open: 100, high: 103, low: 99, close: 102, volume: 1000 },
   { time: t0 * 1000, open: 102, high: 104, low: 101, close: 103, volume: 1200 },
@@ -155,6 +180,8 @@ assert.ok(outputController.includes('chart.renderer.setNativeData(this.overlayCh
   'CoreSpirit publishes immutable rich-output data into Vela native state');
 assert.ok(outputController.includes('chart.renderer.mountIndicator('),
   'the rich-output layer must be attached to Vela as a renderer-owned model');
+assert.ok(!outputController.includes('runCoreSpiritArtifactInWorker') && !outputController.includes('compileCoreSpirit'),
+  'Vela output consumption must not invoke CoreSpirit execution or compilation');
 assert.ok(!outputController.includes('requestAnimationFrame(') && !outputController.includes("document.createElement('canvas')") && !outputController.includes('document.createElement("canvas")'),
   'the adapter must not create a competing canvas or a second render-frame scheduler');
 assert.doesNotMatch(outputController, /runCoreSpiritArtifactInWorker|CoreSpiritRuntime|compileCoreSpirit/,
@@ -171,6 +198,10 @@ assert.ok(velaKernel.includes("import './coreSpiritVelaOutputLayer'"),
   'the layer must register before native renderers are constructed');
 assert.ok(velaEngine.includes('const getCurrentBars=(forceFullNormalization=false)=>'),
   'Vela history is read through one normalized host-data boundary');
+assert.ok(velaEngine.includes('safeVelaNormalizationStart(rows,normalizedBarsCache,normalizedInputLength,forceFullNormalization)'),
+  'the canonical bar adapter must prove stable timestamp anchors before reusing an incremental history prefix');
+assert.ok(velaEngine.includes('time<=previousTime'),
+  'the canonical bar adapter must reject duplicate as well as descending bar-opening timestamps');
 assert.ok(velaEngine.includes('return Object.freeze(normalizedBarsCache.slice())'),
   'asynchronous execution receives an isolated array snapshot rather than a mutable reference to the adapter cache');
 assert.ok(chartController.includes('const bars=[...candles.current]'),
