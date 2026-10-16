@@ -817,7 +817,6 @@ const bookmarksPanel: SidePanelDescriptor = {
       const cachedIsNewest = !!cached && (parsedSnapshotTime === undefined || cached.receivedAt >= parsedSnapshotTime);
       const receivedAt = cachedIsNewest ? cached?.receivedAt : parsedSnapshotTime ?? cached?.receivedAt;
       const ltp = asFinite(cachedIsNewest ? cached?.ltp : snapshot.ltp, cached?.ltp, snapshot.ltp);
-      const percent = asFinite(cachedIsNewest ? cached?.changePercent : snapshot.changePercent, cached?.changePercent, snapshot.changePercent);
       const previousClose = asFinite(cachedIsNewest ? cached?.previousClose : snapshot.previousClose, snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close, cached?.previousClose);
       let change = asFinite(cachedIsNewest ? cached?.change : snapshot.change, snapshot.changeValue, snapshot.netChange, cached?.change);
       let percent = asFinite(cachedIsNewest ? cached?.changePercent : snapshot.changePercent, cached?.changePercent, snapshot.changePercent);
@@ -993,6 +992,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
         if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
         ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.stale ? 'stale' : 'live';
+        ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
         ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
         ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.stale ? 'stale quote' : 'live quote'}`}`);
         ref.value.style.color = quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
