@@ -185,7 +185,7 @@ export class SceneGraph {
     /** Reference price for percent mode (first visible bar's close); recomputed per frame. */
     percentBaseline = 0;
     /** IANA time zone for the time axis + crosshair/data-window stamps (`'UTC'` default). */
-    timezone = 'UTC';
+    timezone = 'Asia/Kolkata';
     /** Draw the background gridlines (price + time). Master toggle (`gridlines`
      *  feature); per-axis visibility + colors live in `style.gridVert`/`gridHorz`. */
     showGrid = true;
