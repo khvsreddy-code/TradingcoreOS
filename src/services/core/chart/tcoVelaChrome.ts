@@ -1154,7 +1154,7 @@ const replayPanel: SidePanelDescriptor = {
     const refresh = () => {
       const state = replay.state;
       status.textContent = state.active
-        ? `ACTIVE · ${state.playing ? 'PLAYING' : 'PAUSED'} · ${state.cursorTime ? new Date(state.cursorTime).toLocaleString('en-IN') : '—'}`
+        ? `ACTIVE · ${state.playing ? 'PLAYING' : 'PAUSED'} · ${state.cursorTime ? new Date(state.cursorTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}`
         : 'READY · multi-chart replay follows one Vela clock';
     };
     refresh();
@@ -1712,7 +1712,7 @@ const journalPanel: SidePanelDescriptor = {
     stamp.type = 'button'; stamp.textContent = 'Stamp context';
     stamp.style.cssText = 'border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;background:#0c111a;color:#cbd5e1;font:11px ui-monospace;cursor:pointer;';
     stamp.addEventListener('click', () => {
-      const line = `[${new Date().toLocaleString('en-IN')}] ${ctx.symbol} · ${ctx.timeframe}
+      const line = `[${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}] ${ctx.symbol} · ${ctx.timeframe}
 `;
       textarea.value = textarea.value ? `${textarea.value.replace(/\s*$/, '')}\n${line}` : line;
       textarea.focus();
