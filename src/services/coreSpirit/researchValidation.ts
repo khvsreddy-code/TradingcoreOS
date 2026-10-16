@@ -43,6 +43,7 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
   let previousTimestamp = Number.NEGATIVE_INFINITY;
   return rows.map((row, index) => {
     if (!row || typeof row !== 'object' ||
+        Object.keys(row).some(key => !['timestamp','availableAt','confirmed','phase','values'].includes(key)) ||
         typeof row.timestamp !== 'number' || !Number.isFinite(row.timestamp) ||
         typeof row.availableAt !== 'number' || !Number.isFinite(row.availableAt) ||
         row.availableAt > row.timestamp ||
