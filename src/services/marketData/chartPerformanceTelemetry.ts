@@ -39,7 +39,7 @@ export type ChartPerformanceSnapshot = {
   olderHistoryCandles: number;
   historyPrependOps: number;
   computeCoalescedTicks: number;
-  stageMs: Readonly<{ transport:number; compute:number; patch:number; renderer:number; frame:number }>;
+  stageMs: Readonly<{ transport:number; normalization:number; ingestion:number; compute:number; patch:number; renderer:number; frame:number }>;
 };
 
 type MutableMetrics = {
@@ -84,7 +84,7 @@ type MutableMetrics = {
   initialHistoryCandles: number;
   olderHistoryCandles: number;
   historyPrependOps: number;
-  stageMs: { transport:number; compute:number; patch:number; renderer:number; frame:number };
+  stageMs: { transport:number; normalization:number; ingestion:number; compute:number; patch:number; renderer:number; frame:number };
 };
 
 const SAMPLE_CAPACITY = 256;
@@ -120,7 +120,7 @@ class ChartPerformanceTelemetry {
         tickToComputeCount: 0, tickToPatchCount: 0, tickToRenderCount: 0,
         tickToComputeCursor: 0, tickToPatchCursor: 0, tickToRenderCursor: 0,
         lastPacketAtForLatency: 0, fullSeriesRewriteCount: 0, formingBarReplaceLastCount: 0, indicatorIncrementalUpdateCount: 0, initialHistoryLoadMs: 0, olderHistoryLoadMs: 0, initialHistoryCandles: 0, olderHistoryCandles: 0, historyPrependOps: 0,
-        stageMs: { transport:0, compute:0, patch:0, renderer:0, frame:0 },
+        stageMs: { transport:0, normalization:0, ingestion:0, compute:0, patch:0, renderer:0, frame:0 },
       };
       this.metrics.set(key, value);
     }
@@ -205,7 +205,7 @@ class ChartPerformanceTelemetry {
 
   recordReactNotificationRequest(key: string): void { this.entry(key).reactNotificationRequests += 1; }
   recordReactFrame(key: string): void { this.entry(key).reactFrames += 1; }
-  recordStage(key: string, stage: 'transport'|'compute'|'patch'|'renderer'|'frame', durationMs: number): void {
+  recordStage(key: string, stage: 'transport'|'normalization'|'ingestion'|'compute'|'patch'|'renderer'|'frame', durationMs: number): void {
     const duration = Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : 0;
     this.entry(key).stageMs[stage] += duration;
   }
@@ -254,7 +254,7 @@ class ChartPerformanceTelemetry {
       firstPacketAt:0, lastPacketAt:0, computeUpdates:0, renderUpdates:0, computeCoalescedTicks:0, packetsAtLastCompute:0,
       tickToComputeSamples:new Float64Array(SAMPLE_CAPACITY), tickToPatchSamples:new Float64Array(SAMPLE_CAPACITY), tickToRenderSamples:new Float64Array(SAMPLE_CAPACITY),
       tickToComputeCount:0, tickToPatchCount:0, tickToRenderCount:0, tickToComputeCursor:0, tickToPatchCursor:0, tickToRenderCursor:0, lastPacketAtForLatency:0,
-      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, initialHistoryLoadMs:0, olderHistoryLoadMs:0, initialHistoryCandles:0, olderHistoryCandles:0, historyPrependOps:0, stageMs:{transport:0,compute:0,patch:0,renderer:0,frame:0},
+      fullSeriesRewriteCount:0, formingBarReplaceLastCount:0, indicatorIncrementalUpdateCount:0, initialHistoryLoadMs:0, olderHistoryLoadMs:0, initialHistoryCandles:0, olderHistoryCandles:0, historyPrependOps:0, stageMs:{transport:0,normalization:0,ingestion:0,compute:0,patch:0,renderer:0,frame:0},
     };
     const coalesced = Math.max(0, m.reactNotificationRequests - m.reactFrames);
     const elapsedMs = m.firstPacketAt && m.lastPacketAt ? Math.max(1, m.lastPacketAt - m.firstPacketAt) : 0;
