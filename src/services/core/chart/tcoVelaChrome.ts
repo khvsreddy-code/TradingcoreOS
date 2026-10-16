@@ -1587,9 +1587,8 @@ const researchPanel:SidePanelDescriptor={
 
     const contextCard=document.createElement('div');
     contextCard.className='tco-frame-card';
-    contextCard.setAttribute('role','status');
-    contextCard.setAttribute('aria-live','polite');
-    contextCard.setAttribute('aria-atomic','true');
+    contextCard.setAttribute('role','group');
+    contextCard.setAttribute('aria-label','Active chart quote and renderer performance');
     contextCard.style.cssText='display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:10px;border:1px solid var(--vela-border);border-radius:8px;background:var(--vela-surface-sunken);font:10px ui-monospace;';
     const quoteLine=document.createElement('div');
     const rendererLine=document.createElement('div');
