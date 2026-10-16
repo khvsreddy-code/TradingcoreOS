@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     }),
   );
   const workerBinding = loadedClientArtifact.toWorkerBinding();
-  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs), 'the client loader must produce a hash-pinned, cutoff-aware binding for the persistent chart worker');
+  assert(workerBinding.artifactHash === artifact.hash && workerBinding.modelAlias === 'regime' && Number.isFinite(workerBinding.trainingEndTimestampMs) && Number.isFinite(workerBinding.inferenceBoundaryTimestampMs), 'the client loader must pin the model hash and provide separate training and post-validation inference cutoffs');
   const runtimeResolver = loadedClientArtifact.createRuntimeResolver();
   const clientRuntimeModel = runtimeResolver('regime');
   assert(Boolean(clientRuntimeModel), 'a verified model artifact should resolve by its CoreScript model alias');
@@ -162,8 +162,10 @@ async function main(): Promise<void> {
     missingTimestampRejected = true;
   }
   assert(missingTimestampRejected, 'a boundary-protected artifact must require timestamps on every inference call');
-  const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Math.floor(Date.UTC(2026, 0, 1) / 1000));
-  assert(Number.isInteger(clientPrediction.state), 'the client-loaded artifact must provide an inference-ready HMM instance');
+  assert(!clientRuntimeModel!.canPredictAt(Math.floor(Date.UTC(2026, 0, 31, 23, 59, 59) / 1000)),
+    'production inference must remain blocked throughout the holdout validation period');
+  const clientPrediction = clientRuntimeModel!.predict([0.2, 0.1], featureGraph.featureNames, Math.floor(Date.UTC(2026, 1, 1) / 1000));
+  assert(Number.isInteger(clientPrediction.state), 'the client-loaded artifact must provide inference only after the holdout window ends');
   assert(inference.artifactHash === artifact.hash, 'live inference must remain pinned to the exact immutable artifact hash');
   assert(Number.isInteger(prediction.state) && prediction.state >= 0 && prediction.state < 3, 'HMM inference must produce a valid state');
   assert(Math.abs(prediction.probabilities.reduce((sum, value) => sum + value, 0) - 1) < 1e-5, 'posterior probabilities must sum to one');
