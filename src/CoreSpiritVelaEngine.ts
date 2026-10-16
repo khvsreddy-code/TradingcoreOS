@@ -12,7 +12,7 @@ import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreS
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
 import { normalizeCoreSpiritTimeframe } from './services/core/data/marketDataGraph.ts';
-import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarsToCoreSpirit, safeVelaNormalizationStart, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
+import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarToCoreSpirit, normalizeVelaBarsToCoreSpirit, safeVelaNormalizationStart, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
 import { isDisplayOnlyCoreSpiritProp, resolveCoreSpiritVelaMetadata } from './services/coreSpirit/coreSpiritVelaMetadata.ts';
@@ -535,7 +535,7 @@ export class CoreSpiritVelaEngine {
     // array snapshot so queued worker jobs never observe later cache mutations.
     const normalizedBarsCache:CoreSpiritMarketBar[]=[];
     let normalizedInputLength=-1;
-    const getCurrentBars=(forceFullNormalization=false):CoreSpiritMarketBar[]=>{
+    const getCurrentBars=(forceFullNormalization=false,isolateSnapshot=true):CoreSpiritMarketBar[]=>{
       if(!req.getBars)return bars;
       const rows=req.getBars() as unknown as readonly VelaOhlcv[];
       if(!Array.isArray(rows))return bars;
@@ -549,18 +549,17 @@ export class CoreSpiritVelaEngine {
       else normalizedBarsCache.length=start;
       let previousTime=start>0?barTimeMillis(normalizedBarsCache[start-1]?.timestamp):Number.NEGATIVE_INFINITY;
       for(let i=start;i<length;i+=1){
-        const row=normalizeVelaBar(rows[i]!,i);
+        const row=normalizeVelaBarToCoreSpirit(rows[i]!,i);
         const time=barTimeMillis(row.timestamp);
         if(i>0&&time<=previousTime)throw new Error(`CoreSpirit Vela data adapter rejected duplicate or non-chronological bar sequence at index ${i}.`);
         previousTime=time;
         normalizedBarsCache.push(row);
       }
       normalizedInputLength=length;
-      return Object.freeze(normalizedBarsCache.slice()) as CoreSpiritMarketBar[];
+      return isolateSnapshot ? Object.freeze(normalizedBarsCache.slice()) as CoreSpiritMarketBar[] : normalizedBarsCache;
     };
 
     type LiveTailWork = {
-      bars: CoreSpiritMarketBar[];
       generation: number;
       sessionGeneration: number;
       datasetRevision: number;
@@ -575,10 +574,14 @@ export class CoreSpiritVelaEngine {
           work.sessionGeneration !== mainRunGeneration ||
           work.datasetRevision !== canonicalDatasetRevision) return;
       try {
-        const tail = work.bars.at(-1);
-        if (!tail) return;
-        const result = await executeInWorker(work.bars, mainContextKey, false, executionBarRange(
-          Math.max(0, work.bars.length - 1), work.bars.length,
+        // Snapshot the canonical tape only when this job actually starts. Queued
+        // intermediate ticks carry no full-history array and therefore allocate no
+        // throwaway bar snapshots while an earlier calculation is still running.
+        const workerBars = getCurrentBars();
+        const tail = workerBars.at(-1);
+        if (!tail || barValueSignature(tail) !== work.tailSignature) return;
+        const result = await executeInWorker(workerBars, mainContextKey, false, executionBarRange(
+          Math.max(0, workerBars.length - 1), workerBars.length,
         ));
         if (stopped || work.generation !== liveRunGeneration ||
             work.sessionGeneration !== mainRunGeneration ||
@@ -761,7 +764,7 @@ export class CoreSpiritVelaEngine {
       },
       notifyBars(reason,dirtyRange) {
         if(stopped)return;
-        const currentBars=getCurrentBars(reason==='backfill');
+        const currentBars=getCurrentBars(reason==='backfill',false);
         if(reason==='backfill'||reason==='complete'){
           const snapshotFingerprint=fullDatasetFingerprint(currentBars);
           if(reason==='backfill'||snapshotFingerprint!==canonicalDatasetFingerprint)canonicalDatasetRevision+=1;
@@ -793,7 +796,7 @@ export class CoreSpiritVelaEngine {
           // Otherwise initializeLive warms all confirmed history and reapplies the forming
           // candle in the same main context, then emits a full-range scene refresh.
           if(!wasHistoryInitialized||!currentBars.length)return;
-          initializeFromBars(currentBars,true);
+          initializeFromBars(Object.freeze(currentBars.slice()) as CoreSpiritMarketBar[],true);
           return;
         }
 
@@ -802,7 +805,7 @@ export class CoreSpiritVelaEngine {
             if(secondaryDependencies.length){
               void loadSecondaryData(true).then(()=>initializeFromBars(getCurrentBars()))
                 .catch(error=>handlers.onError?.(error instanceof Error?error:new Error(String(error))));
-            }else initializeFromBars(currentBars);
+            }else initializeFromBars(getCurrentBars());
           }
           return;
         }
@@ -823,7 +826,6 @@ export class CoreSpiritVelaEngine {
         const generation=++liveRunGeneration;
         const sessionGeneration=mainRunGeneration;
         liveTailScheduler.enqueue({
-          bars: currentBars,
           generation,
           sessionGeneration,
           datasetRevision: canonicalDatasetRevision,
