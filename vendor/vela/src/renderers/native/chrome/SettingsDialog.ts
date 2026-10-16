@@ -16,7 +16,7 @@ import {
     type SettingsValueRow,
 } from '../../../chart-types/registry';
 import { iconAt } from '../../../core/icons';
-import { TIMEZONES, tzMenuLabel, normalizeTimezone } from '../../../core/timezones';
+import { normalizeTimezone } from '../../../core/timezones';
 import { closeOpenPopovers } from '../../../ui/components/popover';
 import { closeWidthPopover } from '../../../ui/components/glyph-select';
 import { Dialog } from '../../../ui/components/dialog';
@@ -1844,10 +1844,8 @@ function normalizeSelectOptions(options: readonly SettingsSelectOption[]): reado
 
 /** The shared zone catalog as labeled options, with the current value guaranteed
  *  present (so an externally-set custom zone still shows selected). */
-function timezoneOptions(current: string): readonly (readonly [string, string])[] {
-    const options = TIMEZONES.map((t) => [t.value, tzMenuLabel(t.value, t.label)] as const);
-    const normalized = normalizeTimezone(current);
-    if (TIMEZONES.some((t) => t.value === normalized)) return options;
-    return [[normalized, tzMenuLabel(normalized, normalized)] as const, ...options];
+function timezoneOptions(_current: string): readonly (readonly [string, string])[] {
+    // TCO uses FYERS and Indian exchange sessions; all charts share IST.
+    return [['Asia/Kolkata', 'Asia/Kolkata (IST)'] as const];
 }
 
