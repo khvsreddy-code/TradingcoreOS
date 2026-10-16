@@ -17,6 +17,10 @@ const aliasSource = parseCoreSpiritInputDeclaration('input priceSource = ohlc4')
 assert.equal(aliasSource?.type, 'source');
 assert.equal(aliasSource?.defval, 'ohlc4');
 
+const inferredSource = parseCoreSpiritInputDeclaration('input price = close');
+assert.equal(inferredSource?.type, 'source', 'a recognized OHLCV default infers source semantics even when the variable has a custom name');
+assert.equal(inferredSource?.defval, 'close');
+
 const explicitFloat = parseCoreSpiritInputDeclaration('input length: int = 14 min=1 max=200');
 assert.equal(explicitFloat?.type, 'int');
 assert.equal(explicitFloat?.defval, 14);
