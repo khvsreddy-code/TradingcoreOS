@@ -91,14 +91,20 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
         training_range: input.trainingRange,
         row_count: input.rows.length,
         rows: input.rows,
+        // This method is fed by the authenticated request body today. Never turn
+        // caller-submitted values into a trusted-source assertion by default.
+        source_provenance: 'user_supplied',
+        source_verified: false,
+        source_attestation_hash: null,
+        source_attestation: { kind: 'client-submitted-feature-rows', verified: false },
       }, { onConflict: 'owner_user_id,dataset_hash', ignoreDuplicates: true })
-      .select('id,dataset_hash,row_count')
+      .select('id,dataset_hash,row_count,source_provenance,source_verified,source_attestation_hash')
       .maybeSingle();
     if (error) throw new Error('Unable to persist immutable CoreSpirit dataset snapshot: ' + error.message);
     if (data) return { id: String(data.id), datasetVersion: String(data.dataset_hash), rowCount: Number(data.row_count) };
 
     const existing = await this.db.from('corespirit_dataset_snapshots')
-      .select('id,dataset_hash,row_count')
+      .select('id,dataset_hash,row_count,source_provenance,source_verified,source_attestation_hash')
       .eq('owner_user_id', this.ownerUserId)
       .eq('dataset_hash', input.datasetVersion)
       .maybeSingle();
@@ -113,10 +119,13 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     datasetVersion: string;
     featureNames: string[];
     trainingRange: { from: string; to: string };
+    sourceProvenance: 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline';
+    sourceVerified: boolean;
+    sourceAttestationHash: string | null;
     rows: Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>;
   } | null> {
     const { data, error } = await this.db.from('corespirit_dataset_snapshots')
-      .select('id,dataset_hash,feature_names,training_range,rows,row_count')
+      .select('id,dataset_hash,feature_names,training_range,rows,row_count,source_provenance,source_verified,source_attestation_hash')
       .eq('id', id)
       .eq('owner_user_id', this.ownerUserId)
       .maybeSingle();
@@ -130,6 +139,9 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       datasetVersion: String(data.dataset_hash),
       featureNames: data.feature_names as string[],
       trainingRange: data.training_range as { from: string; to: string },
+      sourceProvenance: String(data.source_provenance ?? 'user_supplied') as 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline',
+      sourceVerified: data.source_verified === true,
+      sourceAttestationHash: typeof data.source_attestation_hash === 'string' ? data.source_attestation_hash : null,
       rows: data.rows as Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>,
     };
   }
