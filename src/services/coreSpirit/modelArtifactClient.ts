@@ -81,19 +81,34 @@ export async function fetchCoreSpiritHMMArtifact(
   const trainingEndText = artifact.provenance.trainingRange.to;
   const trainingEndDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trainingEndText);
   const trainingEndMs = Date.parse(trainingEndText) + (trainingEndDateOnly ? 86_399_999 : 0);
-  if (!Number.isFinite(trainingEndMs)) throw new Error('Model artifact has an invalid training-range boundary');
-  // CoreSpiritRuntime timestamps are epoch seconds, whereas the public API uses milliseconds.
-  const runtimeTrainingBoundary = Math.floor(trainingEndMs / 1000);
+  const validationEndText = artifact.provenance.validationRange.to;
+  const validationEndDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(validationEndText);
+  const validationEndMs = Date.parse(validationEndText) + (validationEndDateOnly ? 86_399_999 : 0);
+  const validationStartMs = Date.parse(artifact.provenance.validationRange.from);
+  if (!Number.isFinite(trainingEndMs) || !Number.isFinite(validationEndMs) ||
+      !Number.isFinite(validationStartMs) || trainingEndMs >= validationStartMs ||
+      validationStartMs > validationEndMs) {
+    throw new Error('Model artifact has invalid or overlapping training/validation boundaries');
+  }
+  // Production inference must start after the held-out validation period as well
+  // as the fitted training period. CoreSpiritRuntime timestamps are epoch seconds.
+  const runtimeInferenceBoundary = Math.floor(validationEndMs / 1000);
   return Object.freeze({
     artifactHash: artifact.hash,
     artifactName: artifact.name,
     modelAlias,
     featureNames,
-    toWorkerBinding: () => Object.freeze({ artifactHash: artifact.hash, modelAlias, trainingEndTimestampMs: trainingEndMs, state: hmmState }),
+    toWorkerBinding: () => Object.freeze({
+      artifactHash: artifact.hash,
+      modelAlias,
+      trainingEndTimestampMs: trainingEndMs,
+      inferenceBoundaryTimestampMs: validationEndMs,
+      state: hmmState,
+    }),
     createRuntimeResolver: () => {
       // A new mutable posterior state per runtime; learned parameters remain sealed.
       const model = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
-      model.setInferenceBoundaryExclusive(runtimeTrainingBoundary);
+      model.setInferenceBoundaryExclusive(runtimeInferenceBoundary);
       return (requestedName: string) =>
         requestedName === modelAlias || requestedName === artifact.name || requestedName === artifact.hash
           ? model
