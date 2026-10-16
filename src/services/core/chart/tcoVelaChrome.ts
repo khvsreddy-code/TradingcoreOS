@@ -498,21 +498,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         ]);
         if (disposed) return;
         editorModel = new modelModule.CoreSpiritEditorModel(source);
-        // The textarea fallback becomes a fully functional editor as soon as the model
-        // is ready; Monaco is an enhancement, not a dependency for writing or running code.
-        fallbackEditor.addEventListener('input', () => {
-          source = fallbackEditor.value;
-          compileGeneration += 1;
-          editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
-          syncEditor();
-        });
-        examples.addEventListener('change', () => {
-          source = sourceFor(examples.value);
-          compileGeneration += 1;
-          editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
-          monacoAdapter?.setSource(source);
-          syncEditor();
-        });
+        // Existing textarea/example listeners now have the live editor model to update.
         try {
           const adapter = await monacoModule.mountCoreSpiritMonaco(editorHost, editorModel, (nextSource) => {
             source = nextSource;
