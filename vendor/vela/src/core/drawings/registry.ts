@@ -374,13 +374,19 @@ const advancedFamilyPromises = new Map<AdvancedDrawingFamily, Promise<void>>();
 export function loadDrawingFamily(family: AdvancedDrawingFamily): Promise<void> {
     const existing = advancedFamilyPromises.get(family);
     if (existing) return existing;
-    const promise = (
+    let promise: Promise<void>;
+    promise = (
         family === 'channels'
             ? import('./advancedRegistryChannels').then((module) => module.registerAdvancedDrawingTypes())
             : family === 'fibonacci'
                 ? import('./advancedRegistryFibonacci').then((module) => module.registerAdvancedDrawingTypes())
                 : import('./advancedRegistryPatterns').then((module) => module.registerAdvancedDrawingTypes())
-    ).then(() => undefined);
+    ).then(() => undefined).catch((error: unknown) => {
+        // A rejected dynamic import must not stay cached: the toolbar's Retry action
+        // should be able to perform a real second import attempt.
+        if (advancedFamilyPromises.get(family) === promise) advancedFamilyPromises.delete(family);
+        throw error;
+    });
     advancedFamilyPromises.set(family, promise);
     return promise;
 }
