@@ -803,10 +803,15 @@ const bookmarksPanel: SidePanelDescriptor = {
       const cached = quotes.get(symbol.toUpperCase());
       const daily = dayCandle(snapshot);
       const rawSnapshotTime = asFinite(snapshot.receivedAtEpoch, snapshot.lastReceivedAt);
-      const parsedSnapshotTime = rawSnapshotTime ?? (() => {
-        const parsed = Date.parse(String(snapshot.receivedAt ?? ''));
-        return Number.isFinite(parsed) ? parsed : undefined;
-      })();
+      // Runtime/broker adapters may expose Unix seconds or milliseconds. Normalize to
+      // epoch milliseconds before comparing quote age, so a fresh seconds-based snapshot
+      // cannot be mislabeled stale or incorrectly lose to an older cached quote.
+      const parsedSnapshotTime = rawSnapshotTime !== undefined
+        ? (rawSnapshotTime > 1e12 ? rawSnapshotTime : rawSnapshotTime * 1000)
+        : (() => {
+            const parsed = Date.parse(String(snapshot.receivedAt ?? ''));
+            return Number.isFinite(parsed) ? parsed : undefined;
+          })();
       // A cached row quote carries an explicit local receive time. Prefer it whenever
       // the broker snapshot has no timestamp; never make an old retained LTP look live.
       const cachedIsNewest = !!cached && (parsedSnapshotTime === undefined || cached.receivedAt >= parsedSnapshotTime);
