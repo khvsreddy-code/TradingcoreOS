@@ -440,9 +440,10 @@ export class CoreSpiritWorkerPool {
     const installHMMArtifacts=(models:Map<string,CoreSpiritGaussianHMM>)=>{
       models.clear();
       for(const binding of hmmArtifacts??[]){
-        if(!Number.isFinite(binding.trainingEndTimestampMs))throw new Error('Invalid CoreSpirit HMM training cutoff');
+        const inferenceBoundary=binding.inferenceBoundaryTimestampMs ?? binding.trainingEndTimestampMs;
+        if(!Number.isFinite(inferenceBoundary))throw new Error('Invalid CoreSpirit HMM inference boundary');
         const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
-        model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
+        model.setInferenceBoundaryExclusive(Math.floor(inferenceBoundary!/1000));
         models.set(binding.modelAlias,model);
       }
     };
