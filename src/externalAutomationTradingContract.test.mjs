@@ -62,6 +62,11 @@ assert.match(integrationRoutes, /After-market orders are disabled for external a
 assert.match(integrationRoutes, /side !== 'BUY' && side !== 'SELL'/, 'invalid or AI-invented sides must not be coerced into SELL');
 assert.match(integrationRoutes, /validity must be DAY or IOC/);
 assert.match(integrationRoutes, /String\(req\.body\.mode \?\? 'PAPER'\)/, 'order requests must default to paper, even when the credential is live-capable');
+assert.match(integrationRoutes, /Re-read authorization/);
+assert.match(integrationRoutes, /The automation credential was revoked or expired before order submission/);
+assert.match(integrationRoutes, /The integration risk policy changed during evaluation/);
+assert.match(integrationRoutes, /The automation lifecycle or confirmation policy changed before order submission/);
+assert.ok(integrationRoutes.indexOf('Re-read authorization') < integrationRoutes.indexOf('placeFyersOrderViaFixedIpGateway(accessToken, submitPayload'), 'revocation, risk-policy, and lifecycle checks must be repeated before live broker submission.');
 assert.ok(integrationRoutes.indexOf('AutomationIntegrationRepository.claimOrderRequest') <
   integrationRoutes.indexOf('placeFyersOrderViaFixedIpGateway(accessToken, submitPayload'),
   'The durable external request claim must precede broker order placement.');
