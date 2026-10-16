@@ -12,7 +12,7 @@ if (!fs.existsSync(distDir) || !fs.existsSync(manifestPath)) {
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const entries = Object.entries(manifest);
-const entryKey = entries.find(([key, value]) => value?.isEntry && /index\\.html$/.test(key))?.[0]
+const entryKey = entries.find(([key, value]) => value?.isEntry && key.endsWith('index.html'))?.[0]
   || entries.find(([, value]) => value?.isEntry)?.[0];
 
 if (!entryKey) throw new Error('No Vite entry chunk found in manifest');
@@ -53,7 +53,7 @@ function jsFilesFor(keys) {
   const files = new Set();
   for (const key of keys) {
     const file = manifest[key]?.file;
-    if (file && /\\.m?js$/i.test(file)) files.add(file);
+    if (file && (file.endsWith('.js') || file.endsWith('.mjs'))) files.add(file);
   }
   return files;
 }
