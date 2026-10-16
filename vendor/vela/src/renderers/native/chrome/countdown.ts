@@ -30,6 +30,16 @@ export function formatCountdown(ms: number): string {
  * The final intraday bar is capped at the regular-session close, even when its
  * nominal timeframe would extend beyond 15:30 IST.
  */
+// NSE cash-equity holidays published for calendar year 2026. Keep this
+// exchange calendar explicit and versionable; do not infer a trading day from
+// weekday alone. Future years should be loaded from the broker/exchange calendar.
+const NSE_EQUITY_HOLIDAYS_2026 = new Set([
+    '2026-01-15', '2026-01-26', '2026-03-03', '2026-03-26',
+    '2026-03-31', '2026-04-03', '2026-04-14', '2026-05-01',
+    '2026-05-28', '2026-06-26', '2026-09-14', '2026-10-02',
+    '2026-10-20', '2026-11-10', '2026-11-24', '2026-12-25',
+]);
+
 export const INDIA_MARKET_SESSION = Object.freeze({
     timeZone: 'Asia/Kolkata',
     openMinute: 9 * 60 + 15,
@@ -77,6 +87,7 @@ export function indiaSessionCountdownText(barOpen: number, barMs: number, now: n
     const barDay = `${bar.year}-${bar.month}-${bar.day}`;
     if (currentDay !== barDay) return null;
     if (policy.weekdaysOnly && ['Sat', 'Sun'].includes(current.weekday ?? '')) return null;
+    if (NSE_EQUITY_HOLIDAYS_2026.has(currentDay)) return null;
 
     const currentMinute = Number(current.hour) * 60 + Number(current.minute);
     const barMinute = Number(bar.hour) * 60 + Number(bar.minute);
