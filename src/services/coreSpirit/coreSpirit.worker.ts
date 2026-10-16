@@ -108,14 +108,15 @@ function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirty
 function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpiritHMMArtifactBinding[]):void {
   const next=new Map<string,CoreSpiritGaussianHMM>();
   for(const binding of bindings){
+    const inferenceBoundary=binding?.inferenceBoundaryTimestampMs ?? binding?.trainingEndTimestampMs;
     if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
       typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
-      !Number.isFinite(binding.trainingEndTimestampMs)){
-      throw new Error('Invalid CoreSpirit HMM artifact binding');
+      !Number.isFinite(inferenceBoundary)){
+      throw new Error('Invalid CoreSpirit HMM artifact binding or inference boundary');
     }
     if(next.has(binding.modelAlias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+binding.modelAlias);
     const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
-    model.setInferenceBoundaryExclusive(Math.floor(binding.trainingEndTimestampMs/1000));
+    model.setInferenceBoundaryExclusive(Math.floor(inferenceBoundary!/1000));
     next.set(binding.modelAlias,model);
   }
   context.hmmModels.clear();
