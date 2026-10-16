@@ -1,6 +1,6 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
-import { createTcoVelaDataProvider, prewarmTcoVelaHistory, tcoVelaPerformanceKey } from './TcoVelaDataProvider';
+import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
@@ -11,6 +11,77 @@ import { chartPerformanceTelemetry } from './services/marketData/chartPerformanc
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 
 type WorkspaceLoadState = { phase: 'loading' | 'ready' } | { phase: 'error'; message: string };
+type ChartStatusPhase = 'auth' | 'loading-history' | 'failed' | 'empty' | 'reconciling' | 'connecting' | 'live' | 'stale' | 'waiting-tick' | 'reconnecting' | 'history-ready';
+type ChartStatusTone = 'good' | 'warn' | 'error' | 'neutral';
+type ChartStatusView = Readonly<{
+  phase: ChartStatusPhase;
+  tone: ChartStatusTone;
+  title: string;
+  detail: string;
+  symbol: string;
+  timeframe: string;
+}>;
+
+const CHART_QUOTE_STALE_MS = 15_000;
+
+function chartStatusView(snapshot: TcoVelaChartStatusSnapshot, now = Date.now()): ChartStatusView {
+  const instrument = snapshot.symbol || 'Active instrument';
+  const timeframe = snapshot.timeframe || '—';
+  const context = `${instrument} · ${timeframe}`;
+  if (!snapshot.brokerConnected) {
+    return { phase: 'auth', tone: 'warn', title: 'Waiting for broker authentication', detail: 'Connect or restore your FYERS session to request history and live quotes.', symbol: instrument, timeframe };
+  }
+  if (snapshot.error) {
+    const noHistory = /no historical candles|no historical data|returned no history/i.test(snapshot.error);
+    return {
+      phase: noHistory ? 'empty' : 'failed',
+      tone: noHistory ? 'warn' : 'error',
+      title: noHistory ? 'No historical data available' : 'Historical data request failed',
+      detail: `${context} · ${snapshot.error}`,
+      symbol: instrument,
+      timeframe,
+    };
+  }
+  if (snapshot.feedStatus === 'authentication_failed') {
+    return { phase: 'auth', tone: 'error', title: 'Broker authentication failed', detail: 'Reconnect your broker session before resuming live data.', symbol: instrument, timeframe };
+  }
+  if (!snapshot.historyReady && snapshot.historyLoading) {
+    return { phase: 'loading-history', tone: 'neutral', title: 'Loading historical data', detail: `${context} · requesting real candles from the broker.`, symbol: instrument, timeframe };
+  }
+  if (!snapshot.historyReady) {
+    return { phase: 'loading-history', tone: 'neutral', title: 'Waiting for history reconciliation', detail: `${context} · history has not been confirmed yet.`, symbol: instrument, timeframe };
+  }
+  if (snapshot.historyBars === 0) {
+    return { phase: 'empty', tone: 'warn', title: 'No candles available', detail: `${context} · this instrument/timeframe returned no historical bars.`, symbol: instrument, timeframe };
+  }
+  if (snapshot.recovering || snapshot.historyLoading) {
+    return { phase: 'reconciling', tone: 'warn', title: 'Reconciling market history', detail: `${context} · preserving the last valid chart while history is reconciled.`, symbol: instrument, timeframe };
+  }
+  if (snapshot.feedStatus === 'connected') {
+    const tickAge = snapshot.lastTickAt ? Math.max(0, now - snapshot.lastTickAt) : Number.POSITIVE_INFINITY;
+    if (tickAge <= CHART_QUOTE_STALE_MS) {
+      return { phase: 'live', tone: 'good', title: 'Receiving live market data', detail: `${context} · history ready · live feed connected.`, symbol: instrument, timeframe };
+    }
+    if (Number.isFinite(tickAge)) {
+      const seconds = Math.max(1, Math.floor(tickAge / 1000));
+      return { phase: 'stale', tone: 'warn', title: 'Quote is stale', detail: `${context} · last tick received ${seconds}s ago; avoid treating it as live.`, symbol: instrument, timeframe };
+    }
+    return { phase: 'waiting-tick', tone: 'neutral', title: 'Live feed connected · waiting for tick', detail: `${context} · historical candles are available; no live tick has been observed yet.`, symbol: instrument, timeframe };
+  }
+  if (snapshot.feedStatus === 'connecting') {
+    return { phase: 'connecting', tone: 'neutral', title: 'Connecting to live data', detail: `${context} · historical candles are ready while the broker feed connects.`, symbol: instrument, timeframe };
+  }
+  if (snapshot.feedStatus === 'reconnecting' || snapshot.feedStatus === 'disconnected') {
+    return { phase: 'reconnecting', tone: 'warn', title: 'Live feed disconnected · reconnecting', detail: `${context} · historical candles remain available; the live quote may be stale.`, symbol: instrument, timeframe };
+  }
+  return { phase: 'history-ready', tone: 'neutral', title: 'Historical data ready · waiting for live feed', detail: `${context} · chart has real candles but no confirmed live-feed status yet.`, symbol: instrument, timeframe };
+}
+
+function sameChartStatus(left: ChartStatusView, right: ChartStatusView): boolean {
+  return left.phase === right.phase && left.tone === right.tone && left.title === right.title && left.detail === right.detail
+    && left.symbol === right.symbol && left.timeframe === right.timeframe;
+}
+
 
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
@@ -39,11 +110,24 @@ export function LiveTradingWorkspace() {
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
   const [workspaceLoadState, setWorkspaceLoadState] = useState<WorkspaceLoadState>({ phase: 'loading' });
   const [workspaceMountAttempt, setWorkspaceMountAttempt] = useState(0);
+  const [chartStatus, setChartStatus] = useState<ChartStatusView>({
+    phase: 'loading-history',
+    tone: 'neutral',
+    title: 'Preparing chart data',
+    detail: 'Waiting for the active chart and its market-data subscription.',
+    symbol: 'NSE:NIFTY50-INDEX',
+    timeframe: '5',
+  });
+  const chartStatusSnapshotRef = useRef<TcoVelaChartStatusSnapshot | null>(null);
+  const retryChartHistoryRef = useRef<(() => Promise<void>) | null>(null);
+  const activeChartStatusKeyRef = useRef('');
   useEffect(() => {
     if (!host.current) return;
 
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
+    let stopChartStatus: (() => void) | undefined;
+    let chartStatusGeneration = 0;
     let cancelled = false;
     const browserErrors: Array<{ type: 'error' | 'unhandledrejection'; message: string; time: number }> = [];
     const browserRuntimeMetrics = {
@@ -167,10 +251,57 @@ export function LiveTradingWorkspace() {
           },
         };
       }
-      const bindActiveChart = () => undefined;
+      const publishChartStatus = (snapshot: TcoVelaChartStatusSnapshot, generation: number) => {
+        if (cancelled || generation !== chartStatusGeneration) return;
+        chartStatusSnapshotRef.current = snapshot;
+        const next = chartStatusView(snapshot);
+        setChartStatus((previous) => sameChartStatus(previous, next) ? previous : next);
+      };
+      const bindActiveChart = (requestedCellId?: string) => {
+        if (cancelled || !workspace) return;
+        let cell: ReturnType<VelaWorkspaceInstance['cells']>[number] | undefined;
+        try {
+          const cells = workspace.cells();
+          cell = (requestedCellId ? cells.find((candidate) => candidate.id === requestedCellId) : undefined) ?? workspace.active ?? cells[0];
+        } catch {
+          cell = workspace.cells()[0];
+        }
+        if (!cell?.chart?.market) return;
+        const symbol = String(cell.chart.market.symbol || 'NSE:NIFTY50-INDEX');
+        const timeframe = String(cell.chart.market.timeframe || '5');
+        const key = `${symbol.toUpperCase()}|${timeframe}`;
+        if (activeChartStatusKeyRef.current === key && chartStatusSnapshotRef.current) {
+          const view = chartStatusView(chartStatusSnapshotRef.current);
+          setChartStatus((previous) => sameChartStatus(previous, view) ? previous : view);
+          return;
+        }
+
+        chartStatusGeneration += 1;
+        const generation = chartStatusGeneration;
+        activeChartStatusKeyRef.current = key;
+        stopChartStatus?.();
+        stopChartStatus = undefined;
+        retryChartHistoryRef.current = null;
+        chartStatusSnapshotRef.current = null;
+        setChartStatus({
+          phase: 'loading-history',
+          tone: 'neutral',
+          title: 'Preparing chart data',
+          detail: `${symbol} · ${timeframe} · attaching to the shared market-data plane.`,
+          symbol,
+          timeframe,
+        });
+
+        const subscription = subscribeTcoVelaChartStatus(symbol, timeframe, (snapshot) => publishChartStatus(snapshot, generation));
+        stopChartStatus = subscription.unsubscribe;
+        retryChartHistoryRef.current = subscription.retryHistory;
+        workspaceListenerDisposers.push(() => subscription.unsubscribe());
+      };
       workspaceListenerDisposers.push(
-        workspace.on('cell:active', bindActiveChart),
-        workspace.on('layout:changed', bindActiveChart),
+        workspace.on('cell:active', (event) => bindActiveChart(event.id)),
+        workspace.on('layout:changed', () => bindActiveChart()),
+        workspace.on('cell:created', () => bindActiveChart()),
+        workspace.on('cell:destroyed', () => bindActiveChart()),
       );
       bindActiveChart();
       workspaceRef.current = workspace;
@@ -192,6 +323,11 @@ export function LiveTradingWorkspace() {
       workspaceRef.current = null;
       for (const dispose of workspaceListenerDisposers) dispose();
       workspaceListenerDisposers.length = 0;
+      stopChartStatus?.();
+      stopChartStatus = undefined;
+      retryChartHistoryRef.current = null;
+      chartStatusSnapshotRef.current = null;
+      activeChartStatusKeyRef.current = '';
       workspace?.destroy();
       window.removeEventListener('error', onWindowError);
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
@@ -208,6 +344,17 @@ export function LiveTradingWorkspace() {
     };
   }, [workspaceMountAttempt]);
 
+
+  useEffect(() => {
+    const refreshStatusAge = () => {
+      const snapshot = chartStatusSnapshotRef.current;
+      if (!snapshot) return;
+      const next = chartStatusView(snapshot);
+      setChartStatus((previous) => sameChartStatus(previous, next) ? previous : next);
+    };
+    const statusTimer = window.setInterval(refreshStatusAge, 3000);
+    return () => window.clearInterval(statusTimer);
+  }, []);
 
   useEffect(() => {
     const openBroker = () => setBrokerStatusOpen(true);
@@ -345,6 +492,68 @@ export function LiveTradingWorkspace() {
                   </p>
                 </>
               )}
+            </div>
+          </div>
+        )}
+        {workspaceLoadState.phase === 'ready' && (
+          <div
+            className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 shadow-lg backdrop-blur-md ${
+              chartStatus.tone === 'good'
+                ? 'border-emerald-800/70 bg-[#041b13]/90 text-emerald-200'
+                : chartStatus.tone === 'error'
+                  ? 'border-red-800/70 bg-[#240b0d]/95 text-red-200'
+                  : chartStatus.tone === 'warn'
+                    ? 'border-amber-800/70 bg-[#211708]/95 text-amber-100'
+                    : 'border-[#2b3443] bg-[#090d14]/90 text-slate-200'
+            }`}
+            role={chartStatus.tone === 'error' ? 'alert' : 'status'}
+            aria-live={chartStatus.tone === 'error' ? 'assertive' : 'polite'}
+            aria-label={`Chart data status: ${chartStatus.title}`}
+          >
+            <div className="flex items-start gap-2">
+              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                chartStatus.tone === 'good' ? 'bg-emerald-400'
+                  : chartStatus.tone === 'error' ? 'bg-red-400'
+                    : chartStatus.tone === 'warn' ? 'bg-amber-400'
+                      : 'bg-sky-400'
+              }`} aria-hidden="true" />
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold leading-4">{chartStatus.title}</div>
+                <div className="mt-0.5 break-words text-[9px] leading-4 opacity-80">{chartStatus.detail}</div>
+              </div>
+              {(chartStatus.phase === 'auth') ? (
+                <button
+                  type="button"
+                  onClick={() => setBrokerStatusOpen(true)}
+                  className="ml-1 shrink-0 rounded border border-current/30 px-2 py-1 text-[9px] font-semibold hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
+                >
+                  Connect
+                </button>
+              ) : (chartStatus.phase === 'failed' || chartStatus.phase === 'empty') ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const retry = retryChartHistoryRef.current;
+                    if (!retry) return;
+                    const next = { ...chartStatus, phase: 'loading-history' as const, tone: 'neutral' as const, title: 'Retrying historical data', detail: `${chartStatus.symbol} · ${chartStatus.timeframe} · requesting history again.` };
+                    setChartStatus(next);
+                    void retry().catch((error: unknown) => {
+                      const message = error instanceof Error ? error.message : String(error || 'Unknown history error');
+                      setChartStatus({
+                        phase: /no historical candles|no historical data|returned no history/i.test(message) ? 'empty' : 'failed',
+                        tone: /no historical candles|no historical data|returned no history/i.test(message) ? 'warn' : 'error',
+                        title: /no historical candles|no historical data|returned no history/i.test(message) ? 'No historical data available' : 'Historical data request failed',
+                        detail: `${chartStatus.symbol} · ${chartStatus.timeframe} · ${message}`,
+                        symbol: chartStatus.symbol,
+                        timeframe: chartStatus.timeframe,
+                      });
+                    });
+                  }}
+                  className="ml-1 shrink-0 rounded border border-current/30 px-2 py-1 text-[9px] font-semibold hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
+                >
+                  Retry
+                </button>
+              ) : null}
             </div>
           </div>
         )}
