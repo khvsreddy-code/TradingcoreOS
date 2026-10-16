@@ -56,6 +56,7 @@ assert(tcoVelaChrome.includes('updateRows(symbol)'), 'watchlist quote ticks must
 assert(tcoVelaChrome.includes('quoteUpdatedAt'), 'watchlist rows must retain an explicit quote freshness marker');
 assert(tcoVelaChrome.includes('STALE ·') && tcoVelaChrome.includes('WAITING FOR QUOTE'), 'watchlist must distinguish stale and missing quotes');
 assert(tcoVelaChrome.includes('previousClose?: number;'), 'watchlist quote normalization must retain previous close');
+assert(tcoVelaChrome.includes('rawSnapshotTime * 1000'), 'watchlist quote freshness must normalize Unix seconds and milliseconds before comparison');
 assert(tcoVelaChrome.includes('Quote freshness'), 'Trading context must report active-chart quote freshness');
 const watchlistPanelSource = tcoVelaChrome.slice(tcoVelaChrome.indexOf('const bookmarksPanel'), tcoVelaChrome.indexOf('const healthPanel'));
 assert(!watchlistPanelSource.includes('Open Vela symbol search'), 'watchlist must not add a duplicate global symbol selector beside the primary toolbar');
