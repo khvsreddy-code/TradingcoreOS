@@ -162,3 +162,5 @@ export * from './indicatorPresetSystem';
 
 export * from './executionPlanVisualizer';
 
+
+export * from './latestValueAsyncScheduler';
