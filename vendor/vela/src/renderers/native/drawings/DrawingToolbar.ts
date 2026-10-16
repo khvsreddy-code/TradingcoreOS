@@ -5,7 +5,7 @@ import { icon } from '../../../core/icons';
 import { applyChromeTokens } from '../../shared/theme-tokens';
 import { announceSurface } from '../../../ui/surface-events';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
-import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily, loadAdvancedDrawingCatalog } from '../../../core/drawings/registry';
+import { drawingFamilyForType, drawingTypes, getDrawingType, loadDrawingFamily } from '../../../core/drawings/registry';
 import { holdForExit, type SurfaceExit } from '../../../ui/surface-exit';
 
 /** Expanded bar width in px — a docked host's left-gutter reservation must match it. */
@@ -59,7 +59,7 @@ export class DrawingToolbar {
     private shortcuts = new Map<DrawingTypeKey, string>();
     /** Star elements of the currently open flyout, by tool type (live-updated, never stale). */
     private readonly starEls = new Map<DrawingTypeKey, HTMLElement>();
-    private advancedCatalogHydration: Promise<void> | null = null;
+    private capabilityNotice: HTMLDivElement | null = null;
     private flyout: HTMLDivElement | null = null;
     private flyoutOwnerId: string | null = null; // group id (or MAGNET_ID) whose flyout is open
     private flyoutCell: HTMLElement | null = null; // the cell the open flyout is anchored to
@@ -154,49 +154,71 @@ export class DrawingToolbar {
             if (first && !this.lastUsed.has(g.id)) this.lastUsed.set(g.id, first.type);
         }
         this.rebuild();
-        this.hydrateAdvancedDrawingIcons();
     }
 
     /**
-     * Vela's multi-chart workspace hides per-cell drawing bars and owns one shared toolbar.
-     * That means no visible per-cell toolbar triggers lazy drawing registration. Hydrate the
-     * shared definition itself once the catalog arrives, including custom groups and sections.
+     * Resolve metadata only for families already downloaded or explicitly requested.
+     * The production chart must not hydrate the entire advanced catalog just because
+     * a toolbar definition was rendered.
      */
-    private hydrateAdvancedDrawingIcons(): void {
-        if (this.advancedCatalogHydration) return;
-        // Always refresh metadata for advanced tools in a shared workspace toolbar.
-        // Per-cell toolbars can be hidden, so relying on their lazy import side-effects
-        // leaves generic placeholder glyphs (often circles) in the visible shared bar.
-        const hasAdvancedTools = this.def.groups.some((group) =>
-            group.tools.some((tool) => drawingFamilyForType(tool.type))
-            || (group.sections?.some((section) =>
-                section.tools.some((tool) => drawingFamilyForType(tool.type)),
-            ) ?? false),
-        );
-        if (!hasAdvancedTools) return;
+    private hydrateLoadedTools(): void {
+        const hydrate = (tool: ToolGroup['tools'][number]) => {
+            const metadata = drawingTypes().find((candidate) => candidate.type === tool.type);
+            if (!metadata) return;
+            tool.label = metadata.label;
+            tool.icon = metadata.icon;
+        };
+        for (const group of this.def.groups) {
+            group.tools.forEach(hydrate);
+            group.sections?.forEach((section) => section.tools.forEach(hydrate));
+            this.paintGroupIcon(group);
+        }
+    }
 
-        this.advancedCatalogHydration = loadAdvancedDrawingCatalog()
-            .then(() => {
-                const hydrate = (tool: ToolGroup['tools'][number]) => {
-                    const metadata = getDrawingType(tool.type);
-                    if (!metadata) return;
-                    tool.label = metadata.label;
-                    tool.icon = metadata.icon;
-                };
-                // Work from this.def, not a captured older definition: the user may switch
-                // layouts while the asynchronous import is still in flight.
-                for (const group of this.def.groups) {
-                    group.tools.forEach(hydrate);
-                    group.sections?.forEach((section) => section.tools.forEach(hydrate));
-                }
-                this.rebuild();
-            })
-            .catch((error) => {
-                console.error('[vela] failed to hydrate workspace drawing icons', error);
-            })
-            .finally(() => {
-                this.advancedCatalogHydration = null;
-            });
+    private showCapabilityLoading(message: string): HTMLDivElement {
+        this.capabilityNotice?.remove();
+        const notice = document.createElement('div');
+        notice.className = 'vela-dtb-capability-notice';
+        notice.setAttribute('role', 'status');
+        notice.setAttribute('aria-live', 'polite');
+        notice.style.cssText =
+            `position:absolute;left:${TOOLBAR_WIDTH + FLYOUT_GAP}px;top:8px;z-index:24;display:flex;align-items:center;gap:8px;` +
+            `max-width:min(320px,calc(100% - 56px));padding:8px 10px;border:1px solid var(--vela-border-strong);border-radius:var(--vela-radius-md);` +
+            `background:var(--vela-surface);color:var(--vela-fg);box-shadow:var(--vela-shadow);font:12px var(--vela-font-family);pointer-events:auto;`;
+        const spinner = document.createElement('span');
+        spinner.setAttribute('aria-hidden', 'true');
+        spinner.style.cssText =
+            'width:12px;height:12px;flex:none;border:2px solid rgba(59,130,246,.25);border-top-color:#3b82f6;border-radius:50%;animation:vela-dtb-spin .8s linear infinite;';
+        const label = document.createElement('span');
+        label.textContent = message;
+        notice.append(spinner, label);
+        this.host.appendChild(notice);
+        this.capabilityNotice = notice;
+        return notice;
+    }
+
+    private clearCapabilityNotice(notice: HTMLDivElement): void {
+        if (this.capabilityNotice !== notice) return;
+        notice.remove();
+        this.capabilityNotice = null;
+    }
+
+    private failCapabilityNotice(notice: HTMLDivElement, message: string, retry: () => void): void {
+        if (this.capabilityNotice !== notice) return;
+        notice.replaceChildren();
+        notice.setAttribute('role', 'alert');
+        notice.style.borderColor = 'rgba(239,68,68,.5)';
+        const label = document.createElement('span');
+        label.textContent = message;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Retry';
+        button.style.cssText = 'flex:none;padding:3px 6px;border:1px solid var(--vela-border-strong);border-radius:4px;color:var(--vela-fg);font:inherit;cursor:pointer;';
+        button.addEventListener('click', () => {
+            this.clearCapabilityNotice(notice);
+            retry();
+        });
+        notice.append(label, button);
     }
 
     /** Reflect the core's favorite set. An OPEN flyout updates its stars IN PLACE — starring
@@ -246,6 +268,8 @@ export class DrawingToolbar {
     }
 
     destroy(): void {
+        this.capabilityNotice?.remove();
+        this.capabilityNotice = null;
         this.closeFlyout();
         for (const { exit } of [...this.exitingFlyouts.values()]) exit.finish();
         for (const dispose of this.tipDisposers.splice(0)) dispose();
@@ -389,9 +413,14 @@ export class DrawingToolbar {
         if (!type) return;
         const family = drawingFamilyForType(type);
         if (family && !drawingTypes().some((meta) => meta.type === type)) {
-            void loadDrawingFamily(family).then(() => this.onArm(type)).catch((error) => {
-                this.onArm(null);
+            const notice = this.showCapabilityLoading(`Loading ${group.label} drawing tools…`);
+            void loadDrawingFamily(family).then(() => {
+                this.hydrateLoadedTools();
+                this.clearCapabilityNotice(notice);
+                this.onArm(type);
+            }).catch((error) => {
                 console.error('[vela] failed to load drawing family', family, error);
+                this.failCapabilityNotice(notice, 'Drawing tools failed to load.', () => this.onGroupIconClick(group));
             });
             return;
         }
@@ -557,42 +586,62 @@ export class DrawingToolbar {
         const sections: ToolSection[] = group.sections ?? [{ label: '', tools: group.tools }];
         const families = [...new Set(group.tools.map((tool) => drawingFamilyForType(tool.type)).filter((family): family is NonNullable<ReturnType<typeof drawingFamilyForType>> => family !== undefined))];
         const pending = families.filter((family) => group.tools.some((tool) => drawingFamilyForType(tool.type) === family && !drawingTypes().some((meta) => meta.type === tool.type)));
+        const fly = this.beginFlyout(group.id, cell);
+
         if (pending.length) {
+            const status = document.createElement('div');
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
+            status.style.cssText = `padding:8px 10px;color:var(--vela-fg-muted);font:12px ${this.theme.fontFamily};white-space:nowrap;`;
+            status.textContent = 'Loading drawing tools…';
+            fly.appendChild(status);
             void Promise.all(pending.map(loadDrawingFamily)).then(() => {
-                for (const tool of group.tools) {
-                    const loaded = getDrawingType(tool.type);
-                    if (loaded) { tool.label = loaded.label; tool.icon = loaded.icon; }
-                }
-                if (this.flyoutOwnerId === group.id && this.flyout) {
+                this.hydrateLoadedTools();
+                if (this.flyoutOwnerId === group.id && this.flyout === fly) {
                     const openCell = this.flyoutCell;
                     this.closeFlyout();
                     if (openCell && this.groupCells.get(group.id) === openCell) this.openGroupFlyout(group);
                 }
-            }).catch((error) => console.error('[vela] failed to load drawing flyout family', error));
+            }).catch((error) => {
+                console.error('[vela] failed to load drawing flyout family', error);
+                if (this.flyoutOwnerId !== group.id || this.flyout !== fly) return;
+                status.replaceChildren();
+                status.setAttribute('role', 'alert');
+                status.style.color = 'var(--vela-negative, #ef4444)';
+                status.append(document.createTextNode('Could not load drawing tools. '));
+                const retry = document.createElement('button');
+                retry.type = 'button';
+                retry.textContent = 'Retry';
+                retry.style.cssText = 'margin-left:6px;padding:3px 6px;border:1px solid var(--vela-border-strong);border-radius:4px;color:var(--vela-fg);font:inherit;cursor:pointer;';
+                retry.addEventListener('click', () => {
+                    this.closeFlyout();
+                    if (this.groupCells.get(group.id) === cell) this.openGroupFlyout(group);
+                });
+                status.appendChild(retry);
+            });
+            return;
         }
-        const fly = this.beginFlyout(group.id, cell);
-        const badge = sections.some((s) => s.tools.some((tool) => !!tool.icon));
-        for (let si = 0; si < sections.length; si++) {
-            const section = sections[si]!;
+
+        const badge = sections.some((section) => section.tools.some((tool) => !!tool.icon));
+        for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+            const section = sections[sectionIndex]!;
             if (section.label) {
-                if (si > 0) fly.appendChild(this.flyoutSeparator());
+                if (sectionIndex > 0) fly.appendChild(this.flyoutSeparator());
                 fly.appendChild(this.flyoutHeader(section.label));
             }
             for (const tool of section.tools) {
-                fly.appendChild(
-                    this.makeFlyoutItem({
-                        icon: tool.icon,
-                        badge,
-                        label: tool.label,
-                        selected: tool.type === this.active,
-                        shortcut: this.shortcuts.get(tool.type),
-                        onSelect: () => this.onArm(tool.type),
-                        favorite: {
-                            type: tool.type,
-                            toggle: () => this.onToggleFavorite(tool.type, !this.favorites.has(tool.type)),
-                        },
-                    }),
-                );
+                fly.appendChild(this.makeFlyoutItem({
+                    icon: tool.icon,
+                    badge,
+                    label: tool.label,
+                    selected: tool.type === this.active,
+                    shortcut: this.shortcuts.get(tool.type),
+                    onSelect: () => this.onArm(tool.type),
+                    favorite: {
+                        type: tool.type,
+                        toggle: () => this.onToggleFavorite(tool.type, !this.favorites.has(tool.type)),
+                    },
+                }));
             }
         }
     }
