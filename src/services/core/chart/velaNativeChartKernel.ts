@@ -17,7 +17,7 @@ import type { PriceLine, Pane, Fill } from '../../../../vendor/vela/src/core/mod
 import type { ScenePatch, SeriesPatchOperation } from '../../../../vendor/vela/src/core/model/patch';
 import { DrawingsControl } from '../../../../vendor/vela/src/core/DrawingsControl';
 import { DrawingController } from '../../../../vendor/vela/src/core/drawings/DrawingController';
-import { loadAdvancedDrawingCatalog } from '../../../../vendor/vela/src/core/drawings/registry';
+import { loadDrawingFamiliesForTypes } from '../../../../vendor/vela/src/core/drawings/registry';
 import { TypedEventBus } from '../../../../vendor/vela/src/core/events/EventBus';
 import type { VelaEventMap } from '../../../../vendor/vela/src/core/events/types';
 import type { DrawingsOption } from '../../../../vendor/vela/src/core/drawings/toolbar';
@@ -438,7 +438,7 @@ export class VelaNativeChartKernel {
     }
     if (Array.isArray(options?.velaDrawings)) {
       const initial = options.velaDrawings as SerializedDrawing[];
-      void loadAdvancedDrawingCatalog().then(() => this.drawings.fromJSON({version:1,drawings:initial}));
+      void loadDrawingFamiliesForTypes(initial.map((drawing) => drawing.type)).then(() => this.drawings.fromJSON({version:1,drawings:initial}));
     }
     this.renderer.onClick((event: ClickEvent) => {
       for (const cb of this.onClickHandlers) cb({ point: event.time == null ? undefined : { x: this.timeToCoordinate(event.time) ?? 0, y: event.price == null ? 0 : this.priceToCoordinate(event.price) ?? 0 }, time: event.time ?? undefined, seriesData: new Map() });
