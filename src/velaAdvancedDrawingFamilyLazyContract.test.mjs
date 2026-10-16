@@ -20,6 +20,7 @@ const tcoChromeSource = readFileSync(new URL('./services/core/chart/tcoVelaChrom
 assert.match(userDrawingSource, /isCanonicalToolbarDefinition/);
 assert.match(userDrawingSource, /this\.customToolbar = !isCanonicalToolbarDefinition\(def\)/);
 assert.match(drawingRegistrySource, /function lazyDrawingIcon/);
+assert.match(drawingRegistrySource, /advancedFamilyPromises\.get\(family\) === promise\) advancedFamilyPromises\.delete\(family\)/, 'failed drawing-family imports must be evicted so Retry can start a fresh load');
 assert.doesNotMatch(drawingRegistrySource, /icon: svg24\('<circle cx="12" cy="12" r="7"\/>/);
 assert.match(nativeRendererSource, /private settingsEnabled = true/);
 for (const iconId of ['activity','briefcase','shield','list','layers','table','user','layout','play']) {
