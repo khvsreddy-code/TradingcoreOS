@@ -13,6 +13,10 @@ const publication = read('src/services/coreSpirit/indicatorPublicationService.ts
 const editor = read('src/pages/CoreSpiritEditorPage.tsx');
 const viteConfig = read('vite.config.ts');
 const bundleBudget = read('tools/check-bundle-budget.mjs');
+const tcoVelaChrome = read('src/services/core/chart/tcoVelaChrome.ts');
+const workspaceShell = read('src/components/workspace/WorkspaceModuleShell.tsx');
+const workspaceRoutes = read('src/appShells/TradingWorkspaceShell.tsx');
+const coreSpiritPage = read('src/pages/CoreSpiritEditorPage.tsx');
 
 const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 
@@ -36,5 +40,25 @@ assert(bundleBudget.includes('dynamicImports'), 'manifest audit must distinguish
 assert(bundleBudget.includes('new Set()'), 'bundle accounting must de-duplicate emitted JS assets shared across route graphs');
 assert(bundleBudget.includes('advancedRegistryFibonacci.ts'), 'production graph audit must guard the advanced Vela drawing boundary');
 assert(liveWorkspace.includes('Loading chart engine') && liveWorkspace.includes('Retry chart loading'), 'optional chart capability loading must expose visible pending and retry states');
+
+
+assert(!tcoVelaChrome.includes("import { CoreSpiritEditorModel }"), 'CoreSpirit Studio model must not be loaded with the chart chrome');
+assert(!tcoVelaChrome.includes("import { mountCoreSpiritMonaco"), 'Monaco must not be loaded with the chart chrome');
+assert(!tcoVelaChrome.includes("import { compileCoreSpiritSourceOffThread"), 'CoreSpirit compiler client must not be loaded with the chart chrome');
+assert(tcoVelaChrome.includes("import('../../coreSpirit/editorModel')"), 'CoreSpirit Studio editor model must load when Code is opened');
+assert(tcoVelaChrome.includes("import('../../coreSpirit/monacoAdapter')"), 'Monaco must load only when Code is opened');
+assert(tcoVelaChrome.includes("import('../../coreSpirit/coreSpiritCompilerClient')"), 'compiler client must load only when CoreSpirit is run');
+assert(tcoVelaChrome.includes('updateRows(symbol)'), 'watchlist quote ticks must update only the changed symbol on the default sort');
+assert(tcoVelaChrome.includes('quoteUpdatedAt'), 'watchlist rows must retain an explicit quote freshness marker');
+assert(tcoVelaChrome.includes('STALE ·') && tcoVelaChrome.includes('WAITING FOR QUOTE'), 'watchlist must distinguish stale and missing quotes');
+assert(tcoVelaChrome.includes('previousClose?: number;'), 'watchlist quote normalization must retain previous close');
+assert(tcoVelaChrome.includes('Quote freshness'), 'Trading context must report active-chart quote freshness');
+assert(workspaceShell.includes('Skip to workspace content'), 'workspace shell must provide a keyboard skip link');
+assert(workspaceShell.includes('aria-label="Primary workspace navigation"'), 'workspace navigation must be named for assistive technology');
+assert(workspaceShell.includes("aria-current={active===path?'page':undefined}"), 'workspace navigation must expose the current page');
+assert(workspaceRoutes.includes('ROUTE_LOADING_COPY') && workspaceRoutes.includes('fallback(route)'), 'lazy workspace routes must have meaningful route-specific loading states');
+assert(coreSpiritPage.includes('aria-label="CoreSpirit research workspace"'), 'CoreSpirit research workspace must have a labelled main region');
+assert(coreSpiritPage.includes('aria-label="CoreSpirit compiler diagnostics"'), 'CoreSpirit diagnostics must be announced accessibly');
+assert(coreSpiritPage.includes('Compile, review diagnostics, and run the validated artifact on the active Vela chart.'), 'CoreSpirit editor copy must match its actual run capability');
 
 console.log('TCO_FRONTEND_THREE_SHELL_AND_COMPILER_BOUNDARY_OK');
