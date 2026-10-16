@@ -781,6 +781,7 @@ const bookmarksPanel: SidePanelDescriptor = {
       ltp: number;
       change?: number;
       changePercent?: number;
+      previousClose?: number;
       high?: number;
       low?: number;
       receivedAt: number;
@@ -817,13 +818,20 @@ const bookmarksPanel: SidePanelDescriptor = {
       const receivedAt = cachedIsNewest ? cached?.receivedAt : parsedSnapshotTime ?? cached?.receivedAt;
       const ltp = asFinite(cachedIsNewest ? cached?.ltp : snapshot.ltp, cached?.ltp, snapshot.ltp);
       const percent = asFinite(cachedIsNewest ? cached?.changePercent : snapshot.changePercent, cached?.changePercent, snapshot.changePercent);
-      const previousClose = asFinite(snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close);
+      const previousClose = asFinite(cachedIsNewest ? cached?.previousClose : snapshot.previousClose, snapshot.previousClose, snapshot.prevClose, snapshot.close, snapshot.prev_close, snapshot.previous_close, cached?.previousClose);
       let change = asFinite(cachedIsNewest ? cached?.change : snapshot.change, snapshot.changeValue, snapshot.netChange, cached?.change);
+      let percent = asFinite(cachedIsNewest ? cached?.changePercent : snapshot.changePercent, cached?.changePercent, snapshot.changePercent);
       if (change === undefined && ltp !== undefined && previousClose !== undefined) change = ltp - previousClose;
       if (change === undefined && ltp !== undefined && percent !== undefined && percent > -100) {
         // Broker feeds that expose only rounded percent change still provide a useful
         // value-change estimate; prefer the broker's absolute change whenever present.
         change = ltp - ltp / (1 + percent / 100);
+      }
+      if (percent === undefined && ltp !== undefined && previousClose !== undefined && previousClose !== 0) {
+        percent = ((ltp - previousClose) / previousClose) * 100;
+      }
+      if (percent === undefined && ltp !== undefined && change !== undefined && ltp - change > 0) {
+        percent = (change / (ltp - change)) * 100;
       }
       const hasFreshTimestamp = receivedAt !== undefined && Number.isFinite(receivedAt);
       return {
@@ -849,15 +857,18 @@ const bookmarksPanel: SidePanelDescriptor = {
         const ltp = asFinite(tick.ltp);
         if (!symbol || ltp === undefined) return;
         const daily = dayCandle(tick);
-        const percent = asFinite(tick.changePercent);
+        let percent = asFinite(tick.changePercent);
         const previousClose = asFinite(tick.previousClose, tick.prevClose, tick.close, tick.prev_close, tick.previous_close);
         let change = asFinite(tick.change, tick.changeValue, tick.netChange);
         if (change === undefined && previousClose !== undefined) change = ltp - previousClose;
         if (change === undefined && percent !== undefined && percent > -100) change = ltp - ltp / (1 + percent / 100);
+        if (percent === undefined && previousClose !== undefined && previousClose !== 0) percent = ((ltp - previousClose) / previousClose) * 100;
+        if (percent === undefined && change !== undefined && ltp - change > 0) percent = (change / (ltp - change)) * 100;
         quotes.set(symbol, {
           ltp,
           change,
           changePercent: percent,
+          previousClose,
           high: asFinite(tick.dayHigh, tick.high, daily?.high),
           low: asFinite(tick.dayLow, tick.low, daily?.low),
           receivedAt: Date.now(),
@@ -865,7 +876,7 @@ const bookmarksPanel: SidePanelDescriptor = {
         // Keep live price/change sorts stable while the feed updates, without rebuilding
         // every DOM row on the default custom-order path.
         if (sortMode === 'price' || sortMode === 'change') buildRows();
-        else updateRows();
+        else updateRows(symbol);
       });
     };
 
@@ -909,9 +920,52 @@ const bookmarksPanel: SidePanelDescriptor = {
         : 'Waiting for a market quote for this instrument. No sample price is shown.';
     };
 
-    const updateRows = (): void => {
+    const updateRows = (changedSymbol?: string): void => {
       const current = String(ctx.symbol || '').toUpperCase();
       meta.textContent = `${current} · ${ctx.timeframe} · ${watchlist.length} symbols`;
+
+      // Tick-hot path: most packets affect one instrument. Keep existing row DOM and
+      // focus stable rather than walking every row; full passes remain for filters,
+      // sort changes, list edits and quote-freshness sweeps.
+      if (changedSymbol) {
+        const normalized = changedSymbol.toUpperCase();
+        const item = watchlist.find((candidate) => candidate.symbol === normalized);
+        const ref = item ? rowRefs.get(item.symbol) : undefined;
+        if (!item || !ref) {
+          if (normalized === current) updateDetails();
+          return;
+        }
+        const query = filterInput.value.trim().toUpperCase();
+        const searchable = `${item.symbol} ${item.short} ${item.label}`.toUpperCase();
+        const quote = quoteView(item.symbol);
+        const pct = quote.changePercent;
+        const matchesText = !query || searchable.includes(query);
+        const matchesFilter = filterMode === 'all'
+          || (filterMode === 'gainers' && Number.isFinite(pct) && Number(pct) > 0)
+          || (filterMode === 'losers' && Number.isFinite(pct) && Number(pct) < 0);
+        ref.row.hidden = !(matchesText && matchesFilter);
+        const isSelected = item.symbol === current;
+        ref.row.style.background = isSelected ? 'var(--tco-frame-accent-soft,rgba(124,92,255,.10))' : 'transparent';
+        ref.row.style.borderColor = isSelected ? 'var(--tco-frame-accent,#8b7cff)' : 'transparent';
+        const absolute = quote.change;
+        ref.value.textContent = quote.ltp === undefined ? '—' : quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+        const changeParts: string[] = [];
+        if (absolute !== undefined) changeParts.push(`${absolute >= 0 ? '+' : ''}${absolute.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
+        if (pct !== undefined) changeParts.push(`${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`);
+        ref.row.dataset.quoteState = quote.ltp === undefined ? 'waiting' : quote.stale ? 'stale' : 'live';
+        ref.row.dataset.quoteUpdatedAt = quote.receivedAt === undefined ? '' : String(quote.receivedAt);
+        ref.row.title = quote.ltp === undefined ? 'No quote received yet' : quote.stale ? 'Stale quote — last update over 15 seconds ago' : 'Live quote';
+        ref.button.setAttribute('aria-label', `${item.short}, ${quote.ltp === undefined ? 'quote unavailable' : `last price ${quote.ltp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}, ${quote.stale ? 'stale quote' : 'live quote'}`}`);
+        ref.value.style.color = quote.stale ? '#fbbf24' : 'var(--vela-fg-bright)';
+        ref.change.textContent = quote.ltp === undefined
+          ? 'WAITING FOR QUOTE'
+          : `${quote.stale ? 'STALE · ' : ''}${changeParts.length ? changeParts.join(' · ') : 'NO CHANGE DATA'}`;
+        const changeTone = absolute !== undefined ? absolute : pct;
+        ref.change.style.color = quote.stale ? '#fbbf24' : changeTone === undefined ? 'var(--vela-fg-muted)' : changeTone >= 0 ? '#22c55e' : '#f23645';
+        if (isSelected) updateDetails();
+        return;
+      }
+
       const query = filterInput.value.trim().toUpperCase();
       const filtered = watchlist.filter((item) => {
         const text = `${item.symbol} ${item.short} ${item.label}`.toUpperCase();
