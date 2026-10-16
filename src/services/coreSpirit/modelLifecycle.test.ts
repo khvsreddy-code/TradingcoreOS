@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   const loadedClientArtifact = await fetchCoreSpiritHMMArtifact(
     artifact.hash,
     'contract-access-token',
-    async () => new Response(JSON.stringify({ success: true, data: { artifact } }), {
+    async () => new Response(JSON.stringify({ success: true, data: { artifact, release: { status: 'approved', approvalChecks: { productionEligible: true } } } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     }),
