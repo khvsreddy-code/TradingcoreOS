@@ -5,6 +5,8 @@
 alter table public.automations
   add column if not exists lifecycle_state text not null default 'CREATED';
 alter table public.automations
+  add column if not exists lifecycle_status text not null default 'paused';
+alter table public.automations
   add column if not exists lifecycle_version integer not null default 1;
 alter table public.automations
   add column if not exists lifecycle_transition_at timestamptz;
@@ -105,6 +107,24 @@ revoke all on table public.automation_order_requests from anon, authenticated;
 grant select, insert, update, delete on table public.automation_integrations to service_role;
 grant select, insert, update, delete on table public.automation_signal_events to service_role;
 grant select, insert, update, delete on table public.automation_order_requests to service_role;
+
+-- Align the shared broker idempotency ledger with the fields used by the current
+-- repository. Existing databases may have the original three-state schema.
+alter table public.order_idempotency
+  add column if not exists broker_order_id text,
+  add column if not exists attempts integer not null default 1,
+  add column if not exists expires_at timestamptz,
+  add column if not exists last_error text;
+
+alter table public.order_idempotency
+  drop constraint if exists order_idempotency_state_check;
+alter table public.order_idempotency
+  add constraint order_idempotency_state_check
+  check (state in ('pending','completed','failed','unknown','expired','recovery_required'));
+
+create index if not exists order_idempotency_pending_expiry_idx
+  on public.order_idempotency (expires_at)
+  where state = 'pending' and expires_at is not null;
 
 -- The integration row lock serializes claims for a single credential. It is the
 -- durable idempotency authority and also makes daily-cap accounting race-safe.
