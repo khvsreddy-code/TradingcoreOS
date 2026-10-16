@@ -10,6 +10,8 @@ import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/co
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 
+type WorkspaceLoadState = { phase: 'loading' | 'ready' } | { phase: 'error'; message: string };
+
 const CORESPIRIT_LIVE_SOURCE_KEY = 'tradingcore:corespirit:chart-source';
 const VELA_STATE_KEY = 'tradingcore-live-vela-v5';
 
@@ -35,6 +37,8 @@ export function LiveTradingWorkspace() {
   const host = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<VelaWorkspaceInstance | null>(null);
   const [brokerStatusOpen, setBrokerStatusOpen] = useState(false);
+  const [workspaceLoadState, setWorkspaceLoadState] = useState<WorkspaceLoadState>({ phase: 'loading' });
+  const [workspaceMountAttempt, setWorkspaceMountAttempt] = useState(0);
   useEffect(() => {
     if (!host.current) return;
 
@@ -100,6 +104,7 @@ export function LiveTradingWorkspace() {
     }
 
     const mount = async () => {
+      try {
       // Start session restoration immediately, but don't block Vela's first
       // mount on broker/network retries. The TCO provider's async bars/subscription
       // paths attach to the broker when this shared restore promise resolves.
@@ -169,6 +174,15 @@ export function LiveTradingWorkspace() {
       );
       bindActiveChart();
       workspaceRef.current = workspace;
+      if (!cancelled) setWorkspaceLoadState({ phase: 'ready' });
+      } catch (error) {
+        if (!cancelled) {
+          setWorkspaceLoadState({
+            phase: 'error',
+            message: (error instanceof Error ? error.message : String(error || 'Unknown loading error')).slice(0, 240),
+          });
+        }
+      }
     };
 
     void mount();
@@ -192,7 +206,7 @@ export function LiveTradingWorkspace() {
         if (runtime === browserRuntimeMetrics) delete (window as Window & { __TCO_BROWSER_RUNTIME__?: unknown }).__TCO_BROWSER_RUNTIME__;
       }
     };
-  }, []);
+  }, [workspaceMountAttempt]);
 
 
   useEffect(() => {
@@ -288,18 +302,59 @@ export function LiveTradingWorkspace() {
 
   return (
     <Profiler id="tco-live-workspace" onRender={() => chartPerformanceTelemetry.recordReactCommit('workspace:live')}>
-    <div
-      ref={host}
-      className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]"
-      aria-label="TradingCoreOS Vela live trading chart"
-    >
-      {brokerStatusOpen && (
-        <BrokerSettingsModal
-          isOpen={brokerStatusOpen}
-          onClose={() => setBrokerStatusOpen(false)}
+      <div className="tco-live-surface fixed inset-0 z-[100] bg-[#050609]">
+        <div
+          ref={host}
+          className="absolute inset-0"
+          aria-label="TradingCoreOS Vela live trading chart"
         />
-      )}
-    </div>
+        {workspaceLoadState.phase !== 'ready' && (
+          <div
+            className="absolute inset-0 z-[110] flex items-center justify-center bg-[#050609] px-6"
+            role={workspaceLoadState.phase === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            <div className="w-full max-w-md rounded-xl border border-[#202633] bg-[#0a0d13] p-6 text-[#e5e7eb] shadow-2xl">
+              {workspaceLoadState.phase === 'error' ? (
+                <>
+                  <div className="text-[10px] font-mono uppercase tracking-[.2em] text-[#f87171]">Chart engine unavailable</div>
+                  <h2 className="mt-2 text-base font-semibold">The Vela workspace could not be loaded.</h2>
+                  <p className="mt-2 break-words text-xs leading-5 text-[#9ca3af]">{workspaceLoadState.message}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceLoadState({ phase: 'loading' });
+                      setWorkspaceMountAttempt((attempt) => attempt + 1);
+                    }}
+                    className="mt-5 rounded-lg bg-[#3b82f6] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2563eb]"
+                  >
+                    Retry chart loading
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#3b82f6]/30 border-t-[#3b82f6]" aria-hidden="true" />
+                    <div>
+                      <div className="text-sm font-semibold">Loading chart engine</div>
+                      <div className="mt-1 text-[10px] font-mono text-[#9ca3af]">Loading Vela workspace capabilities</div>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-xs leading-5 text-[#9ca3af]">
+                    Preparing the chart workspace. Live history requests begin as soon as the chart mounts.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        {brokerStatusOpen && (
+          <BrokerSettingsModal
+            isOpen={brokerStatusOpen}
+            onClose={() => setBrokerStatusOpen(false)}
+          />
+        )}
+      </div>
     </Profiler>
   );
 }
