@@ -192,7 +192,7 @@ function validateProvenance(provenance: ModelProvenance): void {
   validateDateRange(provenance.trainingRange);
   validateDateRange(provenance.validationRange);
   const trainingEnd = Date.parse(provenance.trainingRange.to) +
-    (/^\\d{4}-\\d{2}-\\d{2}$/.test(provenance.trainingRange.to) ? 86_399_999 : 0);
+    (/^\d{4}-\d{2}-\d{2}$/.test(provenance.trainingRange.to) ? 86_399_999 : 0);
   const validationStart = Date.parse(provenance.validationRange.from);
   if (!Number.isFinite(trainingEnd) || !Number.isFinite(validationStart) || trainingEnd >= validationStart) {
     throw new Error('Validation range must be strictly after the training range; overlapping time-series samples are not allowed');
