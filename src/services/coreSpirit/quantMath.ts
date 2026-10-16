@@ -215,10 +215,10 @@ export type CoreSpiritGaussianHMMState = Readonly<{
 export type CoreSpiritHMMArtifactBinding = Readonly<{
   artifactHash: string;
   modelAlias: string;
-  /** Legacy training cutoff retained for older worker messages. */
+  /** Optional lineage boundary for display/debugging. */
   trainingEndTimestampMs?: number;
-  /** Production inference starts strictly after the last validation observation. */
-  inferenceBoundaryTimestampMs?: number;
+  /** Required: production inference starts strictly after the last validation observation. */
+  inferenceBoundaryTimestampMs: number;
   state: CoreSpiritGaussianHMMState;
 }>;
 
