@@ -58,6 +58,15 @@ export interface AutomationSignalRecord {
   payloadHash: string;
 }
 
+export interface ReconciledBrokerOrderState {
+  brokerOrderId: string;
+  clientOrderId: string | null;
+  status: string;
+  filledQuantity: number | null;
+  averagePrice: number | null;
+  updatedAt: string;
+}
+
 export interface AutomationOrderRequestRecord {
   id: string;
   integrationId: string;
@@ -355,23 +364,41 @@ export class AutomationIntegrationRepository {
     return after ? rows : rows.reverse();
   }
 
-  static async getBrokerOrderState(userId: string, brokerOrderId: string): Promise<{
-    status: string;
-    filledQuantity: number | null;
-    averagePrice: number | null;
-    updatedAt: string;
-  } | undefined> {
+  static async getBrokerOrderState(userId: string, brokerOrderId: string): Promise<ReconciledBrokerOrderState | undefined> {
     const { data, error } = await this.db().from('broker_order_states')
-      .select('status,filled_quantity,average_price,updated_at')
+      .select('broker_order_id,client_order_id,status,filled_quantity,average_price,updated_at')
       .eq('user_id', userId).eq('broker_id', 'fyers').eq('broker_order_id', brokerOrderId)
       .maybeSingle();
     if (error) throw new Error(`Unable to load reconciled broker order state: ${error.message}`);
-    if (!data) return undefined;
+    return data ? this.toReconciledBrokerOrderState(data as Record<string, unknown>) : undefined;
+  }
+
+  /**
+   * Recovery lookup for a request whose HTTP submission outcome was uncertain.
+   * The stable client order ID is persisted before the broker side effect, while
+   * the broker order ID may only arrive later from WebSocket or REST reconciliation.
+   */
+  static async getBrokerOrderStateByClientOrderId(userId: string, clientOrderId: string): Promise<ReconciledBrokerOrderState | undefined> {
+    const { data, error } = await this.db().from('broker_order_states')
+      .select('broker_order_id,client_order_id,status,filled_quantity,average_price,updated_at')
+      .eq('user_id', userId).eq('broker_id', 'fyers').eq('client_order_id', clientOrderId)
+      .order('updated_at', { ascending: false }).limit(2);
+    if (error) throw new Error(`Unable to load reconciled broker order by client ID: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    if (rows.length > 1) throw new Error('More than one broker order maps to this client order ID; manual reconciliation is required.');
+    return rows.length ? this.toReconciledBrokerOrderState(rows[0]) : undefined;
+  }
+
+  private static toReconciledBrokerOrderState(row: Record<string, unknown>): ReconciledBrokerOrderState {
+    const brokerOrderId = String(row.broker_order_id ?? '');
+    if (!brokerOrderId) throw new Error('Reconciled broker order is missing its broker order ID.');
     return {
-      status: String(data.status),
-      filledQuantity: data.filled_quantity == null ? null : Number(data.filled_quantity),
-      averagePrice: data.average_price == null ? null : Number(data.average_price),
-      updatedAt: String(data.updated_at),
+      brokerOrderId,
+      clientOrderId: typeof row.client_order_id === 'string' ? row.client_order_id : null,
+      status: String(row.status),
+      filledQuantity: row.filled_quantity == null ? null : Number(row.filled_quantity),
+      averagePrice: row.average_price == null ? null : Number(row.average_price),
+      updatedAt: String(row.updated_at),
     };
   }
 
