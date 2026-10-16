@@ -1,4 +1,5 @@
 import {
+  CORESPIRIT_MODEL_ARTIFACT_VERSION,
   createResearchArtifact,
   coreSpiritSha256,
   InMemoryModelArtifactStore,
@@ -72,6 +73,8 @@ async function main(): Promise<void> {
     createdAt: '2026-01-02T00:00:00.000Z',
   });
   assert(/^[a-f0-9]{64}$/.test(artifact.hash), 'model artifact must have a SHA-256 identity');
+  assert(CORESPIRIT_MODEL_ARTIFACT_VERSION === '2' && artifact.schemaVersion === '2',
+    'model artifact schema v2 must pin required holdout/runtime/safety provenance');
   assert(Object.isFrozen(artifact) && Object.isFrozen(artifact.provenance), 'artifact metadata must be immutable');
   const store = new InMemoryModelArtifactStore<typeof artifact.weights>();
   await store.put(artifact);
