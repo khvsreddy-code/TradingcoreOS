@@ -1429,8 +1429,16 @@ const orderBookPanel: SidePanelDescriptor = {
 
     const render = () => {
       ladder.textContent = '';
-      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol);
-      meta.textContent = `${ctx.symbol} · ${ctx.timeframe} · live`;
+      const tick = tradingCoreRuntime.getMarketSnapshot(ctx.symbol) as Record<string,unknown> | undefined;
+      const ltp=Number(tick?.ltp??tick?.lastPrice??tick?.close);
+      const rawReceived=Number(tick?.receivedAtEpoch??tick?.lastReceivedAt);
+      let receivedAt=Number.isFinite(rawReceived)&&rawReceived>0
+        ? (rawReceived>1e12?rawReceived:rawReceived*1000)
+        : Date.parse(String(tick?.receivedAt??''));
+      if(!Number.isFinite(receivedAt))receivedAt=0;
+      const quoteState=!Number.isFinite(ltp)?'WAITING':!receivedAt||Date.now()-receivedAt>15_000?'STALE':'LIVE';
+      meta.textContent=`${ctx.symbol} · ${ctx.timeframe} · LTP ${Number.isFinite(ltp)?ltp.toLocaleString('en-IN',{maximumFractionDigits:2}):'—'} · ${quoteState}`;
+      meta.style.color=quoteState==='LIVE'?'#4ade80':quoteState==='STALE'?'#fbbf24':'#94a3b8';
       const asks = Array.isArray((tick as any)?.ask) ? (tick as any).ask : [];
       const bids = Array.isArray((tick as any)?.bid) ? (tick as any).bid : [];
       const row = (side: 'ASK'|'BID', level: any, index: number) => {
@@ -1576,7 +1584,64 @@ const researchPanel:SidePanelDescriptor={
     chartInfo.style.cssText='display:flex;flex-direction:column;gap:2px;font:9px ui-monospace;color:#94a3b8;';
     chartInfo.innerHTML=`<span>Engine: <b style="color:#c4b5fd">CoreSpirit → Vela</b></span><span>Viewport: Vela-managed</span><span>Data: canonical columnar</span>`;
     root.appendChild(chartInfo);
-    return { onOpen:()=>{summary.textContent=`Vela terminal · ${ctx.symbol} · ${ctx.timeframe}`;} };
+
+    const contextCard=document.createElement('div');
+    contextCard.className='tco-frame-card';
+    contextCard.setAttribute('role','status');
+    contextCard.setAttribute('aria-live','polite');
+    contextCard.setAttribute('aria-atomic','true');
+    contextCard.style.cssText='display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:10px;border:1px solid var(--vela-border);border-radius:8px;background:var(--vela-surface-sunken);font:10px ui-monospace;';
+    const quoteLine=document.createElement('div');
+    const rendererLine=document.createElement('div');
+    const performanceLine=document.createElement('div');
+    quoteLine.style.cssText=rendererLine.style.cssText=performanceLine.style.cssText='overflow-wrap:anywhere;color:var(--vela-fg-muted);';
+    contextCard.append(quoteLine,rendererLine,performanceLine);
+    root.appendChild(contextCard);
+
+    const refreshContext=():void=>{
+      const symbol=String(ctx.symbol||'').trim();
+      const snapshot=(tradingCoreRuntime.getMarketSnapshot(symbol)||{}) as Record<string,unknown>;
+      const ltp=Number(snapshot.ltp??snapshot.lastPrice??snapshot.close);
+      const rawReceived=Number(snapshot.receivedAtEpoch??snapshot.lastReceivedAt);
+      let receivedAt=Number.isFinite(rawReceived)&&rawReceived>0
+        ? (rawReceived>1e12?rawReceived:rawReceived*1000)
+        : Date.parse(String(snapshot.receivedAt??''));
+      if(!Number.isFinite(receivedAt))receivedAt=0;
+      const quoteState=!Number.isFinite(ltp)?'WAITING':!receivedAt||Date.now()-receivedAt>15_000?'STALE':'LIVE';
+      quoteLine.textContent=`Active LTP  ${Number.isFinite(ltp)?ltp.toLocaleString('en-IN',{maximumFractionDigits:2}):'—'}  ·  ${quoteState}`;
+      quoteLine.style.color=quoteState==='LIVE'?'#4ade80':quoteState==='STALE'?'#fbbf24':'var(--vela-fg-muted)';
+
+      const perf=(window as Window & {__TCO_PERF__?:{cells?:Array<{symbol?:string;timeframe?:string;backend?:string;fps?:number;p95FrameMs?:number}>}}).__TCO_PERF__;
+      const cell=perf?.cells?.find(item=>String(item.symbol||'').toUpperCase()===symbol.toUpperCase()&&String(item.timeframe||'')===String(ctx.timeframe||''));
+      rendererLine.textContent=`Renderer  ${cell?.backend||'Vela'}`;
+      performanceLine.textContent=cell
+        ? `FPS  ${Number.isFinite(Number(cell.fps))?Number(cell.fps).toFixed(1):'—'}  ·  P95 frame  ${Number.isFinite(Number(cell.p95FrameMs))?Number(cell.p95FrameMs).toFixed(1)+' ms':'—'}`
+        : 'Renderer metrics are warming up…';
+      summary.textContent=`Vela terminal · ${symbol} · ${ctx.timeframe}`;
+    };
+
+    const tools= document.createElement('div');
+    tools.style.cssText='display:flex;flex-direction:column;gap:5px;margin-top:8px;';
+    const replayButton=document.createElement('button');
+    replayButton.type='button'; replayButton.textContent='Open chart replay controls';
+    replayButton.className='tco-frame-button';
+    replayButton.setAttribute('aria-label','Open Vela chart replay controls');
+    replayButton.addEventListener('click',()=>ctx.togglePanel('tco.replay'));
+    const healthButton=document.createElement('button');
+    healthButton.type='button'; healthButton.textContent='Open market health & performance';
+    healthButton.className='tco-frame-button';
+    healthButton.setAttribute('aria-label','Open market health and renderer performance');
+    healthButton.addEventListener('click',()=>ctx.togglePanel('tco.market-health'));
+    tools.append(replayButton,healthButton);
+    root.appendChild(tools);
+
+    refreshContext();
+    const contextTimer=window.setInterval(refreshContext,1000);
+    return {
+      onOpen:refreshContext,
+      onChart:refreshContext,
+      destroy:()=>window.clearInterval(contextTimer),
+    };
   },
 };
 
