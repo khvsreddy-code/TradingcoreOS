@@ -8,6 +8,7 @@ const fibonacci = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings
 const patterns = fs.readFileSync(path.join(root, 'vendor/vela/src/core/drawings/advancedRegistryPatterns.ts'), 'utf8');
 const controller = fs.readFileSync(path.join(root, 'vendor/vela/src/renderers/native/drawings/UserDrawingController.ts'), 'utf8');
 const toolbar = fs.readFileSync(path.join(root, 'vendor/vela/src/renderers/native/drawings/DrawingToolbar.ts'), 'utf8');
+const nativeKernel = fs.readFileSync(path.join(root, 'src/services/core/chart/velaNativeChartKernel.ts'), 'utf8');
 
 const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 
@@ -29,5 +30,7 @@ assert(toolbar.includes('Could not load drawing tools.'),'drawing-family downloa
 assert(controller.includes('this.customToolbar = !isCanonicalToolbarDefinition(def);'),'canonical and custom toolbars must be classified separately');
 assert(controller.includes('this.toolbar.setDefinition(def);'),'the resolved toolbar definition must still be applied');
 assert(toolbar.includes('this.hydrateLoadedTools();'),'downloaded family metadata must hydrate only after it becomes available');
+assert(!nativeKernel.includes('loadAdvancedDrawingCatalog'),'restoring saved drawings must not load every advanced family');
+assert(nativeKernel.includes('loadDrawingFamiliesForTypes(initial.map((drawing) => drawing.type))'),'saved drawings should load only the families actually referenced by the saved document');
 
 console.log('VELA_DRAWING_CAPABILITY_SPLIT_OK');
