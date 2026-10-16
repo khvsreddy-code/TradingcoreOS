@@ -542,7 +542,8 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
 
     const compileSource = async (shouldRun: boolean) => {
       const currentSource = source.trim();
-      if (!editorModel) { status.textContent = 'CoreSpirit editor is still loading. Retry if this message persists.'; status.style.color = '#fca5a5'; return; }
+      const activeEditorModel = editorModel;
+      if (!activeEditorModel) { status.textContent = 'CoreSpirit editor is still loading. Retry if this message persists.'; status.style.color = '#fca5a5'; return; }
       if (!currentSource) { status.textContent = 'Enter a CoreScript indicator first.'; status.style.color = '#fca5a5'; return; }
       const generation = ++compileGeneration;
       compile.disabled = run.disabled = true;
@@ -555,7 +556,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
         if (disposed || generation !== compileGeneration) return;
         const result = await compileCoreSpiritSourceOffThread(currentSource, generation, 'tco-live-studio', { layer: 'chart' });
         if (generation !== compileGeneration) return;
-        editorModel.applyWorkerCompileResult(result, currentSource);
+        activeEditorModel.applyWorkerCompileResult(result, currentSource);
         monacoAdapter?.setDiagnostics(result.diagnostics, currentSource);
         monacoAdapter?.setSymbolInfo(result.symbols);
         const errors = result.diagnostics.filter(d => d.severity === 'error');
