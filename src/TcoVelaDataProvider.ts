@@ -482,8 +482,12 @@ export class TcoVelaDataProvider implements DataProvider {
       scheduled = false;
       if (cancelled || !dirty || !plane) return;
       dirty = false;
+      const normalizationStartedAt = performanceNow();
       const view = marketLatencyTrace.measure(timelineKey, pendingSequence, 'canonical', () => plane!.readCanonical());
-      if (!view.length) return;
+      if (!view.length) {
+        chartPerformanceTelemetry.recordStage(performanceKey, 'normalization', Math.max(0, performanceNow() - normalizationStartedAt));
+        return;
+      }
       const i = view.length - 1;
       const time = view.time[i]!;
       const open = view.open[i]!, high = view.high[i]!, low = view.low[i]!, close = view.close[i]!;
@@ -491,6 +495,11 @@ export class TcoVelaDataProvider implements DataProvider {
       const sequence = plane.canonicalDataPlane().revision;
       const nextKey = `${time}|${open}|${high}|${low}|${close}|${volume ?? ''}`;
       const patchStartedAt = performanceNow();
+      chartPerformanceTelemetry.recordStage(
+        performanceKey,
+        'normalization',
+        Math.max(0, patchStartedAt - normalizationStartedAt),
+      );
       const lastPacketAt = chartPerformanceTelemetry.getLastPacketAt(performanceKey);
 
       if (pendingHistoryReplacement) {
@@ -510,7 +519,7 @@ export class TcoVelaDataProvider implements DataProvider {
           length: view.length,
           timeUnit: 'seconds',
         });
-        onBar({
+        const replacement: ColumnarBarUpdate = {
           time, open, high, low, close, volume,
           timeUnit: 'seconds',
           sequence,
@@ -519,15 +528,21 @@ export class TcoVelaDataProvider implements DataProvider {
           columns,
           dirtyRange: { from: view.dirtyFrom, to: view.dirtyTo },
           preserveView: true,
-        });
-        recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
+        };
+        const dispatchStartedAt = performanceNow();
+        chartPerformanceTelemetry.recordStage(performanceKey, 'patch', Math.max(0, dispatchStartedAt - patchStartedAt));
+        onBar(replacement);
+        recordVelaRenderUpdate(performanceKey, dispatchStartedAt, lastPacketAt, Math.max(0, performanceNow() - dispatchStartedAt));
         return;
       }
 
       if (nextKey === fingerprint) return;
       fingerprint = nextKey;
-      onBar({ time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey });
-      recordVelaRenderUpdate(performanceKey, patchStartedAt, lastPacketAt, Math.max(0, performanceNow() - patchStartedAt));
+      const update: ColumnarBarUpdate = { time, open, high, low, close, volume, timeUnit: 'seconds', sequence, timelineKey };
+      const dispatchStartedAt = performanceNow();
+      chartPerformanceTelemetry.recordStage(performanceKey, 'patch', Math.max(0, dispatchStartedAt - patchStartedAt));
+      onBar(update);
+      recordVelaRenderUpdate(performanceKey, dispatchStartedAt, lastPacketAt, Math.max(0, performanceNow() - dispatchStartedAt));
     };
 
     const schedule = () => {
