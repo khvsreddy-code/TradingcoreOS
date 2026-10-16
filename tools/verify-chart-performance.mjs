@@ -14,6 +14,9 @@ const maxTickToPatchP95Ms = Number(process.env.TCO_MAX_TICK_TO_PATCH_P95_MS || 2
 const maxTickToRenderP95Ms = Number(process.env.TCO_MAX_TICK_TO_RENDER_P95_MS || 25);
 const maxMarketUpdateAgeMs = Number(process.env.TCO_MAX_MARKET_UPDATE_AGE_MS || 2000);
 const maxTelemetryAgeMs = Math.max(1000, Number(process.env.TCO_MAX_TELEMETRY_AGE_MS || 15000));
+const maxLongTaskP95Ms = Number(process.env.TCO_MAX_LONG_TASK_P95_MS || 50);
+const requireHeapMetrics = process.env.TCO_REQUIRE_HEAP_METRICS === 'true';
+const failOnWebglContextLoss = process.env.TCO_FAIL_ON_WEBGL_CONTEXT_LOSS !== 'false';
 const requireSharedMemory = process.env.TCO_REQUIRE_SHARED_MEMORY !== 'false';
 const requiredPipelineFields = ['marketUpdatesPerSec','lastMarketUpdateAgeMs','computeUpdatesPerSec','renderUpdatesPerSec','tickToComputeP95Ms','tickToPatchP95Ms','tickToRenderP95Ms','reactCommitCountDuringTicks','fullSeriesRewriteCount','formingBarReplaceLastCount','indicatorIncrementalUpdateCount','initialHistoryLoadMs','initialHistoryCandles','historyPrependOps','olderHistoryLoadMs','olderHistoryCandles'];
 
@@ -59,6 +62,38 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
   const telemetryAgeMs = Date.now() - capturedAtMs;
   if (telemetryAgeMs < -5000 || telemetryAgeMs > maxTelemetryAgeMs) {
     throw new Error(`Browser verification: telemetry is stale or clock-skewed (${telemetryAgeMs.toFixed(0)}ms old; allowed 0-${maxTelemetryAgeMs}ms) for ${url}; cached samples cannot count as live-load evidence.`);
+  }
+  const runtime = perf.runtime;
+  if (!runtime?.longTasks || !runtime?.memory || !runtime?.webgl) {
+    throw new Error(`Browser verification: runtime health telemetry (long tasks, heap, WebGL context) missing for ${url}`);
+  }
+  for (const field of ['count', 'totalMs', 'worstMs', 'recentP95Ms']) {
+    if (!Number.isFinite(Number(runtime.longTasks[field]))) {
+      throw new Error(`Browser verification: invalid runtime long-task metric ${field} for ${url}`);
+    }
+  }
+  if (!Number.isFinite(Number(runtime.webgl.contextLossCount)) ||
+      !Number.isFinite(Number(runtime.webgl.contextRestoreCount))) {
+    throw new Error(`Browser verification: invalid WebGL context-loss telemetry for ${url}`);
+  }
+  if (failOnWebglContextLoss && Number(runtime.webgl.contextLossCount) > 0) {
+    throw new Error(`Browser verification: ${runtime.webgl.contextLossCount} WebGL context-loss event(s) detected for ${url}`);
+  }
+  if (requireHeapMetrics && !runtime.memory.available) {
+    throw new Error(`Browser verification: JavaScript heap metrics unavailable for ${url}; run Chromium with performance.memory enabled.`);
+  }
+  if (runtime.memory.available) {
+    if (!Number.isFinite(Number(runtime.memory.usedBytes)) ||
+        !Number.isFinite(Number(runtime.memory.sampleCount))) {
+      throw new Error(`Browser verification: invalid JavaScript heap sample for ${url}`);
+    }
+    if (Number(runtime.memory.sampleCount) > 1 &&
+        !Number.isFinite(Number(runtime.memory.windowDeltaBytes))) {
+      throw new Error(`Browser verification: heap growth window is invalid for ${url}`);
+    }
+  }
+  if (Number(runtime.longTasks.recentP95Ms) > maxLongTaskP95Ms) {
+    console.warn(`Browser performance warning: recent long-task p95 ${Number(runtime.longTasks.recentP95Ms).toFixed(2)}ms exceeds ${maxLongTaskP95Ms}ms for ${url}`);
   }
   if (perf.cells.length < expectedCells) throw new Error(`Browser verification: expected at least ${expectedCells} telemetry cell(s), got ${perf.cells.length}`);
   if (perf.pipeline.length < 1) throw new Error(`Browser verification: no active Vela chart data-plane telemetry for ${url}`);
@@ -110,10 +145,18 @@ for (let caseIndex = 0; caseIndex < urls.length; caseIndex += 1) {
     maxTickToRenderP95Ms,
     maxMarketUpdateAgeMs,
     maxTelemetryAgeMs,
+    maxLongTaskP95Ms,
+    requireHeapMetrics,
+    failOnWebglContextLoss,
     telemetryAgeMs,
     requireSharedMemory,
     requireAuth,
     sharedMemory: perf.sharedMemory,
+    runtime: {
+      longTasks: runtime.longTasks,
+      memory: runtime.memory,
+      webgl: runtime.webgl,
+    },
     slowestP95,
     pipeline: perf.pipeline.map((sample) => ({
       key: sample.key,
