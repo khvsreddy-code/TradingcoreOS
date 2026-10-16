@@ -1655,7 +1655,18 @@ const tradingPanel:SidePanelDescriptor={
       rows.textContent='';
       try{
         const [funds,positions]=await Promise.all([tradingCoreRuntime.getFunds(),tradingCoreRuntime.getPositions()]);
-        summary.textContent=`${ctx.symbol} · ${positions.length} open positions`;
+        const quoteSnapshot=(tradingCoreRuntime.getMarketSnapshot(ctx.symbol)||{}) as Record<string,unknown>;
+        const rawReceived=Number(quoteSnapshot.receivedAtEpoch??quoteSnapshot.lastReceivedAt);
+        const parsedReceived=Number.isFinite(rawReceived)&&rawReceived>0
+          ? (rawReceived>1e12?rawReceived:rawReceived*1000)
+          : Date.parse(String(quoteSnapshot.receivedAt??''));
+        const receivedAt=Number.isFinite(parsedReceived)?parsedReceived:undefined;
+        const ltpValue=Number(quoteSnapshot.ltp??quoteSnapshot.lastPrice??quoteSnapshot.close);
+        const hasLtp=Number.isFinite(ltpValue);
+        const quoteStale=!receivedAt||Date.now()-receivedAt>15_000;
+        summary.textContent=`${ctx.symbol} · ${ctx.timeframe} · ${positions.length} open positions`;
+        panelValueRow(rows,'Active chart LTP',hasLtp?ltpValue.toLocaleString('en-IN',{maximumFractionDigits:2}):'Waiting for quote',!hasLtp?'#94a3b8':quoteStale?'#fbbf24':'#4ade80');
+        panelValueRow(rows,'Quote freshness',!hasLtp?'WAITING':quoteStale?'STALE':'LIVE',!hasLtp?'#94a3b8':quoteStale?'#fbbf24':'#4ade80');
         panelValueRow(rows,'Available margin',funds?Number(funds.availableMargin).toLocaleString('en-IN',{maximumFractionDigits:2}):'—');
         panelValueRow(rows,'Used margin',funds?Number(funds.usedMargin).toLocaleString('en-IN',{maximumFractionDigits:2}):'—');
         panelValueRow(rows,'Open P&L',positions.reduce((sum,p)=>sum+Number(p.pnl||0),0).toLocaleString('en-IN',{maximumFractionDigits:2}));
