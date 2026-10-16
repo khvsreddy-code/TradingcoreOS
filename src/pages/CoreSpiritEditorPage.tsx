@@ -752,17 +752,20 @@ export function CoreSpiritEditorPage({ onNavigate, onBackToLanding, onBroker }: 
                 <div><div className="text-[var(--tco-dim)]">Holdout samples</div><div className="font-semibold text-[var(--tco-text-2)]">{String((modelReleaseInfo.artifact.provenance?.validationResults as Record<string,unknown>|undefined)?.sampleCount??'—')}</div></div>
                 <div><div className="text-[var(--tco-dim)]">Compiler</div><div className="break-all font-mono text-[var(--tco-code-muted)]">{String(modelReleaseInfo.artifact.provenance?.compilerVersion??'—')}</div></div>
                 <div><div className="text-[var(--tco-dim)]">Runtime</div><div className="break-all font-mono text-[var(--tco-code-muted)]">{String(modelReleaseInfo.artifact.provenance?.runtimeVersion??'—')}</div></div>
+                <div><div className="text-[var(--tco-dim)]">Dataset source</div><div className="break-all font-mono text-[var(--tco-code-muted)]">{String(modelReleaseInfo.artifact.provenance?.datasetSource??'unknown').replace(/_/g,' ')} · {modelReleaseInfo.artifact.provenance?.datasetSourceVerified===true?'verified':'unverified'}</div></div>
               </div>
-              {(()=>{const checks=modelReleaseInfo.release?.approvalChecks||{};const validation=modelReleaseInfo.artifact?.provenance?.validationResults as Record<string,unknown>|undefined;const safety=modelReleaseInfo.artifact?.provenance?.researchSafety as Record<string,unknown>|undefined;return <div className="space-y-1 border-t border-[var(--tco-border)] pt-2">
+              {(()=>{const checks=modelReleaseInfo.release?.approvalChecks||{};const validation=modelReleaseInfo.artifact?.provenance?.validationResults as Record<string,unknown>|undefined;const safety=modelReleaseInfo.artifact?.provenance?.researchSafety as Record<string,unknown>|undefined;const provenance=modelReleaseInfo.artifact?.provenance||{};return <div className="space-y-1 border-t border-[var(--tco-border)] pt-2">
                 <div className="text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Safety evidence</div>
                 {[
                   ['Chronological holdout',validation?.protocol==='chronological-holdout-v1'&&validation?.noTimestampOverlap===true],
-                  ['Feature availability',validation?.featureAvailabilityCheckPassed===true],
+                  ['Feature availability metadata',validation?.featureAvailabilityCheckPassed===true],
+                  ['Dataset source attestation',checks.datasetSourceVerified===true&&provenance.datasetSourceVerified===true],
                   ['Label leakage guard',validation?.labelLeakageCheckPassed===true],
                   ['Causal source',safety?.causality==='causal'&&safety?.blockers instanceof Array&&safety.blockers.length===0],
                   ['Lookahead safety',safety?.lookahead==='false'&&safety?.backtestLiveEquivalent===true],
                   ['Production release checks',checks.productionEligible===true],
                 ].map(([label,pass])=><div key={String(label)} className="flex items-center justify-between gap-2 text-[9px]"><span className="text-[var(--tco-muted)]">{String(label)}</span><span className={pass===true?'text-[#34d399]':'text-[#fbbf24]'}>{pass===true?'PASS':'NOT PROVEN'}</span></div>)}
+                {provenance.datasetSource==='user_supplied'&&<div className="rounded border border-[#fbbf24]/25 bg-[#fbbf24]/5 p-2 text-[8px] leading-4 text-[#fbbf24]">This dataset was submitted as feature rows by the caller. Its hash proves the snapshot did not change; it does not prove the values came from trusted historical market data. Production approval stays blocked until a server-verified broker-history or trusted feature-pipeline attestation is available.</div>}
                 {safety?.warnings instanceof Array&&safety.warnings.length>0&&<div className="pt-1 text-[8px] leading-4 text-[#fbbf24]">{safety.warnings.slice(0,3).map(String).join(' ')}</div>}
                 {modelReleaseInfo.release?.decisionReason&&<div className="pt-1 text-[8px] leading-4 text-[var(--tco-dim)]">Last decision: {modelReleaseInfo.release.decisionReason}</div>}
               </div>})()}
