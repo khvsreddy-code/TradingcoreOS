@@ -36,6 +36,13 @@ const ALLOWED_EVENT_TYPES = new Set([
   'BUY_CE','BUY_PE','SELL_CE','SELL_PE',
 ]);
 const SYMBOL_PATTERN = /^[A-Z0-9_-]{2,16}:[A-Z0-9&_.-]{1,80}$/;
+const EXTERNAL_ORDER_FIELDS = new Set([
+  'symbol','quantity','side','orderType','product','price','triggerPrice',
+  'stopLoss','takeProfit','trailingStopLoss','validity','offlineOrder',
+]);
+const OPTIONAL_POSITIVE_ORDER_FIELDS = [
+  'price','triggerPrice','stopLoss','takeProfit','trailingStopLoss',
+] as const;
 
 function jsonError(res: Response, status: number, error: string, extra: Record<string, unknown> = {}) {
   return res.status(status).json({ success: false, error, ...extra });
@@ -515,21 +522,44 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
     return jsonError(res, 400, 'Idempotency-Key header must be 8–128 safe characters and is required for every order request.');
   }
   if (!isRecord(req.body) || !isRecord(req.body.order)) return jsonError(res, 400, 'Order request body must contain a typed order object.');
+  const rawOrder = req.body.order;
+  if (Object.keys(rawOrder).some(field => !EXTERNAL_ORDER_FIELDS.has(field))) {
+    return jsonError(res, 400, 'Order contains unsupported fields. Use only the documented symbol, quantity, side, order type, product, price and protective-order fields.', { orderSubmitted: false });
+  }
   try {
-    const parsed = parseBrokerOrderPayload(req.body.order);
+    const parsed = parseBrokerOrderPayload(rawOrder);
     const symbol = String(parsed.symbol).trim().toUpperCase();
     const side = String(parsed.side).trim().toUpperCase();
     const type = String(parsed.orderType).trim().toUpperCase();
     const product = String(parsed.product).trim().toUpperCase();
     const normalizedType = type === 'MARKET' ? 'Market' : type === 'LIMIT' ? 'Limit' : type;
-    orderPayload = {
-      ...parsed,
+    const normalized: Record<string, unknown> = {
       symbol,
       side: side === 'BUY' ? 'Buy' : 'Sell',
-      orderType: normalizedType as BrokerOrderPayload['orderType'],
-      product: product as BrokerOrderPayload['product'],
+      orderType: normalizedType,
+      product,
       quantity: Number(parsed.quantity),
     };
+    for (const field of OPTIONAL_POSITIVE_ORDER_FIELDS) {
+      const rawValue = rawOrder[field];
+      if (rawValue === undefined) continue;
+      const value = typeof rawValue === 'number' || (typeof rawValue === 'string' && rawValue.trim() !== '')
+        ? Number(rawValue)
+        : Number.NaN;
+      if (!Number.isFinite(value) || value <= 0) throw new Error(`${field} must be a positive number when provided.`);
+      normalized[field] = value;
+    }
+    if (rawOrder.validity !== undefined) {
+      if (typeof rawOrder.validity !== 'string') throw new Error('validity must be DAY or IOC.');
+      const validity = rawOrder.validity.trim().toUpperCase();
+      if (validity !== 'DAY' && validity !== 'IOC') throw new Error('validity must be DAY or IOC.');
+      normalized.validity = validity;
+    }
+    if (rawOrder.offlineOrder !== undefined && typeof rawOrder.offlineOrder !== 'boolean') {
+      throw new Error('offlineOrder must be a boolean.');
+    }
+    if (rawOrder.offlineOrder === true) throw new Error('After-market orders are disabled for external automation.');
+    orderPayload = normalized as BrokerOrderPayload;
     if (!integration.allowedSymbols.includes(symbol)) {
       return jsonError(res, 403, 'Order symbol is outside the integration allowlist.', { orderSubmitted: false });
     }
