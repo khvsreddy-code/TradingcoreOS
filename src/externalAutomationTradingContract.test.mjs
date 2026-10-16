@@ -34,6 +34,8 @@ assert.match(migration, /unique \(integration_id, event_id\)/);
 assert.match(migration, /for update;/i);
 assert.match(migration, /claim_automation_order_request/);
 assert.ok(migration.includes("p_request_hash !~ '^[a-f0-9]{64}$'"), 'the idempotency hash guard must be valid SQL and require a complete SHA-256 hex digest');
+assert.equal((migration.match(/create or replace function public\.claim_automation_order_request/g) ?? []).length, 1, 'the migration must define the idempotency claim function exactly once');
+assert.equal((migration.match(/grant execute on function public\.claim_automation_order_request/g) ?? []).length, 1, 'the migration must grant the claim RPC exactly once');
 assert.match(migration, /payload->>'mode' = 'LIVE'/);
 assert.match(migration, /enable row level security/i);
 assert.match(migration, /revoke all on table public\.automation_order_requests from anon, authenticated/i);
