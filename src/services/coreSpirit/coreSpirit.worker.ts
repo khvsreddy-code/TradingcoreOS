@@ -108,11 +108,12 @@ function syncObjectBars(context:WorkerContext,bars:CoreSpiritMarketBar[]):{dirty
 function replaceHMMArtifacts(context:WorkerContext, bindings:readonly CoreSpiritHMMArtifactBinding[]):void {
   const next=new Map<string,CoreSpiritGaussianHMM>();
   for(const binding of bindings){
-    const inferenceBoundary=binding?.inferenceBoundaryTimestampMs ?? binding?.trainingEndTimestampMs;
+    const inferenceBoundary=binding?.inferenceBoundaryTimestampMs;
     if(!binding || typeof binding.modelAlias!=='string' || !binding.modelAlias.trim() ||
       typeof binding.artifactHash!=='string' || !/^[a-f0-9]{64}$/.test(binding.artifactHash) ||
-      !Number.isFinite(inferenceBoundary)){
-      throw new Error('Invalid CoreSpirit HMM artifact binding or inference boundary');
+      !Number.isFinite(inferenceBoundary) ||
+      (Number.isFinite(binding.trainingEndTimestampMs) && inferenceBoundary! <= binding.trainingEndTimestampMs!)){
+      throw new Error('Invalid CoreSpirit HMM artifact binding or post-validation inference boundary');
     }
     if(next.has(binding.modelAlias))throw new Error('Duplicate CoreSpirit HMM artifact alias: '+binding.modelAlias);
     const model=CoreSpiritGaussianHMM.fromTrainedState(binding.state);
