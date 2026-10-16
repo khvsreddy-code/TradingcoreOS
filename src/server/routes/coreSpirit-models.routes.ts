@@ -23,6 +23,7 @@ import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../se
 import { AuthenticatedRequest, requireUser } from '../auth/requireUser.js';
 import { enqueueBackgroundJob } from '../jobs/queue.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
+import { AuditLogRepository } from '../storage/AuditLogRepository.js';
 
 export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
@@ -417,10 +418,124 @@ coreSpiritModelRoutes.get('/models/:hash', async (req: AuthenticatedRequest, res
     const artifact = await repository.getByHash(hash);
     if (!artifact) return fail(res, 404, 'Model artifact not found.');
     if (artifact.hash.toLowerCase() !== hash || !(await verifyModelArtifactIntegrity(artifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    const release = await repository.ensureModelReleaseControl(hash);
     res.setHeader('Cache-Control', 'private, no-store');
-    res.json({ success: true, data: { artifact } });
+    res.json({
+      success: true,
+      data: {
+        artifact,
+        release: {
+          status: release.status,
+          validationReport: release.validationReport,
+          approvalChecks: release.approvalChecks,
+          decisionReason: release.decisionReason,
+          approvedAt: release.approvedAt,
+        },
+      },
+    });
   } catch (error) {
     fail(res, 503, error instanceof Error ? error.message : 'Unable to load model artifact.');
+  }
+});
+
+coreSpiritModelRoutes.post('/models/:hash/approval', async (req: AuthenticatedRequest, res: Response) => {
+  const hash = String(req.params.hash ?? '').toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(hash)) return fail(res, 400, 'Model hash must be a SHA-256 hex digest.');
+  const action = String(req.body?.action ?? '').trim().toLowerCase();
+  if (!['approve','revoke','retire'].includes(action)) return fail(res, 400, 'action must be approve, revoke, or retire.');
+  if (req.body?.confirm !== true) return fail(res, 400, 'Explicit confirmation is required for model release decisions.');
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (reason.length < 8 || reason.length > 1000) return fail(res, 400, 'Provide an 8–1000 character reason for this model release decision.');
+
+  try {
+    const repository = new CoreSpiritArtifactRepository(req.tradingCoreUserId!);
+    const artifact = await repository.getByHash(hash);
+    if (!artifact) return fail(res, 404, 'Model artifact not found.');
+    if (artifact.hash.toLowerCase() !== hash || !(await verifyModelArtifactIntegrity(artifact))) {
+      return fail(res, 409, 'Model artifact integrity check failed.');
+    }
+    const currentRelease = await repository.ensureModelReleaseControl(hash);
+    const provenance = artifact.provenance;
+    const validation = provenance.validationResults;
+    const safety = provenance.researchSafety;
+    const parseBoundary = (value: string): number => {
+      const dateOnly = /^\\d{4}-\\d{2}-\\d{2}$/.test(value);
+      return Date.parse(value) + (dateOnly ? 86_399_999 : 0);
+    };
+    const trainingEnd = parseBoundary(provenance.trainingRange.to);
+    const validationStart = Date.parse(provenance.validationRange.from);
+    const validationEnd = parseBoundary(provenance.validationRange.to);
+    const approvalChecks: Record<string, unknown> = {
+      productionEligible: false,
+      artifactIntegrityVerified: true,
+      hasChronologicalHoldout: validation.protocol === 'chronological-holdout-v1' &&
+        validation.sampleCount >= MIN_RESEARCH_VALIDATION_ROWS && validation.trainingSampleCount >= 12,
+      temporalRangesDisjoint: Number.isFinite(trainingEnd) && Number.isFinite(validationStart) &&
+        Number.isFinite(validationEnd) && trainingEnd < validationStart && validationStart <= validationEnd,
+      forwardOnly: validation.forwardOnly === true,
+      noTimestampOverlap: validation.noTimestampOverlap === true,
+      featureSchemaMatched: validation.featureSchemaMatched === true,
+      labelLeakageCheckPassed: validation.labelLeakageCheckPassed === true,
+      featureAvailabilityCheckPassed: validation.featureAvailabilityCheckPassed === true,
+      datasetHashVerified: validation.datasetHashVerified === true,
+      sourceCausalityPassed: validation.sourceCausalityPassed === true,
+      lookaheadCheckPassed: validation.lookaheadCheckPassed === true,
+      staticSafetyEligible: safety.approvalEligible === true &&
+        safety.causality === 'causal' && safety.lookahead === 'false' &&
+        safety.realtimeSafe === true && safety.backtestLiveEquivalent === true &&
+        safety.blockers.length === 0,
+    };
+    const checkNames = [
+      'hasChronologicalHoldout','temporalRangesDisjoint','forwardOnly','noTimestampOverlap',
+      'featureSchemaMatched','labelLeakageCheckPassed','featureAvailabilityCheckPassed',
+      'datasetHashVerified','sourceCausalityPassed','lookaheadCheckPassed','staticSafetyEligible',
+    ];
+    const productionEligible = checkNames.every(key => approvalChecks[key] === true);
+    approvalChecks.productionEligible = productionEligible;
+    const validationReport: Record<string, unknown> = {
+      artifactHash: artifact.hash,
+      runtimeVersion: provenance.runtimeVersion,
+      trainingRange: provenance.trainingRange,
+      validationRange: provenance.validationRange,
+      validationResults: validation,
+      researchSafety: safety,
+    };
+
+    if (action === 'approve' && !productionEligible) {
+      res.status(422).json({
+        success: false,
+        error: 'Model is not eligible for production inference. Resolve the failed validation or causality checks, retrain a versioned artifact, and review again.',
+        releaseStatus: currentRelease.status,
+        approvalChecks,
+        validationReport,
+      });
+      return;
+    }
+    const targetStatus = action === 'approve' ? 'approved' : action === 'revoke' ? 'revoked' : 'retired';
+    if (action === 'revoke' && currentRelease.status !== 'approved') {
+      return fail(res, 409, 'Only an approved model can have its production approval revoked.');
+    }
+    const release = await repository.transitionModelRelease({
+      artifactHash: hash,
+      status: targetStatus,
+      actorUserId: req.tradingCoreUserId!,
+      reason,
+      approvalChecks,
+      validationReport,
+    });
+    await AuditLogRepository.append({
+      userId: req.tradingCoreUserId!,
+      actorType: 'user',
+      eventType: 'corespirit.model.release.' + action,
+      correlationId: hash,
+      payload: { modelHash: hash, previousStatus: currentRelease.status, status: release.status, reason, approvalChecks },
+    }).catch(() => undefined);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ success: true, data: { modelHash: hash, release } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to update model release status.';
+    const status = /not found/i.test(message) ? 404 : /only candidate|only an approved|failed the server-side/i.test(message) ? 409 : 503;
+    fail(res, status, message);
   }
 });
 
