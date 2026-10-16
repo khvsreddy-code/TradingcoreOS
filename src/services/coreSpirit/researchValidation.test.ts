@@ -33,7 +33,7 @@ const rows: ResearchFeatureRow[] = Array.from({ length: 80 }, (_, index) => {
 
 const confirmed = validateConfirmedResearchRows(rows, featureNames);
 assert(confirmed.length === rows.length, 'confirmed historical rows must pass validation');
-assert(confirmed.every(row => row.values !== rows[0]!.values), 'feature vectors must be copied across the validation boundary');
+assert(confirmed.every((row, index) => row.values !== rows[index]!.values), 'feature vectors must be copied across the validation boundary');
 
 rejects(() => validateConfirmedResearchRows(
   rows.map((row, index) => index === 5 ? { ...row, confirmed: false } : row),
