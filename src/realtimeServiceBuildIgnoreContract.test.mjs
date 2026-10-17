@@ -80,54 +80,54 @@ try {
       'realtime:gateway': 'tsx realtime-gateway/server.ts',
       'test:contracts': 'node tools/run-contracts.mjs',
     },
-  }, null, 2) + '\\n');
-  write('realtime-gateway/server.ts', 'export const gatewayRevision = 1;\\n');
-  write('src/server/marketData/FyersMarketDataTransport.ts', 'export const transportRevision = 1;\\n');
-  write('src/server/routes/trading.routes.ts', 'export const routeRevision = 1;\\n');
-  write('src/server/trading/fyersOrderExecution.ts', 'export const orderExecutionRevision = 1;\\n');
-  write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 1;\\n');
-  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container', ignoreCommand: 'node tools/ignore-realtime-build.mjs' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web' } }] }, null, 2) + '\\n');
+  }, null, 2) + '\n');
+  write('realtime-gateway/server.ts', 'export const gatewayRevision = 1;\n');
+  write('src/server/marketData/FyersMarketDataTransport.ts', 'export const transportRevision = 1;\n');
+  write('src/server/routes/trading.routes.ts', 'export const routeRevision = 1;\n');
+  write('src/server/trading/fyersOrderExecution.ts', 'export const orderExecutionRevision = 1;\n');
+  write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 1;\n');
+  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container', ignoreCommand: 'node tools/ignore-realtime-build.mjs' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web' } }] }, null, 2) + '\n');
   const base = commit('base');
 
-  write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 2;\\n');
+  write('src/TcoVelaDataProvider.ts', 'export const providerRevision = 2;\n');
   const frontendOnly = commit('frontend only');
   assert.equal(runIgnore(base, frontendOnly).status, 0, 'unrelated frontend change must skip the realtime image');
 
   const packageScripts = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
   packageScripts.scripts['test:contracts'] = 'node tools/run-contracts-v2.mjs';
-  write('package.json', JSON.stringify(packageScripts, null, 2) + '\\n');
+  write('package.json', JSON.stringify(packageScripts, null, 2) + '\n');
   const toolingOnly = commit('frontend test script only');
   assert.equal(runIgnore(frontendOnly, toolingOnly).status, 0, 'frontend/test script changes in package.json must not rebuild the gateway');
 
   packageScripts.dependencies.ws = '8.19.0';
-  write('package.json', JSON.stringify(packageScripts, null, 2) + '\\n');
+  write('package.json', JSON.stringify(packageScripts, null, 2) + '\n');
   const packageRuntimeChange = commit('gateway runtime dependency');
   assert.equal(runIgnore(toolingOnly, packageRuntimeChange).status, 1, 'gateway dependency changes in package.json must rebuild the image');
 
   packageScripts.dependencies.ws = '8.18.0';
-  write('package.json', JSON.stringify(packageScripts, null, 2) + '\\n');
+  write('package.json', JSON.stringify(packageScripts, null, 2) + '\n');
   const packageRestored = commit('restore gateway dependency');
   assert.equal(runIgnore(packageRuntimeChange, packageRestored).status, 1, 'reverting a gateway dependency change must also rebuild');
 
   const policyConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8'));
   policyConfig.services.realtimegateway.ignoreCommand = 'node tools/ignore-realtime-build-v2.mjs';
-  write('vercel.json', JSON.stringify(policyConfig, null, 2) + '\\n');
+  write('vercel.json', JSON.stringify(policyConfig, null, 2) + '\n');
   const skipPolicyOnly = commit('change build skip policy');
   assert.equal(runIgnore(packageRestored, skipPolicyOnly).status, 0, 'changing only ignoreCommand must not force a container image rebuild');
 
-  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container', ignoreCommand: 'node tools/ignore-realtime-build-v2.mjs' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web', path: '/index.html' } }] }, null, 2) + '\\n');
+  write('vercel.json', JSON.stringify({ services: { web: { framework: 'vite' }, realtimegateway: { root: '.', entrypoint: 'Dockerfile', runtime: 'container', ignoreCommand: 'node tools/ignore-realtime-build-v2.mjs' } }, rewrites: [{ source: '/(.*)', destination: { service: 'web', path: '/index.html' } }] }, null, 2) + '\n');
   const spaRoutingOnly = commit('SPA route only');
   assert.equal(runIgnore(skipPolicyOnly, spaRoutingOnly).status, 0, 'SPA routing-only config change must skip the realtime image');
 
-  write('src/server/routes/trading.routes.ts', 'export const routeRevision = 2;\\n');
+  write('src/server/routes/trading.routes.ts', 'export const routeRevision = 2;\n');
   const httpRouteOnly = commit('HTTP route only');
   assert.equal(runIgnore(spaRoutingOnly, httpRouteOnly).status, 0, 'unrelated HTTP route change must skip the realtime image');
 
-  write('src/server/trading/fyersOrderExecution.ts', 'export const orderExecutionRevision = 2;\\n');
+  write('src/server/trading/fyersOrderExecution.ts', 'export const orderExecutionRevision = 2;\n');
   const unrelatedServerChange = commit('unrelated HTTP order execution');
   assert.equal(runIgnore(httpRouteOnly, unrelatedServerChange).status, 0, 'unrelated server order execution edits must not rebuild the gateway');
 
-  write('src/server/marketData/FyersMarketDataTransport.ts', 'export const transportRevision = 2;\\n');
+  write('src/server/marketData/FyersMarketDataTransport.ts', 'export const transportRevision = 2;\n');
   const runtimeChange = commit('realtime transport');
   const rebuilt = runIgnore(unrelatedServerChange, runtimeChange);
   assert.equal(rebuilt.status, 1, 'realtime dependency change must allow a new image build');
