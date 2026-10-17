@@ -93,4 +93,20 @@ assert.match(docs, /validationRange/);
 assert.match(docs, /Chronological holdout/);
 assert.match(docs, /production approval/i);
 assert.match(docs, /availableAt/);
+assert.match(worker, /initializer: 'deterministic-quantile-v1'/);
+assert.match(worker, /seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic'/);
+assert.match(worker, /const validationModel = CoreSpiritGaussianHMM.fromTrainedState(hmmState)/,
+  'holdout evaluation must use a frozen copy of the trained model');
+assert.match(worker, /validationModel.setInferenceBoundaryExclusive(trainingEndTimestamp)/,
+  'holdout inference must be forward-only and exclusive of the training range');
+assert.match(worker, /validation.featureAvailabilityCheckPassed/);
+assert.match(worker, /validation.lookaheadCheckPassed/);
+const replayWorker = read('./services/coreSpirit/coreSpiritReplay.worker.ts');
+assert.match(replayWorker, /executionMode:'replay'/);
+assert.match(replayWorker, /suppressExternalEffects:true/);
+assert.match(replayWorker, /executeIrReadOnly/);
+assert.match(replayWorker, /outputChecksum:coreSpiritChecksum(outputs)/);
+assert.match(docs, /It is not a tunable seed for this HMM backend/);
+assert.match(docs, /Posterior confidence is **not** a measure of trading accuracy/);
+assert.match(docs, /out-of-sample trade outcomes/);
 console.log('CORESPIRIT_MODEL_PROVENANCE_AND_RELEASE_OK');
