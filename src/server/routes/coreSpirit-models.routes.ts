@@ -307,18 +307,22 @@ coreSpiritModelRoutes.post('/training-runs', async (req: AuthenticatedRequest, r
   if (rawParameters !== undefined && (!rawParameters || typeof rawParameters !== 'object' || Array.isArray(rawParameters))) {
     return fail(res, 400, 'trainingParameters must be an object.');
   }
-  const trainingParameters = {
+  const trainingParameters: Record<string, string | number | boolean | null> = {
     ...((rawParameters ?? {}) as Record<string, string | number | boolean | null>),
     validationFraction,
   };
-  if (trainingParameters.fitIterations !== undefined &&
-      (typeof trainingParameters.fitIterations !== 'number' || !Number.isInteger(trainingParameters.fitIterations) ||
-       trainingParameters.fitIterations < 1 || trainingParameters.fitIterations > 6)) {
+  // Read optional backend parameters from the scalar map explicitly so TypeScript
+  // checks the runtime guards rather than inferring an object with only one key.
+  const fitIterations = trainingParameters['fitIterations'];
+  if (fitIterations !== undefined &&
+      (typeof fitIterations !== 'number' || !Number.isInteger(fitIterations) ||
+       fitIterations < 1 || fitIterations > 6)) {
     return fail(res, 400, 'fitIterations must be an integer from 1 to 6.');
   }
-  if (trainingParameters.fitEvery !== undefined &&
-      (typeof trainingParameters.fitEvery !== 'number' || !Number.isInteger(trainingParameters.fitEvery) ||
-       trainingParameters.fitEvery < 1 || trainingParameters.fitEvery > 64)) {
+  const fitEvery = trainingParameters['fitEvery'];
+  if (fitEvery !== undefined &&
+      (typeof fitEvery !== 'number' || !Number.isInteger(fitEvery) ||
+       fitEvery < 1 || fitEvery > 64)) {
     return fail(res, 400, 'fitEvery must be an integer from 1 to 64.');
   }
   for (const [key, value] of Object.entries(trainingParameters)) {
