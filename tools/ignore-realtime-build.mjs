@@ -55,7 +55,55 @@ export function shouldBuildRealtime(changedPaths) {
   return changedPaths.some(isRealtimeRuntimePath);
 }
 
+function commitObjectExists(sha) {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Vercel often checks out a shallow Git history. A missing previous commit is
+ * not evidence that runtime files changed: try fetching that exact reachable
+ * commit from the configured remote before falling back to a safe rebuild.
+ */
+function ensureCommitObjectAvailable(sha) {
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return false;
+  if (commitObjectExists(sha)) return true;
+
+  let remotes = [];
+  try {
+    remotes = execFileSync('git', ['remote'], { encoding: 'utf8' })
+      .split(/\r?\n/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+  } catch {
+    return false;
+  }
+  const remote = remotes.includes('origin') ? 'origin' : remotes[0];
+  if (!remote) return false;
+
+  try {
+    execFileSync('git', ['fetch', '--no-tags', '--depth=1', remote, sha], {
+      stdio: 'ignore',
+      timeout: 20_000,
+    });
+  } catch (error) {
+    console.warn(
+      `[realtime-ignore] Could not fetch comparison commit ${sha.slice(0, 12)}; rebuilding safely.`,
+      error instanceof Error ? error.message : '',
+    );
+    return false;
+  }
+  return commitObjectExists(sha);
+}
+
 export function readChangedPaths(previousSha, currentSha) {
+  if (!ensureCommitObjectAvailable(previousSha) || !ensureCommitObjectAvailable(currentSha)) {
+    throw new Error('Could not load both commits needed to prove the realtime runtime diff.');
+  }
   return execFileSync('git', [
     'diff', '--name-only', '--no-renames', previousSha, currentSha, '--',
   ], { encoding: 'utf8' })
@@ -116,10 +164,9 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   }
 
   try {
-    // Ensure both commits exist locally before trusting a path-only diff. A supplied
-    // previous SHA that is absent from the shallow checkout still fails open.
-    execFileSync('git', ['cat-file', '-e', `${previousSha}^{commit}`], { stdio: 'ignore' });
-    execFileSync('git', ['cat-file', '-e', `${currentSha}^{commit}`], { stdio: 'ignore' });
+    // Fetch missing commits from the configured Git remote when Vercel's checkout
+    // is shallow. If either commit still cannot be proved, the outer catch safely
+    // forces a rebuild rather than accidentally reusing a stale gateway image.
     const changed = readChangedPaths(previousSha, currentSha);
     const relevant = changed.filter(isRealtimeRuntimePath);
 
