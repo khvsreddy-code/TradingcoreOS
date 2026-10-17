@@ -51,7 +51,7 @@ const RUNTIME_PREFIXES = [
   // stream/state pipeline from these two narrowly scoped directories.
   'src/server/fyers/core/',
   'src/server/fyers/trading/',
-]);
+];
 
 const REALTIME_PACKAGE_SCRIPT_KEYS = [
   'preinstall',
