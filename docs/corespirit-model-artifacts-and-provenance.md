@@ -116,6 +116,14 @@ The production inference cutoff is the validation end, not merely the training e
 
 CoreSpirit also analyzes source expressions for future/negative-index access, future-dependent calls, unqualified or dynamically aligned requests, developing higher-timeframe values and repaint/realtime-safety hazards. Unknown safety is not treated as proof of safety. Research artifacts can be inspected, but an unknown/unsafe source cannot pass production approval. The API prediction endpoint and the chart artifact loader both require `status: "approved"` and `approvalChecks.productionEligible: true`.
 
+## Historical replay versus captured-live parity
+
+CoreSpirit exposes a stable replay comparison contract in `src/services/coreSpirit/replayContract.ts`. Before comparing a historical/backtest run with a recorded paper/live run, capture both under the same confirmed-bar decision contract and pin the same program checksum, dataset identity, symbol, timeframe, time bounds and row count.
+
+`compareCoreSpiritExecutionParity(reference, candidate)` validates provenance alignment and compares aggregate artifact/output/state/trace checksums plus each bar's timestamp, output checksum, state checksum and trace checksum. Its report is bounded, includes the full mismatch count, and identifies the divergent bar and field so a discrepancy can be investigated rather than hidden behind a single pass/fail value. The existing deterministic-replay helper now uses this same strict comparison path.
+
+The comparison must use confirmed bars and matching feature-availability semantics; comparing a developing live candle with its later confirmed historical form is not a parity test. Replay remains read-only and suppresses external effects. Passing parity is evidence of execution consistency for that pinned run, not evidence of profitability, trusted market-data provenance, or production approval. A model release must still pass its independent causal, holdout, artifact-integrity and approval gates.
+
 ## Reproducibility and audit
 
 - Content-derived SHA-256 binds source, feature graph, dataset version, learned weights, validation report and provenance into the immutable artifact hash.
