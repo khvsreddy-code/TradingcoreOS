@@ -79,7 +79,9 @@ The artifact provenance includes:
 - Training and holdout counts, validation state coverage, and min/mean/max holdout posterior confidence.
 - Checks for chronology, availability metadata, feature schema, label leakage, dataset hash, static causality and lookahead safety.
 
-The current production training backend is Gaussian HMM. Other model families need their own registered trainer and matching inference adapter; they are not silently routed through the HMM implementation. The recorded `randomSeed` is provenance; the current built-in HMM initializer is deterministic and records that policy explicitly.
+The current production training backend is Gaussian HMM. Other model families need their own registered trainer and matching inference adapter; they are not silently routed through the HMM implementation. The recorded `randomSeed` is provenance; the current built-in HMM initializer is deterministic and records that policy explicitly. **It is not a tunable seed for this HMM backend**: changing it alone does not change the fitted model. Do not compare two artifacts as meaningfully different experiments merely because their recorded seed differs; compare the sealed weights, training parameters, feature/data hashes and validation evidence.
+
+The current holdout report measures chronological forward-only inference validity, state coverage and posterior confidence. Posterior confidence is **not** a measure of trading accuracy, calibrated probability of profit, or net strategy return. Before selecting a model for a strategy, run a separate causal strategy evaluation with explicit target/label construction, costs, slippage, order constraints and out-of-sample trade outcomes. Do not promote a model solely because its confidence is high.
 
 `GET /training-runs/:runId` reports queued/running/succeeded/failed status and, once complete, the artifact hash, ranges, validation metrics, safety report and release state.
 
