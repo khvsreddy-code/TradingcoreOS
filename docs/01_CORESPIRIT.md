@@ -522,3 +522,76 @@ Regression coverage: `velaOutputAdapterContract.test.mjs`, `velaRevisionedSceneP
 - The canonical hot path normalizes OHLCV into the retained cache with one-bar replacement/append behavior, and only snapshots a bar array across an async execution boundary. Compatibility object views must not become an independently mutable full-history store.
 - TCO's candle countdown is session-aware and uses Asia/Kolkata: it is hidden before 09:15 IST, after 15:30 IST, on weekends, for stale prior-day bars, and for daily/weekly/monthly bars. The last intraday bar is capped at the regular-session close. This is a regular-session policy, not a guarantee of exchange holiday or special-session availability.
 - CoreScript source selectors may use a recognized bare OHLCV default such as `input source = close`; other string defaults remain quoted and numeric/boolean defaults remain typed literals.
+
+
+## Canonical CoreScript language contract (P0)
+
+This section is normative for new compiler and host work. It formalizes the existing canonical pipeline; it does not define a second parser, interpreter, model language, or automation language.
+
+### Compilation and artifact identity
+
+Every executable CoreScript source must pass through the existing canonical pipeline:
+
+```text
+source + language/compiler target
+  → canonical parser / normalized AST
+  → name resolution + semantic analysis
+  → semantic dependency graph
+  → typed IR contract validation
+  → optimizer + execution plan
+  → CoreSpiritExecutionVM or a validated specialized host
+```
+
+The editor, research worker, backtest runner, and live chart runner must consume the same compiler-produced artifact for the same source and target configuration. A host may provide a specialized execution backend, but it must not reinterpret source syntax or silently substitute different language semantics.
+
+Artifact compatibility is explicit. An artifact is executable only when its declared language/compiler compatibility range and IR contract version are supported by the receiving runtime. Unknown future versions, malformed metadata, and incompatible IR versions fail closed with a structured compatibility diagnostic; they must not be guessed or silently downgraded.
+
+### Normative semantic rules
+
+- **Scope and assignment:** declarations are scoped to their containing program/function according to the canonical AST and semantic analyzer. Reassignment is legal only for a mutable binding; immutable bindings and unresolved names produce compile-time diagnostics.
+- **Scalar and series values:** scalar values represent one value for the current evaluation. `series<T>` represents values aligned to the canonical input timeline. A scalar must not be implicitly treated as a historical series, and prediction/forecast/feature/model values retain their semantic kind through analysis and IR.
+- **Historical indexing:** history offsets are non-negative integers. Offset zero means the current evaluation bar; positive offsets address earlier bars. Negative, non-integral, out-of-range, or unavailable offsets produce the language's explicit missing/error result according to the operation contract; they never read future data.
+- **Forming and confirmed bars:** a forming-bar update replaces the current bar's value and state contribution; it is not an append. Confirmed-bar values are finalized inputs. Scripts must explicitly request developing/realtime values when they intend to observe an unconfirmed bar. Backtests and live execution must agree on this distinction.
+- **Alignment:** multi-symbol and multi-timeframe inputs align by canonical timestamps and declared merge/session policy, not by array position alone. Missing aligned observations remain missing; hosts must not silently forward-fill unless the operation's documented policy requests it.
+- **Purity and state:** pure functions depend only on their arguments and declared deterministic environment. Stateful functions declare their state/revision behavior and must support deterministic replay. Side effects are host capabilities represented as validated requests/events, never hidden effects during ordinary numeric evaluation.
+- **Numeric behavior:** division by zero, non-finite values, missing values, overflow, and invalid domain inputs follow each builtin's declared contract. The compiler and backends must not rely on accidental JavaScript coercion. Backend implementations must pass numerical parity tests within the operation's documented tolerance.
+- **Capability checks:** data access, model training/inference, notifications, automation routing, and order-intent construction require explicit registered capabilities. An unavailable capability is a compile-time error when statically knowable, otherwise a structured runtime denial. CoreScript cannot access broker credentials or submit/cancel/modify orders directly; the TCO risk and execution authority remains the sole order-authorization boundary.
+- **Determinism:** given the same artifact, ordered input snapshot, declared configuration, and initial state/checkpoint, deterministic operations produce equivalent results across editor preview, backtest, replay, worker, and live hosts. Nondeterministic host services must be explicit inputs with provenance.
+- **Diagnostics:** compile-time errors include a stable code, source span when available, and actionable message. Runtime failures are structured and bounded; a host must not silently turn a failed operation into a plausible trading signal.
+
+### Research declarations and metadata
+
+Research/model declarations are semantic AST constructs, not text patterns. Model and backtest metadata extraction must consume the canonical normalized AST and semantic-analysis result. Source-line scanning, regex extraction, and route-local parsers must not independently determine the meaning of model declarations, feature lists, target expressions, or dataset expressions.
+
+The research artifact must distinguish at least:
+
+- source identity and source hash;
+- compiler and IR contract versions;
+- semantic feature-graph identity;
+- validated model, feature, and target specifications;
+- required capabilities and validation policy.
+
+The exact schema must extend the repository's existing artifact contracts rather than introduce a parallel artifact format. Hashes must be computed from canonical, deterministic representations; object key ordering or incidental editor formatting must not create inconsistent artifact identities.
+
+A **feature** is an input available to inference. A **target** is a label/objective used for training or evaluation. Declaring a target does not mean that labels have been materialized, that a training run succeeded, or that a compatible model artifact exists. Training eligibility, target availability, leakage checks, and model readiness are separate validated states. Training data and target ranges must be separated from inference-time feature resolution so future information cannot leak into live inference.
+
+### Authoring depth is presentation, not semantics
+
+Beginner, Trader, Quant, and System are IDE presentation/progressive-disclosure modes over one language. They may expose different templates and diagnostics, but they must not select different parsers, type rules, runtime meanings, or artifact formats. Any alternate surface form must normalize into the same canonical AST/IR semantics and have conformance tests before being advertised as equivalent.
+
+### Conformance and release gates
+
+The existing canonical compiler and unified-language contract suites should be extended rather than replaced. At minimum, the suite must verify:
+
+1. One source revision compiles through the canonical pipeline exactly once per compile request, and downstream research metadata is derived from that compilation result.
+2. Feature specs, target specs, model specs, and capability requirements are present in the validated artifact and traceable to source nodes/spans.
+3. Target declarations are not accepted as evidence that training labels or a trained model artifact exist.
+4. Unsupported model types and unavailable automation/data capabilities produce stable, specific diagnostics and do not emit an executable artifact.
+5. Incompatible compiler/IR versions are rejected before execution.
+6. Negative historical indexes and future-looking access are rejected or produce the documented missing/error behavior.
+7. Forming-bar replacement, confirmed-bar finalization, multi-timeframe alignment, missing values, and deterministic replay agree across supported hosts.
+8. Equivalent supported surface forms produce equivalent results from the same canonical input snapshot.
+9. Editor, research worker, and chart runner report matching source and artifact checksums for the same compilation target.
+10. A failed compile or stale asynchronous result cannot replace the last valid artifact/output.
+
+Do not add another numbered architecture generation, parallel compiler, regex-based metadata interpreter, or model-only/automation-only source language to satisfy these gates. Update the existing canonical compiler, research artifact, unified-language documentation, and their current contract tests in place. These rules describe the required behavior; a passing test run and runtime/browser evidence are still required before claiming full conformance.
