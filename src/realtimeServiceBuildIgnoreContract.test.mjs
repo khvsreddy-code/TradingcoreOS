@@ -143,8 +143,17 @@ try {
 
   assert.equal(runIgnore('', frontendOnly).status, 0, 'missing previous SHA should compare against the commit parent for frontend-only changes');
   assert.equal(runIgnore('', runtimeChange).status, 1, 'missing previous SHA must still rebuild when the commit changes realtime runtime code');
-  assert.equal(runIgnore('', frontendOnly, { VERCEL_GIT_COMMIT_SHA: '' }).status, 0, 'missing Vercel SHA variables should fall back to checked-out HEAD for frontend-only changes');
-  assert.equal(runIgnore('', runtimeChange, { VERCEL_GIT_COMMIT_SHA: '' }).status, 1, 'checked-out HEAD fallback must still rebuild for runtime changes');
+
+  // A missing VERCEL_GIT_COMMIT_SHA falls back to the actual checkout HEAD, not
+  // the supplied fixture SHA. Check out each fixture commit so this assertion
+  // tests the deployment fallback rather than accidentally testing the latest
+  // synthetic commit (which changed the service configuration above).
+  git(['checkout', '--detach', frontendOnly]);
+  assert.equal(runIgnore('', '', { VERCEL_GIT_COMMIT_SHA: '' }).status, 0,
+    'missing Vercel SHA variables should fall back to checked-out HEAD for frontend-only changes');
+  git(['checkout', '--detach', runtimeChange]);
+  assert.equal(runIgnore('', '', { VERCEL_GIT_COMMIT_SHA: '' }).status, 1,
+    'checked-out HEAD fallback must still rebuild for runtime changes');
   assert.equal(runIgnore(httpRouteOnly, runtimeChange, { TCO_REALTIME_FORCE_BUILD: '1' }).status, 1, 'explicit force flag must build');
 
   console.log('REALTIME_SERVICE_BUILD_SKIP_CONTRACT_OK');
