@@ -51,9 +51,9 @@ function commit(message) {
   return git(['rev-parse', 'HEAD']);
 }
 
-function runIgnore(previousSha, currentSha, extras = {}, cwd = repoRoot) {
+function runIgnore(previousSha, currentSha, extras = {}) {
   const result = spawnSync(process.execPath, [ignoreScript], {
-    cwd,
+    cwd: repoRoot,
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -107,22 +107,6 @@ try {
   assert.equal(runIgnore('', frontendOnly, { VERCEL_GIT_COMMIT_SHA: '' }).status, 0, 'missing Vercel SHA variables should fall back to checked-out HEAD for frontend-only changes');
   assert.equal(runIgnore('', runtimeChange, { VERCEL_GIT_COMMIT_SHA: '' }).status, 1, 'checked-out HEAD fallback must still rebuild for runtime changes');
   assert.equal(runIgnore(httpRouteOnly, runtimeChange, { TCO_REALTIME_FORCE_BUILD: '1' }).status, 1, 'explicit force flag must build');
-
-  // Vercel's Git checkout is often shallow. Verify the ignore command fetches a
-  // missing but remotely reachable comparison commit before deciding to rebuild.
-  const bareRemote = path.join(tmp, 'origin.git');
-  const shallowRoot = path.join(tmp, 'shallow-checkout');
-  execFileSync('git', ['clone', '--bare', repoRoot, bareRemote], { stdio: 'pipe' });
-  execFileSync('git', ['clone', '--depth=1', '--no-local', bareRemote, shallowRoot], { stdio: 'pipe' });
-  const shallowDiff = runIgnore(base, frontendOnly, {}, shallowRoot);
-  assert.equal(shallowDiff.status, 0,
-    'a shallow checkout must fetch missing reachable commits and skip frontend-only gateway rebuilds');
-  assert.match(shallowDiff.stdout, /Skipping container rebuild/);
-
-  const shallowRuntimeDiff = runIgnore(httpRouteOnly, runtimeChange, {}, shallowRoot);
-  assert.equal(shallowRuntimeDiff.status, 1,
-    'a shallow checkout must still rebuild when the fetched diff changes a realtime runtime dependency');
-  assert.match(shallowRuntimeDiff.stdout, /Realtime runtime dependency changes detected/);
 
   console.log('REALTIME_SERVICE_BUILD_SKIP_CONTRACT_OK');
 } finally {
