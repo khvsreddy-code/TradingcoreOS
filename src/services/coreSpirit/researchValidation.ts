@@ -64,7 +64,7 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
 /** Keep labels/targets/outcomes separate from the unsupervised HMM input vector. */
 export function assertNoKnownLabelLeakage(featureNames: readonly string[]): void {
   const forbidden = /(?:^|[^a-z0-9])(label|target|outcome|realized|future|forward|lookahead|next(?:[_-]?bar)?|lead(?:[_-]?\d+)?)(?:$|[^a-z0-9])/i;
-  const leaked = featureNames.filter(name => forbidden.test(name.trim().replace(/\s+/g, '_')));
+  // Normalize common identifier styles before checking: camelCase and PascalCase\n  // must not bypass the guard that already catches snake_case feature names.\n  const normalize = (name: string) => name.trim()\n    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')\n    .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2')\n    .replace(/[\\s-]+/g, '_');\n  const leaked = featureNames.filter(name => forbidden.test(normalize(name)));
   if (leaked.length) {
     throw new Error('Potential target/label leakage in model feature names: ' + leaked.join(', ') +
       '. Keep labels and future outcomes outside the input feature vector.');
