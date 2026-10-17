@@ -20,35 +20,81 @@ import path from 'node:path';
 
 const EXACT_RUNTIME_FILES = new Set([
   '.npmrc',
+  '.dockerignore',
   'Dockerfile',
-  'package.json',
   'package-lock.json',
   'npm-shrinkwrap.json',
   'tsconfig.json',
   'tsconfig.build.json',
 ]);
 
+// Track the gateway's actual runtime dependency surface, not the entire HTTP/API
+// server. Broadly watching src/server/ caused unrelated API, CoreSpirit storage,
+// and order-execution edits to rebuild the container and consume VCR image slots.
+const EXACT_RUNTIME_PATHS = new Set([
+  'src/server/brokers/BrokerRequestGate.ts',
+  'src/server/coordination/UpstashRedisRest.ts',
+  'src/server/encryption/EncryptionService.ts',
+  'src/server/latency/budgets.ts',
+  'src/server/marketData/FyersMarketDataTransport.ts',
+  'src/server/marketData/MarketEventBus.ts',
+  'src/server/realtime/ticket.ts',
+  'src/server/storage/BrokerRepository.ts',
+  'src/server/utils/canonicalJson.ts',
+  'src/types/market.ts',
+  'src/types/market-events.ts',
+]);
+
 const RUNTIME_PREFIXES = [
   'realtime-gateway/',
-  'src/server/',
-  'src/types/',
-  'src/services/brokers/',
-  'src/services/boundary/',
-  'src/utils/',
-];
+  // The gateway imports the FYERS API client/capability resolver and order
+  // stream/state pipeline from these two narrowly scoped directories.
+  'src/server/fyers/core/',
+  'src/server/fyers/trading/',
+]);
 
-const NON_RUNTIME_SERVER_PREFIXES = [
-  // HTTP route changes do not enter the independent realtime gateway process.
-  'src/server/routes/',
-  // The symbol-master HTTP/search endpoints are not imported by the gateway.
-  'src/server/fyers/symbols/',
+const REALTIME_PACKAGE_SCRIPT_KEYS = [
+  'preinstall',
+  'install',
+  'postinstall',
+  'prepare',
+  'realtime:gateway',
 ];
 
 export function isRealtimeRuntimePath(filename) {
   const normalized = String(filename || '').replaceAll('\\', '/').replace(/^\.\//, '');
   if (!normalized) return false;
-  if (NON_RUNTIME_SERVER_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return false;
-  return EXACT_RUNTIME_FILES.has(normalized) || RUNTIME_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  return EXACT_RUNTIME_FILES.has(normalized) ||
+    EXACT_RUNTIME_PATHS.has(normalized) ||
+    RUNTIME_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function realtimePackageRuntimeConfig(packageJson) {
+  const scripts = packageJson?.scripts ?? {};
+  return {
+    type: packageJson?.type ?? null,
+    engines: packageJson?.engines ?? null,
+    packageManager: packageJson?.packageManager ?? null,
+    dependencies: packageJson?.dependencies ?? null,
+    devDependencies: packageJson?.devDependencies ?? null,
+    optionalDependencies: packageJson?.optionalDependencies ?? null,
+    peerDependencies: packageJson?.peerDependencies ?? null,
+    peerDependenciesMeta: packageJson?.peerDependenciesMeta ?? null,
+    overrides: packageJson?.overrides ?? null,
+    scripts: Object.fromEntries(
+      REALTIME_PACKAGE_SCRIPT_KEYS.map((key) => [key, scripts[key] ?? null]),
+    ),
+  };
+}
+
+function realtimePackageConfigChanged(previousSha, currentSha) {
+  const readPackage = (sha) => {
+    const raw = execFileSync('git', ['show', `${sha}:package.json`], { encoding: 'utf8' });
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') throw new Error('package.json is not an object');
+    return realtimePackageRuntimeConfig(parsed);
+  };
+  return JSON.stringify(readPackage(previousSha)) !== JSON.stringify(readPackage(currentSha));
 }
 
 export function shouldBuildRealtime(changedPaths) {
@@ -69,11 +115,17 @@ function realtimeServiceConfigChanged(previousSha, currentSha) {
     const raw = execFileSync('git', ['show', `${sha}:vercel.json`], { encoding: 'utf8' });
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') throw new Error('vercel.json is not an object');
-    return parsed.services?.realtimegateway ?? null;
+    const service = parsed.services?.realtimegateway;
+    if (!service) return null;
+    // ignoreCommand only controls whether a new build is needed. Treating that
+    // policy change as an image-runtime change creates a loop: if a deployment
+    // fails on the VCR cap, VERCEL_GIT_PREVIOUS_SHA can stay old and every retry
+    // keeps rebuilding the gateway. Keep all real service settings in the diff.
+    const { ignoreCommand: _ignoreCommand, ...runtimeConfig } = service;
+    return runtimeConfig;
   };
 
-  // Rewrites, headers and web/API service changes do not affect the realtime
-  // process. Only rebuild if the actual realtime service definition changed.
+  // Top-level routing and web/API service settings do not affect the gateway image.
   return JSON.stringify(readConfig(previousSha)) !== JSON.stringify(readConfig(currentSha));
 }
 
@@ -122,6 +174,12 @@ export function runRealtimeIgnoreCommand(env = process.env) {
     execFileSync('git', ['cat-file', '-e', `${currentSha}^{commit}`], { stdio: 'ignore' });
     const changed = readChangedPaths(previousSha, currentSha);
     const relevant = changed.filter(isRealtimeRuntimePath);
+
+    // package.json contains frontend build/test scripts that are unrelated to
+    // the gateway. Rebuild only when its install/runtime contract changed.
+    if (changed.includes('package.json') && realtimePackageConfigChanged(previousSha, currentSha)) {
+      relevant.push('package.json (realtime runtime package configuration)');
+    }
 
     if (changed.includes('vercel.json') && realtimeServiceConfigChanged(previousSha, currentSha)) {
       relevant.push('vercel.json (realtimegateway service configuration)');
