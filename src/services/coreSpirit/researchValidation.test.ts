@@ -64,6 +64,12 @@ rejects(() => assertNoKnownLabelLeakage(['returns', 'next_bar_return']),
   'a target built from the next bar must not be treated as an input feature');
 rejects(() => assertNoKnownLabelLeakage(['close', 'realized_outcome']),
   'realized outcomes must remain separate from inference features');
+rejects(() => assertNoKnownLabelLeakage(['returns', 'nextBarReturn']),
+  'camelCase future-return features must not bypass the target/label leakage guard');
+rejects(() => assertNoKnownLabelLeakage(['close', 'realizedOutcome']),
+  'camelCase realized-outcome features must remain separate from inference inputs');
+rejects(() => assertNoKnownLabelLeakage(['futureClose']),
+  'camelCase future-price features must be rejected as potential lookahead leakage');
 
 const split = splitChronologicalResearchRows(confirmed, 0.2, 48, 12);
 assert(split.trainingRows.length === 64, 'the 80/20 split must train on the first 64 observations');
