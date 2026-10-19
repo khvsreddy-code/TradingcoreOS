@@ -1331,7 +1331,17 @@ export class NativeRenderer implements IChartRenderer {
         out.height = this.dataCanvas.height;
         const ctx = out.getContext('2d');
         if (!ctx) return null;
-        ctx.fillStyle = this.theme.background;
+        const gradient = this.theme.backgroundGradient;
+        if (gradient) {
+            const radians = (gradient.angle - 90) * Math.PI / 180;
+            const dx = Math.sin(radians), dy = -Math.cos(radians);
+            const radius = (Math.abs(dx) * out.width + Math.abs(dy) * out.height) / 2;
+            const cx = out.width / 2, cy = out.height / 2;
+            const paint = ctx.createLinearGradient(cx - dx * radius, cy - dy * radius, cx + dx * radius, cy + dy * radius);
+            paint.addColorStop(0, gradient.from);
+            paint.addColorStop(1, gradient.to);
+            ctx.fillStyle = paint;
+        } else ctx.fillStyle = this.theme.background;
         ctx.fillRect(0, 0, out.width, out.height);
         // DOM replicas share the plot's coordinate space (the canvases fill it).
         const plotRect = this.plot?.getBoundingClientRect();
@@ -4799,7 +4809,11 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     private applyBackground(): void {
-        this.wrapper.style.background = this.theme.background;
+        this.wrapper.style.backgroundColor = this.theme.background;
+        const gradient = this.theme.backgroundGradient;
+        this.wrapper.style.backgroundImage = gradient
+            ? `linear-gradient(${gradient.angle}deg, ${gradient.from}, ${gradient.to})`
+            : '';
     }
 }
 

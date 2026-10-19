@@ -1,3 +1,6 @@
+import type { CoreSpiritAstNode } from './ast';
+import { CoreSpiritParser } from './parser';
+import { normalizeCoreSpiritSource } from './syntax';
 import type { CoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 
@@ -134,9 +137,25 @@ export function inferCoreScriptLevel(input: {
   return level;
 }
 
-export function validateCoreScriptCapabilityRequirements(
-  source: string,
+function astCalleeName(node: CoreSpiritAstNode): string {
+  switch (node.type) {
+    case 'identifier': return node.name;
+    case 'member': return astCalleeName(node.target) + '.' + node.member;
+    case 'memberCall': return astCalleeName(node.target) + '.' + node.member;
+    default: return '';
+  }
+}
+
+/**
+ * Authoritative capability analysis over the canonical AST. Comments, string literals,
+ * formatting and identifier substrings cannot request privileged host capabilities.
+ * The semantic dependency nodes supplement the AST for declaration concepts (such as
+ * AUTOMATE) whose metadata is emitted by the canonical semantic pass.
+ */
+export function validateCoreScriptCapabilityRequirementsFromAst(
+  ast: CoreSpiritAstNode,
   surface: CoreSpiritSurfaceMetadata,
+  semanticNodes: readonly { kind?: string; name?: string }[] = [],
 ): { requirements: readonly CoreScriptCapabilityRequirement[]; errors: readonly string[] } {
   const requirements: CoreScriptCapabilityRequirement[] = [];
   const errors: string[] = [];
@@ -145,30 +164,86 @@ export function validateCoreScriptCapabilityRequirements(
   const add = (capability: CoreScriptRequiredCapability, reason: string, sourceText: string): void => {
     requirements.push(Object.freeze({ capability, reason, source: sourceText }));
   };
-
-  for (const line of String(source ?? '').replace(/\r\n?/g, '\n').split('\n')) {
-    const trimmed = line.trim();
-    const on = trimmed.match(/^on\s+([A-Za-z_][A-Za-z0-9_.]*(?:\([^\n]+\))?)(?:\s*\{)?\s*$/i);
-    if (on) {
-      const capability = coreScriptCapabilityForEvent(on[1]);
-      if (capability) add(capability, `system event '${on[1]}' requires an explicit CoreScript capability`, trimmed);
+  const callRequirement = (name: string): void => {
+    const normalized = name.toLowerCase();
+    if (normalized === 'automation.route' || normalized === 'route order through broker') {
+      add('execution.route', 'broker routing is a host-owned execution route and requires explicit execution.route capability', name);
     }
-  }
+    if (normalized === 'risk.allowed' || normalized === 'risk.evaluate') {
+      add('risk.evaluate', 'risk queries cross the host risk boundary and require explicit risk.evaluate capability', name);
+    }
+    if (normalized === 'webhook' || normalized.endsWith('.webhook')) {
+      add('webhooks', 'webhook delivery requires explicit webhooks capability', name);
+    }
+    if (normalized === 'automation.notify') {
+      add('automation', 'automation notifications require explicit automation capability', name);
+    }
+  };
 
-  if (/\b(?:automation\.route|route\s+order\s+through\s+broker\s*\()/i.test(source)) {
-    add('execution.route', 'broker routing is a host-owned execution route and requires explicit execution.route capability', 'execution route');
-  }
-  if (/\b(?:risk\.allowed|risk\.evaluate)\s*\(/i.test(source)) {
-    add('risk.evaluate', 'risk queries cross the host risk boundary and require explicit risk.evaluate capability', 'risk query');
-  }
-  if (/\bwebhook\s*\(/i.test(source)) {
-    add('webhooks', 'webhook delivery requires explicit webhooks capability', 'webhook');
-  }
-  if (/\bautomation\.notify\s*\(/i.test(source)) {
-    add('automation', 'automation notifications require explicit automation capability', 'automation.notify');
-  }
-  if (/\bautomate\s+(?:["'][^"']+["']|[A-Za-z_][A-Za-z0-9_]*)\s*:/i.test(source)) {
-    add('automation', 'automation declarations require explicit automation capability', 'automation declaration');
+  const visit = (node: CoreSpiritAstNode): void => {
+    switch (node.type) {
+      case 'program':
+        node.body.forEach(visit);
+        return;
+      case 'onEvent': {
+        const capability = coreScriptCapabilityForEvent(node.eventName);
+        if (capability) add(capability, `system event '${node.eventName}' requires an explicit CoreScript capability`, 'on ' + node.eventName);
+        node.body.forEach(visit);
+        return;
+      }
+      case 'let':
+      case 'assignment':
+        visit(node.expression);
+        return;
+      case 'expressionStatement':
+        visit(node.expression);
+        return;
+      case 'if':
+        visit(node.condition);
+        node.thenBranch.forEach(visit);
+        (node.elseBranch ?? []).forEach(visit);
+        return;
+      case 'unary':
+        visit(node.operand);
+        return;
+      case 'binary':
+        visit(node.left);
+        visit(node.right);
+        return;
+      case 'call':
+        callRequirement(node.name);
+        node.args.forEach(visit);
+        return;
+      case 'memberCall':
+        callRequirement(astCalleeName(node));
+        visit(node.target);
+        node.args.forEach(visit);
+        return;
+      case 'member':
+        visit(node.target);
+        return;
+      case 'index':
+        visit(node.target);
+        visit(node.index);
+        return;
+      case 'typeDeclaration':
+      case 'number':
+      case 'string':
+      case 'boolean':
+      case 'null':
+      case 'identifier':
+        return;
+      default: {
+        const exhaustive: never = node;
+        return exhaustive;
+      }
+    }
+  };
+
+  visit(ast);
+  if (surface.declarations.some(declaration => declaration.kind === 'automation') ||
+      semanticNodes.some(node => node.kind === 'automation')) {
+    add('automation', 'AUTOMATE declarations require explicit automation capability', 'automation declaration');
   }
 
   const uniqueRequirements = [...new Map(requirements.map(item => [item.capability, item])).values()];
@@ -181,6 +256,27 @@ export function validateCoreScriptCapabilityRequirements(
     requirements: Object.freeze(uniqueRequirements),
     errors: Object.freeze(errors),
   };
+}
+
+/**
+ * Compatibility entrypoint for callers that have source but not a compiler AST.
+ * The source is normalized and parsed once, then all capability decisions are made
+ * from syntax nodes. Parse failure is fail-closed rather than guessing with regex.
+ */
+export function validateCoreScriptCapabilityRequirements(
+  source: string,
+  surface: CoreSpiritSurfaceMetadata,
+): { requirements: readonly CoreScriptCapabilityRequirement[]; errors: readonly string[] } {
+  try {
+    const ast = new CoreSpiritParser(normalizeCoreSpiritSource(String(source ?? ''))).parse();
+    return validateCoreScriptCapabilityRequirementsFromAst(ast, surface);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      requirements: Object.freeze([]),
+      errors: Object.freeze([`Unable to validate CoreScript host capabilities from source syntax: ${message}`]),
+    };
+  }
 }
 
 export function buildCoreScriptLanguagePolicy(input: {

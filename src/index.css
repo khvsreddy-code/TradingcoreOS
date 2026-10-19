@@ -25,6 +25,10 @@
   --tco-surface-blue: #141022;
   --tco-accent: #d3ebf4;
   --tco-accent-soft: #e5f5fa;
+  --tco-workspace-page: #070a10;
+  --tco-workspace-topbar: #0c0e15;
+  --tco-workspace-sidebar: #0c0e15;
+  --tco-workspace-chart: #07080c;
   --tco-accent-bright: #f0f9fc;
   --tco-motion-fast: 180ms;
   --tco-motion-standard: 280ms;
@@ -564,3 +568,35 @@ html:not(:has(.tco-live-surface)) .tco-panel-enter { animation: tco-product-pane
 .tco-live-surface { --tco-accent:#7c5cff; --tco-accent-soft:#9b8aff; --tco-accent-bright:#c4b5fd; --tco-accent-rgb:124 92 255; }
 
 
+
+
+/* User-customizable surfaces scoped to the live terminal. */
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root { background-color: var(--tco-workspace-page) !important; }
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [data-tco-workspace-zone="topbar"] { background-color: var(--tco-workspace-topbar) !important; }
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [data-tco-workspace-zone="sidebar"] { background-color: var(--tco-workspace-sidebar) !important; }
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [data-tco-workspace-zone="chart"] { background: var(--tco-workspace-chart) !important; }
+
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root button,
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root input {
+  accent-color: var(--tco-accent);
+}
+
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root {
+  --tco-accent: var(--tco-user-workspace-accent);
+  --tco-accent-soft: var(--tco-user-workspace-accent-soft);
+  --tco-accent-bright: var(--tco-user-workspace-accent-bright);
+  --tco-accent-rgb: var(--tco-user-workspace-accent-rgb);
+}
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root .tco-live-surface {
+  --tco-accent: var(--tco-user-workspace-accent);
+  --tco-accent-soft: var(--tco-user-workspace-accent-soft);
+  --tco-accent-bright: var(--tco-user-workspace-accent-bright);
+  --tco-accent-rgb: var(--tco-user-workspace-accent-rgb);
+}
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="#3b82f6"] {
+  color: var(--tco-user-workspace-accent) !important;
+  border-color: color-mix(in srgb, var(--tco-user-workspace-accent) 42%, transparent) !important;
+}
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="bg-[#3b82f6]"] {
+  background-color: color-mix(in srgb, var(--tco-user-workspace-accent) 12%, transparent) !important;
+}

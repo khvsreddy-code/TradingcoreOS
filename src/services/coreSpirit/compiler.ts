@@ -27,7 +27,7 @@ import { analyzeCoreSpiritCausality } from './causalityAnalysis';
 import { buildCoreSpiritExecutionPlanVisualization } from './executionPlanVisualizer';
 import { buildCoreSpiritResearchPlan } from './researchSurface';
 import { inferCoreSpiritAuthoringLevel } from './coreSpiritExecutionModel';
-import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirements, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
+import { inferCoreScriptLevel, validateCoreScriptCapabilityRequirementsFromAst, buildCoreScriptLanguagePolicy, type CoreScriptLanguageFeature } from './coreScriptLanguagePolicy';
 import { buildCoreSpiritSemanticFingerprint as fingerprintCoreSpiritSemantics } from './artifactLookupIdentity';
 export { buildCoreSpiritSemanticFingerprint } from './artifactLookupIdentity';
 
@@ -427,8 +427,7 @@ export class CoreSpiritCompiler {
       const specializedPlan = buildCoreSpiritSpecializedPlan(graphInput.entry.instructions);
       const tradingNativePlan = buildCoreSpiritTradingNativePlan(ast, surface);
       const researchPlan = buildCoreSpiritResearchPlan(options.researchSource ?? options.artifactContext?.source ?? '', surface);
-      const capabilityCheck = validateCoreScriptCapabilityRequirements(options.researchSource ?? options.artifactContext?.source ?? '', surface);
-      const sourceText = options.researchSource ?? options.artifactContext?.source ?? '';
+      const capabilityCheck = validateCoreScriptCapabilityRequirementsFromAst(ast, surface, semanticDependencyGraph.nodes);
       const hasModel = researchPlan.models.length > 0 || semanticDependencyGraph.nodes.some(node => node.kind === 'model' || node.kind === 'model-output');
       const hasResearch = researchPlan.backtests.length > 0 || researchPlan.modelSpecs.length > 0;
       // Capability flags come from typed semantic values, not strings/comments in source.

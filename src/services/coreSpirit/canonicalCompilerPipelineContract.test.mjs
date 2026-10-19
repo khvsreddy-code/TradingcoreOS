@@ -3,11 +3,19 @@ import { readFileSync } from 'node:fs';
 import { CoreSpiritCompiler } from './compiler.ts';
 import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
+import { CoreSpiritParser } from './parser.ts';
+import { normalizeCoreSpiritSource } from './syntax.ts';
+import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
+import { validateCoreScriptCapabilityRequirementsFromAst } from './coreScriptLanguagePolicy.ts';
 
 const compilerSource = readFileSync('src/services/coreSpirit/compiler.ts', 'utf8');
 const artifactIdentitySource = readFileSync('src/services/coreSpirit/artifactLookupIdentity.ts', 'utf8');
+const capabilityPolicySource = readFileSync('src/services/coreSpirit/coreScriptLanguagePolicy.ts', 'utf8');
 assert.doesNotMatch(compilerSource, /createCoreSpiritCompilationUnit/, 'the executable path must not analyze a unit and then analyze it again');
 assert.match(compilerSource, /resolveCoreSpiritNames\(ast/);
+assert.match(compilerSource, /validateCoreScriptCapabilityRequirementsFromAst\(ast, surface, semanticDependencyGraph\.nodes\)/, 'host capability requirements must be derived from canonical AST and semantic metadata');
+assert.doesNotMatch(capabilityPolicySource, /\.split\('\\n'\)/, 'capability usage must not be found by splitting and regex-scanning source lines');
+assert.doesNotMatch(compilerSource, /validateCoreScriptCapabilityRequirements\(options\.researchSource/, 'the compiler may not infer privileged capability requirements from source regex');
 assert.match(compilerSource, /analyzeCoreSpirit\(ast/);
 assert.match(compilerSource, /semanticContainers/, 'matrix/tensor capability flags must derive from semantic types');
 assert.doesNotMatch(compilerSource, /const hasMatrix\s*=\s*\//, 'matrix capability must not use source-text regex');
@@ -22,4 +30,26 @@ assert.equal(validateCoreSpiritIr(result.ir), true, 'VM boundary must be the val
 assert.equal(validateCoreSpiritCompilerPipelineTrace(result.ir.compilerPipeline), true);
 assert.deepEqual(result.ir.compilerPipeline.stages, CORE_SPIRIT_COMPILER_STAGE_ORDER);
 assert.equal(result.ir.compilerPipeline.runtimeBoundary, 'CoreSpiritExecutionVM');
+
+// Comments and string literals are data, not capability use. The old source-regex
+// capability check incorrectly treated both as requests for host privileges.
+const noFalsePositive = new CoreSpiritCompiler().compileSource(
+  '// webhook("comment-only")\nlet note = "risk.evaluate() and automation.notify()"\nlet average = ema(close, 9)',
+  'canonical-capability-source-fixture',
+);
+assert.ok(noFalsePositive.ir, noFalsePositive.diagnostics.map(item => item.message).join('\n'));
+assert.deepEqual(noFalsePositive.ir.requiredCapabilities, []);
+
+const eventAst = new CoreSpiritParser(normalizeCoreSpiritSource('on market.tick { webhook("endpoint") }')).parse();
+const capabilityResult = validateCoreScriptCapabilityRequirementsFromAst(
+  eventAst,
+  extractCoreSpiritSurfaceMetadata('on market.tick { webhook("endpoint") }'),
+);
+assert.deepEqual(
+  capabilityResult.requirements.map(item => item.capability).sort(),
+  ['market.tick', 'webhooks'],
+  'actual event and webhook AST nodes must produce required capabilities',
+);
+assert.equal(capabilityResult.errors.length, 2, 'undeclared event and webhook capabilities must fail closed');
+
 console.log('CORESPIRIT_CANONICAL_COMPILER_PIPELINE_OK');

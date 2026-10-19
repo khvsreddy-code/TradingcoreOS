@@ -81,6 +81,8 @@ export interface MarketSnapshot {
 
 export interface VelaTheme {
     background: string;
+    /** Optional chart-canvas background gradient; background remains the contrast/theme anchor. */
+    backgroundGradient?: { from: string; to: string; angle: number };
     textColor: string;
     gridColor: string;
     borderColor: string;

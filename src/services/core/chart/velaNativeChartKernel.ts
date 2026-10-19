@@ -123,13 +123,29 @@ export function msFromTime(value: unknown): number {
   return n >= 1_000_000_000_000 ? n : n * 1000;
 }
 
+function mergeChartOptions(base: any, patch: any): any {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return patch;
+  const result: Record<string, any> = base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {};
+  for (const [key, value] of Object.entries(patch)) {
+    // An explicit undefined clears an optional setting such as backgroundGradient.
+    if (value === undefined) result[key] = undefined;
+    else if (value && typeof value === 'object' && !Array.isArray(value)) result[key] = mergeChartOptions(result[key], value);
+    else result[key] = value;
+  }
+  return result;
+}
+
 function velaThemeFromOptions(options: any): VelaTheme {
   const layout = options?.layout || {};
   const bg = layout.background?.color || layout.background || '#070a10';
   const text = layout.textColor || '#f3f4f6';
   const grid = options?.grid?.horzLines?.color || options?.grid?.vertLines?.color || '#171b27';
   const border = options?.rightPriceScale?.borderColor || options?.timeScale?.borderColor || '#252b3a';
-  return { background: String(bg), textColor: String(text), gridColor: String(grid), borderColor: String(border), upColor: '#22c55e', downColor: '#ef4444', fontFamily: String(layout.fontFamily || 'JetBrains Mono, monospace') };
+  const gradient = layout.backgroundGradient && typeof layout.backgroundGradient === 'object' ? layout.backgroundGradient : undefined;
+  const backgroundGradient = gradient && /^#[0-9a-f]{6}$/i.test(String(gradient.from || '')) && /^#[0-9a-f]{6}$/i.test(String(gradient.to || ''))
+    ? { from: String(gradient.from), to: String(gradient.to), angle: Math.max(0, Math.min(360, Number(gradient.angle) || 0)) }
+    : undefined;
+  return { background: String(bg), ...(backgroundGradient ? { backgroundGradient } : {}), textColor: String(text), gridColor: String(grid), borderColor: String(border), upColor: '#22c55e', downColor: '#ef4444', fontFamily: String(layout.fontFamily || 'JetBrains Mono, monospace') };
 }
 
 function hexRgb(value: string): [number, number, number] | null {
@@ -413,6 +429,7 @@ export class VelaNativeChartKernel {
   private priceLineHandle?: IndicatorRenderHandle;
   private priceLines: PriceLine[] = [];
   private lastCandleOptions: SeriesOptions = {};
+  private themeOptions: any = {};
   private mounted = false;
   private onClickHandlers = new Set<(param: any) => void>();
   private logicalRangeSubscriptions = new Map<(range: { from: number; to: number } | null) => void, Unsubscribe>();
@@ -423,7 +440,8 @@ export class VelaNativeChartKernel {
   private readonly drawingChangeHandlers = new Set<() => void>();
 
   constructor(private readonly host: HTMLElement, options: any = {}) {
-    this.renderer.mount(host, velaThemeFromOptions(options));
+    this.themeOptions = mergeChartOptions({}, options);
+    this.renderer.mount(host, velaThemeFromOptions(this.themeOptions));
     this.drawingController = new DrawingController(
       this.renderer,
       this.drawingEvents,
@@ -469,7 +487,11 @@ export class VelaNativeChartKernel {
     this.renderer.destroy();
     this.mounted = false;
   }
-  applyOptions(options: any): void { this.renderer.setTheme(velaThemeFromOptions(options)); if (options?.crosshair) this.renderer.applyFeature('crosshair.visible', Number(options.crosshair.mode) !== 2); }
+  applyOptions(options: any): void {
+    this.themeOptions = mergeChartOptions(this.themeOptions, options);
+    this.renderer.setTheme(velaThemeFromOptions(this.themeOptions));
+    if (options?.crosshair) this.renderer.applyFeature('crosshair.visible', Number(options.crosshair.mode) !== 2);
+  }
   subscribeClick(cb: (param: any) => void): void { this.onClickHandlers.add(cb); }
   unsubscribeClick(cb: (param: any) => void): void { this.onClickHandlers.delete(cb); }
   subscribeSizeChange(_cb: () => void): () => void { return () => {}; }

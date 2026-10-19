@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { applyTheme, getCurrentTheme, subscribeTheme, type TradingCoreTheme } from './theme';
+import { bootstrapWorkspaceAppearance } from './workspaceAppearance';
 
 export type ThemeContextValue = {
   theme: TradingCoreTheme;
@@ -12,6 +13,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<TradingCoreTheme>(() => getCurrentTheme());
   useEffect(() => subscribeTheme(next => setThemeState(next)), []);
+  useEffect(() => { bootstrapWorkspaceAppearance(); }, []);
   const value = useMemo<ThemeContextValue>(() => ({
     theme,
     setTheme: next => applyTheme(next),

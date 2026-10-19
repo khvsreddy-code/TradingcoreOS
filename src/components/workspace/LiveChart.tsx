@@ -30,6 +30,7 @@ import type { createChartAnalyticsController } from '../../services/core/chart/C
 import type { createChartInteractionController } from '../../services/core/chart/ChartInteractionController';
 import { createChartRuntimeController } from '../../services/core/chart/ChartRuntimeController';
 import { chartPerformanceTelemetry } from '../../services/marketData/chartPerformanceTelemetry';
+import { getWorkspaceAppearance, subscribeWorkspaceAppearance } from '../../theme/workspaceAppearance';
 
 type Props={instrumentKey:string;brokerId?:string;onAnalytics?:(a:ChartAnalytics)=>void;levelsRequest?:number;chartIndex?:number;showEmbeddedDrawingToolbar?:boolean};
 export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknown',onAnalytics,levelsRequest,chartIndex,showEmbeddedDrawingToolbar=false}:Props){
@@ -336,5 +337,23 @@ export const LiveChart = memo(function LiveChart({instrumentKey,brokerId='unknow
       />
     </>}
   />;
+  // Apply workspace canvas changes in-place so changing colors does not remount
+  // the chart, lose its viewport, or reset user drawings. Vela's renderer preserves
+  // the gradient independently from the solid contrast/axis theme color.
+  useEffect(() => {
+    const applyAppearance = (appearance: ReturnType<typeof getWorkspaceAppearance>) => {
+      const layout = {
+        background: appearance.chartBackgroundStart,
+        backgroundGradient: appearance.chartBackgroundMode === 'gradient'
+          ? { from: appearance.chartBackgroundStart, to: appearance.chartBackgroundEnd, angle: appearance.chartGradientAngle }
+          : undefined,
+      };
+      chart.current?.applyOptions({ layout });
+      oscChart.current?.applyOptions({ layout });
+    };
+    applyAppearance(getWorkspaceAppearance());
+    return subscribeWorkspaceAppearance(applyAppearance);
+  }, []);
+
   return <Profiler id={`tco-chart-${chartDatasetKey}`} onRender={() => chartPerformanceTelemetry.recordReactCommit(chartDatasetKey)}>{chartUi}</Profiler>;
 });
