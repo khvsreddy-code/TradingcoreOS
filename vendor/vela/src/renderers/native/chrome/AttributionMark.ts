@@ -5,10 +5,10 @@
 // same file also allows them to restyle or reposition to fit their design.
 
 import { isDarkColor } from '../../../core/color';
-import { LUXALGO_SYMBOL_SVG, LUXALGO_WORDMARK_SVG } from './luxalgo-logos';
+import { TRADINGCOREOS_SYMBOL_SVG } from './tradingcoreos-logos';
 
 /** Where the mark links — the canonical project page. */
-export const ATTRIBUTION_URL = 'https://luxalgo.com/vela';
+export const ATTRIBUTION_URL = 'https://velacharts.dev';
 
 const STYLE_ID = 'vela-attribution-styles';
 const CSS = `
@@ -45,6 +45,18 @@ const CSS = `
     transform: translateX(-8px);
     transition: max-width 0.3s ease, opacity 0.25s ease, transform 0.3s ease;
     flex: none;
+}
+.vela-attribution .vela-attr-brand-name {
+    color: currentColor;
+    font: 700 11px/1.1 Inter, ui-sans-serif, system-ui, sans-serif;
+    white-space: nowrap;
+    letter-spacing: -0.02em;
+}
+.vela-attribution .vela-attr-brand-powered {
+    color: var(--vela-fg-muted, currentColor);
+    font: 500 9px/1.1 Inter, ui-sans-serif, system-ui, sans-serif;
+    white-space: nowrap;
+    margin-left: 6px;
 }
 .vela-attribution .vela-attr-wordmark svg {
     height: 27px;
@@ -136,8 +148,8 @@ export function createAttributionMark(doc: Document, background: string): HTMLAn
     a.href = ATTRIBUTION_URL;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.title = 'Charting by Vela';
-    a.setAttribute('aria-label', 'Charting by Vela');
+    a.title = 'TradingCoreOS charting · Powered by Vela';
+    a.setAttribute('aria-label', 'TradingCoreOS charting powered by Vela');
     Object.assign(a.style, {
         position: 'absolute',
         zIndex: '6',
@@ -151,10 +163,10 @@ export function createAttributionMark(doc: Document, background: string): HTMLAn
     const symbol = doc.createElement('span');
     symbol.className = 'vela-attr-symbol';
     symbol.setAttribute('aria-hidden', 'true');
-    symbol.innerHTML = LUXALGO_SYMBOL_SVG;
+    symbol.innerHTML = TRADINGCOREOS_SYMBOL_SVG;
     const wordmark = doc.createElement('span');
     wordmark.className = 'vela-attr-wordmark';
-    wordmark.innerHTML = LUXALGO_WORDMARK_SVG;
+    wordmark.innerHTML = '<span class="vela-attr-brand-name">TradingCoreOS</span><span class="vela-attr-brand-powered">Powered by Vela</span>';
     a.append(symbol, wordmark);
     return a;
 }
