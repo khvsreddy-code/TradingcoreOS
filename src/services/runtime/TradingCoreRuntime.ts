@@ -357,7 +357,19 @@ export class TradingCoreRuntime {
         .sort((a, b) => Date.parse(String(a.timestamp)) - Date.parse(String(b.timestamp)))
         .filter((row) => Date.parse(String(row.timestamp)) < beforeMs)
         .slice(-requestedLimit);
-      if (!ordered.length) return null;
+      if (!ordered.length) {
+        coreEventBus.emit('market.history.error', {
+          symbol, timeframe, brokerId,
+          diagnostic: {
+            code: 'no_data' satisfies HistoricalProviderErrorCode,
+            message: 'The provider returned candles, but none matched the requested time boundary after normalization.',
+            occurredAt: Date.now(),
+            fallbackAttempted: Boolean(broker.getHistoricalDataColumns),
+          } satisfies Omit<HistoricalProviderDiagnostic, 'symbol' | 'timeframe' | 'brokerId'>,
+          timestamp: Date.now(),
+        });
+        return null;
+      }
       return {
         time: ordered.map(row => epochMs((row as any)?.timestamp)),
         open: ordered.map(row => Number(row.open)),
