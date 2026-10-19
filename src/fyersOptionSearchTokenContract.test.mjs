@@ -14,8 +14,8 @@ assert.equal(canonicalFyersSymbol('BSE:SENSEX26JUN80000PE'), 'BSE:SENSEX26JUN800
 assert.match(searchRoute, /MCX_COM_sym_master\.json/, 'commodity instruments must be available to search');
 assert.match(searchRoute, /rankFyersInstrumentRows/, 'live search must use the deterministic semantic ranker');
 assert.match(searchRoute, /expiryTime\(a\.row\.expiry\) - expiryTime\(b\.row\.expiry\)/, 'futures results must prioritize nearest expiry');
-assert.match(searchRoute, /MCX_COM_sym_master\.json/, 'MCX commodities must participate in the primary instrument index');
-assert.match(searchRoute, /NSE_COM_sym_master\.json/, 'NSE commodity instruments must be searchable');
+assert.match(searchRoute, /FyersSymbolMasterService\.masterNames\(\)/, 'search should reuse the canonical per-master service and cache');
+assert.match(symbolMaster, /'NSE_COM'.*'BSE_CM'.*'BSE_FO'.*'MCX_COM'/, 'the shared symbol master must cover commodities and all supported exchanges');
 assert.match(searchRoute, /Promise\.allSettled/, 'one unavailable venue must not disable all instrument search');
 assert.match(searchRoute, /intent\.side && \(!kind\.option \|\| kind\.side !== intent\.side\)/, 'requested option side must be a hard filter');
 assert.match(searchRoute, /strikeTokens\.some\(\(token\) => Number\(token\) === strike\)/, 'an explicit strike must rank the exact contract above nearby strikes');

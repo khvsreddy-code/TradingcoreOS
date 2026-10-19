@@ -1,26 +1,15 @@
 import { Router } from 'express';
 import { requireUser } from '../auth/requireUser.js';
-import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
+import { FyersSymbolMasterService, type FyersMasterName } from '../fyers/symbols/FyersSymbolMasterService.js';
 
 export type FyersInstrumentSearchRow = Record<string, any> & { master: string };
 type Row = FyersInstrumentSearchRow;
-type Master = { name: string; url: string };
 
 export const instrumentSearchPriorityRoutes = Router();
 instrumentSearchPriorityRoutes.use(requireUser);
 
 // Include every relevant FYERS segment. In particular, MCX_COM was absent from the
 // old search pool, so "crude oil futures" could never discover the actual MCX contracts.
-const MASTERS: Master[] = [
-  { name: 'NSE_CM', url: 'https://public.fyers.in/sym_details/NSE_CM_sym_master.json' },
-  { name: 'NSE_FO', url: 'https://public.fyers.in/sym_details/NSE_FO_sym_master.json' },
-  { name: 'NSE_CD', url: 'https://public.fyers.in/sym_details/NSE_CD_sym_master.json' },
-  { name: 'NSE_COM', url: 'https://public.fyers.in/sym_details/NSE_COM_sym_master.json' },
-  { name: 'BSE_CM', url: 'https://public.fyers.in/sym_details/BSE_CM_sym_master.json' },
-  { name: 'BSE_FO', url: 'https://public.fyers.in/sym_details/BSE_FO_sym_master.json' },
-  { name: 'MCX_COM', url: 'https://public.fyers.in/sym_details/MCX_COM_sym_master.json' },
-];
-
 let cache: { expiresAt: number; rows: Row[] } | null = null;
 let lastMasterLoadStatus = { partial: false, failedMasters: 0 };
 let inflight: Promise<Row[]> | null = null;
@@ -33,7 +22,7 @@ function first(row: Record<string, any>, keys: string[]): string {
   return '';
 }
 
-function normalize(payload: any, master: string): Row[] {
+function normalize(payload: any, master: FyersMasterName): Row[] {
   const source = payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object' ? payload.data : payload;
   const raw: Array<{ key?: string; row: any }> = Array.isArray(source)
     ? source.map((row: any) => ({ row }))
@@ -61,24 +50,22 @@ function normalize(payload: any, master: string): Row[] {
 async function loadMasters(): Promise<Row[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.rows;
   if (inflight) return inflight;
-  inflight = Promise.allSettled(MASTERS.map(async ({ name, url }) => {
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(API_LATENCY_BUDGET_MS.symbolSearch),
-    });
-    if (!response.ok) throw new Error(`FYERS symbol master ${name} failed (${response.status})`);
-    return normalize(await response.json(), name);
+  // Reuse the platform's canonical FYERS symbol-master service: there is one
+  // in-flight/cache owner per exchange master, shared with existing symbol lookup
+  // routes. This coordinator only caches the smaller reconciled search index.
+  inflight = Promise.allSettled(FyersSymbolMasterService.masterNames().map(async (master) => {
+    const indexed = await FyersSymbolMasterService.load(master);
+    return normalize(Object.fromEntries(indexed), master);
   })).then((parts) => {
     const fulfilled = parts.filter((part): part is PromiseFulfilledResult<Row[]> => part.status === 'fulfilled');
     if (!fulfilled.length) {
       const failed = parts.find((part): part is PromiseRejectedResult => part.status === 'rejected');
       throw new Error(failed?.reason instanceof Error ? failed.reason.message : 'All FYERS instrument masters are unavailable');
     }
-    // One exchange's temporary catalog outage must not take every other exchange's
-    // symbols away. The response can be partial, but never pretends failed masters loaded.
-    const rows = fulfilled.flatMap((part) => part.value);
     lastMasterLoadStatus = { partial: fulfilled.length !== parts.length, failedMasters: parts.length - fulfilled.length };
-    // Refresh a partial catalog quickly so a transient exchange outage does not hide instruments for six hours.
+    const rows = fulfilled.flatMap((part) => part.value);
+    // Recheck partial results quickly; per-master data itself stays in its shared
+    // service cache, so unavailable masters are retried without redownloading good ones.
     cache = { rows, expiresAt: Date.now() + (lastMasterLoadStatus.partial ? 30_000 : 6 * 60 * 60 * 1000) };
     return rows;
   }).finally(() => { inflight = null; });
@@ -96,6 +83,9 @@ function compact(value: unknown): string {
 function expiryTime(value: unknown): number {
   const raw = String(value ?? '').trim();
   if (!raw || raw === '0') return Number.POSITIVE_INFINITY;
+  if (/^\d{8}$/.test(raw) && Number(raw.slice(0, 4)) >= 2000) {
+    return Date.UTC(Number(raw.slice(0, 4)), Number(raw.slice(4, 6)) - 1, Number(raw.slice(6, 8)));
+  }
   if (/^\d+$/.test(raw)) {
     const numeric = Number(raw);
     if (numeric > 1e12) return numeric;
@@ -172,6 +162,14 @@ function score(row: Row, intent: ReturnType<typeof queryIntent>): number {
   if (intent.asksOptions && !kind.option) return -1;
   if (intent.asksCommodity && !kind.commodity) return -1;
   if (intent.asksCurrency && !kind.currency) return -1;
+  // A numeric token in an option query is the requested strike. Treat it as an
+  // exact constraint, not merely a relevance bonus; adjacent strikes must never be
+  // presented as matches for a precise contract query.
+  const strikeTokens = intent.tokens.filter((token) => /^\d+(?:\.\d+)?$/.test(token));
+  if (strikeTokens.length && kind.option) {
+    const strike = Number(String(row.strike || '').replace(/,/g, ''));
+    if (!Number.isFinite(strike) || !strikeTokens.some((token) => Number(token) === strike)) return -1;
+  }
 
   let value = 0;
   if (compactTicker === intent.rawCompact) value += 5000;
@@ -181,11 +179,7 @@ function score(row: Row, intent: ReturnType<typeof queryIntent>): number {
     else if (cleanText(desc).includes(token)) value += 90;
     else value += 35;
   }
-  const strikeTokens = intent.tokens.filter((token) => /^\d+(?:\.\d+)?$/.test(token));
-  if (strikeTokens.length && kind.option) {
-    const strike = Number(String(row.strike || '').replace(/,/g, ''));
-    if (Number.isFinite(strike) && strikeTokens.some((token) => Number(token) === strike)) value += 1800;
-  }
+  if (strikeTokens.length && kind.option) value += 1800;
   if (intent.side && kind.side === intent.side) value += 1200;
   if (intent.asksFutures && kind.future) value += 700;
   if (intent.asksOptions && kind.option) value += 500;
@@ -220,7 +214,6 @@ export function rankFyersInstrumentRows(rows: readonly Row[], query: string, seg
   const intent = queryIntent(query);
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(100, Math.trunc(requestedLimit))) : 30;
   const normalizedSegment = segment.toLowerCase();
-  const futureSearch = intent.asksFutures || normalizedSegment === 'futures';
   const expiredCutoff = nowMs - 24 * 60 * 60 * 1000;
   const scored = rows.map((row) => {
     const kind = family(row);
