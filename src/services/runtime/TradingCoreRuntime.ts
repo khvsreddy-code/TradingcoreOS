@@ -10,6 +10,40 @@ export type RuntimeEvent = 'BROKER_CONNECTED' | 'BROKER_DISCONNECTED' | 'ORDER_E
 export type EventListener = (payload: any) => void;
 export type MarketDataProviderType = 'CONNECTED_BROKER';
 
+export type HistoricalProviderErrorCode =
+  | 'authentication'
+  | 'rate_limited'
+  | 'timeout'
+  | 'no_data'
+  | 'unsupported'
+  | 'partial'
+  | 'invalid_dataset'
+  | 'provider_error';
+
+export type HistoricalProviderDiagnostic = Readonly<{
+  symbol: string;
+  timeframe: string;
+  brokerId?: string;
+  code: HistoricalProviderErrorCode;
+  message: string;
+  occurredAt: number;
+  fallbackAttempted: boolean;
+}>;
+
+function classifyHistoricalProviderError(error: unknown): HistoricalProviderErrorCode {
+  const value = error as { status?: number; statusCode?: number; code?: string; message?: string; name?: string } | null;
+  const status = Number(value?.status ?? value?.statusCode);
+  const message = String(value?.message ?? error ?? '').toLowerCase();
+  const code = String(value?.code ?? '').toLowerCase();
+  if (status === 401 || status === 403 || /unauthori[sz]ed|invalid token|authentication|session expired/.test(message)) return 'authentication';
+  if (status === 429 || /rate.?limit|too many requests|request limit/.test(message)) return 'rate_limited';
+  if (value?.name === 'TimeoutError' || /timeout|timed out|etimedout/.test(message) || code === 'etimedout') return 'timeout';
+  if (/unsupported symbol|unsupported timeframe|invalid symbol|not supported/.test(message)) return 'unsupported';
+  if (/invalid (?:ohlc|candle|dataset|history)|malformed candle/.test(message)) return 'invalid_dataset';
+  if (/no data|empty history|no candles/.test(message)) return 'no_data';
+  return 'provider_error';
+}
+
 function epochMs(value: unknown): number {
   const numeric = Number(value);
   if (Number.isFinite(numeric)) return numeric > 1e12 ? numeric : numeric * 1000;
@@ -279,8 +313,20 @@ export class TradingCoreRuntime {
       try {
         const columns = await broker.getHistoricalDataColumns(symbol, timeframe, signal, requestedLimit, beforeTimestamp);
         if (columns && columns.time.length > 0) return columns;
-      } catch {
-        // Fall through to the ordinary history path below.
+      } catch (error) {
+        if ((error as { name?: string })?.name === 'AbortError' || signal?.aborted) throw error;
+        coreEventBus.emit('market.history.error', {
+          symbol, timeframe, brokerId,
+          diagnostic: {
+            code: classifyHistoricalProviderError(error),
+            message: String((error as { message?: string })?.message ?? error),
+            occurredAt: Date.now(),
+            fallbackAttempted: true,
+          } satisfies Omit<HistoricalProviderDiagnostic, 'symbol' | 'timeframe' | 'brokerId'>,
+          timestamp: Date.now(),
+        });
+        // Keep the object-history compatibility fallback, but preserve the
+        // provider failure so the UI can explain degraded loads.
       }
     }
 
@@ -309,7 +355,18 @@ export class TradingCoreRuntime {
         volume: ordered.map(row => Number(row.volume) || 0),
         timeUnit: 'milliseconds',
       };
-    } catch {
+    } catch (error) {
+      if ((error as { name?: string })?.name === 'AbortError' || signal?.aborted) throw error;
+      coreEventBus.emit('market.history.error', {
+        symbol, timeframe, brokerId,
+        diagnostic: {
+          code: classifyHistoricalProviderError(error),
+          message: String((error as { message?: string })?.message ?? error),
+          occurredAt: Date.now(),
+          fallbackAttempted: false,
+        } satisfies Omit<HistoricalProviderDiagnostic, 'symbol' | 'timeframe' | 'brokerId'>,
+        timestamp: Date.now(),
+      });
       return null;
     }
   }
