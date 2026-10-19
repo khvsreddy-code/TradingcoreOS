@@ -23,6 +23,7 @@ assert.match(service, /calendarComplete\s*===\s*true/);
 assert.match(service, /normalizeRows/);
 assert.match(service, /high < Math\.max\(open, close\)/);
 assert.match(service, /low > Math\.min\(open, close\)/);
+assert.match(service, /hasVolume && !Number\.isFinite\(parsedVolume\)/, 'explicitly malformed volume must be rejected instead of silently coerced to zero');
 assert.match(service, /source === 'fyers' && old\.source !== 'fyers'/);
 assert.match(service, /tvBars = tvBars\.filter/);
 assert.match(service, /fyersAdjustmentPolicy !== mapping\.tvAdjustmentPolicy/, 'do not blend incompatible corporate-action/continuous-contract adjustment policies');

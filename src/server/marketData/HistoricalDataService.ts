@@ -126,8 +126,13 @@ function normalizeRows(rows: unknown[], source: StoredBar['source']): StoredBar[
     if (!row) continue;
     const timestampMs = parseTimestamp(row.time);
     const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
-    const parsedVolume = row.volume == null || row.volume === '' ? 0 : Number(row.volume);
-    const volume = Number.isFinite(parsedVolume) ? parsedVolume : 0;
+    // Missing volume is valid for feeds that do not publish it; an explicitly
+    // malformed volume is not. Never silently turn corrupt source data into a
+    // plausible zero-volume candle used by indicators or model training.
+    const hasVolume = row.volume != null && row.volume !== '';
+    const parsedVolume = hasVolume ? Number(row.volume) : 0;
+    if (hasVolume && !Number.isFinite(parsedVolume)) continue;
+    const volume = parsedVolume;
     if (!Number.isFinite(timestampMs) || timestampMs <= 0 || ![open, high, low, close].every(Number.isFinite) ||
         volume < 0 || high < low || high < Math.max(open, close) || low > Math.min(open, close)) continue;
     const bar: StoredBar = { timestamp: new Date(timestampMs).toISOString(), timestampMs, open, high, low, close, volume, source };
