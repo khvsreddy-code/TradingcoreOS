@@ -40,6 +40,8 @@ assert.match(route, /Math\.min\(5000/);
 assert.match(adapter, /payload\.metadata/);
 assert.match(adapter, /payload\.quote/);
 assert.match(python, /MAX_BARS\s*=\s*5000/);
+assert.match(python, /"1M": \(Interval\.in_monthly, False\)/, 'uppercase monthly must not be confused with one-minute data');
+assert.match(python, /TIMEFRAMES\.get\(request\.timeframe\.strip\(\)\) or TIMEFRAMES\.get\(request\.timeframe\.strip\(\)\.lower\(\)\)/);
 assert.match(python, /hmac\.compare_digest/);
 assert.match(python, /n_bars": MAX_BARS/);
 assert.match(python, /asyncio\.Semaphore\(MAX_WORKERS\)/);

@@ -20,6 +20,19 @@ MAX_WORKERS = 2
 executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="tvdatafeed")
 slots = asyncio.Semaphore(MAX_WORKERS)
 TIMEFRAMES: dict[str, tuple[Any, bool]] = {
+    # Numeric minute aliases are accepted because the FYERS API also uses
+    # interval values such as "1", "5", "15" and "60".
+    "1": (Interval.in_1_minute, False), "3": (Interval.in_3_minute, False),
+    "5": (Interval.in_5_minute, False), "10": (Interval.in_5_minute, True),
+    "15": (Interval.in_15_minute, False), "30": (Interval.in_30_minute, False),
+    "45": (Interval.in_45_minute, False), "60": (Interval.in_1_hour, False),
+    "120": (Interval.in_2_hour, False), "180": (Interval.in_3_hour, False),
+    "240": (Interval.in_4_hour, False),
+    # Upper-case exchange/broker aliases must be resolved before lowercasing:
+    # "1M" is monthly, whereas "1m" is one-minute.
+    "1M": (Interval.in_monthly, False), "M": (Interval.in_monthly, False),
+    "1W": (Interval.in_weekly, False), "W": (Interval.in_weekly, False),
+    "1D": (Interval.in_daily, False), "D": (Interval.in_daily, False),
     "1m": (Interval.in_1_minute, False), "1minute": (Interval.in_1_minute, False),
     "3m": (Interval.in_3_minute, False), "3minute": (Interval.in_3_minute, False),
     "5m": (Interval.in_5_minute, False), "5minute": (Interval.in_5_minute, False),
@@ -161,7 +174,7 @@ async def health() -> dict[str, Any]:
 @app.post("/v1/history")
 async def history(request: HistoryRequest, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
     authenticated(authorization)
-    entry = TIMEFRAMES.get(request.timeframe.strip().lower())
+    entry = TIMEFRAMES.get(request.timeframe.strip()) or TIMEFRAMES.get(request.timeframe.strip().lower())
     if not entry:
         raise HTTPException(status_code=422, detail="Unsupported timeframe")
     timezone = safe_time_zone(request.timezone)
