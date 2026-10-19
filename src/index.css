@@ -593,8 +593,10 @@ html[data-tco-workspace-appearance="custom"] .tco-workspace-root .tco-live-surfa
   --tco-accent-bright: var(--tco-user-workspace-accent-bright);
   --tco-accent-rgb: var(--tco-user-workspace-accent-rgb);
 }
-html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="#3b82f6"] {
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="text-[#3b82f6]"] {
   color: var(--tco-user-workspace-accent) !important;
+}
+html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="border-[#3b82f6]"] {
   border-color: color-mix(in srgb, var(--tco-user-workspace-accent) 42%, transparent) !important;
 }
 html[data-tco-workspace-appearance="custom"] .tco-workspace-root [class*="bg-[#3b82f6]"] {
