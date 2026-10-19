@@ -332,7 +332,19 @@ export class TradingCoreRuntime {
 
     try {
       const rows = await broker.getHistoricalData(symbol, timeframe, signal, requestedLimit);
-      if (!rows.length) return null;
+      if (!rows.length) {
+        coreEventBus.emit('market.history.error', {
+          symbol, timeframe, brokerId,
+          diagnostic: {
+            code: 'no_data' satisfies HistoricalProviderErrorCode,
+            message: 'The provider returned no historical candles for this symbol and timeframe.',
+            occurredAt: Date.now(),
+            fallbackAttempted: false,
+          } satisfies Omit<HistoricalProviderDiagnostic, 'symbol' | 'timeframe' | 'brokerId'>,
+          timestamp: Date.now(),
+        });
+        return null;
+      }
       const beforeMs = beforeTimestamp == null
         ? Number.POSITIVE_INFINITY
         : (() => {
