@@ -82,6 +82,34 @@ export interface HistoricalCandle {
   volume: number;
 }
 
+/** Provenance and bounded-window metadata shared by chart, replay and research hosts. */
+export interface HistoricalDataMetadata {
+  instrumentId: string;
+  timeframe: string;
+  revision: number;
+  sourcePolicy: string;
+  maxBars: number;
+  barCount: number;
+  oldestTimestamp: string | null;
+  newestTimestamp: string | null;
+  cacheHit: boolean;
+  stale: boolean;
+  degraded: boolean;
+  historyExhausted?: boolean;
+  paginationSupported?: boolean;
+  calendarPolicy?: string;
+  sourceStatus: Record<string, unknown>;
+}
+
+/** A quote is a market snapshot, never a fabricated historical candle. */
+export interface HistoricalQuoteSnapshot {
+  instrumentId: string;
+  ltp: number;
+  timestamp: string;
+  volume?: number;
+  source: 'fyers';
+}
+
 /** Compact OHLCV transport used by Vela's native columnar history fast path. */
 export interface HistoricalCandleColumns {
   time: number[];
@@ -91,6 +119,8 @@ export interface HistoricalCandleColumns {
   close: number[];
   volume: number[];
   timeUnit: 'milliseconds' | 'seconds';
+  metadata?: HistoricalDataMetadata;
+  quote?: HistoricalQuoteSnapshot | null;
 }
 
 

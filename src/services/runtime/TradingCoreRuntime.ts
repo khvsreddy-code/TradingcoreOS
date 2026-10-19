@@ -182,7 +182,7 @@ export class TradingCoreRuntime {
     this.optionChainPromises.set(key, promise);
     return promise;
   }
-  public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit = 10000): Promise<HistoricalCandle[]> {
+  public async getHistoricalData(symbol: string, timeframe: string, signal?: AbortSignal, limit = 5000): Promise<HistoricalCandle[]> {
     if (signal?.aborted) throw Object.assign(new Error('Historical request aborted'), { name: 'AbortError' });
     // A chart can mount while the authenticated broker session is still being
     // rehydrated. The old implementation returned [] in that race, which made
@@ -198,12 +198,12 @@ export class TradingCoreRuntime {
     let brokerId = brokerInfo?.brokerId?.toLowerCase();
     if (!broker || !brokerId || this.currentMarketDataProviderType !== 'CONNECTED_BROKER') return [];
 
-    const requestedLimit = Math.max(100, Math.min(10000, Math.floor(Number(limit) || 10000)));
+    const requestedLimit = Math.max(2, Math.min(5000, Math.floor(Number(limit) || 5000)));
     const key = `${brokerId}:${symbol}:${timeframe}:initial-progressive-v15:${requestedLimit}`;
     const storeCached = historyStore.get(brokerId, symbol, timeframe);
-    if (storeCached?.length) return storeCached;
+    if (storeCached?.length) return storeCached.slice(-requestedLimit);
     const cached = this.historyCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return historyStore.set(brokerId, symbol, timeframe, cached.data);
+    if (cached && cached.expiresAt > Date.now()) return historyStore.set(brokerId, symbol, timeframe, cached.data).slice(-requestedLimit);
 
     // Do not silently convert a broker switch into an empty history result.
     // If the active broker changed while the request was in flight, retry once
@@ -237,7 +237,7 @@ export class TradingCoreRuntime {
           if (!time || ![row.open, row.high, row.low, row.close].every((v) => Number.isFinite(Number(v)))) continue;
           byTime.set(time, row);
         }
-        const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-50_000);
+        const history = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row).slice(-requestedLimit);
         if (history.length) { historyStore.set(brokerId, symbol, timeframe, history); this.historyCache.set(key, { data: history, expiresAt: Date.now() + 120_000 }); }
         coreEventBus.emit('market.history.loaded', { symbol, timeframe, count: history.length, timestamp: Date.now() });
         return history;

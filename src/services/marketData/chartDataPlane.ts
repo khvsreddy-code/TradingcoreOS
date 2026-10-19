@@ -499,7 +499,7 @@ export class ChartDataPlane {
     this.state.lastRecoveryAt = Date.now();
     const generation = this.liveCandle.beginHistoryLoad('recovery');
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
-    const requested = Math.max(100, Math.min(500, initialHistoryCandles(this.timeframe)));
+    const requested = Math.max(100, Math.min(5000, initialHistoryCandles(this.timeframe)));
     this.emit({ type: 'status', status: 'loading', snapshot: this.snapshot() });
 
     void tradingCoreRuntime.getHistoricalDataColumns(this.instrumentKey, interval, undefined, requested)
