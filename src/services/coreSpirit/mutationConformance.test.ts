@@ -70,4 +70,41 @@ const cleanResult = clean.executeIr(ir, timeline);
 assert.equal(Number(recoveredResult.state.locals.average), Number(cleanResult.state.locals.average));
 assert.equal(recovered.getState().barIndex, timeline.length - 1);
 
+
+/** A restored checkpoint must continue the same stateful timeline as a clean run. */
+const checkpointRuntime = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-checkpoint-source' });
+checkpointRuntime.executeIr(ir, timeline.slice(0, 5));
+const checkpoint = checkpointRuntime.exportCheckpoint();
+const resumed = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-checkpoint-resume' });
+resumed.loadIr(ir);
+assert.equal(resumed.restoreCheckpoint(checkpoint), true, 'a compatible checkpoint should restore');
+const resumedResult = resumed.executeIr(ir, timeline);
+const resumedOracle = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-checkpoint-oracle' });
+const resumedReference = resumedOracle.executeIr(ir, timeline);
+assert.equal(Number(resumedResult.state.locals.average), Number(resumedReference.state.locals.average),
+  'resuming from a checkpoint must match complete replay');
+
+/** A parameter/artifact change is a new execution identity and must not inherit old EMA state. */
+const changedInput = new CoreSpiritCompiler().compileSource('let average = ema(close, 4)', 'mutation-conformance-input-change');
+assert.ok(changedInput.ir, changedInput.diagnostics.map(item => item.message).join('\\n'));
+const changedRuntime = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-input-change' });
+const changedResult = changedRuntime.executeIr(changedInput.ir, timeline);
+const changedOracle = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-input-change-oracle' });
+const changedReference = changedOracle.executeIr(changedInput.ir, timeline);
+assert.equal(Number(changedResult.state.locals.average), Number(changedReference.state.locals.average),
+  'changing inputs/compiled artifact must match a clean execution');
+
+/** Symbol/timeframe transitions create a new timeline; state must not leak between runtimes. */
+const alternateTimeline: Bar[] = timeline.map((bar, index) => ({
+  ...makeBar(bar.close * 1.01, index, bar.volume),
+  timestamp: new Date(origin + index * 900_000).toISOString(),
+}));
+const switchedRuntime = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-symbol-B-15m' });
+const switchedResult = switchedRuntime.executeIr(ir, alternateTimeline);
+const switchedOracle = new CoreSpiritRuntime({ sourceId: 'mutation-conformance-symbol-B-15m-oracle' });
+const switchedReference = switchedOracle.executeIr(ir, alternateTimeline);
+assert.equal(Number(switchedResult.state.locals.average), Number(switchedReference.state.locals.average),
+  'a new symbol/timeframe timeline must start from its own canonical state');
+assert.equal(switchedRuntime.getState().barIndex, alternateTimeline.length - 1);
+
 console.log('CORESPIRIT_MUTATION_CONFORMANCE_OK');
