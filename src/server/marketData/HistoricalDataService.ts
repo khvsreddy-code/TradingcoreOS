@@ -387,26 +387,53 @@ export class HistoricalDataService {
       const recentDates = new Set(dates.slice(-HISTORICAL_RECENT_SESSIONS));
       const fyersBars = fyersAll.filter(bar => recentDates.has(zonedDate(bar.timestampMs, mapping.timezone)));
       let tvBars = normalizeRows(tvRows, 'tvdatafeed');
-      if (recentDates.size) {
-        const firstRecentDate = [...recentDates].sort()[0]!;
+      const firstRecentDate = recentDates.size ? [...recentDates].sort()[0]! : null;
+      if (firstRecentDate) {
+        // Fyers owns the observed recent sessions, even when tvdatafeed returned
+        // a row at a timestamp that Fyers did not include.
         tvBars = tvBars.filter(bar => zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate);
       }
+
+      // If tvdatafeed is unavailable or returns no validated bars, preserve the
+      // older portion of a previously validated dataset for this same, explicitly
+      // compatible instrument mapping. Never reuse cached bars from recent Fyers
+      // sessions, and never present the fallback as a fresh source response.
+      const cachedOlderBars = cached?.sourcePolicy === HISTORICAL_SOURCE_POLICY &&
+        cached.bars.length > 0 && tvBars.length === 0 && this.tvContractCompatible(mapping)
+        ? cached.bars.filter(bar => !firstRecentDate || zonedDate(bar.timestampMs, mapping.timezone) < firstRecentDate)
+        : [];
+
       const byTime = new Map<number, StoredBar>();
-      for (const bar of [...tvBars, ...fyersBars]) {
+      for (const bar of [...cachedOlderBars, ...tvBars, ...fyersBars]) {
         const old = byTime.get(bar.timestampMs);
-        if (!old || (bar.source === 'fyers' && old.source !== 'fyers')) byTime.set(bar.timestampMs, bar);
+        if (!old || (bar.source === 'fyers' && old.source !== 'fyers') ||
+            (bar.source === 'tvdatafeed' && old.source === 'tvdatafeed' && !cachedOlderBars.includes(old))) {
+          byTime.set(bar.timestampMs, bar);
+        }
       }
       const merged = [...byTime.values()].sort((a, b) => a.timestampMs - b.timestampMs).slice(-HISTORICAL_MAX_BARS);
-      const degraded = fyersFailed || fyersBars.length === 0 || (tvConfigured && (!tvEnabled || tvFailed || tvBars.length === 0));
+      const degraded = fyersFailed || fyersBars.length === 0 || !tvEnabled || tvFailed || tvBars.length === 0;
       sourceStatus.fyers = { ...(isRecord(sourceStatus.fyers) ? sourceStatus.fyers : {}), validatedCount: fyersBars.length, sessions: [...recentDates].sort() };
-      sourceStatus.tvdatafeed = { ...(isRecord(sourceStatus.tvdatafeed) ? sourceStatus.tvdatafeed : {}), validatedCount: tvBars.length, candidateCap: HISTORICAL_MAX_BARS, arbitraryEndPaging: false };
+      sourceStatus.tvdatafeed = {
+        ...(isRecord(sourceStatus.tvdatafeed) ? sourceStatus.tvdatafeed : {}),
+        validatedCount: tvBars.length,
+        cachedOlderFallbackCount: cachedOlderBars.length,
+        candidateCap: HISTORICAL_MAX_BARS,
+        arbitraryEndPaging: false,
+      };
       let record: CacheRecord = {
         instrumentId: mapping.instrumentId || requestedInstrumentId, timeframe, bars: merged,
         revision: cached?.revision || 1, sourcePolicy: HISTORICAL_SOURCE_POLICY, sourceStatus, degraded,
         expiresAt: Date.now() + CACHE_TTL_MS, updatedAt: Date.now(), quote,
       };
-      if (!merged.length && cached?.bars.length) {
-        return { ...cached, expiresAt: Date.now(), sourceStatus: { ...sourceStatus, staleCacheFallback: true }, degraded: true, quote: null };
+      if (!merged.length && cached?.bars.length && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY) {
+        return {
+          ...cached,
+          expiresAt: Date.now(),
+          sourceStatus: { ...sourceStatus, staleCacheFallback: true },
+          degraded: true,
+          quote: quote || null,
+        };
       }
       record = await this.writeCache(record);
       return record;
