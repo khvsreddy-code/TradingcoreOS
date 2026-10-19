@@ -24,11 +24,13 @@ function first(row: Record<string, any>, keys: string[]): string {
 
 function normalize(payload: any, master: FyersMasterName): Row[] {
   const source = payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object' ? payload.data : payload;
-  const raw: Array<{ key?: string; row: any }> = Array.isArray(source)
-    ? source.map((row: any) => ({ row }))
-    : source && typeof source === 'object'
-      ? Object.entries(source).map(([key, row]) => ({ key, row }))
-      : [];
+  const raw: Array<{ key?: string; row: any }> = source instanceof Map
+    ? [...source.entries()].map(([key, row]) => ({ key: String(key), row }))
+    : Array.isArray(source)
+      ? source.map((row: any) => ({ row }))
+      : source && typeof source === 'object'
+        ? Object.entries(source).map(([key, row]) => ({ key, row }))
+        : [];
 
   return raw.map(({ key, row }) => {
     if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
@@ -55,7 +57,7 @@ async function loadMasters(): Promise<Row[]> {
   // routes. This coordinator only caches the smaller reconciled search index.
   inflight = Promise.allSettled(FyersSymbolMasterService.masterNames().map(async (master) => {
     const indexed = await FyersSymbolMasterService.load(master);
-    return normalize(Object.fromEntries(indexed), master);
+    return normalize(indexed, master);
   })).then((parts) => {
     const fulfilled = parts.filter((part): part is PromiseFulfilledResult<Row[]> => part.status === 'fulfilled');
     if (!fulfilled.length) {

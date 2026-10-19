@@ -13,7 +13,9 @@ type Props = { onClose: () => void };
 export function WorkspaceAppearancePanel({ onClose }: Props) {
   const [settings, setSettings] = useState<WorkspaceAppearance>(() => getWorkspaceAppearance());
   const update = (patch: Partial<WorkspaceAppearance>) => {
-    setSettings((current) => applyWorkspaceAppearance({ ...current, ...patch }));
+    // Keep React state updates pure; apply the browser side effect once per user event.
+    const next = applyWorkspaceAppearance({ ...settings, ...patch });
+    setSettings(next);
   };
   const colorInput = (label: string, value: string, onChange: (value: string) => void, disabled = false) => (
     <label className="flex items-center justify-between gap-3 rounded-lg border border-[var(--tco-border)] px-3 py-2 text-xs text-[var(--tco-text)]">
