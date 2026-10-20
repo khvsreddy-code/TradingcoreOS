@@ -202,6 +202,17 @@ export interface VisibleRange {
     to: Millis;
 }
 
+/** Serializable per-pane axis framing used by multi-chart workspace snapshots. */
+export interface WorkspacePaneScaleState {
+    id: string;
+    auto: boolean;
+    min: number;
+    max: number;
+    mode: 'price' | 'percent' | 'indexed';
+    log: boolean;
+    invert: boolean;
+}
+
 /** A user-initiated pane action reported by the renderer (hover buttons / double-clicks). */
 export type PaneAction =
     | { type: 'move'; paneId: string; dir: 'up' | 'down' }
@@ -436,6 +447,10 @@ export interface IChartRenderer {
 
     getVisibleRange(): VisibleRange | null;
     setVisibleRange(range: VisibleRange): void;
+    /** Full pane price-scale framing, optional for renderers without manual-axis zoom. */
+    getWorkspaceScaleState?(): WorkspacePaneScaleState[];
+    applyWorkspaceScaleState?(state: readonly WorkspacePaneScaleState[]): void;
+    onWorkspaceScaleChange?(cb: () => void): Unsubscribe;
     /**
      * Pan by a fraction of the visible width at constant zoom (positive ⇒ toward the
      * latest bars), behaving exactly like a pointer drag: same pan limits (including the
