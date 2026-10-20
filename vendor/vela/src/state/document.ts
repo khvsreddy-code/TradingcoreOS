@@ -295,7 +295,12 @@ function sanitizeCell(raw: unknown): CellState | null {
             if (!id || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) continue;
             if (mode !== 'price' && mode !== 'percent' && mode !== 'indexed') continue;
             if (typeof scale.auto !== 'boolean' || typeof scale.log !== 'boolean' || typeof scale.invert !== 'boolean') continue;
-            priceScales.push({ id, auto: scale.auto, min, max, mode, log: scale.log, invert: scale.invert });
+            priceScales.push({
+                id, auto: scale.auto, min, max, mode, log: scale.log, invert: scale.invert,
+                ...(scale.kind === 'price' || scale.kind === 'study' ? { kind: scale.kind } : {}),
+                ...(Number.isInteger(scale.order) && Number(scale.order) >= 0 && Number(scale.order) < 32 ? { order: Number(scale.order) } : {}),
+                ...(typeof scale.title === 'string' && scale.title.length <= 180 ? { title: scale.title } : {}),
+            });
         }
         if (priceScales.length) out.priceScales = priceScales;
     }
