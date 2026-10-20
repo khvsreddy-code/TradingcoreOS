@@ -470,6 +470,17 @@ export async function persistCurrentTcoVelaAppearance(): Promise<boolean> {
   return flushTcoVelaAppearance();
 }
 
+function stateForNamedWorkspaceSnapshot(state: unknown): unknown {
+  if(!state || typeof state!=='object' || Array.isArray(state)) return state;
+  const record=state as Record<string,unknown>;
+  const panels=record.panels && typeof record.panels==='object' && !Array.isArray(record.panels)
+    ? record.panels as Record<string,unknown> : null;
+  // The snapshot is captured from inside the Workspace manager itself. Do not save that
+  // management panel as the panel users should see when they restore the trading setup.
+  if(!panels || panels.open!=='tco.workspace-frame') return state;
+  return { ...record, panels:{...panels,open:undefined} };
+}
+
 export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:string; synced:boolean } | null> {
   if(typeof window==='undefined') return null;
   const broker=tradingCoreRuntime.getPrimaryBrokerId()??'fyers';
@@ -487,7 +498,7 @@ export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:strin
     const appearanceSynced=await flushTcoVelaAppearance();
     const synced=await saveTcoVelaSavedWorkspace({
       id:active.id,name:active.name,updatedAt:new Date().toISOString(),
-      snapshot:{schemaVersion:1,workspace:api.getState(),appearance:{...appearance,topbar:{...appearance.topbar}}},
+      snapshot:{schemaVersion:1,workspace:stateForNamedWorkspaceSnapshot(api.getState()),appearance:{...appearance,topbar:{...appearance.topbar}}},
     },broker);
     return {name:active.name,synced:synced&&appearanceSynced};
   } catch { return null; }
@@ -763,7 +774,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       const id=asNew||!(overrideId||activeId)?newWorkspaceId():(overrideId||activeId);
       saveCurrent.disabled=true;saveAsNew.disabled=true;savedStatus.textContent='Saving workspace snapshot…';
       try {
-        const stateSnapshot=api.getState();
+        const stateSnapshot=stateForNamedWorkspaceSnapshot(api.getState());
         // Local Vela persistence happens before the cloud request. A temporary failure
         // of the default-workspace cloud write must not block saving this named snapshot.
         try { await Promise.resolve(api.saveNow?.()); } catch {}
