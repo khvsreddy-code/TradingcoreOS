@@ -32,12 +32,33 @@ function localSet(broker: string, key: string, value: string): void {
   try { localStorage.setItem(localKey(broker, key), value); } catch {}
 }
 
-function journalLocalGet(): string | null {
-  try { return localStorage.getItem(LOCAL_PREFIX + 'journal') ?? null; } catch { return null; }
+type TcoJournalRecord = { note: string; updatedAt: string | null };
+
+function journalLocalGetRecord(): TcoJournalRecord | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_PREFIX + 'journal');
+    if (raw == null) return null;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const record = objectRecord(parsed);
+      if (record && typeof record.note === 'string') {
+        const updatedAt = typeof record.updatedAt === 'string' && Number.isFinite(Date.parse(record.updatedAt))
+          ? record.updatedAt : null;
+        return { note: record.note, updatedAt };
+      }
+      if (typeof parsed === 'string') return { note: parsed, updatedAt: null };
+    } catch {}
+    // Backward compatibility with the pre-versioned raw string key.
+    return { note: raw, updatedAt: null };
+  } catch { return null; }
 }
 
-function journalLocalSet(value: string): void {
-  try { localStorage.setItem(LOCAL_PREFIX + 'journal', value); } catch {}
+function journalLocalGet(): string | null {
+  return journalLocalGetRecord()?.note ?? null;
+}
+
+function journalLocalSet(value: string, updatedAt = new Date().toISOString()): void {
+  try { localStorage.setItem(LOCAL_PREFIX + 'journal', JSON.stringify({ version: 1, note: value, updatedAt })); } catch {}
 }
 
 type UserSettings = Record<string, unknown>;
@@ -360,18 +381,47 @@ export async function loadTcoVelaDefaults(): Promise<{ layout?: string; timefram
 }
 
 export async function loadTcoVelaJournal(): Promise<string | null> {
+  const local = journalLocalGetRecord();
   const id = await currentUserId();
-  if (!id) return journalLocalGet();
+  if (!id) return local?.note ?? null;
   try {
     const { data, error } = await getSupabaseClient().from('user_settings').select('settings').eq('user_id', id).maybeSingle();
-    if (error || !data?.settings || typeof data.settings !== 'object') return journalLocalGet();
-    const value = (data.settings as Record<string, unknown>).journal;
-    return typeof value === 'string' ? value : journalLocalGet();
-  } catch { return journalLocalGet(); }
+    if (error) return local?.note ?? null;
+    const settings = objectRecord(data?.settings) ?? {};
+    const cloudNote = typeof settings.journal === 'string' ? settings.journal : null;
+    const cloudUpdatedAt = typeof settings.journalUpdatedAt === 'string' && Number.isFinite(Date.parse(settings.journalUpdatedAt))
+      ? settings.journalUpdatedAt : null;
+    const localTime = local?.updatedAt ? Date.parse(local.updatedAt) : 0;
+    const cloudTime = cloudUpdatedAt ? Date.parse(cloudUpdatedAt) : 0;
+
+    // An offline edit should not be replaced by an older cloud copy on the next sign-in.
+    if (local && localTime > cloudTime) {
+      void mutateUserSettings((current) => ({
+        ...current, journal: local.note, journalUpdatedAt: local.updatedAt,
+      })).catch(() => undefined);
+      return local.note;
+    }
+    if (cloudNote !== null) {
+      journalLocalSet(cloudNote, cloudUpdatedAt ?? new Date().toISOString());
+      return cloudNote;
+    }
+    if (local) {
+      const updatedAt = local.updatedAt ?? new Date().toISOString();
+      journalLocalSet(local.note, updatedAt);
+      void mutateUserSettings((current) => ({
+        ...current, journal: local.note, journalUpdatedAt: updatedAt,
+      })).catch(() => undefined);
+      return local.note;
+    }
+    return null;
+  } catch { return local?.note ?? null; }
 }
 
 export async function saveTcoVelaJournal(note: string): Promise<boolean> {
   // Local write is immediate and remains the fallback if account/cloud storage is unavailable.
-  journalLocalSet(note);
-  try { return await mutateUserSettings((settings) => ({ ...settings, journal: note })); } catch { return false; }
+  const updatedAt = new Date().toISOString();
+  journalLocalSet(note, updatedAt);
+  try {
+    return await mutateUserSettings((settings) => ({ ...settings, journal: note, journalUpdatedAt: updatedAt }));
+  } catch { return false; }
 }
