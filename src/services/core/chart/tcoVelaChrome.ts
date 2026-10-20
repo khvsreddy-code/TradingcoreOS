@@ -2487,17 +2487,48 @@ const journalPanel: SidePanelDescriptor = {
     root.appendChild(context);
     const textarea = document.createElement('textarea');
     textarea.value = localStorage.getItem(JOURNAL_KEY) ?? '';
-    void loadTcoVelaJournal().then((cloud) => { if (cloud != null && document.contains(textarea)) textarea.value = cloud; });
+    let journalEdited = false;
+    let journalSaveTimer: number | null = null;
+    const journalStatus = document.createElement('div');
+    journalStatus.className = 'tco-frame-help';
+    journalStatus.setAttribute('role', 'status');
+    journalStatus.setAttribute('aria-live', 'polite');
+    journalStatus.textContent = 'Journal autosave is on';
+    void loadTcoVelaJournal().then((cloud) => {
+      if (cloud != null && document.contains(textarea) && !journalEdited) {
+        textarea.value = cloud;
+        try { localStorage.setItem(JOURNAL_KEY, cloud); } catch {}
+        journalStatus.textContent = 'Journal loaded from your saved notes';
+      }
+    });
     textarea.placeholder = 'Trade notes, observations, setups, execution review...';
     textarea.style.cssText = 'flex:1;min-height:180px;resize:none;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;background:#090d15;color:#e2e8f0;outline:none;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-sizing:border-box;';
     root.appendChild(textarea);
+    root.appendChild(journalStatus);
+    const flushJournal = async (): Promise<void> => {
+      if (journalSaveTimer !== null) window.clearTimeout(journalSaveTimer);
+      journalSaveTimer = null;
+      try { localStorage.setItem(JOURNAL_KEY, textarea.value); } catch {}
+      const synced = await saveTcoVelaJournal(textarea.value);
+      journalStatus.textContent = synced ? 'Saved to your account' : 'Saved on this device · account sync unavailable';
+    };
+    const scheduleJournalSave = (): void => {
+      journalEdited = true;
+      try { localStorage.setItem(JOURNAL_KEY, textarea.value); } catch {}
+      journalStatus.textContent = 'Saved locally · syncing account…';
+      if (journalSaveTimer !== null) window.clearTimeout(journalSaveTimer);
+      journalSaveTimer = window.setTimeout(() => { journalSaveTimer = null; void flushJournal(); }, 700);
+    };
+    const onJournalPageHide = (): void => { void flushJournal(); };
+    textarea.addEventListener('input', scheduleJournalSave);
+    window.addEventListener('pagehide', onJournalPageHide);
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:6px;';
     root.appendChild(actions);
     const save = document.createElement('button');
     save.type = 'button'; save.textContent = 'Save note';
     save.style.cssText = 'flex:1;border:1px solid rgba(155,138,255,.28);border-radius:7px;padding:8px;background:rgba(124,92,255,.12);color:#ddd6fe;font:11px ui-monospace;cursor:pointer;';
-    save.addEventListener('click', () => { localStorage.setItem(JOURNAL_KEY, textarea.value); void saveTcoVelaJournal(textarea.value); });
+    save.addEventListener('click', () => { journalEdited = true; void flushJournal(); });
     const stamp = document.createElement('button');
     stamp.type = 'button'; stamp.textContent = 'Stamp context';
     stamp.style.cssText = 'border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;background:#0c111a;color:#cbd5e1;font:11px ui-monospace;cursor:pointer;';
@@ -2506,11 +2537,21 @@ const journalPanel: SidePanelDescriptor = {
 `;
       textarea.value = textarea.value ? `${textarea.value.replace(/\s*$/, '')}\n${line}` : line;
       textarea.focus();
+      scheduleJournalSave();
     });
     actions.append(save, stamp);
     const refresh = (): void => { context.textContent = `${ctx.symbol} · ${ctx.timeframe}`; };
     refresh();
-    return { onOpen: refresh, onChart: refresh };
+    return {
+      onOpen: refresh,
+      onChart: refresh,
+      destroy() {
+        window.removeEventListener('pagehide', onJournalPageHide);
+        textarea.removeEventListener('input', scheduleJournalSave);
+        if (journalSaveTimer !== null) window.clearTimeout(journalSaveTimer);
+        if (journalEdited) void flushJournal();
+      },
+    };
   },
 };
 
