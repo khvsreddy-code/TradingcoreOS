@@ -94,10 +94,24 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
     Date.parse('2026-10-20T05:00:00.000Z'),
   );
   assert.equal(confirmed.triggered, false, 'confirmed-bar rules use the canonical close rather than an out-of-bar LTP');
+
+  const missingTimestamp = evaluateAutomation(
+    rule({
+      mode: 'Live', lifecycle: 'LIVE', allowOrderExecution: true, requireConfirmation: false,
+      actions: [{ type: 'PLACE_ORDER', payload: { side: 'Buy', quantity: 1 } }],
+    }),
+    context({
+      price: 120, barConfirmed: true, executionMode: 'live', timestamp: undefined,
+      candles: candles.map((c, index) => index === 1 ? { ...c, timestamp: '' } : c),
+    }),
+    Date.parse('2026-10-20T05:00:00.000Z'),
+  );
+  assert.equal(missingTimestamp.actions.some(action => action.type === 'PLACE_ORDER'), false, 'live order actions require a canonical timestamp for durable bar idempotency');
+  assert.equal(missingTimestamp.reason, 'matched_order_action_blocked_missing_bar_timestamp');
 }
 
 {
-  const stable = rule({ lastRunBarKey: ['NSE:NIFTY50-INDEX', '5m', 1, Date.parse(candles[1]!.timestamp)].join('|') });
+  const stable = rule({ lastRunBarKey: ['NSE:NIFTY50-INDEX', '5m', Date.parse(candles[1]!.timestamp)].join('|') });
   const evaluation = evaluateAutomation(stable, context(), Date.parse('2026-10-20T05:00:00.000Z'));
   assert.equal(evaluation.triggered, false, 'same-bar packet/revision changes cannot re-run the rule');
 }
