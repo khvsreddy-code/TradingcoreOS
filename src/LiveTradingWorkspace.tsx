@@ -252,7 +252,7 @@ export function LiveTradingWorkspace() {
             });
           },
         };
-        applySavedTcoVelaAppearance(host.current);
+        if (host.current) applySavedTcoVelaAppearance(host.current);
       }
       const publishChartStatus = (snapshot: TcoVelaChartStatusSnapshot, generation: number) => {
         if (cancelled || generation !== chartStatusGeneration) return;
