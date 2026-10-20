@@ -7,9 +7,6 @@ import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 export const productionPredictionRoutes = Router();
 productionPredictionRoutes.use(requireUser);
 
-const MAX_CANDLES = 180;
-const ALLOWED_MODELS = new Set(["xgb-direction", "rf-direction", "logistic-direction", "gb-volatility", "xgb-breakout", "momentum-regime", "mean-reversion", "trend-strength", "range-breakout", "volatility-regime", "price-action", "options-flow", "ensemble-voting", "tft-multihorizon", "nbeats-trend", "patchtst-pattern", "lstm-sequence", "tcn-momentum", "lightgbm-regime", "catboost-direction", "hmm-regime", "timemixer-multiscale", "conformal-range", "arima-direction", "sarima-seasonal", "ets-trend", "prophet-trend", "svr-direction", "knn-pattern", "bilstm-sequence", "cnn-lstm-hybrid", "lstm-gru-hybrid", "transformer-attention", "sentiment-hybrid", "garch-volatility", "quantile-forest-range", "production-xgboost-direction", "production-lstm-sequence", "production-transformer"]);
-
 productionPredictionRoutes.post('/', async (req: AuthenticatedRequest, res: Response) => {
   const serviceUrl = String(process.env.ML_SERVICE_URL || '').trim().replace(/\/$/, '');
   const wantsAsync = req.query.async === 'true' || req.body?.async === true;
@@ -42,12 +39,11 @@ productionPredictionRoutes.post('/', async (req: AuthenticatedRequest, res: Resp
     res.status(503).json({ success: false, error: 'Production ML service is not configured. Set ML_SERVICE_URL on the server.' });
     return;
   }
-  const symbol = String(req.body?.symbol || '').trim();
-  const timeframe = String(req.body?.timeframe || '').trim();
-  const candles = Array.isArray(req.body?.candles) ? req.body.candles.slice(-MAX_CANDLES) : [];
-  const models = Array.isArray(req.body?.models) ? req.body.models.filter((x: any) => ALLOWED_MODELS.has(String(x))).slice(0, 24) : ['xgboost','lstm'];
-  if (!symbol || !timeframe || candles.length < 80) {
-    res.status(400).json({ success: false, error: 'Production prediction requires symbol, timeframe and at least 80 candles.' });
+  let input;
+  try {
+    input = parseProductionPredictionInput(req.body);
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error?.message || 'Invalid production prediction payload.' });
     return;
   }
   const controller = new AbortController();
@@ -60,7 +56,7 @@ productionPredictionRoutes.post('/', async (req: AuthenticatedRequest, res: Resp
         'Content-Type': 'application/json',
         ...(process.env.ML_SERVICE_SECRET ? { 'X-TradingCore-ML-Secret': process.env.ML_SERVICE_SECRET } : {}),
       },
-      body: JSON.stringify({ symbol, timeframe, candles, models, horizon: 1 }),
+      body: JSON.stringify(input),
     });
     const text = await upstream.text();
     let payload: any = null;
