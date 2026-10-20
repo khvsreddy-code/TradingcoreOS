@@ -186,6 +186,10 @@ type TcoFrameColorKey = keyof TcoFrameColors | 'chartBackgroundEnd';
 type TcoFrameThemePreset = { id: string; label: string; colors: TcoFrameColors };
 
 const TCO_FRAME_STORAGE_KEY = 'tradingcore:vela:frame-preferences:v1';
+// Re-applying panel/layout preferences should not reset/repaint all chart cells unless the
+// chart palette actually changed or a different Vela workspace has just been mounted.
+let lastAppliedTcoVelaThemeWorkspace: object | null = null;
+let lastAppliedTcoVelaThemeSignature = '';
 const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
   { id: 'graphite', label: 'Graphite', colors: {
     uiBackground: '#0d0f13', topbarBackground: '#141518', panelBackground: '#111317', chartBackground: '#141518',
@@ -288,7 +292,8 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   const workspace=(host.closest('.vela-workspace') as HTMLElement|null)??(doc.querySelector('.vela-workspace') as HTMLElement|null)??host;
   let style=doc.getElementById('tco-workspace-frame-style') as HTMLStyleElement|null;
   if(!style){style=doc.createElement('style');style.id='tco-workspace-frame-style';doc.head.appendChild(style);}
-  style.textContent=`
+  if(style.dataset.tcoInstalled!=='1') {
+    style.textContent=`
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-toolbar { order:0; }
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-panel:not([hidden]):not([data-overlay="1"]) { order:1;border-left:0;border-right:1px solid var(--vela-border); }
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-grid { order:2; }
@@ -358,7 +363,9 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-core-editor-frame { min-height:280px!important;flex:1 1 auto;border-color:var(--vela-border)!important;border-radius:9px!important;background:var(--vela-surface-sunken)!important; }
     .tco-core-editor-frame textarea { background:var(--vela-surface-sunken)!important; }
     .tco-core-status { border-radius:7px!important;border-color:var(--vela-border)!important;background:var(--vela-surface)!important; }
-  `;
+    `;
+    style.dataset.tcoInstalled='1';
+  }
   workspace.dataset.tcoSidebar=preferences.sidebar;
   workspace.dataset.tcoDensity=preferences.density;
   workspace.dataset.tcoColorPreset=preferences.themePreset;
@@ -379,7 +386,13 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   };
   try {
     const liveWorkspace=(window as Window & { __TCO_VELA__?: { workspace?: { setTheme?: (theme: VelaTheme) => void } } }).__TCO_VELA__?.workspace;
-    liveWorkspace?.setTheme?.(chartTheme);
+    const signature=JSON.stringify(chartTheme);
+    if(liveWorkspace && typeof liveWorkspace.setTheme==='function'
+      && (liveWorkspace!==lastAppliedTcoVelaThemeWorkspace || signature!==lastAppliedTcoVelaThemeSignature)) {
+      liveWorkspace.setTheme(chartTheme);
+      lastAppliedTcoVelaThemeWorkspace=liveWorkspace;
+      lastAppliedTcoVelaThemeSignature=signature;
+    }
   } catch {}
 
   // The UI palette is intentionally distinct from the plot palette, just like a trading
