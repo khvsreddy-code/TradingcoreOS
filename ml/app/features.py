@@ -10,7 +10,9 @@ import pandas as pd
 
 # Feature order is a model ABI. Never silently change the meaning of columns for an old artifact.
 LEGACY_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features/1'
-FEATURE_SCHEMA_VERSION = 'tradingcore-market-features/2'
+TIMEZONE_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features/2'
+FEATURE_SCHEMA_VERSION = 'tradingcore-market-features/3'
+SESSION_CALENDAR_POLICY_VERSION = 'weekday-session+explicit-holidays/v1'
 FEATURE_COLUMNS = [
     'ret_1', 'ret_3', 'ret_5', 'ret_10',
     'range_pct', 'body_pct', 'volume_ratio',
@@ -59,8 +61,10 @@ def build_features(
     session_open: str = '09:15',
     session_close: str = '15:30',
     feature_schema_version: str = FEATURE_SCHEMA_VERSION,
+    session_holidays: Iterable[str] = (),
+    require_confirmed: bool = False,
 ) -> pd.DataFrame:
-    if feature_schema_version not in (FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION):
+    if feature_schema_version not in (FEATURE_SCHEMA_VERSION, TIMEZONE_FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION):
         raise ValueError(f'Unsupported market feature schema: {feature_schema_version}')
     try:
         ZoneInfo(exchange_timezone)
@@ -81,9 +85,21 @@ def build_features(
     if missing:
         raise ValueError(f'Missing candle columns: {missing}')
 
-    # Store timestamps as aware UTC values for chronological joins; use the explicitly
-    # configured exchange timezone only when calculating session-based features.
+    # Keep UTC as the canonical timeline. Explicit temporal columns, when present,
+    # are enforced before features are calculated so a training request cannot relabel a
+    # developing/realtime bar as historical merely by sorting it into the input frame.
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
+    if require_confirmed:
+        if 'confirmed' in df.columns:
+            df = df[df['confirmed'].map(lambda value: value is True or str(value).strip().lower() in ('true', '1', 'yes'))]
+        if 'phase' in df.columns:
+            df = df[df['phase'].astype(str).str.lower().isin(('historical', 'confirmed'))]
+        if 'availableAt' in df.columns:
+            available_at = pd.to_datetime(df['availableAt'], utc=True, errors='coerce')
+            df = df.loc[available_at.notna() & df['timestamp'].notna() & (available_at <= df['timestamp'])].copy()
+        elif 'available_at' in df.columns:
+            available_at = pd.to_datetime(df['available_at'], utc=True, errors='coerce')
+            df = df.loc[available_at.notna() & df['timestamp'].notna() & (available_at <= df['timestamp'])].copy()
     for col in ['open', 'high', 'low', 'close', 'volume']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     df = df.dropna(subset=required).sort_values('timestamp').drop_duplicates('timestamp').reset_index(drop=True)
@@ -121,15 +137,28 @@ def build_features(
     df['trend_slope'] = close.pct_change(10) / 10.0
 
     if feature_schema_version == LEGACY_FEATURE_SCHEMA_VERSION:
-        # Exact compatibility with previously trained artifacts: old time features
-        # used UTC clock time and assumed a fixed 09:00–15:30 clock.
+        # Exact compatibility with the original published artifact ABI.
         minute = df['timestamp'].dt.hour * 60 + df['timestamp'].dt.minute
         phase = 2 * math.pi * (minute - 9 * 60) / (6.5 * 60)
+        calendar_policy = 'legacy-utc-clock/v1'
     else:
         local_timestamp = df['timestamp'].dt.tz_convert(exchange_timezone)
         minute = local_timestamp.dt.hour * 60 + local_timestamp.dt.minute
         session_phase = ((minute - open_minute) / (close_minute - open_minute)).clip(0.0, 1.0)
-        phase = 2 * math.pi * session_phase
+        if feature_schema_version == TIMEZONE_FEATURE_SCHEMA_VERSION:
+            # Schema v2 is frozen for previously trained artifacts: timezone-aware
+            # clock features, without a session-calendar filter.
+            phase = 2 * math.pi * session_phase
+            calendar_policy = 'timezone-session-clock/v1'
+        else:
+            holidays = {str(day).strip()[:10] for day in session_holidays if str(day).strip()}
+            local_dates = local_timestamp.dt.strftime('%Y-%m-%d')
+            weekday_session = (local_timestamp.dt.dayofweek < 5) & ~local_dates.isin(holidays)
+            # Exchange-local weekends and explicit holidays are not valid trading
+            # sessions. Keep the missing value as NaN; downstream train/validation
+            # drops it rather than inventing an out-of-session phase.
+            phase = (2 * math.pi * session_phase).where(weekday_session, np.nan)
+            calendar_policy = SESSION_CALENDAR_POLICY_VERSION
     df['hour_sin'] = np.sin(phase)
     df['hour_cos'] = np.cos(phase)
 
@@ -138,6 +167,8 @@ def build_features(
     df.attrs['exchange_timezone'] = exchange_timezone
     df.attrs['session_open'] = session_open
     df.attrs['session_close'] = session_close
+    df.attrs['session_calendar_policy'] = calendar_policy
+    df.attrs['session_holidays'] = sorted({str(day).strip()[:10] for day in session_holidays if str(day).strip()})
     return add_market_optimization_features(df)
 
 
@@ -149,6 +180,8 @@ def make_supervised(
     session_open: str = '09:15',
     session_close: str = '15:30',
     feature_schema_version: str = FEATURE_SCHEMA_VERSION,
+    session_holidays: Iterable[str] = (),
+    require_confirmed: bool = True,
 ):
     if not isinstance(horizon, int) or horizon < 1 or horizon > 500:
         raise ValueError('forecast horizon must be an integer in [1, 500] bars')
@@ -158,6 +191,8 @@ def make_supervised(
         session_open=session_open,
         session_close=session_close,
         feature_schema_version=feature_schema_version,
+        session_holidays=session_holidays,
+        require_confirmed=require_confirmed,
     )
     future_return = features['close'].shift(-horizon) / features['close'] - 1
     features['target_return'] = future_return
