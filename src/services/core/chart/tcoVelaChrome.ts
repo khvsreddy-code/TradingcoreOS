@@ -16,7 +16,17 @@ import {
 } from './velaChartFacade';
 import { tradingCoreRuntime } from '../../runtime/TradingCoreRuntime';
 import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineLoader';
-import { loadTcoVelaJournal, saveTcoVelaJournal } from './tcoVelaSupabaseStorage';
+import {
+  deleteTcoVelaSavedWorkspace,
+  flushTcoVelaAppearance,
+  loadTcoVelaAppearance,
+  loadTcoVelaJournal,
+  loadTcoVelaSavedWorkspaces,
+  saveTcoVelaAppearance,
+  saveTcoVelaJournal,
+  saveTcoVelaSavedWorkspace,
+  type TcoSavedWorkspace,
+} from './tcoVelaSupabaseStorage';
 import { getAutomations } from '../../workspace/workspaceState';
 import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
 import type { CoreSpiritEditorModel as CoreSpiritEditorModelType } from '../../coreSpirit/editorModel';
@@ -257,36 +267,43 @@ function frameRgba(hex: string, alpha: number): string {
   const rgb = hex.replace('#', '').match(/.{2}/g)?.map((part) => parseInt(part, 16)) ?? [139, 124, 255];
   return `rgba(${rgb[0] ?? 139}, ${rgb[1] ?? 124}, ${rgb[2] ?? 255}, ${alpha})`;
 }
+function normalizeTcoFramePreferences(value: unknown): TcoFramePreferences {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<TcoFramePreferences> & { accent?: string }
+    : {};
+  const legacyAccent: Record<string, string> = { violet: '#8b7cff', teal: '#14b8a6', blue: '#60a5fa', amber: '#f59e0b' };
+  const themePreset = TCO_FRAME_THEME_PRESETS.some((preset) => preset.id === raw.themePreset) ? String(raw.themePreset) : 'custom';
+  const topbarRaw = raw.topbar && typeof raw.topbar === 'object' ? raw.topbar : {};
+  return {
+    ...DEFAULT_FRAME_PREFERENCES,
+    sidebar: raw.sidebar === 'left' ? 'left' : 'right',
+    density: raw.density === 'compact' ? 'compact' : 'comfortable',
+    themePreset,
+    uiBackground: safeFrameColor(raw.uiBackground, DEFAULT_FRAME_PREFERENCES.uiBackground),
+    topbarBackground: safeFrameColor(raw.topbarBackground, DEFAULT_FRAME_PREFERENCES.topbarBackground),
+    panelBackground: safeFrameColor(raw.panelBackground, DEFAULT_FRAME_PREFERENCES.panelBackground),
+    chartBackground: safeFrameColor(raw.chartBackground, DEFAULT_FRAME_PREFERENCES.chartBackground),
+    chartTextColor: safeFrameColor(raw.chartTextColor, DEFAULT_FRAME_PREFERENCES.chartTextColor),
+    gridColor: safeFrameColor(raw.gridColor, DEFAULT_FRAME_PREFERENCES.gridColor),
+    accent: safeFrameColor(raw.accent && raw.accent in legacyAccent ? legacyAccent[raw.accent] : raw.accent, DEFAULT_FRAME_PREFERENCES.accent),
+    upColor: safeFrameColor(raw.upColor, DEFAULT_FRAME_PREFERENCES.upColor),
+    downColor: safeFrameColor(raw.downColor, DEFAULT_FRAME_PREFERENCES.downColor),
+    chartBackgroundMode: raw.chartBackgroundMode === 'gradient' ? 'gradient' : 'solid',
+    chartBackgroundEnd: safeFrameColor(raw.chartBackgroundEnd, DEFAULT_FRAME_PREFERENCES.chartBackgroundEnd),
+    chartGradientAngle: Math.max(0, Math.min(360, Math.round(Number.isFinite(Number(raw.chartGradientAngle)) ? Number(raw.chartGradientAngle) : 135))),
+    topbar: { ...DEFAULT_FRAME_PREFERENCES.topbar, ...topbarRaw },
+  };
+}
+
 function readTcoFramePreferences(): TcoFramePreferences {
   try {
-    const raw = JSON.parse(localStorage.getItem(TCO_FRAME_STORAGE_KEY) || '{}') as Partial<TcoFramePreferences> & { accent?: string };
-    const legacyAccent: Record<string, string> = { violet: '#8b7cff', teal: '#14b8a6', blue: '#60a5fa', amber: '#f59e0b' };
-    const themePreset = TCO_FRAME_THEME_PRESETS.some((preset) => preset.id === raw.themePreset) ? String(raw.themePreset) : 'custom';
-    return {
-      ...DEFAULT_FRAME_PREFERENCES,
-      sidebar: raw.sidebar === 'left' ? 'left' : 'right',
-      density: raw.density === 'compact' ? 'compact' : 'comfortable',
-      themePreset,
-      uiBackground: safeFrameColor(raw.uiBackground, DEFAULT_FRAME_PREFERENCES.uiBackground),
-      topbarBackground: safeFrameColor(raw.topbarBackground, DEFAULT_FRAME_PREFERENCES.topbarBackground),
-      panelBackground: safeFrameColor(raw.panelBackground, DEFAULT_FRAME_PREFERENCES.panelBackground),
-      chartBackground: safeFrameColor(raw.chartBackground, DEFAULT_FRAME_PREFERENCES.chartBackground),
-      chartTextColor: safeFrameColor(raw.chartTextColor, DEFAULT_FRAME_PREFERENCES.chartTextColor),
-      gridColor: safeFrameColor(raw.gridColor, DEFAULT_FRAME_PREFERENCES.gridColor),
-      accent: safeFrameColor(raw.accent && raw.accent in legacyAccent ? legacyAccent[raw.accent] : raw.accent, DEFAULT_FRAME_PREFERENCES.accent),
-      upColor: safeFrameColor(raw.upColor, DEFAULT_FRAME_PREFERENCES.upColor),
-      downColor: safeFrameColor(raw.downColor, DEFAULT_FRAME_PREFERENCES.downColor),
-      chartBackgroundMode: raw.chartBackgroundMode === 'gradient' ? 'gradient' : 'solid',
-      chartBackgroundEnd: safeFrameColor(raw.chartBackgroundEnd, DEFAULT_FRAME_PREFERENCES.chartBackgroundEnd),
-      chartGradientAngle: Math.max(0, Math.min(360, Math.round(Number.isFinite(Number(raw.chartGradientAngle)) ? Number(raw.chartGradientAngle) : 135))),
-      topbar: { ...DEFAULT_FRAME_PREFERENCES.topbar, ...(raw.topbar || {}) },
-    };
+    return normalizeTcoFramePreferences(JSON.parse(localStorage.getItem(TCO_FRAME_STORAGE_KEY) || '{}'));
   } catch {
     return { ...DEFAULT_FRAME_PREFERENCES, topbar: { ...DEFAULT_FRAME_PREFERENCES.topbar } };
   }
 }
 
-function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePreferences, forceChartTheme = false): void {
+function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePreferences, forceChartTheme = false, persistAppearance = true): void {
   const doc=host.ownerDocument;
   const workspace=(host.closest('.vela-workspace') as HTMLElement|null)??(doc.querySelector('.vela-workspace') as HTMLElement|null)??host;
   let style=doc.getElementById('tco-workspace-frame-style') as HTMLStyleElement|null;
@@ -444,10 +461,21 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   workspace.style.setProperty('--tco-frame-accent', preferences.accent);
   workspace.style.setProperty('--tco-frame-accent-soft', frameRgba(preferences.accent, .18));
   try { localStorage.setItem(TCO_FRAME_STORAGE_KEY,JSON.stringify(preferences)); } catch {}
+  if (persistAppearance) saveTcoVelaAppearance(preferences);
 }
 
 export function applySavedTcoVelaAppearance(host: HTMLElement): void {
-  applyTcoFramePreferences(host, readTcoFramePreferences(), true);
+  const localSignature = (() => { try { return localStorage.getItem(TCO_FRAME_STORAGE_KEY); } catch { return null; } })();
+  applyTcoFramePreferences(host, readTcoFramePreferences(), true, false);
+  void loadTcoVelaAppearance().then((cloud) => {
+    if (!cloud || !host.isConnected) return;
+    // Do not overwrite a local edit made while the account preference request was in flight.
+    let currentSignature: string | null = null;
+    try { currentSignature = localStorage.getItem(TCO_FRAME_STORAGE_KEY); } catch {}
+    if (currentSignature !== localSignature) return;
+    const preferences = normalizeTcoFramePreferences(cloud);
+    applyTcoFramePreferences(host, preferences, true, false);
+  }).catch(() => undefined);
 }
 
 function createFrameSelect(options:Array<[string,string]>,value:string):HTMLSelectElement {
