@@ -19,10 +19,10 @@ assert.match(chrome, /data-tco-density="compact"/, 'the single top bar supports 
 assert.match(chrome, /data-action-id="tco\.watchlist"/, 'topbar action preferences target the actual Vela action ids');
 assert.match(chrome, /TCO_FRAME_THEME_PRESETS/, 'live trading must expose curated full-workspace color palettes');
 assert.match(chrome, /TradingView Dark/, 'a TradingView-style dark preset must be available');
-assert.match(chrome, /chartBackgroundMode: 'solid' \\| 'gradient'/, 'chart background can use solid or gradient fill');
+assert.ok(chrome.includes("chartBackgroundMode: 'solid' | 'gradient'"), 'chart background can use solid or gradient fill');
 assert.match(chrome, /chartBackgroundEnd: string/, 'gradient end color is independently configurable');
 assert.match(chrome, /export function applySavedTcoVelaAppearance/, 'stored live trading appearance must be restored on chart startup');
-assert.match(chrome, /liveWorkspace\?\.setTheme\?\.\(chartTheme\)/, 'user colors apply through Vela chart theme instead of a parallel renderer');
+assert.ok(chrome.includes('liveWorkspace?.setTheme?.(chartTheme)'), 'user colors apply through Vela chart theme instead of a parallel renderer');
 assert.match(chrome, /Search this watchlist/, 'watchlist contains its own ticker filter');
 assert.match(chrome, /Gainers/);
 assert.match(chrome, /Losers/);
