@@ -315,7 +315,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .vela-workspace .vela-ws-toolbar,
     .vela-workspace .vela-ws-strips,
     .vela-workspace .vela-panel { --vela-fg:var(--tco-user-vela-panel-text,#d1d4dc);--vela-fg-muted:color-mix(in srgb,var(--tco-user-vela-panel-text,#d1d4dc) 68%,transparent);--vela-fg-bright:var(--tco-user-vela-panel-text,#f0f3fa);background:var(--tco-user-vela-panel,var(--vela-surface))!important; }
-    .vela-workspace .vela-lp { --vela-fg:var(--tco-user-vela-panel-text,var(--vela-fg));--vela-fg-muted:color-mix(in srgb,var(--tco-user-vela-panel-text,var(--vela-fg)) 68%,transparent);--vela-fg-bright:var(--tco-user-vela-panel-text,#f0f3fa); }
+    .vela-workspace .vela-lp { --vela-fg:var(--tco-user-vela-panel-text,#d1d4dc);--vela-fg-muted:color-mix(in srgb,var(--tco-user-vela-panel-text,var(--vela-fg)) 68%,transparent);--vela-fg-bright:var(--tco-user-vela-panel-text,#f0f3fa); }
     .vela-workspace .vela-ws-grid { background:var(--tco-user-vela-grid,var(--vela-border-soft))!important; }
     .vela-workspace .vela-cell { background:var(--tco-user-vela-chart,var(--vela-bg))!important; }
     .vela-workspace .vela-panel { border-color:var(--tco-user-vela-grid,var(--vela-border))!important; }
@@ -536,8 +536,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       ['topbarBackground','Top bar'],
       ['panelBackground','Panels and tools'],
       ['chartBackground','Chart canvas'],
-      ['chartBackgroundEnd','Gradient end'],
-      ['chartTextColor','Chart text'],
+            ['chartTextColor','Chart text'],
       ['gridColor','Grid and borders'],
       ['accent','Accent and selection'],
       ['upColor','Bull candle'],
@@ -591,6 +590,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
     const help=document.createElement('div');help.className='tco-frame-help';help.style.cssText='margin:4px 0 8px;';
     help.textContent='Hide actions you do not use. Symbol, timeframe, chart style, Indicators, drawings and settings remain available.';
     tools.append(title,help);
+    const toolInputs = new Map<keyof TcoFramePreferences['topbar'], HTMLInputElement>();
     const toolOptions:Array<[keyof TcoFramePreferences['topbar'],string]>=[
       ['watchlist','Watchlist'],['research','Research'],['automation','Automation'],['trading','Trading'],['journal','Journal'],['positions','Positions'],['code','CoreSpirit Studio'],
     ];
@@ -598,6 +598,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       const row=document.createElement('label');row.className='tco-frame-toggle';
       const input=document.createElement('input');input.type='checkbox';input.checked=prefs.topbar[key]!==false;
       const text=document.createElement('span');text.textContent=label;row.append(input,text);tools.appendChild(row);
+      toolInputs.set(key,input);
       input.addEventListener('change',()=>{prefs={...prefs,topbar:{...prefs.topbar,[key]:input.checked}};applyTcoFramePreferences(ctx.host,prefs);});
     }
     root.appendChild(tools);
@@ -605,6 +606,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
     reset.addEventListener('click',()=>{
       prefs={...DEFAULT_FRAME_PREFERENCES,topbar:{...DEFAULT_FRAME_PREFERENCES.topbar}};
       sidebar.value=prefs.sidebar;density.value=prefs.density;
+      for(const [key,input] of toolInputs) input.checked=prefs.topbar[key]!==false;
       applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
       ctx.toast('Workspace appearance reset','success');
     });
