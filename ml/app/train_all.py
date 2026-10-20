@@ -4,7 +4,7 @@ import argparse, json, random, traceback
 from pathlib import Path
 import numpy as np, pandas as pd
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, log_loss
-from .features import build_features, make_supervised, FEATURE_COLUMNS
+from .features import build_features, make_supervised, FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION
 from .optimization import fit_meta_labeler, OPT_FEATURES
 from .all_models import *
 
@@ -30,13 +30,35 @@ NEURAL_KIND={'lstm-sequence':'lstm','production-lstm-sequence':'lstm','transform
 'production-transformer':'transformer','bilstm-sequence':'bilstm','cnn-lstm-hybrid':'cnn_lstm','lstm-gru-hybrid':'lstm_gru',
 'tcn-momentum':'tcn','tft-multihorizon':'tft','nbeats-trend':'nbeats','patchtst-pattern':'patchtst','timemixer-multiscale':'timemixer'}
 
-def split(df):
-    n=len(df); a=int(n*.70); b=int(n*.85)
-    return df.iloc[:a].copy(),df.iloc[a:b].copy(),df.iloc[b:].copy()
+def split(df, horizon=1):
+    # Purge the last target-horizon rows from each earlier window. Their labels use
+    # outcomes in the next window and must not contaminate validation/test metrics.
+    n=len(df); a=int(n*.70); b=int(n*.85); purge=max(1,int(horizon))
+    train_end=max(0,a-purge)
+    valid_end=max(a,b-purge)
+    return df.iloc[:train_end].copy(),df.iloc[a:valid_end].copy(),df.iloc[b:].copy()
 
-def evaluate(model, frame, features):
-    X=frame[features]; y=frame.target_up.to_numpy()
-    if isinstance(model,dict): return {}
+def target_kind_for(model_id):
+    if model_id in ('quantile-forest-range','conformal-range'): return 'return'
+    if model_id == 'garch-volatility': return 'volatility'
+    if model_id == 'hmm-regime': return 'regime'
+    if model_id in TIME_SERIES_MODELS: return 'price'
+    return 'direction'
+
+def evaluate(model, frame, features, target_kind='direction'):
+    X=frame[features]
+    if frame.empty: return {'status':'insufficient_test_rows'}
+    if target_kind in ('return','price'):
+        y=frame.target_return.to_numpy() if target_kind=='return' else frame.close.to_numpy()
+        if isinstance(model,dict) and {'q10','q50','q90'}.issubset(model):
+            pred=np.asarray(model['q50'].predict(X),float); lo=np.asarray(model['q10'].predict(X),float); hi=np.asarray(model['q90'].predict(X),float)
+            return {'mae':float(np.mean(np.abs(y-pred))),'rmse':float(np.sqrt(np.mean((y-pred)**2))),
+                    'interval_coverage':float(np.mean((y>=lo)&(y<=hi))),'sample_count':int(len(y))}
+        if isinstance(model,dict): return {'status':'not_available_for_ensemble'}
+        pred=np.asarray(model.predict(X),float)
+        return {'mae':float(np.mean(np.abs(y-pred))),'rmse':float(np.sqrt(np.mean((y-pred)**2))),'sample_count':int(len(y))}
+    y=frame.target_up.to_numpy()
+    if isinstance(model,dict): return {'status':'member_metrics_recorded_individually'}
     if hasattr(model,'predict_proba'): p=model.predict_proba(X)[:,1]
     else:
         r=model.predict(X); p=1/(1+np.exp(-np.clip(np.asarray(r,float),-20,20)))
@@ -44,18 +66,21 @@ def evaluate(model, frame, features):
     return {'accuracy':float(accuracy_score(y,pred)),'precision':float(precision_score(y,pred,zero_division=0)),
             'recall':float(recall_score(y,pred,zero_division=0)),
             'roc_auc':float(roc_auc_score(y,p)) if len(np.unique(y))>1 else None,
-            'log_loss':float(log_loss(y,np.clip(p,1e-6,1-1e-6)))}
+            'log_loss':float(log_loss(y,np.clip(p,1e-6,1-1e-6))),
+            'sample_count':int(len(y))}
 
 def main():
     ap=argparse.ArgumentParser(description='Train all TradingCoreOS production models from real historical data.')
     ap.add_argument('--csv',required=True);ap.add_argument('--symbol',required=True);ap.add_argument('--timeframe',default='5m')
     ap.add_argument('--out',default='models');ap.add_argument('--horizon',type=int,default=1);ap.add_argument('--epochs',type=int,default=20)
+    ap.add_argument('--exchange-timezone',default='Asia/Kolkata');ap.add_argument('--session-open',default='09:15');ap.add_argument('--session-close',default='15:30')
     args=ap.parse_args(); random.seed(42);np.random.seed(42); 
     df=pd.read_csv(args.csv)
     ren={c:{'date':'timestamp','datetime':'timestamp','shares_traded':'volume'}.get(c.strip().lower().replace(' ','_'),c.strip().lower().replace(' ','_')) for c in df.columns}
     df=df.rename(columns=ren)
-    supervised=make_supervised(df,args.horizon)
-    train,valid,test=split(supervised)
+    supervised=make_supervised(df,args.horizon,exchange_timezone=args.exchange_timezone,session_open=args.session_open,session_close=args.session_close,feature_schema_version=FEATURE_SCHEMA_VERSION)
+    train,valid,test=split(supervised,args.horizon)
+    if min(len(train),len(valid),len(test)) < 12: raise ValueError('Purged chronological training requires at least 12 rows in each train/validation/test window.')
     root=Path(args.out);root.mkdir(parents=True,exist_ok=True)
     report={'symbol':args.symbol,'timeframe':args.timeframe,'horizon':args.horizon,'models':{}}
     base=FEATURE_COLUMNS
@@ -65,9 +90,23 @@ def main():
     if 'sentiment' in supervised.columns: special.append('sentiment')
     for model_id in ALL_MODEL_IDS:
         d=root/f"{args.symbol}__{args.timeframe}__{model_id}"; d.mkdir(parents=True,exist_ok=True)
+        target_kind=target_kind_for(model_id)
+        required_lookback=max(80, 60+20 if model_id in NEURAL_KIND else 80)
         meta={'model_id':model_id,'name':MODEL_NAMES[model_id],'algorithm':TREE_MODELS.get(model_id,model_id.split('-')[0]),
               'symbol':args.symbol,'timeframe':args.timeframe,'horizon':args.horizon,'status':'paper',
-              'trained_on':'real historical CSV supplied to train_all.py','feature_schema':base}
+              'trained_on':'real historical CSV supplied to train_all.py','feature_schema':base,
+              'feature_schema_version':FEATURE_SCHEMA_VERSION,'feature_schema_hash':__import__('hashlib').sha256('|'.join(base).encode('utf-8')).hexdigest(),
+              'exchange_timezone':args.exchange_timezone,'session_open':args.session_open,'session_close':args.session_close,
+              'target_kind':target_kind,'forecast_horizon_bars':args.horizon,'required_lookback_bars':required_lookback,
+              'model_contract':{'contract_version':1,'model_identity':{'id':model_id,'symbol':args.symbol,'timeframe':args.timeframe},
+                  'feature_schema':{'version':FEATURE_SCHEMA_VERSION,'ordered_names':base,'hash':__import__('hashlib').sha256('|'.join(base).encode('utf-8')).hexdigest()},
+                  'lookback':{'minimum_bars':required_lookback,'preferred_bars':max(required_lookback,500),'maximum_bars':5000},
+                  'target':{'kind':target_kind,'forecast_horizon_bars':args.horizon},
+                  'temporal_availability':{'training_requires_confirmed_bars':True,'availability_rule':'availableAt<=timestamp','validation_protocol':'purged-chronological-v1'},
+                  'validation':{'protocol':'purged-chronological-v1','calibration_status':'not_calibrated','purged_bars_per_boundary':args.horizon},
+                  'release_status':'candidate'},
+              'calibration_status':'not_calibrated','release_status':'candidate',
+              'validation_protocol':'purged-chronological-v1','purged_bars_per_boundary':args.horizon}
         try:
             if model_id in TREE_MODELS:
                 features=base
@@ -83,20 +122,20 @@ def main():
                     m=train_classical(train,valid,model_id,features)
                     kind='quantile' if model_id=='quantile-forest-range' else 'classical'
                 joblib.dump({'kind':kind,'model':m,'features':features, **(m if kind=='quantile' else {})},d/'model.joblib')
-                meta['feature_schema']=features;meta['metrics']=evaluate(m,test,features)
+                meta['feature_schema']=features;meta['model_contract']['feature_schema']['ordered_names']=features;meta['model_contract']['feature_schema']['hash']=__import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest();meta['metrics']=evaluate(m,test,features,'return' if model_id=='quantile-forest-range' else 'direction')
             elif model_id in NEURAL_MODELS:
                 kind=NEURAL_KIND[model_id];features=base
                 if kind in ('nbeats','patchtst','tft','timemixer'): train_special_neural(train,valid,kind,features,d,epochs=args.epochs)
                 else: train_neural(train,valid,kind,features,d,epochs=args.epochs)
                 # store architecture metadata for loader
-                meta.update({'kind':kind,'sequence_length':60,'neural_features':features})
+                meta.update({'kind':kind,'sequence_length':60,'required_lookback_bars':80,'neural_features':features,'feature_schema':features});meta['model_contract']['feature_schema']['ordered_names']=features;meta['model_contract']['feature_schema']['hash']=__import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
                 # validate quickly using test
-                meta['metrics']={'note':'test metrics are computed by inference service for sequence artifacts'}
+                meta['metrics']=evaluate(m,test,features,'direction');meta['metrics']['note']='direction metrics; probability calibration remains not_calibrated'
             elif model_id in TIME_SERIES_MODELS:
                 m=fit_time_series(train,model_id);joblib.dump({'kind':'timeseries','model':m},d/'model.joblib')
-                meta['metrics']={'note':'time-series forecast metrics require horizon-aware evaluation'}
+                meta['metrics']={'note':'point forecast metrics must be measured on a separate horizon-matched holdout','validation_protocol':'purged-chronological-v1'}
             elif model_id=='hmm-regime':
-                b=fit_hmm(train,base);joblib.dump({'kind':'hmm','model':b},d/'model.joblib');meta['feature_schema']=base
+                b=fit_hmm(train,base);joblib.dump({'kind':'hmm','model':b,'features':base},d/'model.joblib');meta['feature_schema']=base;meta['metrics']={'sample_count':int(len(test)),'note':'regime state metrics require state-alignment validation'}
             elif model_id=='conformal-range':
                 # Train a genuine base regressor then calibrate absolute residual quantile on validation.
                 base_model=GradientBoostingRegressor(n_estimators=300,max_depth=3,learning_rate=.03,random_state=42).fit(train[base],train.target_return)
@@ -105,7 +144,7 @@ def main():
                 joblib.dump({'kind':'conformal','model':base_model,'features':base,'q90':q},d/'model.joblib');meta['interval_method']='split_conformal_abs_residual';meta['q90']=q
             elif model_id=='sentiment-hybrid':
                 if 'sentiment' not in supervised.columns: raise RuntimeError('Sentiment Hybrid requires a real sentiment feature column')
-                features=base+['sentiment'];m=train_classical(train,valid,'logistic-direction',features);joblib.dump({'kind':'classical','model':m,'features':features},d/'model.joblib');meta['feature_schema']=features
+                features=base+['sentiment'];m=train_classical(train,valid,'logistic-direction',features);joblib.dump({'kind':'classical','model':m,'features':features},d/'model.joblib');meta['feature_schema']=features;meta['model_contract']['feature_schema']['ordered_names']=features;meta['model_contract']['feature_schema']['hash']=__import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
             else: raise RuntimeError('Unhandled model')
             (d/'metadata.json').write_text(json.dumps(meta,indent=2,default=str));report['models'][model_id]=meta
         except Exception as e:
