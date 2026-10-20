@@ -71,7 +71,7 @@ assert.match(workspace, /async persistNow\(\): Promise<void>/, 'cloud storage er
 assert.match(stateDocument, /priceScales\?: WorkspacePaneScaleState\[\]/, 'per-pane vertical framing is validated as part of the persisted chart document');
 assert.match(cell, /priceScales: this\.inner\?\.renderer\.getWorkspaceScaleState\?\.\(\) \?\? this\.state\.priceScales/, 'manual axis ranges and autoscale flags are snapshotted');
 assert.match(cell, /onWorkspaceScaleChange\?\.\(\(\) =>/, 'manual scale edits trigger chart autosave');
-assert.match(workspace, /applyWorkspaceScaleState\?\.\(scales\)/, 'restoration reapplies scale settings after panes mount');
+assert.match(cell, /applyWorkspaceScaleState\?\.\(scales\)/, 'restoration reapplies scale settings after panes mount');
 assert.match(nativeRenderer, /getWorkspaceScaleState\(\): WorkspacePaneScaleState\[\]/, 'native renderer exposes actual manual axis bounds');
 assert.match(nativeRenderer, /applyWorkspaceScaleState\(state: readonly WorkspacePaneScaleState\[\]\)/, 'native renderer restores manual axis bounds safely');
 assert.match(nativeRenderer, /private setPaneInvert\([\s\S]{0,280}emitWorkspaceScaleChange\(\)/, 'axis inversion changes are autosaved');
