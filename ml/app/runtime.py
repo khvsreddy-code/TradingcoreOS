@@ -333,8 +333,12 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     neural_sequence = int(meta.get('sequence_length', 60)) if kind == 'neural' else 0
     contract_lookback = model_contract.get('lookback', {}) if isinstance(model_contract.get('lookback'), dict) else {}
     contract_minimum = int(_contract_field(contract_lookback, 'min_bars', 'minBars', 80))
-    contract_preferred = int(_contract_field(contract_lookback, 'preferred_bars', 'preferredBars', max(contract_minimum, 80, neural_sequence)))
     contract_maximum = int(_contract_field(contract_lookback, 'max_bars', 'maxBars', 5000))
+    # Legacy artifacts have no per-artifact preference, so preserve their established
+    # 5k-history behavior. Newer contracts default an omitted preference to a useful
+    # bounded window (or their maximum when that maximum is smaller).
+    default_preferred = 5000 if not model_contract else min(contract_maximum, max(contract_minimum, 500, neural_sequence))
+    contract_preferred = int(_contract_field(contract_lookback, 'preferred_bars', 'preferredBars', default_preferred))
     if not 1 <= contract_minimum <= contract_preferred <= contract_maximum <= 5000:
         raise ValueError('Artifact lookback contract must satisfy 1 <= minBars <= preferredBars <= maxBars <= 5000.')
     required_lookback = max(
