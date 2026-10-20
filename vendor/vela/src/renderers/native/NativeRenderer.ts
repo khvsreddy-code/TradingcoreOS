@@ -2716,11 +2716,14 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     getWorkspaceScaleState(): WorkspacePaneScaleState[] {
-        return this.scene.orderedPanes().flatMap((pane) => {
+        return this.scene.orderedPanes().flatMap((pane, order) => {
             const scale = pane.manualScale ?? pane.scale;
             if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max) || scale.max <= scale.min) return [];
             return [{
                 id: pane.id,
+                kind: pane.kind,
+                order,
+                ...(pane.title ? { title: pane.title } : {}),
                 auto: pane.manualScale == null,
                 min: scale.min,
                 max: scale.max,
@@ -2734,9 +2737,18 @@ export class NativeRenderer implements IChartRenderer {
     applyWorkspaceScaleState(state: readonly WorkspacePaneScaleState[]): void {
         if (!Array.isArray(state) || state.length === 0) return;
         let changed = false;
+        const ordered = this.scene.orderedPanes();
         for (const saved of state) {
             if (!saved || typeof saved.id !== 'string') continue;
-            const pane = this.scene.panes.get(saved.id);
+            let pane = this.scene.panes.get(saved.id);
+            // Manifest indicators may receive new runtime IDs after reload. In that case,
+            // recover study pane scales by stable title first, then their saved position.
+            if (!pane && saved.kind) {
+                const candidates = ordered.filter((candidate) => candidate.kind === saved.kind);
+                pane = (saved.title ? candidates.find((candidate) => candidate.title === saved.title) : undefined)
+                    ?? (Number.isInteger(saved.order) ? ordered[saved.order!] : undefined);
+                if (pane && pane.kind !== saved.kind) pane = undefined;
+            }
             if (!pane) continue;
             const min = Number(saved.min);
             const max = Number(saved.max);
