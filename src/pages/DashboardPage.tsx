@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity, ArrowDownRight, ArrowUpRight, BookOpen, Code2, ExternalLink,
-  LineChart, Newspaper, RefreshCw, Sparkles, TrendingDown, TrendingUp,
+  LineChart, Newspaper, RefreshCw, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { WorkspaceModuleShell, WorkspaceRoute, Panel } from '../components/workspace/WorkspaceModuleShell';
 import { tradingCoreRuntime } from '../services/runtime/TradingCoreRuntime';
 import { listPublicIndicatorPublications, type IndicatorPublication } from '../services/coreSpirit/indicatorPublicationService';
 import type { NormalizedMarketTick } from '../types/market';
 
-type MarketIndex = { symbol: string; label: string; yahoo: string };
+type MarketIndex = { symbol: string; label: string };
 type MarketQuoteView = MarketIndex & { tick: NormalizedMarketTick | null; receivedAt: number; ageMs: number; live: boolean };
 type NewsItem = { id?: string; title: string; source: string; url: string; publishedAt?: string };
 type NewsPayload = { success?: boolean; provider?: string; items?: NewsItem[]; error?: string };
 
 const MARKET_INDEXES: MarketIndex[] = [
-  { symbol: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50', yahoo: '^NSEI' },
-  { symbol: 'NSE:NIFTYBANK-INDEX', label: 'NIFTY BANK', yahoo: '^NSEBANK' },
-  { symbol: 'BSE:SENSEX-INDEX', label: 'SENSEX', yahoo: '^BSESN' },
-  { symbol: 'NSE:FINNIFTY-INDEX', label: 'FINNIFTY', yahoo: '^NSEI' },
-  { symbol: 'NSE:MIDCPNIFTY-INDEX', label: 'MIDCAP SELECT', yahoo: '^NSEI' },
+  { symbol: 'NSE:NIFTY50-INDEX', label: 'NIFTY 50' },
+  { symbol: 'NSE:NIFTYBANK-INDEX', label: 'NIFTY BANK' },
+  { symbol: 'BSE:SENSEX-INDEX', label: 'SENSEX' },
+  { symbol: 'NSE:FINNIFTY-INDEX', label: 'FINNIFTY' },
+  { symbol: 'NSE:MIDCPNIFTY-INDEX', label: 'MIDCAP SELECT' },
 ];
 
 const MARKET_REFRESH_MS = 5_000;
@@ -126,10 +126,30 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
   }, [sync]);
 
   useEffect(() => {
+    let cancelled = false;
+    let stopMarketSubscription: (() => void) | undefined;
     refreshMarket();
     const unsubscribe = tradingCoreRuntime.on('TICK_UPDATE', refreshMarket);
     const timer = window.setInterval(refreshMarket, MARKET_REFRESH_MS);
-    return () => { unsubscribe(); window.clearInterval(timer); };
+    // A dashboard visit should receive fresh quotes even when the live chart hasn't
+    // been mounted in this tab yet. This is a small lite-quote set, not full chart streams.
+    void (async () => {
+      if (!tradingCoreRuntime.hasConnectedBroker()) {
+        try { await tradingCoreRuntime.restoreBrokerConnections(); } catch {}
+      }
+      if (cancelled || !tradingCoreRuntime.hasConnectedBroker()) return;
+      stopMarketSubscription = tradingCoreRuntime.subscribeMarketData(
+        MARKET_INDEXES.map(index => index.symbol),
+        event => { if (event.type === 'tick') refreshMarket(); },
+      );
+      refreshMarket();
+    })();
+    return () => {
+      cancelled = true;
+      stopMarketSubscription?.();
+      unsubscribe();
+      window.clearInterval(timer);
+    };
   }, [refreshMarket]);
 
   useEffect(() => {
