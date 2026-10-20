@@ -71,6 +71,7 @@ def build_features(
     except (ZoneInfoNotFoundError, TypeError, ValueError):
         raise ValueError(f'Unknown exchange timezone: {exchange_timezone}') from None
 
+    session_holidays = tuple(str(day).strip()[:10] for day in session_holidays if str(day).strip())
     open_minute = _parse_clock(session_open, 'session_open')
     close_minute = _parse_clock(session_close, 'session_close')
     if close_minute <= open_minute:
