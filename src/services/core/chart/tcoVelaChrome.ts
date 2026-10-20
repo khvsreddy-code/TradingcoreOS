@@ -186,10 +186,8 @@ type TcoFrameColorKey = keyof TcoFrameColors | 'chartBackgroundEnd';
 type TcoFrameThemePreset = { id: string; label: string; colors: TcoFrameColors };
 
 const TCO_FRAME_STORAGE_KEY = 'tradingcore:vela:frame-preferences:v1';
-// Re-applying panel/layout preferences should not reset/repaint all chart cells unless the
-// chart palette actually changed or a different Vela workspace has just been mounted.
-let lastAppliedTcoVelaThemeWorkspace: object | null = null;
-let lastAppliedTcoVelaThemeSignature = '';
+// A WeakMap avoids retaining a destroyed chart workspace after the live route unmounts.
+const appliedTcoVelaThemeSignatures = new WeakMap<object, string>();
 const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
   { id: 'graphite', label: 'Graphite', colors: {
     uiBackground: '#0d0f13', topbarBackground: '#141518', panelBackground: '#111317', chartBackground: '#141518',
@@ -287,7 +285,7 @@ function readTcoFramePreferences(): TcoFramePreferences {
   }
 }
 
-function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePreferences): void {
+function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePreferences, forceChartTheme = false): void {
   const doc=host.ownerDocument;
   const workspace=(host.closest('.vela-workspace') as HTMLElement|null)??(doc.querySelector('.vela-workspace') as HTMLElement|null)??host;
   let style=doc.getElementById('tco-workspace-frame-style') as HTMLStyleElement|null;
@@ -387,11 +385,11 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   try {
     const liveWorkspace=(window as Window & { __TCO_VELA__?: { workspace?: { setTheme?: (theme: VelaTheme) => void } } }).__TCO_VELA__?.workspace;
     const signature=JSON.stringify(chartTheme);
+    const previousSignature=liveWorkspace ? appliedTcoVelaThemeSignatures.get(liveWorkspace) : undefined;
     if(liveWorkspace && typeof liveWorkspace.setTheme==='function'
-      && (liveWorkspace!==lastAppliedTcoVelaThemeWorkspace || signature!==lastAppliedTcoVelaThemeSignature)) {
+      && (forceChartTheme || signature!==previousSignature)) {
       liveWorkspace.setTheme(chartTheme);
-      lastAppliedTcoVelaThemeWorkspace=liveWorkspace;
-      lastAppliedTcoVelaThemeSignature=signature;
+      appliedTcoVelaThemeSignatures.set(liveWorkspace,signature);
     }
   } catch {}
 
@@ -433,7 +431,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
 }
 
 export function applySavedTcoVelaAppearance(host: HTMLElement): void {
-  applyTcoFramePreferences(host, readTcoFramePreferences());
+  applyTcoFramePreferences(host, readTcoFramePreferences(), true);
 }
 
 function createFrameSelect(options:Array<[string,string]>,value:string):HTMLSelectElement {
@@ -524,7 +522,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
     };
     const applyPreset=(preset:TcoFrameThemePreset)=>{
       prefs={...prefs,...preset.colors,themePreset:preset.id,chartBackgroundMode:'solid'};
-      applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
+      applyTcoFramePreferences(ctx.host,prefs,true);setPresetSelection();syncColorControls();
       ctx.toast('Color scheme applied','success');
     };
 
@@ -620,12 +618,12 @@ const workspaceFramePanel: SidePanelDescriptor = {
       prefs={...DEFAULT_FRAME_PREFERENCES,topbar:{...DEFAULT_FRAME_PREFERENCES.topbar}};
       sidebar.value=prefs.sidebar;density.value=prefs.density;
       for(const [key,input] of toolInputs) input.checked=prefs.topbar[key]!==false;
-      applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
+      applyTcoFramePreferences(ctx.host,prefs,true);setPresetSelection();syncColorControls();
       ctx.toast('Workspace appearance reset','success');
     });
     root.appendChild(reset);
     applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
-    return {onOpen:()=>{applyTcoFramePreferences(ctx.host,prefs);}};
+    return {onOpen:()=>{applyTcoFramePreferences(ctx.host,prefs,true);}};
   },
 };
 
