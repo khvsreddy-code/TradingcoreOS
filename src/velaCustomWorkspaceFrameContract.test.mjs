@@ -56,6 +56,13 @@ assert.match(chrome, /loadTcoVelaSavedWorkspaces/, 'saved workspaces must be lis
 assert.match(chrome, /deleteTcoVelaSavedWorkspace/, 'saved workspace management supports deletion');
 assert.match(chrome, /persistActiveTcoVelaSavedWorkspace/, 'manual save and periodic checkpoints update the selected named setup');
 assert.match(chrome, /stateForNamedWorkspaceSnapshot/, 'saving from the settings panel must not restore that manager as the active trading panel');
+assert.match(chrome, /key: 'tco\.corespirit\.live-editor'/, 'the live CoreSpirit source is included in versioned global workspace state');
+assert.match(chrome, /tco:corespirit-live-source-restored/, 'restoring a workspace updates an already-open CoreSpirit editor');
+assert.match(chrome, /queueLiveSourceSave/, 'CoreSpirit edits trigger a debounced workspace save as well as local recovery');
+assert.match(chrome, /Journal autosave is on/, 'the trade journal exposes its autosave status');
+assert.match(chrome, /scheduleJournalSave/, 'journal edits autosave without requiring a manual click');
+assert.match(chrome, /onJournalPageHide/, 'journal text flushes when the page is backgrounded or closed');
+assert.match(storage, /saveTcoVelaJournal\(note: string\): Promise<boolean>/, 'journal persistence reports account-sync success or local fallback');
 assert.match(chrome, /api\.applyState\(snapshot\.workspace/, 'restore applies the saved Vela workspace document');
 assert.match(chrome, /appearance:\{\.\.\.prefs/, 'named workspaces include the full live UI/chart appearance');
 assert.match(storage, /tradingcoreVelaSavedWorkspaces/, 'named workspace snapshots are account-scoped');
