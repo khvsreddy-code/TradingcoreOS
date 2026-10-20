@@ -137,6 +137,7 @@ for (const [route, rootKey] of Object.entries(routeRoots)) {
   const budget = budgets[route];
   const target = targets[route];
   console.log(`  ${route}: ${totals.gzipKb.toFixed(1)} KB gzip across ${totals.files.size} unique JS files`);
+  if (route === 'workspace') console.log(`    workspace graph files: ${[...totals.files].sort().join(', ')}`);
   if (target && totals.gzipKb > target) {
     console.log(`    optimization target: ${target} KB gzip (hard budget: ${budget} KB)`);
   }
