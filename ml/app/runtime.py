@@ -85,9 +85,12 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     if not isinstance(identity, dict):
         raise ValueError('Model contract identity must be an object.')
     contract_id = str(identity.get('id', identity.get('model_id', model_id)))
-    contract_symbol = str(identity.get('symbol', symbol))
-    contract_timeframe = str(identity.get('timeframe', timeframe))
-    if contract_id != model_id or contract_symbol != symbol or contract_timeframe != timeframe:
+    contract_symbol = str(identity.get('symbol', meta.get('symbol', symbol)))
+    contract_timeframe = str(identity.get('timeframe', meta.get('timeframe', timeframe)))
+    artifact_symbol = str(meta.get('symbol', symbol))
+    artifact_timeframe = str(meta.get('timeframe', timeframe))
+    if (contract_id != model_id or contract_symbol != symbol or contract_timeframe != timeframe
+            or artifact_symbol != symbol or artifact_timeframe != timeframe):
         raise ValueError('Model artifact identity does not match the requested symbol, timeframe and model family.')
 
     schema = contract.get('featureSchema', contract.get('feature_schema', {}))
