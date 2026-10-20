@@ -30,7 +30,7 @@ assert.match(chrome, /Search this watchlist/, 'watchlist contains its own ticker
 assert.match(chrome, /Gainers/);
 assert.match(chrome, /Losers/);
 assert.match(chrome, /Sort watchlist/);
-assert.match(chrome, /Live market quote|Snapshot from the active market-data feed/, 'watchlist detail must not present demo prices as live');
+assert.match(chrome, /Live broker quote|Waiting for a market quote for this instrument\. No sample price is shown\./, 'watchlist detail must not present demo prices as live');
 assert.match(chrome, /ctx\.symbol.*ctx\.timeframe/, 'CoreSpirit Studio identifies the active chart context');
 assert.match(chrome, /tco-core-editor-frame/, 'CoreSpirit Studio uses the refreshed terminal-panel styling');
 assert.match(workspace, /this\.topbar = new Topbar/, 'Vela workspace remains the sole owner of the command bar');
