@@ -76,7 +76,7 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
   // We test the reference-field resolver with known feature keys rather than custom candles.
   const dynamicCrossover = evaluateAutomation(
     crossover,
-    context(),
+    emaContext,
     Date.parse('2026-10-20T05:00:00.000Z'),
   );
   // The first two bars make EMA 9 move above EMA 21 after both shared series begin
