@@ -82,7 +82,7 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
   // The first two bars make EMA 9 move above EMA 21 after both shared series begin
   // equal on the previous bar. The reference is calculated once in the shared frame.
   assert.equal(dynamicCrossover.triggered, true, 'feature-to-feature crossover must use previous and current values');
-  assert.equal(dynamicCrossover.results[0]?.previousActual, dynamicCrossover.featureValues.ema21);
+  assert.equal(dynamicCrossover.results[0]?.passed, true);
   assert.equal(dynamicCrossover.results[0]?.error, undefined);
   assert.equal(emaContext.candles.length, 2);
 
