@@ -234,6 +234,26 @@ export class HistoricalDataService {
       if (mapping.enabled && mapping.fyersSymbol === instrumentId) return mapping;
     }
 
+    // These five broad Indian cash indices have stable, unambiguous TradingView symbols.
+    // Their history can be sourced without an administrator-managed mapping row; derivatives
+    // deliberately stay on the explicit-map path because expiry/contract identity must match.
+    const builtInIndexMappings: Record<string, { tvSymbol: string; tvExchange: string; exchange: string }> = {
+      'NSE:NIFTY50-INDEX': { tvSymbol: 'NIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'NSE:NIFTYBANK-INDEX': { tvSymbol: 'BANKNIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'NSE:FINNIFTY-INDEX': { tvSymbol: 'FINNIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'NSE:MIDCPNIFTY-INDEX': { tvSymbol: 'MIDCPNIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'BSE:SENSEX-INDEX': { tvSymbol: 'SENSEX', tvExchange: 'BSE', exchange: 'BSE' },
+    };
+    const builtInIndex = builtInIndexMappings[instrumentId];
+    if (builtInIndex) {
+      return {
+        instrumentId, fyersSymbol: instrumentId, ...builtInIndex, instrumentType: 'index',
+        timezone: 'Asia/Kolkata', sessionOpen: '09:15', sessionClose: '15:30',
+        adjustmentPolicy: 'none', fyersAdjustmentPolicy: 'none', tvAdjustmentPolicy: 'none',
+        calendarHolidays: [], calendarComplete: false, enabled: true,
+      };
+    }
+
     return {
       instrumentId, fyersSymbol: instrumentId, exchange: instrumentId.includes(':') ? instrumentId.split(':')[0]! : 'NSE',
       instrumentType: /-INDEX$/i.test(instrumentId) ? 'index' : 'unknown',
