@@ -19,6 +19,7 @@ import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineL
 import {
   deleteTcoVelaSavedWorkspace,
   flushTcoVelaAppearance,
+  getLocalTcoVelaSavedWorkspace,
   loadTcoVelaActiveWorkspaceId,
   loadTcoVelaAppearance,
   loadTcoVelaJournal,
@@ -502,7 +503,7 @@ function stateForNamedWorkspaceSnapshot(state: unknown): unknown {
 
 export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:string; synced:boolean } | null> {
   if(typeof window==='undefined') return null;
-  const broker=tradingCoreRuntime.getPrimaryBrokerId()??'fyers';
+  const broker=String(tradingCoreRuntime.getPrimaryBrokerId()??'fyers').trim().toLowerCase()||'fyers';
   let activeId='';
   try { activeId=localStorage.getItem('tradingcore:vela:active-saved-workspace:v1:'+broker)??''; } catch {}
   // The local selection is available synchronously for page-hide checkpoints. Only fetch
@@ -511,17 +512,29 @@ export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:strin
   if(!activeId) return null;
   const api=(window as Window & { __TCO_VELA__?: { workspace?: { getState?:()=>unknown } } }).__TCO_VELA__?.workspace;
   if(!api?.getState) return null;
+
   try {
-    const entries=await loadTcoVelaSavedWorkspaces(broker);
-    const active=entries.find((entry)=>entry.id===activeId);
-    if(!active) return null;
+    // Capture the complete state once so the default Vela document and this named snapshot
+    // represent the same checkpoint rather than two different in-flight UI revisions.
+    const workspaceState=stateForNamedWorkspaceSnapshot(api.getState());
     const appearance=readTcoFramePreferences();
     saveTcoVelaAppearance(appearance);
-    const appearanceSynced=await flushTcoVelaAppearance();
-    const synced=await saveTcoVelaSavedWorkspace({
+
+    // Named setup metadata normally exists in localStorage already. Resolve it synchronously
+    // first so the local named snapshot is written immediately, even during pagehide/offline.
+    let active=getLocalTcoVelaSavedWorkspace(activeId,broker);
+    if(!active) {
+      const entries=await loadTcoVelaSavedWorkspaces(broker);
+      active=entries.find((entry)=>entry.id===activeId)??null;
+    }
+    if(!active) return null;
+
+    const snapshotWrite=saveTcoVelaSavedWorkspace({
       id:active.id,name:active.name,updatedAt:new Date().toISOString(),
-      snapshot:{schemaVersion:1,workspace:stateForNamedWorkspaceSnapshot(api.getState()),appearance:{...appearance,topbar:{...appearance.topbar}}},
+      snapshot:{schemaVersion:1,workspace:workspaceState,appearance:{...appearance,topbar:{...appearance.topbar}}},
     },broker);
+    // Both writers persist locally before awaiting their cloud operation.
+    const [synced,appearanceSynced]=await Promise.all([snapshotWrite,flushTcoVelaAppearance()]);
     return {name:active.name,synced:synced&&appearanceSynced};
   } catch { return null; }
 }
