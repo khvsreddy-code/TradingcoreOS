@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, math, hashlib
 from pathlib import Path
 import joblib, numpy as np, pandas as pd, torch
-from .features import build_features, FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION
+from .features import build_features, FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION, TIMEZONE_FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION
 from .all_models import *
 from .optimization import _meta_frame, execution_gate
 from statsmodels.tsa.arima.model import ARIMA
@@ -62,6 +62,89 @@ def _apply_meta_gate(root, symbol, timeframe, frame, prob, direction):
             "error": str(e),
         }
 
+def _contract_field(contract, snake_name, camel_name, default=None):
+    value = contract.get(camel_name, contract.get(snake_name, default))
+    return default if value is None else value
+
+
+def _validate_model_contract(meta, contract, symbol, timeframe, model_id, features, feature_version, target_kind, horizon, lookback):
+    if not contract:
+        # Read pre-contract artifacts for backwards compatibility, while keeping their
+        # legacy feature schema explicit instead of silently upgrading their ABI.
+        return {
+            'schema_hash': hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest(),
+            'release_status': str(meta.get('release_status', meta.get('status', 'candidate'))),
+            'calibration_status': str(meta.get('calibration_status', 'not_calibrated')),
+            'validation_metrics': contract_validation['validation_metrics'],
+        'model_contract': model_contract,
+        }
+
+    if int(_contract_field(contract, 'contract_version', 'contractVersion', 0)) != 1:
+        raise ValueError('Unsupported model contract version.')
+    identity = contract.get('identity', contract.get('model_identity', {}))
+    if not isinstance(identity, dict):
+        raise ValueError('Model contract identity must be an object.')
+    contract_id = str(identity.get('id', identity.get('model_id', model_id)))
+    contract_symbol = str(identity.get('symbol', symbol))
+    contract_timeframe = str(identity.get('timeframe', timeframe))
+    if contract_id != model_id or contract_symbol != symbol or contract_timeframe != timeframe:
+        raise ValueError('Model artifact identity does not match the requested symbol, timeframe and model family.')
+
+    schema = contract.get('featureSchema', contract.get('feature_schema', {}))
+    if not isinstance(schema, dict):
+        raise ValueError('Model feature schema must be an object.')
+    ordered_names = schema.get('orderedNames', schema.get('ordered_names', features))
+    schema_version = str(schema.get('version', feature_version))
+    schema_hash = str(schema.get('hash', ''))
+    actual_hash = hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest()
+    if list(ordered_names) != list(features):
+        raise ValueError('Model feature order does not match its sealed feature schema.')
+    if schema_hash and schema_hash != actual_hash:
+        raise ValueError('Model feature schema hash does not match its ordered feature names.')
+    if schema_version != feature_version:
+        raise ValueError(f'Model feature schema version mismatch: metadata declares {schema_version}, runtime selected {feature_version}.')
+
+    lookback_contract = contract.get('lookback', {})
+    declared_minimum = int(_contract_field(lookback_contract, 'min_bars', 'minBars', lookback))
+    declared_maximum = int(_contract_field(lookback_contract, 'max_bars', 'maxBars', 5000))
+    if declared_minimum < 1 or declared_maximum < declared_minimum or declared_maximum > 5000:
+        raise ValueError('Model lookback contract must satisfy 1 <= minimum <= maximum <= 5000.')
+    if lookback < declared_minimum:
+        raise ValueError('Model required lookback is below the contract minimum.')
+
+    target = contract.get('target', {})
+    declared_target = str(target.get('kind', target_kind))
+    declared_horizon = int(_contract_field(target, 'forecast_horizon_bars', 'forecastHorizonBars', horizon))
+    if declared_target != target_kind or declared_horizon != horizon:
+        raise ValueError('Model target semantics or forecast horizon do not match the artifact contract.')
+
+    temporal = contract.get('temporal', {})
+    if temporal and temporal.get('trainingRequiresConfirmedBars', temporal.get('training_requires_confirmed_bars', True)) is not True:
+        raise ValueError('Model contract must require confirmed historical bars during training.')
+    availability_rule = temporal.get('availabilityRule', temporal.get('availability_rule', 'availableAt<=timestamp'))
+    if availability_rule != 'availableAt<=timestamp':
+        raise ValueError('Model contract has an unsupported temporal availability rule.')
+
+    validation = contract.get('validation', {})
+    calibration = str(_contract_field(validation, 'calibration_status', 'calibrationStatus',
+                                      meta.get('calibration_status', 'not_calibrated')))
+    release_status = str(_contract_field(contract, 'release_status', 'releaseStatus',
+                                         meta.get('release_status', meta.get('status', 'candidate'))))
+    if release_status not in ('candidate', 'approved', 'revoked', 'retired'):
+        raise ValueError('Model release status is invalid.')
+    if calibration not in ('calibrated', 'not_calibrated', 'not_applicable'):
+        raise ValueError('Model probability calibration status is invalid.')
+    metrics = _contract_field(validation, 'metrics', 'metrics', meta.get('metrics', {}))
+    if not isinstance(metrics, dict):
+        raise ValueError('Model validation metrics must be an object.')
+    return {
+        'schema_hash': actual_hash,
+        'release_status': release_status,
+        'calibration_status': calibration,
+        'validation_metrics': metrics,
+    }
+
+
 def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horizon=1):
     d, meta, a = load_artifact(root, symbol, timeframe, model_id)
     if not isinstance(candles, (list, tuple)) or len(candles) > 5000:
@@ -70,37 +153,62 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     model_contract = meta.get('model_contract') if isinstance(meta.get('model_contract'), dict) else {}
     contract_target = model_contract.get('target') if isinstance(model_contract.get('target'), dict) else {}
     target_kind = str(meta.get('target_kind', contract_target.get('kind', 'direction')))
-    forecast_horizon = int(meta.get('forecast_horizon_bars', meta.get('horizon', contract_target.get('forecast_horizon_bars', 1))))
+    contract_horizon = _contract_field(contract_target, 'forecast_horizon_bars', 'forecastHorizonBars', 1)
+    forecast_horizon = int(meta.get('forecast_horizon_bars', meta.get('horizon', contract_horizon)))
     if forecast_horizon < 1 or forecast_horizon > 500:
         raise ValueError('Artifact forecast horizon is outside the supported [1, 500] bar range.')
     if requested_horizon != forecast_horizon:
         raise ValueError(f'Artifact was trained for a {forecast_horizon}-bar target; requested horizon {requested_horizon} is not compatible.')
 
-    feature_version = str(meta.get('feature_schema_version', model_contract.get('feature_schema_version', LEGACY_FEATURE_SCHEMA_VERSION)))
-    timezone = str(meta.get('exchange_timezone', 'Asia/Kolkata'))
-    session_open = str(meta.get('session_open', '09:15'))
-    session_close = str(meta.get('session_close', '15:30'))
+    contract_schema = model_contract.get('featureSchema', model_contract.get('feature_schema', {}))
+    if not isinstance(contract_schema, dict):
+        contract_schema = {}
+    feature_version = str(meta.get(
+        'feature_schema_version',
+        contract_schema.get('version', model_contract.get('feature_schema_version', LEGACY_FEATURE_SCHEMA_VERSION)),
+    ))
+    if feature_version not in (FEATURE_SCHEMA_VERSION, TIMEZONE_FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION):
+        raise ValueError(f'Unsupported artifact feature schema version: {feature_version}')
+    temporal = model_contract.get('temporal', {}) if isinstance(model_contract.get('temporal'), dict) else {}
+    timezone = str(meta.get('exchange_timezone', temporal.get('exchangeTimezone', temporal.get('exchange_timezone', 'Asia/Kolkata'))))
+    session_open = str(meta.get('session_open', temporal.get('sessionOpen', temporal.get('session_open', '09:15'))))
+    session_close = str(meta.get('session_close', temporal.get('sessionClose', temporal.get('session_close', '15:30'))))
+    session_holidays = meta.get('session_holidays', temporal.get('sessionHolidays', temporal.get('session_holidays', [])))
+    if not isinstance(session_holidays, (list, tuple)):
+        raise ValueError('Artifact session_holidays must be a list of exchange-local YYYY-MM-DD dates.')
+    session_holidays = [str(day) for day in session_holidays]
     frame = build_features(
         candles,
         exchange_timezone=timezone,
         session_open=session_open,
         session_close=session_close,
         feature_schema_version=feature_version,
+        session_holidays=session_holidays,
     )
     if frame.empty:
         raise ValueError('Feature pipeline produced no valid rows from the supplied OHLCV history.')
 
     kind = a.get('kind') if isinstance(a, dict) else 'classical'
     neural_sequence = int(meta.get('sequence_length', 60)) if kind == 'neural' else 0
-    required_lookback = int(meta.get('required_lookback_bars', max(80, neural_sequence)))
+    contract_lookback = model_contract.get('lookback', {}) if isinstance(model_contract.get('lookback'), dict) else {}
+    contract_minimum = _contract_field(contract_lookback, 'min_bars', 'minBars', 80)
+    required_lookback = max(
+        int(meta.get('required_lookback_bars', max(80, neural_sequence))),
+        int(contract_minimum),
+        neural_sequence,
+    )
     if not 1 <= required_lookback <= 5000:
-        raise ValueError('Artifact required_lookback_bars must be in [1, 5000].')
+        raise ValueError('Artifact required lookback must be in [1, 5000].')
     if len(frame) < required_lookback:
         raise ValueError(f"Insufficient feature history for {model_id}: artifact requires {required_lookback} bars, received {len(frame)} validated rows.")
     features = list(a.get('features', meta.get('neural_features', meta.get('feature_schema', FEATURE_COLUMNS)))) if isinstance(a, dict) else list(meta.get('feature_schema', FEATURE_COLUMNS))
     missing_features = [name for name in features if name not in frame.columns]
     if missing_features:
         raise ValueError(f'Artifact feature schema is not available from this pipeline: {missing_features}')
+    contract_validation = _validate_model_contract(
+        meta, model_contract, symbol, timeframe, model_id, features,
+        feature_version, target_kind, forecast_horizon, required_lookback,
+    )
     latest = float(frame.close.iloc[-1])
     if not math.isfinite(latest) or latest <= 0:
         raise ValueError('Latest validated close is not a positive finite price.')
@@ -223,9 +331,9 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     latest_phase = str(latest_candle.get('phase', 'unknown')) if isinstance(latest_candle, dict) else 'unknown'
     latest_confirmed = latest_candle.get('confirmed') if isinstance(latest_candle, dict) else None
     latest_available_at = latest_candle.get('availableAt') if isinstance(latest_candle, dict) else None
-    calibration = str(meta.get('calibration_status', 'not_calibrated'))
-    release_status = str(meta.get('release_status', meta.get('status', 'candidate')))
-    feature_schema_hash = hashlib.sha256(('|'.join(features)).encode('utf-8')).hexdigest()
+    calibration = contract_validation['calibration_status']
+    release_status = contract_validation['release_status']
+    feature_schema_hash = contract_validation['schema_hash']
 
     return {
         'model_version': meta.get('version', meta.get('model_id', 'trained')),
