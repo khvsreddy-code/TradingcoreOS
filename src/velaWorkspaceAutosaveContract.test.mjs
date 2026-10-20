@@ -35,6 +35,9 @@ assert.match(live, /30 \* 60 \* 1000/, 'a full checkpoint runs every 30 minutes'
 assert.match(live, /window\.addEventListener\('pagehide', checkpointWorkspace\)/, 'a final checkpoint is attempted on page hide');
 assert.match(live, /document\.addEventListener\('visibilitychange', onVisibilityChange\)/, 'backgrounding the tab triggers an early checkpoint');
 assert.match(live, /WORKSPACE_AUTOSAVE_STATUS_EVENT/, 'save progress and outcomes are surfaced to the workspace UI');
+assert.match(live, /loadTcoVelaActiveWorkspaceId\(selectionBrokerKey\)/, 'the signed-in active named setup hydrates before named autosave is armed');
+assert.match(live, /currentLocalId === activeWorkspaceIdAtStart/, 'a newer local workspace selection wins a racing cloud hydration');
+assert.match(live, /namedWorkspaceAutosavePending = true/, 'edits made while account selection loads are not lost for named-workspace autosave');
 
 assert.match(chrome, /'tco\.workspace-frame'/, 'the workspace panel exposes save and restore controls');
 assert.match(chrome, /tco:workspace-autosave-status/, 'the workspace panel displays autosave status');
