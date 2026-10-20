@@ -14,9 +14,22 @@ export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
 export type CoreSpiritModelReleaseStatus = 'candidate' | 'approved' | 'revoked' | 'retired';
 export type CoreSpiritModelTargetKind = 'direction' | 'return' | 'volatility' | 'regime' | 'range' | 'price';
 
+export type CoreSpiritDatasetSnapshotSource = 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline';
+export type CoreSpiritModelDatasetSnapshot = Readonly<{
+  hash: string;
+  version: string;
+  rows: number;
+  source: CoreSpiritDatasetSnapshotSource;
+  from: string;
+  to: string;
+  immutable: true;
+}>;
+
 export type CoreSpiritModelContract = Readonly<{
   contractVersion: 1;
   identity: Readonly<{ id: string; version: string }>;
+  /** Content-addressed, immutable training rows used to seal this artifact. */
+  datasetSnapshot?: CoreSpiritModelDatasetSnapshot;
   featureSchema: Readonly<{
     version: string;
     orderedNames: readonly string[];
@@ -353,6 +366,17 @@ function assertModelContract(contract: CoreSpiritModelContract): void {
       !contract.identity || !contract.identity.id.trim() || !contract.identity.version.trim()) {
     throw new Error('Model contract must include a stable identity and supported contract version.');
   }
+  if (contract.datasetSnapshot) {
+    const snapshot = contract.datasetSnapshot;
+    const from = Date.parse(snapshot.from);
+    const to = Date.parse(snapshot.to);
+    if (!/^[a-f0-9]{64}$/.test(snapshot.hash) || snapshot.version !== snapshot.hash ||
+        !Number.isSafeInteger(snapshot.rows) || snapshot.rows < 12 || snapshot.rows > 5000 ||
+        !['user_supplied', 'broker_history', 'trusted_feature_pipeline'].includes(snapshot.source) ||
+        snapshot.immutable !== true || !Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+      throw new Error('Model dataset snapshot must be immutable, content-addressed, bounded, and time-ranged.');
+    }
+  }
   const schema = contract.featureSchema;
   if (!schema || !schema.version.trim() || !Array.isArray(schema.orderedNames) ||
       schema.orderedNames.length < 1 || schema.orderedNames.length > 64 ||
@@ -396,8 +420,27 @@ function assertModelContract(contract: CoreSpiritModelContract): void {
 
 async function defaultModelContract<TWeights>(input: TrainModelInput<TWeights>, metrics: Readonly<Record<string, number>>): Promise<CoreSpiritModelContract> {
   if (input.contract) {
-    assertModelContract(input.contract);
-    return normalizeArtifactValue(input.contract) as CoreSpiritModelContract;
+    const supplied = normalizeArtifactValue(input.contract) as CoreSpiritModelContract;
+    const provenance = input.provenance;
+    const purgedRows = provenance.trainingParameters.purgedDatasetRows ?? provenance.trainingParameters.purgedCount ?? 0;
+    const snapshotRows = provenance.validationResults.trainingSampleCount +
+      provenance.validationResults.sampleCount + (typeof purgedRows === 'number' && Number.isSafeInteger(purgedRows) && purgedRows >= 0 ? purgedRows : 0);
+    const generatedSnapshot: CoreSpiritModelDatasetSnapshot = {
+      hash: provenance.datasetVersion,
+      version: provenance.datasetVersion,
+      rows: snapshotRows,
+      source: provenance.datasetSource,
+      from: provenance.trainingRange.from,
+      to: provenance.validationRange.to,
+      immutable: true,
+    };
+    const contract = { ...supplied, datasetSnapshot: supplied.datasetSnapshot ?? generatedSnapshot };
+    if (contract.datasetSnapshot.hash !== provenance.datasetVersion ||
+        contract.datasetSnapshot.source !== provenance.datasetSource) {
+      throw new Error('Model contract dataset snapshot does not match the verified training provenance.');
+    }
+    assertModelContract(contract);
+    return deepFreeze(contract);
   }
   const names = featureNamesFromResearchGraph(input.research.featureGraph);
   if (!names.length) {
@@ -441,6 +484,17 @@ async function defaultModelContract<TWeights>(input: TrainModelInput<TWeights>, 
     contractVersion: 1,
     identity: { id: input.research.name, version: input.provenance.datasetVersion.slice(0, 16) },
     featureSchema: { ...featureSchema, hash: featureSchemaHash },
+    datasetSnapshot: {
+      hash: input.provenance.datasetVersion,
+      version: input.provenance.datasetVersion,
+      rows: input.provenance.validationResults.trainingSampleCount +
+        input.provenance.validationResults.sampleCount +
+        (typeof parameters.purgedDatasetRows === 'number' && Number.isSafeInteger(parameters.purgedDatasetRows) && parameters.purgedDatasetRows >= 0 ? parameters.purgedDatasetRows : 0),
+      source: input.provenance.datasetSource,
+      from: input.provenance.trainingRange.from,
+      to: input.provenance.validationRange.to,
+      immutable: true,
+    },
     lookback: { minBars, preferredBars, maxBars },
     target: { kind: targetKind, forecastHorizonBars: horizon },
     temporal: {
