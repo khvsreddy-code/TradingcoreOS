@@ -480,7 +480,7 @@ export class HistoricalDataService {
     const key = cacheKey(cacheInstrumentId, timeframe);
     let refreshed: CacheRecord;
     try {
-      refreshed = inflight.get(key) || await this.refresh(instrumentId, timeframe, mapping, cached, request.fetchFyersRecent);
+      refreshed = await (inflight.get(key) || this.refresh(instrumentId, timeframe, mapping, cached, request.fetchFyersRecent));
     } catch (error) {
       if (!cached?.bars.length) throw error;
       refreshed = { ...cached, expiresAt: Date.now(), degraded: true, quote: null, sourceStatus: { ...cached.sourceStatus, refreshError: errorText(error) } };
