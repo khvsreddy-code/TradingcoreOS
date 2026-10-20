@@ -73,7 +73,7 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
         # legacy feature schema explicit instead of silently upgrading their ABI.
         return {
             'schema_hash': hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest(),
-            'release_status': str(meta.get('release_status', meta.get('status', 'candidate'))),
+            'release_status': str(meta.get('release_status', 'candidate')) if str(meta.get('release_status', 'candidate')) in ('candidate', 'approved', 'revoked', 'retired') else 'candidate',
             'calibration_status': str(meta.get('calibration_status', 'not_calibrated')),
             'validation_metrics': meta.get('metrics', {}),
         }
@@ -140,7 +140,9 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     calibration = str(_contract_field(validation, 'calibration_status', 'calibrationStatus',
                                       meta.get('calibration_status', 'not_calibrated')))
     release_status = str(_contract_field(contract, 'release_status', 'releaseStatus',
-                                         meta.get('release_status', meta.get('status', 'candidate'))))
+                                         meta.get('release_status', 'candidate')))
+    if release_status not in ('candidate', 'approved', 'revoked', 'retired'):
+        release_status = 'candidate'
     if release_status not in ('candidate', 'approved', 'revoked', 'retired'):
         raise ValueError('Model release status is invalid.')
     if calibration not in ('calibrated', 'not_calibrated', 'not_applicable'):
