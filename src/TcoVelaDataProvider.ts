@@ -863,23 +863,72 @@ export function createTcoVelaDataProvider(): TcoVelaDataProvider {
 }
 
 
-/** Prewarm the common index set without blocking chart construction or first paint. */
+/**
+ * Warm active workspace symbols across requested intervals without delaying first paint.
+ * A shared low-priority queue plus a per-symbol/timeframe cooldown keeps this from
+ * competing with visible chart history or refetching the same datasets on every route visit.
+ */
+const activeHistoryWarmKeys = new Set<string>();
+const HISTORY_WARM_SUCCESS_TTL_MS = 12 * 60 * 60 * 1000;
+const HISTORY_WARM_EMPTY_TTL_MS = 30 * 60 * 1000;
+
 export function prewarmTcoVelaHistory(
   symbols: readonly string[],
-  timeframe = '5m',
+  timeframe: string | readonly string[] = '5m',
   limit = 1200,
 ): void {
-  const unique = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 8);
-  if (!unique.length) return;
+  const uniqueSymbols = [...new Set(symbols.map(value => String(value).trim()).filter(Boolean))].slice(0, 12);
+  const requestedTimeframes = typeof timeframe === 'string' ? [timeframe] : [...timeframe];
+  const uniqueTimeframes = [...new Set(requestedTimeframes.map(value => String(value).trim()).filter(Boolean))];
+  if (!uniqueSymbols.length || !uniqueTimeframes.length) return;
 
   const run = () => {
     const brokerId = tradingCoreRuntime.getPrimaryBrokerId();
     if (!brokerId) return;
-    const requested = Math.max(200, Math.min(2000, Math.floor(Number(limit) || 1200)));
-    for (const raw of unique) {
-      const plane = getChartDataPlane(brokerId, runtimeSymbol(raw), runtimeTimeframe(timeframe));
-      void plane.prewarmHistory(requested).catch(() => {});
-    }
+    const requested = Math.max(200, Math.min(5000, Math.floor(Number(limit) || 1200)));
+    const jobs = uniqueSymbols.flatMap(raw => uniqueTimeframes.map(tf => ({
+      symbol: runtimeSymbol(raw),
+      timeframe: runtimeTimeframe(tf),
+    })));
+    const queued = jobs.filter(job => {
+      const key = `${brokerId}:${job.symbol}:${job.timeframe}`;
+      if (activeHistoryWarmKeys.has(key)) return false;
+      try {
+        const lastAttempt = Number(localStorage.getItem(`tradingcore:history-warm:v1:${key}`) || 0);
+        if (Number.isFinite(lastAttempt) && lastAttempt > 0) {
+          const elapsed = Date.now() - lastAttempt;
+          const ttl = localStorage.getItem(`tradingcore:history-warm-count:v1:${key}`) === '0'
+            ? HISTORY_WARM_EMPTY_TTL_MS : HISTORY_WARM_SUCCESS_TTL_MS;
+          if (elapsed >= 0 && elapsed < ttl) return false;
+        }
+      } catch {}
+      activeHistoryWarmKeys.add(key);
+      return true;
+    });
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < queued.length) {
+        const job = queued[cursor++];
+        if (!job) continue;
+        const key = `${brokerId}:${job.symbol}:${job.timeframe}`;
+        try {
+          const plane = getChartDataPlane(brokerId, job.symbol, job.timeframe);
+          const rows = await plane.prewarmHistory(requested);
+          try {
+            localStorage.setItem(`tradingcore:history-warm:v1:${key}`, String(Date.now()));
+            localStorage.setItem(`tradingcore:history-warm-count:v1:${key}`, String(rows));
+          } catch {}
+        } catch {
+          // An unavailable broker/source gets a short backoff, not a permanent skip.
+          try { localStorage.setItem(`tradingcore:history-warm:v1:${key}`, String(Date.now())); localStorage.setItem(`tradingcore:history-warm-count:v1:${key}`, '0'); } catch {}
+        } finally {
+          activeHistoryWarmKeys.delete(key);
+        }
+      }
+    };
+    // Two warm workers respect ChartHistoryCoordinator's low-priority budget. Visible
+    // chart history can still promote its own request ahead of these background jobs.
+    void Promise.all([worker(), worker()]);
   };
 
   if (typeof globalThis.requestIdleCallback === 'function') {
