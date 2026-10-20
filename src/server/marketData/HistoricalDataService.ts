@@ -146,7 +146,74 @@ export function normalizeHistoricalCandles(rows: unknown[], source: 'fyers' | 't
   return normalizeRows(rows, source);
 }
 function sessionDates(bars: StoredBar[], timezone: string): string[] { return [...new Set(bars.map(b => zonedDate(b.timestampMs, timezone)))].sort(); }
-function toPublicBars(bars: StoredBar[]): HistoricalCandle[] { return bars.map(({ source: _source, timestampMs: _timestampMs, ...bar }) => bar); }
+function dateOffset(date: string, offsetDays: number): string {
+  return new Date(Date.parse(date + 'T12:00:00Z') + offsetDays * 86_400_000).toISOString().slice(0, 10);
+}
+
+function isTradingDate(date: string, holidays: readonly string[]): boolean {
+  const dow = new Date(date + 'T12:00:00Z').getUTCDay();
+  return dow !== 0 && dow !== 6 && !holidays.includes(date);
+}
+
+/** Compute the earliest availability of a completed OHLCV bar, not its candle-open time. */
+function historicalBarAvailableAt(
+  timestampMs: number,
+  timeframe: string,
+  timezone: string,
+  sessionClose: string,
+  holidays: readonly string[],
+): number | undefined {
+  const raw = String(timeframe || '').trim();
+  const seconds = /^(\d+)\s*S$/i.exec(raw);
+  if (seconds) return timestampMs + Number(seconds[1]) * 1000;
+
+  const minutes = /^(\d+)\s*(?:m|min|minute|minutes)?$/i.exec(raw);
+  if (minutes) {
+    const size = Number(minutes[1]);
+    if (size >= 1 && size <= 24 * 60) return timestampMs + size * 60_000;
+  }
+  const minuteWords = /^(\d+)\s*(?:minute|minutes)$/i.exec(raw);
+  if (minuteWords) return timestampMs + Number(minuteWords[1]) * 60_000;
+
+  const localDate = zonedDate(timestampMs, timezone);
+  let closeDate = localDate;
+  if (['W', '1W', 'week', 'weekly'].includes(raw)) {
+    const dow = new Date(localDate + 'T12:00:00Z').getUTCDay();
+    const toFriday = dow === 0 ? -2 : dow === 6 ? -1 : 5 - dow;
+    closeDate = dateOffset(localDate, toFriday);
+  } else if (['M', '1M', 'month', 'monthly'].includes(raw)) {
+    const [year, month] = localDate.split('-').map(Number);
+    closeDate = new Date(Date.UTC(year!, month!, 0, 12)).toISOString().slice(0, 10);
+  } else if (!['D', '1D', 'day', 'daily', '1day', '1d'].includes(raw)) {
+    return undefined;
+  }
+  // Weekly/monthly candles can end before a weekend or a configured exchange holiday.
+  for (let walked = 0; walked < 8 && !isTradingDate(closeDate, holidays); walked += 1) {
+    closeDate = dateOffset(closeDate, -1);
+  }
+  return localDateTimeToEpoch(closeDate, sessionClose || '15:30', timezone);
+}
+
+function toPublicBars(
+  bars: StoredBar[],
+  timeframe: string,
+  timezone: string,
+  sessionClose: string,
+  holidays: readonly string[],
+): HistoricalCandle[] {
+  return bars.map(({ source, timestampMs, ...bar }) => {
+    const availableAt = historicalBarAvailableAt(timestampMs, timeframe, timezone, sessionClose, holidays);
+    return {
+      ...bar,
+      source,
+      phase: 'historical',
+      confirmed: true,
+      ...(availableAt !== undefined && Number.isFinite(availableAt)
+        ? { availableAt: new Date(availableAt).toISOString() }
+        : {}),
+    };
+  });
+}
 function cacheKey(instrumentId: string, timeframe: string): string { return instrumentId + ':' + timeframe; }
 function errorText(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? 'source error');
@@ -482,7 +549,7 @@ export class HistoricalDataService {
         sourceStatus: { cache: { status: 'miss' } }, degraded: false, expiresAt: 0, updatedAt: 0,
       };
       return {
-        bars: toPublicBars(older),
+        bars: toPublicBars(older, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
         metadata: this.metadata(record, older, {
           cacheHit: Boolean(cached), stale: Boolean(cached && cached.expiresAt <= Date.now()),
           historyExhausted: older.length === 0, paginationSupported: false,
@@ -494,7 +561,7 @@ export class HistoricalDataService {
 
     if (cached && cached.expiresAt > Date.now() && cached.sourcePolicy === HISTORICAL_SOURCE_POLICY && cached.bars.length) {
       const bars = cached.bars.slice(-maxBars);
-      return { bars: toPublicBars(bars), metadata: this.metadata(cached, bars, { cacheHit: true }), quote: null };
+      return { bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays), metadata: this.metadata(cached, bars, { cacheHit: true }), quote: null };
     }
 
     const key = cacheKey(cacheInstrumentId, timeframe);
@@ -507,7 +574,7 @@ export class HistoricalDataService {
     }
     const bars = refreshed.bars.slice(-maxBars), stale = refreshed.expiresAt <= Date.now();
     return {
-      bars: toPublicBars(bars),
+      bars: toPublicBars(bars, timeframe, mapping.timezone, mapping.sessionClose, mapping.calendarHolidays),
       metadata: this.metadata(refreshed, bars, { stale, degraded: refreshed.degraded || stale }),
       quote: refreshed.quote || null,
     };
