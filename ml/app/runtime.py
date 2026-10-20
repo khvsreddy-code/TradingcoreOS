@@ -338,7 +338,7 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     if not 1 <= contract_minimum <= contract_preferred <= contract_maximum <= 5000:
         raise ValueError('Artifact lookback contract must satisfy 1 <= minBars <= preferredBars <= maxBars <= 5000.')
     required_lookback = max(
-        int(meta.get('required_lookback_bars', max(80, neural_sequence))),
+        int(meta.get('required_lookback_bars', max(contract_minimum, neural_sequence))),
         contract_minimum,
         neural_sequence,
     )
