@@ -59,6 +59,48 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
 }
 
 {
+  const crossover = rule({
+    conditions: [{ field: 'ema9', operator: 'crosses_above', value: 'ema21' }],
+  });
+  const emaContext = context({
+    columns: {
+      time: Float64Array.from([Date.parse(candles[0]!.timestamp), Date.parse(candles[1]!.timestamp)]),
+      open: Float64Array.from([98, 99]), high: Float64Array.from([100, 102]),
+      low: Float64Array.from([97, 98]), close: Float64Array.from([99, 101]),
+      volume: Float64Array.from([100, 120]), length: 2,
+    },
+    // The current/previous feature frame still comes from the one canonical candle tape.
+    candles,
+  });
+  // The short feature is below its longer feature on the previous bar and above it now.
+  // We test the reference-field resolver with known feature keys rather than custom candles.
+  const dynamicCrossover = evaluateAutomation(
+    crossover,
+    context({
+      candles: [...candles, { timestamp: '2026-10-20T03:55:00.000Z', open: 101, high: 104, low: 100, close: 103, volume: 130 }],
+      price: 103,
+      barConfirmed: true,
+      timestamp: Date.parse('2026-10-20T03:55:00.000Z'),
+      barIndex: 2,
+    }),
+    Date.parse('2026-10-20T05:00:00.000Z'),
+  );
+  // ema9/ema21 are both available in the same precomputed frame; equality of the
+  // reference names is resolved without remapping candles inside the condition loop.
+  assert.equal(dynamicCrossover.results[0]?.error, undefined);
+  assert.equal(typeof dynamicCrossover.results[0]?.passed, 'boolean');
+  assert.equal(emaContext.candles.length, 2);
+
+  const missingReference = evaluateAutomation(
+    rule({ conditions: [{ field: 'ema9', operator: 'crosses_above', value: 'not_a_feature' }] }),
+    context(),
+    Date.parse('2026-10-20T05:00:00.000Z'),
+  );
+  assert.equal(missingReference.triggered, false, 'unknown crossover reference fields must fail closed');
+  assert.equal(missingReference.results[0]?.error, 'unknown_or_unavailable_reference_field');
+}
+
+{
   const now = Date.parse('2026-10-20T05:00:00.000Z');
   const priorSession = Date.parse('2026-10-19T04:00:00.000Z');
   const dailyRule = rule({ maxRunsPerDay: 1, runTimestamps: [priorSession] });
