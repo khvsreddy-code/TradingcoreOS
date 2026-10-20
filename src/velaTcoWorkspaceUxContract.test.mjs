@@ -30,7 +30,7 @@ const chartCell = read('vendor/vela/src/workspace/ChartCell.ts');
 
 assert.match(live, /dismissedChartStatusKey/, 'chart status banners must have a dismiss state');
 assert.match(live, /Dismiss chart status notification/, 'chart status banner must expose an accessible close control');
-assert.match(live, /applySavedTcoVelaAppearance\\(host\\.current\\)/, 'saved live-terminal theme settings must be restored at chart startup');
+assert.ok(live.includes('if (host.current) applySavedTcoVelaAppearance(host.current);'), 'saved live-terminal theme settings must be restored at chart startup');
 
 assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
 assert(/const initialLayout = .*defaults\.layout/.test(live));
