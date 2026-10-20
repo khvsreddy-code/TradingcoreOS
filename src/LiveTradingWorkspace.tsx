@@ -266,8 +266,11 @@ export function LiveTradingWorkspace() {
         void workspace?.saveNow().catch(() => undefined);
         void persistActiveTcoVelaSavedWorkspace().catch(() => undefined);
       };
+      const onVisibilityChange = () => { if (document.visibilityState === 'hidden') checkpointOnPageHide(); };
       window.addEventListener('pagehide', checkpointOnPageHide);
+      document.addEventListener('visibilitychange', onVisibilityChange);
       workspaceListenerDisposers.push(() => window.removeEventListener('pagehide', checkpointOnPageHide));
+      workspaceListenerDisposers.push(() => document.removeEventListener('visibilitychange', onVisibilityChange));
 
       // Hydrate the account's selected named setup once at mount. Capture the local value
       // first so an intentional local selection made while the request is in flight wins.
