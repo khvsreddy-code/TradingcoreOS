@@ -6,6 +6,7 @@ import {
   type CoreSpiritAutomationLifecycleRecord,
   type CoreSpiritAutomationLifecycleState,
 } from './coreSpirit/automationLifecycle';
+import { ema as canonicalEma, rsi as canonicalRsi } from './coreSpirit/numericalKernels';
 
 export type AutomationSignal = 'BUY_CE'|'BUY_PE'|'SELL_CE'|'SELL_PE'|'LONG'|'SHORT'|'ALERT';
 
@@ -86,35 +87,12 @@ export interface AutomationEvaluation {
   featureValues:Readonly<Record<string,number|null>>;
 }
 
-const mean=(values:number[])=>values.length?values.reduce((sum,value)=>sum+value,0)/values.length:0;
-
-function emaSeries(values:ArrayLike<number>,period:number):number[] {
-  if(!values.length)return [];
-  const k=2/(period+1);
-  const out=new Array<number>(values.length);
-  out[0]=values[0]!;
-  for(let i=1;i<values.length;i++)out[i]=values[i]!*k+out[i-1]!*(1-k);
-  return out;
+/** Compatibility feature names backed by CoreSpirit's canonical typed-array kernels. */
+function emaSeries(values:ArrayLike<number>,period:number):Float64Array {
+  return canonicalEma(values,period);
 }
-
-function rsiSeries(values:ArrayLike<number>,period=14):number[] {
-  const out=new Array<number>(values.length).fill(Number.NaN);
-  if(values.length<=period)return out;
-  let gain=0,loss=0;
-  for(let i=1;i<=period;i++){
-    const delta=values[i]!-values[i-1]!;
-    if(delta>0)gain+=delta;else loss-=delta;
-  }
-  gain/=period;loss/=period;
-  const calculate=()=>loss===0?(gain===0?50:100):100-(100/(1+gain/loss));
-  out[period]=calculate();
-  for(let i=period+1;i<values.length;i++){
-    const delta=values[i]!-values[i-1]!;
-    gain=(gain*(period-1)+Math.max(0,delta))/period;
-    loss=(loss*(period-1)+Math.max(0,-delta))/period;
-    out[i]=calculate();
-  }
-  return out;
+function rsiSeries(values:ArrayLike<number>,period=14):Float64Array {
+  return canonicalRsi(values,period);
 }
 
 function safeFinite(value:unknown):number|undefined {
