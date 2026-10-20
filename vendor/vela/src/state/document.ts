@@ -10,6 +10,8 @@
 // the storage seam. Nothing here touches the URL — hosts wanting shareable links
 // compose them from `getState()` themselves.
 
+import type { WorkspacePaneScaleState } from '../core/ports/IChartRenderer';
+
 /** The linkable dimensions. `crosshair` mirrors the pointer time onto same-group
  *  cells as GHOST crosshairs (renderers without the optional `setExternalCrosshair`
  *  seam simply never display one). `drawings` copies each NEWLY CREATED drawing onto
@@ -84,6 +86,8 @@ export interface CellState {
     timeframe?: string;
     /** Visible time window, in the renderer's time coordinates, so pan/zoom restores across sessions. */
     viewport?: { from: number; to: number };
+    /** Per-pane vertical scale framing (manual bounds + autoscale and axis mode). */
+    priceScales?: WorkspacePaneScaleState[];
     priceStyle?: string;
     bars?: number;
     /** Trading session shown (`'extended'` persisted; absent = regular, the default). */
@@ -278,6 +282,22 @@ function sanitizeCell(raw: unknown): CellState | null {
         const from = Number(range.from);
         const to = Number(range.to);
         if (Number.isFinite(from) && Number.isFinite(to) && to > from) out.viewport = { from, to };
+    }
+    if (Array.isArray(c.priceScales)) {
+        const priceScales: WorkspacePaneScaleState[] = [];
+        for (const rawScale of c.priceScales.slice(0, 32)) {
+            if (!rawScale || typeof rawScale !== 'object' || Array.isArray(rawScale)) continue;
+            const scale = rawScale as Record<string, unknown>;
+            const id = typeof scale.id === 'string' ? scale.id.slice(0, 180) : '';
+            const min = Number(scale.min);
+            const max = Number(scale.max);
+            const mode = scale.mode;
+            if (!id || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) continue;
+            if (mode !== 'price' && mode !== 'percent' && mode !== 'indexed') continue;
+            if (typeof scale.auto !== 'boolean' || typeof scale.log !== 'boolean' || typeof scale.invert !== 'boolean') continue;
+            priceScales.push({ id, auto: scale.auto, min, max, mode, log: scale.log, invert: scale.invert });
+        }
+        if (priceScales.length) out.priceScales = priceScales;
     }
     if (typeof c.priceStyle === 'string') out.priceStyle = c.priceStyle;
     if (typeof c.bars === 'number' && Number.isFinite(c.bars) && c.bars > 0) out.bars = c.bars;
