@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { evaluateAutomation, type AutomationContext, type AutomationRule } from './automationEngine.ts';
+import { evaluateAutomation, evaluateAutomationBatch, type AutomationContext, type AutomationRule } from './automationEngine.ts';
 
 const candles = [
   { timestamp: '2026-10-20T03:45:00.000Z', open: 98, high: 100, low: 97, close: 99, volume: 100 },
@@ -100,6 +100,19 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
   const stable = rule({ lastRunBarKey: ['NSE:NIFTY50-INDEX', '5m', 1, Date.parse(candles[1]!.timestamp)].join('|') });
   const evaluation = evaluateAutomation(stable, context(), Date.parse('2026-10-20T05:00:00.000Z'));
   assert.equal(evaluation.triggered, false, 'same-bar packet/revision changes cannot re-run the rule');
+}
+
+{
+  const rules = [
+    rule({ id: 'batch-price-a' }),
+    rule({ id: 'batch-price-b', conditions: [{ field: 'price', operator: '>', value: 100 }] }),
+  ];
+  const now = Date.parse('2026-10-20T05:00:00.000Z');
+  const batch = evaluateAutomationBatch(rules, context(), now);
+  const singles = rules.map(item => evaluateAutomation(item, context(), now));
+  assert.deepEqual(batch.map(item => [item.triggered, item.results.map(result => result.actual), item.reason]),
+    singles.map(item => [item.triggered, item.results.map(result => result.actual), item.reason]),
+    'batch evaluation must preserve per-rule semantics while sharing one per-bar feature frame');
 }
 
 console.log('AUTOMATION_CONFIRMED_BAR_DAILY_BUDGET_AND_UNKNOWN_FIELD_REGRESSION_OK');
