@@ -218,6 +218,8 @@ def main():
     ren={c:{'date':'timestamp','datetime':'timestamp','shares_traded':'volume'}.get(c.strip().lower().replace(' ','_'),c.strip().lower().replace(' ','_')) for c in df.columns}
     df=df.rename(columns=ren)
     supervised=make_supervised(df,args.horizon,exchange_timezone=args.exchange_timezone,session_open=args.session_open,session_close=args.session_close,feature_schema_version=FEATURE_SCHEMA_VERSION,session_holidays=session_holidays,require_confirmed=True)
+    if len(supervised) > 5000:
+        raise ValueError('This ML training backend accepts at most 5000 validated rows per immutable dataset snapshot; use a bounded model window or a separately provisioned batch trainer for larger research sets.')
     train,valid,test=split(supervised,args.horizon)
     if min(len(train),len(valid),len(test)) < 12: raise ValueError('Purged chronological training requires at least 12 rows in each train/validation/test window.')
     root=Path(args.out);root.mkdir(parents=True,exist_ok=True)
