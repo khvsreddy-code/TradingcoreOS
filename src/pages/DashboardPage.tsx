@@ -4,7 +4,7 @@ import {
   LineChart, Newspaper, RefreshCw, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { WorkspaceModuleShell, WorkspaceRoute, Panel } from '../components/workspace/WorkspaceModuleShell';
-import { tradingCoreRuntime } from '../services/runtime/TradingCoreRuntime';
+import { loadTradingCoreRuntime, type TradingCoreRuntimeApi } from '../services/runtime/tradingCoreRuntimeLoader';
 import { listPublicIndicatorPublications, type IndicatorPublication } from '../services/coreSpirit/indicatorPublicationService';
 import type { NormalizedMarketTick } from '../types/market';
 
@@ -33,7 +33,7 @@ function receivedAtMs(tick: NormalizedMarketTick | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function readMarketQuote(index: MarketIndex, now = Date.now()): MarketQuoteView {
+function readMarketQuote(index: MarketIndex, runtime: TradingCoreRuntimeApi | null = null, now = Date.now()): MarketQuoteView {
   const candidates = [
     index.symbol,
     index.symbol.replace(/-INDEX$/i, ''),
@@ -41,7 +41,7 @@ function readMarketQuote(index: MarketIndex, now = Date.now()): MarketQuoteView 
   ];
   let tick: NormalizedMarketTick | undefined;
   for (const key of candidates) {
-    tick = tradingCoreRuntime.getMarketSnapshot(key);
+    tick = runtime?.getMarketSnapshot(key);
     if (tick) break;
   }
   const receivedAt = receivedAtMs(tick);
@@ -69,10 +69,11 @@ function fmtPublishedAt(value?: string): string {
 }
 
 export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: WorkspaceRoute) => void; onBroker?: () => void }) {
+  const [runtime, setRuntime] = useState<TradingCoreRuntimeApi | null>(null);
   const [snapshot, setSnapshot] = useState<any>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const connected = tradingCoreRuntime.hasConnectedBroker();
+  const connected = Boolean(runtime?.hasConnectedBroker());
   const [marketQuotes, setMarketQuotes] = useState<MarketQuoteView[]>(() => MARKET_INDEXES.map(index => readMarketQuote(index)));
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [newsProvider, setNewsProvider] = useState('Yahoo Finance RSS');
@@ -84,22 +85,22 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
 
   const sync = useCallback(async () => {
     setError('');
-    if (!tradingCoreRuntime.hasConnectedBroker()) return;
+    if (!runtime?.hasConnectedBroker()) return;
     setLoading(true);
     try {
-      const broker = tradingCoreRuntime.getPrimaryBrokerInfo();
-      setSnapshot(await tradingCoreRuntime.syncPortfolio(broker?.brokerId));
+      const broker = runtime.getPrimaryBrokerInfo();
+      setSnapshot(await runtime.syncPortfolio(broker?.brokerId));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Portfolio sync failed');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [runtime]);
 
   const refreshMarket = useCallback(() => {
     const now = Date.now();
-    setMarketQuotes(MARKET_INDEXES.map(index => readMarketQuote(index, now)));
-  }, []);
+    setMarketQuotes(MARKET_INDEXES.map(index => readMarketQuote(index, runtime, now)));
+  }, [runtime]);
 
   const refreshNews = useCallback(async () => {
     setNewsLoading(true);
@@ -120,25 +121,34 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
   }, []);
 
   useEffect(() => {
-    void sync();
-    const unsubscribe = tradingCoreRuntime.on('PORTFOLIO_SYNCED', (s: any) => setSnapshot(s));
-    return unsubscribe;
-  }, [sync]);
+    let cancelled = false;
+    void loadTradingCoreRuntime()
+      .then(loadedRuntime => { if (!cancelled) setRuntime(loadedRuntime); })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Market runtime unavailable.'); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
+    if (!runtime) return;
+    void sync();
+    const unsubscribe = runtime.on('PORTFOLIO_SYNCED', (s: any) => setSnapshot(s));
+    return unsubscribe;
+  }, [runtime, sync]);
+
+  useEffect(() => {
+    if (!runtime) { refreshMarket(); return; }
     let cancelled = false;
     let stopMarketSubscription: (() => void) | undefined;
     refreshMarket();
-    const unsubscribe = tradingCoreRuntime.on('TICK_UPDATE', refreshMarket);
+    const unsubscribe = runtime.on('TICK_UPDATE', refreshMarket);
     const timer = window.setInterval(refreshMarket, MARKET_REFRESH_MS);
-    // A dashboard visit should receive fresh quotes even when the live chart hasn't
-    // been mounted in this tab yet. Keep this to the five index instruments instead of opening history streams.
+    // The shared runtime loads after the dashboard mounts; no chart renderer is pulled into the initial dashboard graph.
     void (async () => {
-      if (!tradingCoreRuntime.hasConnectedBroker()) {
-        try { await tradingCoreRuntime.restoreBrokerConnections(); } catch {}
+      if (!runtime.hasConnectedBroker()) {
+        try { await runtime.restoreBrokerConnections(); } catch {}
       }
-      if (cancelled || !tradingCoreRuntime.hasConnectedBroker()) return;
-      stopMarketSubscription = tradingCoreRuntime.subscribeMarketData(
+      if (cancelled || !runtime.hasConnectedBroker()) return;
+      stopMarketSubscription = runtime.subscribeMarketData(
         MARKET_INDEXES.map(index => index.symbol),
         event => { if (event.type === 'tick') refreshMarket(); },
       );
@@ -150,7 +160,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
       unsubscribe();
       window.clearInterval(timer);
     };
-  }, [refreshMarket]);
+  }, [runtime, refreshMarket]);
 
   useEffect(() => {
     void refreshNews();
