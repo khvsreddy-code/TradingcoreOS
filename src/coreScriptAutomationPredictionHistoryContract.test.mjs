@@ -17,6 +17,7 @@ const modelArtifact = read('src/services/coreSpirit/modelArtifacts.ts');
 const mlRuntime = read('ml/app/runtime.py');
 const mlFeatures = read('ml/app/features.py');
 const mlTrainer = read('ml/app/train_all.py');
+const automationPage = read('src/pages/AutomationsPage.tsx');
 
 assert.match(automation, /ema as canonicalEma, rsi as canonicalRsi/, 'automation EMA/RSI must use CoreSpirit canonical numerical kernels');
 assert.match(automation, /export function evaluateAutomationBatch\(/, 'rules for one market bar must share one feature frame');
@@ -25,6 +26,10 @@ assert.match(automation, /unknown_or_unavailable_field/, 'unknown fields must be
 assert.match(automation, /unknown_or_unavailable_reference_field/, 'field-to-field conditions must reject unknown feature references');
 assert.match(automation, /previous_reference_field_unavailable/, 'field-to-field crossovers require previous and current reference values');
 assert.match(automation, /previousActual<=previousThreshold&&actual>threshold/, 'crossovers compare prior and current values of both features');
+assert.match(automationPage, /value="crosses_above"/, 'Automation Center must expose crosses-above rules');
+assert.match(automationPage, /value="crosses_below"/, 'Automation Center must expose crosses-below rules');
+assert.match(automationPage, /isFeatureReferenceValue\(c\.value\)/, 'Automation Center must allow a feature reference as the second crossover series');
+assert.match(automationPage, /value="feature"/, 'Automation Center must distinguish numeric thresholds from feature references');
 assert.match(automation, /confirmed_bar_required/, 'crossover decisions must be confirmed-bar only');
 assert.match(automation, /marketDayKey\(value,context,false\)===dayKey/, 'historical run timestamps must use their own exchange-local date');
 assert.match(automation, /context\.barConfirmed===true/, 'the simple evaluator must suppress live order actions on developing bars');
