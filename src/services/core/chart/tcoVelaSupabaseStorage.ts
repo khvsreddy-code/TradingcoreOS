@@ -325,7 +325,8 @@ export async function loadTcoVelaJournal(): Promise<string | null> {
   } catch { return journalLocalGet(); }
 }
 
-export async function saveTcoVelaJournal(note: string): Promise<void> {
+export async function saveTcoVelaJournal(note: string): Promise<boolean> {
+  // Local write is immediate and remains the fallback if account/cloud storage is unavailable.
   journalLocalSet(note);
-  try { await mutateUserSettings((settings) => ({ ...settings, journal: note })); } catch {}
+  try { return await mutateUserSettings((settings) => ({ ...settings, journal: note })); } catch { return false; }
 }
