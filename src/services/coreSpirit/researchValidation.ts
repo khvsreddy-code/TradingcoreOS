@@ -6,10 +6,14 @@ export type ResearchFeatureRow = Readonly<{
   confirmed: boolean;
   phase: ResearchTemporalPhase;
   values: readonly number[];
+  source?: 'fyers' | 'tvdatafeed' | 'trusted_feature_pipeline' | 'user_supplied';
+  revision?: number;
 }>;
 export type ResearchDateRange = Readonly<{ from: string; to: string }>;
 export const DEFAULT_RESEARCH_VALIDATION_FRACTION = 0.2;
 export const MIN_RESEARCH_VALIDATION_ROWS = 12;
+export const DEFAULT_RESEARCH_MAX_ROWS = 1024;
+export const CORESPIRIT_MAX_DATASET_ROWS = 5000;
 
 export type ChronologicalResearchSplit<T extends ResearchFeatureRow> = Readonly<{
   trainingRows: readonly T[];
@@ -17,6 +21,8 @@ export type ChronologicalResearchSplit<T extends ResearchFeatureRow> = Readonly<
   trainingRange: ResearchDateRange;
   validationRange: ResearchDateRange;
   validationFraction: number;
+  purgedCount: number;
+  validationProtocol: 'chronological-holdout-v1' | 'purged-chronological-v1';
 }>;
 
 function isoRange(rows: readonly ResearchFeatureRow[]): ResearchDateRange {
@@ -31,9 +37,11 @@ function isoRange(rows: readonly ResearchFeatureRow[]): ResearchDateRange {
 export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
   rows: readonly T[],
   featureNames: readonly string[],
+  options: { maxRows?: number } = {},
 ): T[] {
-  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 1024) {
-    throw new Error('Research rows must contain 1–1024 observations.');
+  const maxRows = Math.max(1, Math.min(CORESPIRIT_MAX_DATASET_ROWS, Math.floor(options.maxRows ?? DEFAULT_RESEARCH_MAX_ROWS)));
+  if (!Array.isArray(rows) || rows.length < 1 || rows.length > maxRows) {
+    throw new Error('Research rows must contain 1–' + maxRows + ' observations for this pipeline.');
   }
   if (!featureNames.length || featureNames.length > 16 ||
       featureNames.some(name => typeof name !== 'string' || !name.trim()) ||
@@ -43,14 +51,16 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
   let previousTimestamp = Number.NEGATIVE_INFINITY;
   return rows.map((row, index) => {
     if (!row || typeof row !== 'object' ||
-        Object.keys(row).some(key => !['timestamp','availableAt','confirmed','phase','values'].includes(key)) ||
+        Object.keys(row).some(key => !['timestamp','availableAt','confirmed','phase','values','source','revision'].includes(key)) ||
         typeof row.timestamp !== 'number' || !Number.isFinite(row.timestamp) ||
         typeof row.availableAt !== 'number' || !Number.isFinite(row.availableAt) ||
         row.availableAt > row.timestamp ||
         row.confirmed !== true ||
         (row.phase !== 'historical' && row.phase !== 'confirmed') ||
         !Array.isArray(row.values) || row.values.length !== featureNames.length ||
-        row.values.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+        row.values.some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+        (row.source !== undefined && !['fyers','tvdatafeed','trusted_feature_pipeline','user_supplied'].includes(row.source)) ||
+        (row.revision !== undefined && (!Number.isSafeInteger(row.revision) || row.revision < 0))) {
       throw new Error('Research row ' + index + ' must contain finite feature values from confirmed historical data, with availableAt <= decision timestamp. Developing, realtime, forecast, and unconfirmed rows are forbidden.');
     }
     if (row.timestamp <= previousTimestamp) {
@@ -83,6 +93,7 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
   validationFraction = DEFAULT_RESEARCH_VALIDATION_FRACTION,
   minimumTrainingRows = 12,
   minimumValidationRows = MIN_RESEARCH_VALIDATION_ROWS,
+  options: { maxRows?: number; purgeBars?: number } = {},
 ): ChronologicalResearchSplit<T> {
   if (!Number.isFinite(validationFraction) || validationFraction < 0.1 || validationFraction > 0.4) {
     throw new Error('validationFraction must be between 0.10 and 0.40 for chronological holdout validation.');
@@ -91,20 +102,25 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
       !Number.isInteger(minimumValidationRows) || minimumValidationRows < 12) {
     throw new Error('Chronological validation requires at least 12 training and 12 validation rows.');
   }
-  if (rows.length > 1024) throw new Error('Research datasets are limited to 1024 rows per training run.');
-  const validationCount = Math.floor(rows.length * validationFraction);
-  const trainingCount = rows.length - validationCount;
+  const maxRows = Math.max(1, Math.min(CORESPIRIT_MAX_DATASET_ROWS, Math.floor(options.maxRows ?? DEFAULT_RESEARCH_MAX_ROWS)));
+  const purgeBars = Math.max(0, Math.floor(options.purgeBars ?? 0));
+  if (!Array.isArray(rows) || rows.length > maxRows) {
+    throw new Error('Research datasets are limited to ' + maxRows + ' rows for this training backend.');
+  }
+  if (purgeBars > 500 || purgeBars >= rows.length) {
+    throw new Error('Validation purge gap must be between 0 and 500 bars and smaller than the dataset.');
+  }
+  const evaluableRows = rows.length - purgeBars;
+  const validationCount = Math.floor(evaluableRows * validationFraction);
+  const trainingCount = evaluableRows - validationCount;
   if (trainingCount < minimumTrainingRows || validationCount < minimumValidationRows) {
-    throw new Error('Not enough rows for a chronological holdout: require at least ' +
-      Math.max(
-        minimumTrainingRows + minimumValidationRows,
-        Math.ceil(minimumValidationRows / validationFraction),
-        Math.ceil(minimumTrainingRows / (1 - validationFraction)),
-      ) +
-      ' rows at the selected validationFraction.');
+    throw new Error('Not enough rows for a chronological holdout with ' + purgeBars + ' purged boundary bars: require at least ' +
+      (minimumTrainingRows + minimumValidationRows + purgeBars) +
+      ' total rows at the selected validationFraction.');
   }
   const trainingRows = rows.slice(0, trainingCount);
-  const validationRows = rows.slice(trainingCount);
+  const validationStart = trainingCount + purgeBars;
+  const validationRows = rows.slice(validationStart);
   const trainingRange = isoRange(trainingRows);
   const validationRange = isoRange(validationRows);
   if (trainingRows[trainingRows.length - 1]!.timestamp >= validationRows[0]!.timestamp ||
@@ -116,10 +132,11 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
     validationRows: Object.freeze([...validationRows]),
     trainingRange,
     validationRange,
-    validationFraction,
+    validationFraction: validationCount / evaluableRows,
+    purgedCount: purgeBars,
+    validationProtocol: purgeBars > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1',
   });
 }
-
 export type ResearchSafetySummary = Readonly<{
   version: 1;
   causality: string;
