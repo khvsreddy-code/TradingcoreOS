@@ -1739,7 +1739,9 @@ export class VelaWorkspace {
             }
             if (this.cellsById.has(id)) continue;
             const pooled = this.pool.get(id);
-            const seed: CellBoot = pooled ?? { ...seedDefaults(this.opts), ...(this.opts.cells?.[id] ?? {}) };
+            const seed: CellBoot = pooled
+                ? { ...pooled, visibleRange: pooled.viewport ?? undefined }
+                : { ...seedDefaults(this.opts), ...(this.opts.cells?.[id] ?? {}) };
             this.pool.delete(id); // the slot is live again — its pooled state is consumed
             const cell = new ChartCell(id, this.gridEl, seed, {
                 feed: this.feed,
@@ -1920,8 +1922,12 @@ export class VelaWorkspace {
             this.drawToolbar?.setMeasureActive(mode === 'measure');
             this.drawToolbar?.setEraserActive(mode === 'eraser');
         });
-        // Viewport sync: every applied pan/zoom/fit propagates to the same-group cells.
-        chart.on('viewport:changed', (range) => this.propagateViewport(cell.id, range));
+        // Persist pan/zoom/fit as part of each cell's workspace snapshot. The state write is
+        // debounced, so pointer-move bursts collapse into one durable save after interaction.
+        chart.on('viewport:changed', (range) => {
+            this.propagateViewport(cell.id, range);
+            this.markStateDirty();
+        });
         // Style sync: any committed config edit (settings dialog, applyConfig) mirrors
         // this cell's style-link slice onto its same-group followers.
         chart.renderer.onConfigChanged(() => this.propagateStylePrefs(cell.id));
