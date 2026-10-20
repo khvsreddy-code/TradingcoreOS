@@ -259,7 +259,7 @@ export class ChartCell {
     private readonly offMarket: () => void;
     /** The cell's durable market state — the seed vocabulary plus the venue mirror the
      *  persisted document carries (`provider` = the symbol's parsed prefix). */
-    private state: CellSeed & Pick<CellState, 'provider'>;
+    private state: CellSeed & Pick<CellState, 'provider' | 'viewport'>;
     private manifest: readonly ResolvedIndicator[] = [];
     /** A restored ledger's manifest entry NAMES, waiting for the manifest to resolve
      *  (a pool/persisted cell can be built before the shared manifest has loaded). */
@@ -1511,7 +1511,16 @@ export class ChartCell {
             this.state.bars = bars;
             next.bars = Math.max(bars, this.rangeBars);
         }
-        if (Object.keys(next).length > 0) void this.inner.setMarket(next);
+        const restoreViewport = (): void => {
+            if (this.destroyed || !this.inner || !cs.viewport) return;
+            this.state.viewport = cs.viewport;
+            this.inner.setVisibleRange(cs.viewport);
+        };
+        if (Object.keys(next).length > 0) {
+            void this.inner.setMarket(next).then(restoreViewport).catch(() => undefined);
+        } else {
+            restoreViewport();
+        }
     }
 
     /** Snapshot everything the pool needs to restore this slot later. The market fields
@@ -1531,6 +1540,7 @@ export class ChartCell {
             indicatorTitles: this.indicatorTitlesOn,
             indicatorValues: this.indicatorValuesOn,
             rendererConfig: this.inner?.renderer.getConfig() ?? undefined,
+            viewport: this.inner?.getVisibleRange() ?? this.state.viewport,
             drawings: this.inner ? this.inner.drawings.toJSON() : undefined,
             // Natives from the chart's SYNC registry read — an async catalog mirror here
             // lost unload-time saves, and the old empty-set fallbacks resurrected removed
