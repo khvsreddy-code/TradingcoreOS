@@ -465,6 +465,11 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   if (persistAppearance) saveTcoVelaAppearance(preferences);
 }
 
+export async function persistCurrentTcoVelaAppearance(): Promise<boolean> {
+  saveTcoVelaAppearance(readTcoFramePreferences());
+  return flushTcoVelaAppearance();
+}
+
 export function applySavedTcoVelaAppearance(host: HTMLElement): void {
   applyTcoFramePreferences(host, readTcoFramePreferences(), true, false);
   const localSignature = (() => { try { return localStorage.getItem(TCO_FRAME_STORAGE_KEY); } catch { return null; } })();
@@ -1133,8 +1138,7 @@ const saveWorkspaceAction: WidgetActionDescriptor = {
     const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
     if(!api?.workspace?.saveNow) { ctx.toast('The live workspace is not ready to save yet','error'); return; }
     void Promise.resolve(api.workspace.saveNow()).then(async()=>{
-      saveTcoVelaAppearance(readTcoFramePreferences());
-      const appearanceSynced=await flushTcoVelaAppearance();
+      const appearanceSynced=await persistCurrentTcoVelaAppearance();
       ctx.toast(appearanceSynced?'Workspace saved to your account':'Workspace saved on this device; account sync resumes when available','success');
     }).catch((error:unknown)=>{
       ctx.toast('Workspace saved locally; cloud sync failed'+(error instanceof Error?': '+error.message:''),'error');
