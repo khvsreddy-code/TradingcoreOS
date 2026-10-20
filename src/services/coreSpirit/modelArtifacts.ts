@@ -11,6 +11,33 @@ export const CORESPIRIT_MODEL_ARTIFACT_VERSION = '2';
 
 export type TrainingRange = Readonly<{ from: string; to: string }>;
 export type ArtifactBackend = 'cpu' | 'wasm' | 'webgpu' | 'remote';
+export type CoreSpiritModelReleaseStatus = 'candidate' | 'approved' | 'revoked' | 'retired';
+export type CoreSpiritModelTargetKind = 'direction' | 'return' | 'volatility' | 'regime' | 'range' | 'price';
+
+export type CoreSpiritModelContract = Readonly<{
+  contractVersion: 1;
+  identity: Readonly<{ id: string; version: string }>;
+  featureSchema: Readonly<{
+    version: string;
+    orderedNames: readonly string[];
+    types: readonly string[];
+    hash: string;
+  }>;
+  lookback: Readonly<{ minBars: number; preferredBars: number; maxBars: number }>;
+  target: Readonly<{ kind: CoreSpiritModelTargetKind; forecastHorizonBars: number }>;
+  temporal: Readonly<{
+    trainingRequiresConfirmedBars: true;
+    availabilityRule: 'availableAt<=timestamp';
+    validationProtocol: 'chronological-holdout-v1' | 'purged-chronological-v1';
+  }>;
+  validation: Readonly<{
+    protocol: 'chronological-holdout-v1' | 'purged-chronological-v1';
+    metrics: Readonly<Record<string, number>>;
+    calibrationStatus: 'calibrated' | 'not_calibrated' | 'not_applicable';
+  }>;
+  /** Immutable artifact metadata remains candidate; approval lives in the audited release-control record. */
+  releaseStatus: CoreSpiritModelReleaseStatus;
+}>;
 
 export type ModelValidationResults = Readonly<{
   protocol: 'chronological-holdout-v1';
@@ -74,6 +101,8 @@ export type ModelArtifact<TWeights = unknown> = Readonly<{
   provenance: ModelProvenance;
   weights: TWeights;
   metrics: Readonly<Record<string, number>>;
+  /** Optional only for legacy v2 artifacts. Newly sealed artifacts always carry this ABI contract. */
+  contract?: CoreSpiritModelContract;
   createdAt: string;
 }>;
 
@@ -92,6 +121,7 @@ export type TrainModelInput<TWeights = unknown> = Readonly<{
   provenance: ModelProvenance;
   weights: TWeights;
   metrics?: Readonly<Record<string, number>>;
+  contract?: CoreSpiritModelContract;
   createdAt?: string;
 }>;
 
@@ -166,13 +196,17 @@ function canonical(value: unknown): string {
   throw new Error('Artifact payload cannot contain ' + typeof value);
 }
 
-function modelArtifactHashPayload<TWeights>(artifact: Pick<ModelArtifact<TWeights>, 'schemaVersion' | 'name' | 'provenance' | 'weights' | 'metrics'>): unknown {
+function modelArtifactHashPayload<TWeights>(
+  artifact: Pick<ModelArtifact<TWeights>, 'schemaVersion' | 'name' | 'provenance' | 'weights' | 'metrics'> &
+    Partial<Pick<ModelArtifact<TWeights>, 'contract'>>,
+): unknown {
   return {
     schemaVersion: artifact.schemaVersion,
     name: artifact.name,
     provenance: artifact.provenance,
     weights: artifact.weights,
     metrics: artifact.metrics,
+    ...(artifact.contract ? { contract: artifact.contract } : {}),
   };
 }
 
@@ -298,6 +332,133 @@ export async function createResearchArtifact(input: ResearchCompileInput): Promi
   });
 }
 
+function featureNamesFromResearchGraph(graphValue: unknown): string[] {
+  if (!graphValue || typeof graphValue !== 'object' || Array.isArray(graphValue)) return [];
+  const graph = graphValue as Record<string, unknown>;
+  const candidate = Array.isArray(graph.featureNames) ? graph.featureNames
+    : Array.isArray(graph.fields) ? graph.fields
+    : Array.isArray(graph.features) ? graph.features
+    : graph.features && typeof graph.features === 'object' && !Array.isArray(graph.features)
+      ? Object.keys(graph.features as Record<string, unknown>)
+      : [];
+  return candidate.map(value => typeof value === 'string'
+    ? value.trim()
+    : value && typeof value === 'object' && 'name' in value
+      ? String((value as Record<string, unknown>).name).trim()
+      : '').filter(Boolean);
+}
+
+function assertModelContract(contract: CoreSpiritModelContract): void {
+  if (!contract || contract.contractVersion !== 1 ||
+      !contract.identity || !contract.identity.id.trim() || !contract.identity.version.trim()) {
+    throw new Error('Model contract must include a stable identity and supported contract version.');
+  }
+  const schema = contract.featureSchema;
+  if (!schema || !schema.version.trim() || !Array.isArray(schema.orderedNames) ||
+      schema.orderedNames.length < 1 || schema.orderedNames.length > 64 ||
+      schema.orderedNames.some(name => typeof name !== 'string' || !name.trim()) ||
+      new Set(schema.orderedNames).size !== schema.orderedNames.length ||
+      !/^[a-f0-9]{64}$/.test(schema.hash) ||
+      !Array.isArray(schema.types) || schema.types.length !== schema.orderedNames.length ||
+      schema.types.some(type => typeof type !== 'string' || !type.trim())) {
+    throw new Error('Model contract feature schema must preserve ordered named types and a SHA-256 hash.');
+  }
+  const lookback = contract.lookback;
+  if (!lookback ||
+      !Number.isSafeInteger(lookback.minBars) || lookback.minBars < 1 ||
+      !Number.isSafeInteger(lookback.preferredBars) || lookback.preferredBars < lookback.minBars ||
+      !Number.isSafeInteger(lookback.maxBars) || lookback.maxBars < lookback.preferredBars ||
+      lookback.maxBars > 5000) {
+    throw new Error('Model lookback must satisfy 1 <= minimum <= preferred <= maximum <= 5000 bars.');
+  }
+  if (!contract.target || !['direction', 'return', 'volatility', 'regime', 'range', 'price'].includes(contract.target.kind) ||
+      !Number.isSafeInteger(contract.target.forecastHorizonBars) ||
+      contract.target.forecastHorizonBars < 1 || contract.target.forecastHorizonBars > 500) {
+    throw new Error('Model target must identify its output semantics and a bounded forecast horizon.');
+  }
+  if (!contract.temporal || contract.temporal.trainingRequiresConfirmedBars !== true ||
+      contract.temporal.availabilityRule !== 'availableAt<=timestamp' ||
+      !['chronological-holdout-v1', 'purged-chronological-v1'].includes(contract.temporal.validationProtocol)) {
+    throw new Error('Model temporal contract must require confirmed rows and a declared availability/validation protocol.');
+  }
+  if (!contract.validation ||
+      contract.validation.protocol !== contract.temporal.validationProtocol ||
+      !['calibrated', 'not_calibrated', 'not_applicable'].includes(contract.validation.calibrationStatus) ||
+      !contract.validation.metrics || typeof contract.validation.metrics !== 'object' ||
+      Array.isArray(contract.validation.metrics) ||
+      Object.entries(contract.validation.metrics).some(([name, value]) => !name.trim() || !Number.isFinite(value))) {
+    throw new Error('Model validation contract is incomplete or contains non-finite metrics.');
+  }
+  if (!['candidate', 'approved', 'revoked', 'retired'].includes(contract.releaseStatus)) {
+    throw new Error('Model release status is unsupported.');
+  }
+}
+
+async function defaultModelContract<TWeights>(input: TrainModelInput<TWeights>, metrics: Readonly<Record<string, number>>): Promise<CoreSpiritModelContract> {
+  if (input.contract) {
+    assertModelContract(input.contract);
+    return normalizeArtifactValue(input.contract) as CoreSpiritModelContract;
+  }
+  const names = featureNamesFromResearchGraph(input.research.featureGraph);
+  if (!names.length) {
+    throw new Error('Research feature graph must declare ordered feature names before a model can be sealed.');
+  }
+  const graph = input.research.featureGraph && typeof input.research.featureGraph === 'object'
+    ? input.research.featureGraph as Record<string, unknown> : {};
+  const schemaVersion = typeof graph.featureSchemaVersion === 'string' && graph.featureSchemaVersion.trim()
+    ? graph.featureSchemaVersion : 'corespirit-feature-schema/v1';
+  const featureSchema = {
+    version: schemaVersion,
+    orderedNames: names,
+    types: names.map(() => 'number'),
+  };
+  const featureSchemaHash = await coreSpiritSha256({
+    version: featureSchema.version,
+    orderedNames: featureSchema.orderedNames,
+    types: featureSchema.types,
+  });
+  const parameters = input.provenance.trainingParameters;
+  const numericParameter = (keys: string[], fallback: number) => {
+    for (const key of keys) {
+      const value = parameters[key];
+      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;
+    }
+    return fallback;
+  };
+  const modelType = String(graph.modelType ?? '');
+  const targetKindRaw = String(parameters.targetKind ?? (modelType.includes('HMM') ? 'regime' : 'direction'));
+  const targetKind: CoreSpiritModelTargetKind = ['direction', 'return', 'volatility', 'regime', 'range', 'price'].includes(targetKindRaw)
+    ? targetKindRaw as CoreSpiritModelTargetKind : 'direction';
+  const horizon = Math.min(500, numericParameter(['forecastHorizonBars', 'targetHorizonBars', 'horizon'], 1));
+  const minBars = Math.min(5000, numericParameter(['minLookbackBars', 'lookbackBars'], Math.min(64, Math.max(1, names.length * 4))));
+  const preferredBars = Math.min(5000, Math.max(minBars, numericParameter(['preferredLookbackBars'], Math.max(minBars, 512))));
+  const maxBars = Math.min(5000, Math.max(preferredBars, numericParameter(['maxLookbackBars'], 5000)));
+  const validationProtocol = input.provenance.validationResults.protocol;
+  const calibrationValue = parameters.calibrationStatus;
+  const calibrationStatus = calibrationValue === 'calibrated' || calibrationValue === 'not_applicable'
+    ? calibrationValue : 'not_calibrated';
+  const contract: CoreSpiritModelContract = {
+    contractVersion: 1,
+    identity: { id: input.research.name, version: input.provenance.datasetVersion.slice(0, 16) },
+    featureSchema: { ...featureSchema, hash: featureSchemaHash },
+    lookback: { minBars, preferredBars, maxBars },
+    target: { kind: targetKind, forecastHorizonBars: horizon },
+    temporal: {
+      trainingRequiresConfirmedBars: true,
+      availabilityRule: 'availableAt<=timestamp',
+      validationProtocol,
+    },
+    validation: {
+      protocol: validationProtocol,
+      metrics,
+      calibrationStatus,
+    },
+    releaseStatus: 'candidate',
+  };
+  assertModelContract(contract);
+  return deepFreeze(contract);
+}
+
 /** Seals trained weights together with every declared reproducibility input. */
 export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeights>): Promise<ModelArtifact<TWeights>> {
   validateProvenance(input.provenance);
@@ -315,6 +476,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
   for (const [key, value] of Object.entries(metrics)) {
     if (!Number.isFinite(value)) throw new Error('Model metric "' + key + '" must be finite');
   }
+  const contract = await defaultModelContract(input, metrics);
   const createdAt = input.createdAt ?? new Date().toISOString();
   const hash = await coreSpiritSha256(modelArtifactHashPayload({
     schemaVersion: CORESPIRIT_MODEL_ARTIFACT_VERSION,
@@ -322,6 +484,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
     provenance,
     weights,
     metrics,
+    contract,
   }));
   return deepFreeze({
     kind: 'corespirit-model',
@@ -331,6 +494,7 @@ export async function sealModelArtifact<TWeights>(input: TrainModelInput<TWeight
     provenance,
     weights,
     metrics,
+    contract,
     createdAt,
   });
 }
@@ -381,6 +545,7 @@ export async function verifyModelArtifactIntegrity<TWeights>(artifact: ModelArti
         typeof artifact.name!=='string'||!artifact.name.trim() ||
         !artifact.metrics||typeof artifact.metrics!=='object'||Array.isArray(artifact.metrics)) return false;
     validateProvenance(artifact.provenance);
+    if (artifact.contract) assertModelContract(artifact.contract);
     for(const [name,value] of Object.entries(artifact.metrics)){
       if(!name.trim()||typeof value!=='number'||!Number.isFinite(value))return false;
     }
@@ -397,7 +562,8 @@ export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
   store: ModelArtifactStore<TWeights>,
   nameOrHash: string,
   createInference: ModelInferenceFactory<TWeights, TFeatures, TPrediction>,
-): Promise<ModelInference<TFeatures, TPrediction> & { readonly artifactHash: string; readonly artifactName: string }> {
+  options: { environment?: 'research' | 'paper' | 'production'; approvedReleaseStatus?: CoreSpiritModelReleaseStatus } = {},
+): Promise<ModelInference<TFeatures, TPrediction> & { readonly artifactHash: string; readonly artifactName: string; readonly contract?: CoreSpiritModelContract }> {
   const artifact = /^[a-f0-9]{64}$/i.test(nameOrHash)
     ? await store.getByHash(nameOrHash)
     : await store.getByName(nameOrHash);
@@ -408,10 +574,17 @@ export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
   if (!(await verifyModelArtifactIntegrity(artifact))) {
     throw new Error('Model artifact integrity check failed for "' + artifact.name + '"');
   }
+  const environment = options.environment ?? 'research';
+  if (environment === 'production' &&
+      (!artifact.contract || options.approvedReleaseStatus !== 'approved' ||
+       artifact.contract.releaseStatus === 'revoked' || artifact.contract.releaseStatus === 'retired')) {
+    throw new Error('Production inference requires an audited approved release status for this hash-pinned model artifact.');
+  }
   const inference = createInference(artifact);
   return Object.freeze({
     artifactHash: artifact.hash,
     artifactName: artifact.name,
+    ...(artifact.contract ? { contract: artifact.contract } : {}),
     predict: (features: TFeatures) => inference.predict(features),
   });
 }
