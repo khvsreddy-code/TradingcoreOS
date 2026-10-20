@@ -107,6 +107,7 @@ const contracts = [
   ['fyers-order-reconciliation-state-machine', ['src/fyersOrderStateReconciliationContract.test.mjs', true]],
   ['external-automation-trading', ['src/externalAutomationTradingContract.test.mjs', false]],
   ['automation-engine-regressions', ['src/services/automationEngineRegression.test.ts', true]],
+  ['corescript-automation-prediction-history', ['src/coreScriptAutomationPredictionHistoryContract.test.mjs', false]],
   ['fyers-multi-class-domain-events', ['src/fyersMultiClassDomainEventsContract.test.mjs', true]],
   ['vela-advanced-drawing-family-lazy', ['src/velaAdvancedDrawingFamilyLazyContract.test.mjs', true]],
   ['vela-drawing-capability-inventory', ['src/velaDrawingCapabilityInventoryContract.test.mjs', true]],
