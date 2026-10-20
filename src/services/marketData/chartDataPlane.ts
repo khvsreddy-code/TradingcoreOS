@@ -177,8 +177,10 @@ function columnarHistoryToCandles(columns: {
     const source = columns.source?.[i];
     const phase = columns.phase?.[i];
     const confirmed = columns.confirmed?.[i];
-    const availableAtMs = Number(columns.availableAt?.[i]);
-    const revision = Number(columns.revision?.[i]);
+    const availableAtRaw = columns.availableAt?.[i];
+    const revisionRaw = columns.revision?.[i];
+    const availableAtMs = typeof availableAtRaw === 'number' ? availableAtRaw : Number.NaN;
+    const revision = typeof revisionRaw === 'number' ? revisionRaw : Number.NaN;
     out[written++] = {
       timestamp: new Date(time).toISOString(), open, high, low, close, volume: Number.isFinite(volume) ? volume : 0,
       ...(source === 'fyers' || source === 'tvdatafeed' || source === 'unknown' ? { source } : {}),

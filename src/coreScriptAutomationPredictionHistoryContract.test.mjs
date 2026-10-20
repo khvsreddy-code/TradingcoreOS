@@ -14,6 +14,8 @@ const canonicalHistory = read('src/server/marketData/canonicalHistoricalData.ts'
 const researchHistoryRoute = read('src/server/routes/coreSpirit-research-history.routes.ts');
 const historyRoute = read('src/server/routes/fyers-history.routes.ts');
 const predictionRoute = read('src/server/routes/production-prediction.routes.ts');
+const predictionClient = read('src/services/productionPredictionService.ts');
+const researchHistoryClient = read('src/services/coreSpirit/researchHistoryClient.ts');
 const brokerAdapter = read('src/services/brokers/BrokerAdapter.ts');
 const chartPlane = read('src/services/marketData/chartDataPlane.ts');
 const runtimeHistory = read('src/services/runtime/TradingCoreRuntime.ts');
@@ -72,6 +74,8 @@ assert.match(historyRoute, /loadCanonicalHistoryForUser/, 'the chart history rou
 assert.match(researchHistoryRoute, /loadCanonicalHistoryForUser/, 'research must read the same source-validated dataset');
 assert.match(predictionRoute, /loadCanonicalHistoryForUser/, 'production inference can request the canonical history directly');
 assert.match(predictionRoute, /useCanonicalHistory/, 'prediction history selection must be explicit and bounded');
+assert.match(predictionClient, /fetchProductionPredictionsFromCanonicalHistory/, 'browser inference can use server-owned canonical history without shipping chart arrays');
+assert.match(researchHistoryClient, /fetchCoreSpiritResearchHistory/, 'CoreSpirit research has a typed client for the shared history endpoint');
 assert.match(brokerAdapter, /availableAt\?: number\[\]/, 'columnar history must retain per-bar availability provenance');
 assert.match(chartPlane, /availableAtMs/, 'chart column materialization must preserve availability timestamps');
 assert.match(runtimeHistory, /availableAt: ordered\.map/, 'runtime object-to-columnar fallback must preserve temporal provenance');

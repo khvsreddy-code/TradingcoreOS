@@ -56,7 +56,15 @@ export function normalizeCanonicalHistoryTimeframe(raw: string): TimeframeSpec {
 function canonicalInstrument(rawSymbol: string): string {
   const raw = String(rawSymbol || '').trim();
   if (!raw || raw.length > 128 || /[\r\n\0]/.test(raw)) throw new CanonicalHistoryError('symbol is required and must be a valid instrument identifier.');
-  let resolved = canonicalFyersSymbol(raw);
+  const compact = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const indexAliases: Record<string, string> = {
+    NIFTY: 'NSE:NIFTY50-INDEX', NIFTY50: 'NSE:NIFTY50-INDEX', NIFTY50INDEX: 'NSE:NIFTY50-INDEX', NSENIFTY50INDEX: 'NSE:NIFTY50-INDEX',
+    BANKNIFTY: 'NSE:NIFTYBANK-INDEX', NIFTYBANK: 'NSE:NIFTYBANK-INDEX', NIFTYBANKINDEX: 'NSE:NIFTYBANK-INDEX', NSENIFTYBANKINDEX: 'NSE:NIFTYBANK-INDEX',
+    FINNIFTY: 'NSE:FINNIFTY-INDEX', FINNIFTYINDEX: 'NSE:FINNIFTY-INDEX', NSEFINNIFTYINDEX: 'NSE:FINNIFTY-INDEX',
+    MIDCPNIFTY: 'NSE:MIDCPNIFTY-INDEX', MIDCPNIFTYINDEX: 'NSE:MIDCPNIFTY-INDEX', NSEMIDCPNIFTYINDEX: 'NSE:MIDCPNIFTY-INDEX',
+    SENSEX: 'BSE:SENSEX-INDEX', BSESENSEX: 'BSE:SENSEX-INDEX', SENSEXINDEX: 'BSE:SENSEX-INDEX', BSESENSEXINDEX: 'BSE:SENSEX-INDEX',
+  };
+  let resolved = indexAliases[compact] ? canonicalFyersSymbol(indexAliases[compact]!) : canonicalFyersSymbol(raw);
   if (!resolved.includes(':') && /^[A-Z0-9&._-]{1,64}$/i.test(resolved)) {
     resolved = canonicalFyersSymbol((/^(SENSEX|BANKEX)/i.test(resolved) ? 'BSE:' : 'NSE:') + resolved);
   }
