@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const read = path => readFileSync(path, 'utf8');
+const automation = read('src/services/automationEngine.ts');
+const automationPipeline = read('src/services/coreSpirit/automationPipeline.ts');
+const automationGateway = read('src/server/routes/automation-integration.routes.ts');
+const automationRepository = read('src/server/automation/AutomationIntegrationRepository.ts');
+const runtime = read('src/services/coreSpirit/runtime.ts');
+const kernels = read('src/services/coreSpirit/numericalKernels.ts');
+const outputAdapter = read('src/services/coreSpirit/velaOutputAdapter.ts');
+const historical = read('src/server/marketData/HistoricalDataService.ts');
+const predictionJob = read('src/server/jobs/productionPrediction.ts');
+const hmmTraining = read('src/server/jobs/coreSpiritModelTraining.ts');
+const researchValidation = read('src/services/coreSpirit/researchValidation.ts');
+const modelArtifact = read('src/services/coreSpirit/modelArtifacts.ts');
+const mlRuntime = read('ml/app/runtime.py');
+const mlFeatures = read('ml/app/features.py');
+const mlTrainer = read('ml/app/train_all.py');
+
+assert.match(automation, /ema as canonicalEma, rsi as canonicalRsi/, 'automation EMA/RSI must use CoreSpirit canonical numerical kernels');
+assert.match(automation, /export function evaluateAutomationBatch\(/, 'rules for one market bar must share one feature frame');
+assert.match(automation, /const frame=buildAutomationFeatureFrame\(context\);\s*return rules\.map\(rule=>evaluateAutomationWithFrame\(rule,context,now,frame\)\)/);
+assert.match(automation, /unknown_or_unavailable_field/, 'unknown fields must be unavailable, never coerced to zero');
+assert.match(automation, /confirmed_bar_required/, 'crossover decisions must be confirmed-bar only');
+assert.match(automation, /marketDayKey\(value,context,false\)===dayKey/, 'historical run timestamps must use their own exchange-local date');
+assert.match(automation, /context\.barConfirmed===true/, 'the simple evaluator must suppress live order actions on developing bars');
+assert.match(automation, /context\.barConfirmed===true\?close/, 'confirmed-bar conditions must use the bar close, not a late LTP snapshot');
+
+assert.match(automationPipeline, /hostExecutionMode === 'live'/, 'CoreSpirit live execution requires trusted host mode');
+assert.match(automationPipeline, /event\.executionMode === 'realtime'/, 'historical/replay events must not reach live broker submission');
+assert.match(automationPipeline, /PAPER_SIMULATION/, 'non-live paths must explicitly suppress broker side effects');
+assert.match(automationGateway, /AutomationIntegrationRepository\.claimOrderRequest/, 'external order requests must claim durable idempotency before submission');
+assert.match(automationGateway, /evaluateAutomationPreTradeRisk/, 'external live orders must pass server-side pre-trade risk');
+assert.ok(automationGateway.indexOf('AutomationIntegrationRepository.claimOrderRequest') < automationGateway.indexOf('placeFyersOrderViaFixedIpGateway(accessToken, submitPayload'), 'the durable request claim must precede the broker side effect');
+assert.match(automationRepository, /claim_automation_order_request/, 'daily quota and duplicate claim must be enforced by the durable database RPC');
+
+assert.match(runtime, /CoreSpiritFusedSeriesCursor/, 'the canonical CoreSpirit runtime owns fused stateful series execution');
+assert.match(runtime, /statefulIndicatorKernel/, 'the canonical runtime uses shared bounded-state numerical kernels');
+assert.match(kernels, /export function ema\(/);
+assert.match(kernels, /export function rsi\(/);
+assert.match(outputAdapter, /CoreSpiritVelaOutputRevisionGate/, 'Vela output application must reject stale output revisions');
+assert.match(outputAdapter, /does not match a canonical chart bar/, 'indicator points must align to the canonical chart timeline');
+
+assert.match(historical, /HISTORICAL_RECENT_SESSIONS = 3/, 'FYERS remains the source for the latest three observed sessions');
+assert.match(historical, /fyers-three-sessions\+tvdatafeed-older-5000\/v1/, 'the shared history source policy is explicit');
+assert.match(historical, /HISTORICAL_MAX_BARS = 5_000/);
+assert.match(historical, /TVDATAFEED_SERVICE_URL/, 'older candles use the server-side TradingView datafeed adapter');
+assert.match(historical, /tvContractCompatible\(mapping\)/, 'older TV bars require compatible source mappings');
+assert.match(historical, /mapping\.tvContractIdentity && fyersIdentity === mapping\.tvContractIdentity/, 'derivative history must match contract identity');
+assert.match(historical, /'NSE:NIFTY50-INDEX': \{ tvSymbol: 'NIFTY', tvExchange: 'NSE'/, 'NIFTY 50 gets an exact TradingView symbol mapping');
+assert.match(predictionJob, /MAX_PRODUCTION_PREDICTION_CANDLES = 5_000/);
+assert.match(predictionJob, /required_lookback_bars|lookback/, 'prediction jobs preserve the per-artifact lookback metadata');
+assert.match(hmmTraining, /MAX_HMM_TRAINING_ROWS = 5_000/);
+assert.match(hmmTraining, /validateConfirmedResearchRows/);
+assert.match(hmmTraining, /Dataset snapshot hash mismatch/);
+assert.match(researchValidation, /CORESPIRIT_MAX_DATASET_ROWS = 5000/);
+assert.match(researchValidation, /row\.availableAt > row\.timestamp/, 'research forbids unavailable-at-decision-time features');
+assert.match(researchValidation, /purged boundary bars/);
+assert.match(modelArtifact, /featureSchema:[\s\S]*orderedNames:[\s\S]*types:[\s\S]*hash:/);
+assert.match(modelArtifact, /lookback:[\s\S]*minBars:[\s\S]*preferredBars:[\s\S]*maxBars:/);
+assert.match(modelArtifact, /target:[\s\S]*forecastHorizonBars:/);
+assert.match(modelArtifact, /releaseStatus: CoreSpiritModelReleaseStatus/);
+
+assert.match(mlFeatures, /LEGACY_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features\/1'/);
+assert.match(mlFeatures, /TIMEZONE_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features\/2'/);
+assert.match(mlFeatures, /FEATURE_SCHEMA_VERSION = 'tradingcore-market-features\/3'/);
+assert.match(mlFeatures, /ZoneInfo\(exchange_timezone\)/);
+assert.match(mlFeatures, /session_holidays/);
+assert.match(mlFeatures, /require_confirmed/);
+assert.match(mlTrainer, /'contractVersion': 1/);
+assert.match(mlTrainer, /'featureSchema':/);
+assert.match(mlTrainer, /'orderedNames': list\(features\)/);
+assert.match(mlTrainer, /'calibrationStatus': 'not_calibrated'/, 'score metrics must not claim calibration without fitting a calibrator');
+assert.match(mlTrainer, /expected_calibration_error/);
+assert.match(mlTrainer, /purged-chronological-v1/);
+assert.match(mlRuntime, /_validate_model_contract/);
+assert.match(mlRuntime, /feature schema hash does not match/);
+assert.match(mlRuntime, /required lookback is below the contract minimum|Insufficient feature history/);
+assert.match(mlRuntime, /'expected_return': expected_return/);
+assert.match(mlRuntime, /'production_eligible': release_status == 'approved'/, 'unapproved artifacts must never be marked production eligible');
+assert.match(mlRuntime, /'entry_allowed': False/, 'candidate/revoked artifacts must not produce an execution-allowed gate');
+
+console.log('CORESCRIPT_AUTOMATION_PREDICTION_HISTORY_CONTRACT_OK');
