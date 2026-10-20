@@ -298,9 +298,6 @@ export function LiveTradingWorkspace() {
       const onWorkspaceAppearanceChanged = () => scheduleNamedWorkspaceAutosave?.();
       window.addEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged);
       workspaceListenerDisposers.push(() => window.removeEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged));
-      const onWorkspaceAppearanceChanged = () => scheduleNamedWorkspaceAutosave?.();
-      window.addEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged);
-      workspaceListenerDisposers.push(() => window.removeEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged));
 
       // Warm common index history in the background once the broker is ready.
       // The workspace itself is already mounted, and its own getBars call is
