@@ -14,7 +14,12 @@ export type AutomationExecutionMode = 'live'|'paper'|'historical'|'replay'|'back
 export interface AutomationContext {
   symbol:string;
   price:number;
+  timeframe?:string;
+  /** Exchange timezone for session/run-budget accounting; the host owns this value. */
+  exchangeTimezone?:string;
   candles:HistoricalCandle[];
+  /** Preferred zero-copy input from the canonical market-data plane. */
+  columns?:Readonly<{time:ArrayLike<number>;open:ArrayLike<number>;high:ArrayLike<number>;low:ArrayLike<number>;close:ArrayLike<number>;volume:ArrayLike<number>;length:number}>;
   prediction?:PredictionResult;
   vwap?:number;
   oi?:number;
@@ -83,7 +88,7 @@ export interface AutomationEvaluation {
 
 const mean=(values:number[])=>values.length?values.reduce((sum,value)=>sum+value,0)/values.length:0;
 
-function emaSeries(values:number[],period:number):number[] {
+function emaSeries(values:ArrayLike<number>,period:number):number[] {
   if(!values.length)return [];
   const k=2/(period+1);
   const out=new Array<number>(values.length);
@@ -92,7 +97,7 @@ function emaSeries(values:number[],period:number):number[] {
   return out;
 }
 
-function rsiSeries(values:number[],period=14):number[] {
+function rsiSeries(values:ArrayLike<number>,period=14):number[] {
   const out=new Array<number>(values.length).fill(Number.NaN);
   if(values.length<=period)return out;
   let gain=0,loss=0;
@@ -118,40 +123,55 @@ function safeFinite(value:unknown):number|undefined {
   return Number.isFinite(numeric)?numeric:undefined;
 }
 
-function marketDayKey(now:number,context:AutomationContext):string {
-  if(context.sessionDate && /^\d{4}-\d{2}-\d{2}$/.test(context.sessionDate))return context.sessionDate;
-  try {
-    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now));
+function marketDayKey(timestampMs:number,context:AutomationContext,useSuppliedSessionDate=false):string {
+  if(useSuppliedSessionDate && context.sessionDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(context.sessionDate)) return context.sessionDate;
+  const formatDate=(timezone:string)=> {
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(timestampMs));
     const values:Record<string,string>={};
     for(const part of parts)if(part.type!=='literal')values[part.type]=part.value;
     return values.year+'-'+values.month+'-'+values.day;
-  } catch { return new Date(now).toISOString().slice(0,10); }
+  };
+  try { return formatDate(String(context.exchangeTimezone||'Asia/Kolkata')); }
+  catch { return formatDate('Asia/Kolkata'); }
 }
-
+function timestampMs(value:unknown):number|undefined {
+  if(value===null||value===undefined||value==='')return undefined;
+  const numeric=typeof value==='number'?value:Number(value);
+  if(Number.isFinite(numeric))return numeric>1e12?numeric:numeric*1000;
+  const parsed=Date.parse(String(value));
+  return Number.isFinite(parsed)?parsed:undefined;
+}
 /** Build one shared current/previous feature frame per evaluation rather than recalculating each condition. */
 function buildAutomationFeatureFrame(context:AutomationContext):{
   current:Map<string,number|undefined>;
   previous:Map<string,number|undefined>;
 } {
   const candles=Array.isArray(context.candles)?context.candles:[];
-  const closes:number[]=[],highs:number[]=[],lows:number[]=[],volumes:number[]=[];
-  for(const candle of candles){
-    closes.push(Number(candle.close));
-    highs.push(Number(candle.high));
-    lows.push(Number(candle.low));
-    volumes.push(Number(candle.volume??0));
+  const columns=context.columns;
+  const count=columns
+    ? Math.max(0,Math.min(columns.length,columns.close.length,columns.high.length,columns.low.length,columns.volume.length))
+    : candles.length;
+  // Preferred columnar input borrows canonical ArrayLike views rather than remapping
+  // the chart tape into OHLCV objects for each rule/condition evaluation.
+  const closes:ArrayLike<number>=columns?.close ?? candles.map(candle=>Number(candle.close));
+  const highs:ArrayLike<number>=columns?.high ?? candles.map(candle=>Number(candle.high));
+  const lows:ArrayLike<number>=columns?.low ?? candles.map(candle=>Number(candle.low));
+  const volumes:ArrayLike<number>=columns?.volume ?? candles.map(candle=>Number(candle.volume??0));
+  for(let i=0;i<count;i++){
+    const volume=Number(volumes[i]);
+    if(!Number.isFinite(Number(closes[i]))||!Number.isFinite(Number(highs[i]))||
+       !Number.isFinite(Number(lows[i]))||!Number.isFinite(volume)||volume<0){
+      return {current:new Map(),previous:new Map()};
+    }
   }
-  const finiteCandles=closes.every(Number.isFinite)&&highs.every(Number.isFinite)&&lows.every(Number.isFinite)
-    &&volumes.every(value=>Number.isFinite(value)&&value>=0);
-  if(!finiteCandles){
-    return {current:new Map(),previous:new Map()};
-  }
+  if(count===0)return {current:new Map(),previous:new Map()};
   const ema9=emaSeries(closes,9),ema21=emaSeries(closes,21),rsi14=rsiSeries(closes,14);
   const readAt=(index:number,isCurrent:boolean):Map<string,number|undefined>=>{
     const values=new Map<string,number|undefined>();
-    if(index<0||index>=candles.length)return values;
-    const candle=candles[index]!;
-    const price=isCurrent?(safeFinite(context.price)??closes[index]!):closes[index]!;
+    if(index<0||index>=count)return values;
+    const candle=candles[index];
+    const close=Number(closes[index]);
+    const price=isCurrent?(safeFinite(context.price)??close):close;
     const e9=ema9[index],e21=ema21[index];
     values.set('price',price);
     values.set('prediction_confidence',safeFinite(context.prediction?.confidence));
@@ -165,26 +185,27 @@ function buildAutomationFeatureFrame(context:AutomationContext):{
     values.set('ema21',Number.isFinite(e21)?e21:undefined);
     values.set('ema_spread_pct',Number.isFinite(e9)&&Number.isFinite(e21)&&e21!==0?((e9/e21)-1)*100:undefined);
     values.set('rsi14',Number.isFinite(rsi14[index])?rsi14[index]:undefined);
-    const previousVolumeStart=Math.max(0,index-20);
-    const previousVolumes=volumes.slice(previousVolumeStart,index);
-    const averageVolume=previousVolumes.length===20?mean(previousVolumes):undefined;
-    values.set('volume_ratio',averageVolume!==undefined&&averageVolume>0?volumes[index]!/averageVolume:undefined);
     if(index>=20){
-      const priorHigh=Math.max(...highs.slice(index-20,index));
-      const priorLow=Math.min(...lows.slice(index-20,index));
+      let volumeSum=0,priorHigh=Number.NEGATIVE_INFINITY,priorLow=Number.POSITIVE_INFINITY;
+      for(let j=index-20;j<index;j++){
+        volumeSum+=Number(volumes[j]);
+        priorHigh=Math.max(priorHigh,Number(highs[j]));
+        priorLow=Math.min(priorLow,Number(lows[j]));
+      }
+      const averageVolume=volumeSum/20;
+      values.set('volume_ratio',averageVolume>0?Number(volumes[index])/averageVolume:undefined);
       values.set('range_breakout_up',price>priorHigh?1:0);
       values.set('range_breakout_down',price<priorLow?1:0);
-    } else {
+    }else{
+      values.set('volume_ratio',undefined);
       values.set('range_breakout_up',undefined);
       values.set('range_breakout_down',undefined);
     }
-    values.set('volume',safeFinite(candle.volume));
+    values.set('volume',safeFinite(volumes[index]));
     return values;
   };
-  const lastIndex=candles.length-1;
-  return {current:readAt(lastIndex,true),previous:readAt(lastIndex-1,false)};
+  return {current:readAt(count-1,true),previous:readAt(count-2,false)};
 }
-
 function compare(actual:number,threshold:number,operator:AutomationCondition['operator']):boolean {
   switch(operator){
     case '>':return actual>threshold;
@@ -210,14 +231,19 @@ export function evaluateAutomation(rule:AutomationRule,context:AutomationContext
   const cooldownMs=Math.max(0,Number(rule.cooldownSeconds)||0)*1000;
   if(Number.isFinite(rule.lastRunAt)&&rule.lastRunAt!>0&&now-rule.lastRunAt!<cooldownMs)return noAction('cooldown');
 
-  const dayKey=marketDayKey(now,context);
+  const dayKey=marketDayKey(now,context,true);
+  // The supplied sessionDate belongs to this evaluation only. Bucket saved timestamps
+  // by their own exchange-local date to prevent prior-session runs consuming today's budget.
   const runTimestamps=(Array.isArray(rule.runTimestamps)?rule.runTimestamps:[])
-    .filter(value=>Number.isFinite(value)&&value>0&&marketDayKey(value,context)===dayKey);
+    .filter(value=>Number.isFinite(value)&&value>0&&marketDayKey(value,context,false)===dayKey);
   if(runTimestamps.length>=Math.max(0,Math.floor(Number(rule.maxRunsPerDay)||0)))return noAction('max_runs_per_day');
 
-  const currentBarIndex=Number.isInteger(context.barIndex)?context.barIndex:(context.candles.length-1);
-  const barTimestamp=Number(context.timestamp??context.candles.at(-1)?.timestamp??0);
-  const barKey=context.eventId||[context.symbol,currentBarIndex,barTimestamp,context.barRevision??0].join('|');
+  const currentBarIndex=Number.isInteger(context.barIndex)?context.barIndex:(context.columns?.length??context.candles.length)-1;
+  const lastCandle=context.candles.at(-1);
+  const rawBarTimestamp=lastCandle?.timestamp??context.columns?.time?.[currentBarIndex]??context.timestamp;
+  const canonicalBarTimestamp=timestampMs(rawBarTimestamp);
+  const barKey=[context.symbol,String(context.timeframe||''),currentBarIndex,canonicalBarTimestamp??String(rawBarTimestamp??'unknown')].join('|');
+  // Ignore packet IDs and bar revisions: a single confirmed candle must not submit twice.
   if(rule.lastRunBarKey&&rule.lastRunBarKey===barKey)return noAction('duplicate_bar_event');
 
   const results:AutomationConditionResult[]=rule.conditions.map(condition=>{
