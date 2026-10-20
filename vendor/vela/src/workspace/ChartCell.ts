@@ -259,7 +259,7 @@ export class ChartCell {
     private readonly offMarket: () => void;
     /** The cell's durable market state — the seed vocabulary plus the venue mirror the
      *  persisted document carries (`provider` = the symbol's parsed prefix). */
-    private state: CellSeed & Pick<CellState, 'provider' | 'viewport'>;
+    private state: CellSeed & Pick<CellState, 'provider' | 'viewport' | 'priceScales'>;
     private manifest: readonly ResolvedIndicator[] = [];
     /** A restored ledger's manifest entry NAMES, waiting for the manifest to resolve
      *  (a pool/persisted cell can be built before the shared manifest has loaded). */
@@ -308,6 +308,8 @@ export class ChartCell {
             priceStyle: seed.priceStyle,
             bars: seed.bars,
             session: normalizeSession(seed.session),
+            viewport: seed.viewport,
+            priceScales: seed.priceScales,
         };
         const doc = gridHost.ownerDocument;
         this.host = doc.createElement('div');
@@ -410,6 +412,7 @@ export class ChartCell {
             }
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
         }
+        this.restoreWorkspaceScaleState();
         this.volumeIntent = seed.indicators ? seed.indicators.natives.some((e) => ledgerNativeType(e as LedgerNativeEntry) === 'volume') : deps.volume;
         // Third-party state rides in verbatim; the workspace triggers the handlers'
         // `restore` AFTER wiring the cell (restorePersistedExt) — a restore that adds
@@ -418,6 +421,7 @@ export class ChartCell {
         // The volume auto-add rides the cell's first candles — from `load:end` on, the
         // registry is the whole truth and the dehydrated ledger stops reporting intent.
         this.inner.on('load:end', () => {
+            this.restoreWorkspaceScaleState();
             this.volumeMayBePending = false;
         });
         // A symbol nothing serves parks the load forever — say so instead of showing a
@@ -1115,11 +1119,20 @@ export class ChartCell {
                 if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props, hidden: led.hidden } : {}) });
             }
             this.pendingManifestNames = null;
+            this.restoreWorkspaceScaleState();
             return;
         }
         if (seedEnabled) {
             for (const entry of list) if (entry.enabled) this.addManifestInstance(entry, { record: false });
         }
+        this.restoreWorkspaceScaleState();
+    }
+
+    /** Reapply saved axis framing after the price/study panes exist. Unknown panes are
+     *  ignored by the renderer so a removed indicator cannot break workspace restoration. */
+    private restoreWorkspaceScaleState(): void {
+        const scales = this.state.priceScales;
+        if (scales?.length) this.inner?.renderer.applyWorkspaceScaleState?.(scales);
     }
 
     /**
@@ -1489,6 +1502,8 @@ export class ChartCell {
         if (cs.rendererConfig != null) this.inner.renderer.applyConfig(cs.rendererConfig);
         if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
         if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
+        this.state.priceScales = cs.priceScales;
+        this.restoreWorkspaceScaleState();
         // Third-party state converges to the document too: the restored bag REPLACES
         // the baseline (absent in the document = the document carries none), then the
         // registered handlers re-apply. After the ledger — a handler re-adding external
@@ -1512,9 +1527,12 @@ export class ChartCell {
             next.bars = Math.max(bars, this.rangeBars);
         }
         const restoreViewport = (): void => {
-            if (this.destroyed || !this.inner || !cs.viewport) return;
-            this.state.viewport = cs.viewport;
-            this.inner.setVisibleRange(cs.viewport);
+            if (this.destroyed || !this.inner) return;
+            if (cs.viewport) {
+                this.state.viewport = cs.viewport;
+                this.inner.setVisibleRange(cs.viewport);
+            }
+            this.restoreWorkspaceScaleState();
         };
         if (Object.keys(next).length > 0) {
             void this.inner.setMarket(next).then(restoreViewport).catch(() => undefined);
@@ -1541,6 +1559,7 @@ export class ChartCell {
             indicatorValues: this.indicatorValuesOn,
             rendererConfig: this.inner?.renderer.getConfig() ?? undefined,
             viewport: this.inner?.getVisibleRange() ?? this.state.viewport,
+            priceScales: this.inner?.renderer.getWorkspaceScaleState?.() ?? this.state.priceScales,
             drawings: this.inner ? this.inner.drawings.toJSON() : undefined,
             // Natives from the chart's SYNC registry read — an async catalog mirror here
             // lost unload-time saves, and the old empty-set fallbacks resurrected removed
