@@ -41,6 +41,9 @@ assert.match(live, /namedWorkspaceAutosavePending = true/, 'edits made while acc
 
 assert.match(chrome, /'tco\.workspace-frame'/, 'the workspace panel exposes save and restore controls');
 assert.match(chrome, /tco:workspace-autosave-status/, 'the workspace panel displays autosave status');
+assert.match(chrome, /tco:workspace-appearance-changed/, 'appearance-only changes publish a persistence event');
+assert.match(live, /addEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'appearance-only changes refresh the active named snapshot');
+assert.match(live, /removeEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'appearance autosave listeners are removed on workspace teardown');
 assert.match(chrome, /drawings, panel layout and UI theme are saved/, 'the saved-workspace UI describes restored trading configuration');
 assert.match(chrome, /Broker positions and orders refresh live from your broker and are never replayed from an old snapshot/, 'broker positions and orders must be refreshed live, not replayed from old data');
 assert.match(chrome, /saveTcoVelaAppearance\(preferences\)/, 'workspace appearance changes are independently persisted');
