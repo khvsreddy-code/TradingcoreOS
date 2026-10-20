@@ -32,7 +32,7 @@ assert.match(storage, /select\('snapshot,updated_at'\)/, 'restore compares local
 assert.match(storage, /snapshot,\s*updated_at:/, 'the cloud record stores the complete snapshot and its revision time');
 assert.match(storage, /writeLocalSavedWorkspaces\(broker, local\)/, 'named workspace saves keep a browser-local fallback');
 assert.match(storage, /APPEARANCE_UPDATED_AT_SETTINGS_KEY/, 'appearance preferences include a cloud revision timestamp');
-assert.match(storage, /localUpdatedAt > Date\.parse\(cloudUpdatedAt\)/, 'newer local appearance is not overwritten by stale cloud settings');
+assert.match(storage, /Date\.parse\(localUpdatedAt\) > Date\.parse\(cloudUpdatedAt\)/, 'newer local appearance is not overwritten by stale cloud settings');
 
 assert.match(live, /workspace\.on\('state:changed', \(\) => scheduleNamedWorkspaceAutosave\?\.\(\)\)/, 'active named setups refresh after a persistable edit');
 assert.match(live, /namedWorkspaceAutosaveTimer = window\.setTimeout/, 'named workspace updates are coalesced rather than sent on every input event');
