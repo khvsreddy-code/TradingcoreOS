@@ -19,9 +19,11 @@ import { LazyCoreSpiritVelaEngine } from '../../coreSpirit/coreSpiritVelaEngineL
 import {
   deleteTcoVelaSavedWorkspace,
   flushTcoVelaAppearance,
+  loadTcoVelaActiveWorkspaceId,
   loadTcoVelaAppearance,
   loadTcoVelaJournal,
   loadTcoVelaSavedWorkspaces,
+  saveTcoVelaActiveWorkspaceId,
   saveTcoVelaAppearance,
   saveTcoVelaJournal,
   saveTcoVelaSavedWorkspace,
@@ -484,8 +486,7 @@ function stateForNamedWorkspaceSnapshot(state: unknown): unknown {
 export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:string; synced:boolean } | null> {
   if(typeof window==='undefined') return null;
   const broker=tradingCoreRuntime.getPrimaryBrokerId()??'fyers';
-  let activeId='';
-  try { activeId=localStorage.getItem('tradingcore:vela:active-saved-workspace:v1:'+broker)??''; } catch {}
+  const activeId=await loadTcoVelaActiveWorkspaceId(broker);
   if(!activeId) return null;
   const api=(window as Window & { __TCO_VELA__?: { workspace?: { getState?:()=>unknown } } }).__TCO_VELA__?.workspace;
   if(!api?.getState) return null;
@@ -747,7 +748,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
     let namedWorkspaces:TcoSavedWorkspace[]=[];
     const setActive=(id:string)=>{
       activeId=id;
-      try { if(id) localStorage.setItem(activeKey(),id); else localStorage.removeItem(activeKey()); } catch {}
+      void saveTcoVelaActiveWorkspaceId(id||null,brokerScope()).catch(()=>false);
     };
     const liveWorkspaceApi=()=>((window as Window & { __TCO_VELA__?: { workspace?: {
       getState?:()=>unknown; applyState?:(state:unknown)=>void; saveNow?:()=>void|Promise<void>;
@@ -781,7 +782,13 @@ const workspaceFramePanel: SidePanelDescriptor = {
       savedStatus.textContent='Loading saved workspaces…';
       try {
         namedWorkspaces=await loadTcoVelaSavedWorkspaces(brokerScope());
-        if(activeId&&!namedWorkspaces.some((entry)=>entry.id===activeId))setActive('');
+        const cloudActiveId=await loadTcoVelaActiveWorkspaceId(brokerScope());
+        if(cloudActiveId && namedWorkspaces.some((entry)=>entry.id===cloudActiveId)) {
+          activeId=cloudActiveId;
+          try { localStorage.setItem(activeKey(),cloudActiveId); } catch {}
+        } else if(activeId&&!namedWorkspaces.some((entry)=>entry.id===activeId)) {
+          setActive('');
+        }
         refreshSavedRows();
         savedStatus.textContent='Autosave is on · full checkpoint every 30 minutes · '+namedWorkspaces.length+' saved setup'+(namedWorkspaces.length===1?'':'s')+'.';
       } catch {
