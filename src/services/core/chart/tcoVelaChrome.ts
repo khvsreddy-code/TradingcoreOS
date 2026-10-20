@@ -486,7 +486,11 @@ function stateForNamedWorkspaceSnapshot(state: unknown): unknown {
 export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:string; synced:boolean } | null> {
   if(typeof window==='undefined') return null;
   const broker=tradingCoreRuntime.getPrimaryBrokerId()??'fyers';
-  const activeId=await loadTcoVelaActiveWorkspaceId(broker);
+  let activeId='';
+  try { activeId=localStorage.getItem('tradingcore:vela:active-saved-workspace:v1:'+broker)??''; } catch {}
+  // The local selection is available synchronously for page-hide checkpoints. Only fetch
+  // the cloud selection when this device has not selected a named setup yet.
+  if(!activeId) activeId=await loadTcoVelaActiveWorkspaceId(broker)??'';
   if(!activeId) return null;
   const api=(window as Window & { __TCO_VELA__?: { workspace?: { getState?:()=>unknown } } }).__TCO_VELA__?.workspace;
   if(!api?.getState) return null;
