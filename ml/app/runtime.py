@@ -196,6 +196,8 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
         raise ValueError('Model lookback contract must satisfy 1 <= minimum <= maximum <= 5000.')
     if lookback < declared_minimum:
         raise ValueError('Model required lookback is below the contract minimum.')
+    if lookback > declared_maximum:
+        raise ValueError('Model required lookback exceeds the contract maximum.')
 
     target = contract.get('target', {})
     declared_target = str(target.get('kind', target_kind))
@@ -326,8 +328,32 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     if not isinstance(session_holidays, (list, tuple)):
         raise ValueError('Artifact session_holidays must be a list of exchange-local YYYY-MM-DD dates.')
     session_holidays = [str(day) for day in session_holidays]
+
+    kind = a.get('kind') if isinstance(a, dict) else 'classical'
+    neural_sequence = int(meta.get('sequence_length', 60)) if kind == 'neural' else 0
+    contract_lookback = model_contract.get('lookback', {}) if isinstance(model_contract.get('lookback'), dict) else {}
+    contract_minimum = int(_contract_field(contract_lookback, 'min_bars', 'minBars', 80))
+    contract_preferred = int(_contract_field(contract_lookback, 'preferred_bars', 'preferredBars', max(80, neural_sequence)))
+    contract_maximum = int(_contract_field(contract_lookback, 'max_bars', 'maxBars', 5000))
+    if not 1 <= contract_minimum <= contract_preferred <= contract_maximum <= 5000:
+        raise ValueError('Artifact lookback contract must satisfy 1 <= minBars <= preferredBars <= maxBars <= 5000.')
+    required_lookback = max(
+        int(meta.get('required_lookback_bars', max(80, neural_sequence))),
+        contract_minimum,
+        neural_sequence,
+    )
+    if not 1 <= required_lookback <= 5000:
+        raise ValueError('Artifact required lookback must be in [1, 5000].')
+    if required_lookback > contract_maximum:
+        raise ValueError(f'Artifact requires {required_lookback} bars but its model contract maximum is {contract_maximum}.')
+    if len(candles) < required_lookback:
+        raise ValueError(f'Insufficient candle history for {model_id}: artifact requires {required_lookback} bars, received {len(candles)}.')
+    # Every artifact gets its declared bounded history window. A small-lookback model
+    # must not accidentally consume 5,000 bars, while a long-lookback model must fail
+    # explicitly if its caller cannot supply the rows it requires.
+    model_candles = candles[-contract_maximum:]
     frame = build_features(
-        candles,
+        model_candles,
         exchange_timezone=timezone,
         session_open=session_open,
         session_close=session_close,
@@ -337,17 +363,6 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     if frame.empty:
         raise ValueError('Feature pipeline produced no valid rows from the supplied OHLCV history.')
 
-    kind = a.get('kind') if isinstance(a, dict) else 'classical'
-    neural_sequence = int(meta.get('sequence_length', 60)) if kind == 'neural' else 0
-    contract_lookback = model_contract.get('lookback', {}) if isinstance(model_contract.get('lookback'), dict) else {}
-    contract_minimum = _contract_field(contract_lookback, 'min_bars', 'minBars', 80)
-    required_lookback = max(
-        int(meta.get('required_lookback_bars', max(80, neural_sequence))),
-        int(contract_minimum),
-        neural_sequence,
-    )
-    if not 1 <= required_lookback <= 5000:
-        raise ValueError('Artifact required lookback must be in [1, 5000].')
     if len(frame) < required_lookback:
         raise ValueError(f"Insufficient feature history for {model_id}: artifact requires {required_lookback} bars, received {len(frame)} validated rows.")
     features = list(a.get('features', meta.get('neural_features', meta.get('feature_schema', FEATURE_COLUMNS)))) if isinstance(a, dict) else list(meta.get('feature_schema', FEATURE_COLUMNS))
