@@ -18,6 +18,7 @@ assert.ok(dashboard.includes('Market overview'), 'homepage must present a market
 assert.ok(dashboard.includes('Market sentiment'), 'homepage must present measured market breadth/sentiment');
 assert.ok(dashboard.includes('Market news'), 'homepage must show sourced market headlines');
 assert.ok(dashboard.includes('listPublicIndicatorPublications'), 'homepage must surface the public CoreSpirit script library');
+assert.ok(dashboard.includes("scriptKind: 'strategy'"), 'homepage should feature both indicators and strategies');
 assert.ok(dashboard.includes('tradingCoreRuntime.subscribeMarketData'), 'dashboard must receive market quotes even before the live chart is opened');
 assert.ok(dashboard.includes("fetch('/api/news?symbol=financial%20markets'"), 'dashboard must fetch headlines through the server-side feed proxy');
 
@@ -36,6 +37,8 @@ assert.ok(dataPlane.includes('prewarmHistory(limitOverride?: number): Promise<nu
 assert.ok(dataPlane.includes('const requestKey = `${this.key}:initial:${requestedLimit}`;'), 'history backfill must share the existing per-symbol/timeframe request gate');
 assert.ok(dataPlane.includes('historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit)'), 'older candles must be retained in the canonical history store');
 assert.ok(history.includes("fyers-three-sessions+tvdatafeed-older-5000/v1"), 'older candles must keep using the configured TV-datafeed/FYERS source policy');
+assert.ok(history.includes("'NSE:NIFTY50-INDEX': { tvSymbol: 'NIFTY', tvExchange: 'NSE', exchange: 'NSE' }"), 'the default NIFTY 50 chart must have an exact TV history mapping');
+assert.ok(history.includes("'BSE:SENSEX-INDEX': { tvSymbol: 'SENSEX', tvExchange: 'BSE', exchange: 'BSE' }"), 'SENSEX must have an exact TV history mapping');
 assert.ok(history.includes('HISTORICAL_MAX_BARS = 5_000'), 'history backfill must remain bounded');
 
 console.log('MARKET_DESK_NEWS_DISMISSAL_AND_HISTORY_WARM_CONTRACT_OK');
