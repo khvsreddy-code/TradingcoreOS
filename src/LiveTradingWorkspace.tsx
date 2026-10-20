@@ -5,9 +5,9 @@ import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChart
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
-import { applySavedTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
+import { applySavedTcoVelaAppearance, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
-import { createTcoVelaSupabaseStorage, flushTcoVelaAppearance, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
+import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 
@@ -457,7 +457,7 @@ export function LiveTradingWorkspace() {
       if (current) void Promise.resolve(current.saveNow()).catch(() => undefined);
       // flushTcoVelaAppearance has already written local storage synchronously; this awaits
       // the queued account write when the page is backgrounded or closed.
-      void flushTcoVelaAppearance().catch(() => undefined);
+      void persistCurrentTcoVelaAppearance().catch(() => false);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') checkpointWorkspace();
