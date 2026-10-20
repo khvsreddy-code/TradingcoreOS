@@ -1,6 +1,6 @@
 
 from __future__ import annotations
-import json, math, hashlib
+import json, math, hashlib, re
 from pathlib import Path
 import joblib, numpy as np, pandas as pd, torch
 from .features import build_features, FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION, TIMEZONE_FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION
@@ -67,7 +67,7 @@ def _contract_field(contract, snake_name, camel_name, default=None):
     return default if value is None else value
 
 
-def _validate_model_contract(meta, contract, symbol, timeframe, model_id, features, feature_version, target_kind, horizon, lookback):
+def _validate_model_contract(meta, contract, symbol, timeframe, model_id, features, feature_version, target_kind, horizon, lookback, dataset_root):
     if not contract:
         # Read pre-contract artifacts for backwards compatibility, while keeping their
         # legacy feature schema explicit instead of silently upgrading their ABI.
@@ -150,11 +150,77 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     metrics = _contract_field(validation, 'metrics', 'metrics', meta.get('metrics', {}))
     if not isinstance(metrics, dict):
         raise ValueError('Model validation metrics must be an object.')
+
+    dataset_snapshot = contract.get('datasetSnapshot', contract.get('dataset_snapshot'))
+    metadata_snapshot = meta.get('dataset_snapshot')
+    dataset_snapshot_verified = False
+    if dataset_snapshot is None:
+        # Compatibility for artifacts produced before immutable dataset snapshots
+        # were required. Such artifacts can be used for research/paper inspection,
+        # but a release cannot be approved for production without verified lineage.
+        if release_status == 'approved':
+            raise ValueError('Production model release requires a verified immutable dataset snapshot.')
+        if metadata_snapshot:
+            raise ValueError('Artifact metadata declares a dataset snapshot but the contract omits it.')
+    else:
+        if not isinstance(dataset_snapshot, dict):
+            raise ValueError('Model dataset snapshot must be an object.')
+        snapshot_hash = str(dataset_snapshot.get('hash', ''))
+        snapshot_version = str(dataset_snapshot.get('version', ''))
+        snapshot_rows = dataset_snapshot.get('rows')
+        snapshot_source = str(dataset_snapshot.get('source', ''))
+        snapshot_from = str(dataset_snapshot.get('from', ''))
+        snapshot_to = str(dataset_snapshot.get('to', ''))
+        if (not re.fullmatch(r'[a-f0-9]{64}', snapshot_hash) or snapshot_version != snapshot_hash
+                or not isinstance(snapshot_rows, int) or isinstance(snapshot_rows, bool)
+                or not 12 <= snapshot_rows <= 5000
+                or snapshot_source not in ('user_supplied', 'broker_history', 'trusted_feature_pipeline')
+                or dataset_snapshot.get('immutable') is not True
+                or not math.isfinite(pd.to_datetime(snapshot_from, utc=True, errors='coerce').timestamp()) 
+                or not math.isfinite(pd.to_datetime(snapshot_to, utc=True, errors='coerce').timestamp())
+                or pd.to_datetime(snapshot_from, utc=True, errors='coerce') >= pd.to_datetime(snapshot_to, utc=True, errors='coerce')):
+            raise ValueError('Model dataset snapshot contract is incomplete, unbounded, or invalid.')
+        if not isinstance(metadata_snapshot, dict):
+            raise ValueError('Model metadata is missing the dataset snapshot reference.')
+        if (str(metadata_snapshot.get('hash', '')) != snapshot_hash
+                or str(metadata_snapshot.get('version', '')) != snapshot_version
+                or metadata_snapshot.get('rows') != snapshot_rows
+                or metadata_snapshot.get('source') != snapshot_source
+                or metadata_snapshot.get('from') != snapshot_from
+                or metadata_snapshot.get('to') != snapshot_to
+                or metadata_snapshot.get('immutable') is not True):
+            raise ValueError('Model metadata and contract dataset snapshot references do not match.')
+        snapshot_path = Path(dataset_root) / 'dataset-snapshots' / (snapshot_hash + '.json')
+        try:
+            snapshot_bytes = snapshot_path.read_bytes()
+        except OSError as error:
+            raise ValueError('Immutable training dataset snapshot is not available at the model artifact root.') from error
+        if hashlib.sha256(snapshot_bytes).hexdigest() != snapshot_hash:
+            raise ValueError('Immutable training dataset snapshot hash verification failed.')
+        try:
+            snapshot_payload = json.loads(snapshot_bytes)
+        except (ValueError, UnicodeDecodeError) as error:
+            raise ValueError('Immutable training dataset snapshot is not valid JSON.') from error
+        if (not isinstance(snapshot_payload, dict)
+                or snapshot_payload.get('schema') != 'tradingcore-ml-dataset-snapshot/1'
+                or snapshot_payload.get('row_count') != snapshot_rows
+                or not isinstance(snapshot_payload.get('rows'), list)
+                or len(snapshot_payload['rows']) != snapshot_rows
+                or snapshot_payload.get('symbol') != symbol
+                or snapshot_payload.get('timeframe') != timeframe
+                or str(snapshot_payload.get('source')) != snapshot_source
+                or str(snapshot_payload.get('from')) != snapshot_from
+                or str(snapshot_payload.get('to')) != snapshot_to):
+            raise ValueError('Immutable dataset snapshot contents do not match the sealed model contract.')
+        dataset_snapshot_verified = True
+
     return {
         'schema_hash': actual_hash,
         'release_status': release_status,
         'calibration_status': calibration,
         'validation_metrics': metrics,
+        'dataset_snapshot_verified': dataset_snapshot_verified,
+        'dataset_snapshot_hash': str(dataset_snapshot.get('hash')) if isinstance(dataset_snapshot, dict) else None,
     }
 
 
@@ -220,7 +286,7 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
         raise ValueError(f'Artifact feature schema is not available from this pipeline: {missing_features}')
     contract_validation = _validate_model_contract(
         meta, model_contract, symbol, timeframe, model_id, features,
-        feature_version, target_kind, forecast_horizon, required_lookback,
+        feature_version, target_kind, forecast_horizon, required_lookback, root,
     )
     latest = float(frame.close.iloc[-1])
     if not math.isfinite(latest) or latest <= 0:
@@ -392,6 +458,8 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
         },
         'validation_metrics': contract_validation['validation_metrics'],
         'model_contract': model_contract,
+        'dataset_snapshot_verified': contract_validation['dataset_snapshot_verified'],
+        'dataset_snapshot_hash': contract_validation['dataset_snapshot_hash'],
         'execution_gate': gate,
         'trained': True,
         'status': meta.get('status', 'paper'),
