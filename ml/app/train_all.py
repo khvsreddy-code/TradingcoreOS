@@ -46,7 +46,13 @@ def target_kind_for(model_id):
     return 'direction'
 
 def _ordered_feature_hash(features):
-    return __import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
+    schema = {
+        'version': FEATURE_SCHEMA_VERSION,
+        'orderedNames': list(features),
+        'types': ['float64'] * len(features),
+    }
+    serialized = json.dumps(schema, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+    return hashlib.sha256(serialized).hexdigest()
 
 
 def persist_immutable_dataset_snapshot(root, supervised, *, symbol, timeframe, horizon,
