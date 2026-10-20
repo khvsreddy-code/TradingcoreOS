@@ -525,6 +525,28 @@ function createFrameSelect(options:Array<[string,string]>,value:string):HTMLSele
 }
 
 const CORESPIRIT_LIVE_EDITOR_KEY = 'tradingcore:corespirit:chart-source';
+
+const coreSpiritLiveEditorState: StatePersistenceHandler = {
+  key: 'tco.corespirit.live-editor',
+  scope: 'global',
+  serialize() {
+    try {
+      const source = localStorage.getItem(CORESPIRIT_LIVE_EDITOR_KEY);
+      return source == null ? undefined : { version: 1, source };
+    } catch { return undefined; }
+  },
+  restore(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+    const source = (payload as Record<string, unknown>).source;
+    if (typeof source !== 'string' || source.length > 1_000_000) return;
+    try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, source); } catch {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tco:corespirit-live-source-restored', { detail: { source } }));
+    }
+  },
+};
+registerStatePersistence(coreSpiritLiveEditorState);
+
 const CORESPIRIT_STARTER = `indicator("CoreSpirit Trend") {
     overlay: true
     input length = int(20, min: 1)
@@ -935,10 +957,20 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     let editorModel: CoreSpiritEditorModelType | undefined;
     let monacoAdapter: CoreSpiritMonacoAdapter | undefined;
     let disposed = false;
+    let sourceSaveTimer: number | null = null;
+    const queueLiveSourceSave = () => {
+      if (sourceSaveTimer !== null) window.clearTimeout(sourceSaveTimer);
+      sourceSaveTimer = window.setTimeout(() => {
+        sourceSaveTimer = null;
+        const api = (window as Window & { __TCO_VELA__?: { workspace?: { saveNow?: () => void | Promise<void> } } }).__TCO_VELA__?.workspace;
+        if (api?.saveNow) void Promise.resolve(api.saveNow()).catch(() => undefined);
+      }, 800);
+    };
     const syncEditor = () => {
       target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`;
       fallbackEditor.value = source;
       try { localStorage.setItem(CORESPIRIT_LIVE_EDITOR_KEY, source); } catch {}
+      queueLiveSourceSave();
     };
     fallbackEditor.addEventListener('input', () => {
       source = fallbackEditor.value;
@@ -955,6 +987,17 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
     });
     syncEditor();
     let compileGeneration = 0;
+    const onLiveSourceRestored = (event: Event) => {
+      const restored = (event as CustomEvent<{ source?: unknown }>).detail?.source;
+      if (typeof restored !== 'string' || restored === source) return;
+      source = restored;
+      compileGeneration += 1;
+      editorModel?.updateSource(source, '', { deferSemanticAnalysis: true });
+      monacoAdapter?.setSource(source);
+      syncEditor();
+      status.textContent = 'Restored CoreSpirit source from the saved workspace';
+    };
+    window.addEventListener('tco:corespirit-live-source-restored', onLiveSourceRestored);
     // A Run action should update the Studio's active script in place, not stack duplicates.
     type LiveStudioHandle = ReturnType<typeof ctx.chart.indicators>[number];
     let liveStudioHandle: LiveStudioHandle | undefined;
@@ -1157,7 +1200,7 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
       window.dispatchEvent(new PopStateEvent('popstate'));
       ctx.toast('Opened the full CoreSpirit IDE', 'success');
     });
-    return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, onChart() { target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`; }, destroy() { disposed = true; compileGeneration += 1; monacoAdapter?.dispose(); monacoAdapter = undefined; } };
+    return { onOpen() { (monacoAdapter?.editor ?? fallbackEditor).focus({ preventScroll: true }); }, onChart() { target.textContent = `${ctx.symbol} · ${ctx.timeframe} · worker compiler · ${source.split('\n').length} lines`; }, destroy() { disposed = true; compileGeneration += 1; window.removeEventListener('tco:corespirit-live-source-restored', onLiveSourceRestored); if (sourceSaveTimer !== null) window.clearTimeout(sourceSaveTimer); void Promise.resolve((window as Window & { __TCO_VELA__?: { workspace?: { saveNow?: () => void | Promise<void> } } }).__TCO_VELA__?.workspace?.saveNow?.()).catch(() => undefined); monacoAdapter?.dispose(); monacoAdapter = undefined; } };
   },
 };
 
