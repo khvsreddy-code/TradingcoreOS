@@ -205,6 +205,10 @@ export interface VisibleRange {
 /** Serializable per-pane axis framing used by multi-chart workspace snapshots. */
 export interface WorkspacePaneScaleState {
     id: string;
+    /** Current pane kind, relative order and title permit restore if study instance IDs are regenerated. */
+    kind?: 'price' | 'study';
+    order?: number;
+    title?: string;
     auto: boolean;
     min: number;
     max: number;
