@@ -28,6 +28,10 @@ const theme = read('src/theme/theme.ts');
 const picker = read('vendor/vela/src/widget/symbol-picker.ts');
 const chartCell = read('vendor/vela/src/workspace/ChartCell.ts');
 
+assert.match(live, /dismissedChartStatusKey/, 'chart status banners must have a dismiss state');
+assert.match(live, /Dismiss chart status notification/, 'chart status banner must expose an accessible close control');
+assert.match(live, /applySavedTcoVelaAppearance\\(host\\.current\\)/, 'saved live-terminal theme settings must be restored at chart startup');
+
 assert(/const queryLayout = new URLSearchParams\(window\.location\.search\)/.test(live));
 assert(/const initialLayout = .*defaults\.layout/.test(live));
 assert(live.includes("layout: initialLayout"));
