@@ -160,8 +160,15 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
 
   useEffect(() => {
     let cancelled = false;
-    void listPublicIndicatorPublications({ query: '', category: 'All', openSourceOnly: false, sort: 'popular', scriptKind: 'indicator' })
-      .then(items => { if (!cancelled) setScripts(items.slice(0, 4)); })
+    void Promise.all([
+      listPublicIndicatorPublications({ query: '', category: 'All', openSourceOnly: false, sort: 'popular', scriptKind: 'indicator' }),
+      listPublicIndicatorPublications({ query: '', category: 'All', openSourceOnly: false, sort: 'popular', scriptKind: 'strategy' }),
+    ])
+      .then(([indicators, strategies]) => {
+        if (cancelled) return;
+        // A balanced set makes the homepage a script discovery surface for both studies and strategies.
+        setScripts([...indicators.slice(0, 3), ...strategies.slice(0, 2)].slice(0, 5));
+      })
       .catch((e: unknown) => { if (!cancelled) setScriptsError(e instanceof Error ? e.message : 'Community scripts are unavailable.'); })
       .finally(() => { if (!cancelled) setScriptsLoading(false); });
     return () => { cancelled = true; };
