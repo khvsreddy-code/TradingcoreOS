@@ -22,7 +22,8 @@ assert.match(chrome, /TradingView Dark/, 'a TradingView-style dark preset must b
 assert.ok(chrome.includes("chartBackgroundMode: 'solid' | 'gradient'"), 'chart background can use solid or gradient fill');
 assert.match(chrome, /chartBackgroundEnd: string/, 'gradient end color is independently configurable');
 assert.match(chrome, /export function applySavedTcoVelaAppearance/, 'stored live trading appearance must be restored on chart startup');
-assert.ok(chrome.includes('liveWorkspace?.setTheme?.(chartTheme)'), 'user colors apply through Vela chart theme instead of a parallel renderer');
+assert.ok(chrome.includes('liveWorkspace.setTheme(chartTheme)'), 'user colors apply through Vela chart theme instead of a parallel renderer');
+assert.match(chrome, /lastAppliedTcoVelaThemeSignature/, 'UI-only settings must not trigger redundant chart theme updates');
 assert.match(chrome, /Search this watchlist/, 'watchlist contains its own ticker filter');
 assert.match(chrome, /Gainers/);
 assert.match(chrome, /Losers/);
