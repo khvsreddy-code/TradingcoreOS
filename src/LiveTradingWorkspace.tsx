@@ -1,10 +1,11 @@
 import { Profiler, useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { loadVelaWorkspace } from './services/core/chart/velaWorkspaceLoader';
 import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChartStatus, tcoVelaPerformanceKey, type TcoVelaChartStatusSnapshot } from './TcoVelaDataProvider';
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
-import './services/core/chart/tcoVelaChrome';
+import { applySavedTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
@@ -121,6 +122,7 @@ export function LiveTradingWorkspace() {
   const chartStatusSnapshotRef = useRef<TcoVelaChartStatusSnapshot | null>(null);
   const retryChartHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const activeChartStatusKeyRef = useRef('');
+  const [dismissedChartStatusKey, setDismissedChartStatusKey] = useState('');
   useEffect(() => {
     if (!host.current) return;
 
@@ -250,6 +252,7 @@ export function LiveTradingWorkspace() {
             });
           },
         };
+        applySavedTcoVelaAppearance(host.current);
       }
       const publishChartStatus = (snapshot: TcoVelaChartStatusSnapshot, generation: number) => {
         if (cancelled || generation !== chartStatusGeneration) return;
@@ -495,9 +498,9 @@ export function LiveTradingWorkspace() {
             </div>
           </div>
         )}
-        {workspaceLoadState.phase === 'ready' && (
+        {workspaceLoadState.phase === 'ready' && dismissedChartStatusKey !== `${chartStatus.phase}|${chartStatus.symbol}|${chartStatus.timeframe}` && (
           <div
-            className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 shadow-lg backdrop-blur-md ${
+            className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 pr-8 shadow-lg backdrop-blur-md relative ${
               chartStatus.tone === 'good'
                 ? 'border-emerald-800/70 bg-[#041b13]/90 text-emerald-200'
                 : chartStatus.tone === 'error'
@@ -510,6 +513,16 @@ export function LiveTradingWorkspace() {
             aria-live={chartStatus.tone === 'error' ? 'assertive' : 'polite'}
             aria-label={`Chart data status: ${chartStatus.title}`}
           >
+            <button
+              type="button"
+              title="Dismiss notification"
+              aria-label="Dismiss chart status notification"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setDismissedChartStatusKey(`${chartStatus.phase}|${chartStatus.symbol}|${chartStatus.timeframe}`)}
+              className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/70 transition-colors hover:bg-white/10 hover:text-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-400"
+            >
+              <X size={12} aria-hidden="true" />
+            </button>
             <div className="flex items-start gap-2">
               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
                 chartStatus.tone === 'good' ? 'bg-emerald-400'
