@@ -50,7 +50,7 @@ assert.match(historical, /tvContractCompatible\(mapping\)/, 'older TV bars requi
 assert.match(historical, /mapping\.tvContractIdentity && fyersIdentity === mapping\.tvContractIdentity/, 'derivative history must match contract identity');
 assert.match(historical, /'NSE:NIFTY50-INDEX': \{ tvSymbol: 'NIFTY', tvExchange: 'NSE'/, 'NIFTY 50 gets an exact TradingView symbol mapping');
 assert.match(predictionJob, /MAX_PRODUCTION_PREDICTION_CANDLES = 5_000/);
-assert.match(predictionJob, /required_lookback_bars|lookback/, 'prediction jobs preserve the per-artifact lookback metadata');
+assert.match(mlRuntime, /contract_lookback|required_lookback_bars/, 'production inference preserves the per-artifact lookback metadata');
 assert.match(hmmTraining, /MAX_HMM_TRAINING_ROWS = 5_000/);
 assert.match(hmmTraining, /validateConfirmedResearchRows/);
 assert.match(hmmTraining, /Dataset snapshot hash mismatch/);
