@@ -735,10 +735,13 @@ const workspaceFramePanel: SidePanelDescriptor = {
       const id=asNew||!(overrideId||activeId)?newWorkspaceId():(overrideId||activeId);
       saveCurrent.disabled=true;saveAsNew.disabled=true;savedStatus.textContent='Saving workspace snapshot…';
       try {
-        await Promise.resolve(api.saveNow?.());
+        const stateSnapshot=api.getState();
+        // Local Vela persistence happens before the cloud request. A temporary failure
+        // of the default-workspace cloud write must not block saving this named snapshot.
+        try { await Promise.resolve(api.saveNow?.()); } catch {}
         await flushTcoVelaAppearance();
         const result=await saveTcoVelaSavedWorkspace({id,name,updatedAt:new Date().toISOString(),snapshot:{
-          schemaVersion:1,workspace:api.getState(),appearance:{...prefs,topbar:{...prefs.topbar}},
+          schemaVersion:1,workspace:stateSnapshot,appearance:{...prefs,topbar:{...prefs.topbar}},
         }},brokerScope());
         setActive(id);savedName.value=name;await refreshSaved();
         savedStatus.textContent=result?'Saved “'+name+'” to your account. Autosave continues in the background.':'Saved “'+name+'” in this browser. Sign in to sync across devices.';
