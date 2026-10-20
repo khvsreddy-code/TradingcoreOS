@@ -468,8 +468,20 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   workspace.style.setProperty('--vela-hover-strong', frameRgba(preferences.accent, .22));
   workspace.style.setProperty('--tco-frame-accent', preferences.accent);
   workspace.style.setProperty('--tco-frame-accent-soft', frameRgba(preferences.accent, .18));
-  try { localStorage.setItem(TCO_FRAME_STORAGE_KEY,JSON.stringify(preferences)); } catch {}
-  if (persistAppearance) saveTcoVelaAppearance(preferences);
+  const serializedAppearance=JSON.stringify(preferences);
+  let previousAppearance:string|null=null;
+  try {
+    previousAppearance=localStorage.getItem(TCO_FRAME_STORAGE_KEY);
+    localStorage.setItem(TCO_FRAME_STORAGE_KEY,serializedAppearance);
+  } catch {}
+  if (persistAppearance) {
+    saveTcoVelaAppearance(preferences);
+    // Keep the active NAMED snapshot in sync when only UI colors/tools/sidebar settings
+    // change and the chart renderer itself has no changed state to emit.
+    if (previousAppearance !== serializedAppearance && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tco:workspace-appearance-changed'));
+    }
+  }
 }
 
 export async function persistCurrentTcoVelaAppearance(): Promise<boolean> {
