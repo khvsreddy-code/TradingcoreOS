@@ -2716,13 +2716,15 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     getWorkspaceScaleState(): WorkspacePaneScaleState[] {
-        return this.scene.orderedPanes().flatMap((pane, order) => {
+        const ordered = this.scene.orderedPanes();
+        return ordered.flatMap((pane, order) => {
             const scale = pane.manualScale ?? pane.scale;
+            const kindOrder = ordered.slice(0, order).filter((candidate) => candidate.kind === pane.kind).length;
             if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max) || scale.max <= scale.min) return [];
             return [{
                 id: pane.id,
                 kind: pane.kind,
-                order,
+                order: kindOrder,
                 ...(pane.title ? { title: pane.title } : {}),
                 auto: pane.manualScale == null,
                 min: scale.min,
@@ -2746,8 +2748,7 @@ export class NativeRenderer implements IChartRenderer {
             if (!pane && saved.kind) {
                 const candidates = ordered.filter((candidate) => candidate.kind === saved.kind);
                 pane = (saved.title ? candidates.find((candidate) => candidate.title === saved.title) : undefined)
-                    ?? (Number.isInteger(saved.order) ? ordered[saved.order!] : undefined);
-                if (pane && pane.kind !== saved.kind) pane = undefined;
+                    ?? (Number.isInteger(saved.order) ? candidates[saved.order!] : undefined);
             }
             if (!pane) continue;
             const min = Number(saved.min);
@@ -4606,6 +4607,7 @@ export class NativeRenderer implements IChartRenderer {
             if (!p) return;
             p.invert = invert;
         }
+        this.emitWorkspaceScaleChange();
         this.emitWorkspaceScaleChange();
         this.scheduler?.invalidate(InvalidateLevel.Full);
     }
