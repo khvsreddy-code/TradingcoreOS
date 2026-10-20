@@ -56,6 +56,7 @@ const TCO_CHROME_ICONS: Record<string, string> = {
   gear: svg16('<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/>'),
   objects: svg16('<rect x="1.5" y="1.5" width="5" height="5" rx=".5"/><rect x="9.5" y="1.5" width="5" height="5" rx=".5"/><rect x="1.5" y="9.5" width="5" height="5" rx=".5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/>'),
   indicators: svg16('<path d="M1.5 12.5 5 8.5l2.5 2 5-7 2 2"/>'),
+  save: svg16('<path d="M2 1.5h9l3 3v10H2z"/><path d="M4.5 1.5v4h6v-4M4.5 14.5v-5h7v5"/>'),
 };
 for (const [id, markup] of Object.entries(TCO_CHROME_ICONS)) registerIcon(id, markup);
 
@@ -465,8 +466,8 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
 }
 
 export function applySavedTcoVelaAppearance(host: HTMLElement): void {
-  const localSignature = (() => { try { return localStorage.getItem(TCO_FRAME_STORAGE_KEY); } catch { return null; } })();
   applyTcoFramePreferences(host, readTcoFramePreferences(), true, false);
+  const localSignature = (() => { try { return localStorage.getItem(TCO_FRAME_STORAGE_KEY); } catch { return null; } })();
   void loadTcoVelaAppearance().then((cloud) => {
     if (!cloud || !host.isConnected) return;
     // Do not overwrite a local edit made while the account preference request was in flight.
@@ -1107,6 +1108,20 @@ const coreSpiritCodePanel: SidePanelDescriptor = {
 const workspaceFrameAction:WidgetActionDescriptor={
   id:'tco.workspace-frame',target:'topbar',label:'Workspace',icon:'sliders',iconOnly:true,align:'right',order:19,mobile:'menu',
   run(ctx){ctx.togglePanel('tco.workspace-frame');},
+};
+
+const saveWorkspaceAction: WidgetActionDescriptor = {
+  id:'tco.save-workspace', target:'topbar', label:'Save', icon:'save', iconOnly:true, align:'right', order:18.5, mobile:'menu',
+  run(ctx) {
+    const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
+    if(!api?.workspace?.saveNow) { ctx.toast('The live workspace is not ready to save yet','error'); return; }
+    void Promise.resolve(api.workspace.saveNow()).then(async()=>{
+      const appearanceSynced=await flushTcoVelaAppearance();
+      ctx.toast(appearanceSynced?'Workspace saved to your account':'Workspace saved on this device; account sync resumes when available','success');
+    }).catch((error:unknown)=>{
+      ctx.toast('Workspace saved locally; cloud sync failed'+(error instanceof Error?': '+error.message:''),'error');
+    });
+  },
 };
 
 const coreSpiritCodeAction: WidgetActionDescriptor = {
@@ -2529,6 +2544,7 @@ registerWidgetAction(automationAction);
 registerWidgetAction(tradingAction);
 registerWidgetAction(positionsAction);
 registerWidgetAction(workspaceFrameAction);
+registerWidgetAction(saveWorkspaceAction);
 registerWidgetAction(coreSpiritCodeAction);
 registerWidgetAction(watchlistAction);
 registerWidgetAction(chartSettingsAction);
