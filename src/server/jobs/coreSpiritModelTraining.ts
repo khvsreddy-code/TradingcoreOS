@@ -11,6 +11,7 @@ import {
 } from '../../services/coreSpirit/researchValidation.js';
 
 type TrainingRow = ResearchFeatureRow;
+const MAX_HMM_TRAINING_ROWS = 5_000;
 type TrainingPayload = Readonly<{
   trainingRunId: string;
   researchArtifactId: string;
@@ -35,8 +36,8 @@ function parsePayload(value: unknown): TrainingPayload {
   const featureNames = value.featureNames;
   const trainingRange = value.trainingRange;
   const trainingParameters = value.trainingParameters;
-  if (!Array.isArray(rows) || rows.length < 12 || rows.length > 1024) {
-    throw new Error('CoreSpirit HMM training requires 12–1024 historical rows');
+  if (!Array.isArray(rows) || rows.length < 12 || rows.length > MAX_HMM_TRAINING_ROWS) {
+    throw new Error('CoreSpirit HMM training requires 12–' + MAX_HMM_TRAINING_ROWS + ' immutable historical rows');
   }
   if (!Array.isArray(featureNames) || featureNames.length < 1 || featureNames.length > 16 ||
       featureNames.some(name => typeof name !== 'string' || !name.trim())) {
@@ -57,7 +58,7 @@ function parsePayload(value: unknown): TrainingPayload {
   if (!Number.isSafeInteger(value.randomSeed) || Number(value.randomSeed) < 0) throw new Error('randomSeed must be a non-negative safe integer');
 
   assertNoKnownLabelLeakage(featureNames as string[]);
-  const normalizedRows = validateConfirmedResearchRows(rows as TrainingRow[], featureNames as string[])
+  const normalizedRows = validateConfirmedResearchRows(rows as TrainingRow[], featureNames as string[], { maxRows: MAX_HMM_TRAINING_ROWS })
     .map((row, index) => {
       if (row.timestamp < from || row.timestamp > to) {
         throw new Error('Invalid feature row at index ' + index + ': decision timestamp falls outside the immutable dataset range');
@@ -150,11 +151,17 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     if (expectedDatasetVersion !== payload.datasetVersion) throw new Error('Dataset snapshot hash mismatch; refusing to train on changed data');
 
     const states = Number(featureGraph.states ?? 3);
+    const rawPurgeBars = payload.trainingParameters.purgeBars ?? payload.trainingParameters.forecastHorizonBars ?? payload.trainingParameters.horizon ?? 1;
+    const purgeBars = Number(rawPurgeBars);
+    if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
+      throw new Error('purgeBars must be an integer from 0 to 500.');
+    }
     const split = splitChronologicalResearchRows(
       payload.rows,
       Number(payload.trainingParameters.validationFraction ?? 0.2),
       Math.max(12, states * 4),
       12,
+      { maxRows: MAX_HMM_TRAINING_ROWS, purgeBars },
     );
     const trainingRows = split.trainingRows;
     const validationRows = split.validationRows;
@@ -214,7 +221,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     const maxValidationConfidence = Math.max(...validationConfidences);
     const safety = featureGraph.researchSafety;
     const validationResults = {
-      protocol: 'chronological-holdout-v1' as const,
+      protocol: split.validationProtocol,
       trainingSampleCount: trainingRows.length,
       sampleCount: validationRows.length,
       distinctPredictedStates: validationStates.size,
@@ -259,6 +266,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       trainingParameters: {
         ...payload.trainingParameters,
         validationFraction: split.validationFraction,
+        validationProtocol: split.validationProtocol,
+        purgeBars: split.purgedCount,
+        purgedDatasetRows: split.purgedCount,
         states,
         covariance,
         fitIterations,
