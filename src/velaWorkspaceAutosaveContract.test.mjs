@@ -24,9 +24,15 @@ for (const field of ['layout', 'trackSizes', 'activeCellId', 'drawingTools', 'pa
 }
 
 assert.match(storage, /localSet\(broker, key, value\)/, 'workspace snapshots are saved locally before cloud writes');
+assert.match(storage, /localGetUpdatedAt/, 'the adapter versions its device-local chart snapshots');
+assert.match(storage, /localUpdatedAt > cloudUpdatedAt/, 'a newer offline snapshot must win over an older cloud copy');
+assert.match(storage, /queueWorkspaceSnapshotRetry/, 'restoring a newer local snapshot schedules cloud repair');
 assert.match(storage, /from\('workspace_layouts'\)/, 'signed-in users sync their full workspace document to cloud storage');
+assert.match(storage, /select\('snapshot,updated_at'\)/, 'restore compares local and cloud snapshot revisions');
 assert.match(storage, /snapshot,\s*updated_at:/, 'the cloud record stores the complete snapshot and its revision time');
 assert.match(storage, /writeLocalSavedWorkspaces\(broker, local\)/, 'named workspace saves keep a browser-local fallback');
+assert.match(storage, /APPEARANCE_UPDATED_AT_SETTINGS_KEY/, 'appearance preferences include a cloud revision timestamp');
+assert.match(storage, /localUpdatedAt > Date\.parse\(cloudUpdatedAt\)/, 'newer local appearance is not overwritten by stale cloud settings');
 
 assert.match(live, /workspace\.on\('state:changed', \(\) => scheduleNamedWorkspaceAutosave\?\.\(\)\)/, 'active named setups refresh after a persistable edit');
 assert.match(live, /namedWorkspaceAutosaveTimer = window\.setTimeout/, 'named workspace updates are coalesced rather than sent on every input event');
@@ -52,6 +58,10 @@ assert.match(chrome, /Broker positions and orders refresh live from your broker 
 assert.match(chrome, /saveTcoVelaAppearance\(preferences\)/, 'workspace appearance changes are independently persisted');
 assert.match(chrome, /tco:workspace-appearance-changed/, 'UI-only appearance edits notify the active workspace autosave');
 assert.match(live, /window\.addEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'named workspace snapshots also autosave when only UI appearance changes');
+assert.match(chrome, /getLocalTcoVelaSavedWorkspace/, 'checkpointing resolves active named-workspace metadata without a network request');
+assert.match(chrome, /const workspaceState=stateForNamedWorkspaceSnapshot\(api\.getState\(\)\)/, 'named checkpoints serialize one consistent full workspace state');
+assert.match(chrome, /const snapshotWrite=saveTcoVelaSavedWorkspace\(/, 'named checkpoints start their local write before awaiting cloud sync');
+assert.match(chrome, /Promise\.all\(\[snapshotWrite,flushTcoVelaAppearance\(\)\]\)/, 'appearance and named snapshots sync as part of the same checkpoint');
 assert.match(chrome, /saveTcoVelaSavedWorkspace\(/, 'named workspace snapshots are persisted separately from the latest working copy');
 
 console.log('VELA_WORKSPACE_AUTOSAVE_AND_FULL_STATE_CONTRACT_OK');
