@@ -82,6 +82,8 @@ export interface CellState {
      *  welds the two back into the one canonical form at restore time. */
     provider?: string;
     timeframe?: string;
+    /** Visible time window, in the renderer's time coordinates, so pan/zoom restores across sessions. */
+    viewport?: { from: number; to: number };
     priceStyle?: string;
     bars?: number;
     /** Trading session shown (`'extended'` persisted; absent = regular, the default). */
@@ -271,6 +273,12 @@ function sanitizeCell(raw: unknown): CellState | null {
     if (typeof c.symbol === 'string') out.symbol = c.symbol;
     if (typeof c.provider === 'string') out.provider = c.provider;
     if (typeof c.timeframe === 'string') out.timeframe = c.timeframe;
+    if (c.viewport != null && typeof c.viewport === 'object' && !Array.isArray(c.viewport)) {
+        const range = c.viewport as Record<string, unknown>;
+        const from = Number(range.from);
+        const to = Number(range.to);
+        if (Number.isFinite(from) && Number.isFinite(to) && to > from) out.viewport = { from, to };
+    }
     if (typeof c.priceStyle === 'string') out.priceStyle = c.priceStyle;
     if (typeof c.bars === 'number' && Number.isFinite(c.bars) && c.bars > 0) out.bars = c.bars;
     if (c.session === 'regular' || c.session === 'extended') out.session = c.session;
