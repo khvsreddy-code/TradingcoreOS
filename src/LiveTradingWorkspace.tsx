@@ -7,7 +7,7 @@ import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { applySavedTcoVelaAppearance, persistActiveTcoVelaSavedWorkspace, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
-import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
+import { createTcoVelaSupabaseStorage, loadTcoVelaActiveWorkspaceId, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 
@@ -144,6 +144,9 @@ export function LiveTradingWorkspace() {
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
     let namedWorkspaceAutosaveTimer: number | null = null;
+    let namedWorkspaceSelectionHydrated = false;
+    let namedWorkspaceAutosavePending = false;
+    let scheduleNamedWorkspaceAutosave: (() => void) | null = null;
     let stopChartStatus: (() => void) | undefined;
     let chartStatusGeneration = 0;
     let cancelled = false;
@@ -230,19 +233,43 @@ export function LiveTradingWorkspace() {
       }));
       workspaceRef.current = workspace;
 
+      // Hydrate the account's selected named setup once at mount. Capture the local value
+      // first so an intentional local selection made while the request is in flight wins.
+      const selectionBrokerKey = String(tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers').trim().toLowerCase();
+      const activeWorkspaceStorageKey = `tradingcore:vela:active-saved-workspace:v1:${selectionBrokerKey}`;
+      let activeWorkspaceIdAtStart = '';
+      try { activeWorkspaceIdAtStart = localStorage.getItem(activeWorkspaceStorageKey) ?? ''; } catch {}
+      void loadTcoVelaActiveWorkspaceId(selectionBrokerKey).then((loadedId) => {
+        if (cancelled || !loadedId) return;
+        let currentLocalId = '';
+        try { currentLocalId = localStorage.getItem(activeWorkspaceStorageKey) ?? ''; } catch {}
+        if (currentLocalId === activeWorkspaceIdAtStart) {
+          try { localStorage.setItem(activeWorkspaceStorageKey, loadedId); } catch {}
+        }
+      }).catch(() => undefined).finally(() => {
+        namedWorkspaceSelectionHydrated = true;
+        if (namedWorkspaceAutosavePending) {
+          namedWorkspaceAutosavePending = false;
+          scheduleNamedWorkspaceAutosave?.();
+        }
+      });
+
       // The Vela document adapter already saves the live workspace on every dirty burst.
       // When a named setup is active, also update that named snapshot after the user pauses
       // editing, so "Restore" never trails the live chart until the 30-minute checkpoint.
-      const scheduleNamedWorkspaceAutosave = () => {
+      scheduleNamedWorkspaceAutosave = () => {
         if (cancelled) return;
         const brokerKey = String(tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers').trim().toLowerCase();
         let activeNamedId = '';
         try {
           activeNamedId = localStorage.getItem(`tradingcore:vela:active-saved-workspace:v1:${brokerKey}`) ?? '';
         } catch {}
-        // No named setup selected: the canonical Vela workspace is already autosaved on
-        // every state change; do not make redundant user_settings requests.
-        if (!activeNamedId) return;
+        // If the account selection is still loading, remember that a save-worthy edit
+        // happened and resume once hydration finishes. Do not query cloud on every keystroke.
+        if (!activeNamedId) {
+          if (!namedWorkspaceSelectionHydrated) namedWorkspaceAutosavePending = true;
+          return;
+        }
         if (namedWorkspaceAutosaveTimer !== null) window.clearTimeout(namedWorkspaceAutosaveTimer);
         publishWorkspaceAutosaveStatus('saving', 'Saving changes to the active workspace…');
         namedWorkspaceAutosaveTimer = window.setTimeout(() => {
@@ -265,7 +292,7 @@ export function LiveTradingWorkspace() {
           });
         }, 1_800);
       };
-      workspaceListenerDisposers.push(workspace.on('state:changed', scheduleNamedWorkspaceAutosave));
+      workspaceListenerDisposers.push(workspace.on('state:changed', () => scheduleNamedWorkspaceAutosave?.()));
 
       // Warm common index history in the background once the broker is ready.
       // The workspace itself is already mounted, and its own getBars call is
