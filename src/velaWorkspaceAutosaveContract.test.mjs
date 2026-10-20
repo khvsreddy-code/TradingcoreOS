@@ -28,7 +28,7 @@ assert.match(storage, /from\('workspace_layouts'\)/, 'signed-in users sync their
 assert.match(storage, /snapshot,\s*updated_at:/, 'the cloud record stores the complete snapshot and its revision time');
 assert.match(storage, /writeLocalSavedWorkspaces\(broker, local\)/, 'named workspace saves keep a browser-local fallback');
 
-assert.match(live, /workspace\.on\('state:changed', scheduleNamedWorkspaceAutosave\)/, 'active named setups refresh after a persistable edit');
+assert.match(live, /workspace\.on\('state:changed', \(\) => scheduleNamedWorkspaceAutosave\?\.\(\)\)/, 'active named setups refresh after a persistable edit');
 assert.match(live, /namedWorkspaceAutosaveTimer = window\.setTimeout/, 'named workspace updates are coalesced rather than sent on every input event');
 assert.match(live, /}, 1_800\)/, 'named snapshots update shortly after editing pauses');
 assert.match(live, /30 \* 60 \* 1000/, 'a full checkpoint runs every 30 minutes');
@@ -44,6 +44,8 @@ assert.match(chrome, /tco:workspace-autosave-status/, 'the workspace panel displ
 assert.match(chrome, /drawings, panel layout and UI theme are saved/, 'the saved-workspace UI describes restored trading configuration');
 assert.match(chrome, /Broker positions and orders refresh live from your broker and are never replayed from an old snapshot/, 'broker positions and orders must be refreshed live, not replayed from old data');
 assert.match(chrome, /saveTcoVelaAppearance\(preferences\)/, 'workspace appearance changes are independently persisted');
+assert.match(chrome, /tco:workspace-appearance-changed/, 'UI-only appearance edits notify the active workspace autosave');
+assert.match(live, /window\.addEventListener\('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged\)/, 'named workspace snapshots also autosave when only UI appearance changes');
 assert.match(chrome, /saveTcoVelaSavedWorkspace\(/, 'named workspace snapshots are persisted separately from the latest working copy');
 
 console.log('VELA_WORKSPACE_AUTOSAVE_AND_FULL_STATE_CONTRACT_OK');
