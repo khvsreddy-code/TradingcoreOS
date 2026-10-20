@@ -131,13 +131,19 @@ export function LiveTradingWorkspace() {
   const chartStatusSnapshotRef = useRef<TcoVelaChartStatusSnapshot | null>(null);
   const retryChartHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const activeChartStatusKeyRef = useRef('');
-  const [dismissedChartStatusKey, setDismissedChartStatusKey] = useState('');
-  const chartStatusDismissKey = `${chartStatus.phase}|${chartStatus.symbol}|${chartStatus.timeframe}`;
-  useEffect(() => {
-    // Dismiss one occurrence, not the whole phase forever: recovery or a symbol/interval
-    // switch clears the prior dismissal so a later stale-data episode can be noticed.
-    setDismissedChartStatusKey((dismissed) => dismissed && dismissed !== chartStatusDismissKey ? '' : dismissed);
-  }, [chartStatusDismissKey]);
+  const [dismissedChartStatusKey, setDismissedChartStatusKey] = useState(() => {
+    try { return localStorage.getItem('tradingcore:chart-status-dismissed:v1') ?? ''; } catch { return ''; }
+  });
+  const statusMessage = `${chartStatus.title} ${chartStatus.detail}`;
+  const statusCategory = chartStatus.phase === 'stale' || /quote is stale|last tick received\\s+\\d+s ago/i.test(statusMessage)
+    ? 'stale-quote'
+    : `${chartStatus.phase}|${chartStatus.title}`;
+  const now = new Date();
+  const localDayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // The quote-age detail changes every few seconds, so dismissal is keyed by warning
+  // category + instrument + interval, not the dynamic detail string or transient phase.
+  // Persist it across status refreshes and reloads; a new day/instrument/interval can notify again.
+  const chartStatusDismissKey = `${localDayKey}|${chartStatus.symbol.toUpperCase()}|${chartStatus.timeframe}|${statusCategory}`;
   useEffect(() => {
     if (!host.current) return;
 
@@ -304,13 +310,24 @@ export function LiveTradingWorkspace() {
       // allowed to drive first-candle loading concurrently.
       void brokerReady.then(() => {
         if (cancelled) return;
-        // Keep speculative history off the user's critical path. The active chart's
-        // initial request has priority; warm only the default symbol/timeframe, and let
-        // rapid symbol/timeframe switches reuse the shared per-key single-flight cache.
+        // Warm the tickers present in this user's active chart layout first, followed by
+        // saved watchlist symbols. The data plane runs this as bounded low-priority work;
+        // visible chart history always wins, and each symbol/interval is cooled down after warming.
+        const activeSymbols = (workspace?.cells?.() ?? [])
+          .map(cell => String(cell.chart?.market?.symbol ?? '').trim())
+          .filter(Boolean);
+        let watchlistSymbols: string[] = [];
+        try {
+          const stored = JSON.parse(localStorage.getItem('tradingcore:vela:watchlist:v2') || '{}') as { items?: unknown[] };
+          watchlistSymbols = (Array.isArray(stored) ? stored : Array.isArray(stored?.items) ? stored.items : [])
+            .map(item => item && typeof item === 'object' ? String((item as Record<string, unknown>).symbol ?? '').trim() : '')
+            .filter(Boolean);
+        } catch {}
+        const activeHistorySymbols = [...new Set([...activeSymbols, ...watchlistSymbols])].slice(0, 12);
         prewarmTcoVelaHistory(
-          ['NSE:NIFTY50-INDEX'],
-          defaults.timeframe || '5',
-          500,
+          activeHistorySymbols.length ? activeHistorySymbols : ['NSE:NIFTY50-INDEX'],
+          ['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M'],
+          5000,
         );
       });
 
@@ -662,7 +679,10 @@ export function LiveTradingWorkspace() {
               title="Dismiss notification"
               aria-label="Dismiss chart status notification"
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => setDismissedChartStatusKey(chartStatusDismissKey)}
+              onClick={() => {
+                setDismissedChartStatusKey(chartStatusDismissKey);
+                try { localStorage.setItem('tradingcore:chart-status-dismissed:v1', chartStatusDismissKey); } catch {}
+              }
               className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/70 transition-colors hover:bg-white/10 hover:text-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-400"
             >
               <X size={12} aria-hidden="true" />
