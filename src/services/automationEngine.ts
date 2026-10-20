@@ -197,8 +197,7 @@ function compare(actual:number,threshold:number,operator:AutomationCondition['op
   }
 }
 
-export function evaluateAutomation(rule:AutomationRule,context:AutomationContext,now=Date.now()):AutomationEvaluation {
-  const frame=buildAutomationFeatureFrame(context);
+function evaluateAutomationWithFrame(rule:AutomationRule,context:AutomationContext,now:number,frame:ReturnType<typeof buildAutomationFeatureFrame>):AutomationEvaluation {
   const featureValues=Object.fromEntries([...frame.current.entries()].map(([name,value])=>[name,value??null]));
   const noAction=(reason:string,results:AutomationConditionResult[]=[]):AutomationEvaluation=>({
     triggered:false,results,actions:[],blockedActions:[],reason,featureValues,
@@ -269,6 +268,25 @@ export function evaluateAutomation(rule:AutomationRule,context:AutomationContext
     reason:blockedActions.length?(context.barConfirmed!==true?'matched_order_action_blocked_unconfirmed_bar':'matched_order_action_blocked_by_execution_boundary'):'matched',
     runTimestamps:nextRuns,lastRunAt:now,lastRunBarKey:barKey,featureValues,
   };
+}
+
+/** Evaluate one rule using the shared feature frame and canonical CoreSpirit kernels. */
+export function evaluateAutomation(rule:AutomationRule,context:AutomationContext,now=Date.now()):AutomationEvaluation {
+  return evaluateAutomationWithFrame(rule,context,now,buildAutomationFeatureFrame(context));
+}
+
+/**
+ * Production hosts evaluating a rule set for the same market bar should use this
+ * batch API: EMA/RSI and shared features are calculated once, then every rule reads
+ * the same immutable current/previous feature snapshots.
+ */
+export function evaluateAutomationBatch(
+  rules:readonly AutomationRule[],
+  context:AutomationContext,
+  now=Date.now(),
+):AutomationEvaluation[] {
+  const frame=buildAutomationFeatureFrame(context);
+  return rules.map(rule=>evaluateAutomationWithFrame(rule,context,now,frame));
 }
 
 export const automationPresets:AutomationRule[]=[
