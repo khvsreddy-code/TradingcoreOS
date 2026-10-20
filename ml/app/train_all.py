@@ -148,7 +148,7 @@ def main():
     ap.add_argument('--session-holidays',default='',help='comma-separated exchange-local YYYY-MM-DD holidays for the feature calendar')
     args=ap.parse_args(); random.seed(42);np.random.seed(42)
     session_holidays=sorted({value.strip() for value in args.session_holidays.split(',') if value.strip()})
-    if any(not __import__('re').fullmatch(r'\\d{4}-\\d{2}-\\d{2}', value) for value in session_holidays):
+    if any(not __import__('re').fullmatch(r'\d{4}-\d{2}-\d{2}', value) for value in session_holidays):
         raise ValueError('--session-holidays accepts comma-separated YYYY-MM-DD dates')
     df=pd.read_csv(args.csv)
     ren={c:{'date':'timestamp','datetime':'timestamp','shares_traded':'volume'}.get(c.strip().lower().replace(' ','_'),c.strip().lower().replace(' ','_')) for c in df.columns}
@@ -223,10 +223,18 @@ def main():
                 if 'sentiment' not in supervised.columns: raise RuntimeError('Sentiment Hybrid requires a real sentiment feature column')
                 features=base+['sentiment'];m=train_classical(train,valid,'logistic-direction',features);joblib.dump({'kind':'classical','model':m,'features':features},d/'model.joblib');meta['feature_schema']=features;meta['model_contract']['feature_schema']['ordered_names']=features;meta['model_contract']['feature_schema']['hash']=__import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
             else: raise RuntimeError('Unhandled model')
-            meta['model_contract']=build_model_contract(meta, list(meta.get('feature_schema', base)), meta.get('metrics', {}), session_holidays)
+            sealed_features=list(meta.get('feature_schema', base))
+            meta['feature_schema']=sealed_features
+            meta['feature_schema_hash']=_ordered_feature_hash(sealed_features)
+            meta['model_contract']=build_model_contract(meta, sealed_features, meta.get('metrics', {}), session_holidays)
             (d/'metadata.json').write_text(json.dumps(meta,indent=2,default=str));report['models'][model_id]=meta
         except Exception as e:
-            meta['status']='blocked';meta['error']=str(e);(d/'metadata.json').write_text(json.dumps(meta,indent=2));report['models'][model_id]=meta
+            meta['status']='blocked';meta['error']=str(e)
+            fallback_features=list(meta.get('feature_schema', base))
+            meta['feature_schema']=fallback_features
+            meta['feature_schema_hash']=_ordered_feature_hash(fallback_features)
+            meta['model_contract']=build_model_contract(meta, fallback_features, meta.get('metrics', {}), session_holidays)
+            (d/'metadata.json').write_text(json.dumps(meta,indent=2,default=str));report['models'][model_id]=meta
     # Shared event-driven meta-labeler: filters primary directional signals using
     # triple-barrier outcomes plus microstructure/options/volatility/time-of-day evidence.
     try:
