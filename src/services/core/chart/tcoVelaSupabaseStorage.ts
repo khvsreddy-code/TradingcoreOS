@@ -6,6 +6,7 @@ const LOCAL_APPEARANCE_KEY = 'tradingcore:vela:appearance:v1';
 const LOCAL_SAVED_WORKSPACES_PREFIX = 'tradingcore:vela:saved-workspaces:v1:';
 const APPEARANCE_SETTINGS_KEY = 'tradingcoreVelaAppearance';
 const SAVED_WORKSPACES_SETTINGS_KEY = 'tradingcoreVelaSavedWorkspaces';
+const ACTIVE_WORKSPACE_SETTINGS_KEY = 'tradingcoreVelaActiveWorkspace';
 const WORKSPACE_SNAPSHOT_LIMIT = 20;
 
 async function currentUserId(): Promise<string | null> {
@@ -120,6 +121,50 @@ function mergeSavedWorkspaces(...groups: TcoSavedWorkspace[][]): TcoSavedWorkspa
   return [...byId.values()]
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .slice(0, WORKSPACE_SNAPSHOT_LIMIT);
+}
+
+function localActiveWorkspaceKey(broker: string): string {
+  return 'tradingcore:vela:active-saved-workspace:v1:' + broker;
+}
+
+export async function loadTcoVelaActiveWorkspaceId(brokerScope: BrokerScope = 'fyers'): Promise<string | null> {
+  const broker = resolveBroker(brokerScope);
+  let local: string | null = null;
+  try { local = localStorage.getItem(localActiveWorkspaceKey(broker)); } catch {}
+  const id = await currentUserId();
+  if (!id) return local;
+  try {
+    const { data, error } = await getSupabaseClient().from('user_settings').select('settings').eq('user_id', id).maybeSingle();
+    if (error) return local;
+    const settings = objectRecord(data?.settings);
+    const active = objectRecord(settings?.[ACTIVE_WORKSPACE_SETTINGS_KEY]);
+    const cloud = typeof active?.[broker] === 'string' && active[broker] ? String(active[broker]) : null;
+    if (cloud) {
+      try { localStorage.setItem(localActiveWorkspaceKey(broker), cloud); } catch {}
+      return cloud;
+    }
+    return local;
+  } catch { return local; }
+}
+
+export async function saveTcoVelaActiveWorkspaceId(idToSet: string | null, brokerScope: BrokerScope = 'fyers'): Promise<boolean> {
+  const broker = resolveBroker(brokerScope);
+  const normalizedId = typeof idToSet === 'string' ? idToSet.trim().slice(0, 160) : '';
+  try {
+    if (normalizedId) localStorage.setItem(localActiveWorkspaceKey(broker), normalizedId);
+    else localStorage.removeItem(localActiveWorkspaceKey(broker));
+  } catch {}
+  try {
+    return await mutateUserSettings((settings) => {
+      const active = { ...(objectRecord(settings[ACTIVE_WORKSPACE_SETTINGS_KEY]) ?? {}) };
+      if (normalizedId) active[broker] = normalizedId;
+      else delete active[broker];
+      const next = { ...settings };
+      if (Object.keys(active).length) next[ACTIVE_WORKSPACE_SETTINGS_KEY] = active;
+      else delete next[ACTIVE_WORKSPACE_SETTINGS_KEY];
+      return next;
+    });
+  } catch { return false; }
 }
 
 export async function loadTcoVelaSavedWorkspaces(brokerScope: BrokerScope = 'fyers'): Promise<TcoSavedWorkspace[]> {
