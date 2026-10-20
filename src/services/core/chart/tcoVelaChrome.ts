@@ -739,6 +739,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
         // Local Vela persistence happens before the cloud request. A temporary failure
         // of the default-workspace cloud write must not block saving this named snapshot.
         try { await Promise.resolve(api.saveNow?.()); } catch {}
+        saveTcoVelaAppearance(prefs);
         await flushTcoVelaAppearance();
         const result=await saveTcoVelaSavedWorkspace({id,name,updatedAt:new Date().toISOString(),snapshot:{
           schemaVersion:1,workspace:stateSnapshot,appearance:{...prefs,topbar:{...prefs.topbar}},
@@ -1132,6 +1133,7 @@ const saveWorkspaceAction: WidgetActionDescriptor = {
     const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
     if(!api?.workspace?.saveNow) { ctx.toast('The live workspace is not ready to save yet','error'); return; }
     void Promise.resolve(api.workspace.saveNow()).then(async()=>{
+      saveTcoVelaAppearance(readTcoFramePreferences());
       const appearanceSynced=await flushTcoVelaAppearance();
       ctx.toast(appearanceSynced?'Workspace saved to your account':'Workspace saved on this device; account sync resumes when available','success');
     }).catch((error:unknown)=>{
