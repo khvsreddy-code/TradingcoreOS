@@ -128,6 +128,12 @@ export interface HistoricalCandleColumns {
   close: number[];
   volume: number[];
   timeUnit: 'milliseconds' | 'seconds';
+  /** Per-bar lineage sidecars; availableAt contains epoch milliseconds (NaN means unavailable). */
+  source?: Array<'fyers' | 'tvdatafeed' | 'unknown'>;
+  phase?: Array<'historical' | 'confirmed' | 'developing' | 'realtime' | 'forecast'>;
+  confirmed?: boolean[];
+  availableAt?: number[];
+  revision?: number[];
   metadata?: HistoricalDataMetadata;
   quote?: HistoricalQuoteSnapshot | null;
 }

@@ -6,6 +6,7 @@ import { instrumentSearchPriorityRoutes } from './src/server/routes/instrument-s
 import { workspaceFixRoutes } from './src/server/routes/workspace-fix.routes.js';
 import { brokerMarketDataRoutes } from './src/server/routes/broker-market-data.routes.js';
 import { fyersHistoryRoutes } from './src/server/routes/fyers-history.routes.js';
+import { coreSpiritResearchHistoryRoutes } from './src/server/routes/coreSpirit-research-history.routes.js';
 import { fyersMarketRoutes } from './src/server/routes/fyers-market.routes.js';
 import { fyersOrderStreamRoutes } from './src/server/routes/fyers-order-stream.routes.js';
 import { fyersAccountRoutes } from './src/server/routes/fyers-account.routes.js';
@@ -176,6 +177,8 @@ app.use('/api/automation-gateway', automationGatewayRoutes);
 app.use('/api/predictions/production', productionPredictionRoutes);
 app.use('/api/jobs', backgroundJobRoutes);
 app.use('/api/corespirit/copilot', coreSpiritCopilotRoutes);
+// Research, replay and model inference share the same authenticated FYERS + TV dataset policy.
+app.use('/api/corespirit/research', coreSpiritResearchHistoryRoutes);
 app.use('/api/corespirit', coreSpiritModelRoutes);
 app.use('/api/realtime/ticket', realtimeTicketRoutes);
 app.use('/api', newsRoutes);

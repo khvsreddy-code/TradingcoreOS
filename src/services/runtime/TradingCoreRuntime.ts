@@ -378,6 +378,17 @@ export class TradingCoreRuntime {
         close: ordered.map(row => Number(row.close)),
         volume: ordered.map(row => Number(row.volume) || 0),
         timeUnit: 'milliseconds',
+        source: ordered.map(row => row.source === 'fyers' || row.source === 'tvdatafeed' ? row.source : 'unknown'),
+        phase: ordered.map(row => row.phase === 'historical' || row.phase === 'confirmed' || row.phase === 'developing' || row.phase === 'realtime' || row.phase === 'forecast' ? row.phase : 'historical'),
+        confirmed: ordered.map(row => row.confirmed === true),
+        availableAt: ordered.map(row => {
+          const raw = row.availableAt;
+          const numeric = typeof raw === 'number' ? raw : Number(raw);
+          if (Number.isFinite(numeric) && numeric > 0) return numeric > 1e12 ? numeric : numeric * 1000;
+          const parsed = Date.parse(String(raw ?? ''));
+          return Number.isFinite(parsed) ? parsed : Number.NaN;
+        }),
+        revision: ordered.map(row => typeof row.revision === 'number' && Number.isSafeInteger(row.revision) && row.revision >= 0 ? row.revision : Number.NaN),
       };
     } catch (error) {
       if ((error as { name?: string })?.name === 'AbortError' || signal?.aborted) throw error;
