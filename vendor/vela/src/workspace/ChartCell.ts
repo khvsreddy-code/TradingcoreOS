@@ -398,6 +398,11 @@ export class ChartCell {
             this.syncPlotOverlayTokens();
         });
         this.syncPlotOverlayTokens();
+        this.inner.renderer.onWorkspaceScaleChange?.(() => {
+            const scales = this.inner?.renderer.getWorkspaceScaleState?.();
+            if (scales) this.state.priceScales = scales;
+            this.deps.onStateDirty();
+        });
         // Pool restore: cosmetics + drawings round-trip (both validate untrusted input).
         if (seed.rendererConfig != null) this.inner.renderer.applyConfig(seed.rendererConfig);
         if (seed.drawings != null) this.inner.drawings.fromJSON(seed.drawings);
