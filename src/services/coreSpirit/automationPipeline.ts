@@ -63,6 +63,8 @@ export interface CoreSpiritAutomationResult {
 
 export interface CoreSpiritAutomationLimits {
   allowLiveExecution: boolean;
+  /** Set only by the trusted host, never inferred from script payload metadata. */
+  hostExecutionMode?: 'live' | 'paper' | 'historical' | 'replay' | 'backtest';
   maxQuantityPerIntent: number;
   automationId?: string;
   lifecycle?: CoreSpiritAutomationLifecycleSnapshot;
@@ -225,9 +227,19 @@ export class CoreSpiritAutomationOrchestrator {
       return this.recordResult({ event, intent: approvedIntent, risk, policy, authority: authorityAfterPolicy, explainability: explain({ label: 'Policy', status: 'REJECTED', reason: policy.reason, policyId: policy.policyId }, risk, policy) });
     }
 
-    if (!canAutomationUseCapability(this.lifecycle.state, 'live-execute') || !this.limits.allowLiveExecution || !isAutomationLive(this.lifecycle.state)) {
-      authorityAfterPolicy = appendExecutionAuthorityRecord(authorityAfterPolicy, { stage: 'EXECUTION', disposition: 'PAPER_SIMULATION', timestamp: now, reason: !isAutomationLive(this.lifecycle.state) ? `lifecycle ${this.lifecycle.state} does not permit live submission` : 'host live-execution guard is disabled', actor: 'execution-host' });
-      return this.recordResult({ event, intent: approvedIntent, risk, policy, authority: authorityAfterPolicy, explainability: explain({ label: 'Execution', status: 'APPROVED', reason: 'Intent is risk/policy approved but remains outside broker execution in this lifecycle' }, risk, policy) });
+    const realtimeStrategyEvent = event.executionMode === 'realtime';
+    const trustedLiveHost = this.limits.hostExecutionMode === 'live';
+    const liveLifecycleAuthorized = canAutomationUseCapability(this.lifecycle.state, 'live-execute') && isAutomationLive(this.lifecycle.state);
+    if (!trustedLiveHost || !realtimeStrategyEvent || !liveLifecycleAuthorized || !this.limits.allowLiveExecution) {
+      const reason = !trustedLiveHost
+        ? 'trusted host execution mode is not live'
+        : !realtimeStrategyEvent
+          ? `strategy event mode '${event.executionMode ?? 'unspecified'}' is not realtime; broker side effects are suppressed`
+          : !liveLifecycleAuthorized
+            ? `lifecycle ${this.lifecycle.state} does not permit live submission`
+            : 'host live-execution guard is disabled';
+      authorityAfterPolicy = appendExecutionAuthorityRecord(authorityAfterPolicy, { stage: 'EXECUTION', disposition: 'PAPER_SIMULATION', timestamp: now, reason, actor: 'execution-host' });
+      return this.recordResult({ event, intent: approvedIntent, risk, policy, authority: authorityAfterPolicy, explainability: explain({ label: 'Execution', status: 'APPROVED', reason: 'Intent is risk/policy approved but remains outside broker execution: ' + reason }, risk, policy) });
     }
 
     const validationErrors = validateExecutionAuthority(authorityAfterPolicy);
@@ -259,6 +271,7 @@ export function strategyEventFromEnvelope(
     timestamp: event.timestamp,
     symbol: String(p.symbol ?? ''),
     timeframe: String(p.timeframe ?? ''),
+    executionMode: event.mode,
     reason: String(p.reason ?? p.type ?? 'CoreSpirit strategy event'),
     metadata: Object.fromEntries(
       Object.entries(p).filter(([, value]) =>
