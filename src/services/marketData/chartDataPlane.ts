@@ -751,22 +751,31 @@ export class ChartDataPlane {
    */
   prewarmHistory(limitOverride?: number): Promise<number> {
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
-    if (this.state.historyPromise) return this.state.historyPromise.then(rows => rows.length);
-    if (this.state.historyReady) return Promise.resolve(this.state.columns?.time.length || this.state.candles.length || this.canonicalPlane.length);
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride))
       ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride))))
       : baseLimit;
-    const cached = historyStore.get(this.brokerId, this.instrumentKey, interval);
-    if (cached?.length) return Promise.resolve(cached.length);
-
-    const requestKey = `${this.key}:initial:${requestedLimit}`;
-    return chartHistoryCoordinator.request(requestKey, async () => {
-      const rows = await tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, requestedLimit);
-      const normalized = normalizeHistory(rows);
-      if (normalized.length) historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit);
-      return normalized;
-    }, 'warm').then(rows => rows.length);
+    const residentCount = () => Math.max(
+      historyStore.get(this.brokerId, this.instrumentKey, interval)?.length ?? 0,
+      this.state.columns?.time.length ?? 0,
+      this.state.candles.length,
+      this.canonicalPlane.length,
+    );
+    const ensureRequestedHistory = (): Promise<number> => {
+      const cachedCount = residentCount();
+      if (cachedCount >= requestedLimit) return Promise.resolve(cachedCount);
+      const requestKey = `${this.key}:initial:${requestedLimit}`;
+      return chartHistoryCoordinator.request(requestKey, async () => {
+        const rows = await tradingCoreRuntime.getHistoricalData(this.instrumentKey, interval, undefined, requestedLimit);
+        const normalized = normalizeHistory(rows);
+        if (normalized.length) historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit);
+        return normalized;
+      }, 'warm').then(rows => rows.length);
+    };
+    // If a visible chart is still loading its small first window, let that request finish
+    // and then fetch the larger background window only if it is not already cached.
+    if (this.state.historyPromise) return this.state.historyPromise.then(() => ensureRequestedHistory());
+    return ensureRequestedHistory();
   }
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
