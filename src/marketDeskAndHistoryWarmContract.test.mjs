@@ -10,6 +10,8 @@ const news = read('src/server/routes/news.routes.ts');
 const history = read('src/server/marketData/HistoricalDataService.ts');
 
 assert.ok(live.includes("tradingcore:chart-status-dismissed:v1"), 'notification dismissal must survive chart renders and page reloads');
+assert.ok(live.includes("'market-feed-stale'"), 'stale/reconnecting feed notifications must share one dismissal identity');
+assert.ok(live.includes("['stale', 'waiting-tick', 'connecting', 'reconnecting']"), 'feed warning identity must survive transient feed phase changes');
 assert.ok(live.includes("const chartStatusDismissKey = `\u0024{localDayKey}|\u0024{chartStatus.symbol.toUpperCase()}|\u0024{chartStatus.timeframe}|\u0024{statusCategory}`;"), 'dismissal must be keyed by instrument/interval/day/status category');
 assert.ok(live.includes("localStorage.setItem('tradingcore:chart-status-dismissed:v1', chartStatusDismissKey)"), 'closing the alert must persist its dismissal');
 assert.ok(!live.includes('setDismissedChartStatusKey((dismissed) => dismissed && dismissed !== chartStatusDismissKey ?'), 'status phase refreshes must not clear a matching dismissal');
