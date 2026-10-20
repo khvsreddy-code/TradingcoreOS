@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import type { ModelArtifact, ModelArtifactStore, ResearchArtifact } from '../../services/coreSpirit/modelArtifacts.js';
+import { coreSpiritSha256, type ModelArtifact, type ModelArtifactStore, type ResearchArtifact } from '../../services/coreSpirit/modelArtifacts.js';
 import { verifyModelArtifactIntegrity } from '../../services/coreSpirit/modelArtifacts.js';
-import type { ResearchFeatureRow } from '../../services/coreSpirit/researchValidation.js';
+import { CORESPIRIT_MAX_DATASET_ROWS, validateConfirmedResearchRows, type ResearchFeatureRow } from '../../services/coreSpirit/researchValidation.js';
 
 function createServerClient() {
   const url = process.env.SUPABASE_URL;
@@ -83,14 +83,25 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
     trainingRange: Readonly<{ from: string; to: string }>;
     rows: readonly ResearchFeatureRow[];
   }): Promise<{ id: string; datasetVersion: string; rowCount: number }> {
+    if (!Array.isArray(input.rows) || input.rows.length < 12 || input.rows.length > CORESPIRIT_MAX_DATASET_ROWS) {
+      throw new Error('Immutable research snapshots must contain 12–' + CORESPIRIT_MAX_DATASET_ROWS + ' validated rows.');
+    }
+    const rows = validateConfirmedResearchRows(input.rows, input.featureNames, { maxRows: CORESPIRIT_MAX_DATASET_ROWS });
+    if (!/^[a-f0-9]{64}$/.test(input.datasetVersion)) throw new Error('Dataset snapshot requires a SHA-256 identity.');
+    const serializedBytes = new TextEncoder().encode(JSON.stringify({
+      featureNames: input.featureNames, rows, trainingRange: input.trainingRange,
+    })).byteLength;
+    if (serializedBytes > 8 * 1024 * 1024) throw new Error('Immutable research snapshot exceeds the 8 MiB storage budget.');
+    const calculatedHash = await coreSpiritSha256({ featureNames: input.featureNames, rows, trainingRange: input.trainingRange });
+    if (calculatedHash !== input.datasetVersion) throw new Error('Dataset snapshot hash does not match the validated immutable row payload.');
     const { data, error } = await this.db.from('corespirit_dataset_snapshots')
       .upsert({
         owner_user_id: this.ownerUserId,
         dataset_hash: input.datasetVersion,
         feature_names: input.featureNames,
         training_range: input.trainingRange,
-        row_count: input.rows.length,
-        rows: input.rows,
+        row_count: rows.length,
+        rows,
         // This method is fed by the authenticated request body today. Never turn
         // caller-submitted values into a trusted-source assertion by default.
         source_provenance: 'user_supplied',
@@ -142,7 +153,7 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       sourceProvenance: String(data.source_provenance ?? 'user_supplied') as 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline',
       sourceVerified: data.source_verified === true,
       sourceAttestationHash: typeof data.source_attestation_hash === 'string' ? data.source_attestation_hash : null,
-      rows: data.rows as Array<{ timestamp: number; availableAt: number; confirmed: boolean; phase: ResearchFeatureRow['phase']; values: number[] }>,
+      rows: data.rows as ResearchFeatureRow[],
     };
   }
 
