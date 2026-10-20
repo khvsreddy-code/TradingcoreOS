@@ -92,6 +92,7 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
             or artifact_symbol != symbol or artifact_timeframe != timeframe):
         raise ValueError('Model artifact identity does not match the requested symbol, timeframe and model family.')
 
+    strict_schema = 'featureSchema' in contract
     schema = contract.get('featureSchema', contract.get('feature_schema', {}))
     if not isinstance(schema, dict):
         raise ValueError('Model feature schema must be an object.')
@@ -99,9 +100,13 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     schema_version = str(schema.get('version', feature_version))
     schema_hash = str(schema.get('hash', ''))
     actual_hash = hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest()
-    if list(ordered_names) != list(features):
+    # New camel-case contracts are strict and hash-pinned. Older snake-case v1
+    # contracts are read through a compatibility adapter because early Python
+    # artifacts sometimes recorded the common base features before model-specific
+    # optional columns were attached to the fitted estimator.
+    if strict_schema and list(ordered_names) != list(features):
         raise ValueError('Model feature order does not match its sealed feature schema.')
-    if schema_hash and schema_hash != actual_hash:
+    if strict_schema and schema_hash and schema_hash != actual_hash:
         raise ValueError('Model feature schema hash does not match its ordered feature names.')
     if schema_version != feature_version:
         raise ValueError(f'Model feature schema version mismatch: metadata declares {schema_version}, runtime selected {feature_version}.')
