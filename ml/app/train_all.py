@@ -45,6 +45,73 @@ def target_kind_for(model_id):
     if model_id in TIME_SERIES_MODELS: return 'price'
     return 'direction'
 
+def _ordered_feature_hash(features):
+    return __import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
+
+
+def build_model_contract(meta, features, metrics, session_holidays):
+    # This JSON contract intentionally matches src/services/coreSpirit/modelArtifacts.ts.
+    # Older artifact-specific root fields remain alongside it for rollout compatibility.
+    model_id = str(meta['model_id'])
+    target_kind = target_kind_for(model_id)
+    numeric_metrics = {
+        str(name): float(value)
+        for name, value in (metrics or {}).items()
+        if isinstance(value, (int, float, np.integer, np.floating))
+        and not isinstance(value, (bool, np.bool_))
+        and np.isfinite(float(value))
+    }
+    required = int(meta['required_lookback_bars'])
+    preferred = max(required, min(512, 5000))
+    schema_hash = _ordered_feature_hash(features)
+    return {
+        'contractVersion': 1,
+        'identity': {'id': model_id, 'version': f'{model_id}/1'},
+        'featureSchema': {
+            'version': FEATURE_SCHEMA_VERSION,
+            'orderedNames': list(features),
+            'types': ['float64'] * len(features),
+            'hash': schema_hash,
+        },
+        'lookback': {'minBars': required, 'preferredBars': preferred, 'maxBars': 5000},
+        'target': {'kind': target_kind, 'forecastHorizonBars': int(meta['forecast_horizon_bars'])},
+        'temporal': {
+            'trainingRequiresConfirmedBars': True,
+            'availabilityRule': 'availableAt<=timestamp',
+            'validationProtocol': 'purged-chronological-v1',
+            'exchangeTimezone': str(meta['exchange_timezone']),
+            'sessionOpen': str(meta['session_open']),
+            'sessionClose': str(meta['session_close']),
+            'sessionCalendarPolicy': str(meta.get('session_calendar_policy', 'weekday-session+explicit-holidays/v1')),
+            'sessionCalendarHash': str(meta.get('session_calendar_hash', '')),
+        },
+        'validation': {
+            'protocol': 'purged-chronological-v1',
+            'metrics': numeric_metrics,
+            'calibrationStatus': 'not_calibrated',
+        },
+        'releaseStatus': 'candidate',
+    }
+
+
+def classification_calibration_metrics(y_true, probability, bins=10):
+    y = np.asarray(y_true, dtype=float)
+    p = np.clip(np.asarray(probability, dtype=float), 0.0, 1.0)
+    if len(y) == 0 or len(y) != len(p) or not np.all(np.isfinite(y)) or not np.all(np.isfinite(p)):
+        return {}
+    brier = float(np.mean((p - y) ** 2))
+    ece = 0.0
+    bin_count = 0
+    for index in range(bins):
+        left = index / bins
+        right = (index + 1) / bins
+        mask = (p >= left) & ((p < right) if index < bins - 1 else (p <= right))
+        if not np.any(mask):
+            continue
+        bin_count += 1
+        ece += float(np.mean(mask)) * abs(float(np.mean(p[mask])) - float(np.mean(y[mask])))
+    return {'brier_score': brier, 'expected_calibration_error': float(ece), 'calibration_bin_count': float(bin_count)}
+
 def evaluate(model, frame, features, target_kind='direction'):
     X=frame[features]
     if frame.empty: return {'status':'insufficient_test_rows'}
@@ -62,27 +129,36 @@ def evaluate(model, frame, features, target_kind='direction'):
     if hasattr(model,'predict_proba'): p=model.predict_proba(X)[:,1]
     else:
         r=model.predict(X); p=1/(1+np.exp(-np.clip(np.asarray(r,float),-20,20)))
+    p=np.clip(np.asarray(p,float),1e-6,1-1e-6)
     pred=(p>=.5).astype(int)
-    return {'accuracy':float(accuracy_score(y,pred)),'precision':float(precision_score(y,pred,zero_division=0)),
+    metrics={'accuracy':float(accuracy_score(y,pred)),'precision':float(precision_score(y,pred,zero_division=0)),
             'recall':float(recall_score(y,pred,zero_division=0)),
             'roc_auc':float(roc_auc_score(y,p)) if len(np.unique(y))>1 else None,
-            'log_loss':float(log_loss(y,np.clip(p,1e-6,1-1e-6))),
+            'log_loss':float(log_loss(y,p)),
             'sample_count':int(len(y))}
+    metrics.update(classification_calibration_metrics(y,p))
+    metrics['probability_semantics']='uncalibrated_classifier_probability'
+    return metrics
 
 def main():
     ap=argparse.ArgumentParser(description='Train all TradingCoreOS production models from real historical data.')
     ap.add_argument('--csv',required=True);ap.add_argument('--symbol',required=True);ap.add_argument('--timeframe',default='5m')
     ap.add_argument('--out',default='models');ap.add_argument('--horizon',type=int,default=1);ap.add_argument('--epochs',type=int,default=20)
     ap.add_argument('--exchange-timezone',default='Asia/Kolkata');ap.add_argument('--session-open',default='09:15');ap.add_argument('--session-close',default='15:30')
-    args=ap.parse_args(); random.seed(42);np.random.seed(42); 
+    ap.add_argument('--session-holidays',default='',help='comma-separated exchange-local YYYY-MM-DD holidays for the feature calendar')
+    args=ap.parse_args(); random.seed(42);np.random.seed(42)
+    session_holidays=sorted({value.strip() for value in args.session_holidays.split(',') if value.strip()})
+    if any(not __import__('re').fullmatch(r'\\d{4}-\\d{2}-\\d{2}', value) for value in session_holidays):
+        raise ValueError('--session-holidays accepts comma-separated YYYY-MM-DD dates')
     df=pd.read_csv(args.csv)
     ren={c:{'date':'timestamp','datetime':'timestamp','shares_traded':'volume'}.get(c.strip().lower().replace(' ','_'),c.strip().lower().replace(' ','_')) for c in df.columns}
     df=df.rename(columns=ren)
-    supervised=make_supervised(df,args.horizon,exchange_timezone=args.exchange_timezone,session_open=args.session_open,session_close=args.session_close,feature_schema_version=FEATURE_SCHEMA_VERSION)
+    supervised=make_supervised(df,args.horizon,exchange_timezone=args.exchange_timezone,session_open=args.session_open,session_close=args.session_close,feature_schema_version=FEATURE_SCHEMA_VERSION,session_holidays=session_holidays,require_confirmed=True)
     train,valid,test=split(supervised,args.horizon)
     if min(len(train),len(valid),len(test)) < 12: raise ValueError('Purged chronological training requires at least 12 rows in each train/validation/test window.')
     root=Path(args.out);root.mkdir(parents=True,exist_ok=True)
-    report={'symbol':args.symbol,'timeframe':args.timeframe,'horizon':args.horizon,'models':{}}
+    session_calendar_hash=__import__('hashlib').sha256('|'.join(session_holidays).encode('utf-8')).hexdigest()
+    report={'symbol':args.symbol,'timeframe':args.timeframe,'horizon':args.horizon,'feature_schema_version':FEATURE_SCHEMA_VERSION,'session_calendar_policy':'weekday-session+explicit-holidays/v1','session_calendar_hash':session_calendar_hash,'session_holidays':session_holidays,'models':{}}
     base=FEATURE_COLUMNS
     # options/sentiment models require real columns. No synthetic fallback is used.
     opt=[c for c in OPTIONAL_FEATURES if c in supervised.columns and c!='sentiment']
@@ -97,6 +173,7 @@ def main():
               'trained_on':'real historical CSV supplied to train_all.py','feature_schema':base,
               'feature_schema_version':FEATURE_SCHEMA_VERSION,'feature_schema_hash':__import__('hashlib').sha256('|'.join(base).encode('utf-8')).hexdigest(),
               'exchange_timezone':args.exchange_timezone,'session_open':args.session_open,'session_close':args.session_close,
+              'session_holidays':session_holidays,'session_calendar_policy':'weekday-session+explicit-holidays/v1','session_calendar_hash':session_calendar_hash,
               'target_kind':target_kind,'forecast_horizon_bars':args.horizon,'required_lookback_bars':required_lookback,
               'model_contract':{'contract_version':1,'model_identity':{'id':model_id,'symbol':args.symbol,'timeframe':args.timeframe},
                   'feature_schema':{'version':FEATURE_SCHEMA_VERSION,'ordered_names':base,'hash':__import__('hashlib').sha256('|'.join(base).encode('utf-8')).hexdigest()},
@@ -146,6 +223,7 @@ def main():
                 if 'sentiment' not in supervised.columns: raise RuntimeError('Sentiment Hybrid requires a real sentiment feature column')
                 features=base+['sentiment'];m=train_classical(train,valid,'logistic-direction',features);joblib.dump({'kind':'classical','model':m,'features':features},d/'model.joblib');meta['feature_schema']=features;meta['model_contract']['feature_schema']['ordered_names']=features;meta['model_contract']['feature_schema']['hash']=__import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
             else: raise RuntimeError('Unhandled model')
+            meta['model_contract']=build_model_contract(meta, list(meta.get('feature_schema', base)), meta.get('metrics', {}), session_holidays)
             (d/'metadata.json').write_text(json.dumps(meta,indent=2,default=str));report['models'][model_id]=meta
         except Exception as e:
             meta['status']='blocked';meta['error']=str(e);(d/'metadata.json').write_text(json.dumps(meta,indent=2));report['models'][model_id]=meta
