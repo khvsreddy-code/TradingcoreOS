@@ -324,6 +324,18 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     bull, neutral, bear, edge = _probs_from_p(p)
     direction = 'BULLISH' if edge > .08 else 'BEARISH' if edge < -.08 else 'NEUTRAL'
     gate = _apply_meta_gate(root, symbol, timeframe, frame, p, direction)
+    release_status = contract_validation['release_status']
+    if release_status != 'approved':
+        # A fitted artifact is not automatically a production-released model. Keep
+        # inference available for research/paper use but deny the execution gate until
+        # an audited release-control record has approved this exact artifact.
+        gate = {
+            **gate,
+            'entry_allowed': False,
+            'status': 'release_blocked',
+            'release_status': release_status,
+            'release_block_reason': 'Model artifact is not approved for production execution.',
+        }
 
     # A developing input bar is useful for a preview, but it is not silently equated
     # with a confirmed close and should not be used as a historical training label.
@@ -370,6 +382,9 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
         'trained': True,
         'status': meta.get('status', 'paper'),
         'release_status': release_status,
+        'production_eligible': release_status == 'approved' and bool(gate.get('entry_allowed', False)),
+        'session_calendar_policy': frame.attrs.get('session_calendar_policy', 'legacy-utc-clock/v1'),
+        'session_calendar_holidays': frame.attrs.get('session_holidays', []),
     }
 
 def predict_many(root, symbol, timeframe, model_ids, candles, horizon=1):
