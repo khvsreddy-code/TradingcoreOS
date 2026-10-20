@@ -470,6 +470,29 @@ export async function persistCurrentTcoVelaAppearance(): Promise<boolean> {
   return flushTcoVelaAppearance();
 }
 
+export async function persistActiveTcoVelaSavedWorkspace(): Promise<{ name:string; synced:boolean } | null> {
+  if(typeof window==='undefined') return null;
+  const broker=tradingCoreRuntime.getPrimaryBrokerId()??'fyers';
+  let activeId='';
+  try { activeId=localStorage.getItem('tradingcore:vela:active-saved-workspace:v1:'+broker)??''; } catch {}
+  if(!activeId) return null;
+  const api=(window as Window & { __TCO_VELA__?: { workspace?: { getState?:()=>unknown } } }).__TCO_VELA__?.workspace;
+  if(!api?.getState) return null;
+  try {
+    const entries=await loadTcoVelaSavedWorkspaces(broker);
+    const active=entries.find((entry)=>entry.id===activeId);
+    if(!active) return null;
+    const appearance=readTcoFramePreferences();
+    saveTcoVelaAppearance(appearance);
+    const appearanceSynced=await flushTcoVelaAppearance();
+    const synced=await saveTcoVelaSavedWorkspace({
+      id:active.id,name:active.name,updatedAt:new Date().toISOString(),
+      snapshot:{schemaVersion:1,workspace:api.getState(),appearance:{...appearance,topbar:{...appearance.topbar}}},
+    },broker);
+    return {name:active.name,synced:synced&&appearanceSynced};
+  } catch { return null; }
+}
+
 export function applySavedTcoVelaAppearance(host: HTMLElement): void {
   applyTcoFramePreferences(host, readTcoFramePreferences(), true, false);
   const localSignature = (() => { try { return localStorage.getItem(TCO_FRAME_STORAGE_KEY); } catch { return null; } })();
@@ -1138,6 +1161,11 @@ const saveWorkspaceAction: WidgetActionDescriptor = {
     const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
     if(!api?.workspace?.saveNow) { ctx.toast('The live workspace is not ready to save yet','error'); return; }
     void Promise.resolve(api.workspace.saveNow()).then(async()=>{
+      const named=await persistActiveTcoVelaSavedWorkspace();
+      if(named) {
+        ctx.toast(named.synced?'Saved “'+named.name+'” to your account':'Saved “'+named.name+'” on this device; account sync resumes when available','success');
+        return;
+      }
       const appearanceSynced=await persistCurrentTcoVelaAppearance();
       ctx.toast(appearanceSynced?'Workspace saved to your account':'Workspace saved on this device; account sync resumes when available','success');
     }).catch((error:unknown)=>{
