@@ -25,6 +25,7 @@ assert.match(chrome, /export function applySavedTcoVelaAppearance/, 'stored live
 assert.ok(chrome.includes('liveWorkspace.setTheme(chartTheme)'), 'user colors apply through Vela chart theme instead of a parallel renderer');
 assert.match(chrome, /appliedTcoVelaThemeSignatures/, 'theme deduplication must not retain destroyed workspace instances');
 assert.match(chrome, /forceChartTheme = false/, 'full palette selections can reapply chart theme while UI-only changes avoid unnecessary redraws');
+assert.match(chrome, /pendingTcoChartThemeTimer/, 'custom color drag must debounce chart-wide repaints');
 assert.match(chrome, /Search this watchlist/, 'watchlist contains its own ticker filter');
 assert.match(chrome, /Gainers/);
 assert.match(chrome, /Losers/);
