@@ -355,7 +355,7 @@ export class VelaWorkspace {
      *  host, the timer is cleared, and a `destroy()` that follows adds no second write. */
     private readonly onUnload = (): void => {
         this.flushPendingState();
-        this.persistNow();
+        void this.persistNow().catch(() => undefined);
     };
     /** Re-entrance guard around one propagation tick: followers' synchronous echoes
      *  (their setVisibleRange re-emits viewport:changed) must not re-propagate. */
@@ -1536,7 +1536,7 @@ export class VelaWorkspace {
         this.stateTimer = setTimeout(() => {
             this.stateTimer = null;
             this.events.emit('state:changed', undefined);
-            this.persistNow();
+            void this.persistNow().catch(() => undefined);
         }, 500);
     }
 
@@ -1573,27 +1573,24 @@ export class VelaWorkspace {
         }
         if (snapshot !== null && this.persistKey !== null) {
             try {
-                void this.storage.set(this.persistKey, snapshot);
+                void Promise.resolve(this.storage.set(this.persistKey, snapshot)).catch(() => undefined);
             } catch {
                 /* best-effort — a failing adapter must never break the workspace */
             }
         }
     }
 
-    /** Host-facing persistence hook. TCO uses this for periodic cloud autosave. */
-    saveNow(): void { this.persistNow(); }
+    /** Host-facing persistence hook. Resolves when local/cloud storage accepted the snapshot. */
+    saveNow(): Promise<void> { return this.persistNow(); }
 
     /** Host-facing panel control; keeps Vela's dock as the sole panel owner. */
     togglePanel(id: string, open?: boolean): void { this.dock.toggle(id, open); }
 
-    /** Write the current state through the storage adapter now (fire-and-forget). */
-    private persistNow(): void {
+    /** Write the current state through the storage adapter. Manual saves can report failures;
+     *  background autosaves catch failures at the caller and keep the chart interactive. */
+    private async persistNow(): Promise<void> {
         if (this.persistKey === null || this.destroyed) return;
-        try {
-            void this.storage.set(this.persistKey, encodeState(this.getState()));
-        } catch {
-            /* best-effort — a failing adapter must never break the workspace */
-        }
+        await this.storage.set(this.persistKey, encodeState(this.getState()));
     }
 
     // ── internals ───────────────────────────────────────────────
