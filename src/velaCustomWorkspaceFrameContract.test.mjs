@@ -9,6 +9,8 @@ const live = read('src/LiveTradingWorkspace.tsx');
 const storage = read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
 const cell = read('vendor/vela/src/workspace/ChartCell.ts');
 const stateDocument = read('vendor/vela/src/state/document.ts');
+const nativeRenderer = read('vendor/vela/src/renderers/native/NativeRenderer.ts');
+const rendererPort = read('vendor/vela/src/core/ports/IChartRenderer.ts');
 const upstream = read('vendor/vela/UPSTREAM.md');
 
 assert.match(upstream, /upstream source version:\s*\*\*0\.8\.4\*\*/i, 'TCO must continue to use the official Vela 0.8.4 foundation');
@@ -66,5 +68,14 @@ assert.match(cell, /viewport: this\.inner\?\.getVisibleRange\(\)/, 'the latest v
 assert.match(workspace, /chart\.on\('viewport:changed',[\s\S]{0,150}markStateDirty/, 'pan/zoom changes trigger debounced persistence');
 assert.match(workspace, /saveNow\(\): Promise<void>/, 'manual Save waits for the storage adapter');
 assert.match(workspace, /async persistNow\(\): Promise<void>/, 'cloud storage errors are observable by explicit saves');
+assert.match(stateDocument, /priceScales\?: WorkspacePaneScaleState\[\]/, 'per-pane vertical framing is validated as part of the persisted chart document');
+assert.match(cell, /priceScales: this\.inner\?\.renderer\.getWorkspaceScaleState\?\.\(\) \?\? this\.state\.priceScales/, 'manual axis ranges and autoscale flags are snapshotted');
+assert.match(cell, /onWorkspaceScaleChange\?\.\(\(\) =>/, 'manual scale edits trigger chart autosave');
+assert.match(workspace, /applyWorkspaceScaleState\?\.\(scales\)/, 'restoration reapplies scale settings after panes mount');
+assert.match(nativeRenderer, /getWorkspaceScaleState\(\): WorkspacePaneScaleState\[\]/, 'native renderer exposes actual manual axis bounds');
+assert.match(nativeRenderer, /applyWorkspaceScaleState\(state: readonly WorkspacePaneScaleState\[\]\)/, 'native renderer restores manual axis bounds safely');
+assert.match(nativeRenderer, /private setPaneInvert\([\s\S]{0,280}emitWorkspaceScaleChange\(\)/, 'axis inversion changes are autosaved');
+assert.match(nativeRenderer, /configurePaneAppearance\([\s\S]{0,800}emitWorkspaceScaleChange\(\)/, 'manual pane scale-dialog changes are autosaved');
+assert.match(rendererPort, /interface WorkspacePaneScaleState/, 'price-scale state is a renderer-neutral persistence contract');
 
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
