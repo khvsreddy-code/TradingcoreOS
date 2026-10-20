@@ -28,7 +28,7 @@ assert.ok(news.includes('const NEWS_CACHE_TTL_MS = 90_000'), 'news should be cac
 
 assert.ok(provider.includes('const HISTORY_WARM_SUCCESS_TTL_MS = 12 * 60 * 60 * 1000'), 'successful history warming must be throttled');
 assert.ok(provider.includes('const HISTORY_WARM_EMPTY_TTL_MS = 30 * 60 * 1000'), 'empty/unavailable history must have a shorter retry cooldown');
-assert.ok(provider.includes("['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M']"), 'active chart history must be warmed for all supported intervals');
+assert.ok(live.includes("['1', '3', '5', '10', '15', '30', '60', '120', '240', 'D', 'W', 'M']"), 'active chart history must be warmed for all supported intervals');
 assert.ok(provider.includes('.slice(0, 12)'), 'background warming must cap active symbols');
 assert.ok(provider.includes('void Promise.all([worker(), worker()])'), 'background warming must use bounded concurrency');
 
