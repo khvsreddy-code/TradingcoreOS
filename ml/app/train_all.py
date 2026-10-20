@@ -1,6 +1,6 @@
 
 from __future__ import annotations
-import argparse, json, random, traceback
+import argparse, hashlib, json, random, traceback
 from pathlib import Path
 import numpy as np, pandas as pd
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, log_loss
@@ -49,6 +49,66 @@ def _ordered_feature_hash(features):
     return __import__('hashlib').sha256('|'.join(features).encode('utf-8')).hexdigest()
 
 
+def persist_immutable_dataset_snapshot(root, supervised, *, symbol, timeframe, horizon,
+                                      exchange_timezone, session_open, session_close,
+                                      session_holidays, session_calendar_hash):
+    """Persist canonical post-feature rows by content hash; never mutate an existing snapshot."""
+    if len(supervised) < 2:
+        raise ValueError('Dataset snapshot requires at least two chronologically ordered rows.')
+    from_timestamp = pd.Timestamp(supervised['timestamp'].iloc[0])
+    to_timestamp = pd.Timestamp(supervised['timestamp'].iloc[-1])
+    if pd.isna(from_timestamp) or pd.isna(to_timestamp) or from_timestamp >= to_timestamp:
+        raise ValueError('Dataset snapshot must have a valid increasing timestamp range.')
+
+    # DataFrame.to_json normalizes NumPy/Pandas scalars and writes non-finite values as
+    # JSON null. The complete feature/target frame is sealed before model-specific fits,
+    # so every model from this training invocation refers to the exact same dataset.
+    rows = json.loads(supervised.to_json(orient='records', date_format='iso', double_precision=15))
+    envelope = {
+        'schema': 'tradingcore-ml-dataset-snapshot/1',
+        'symbol': str(symbol),
+        'timeframe': str(timeframe),
+        'forecast_horizon_bars': int(horizon),
+        'feature_schema_version': FEATURE_SCHEMA_VERSION,
+        'source': 'user_supplied',
+        'exchange_timezone': str(exchange_timezone),
+        'session_open': str(session_open),
+        'session_close': str(session_close),
+        'session_calendar_policy': 'weekday-session+explicit-holidays/v1',
+        'session_calendar_hash': str(session_calendar_hash),
+        'session_holidays': list(session_holidays),
+        'from': from_timestamp.isoformat(),
+        'to': to_timestamp.isoformat(),
+        'row_count': len(rows),
+        'rows': rows,
+    }
+    serialized = json.dumps(envelope, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode('utf-8')
+    digest = hashlib.sha256(serialized).hexdigest()
+    snapshots_dir = Path(root) / 'dataset-snapshots'
+    snapshots_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = snapshots_dir / f'{digest}.json'
+
+    # Exclusive create makes snapshots append-only across concurrent training runs.
+    try:
+        with snapshot_path.open('xb') as stream:
+            stream.write(serialized)
+    except FileExistsError:
+        existing = snapshot_path.read_bytes()
+        if hashlib.sha256(existing).hexdigest() != digest or existing != serialized:
+            raise RuntimeError('Existing content-addressed dataset snapshot failed integrity verification.')
+
+    return {
+        'hash': digest,
+        'version': digest,
+        'rows': len(rows),
+        'source': 'user_supplied',
+        'from': from_timestamp.isoformat(),
+        'to': to_timestamp.isoformat(),
+        'immutable': True,
+        'path': str(snapshot_path.relative_to(root)),
+    }
+
+
 def build_model_contract(meta, features, metrics, session_holidays):
     # This JSON contract intentionally matches src/services/coreSpirit/modelArtifacts.ts.
     # Older artifact-specific root fields remain alongside it for rollout compatibility.
@@ -74,6 +134,10 @@ def build_model_contract(meta, features, metrics, session_holidays):
             'hash': schema_hash,
         },
         'lookback': {'minBars': required, 'preferredBars': preferred, 'maxBars': 5000},
+        'datasetSnapshot': {
+            key: meta['dataset_snapshot'][key]
+            for key in ('hash', 'version', 'rows', 'source', 'from', 'to', 'immutable')
+        },
         'target': {'kind': target_kind, 'forecastHorizonBars': int(meta['forecast_horizon_bars'])},
         'temporal': {
             'trainingRequiresConfirmedBars': True,
@@ -157,8 +221,14 @@ def main():
     train,valid,test=split(supervised,args.horizon)
     if min(len(train),len(valid),len(test)) < 12: raise ValueError('Purged chronological training requires at least 12 rows in each train/validation/test window.')
     root=Path(args.out);root.mkdir(parents=True,exist_ok=True)
-    session_calendar_hash=__import__('hashlib').sha256('|'.join(session_holidays).encode('utf-8')).hexdigest()
-    report={'symbol':args.symbol,'timeframe':args.timeframe,'horizon':args.horizon,'feature_schema_version':FEATURE_SCHEMA_VERSION,'session_calendar_policy':'weekday-session+explicit-holidays/v1','session_calendar_hash':session_calendar_hash,'session_holidays':session_holidays,'models':{}}
+    session_calendar_hash=hashlib.sha256('|'.join(session_holidays).encode('utf-8')).hexdigest()
+    dataset_snapshot=persist_immutable_dataset_snapshot(
+        root, supervised, symbol=args.symbol, timeframe=args.timeframe, horizon=args.horizon,
+        exchange_timezone=args.exchange_timezone, session_open=args.session_open,
+        session_close=args.session_close, session_holidays=session_holidays,
+        session_calendar_hash=session_calendar_hash,
+    )
+    report={'symbol':args.symbol,'timeframe':args.timeframe,'horizon':args.horizon,'feature_schema_version':FEATURE_SCHEMA_VERSION,'session_calendar_policy':'weekday-session+explicit-holidays/v1','session_calendar_hash':session_calendar_hash,'session_holidays':session_holidays,'dataset_snapshot':{key:dataset_snapshot[key] for key in ('hash','version','rows','source','from','to','immutable','path')},'models':{}}
     base=FEATURE_COLUMNS
     # options/sentiment models require real columns. No synthetic fallback is used.
     opt=[c for c in OPTIONAL_FEATURES if c in supervised.columns and c!='sentiment']
@@ -174,6 +244,7 @@ def main():
               'feature_schema_version':FEATURE_SCHEMA_VERSION,'feature_schema_hash':__import__('hashlib').sha256('|'.join(base).encode('utf-8')).hexdigest(),
               'exchange_timezone':args.exchange_timezone,'session_open':args.session_open,'session_close':args.session_close,
               'session_holidays':session_holidays,'session_calendar_policy':'weekday-session+explicit-holidays/v1','session_calendar_hash':session_calendar_hash,
+              'dataset_hash':dataset_snapshot['hash'],'dataset_snapshot':dataset_snapshot,
               'target_kind':target_kind,'forecast_horizon_bars':args.horizon,'required_lookback_bars':required_lookback,
               'model_contract':{'contract_version':1,'model_identity':{'id':model_id,'symbol':args.symbol,'timeframe':args.timeframe},
                   'feature_schema':{'version':FEATURE_SCHEMA_VERSION,'ordered_names':base,'hash':__import__('hashlib').sha256('|'.join(base).encode('utf-8')).hexdigest()},
