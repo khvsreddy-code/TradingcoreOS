@@ -40,7 +40,7 @@ export type CoreSpiritModelContract = Readonly<{
 }>;
 
 export type ModelValidationResults = Readonly<{
-  protocol: 'chronological-holdout-v1';
+  protocol: 'chronological-holdout-v1' | 'purged-chronological-v1';
   trainingSampleCount: number;
   sampleCount: number;
   distinctPredictedStates: number;
