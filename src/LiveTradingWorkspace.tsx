@@ -5,7 +5,7 @@ import { createTcoVelaDataProvider, prewarmTcoVelaHistory, subscribeTcoVelaChart
 import { LazyCoreSpiritVelaEngine } from './services/coreSpirit/coreSpiritVelaEngineLoader';
 import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
-import { applySavedTcoVelaAppearance, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
+import { applySavedTcoVelaAppearance, persistActiveTcoVelaSavedWorkspace, persistCurrentTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
 import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
@@ -453,11 +453,14 @@ export function LiveTradingWorkspace() {
       }
     }, 1000);
     const checkpointWorkspace = () => {
-      const current = workspaceRef.current;
-      if (current) void Promise.resolve(current.saveNow()).catch(() => undefined);
-      // flushTcoVelaAppearance has already written local storage synchronously; this awaits
-      // the queued account write when the page is backgrounded or closed.
-      void persistCurrentTcoVelaAppearance().catch(() => false);
+      const checkpoint = async () => {
+        const current = workspaceRef.current;
+        try { if (current) await current.saveNow(); } catch { /* local fallback was written before cloud sync */ }
+        const named = await persistActiveTcoVelaSavedWorkspace();
+        // When no named setup is active, keep the account-level appearance in sync as well.
+        if (!named) await persistCurrentTcoVelaAppearance();
+      };
+      void checkpoint().catch(() => undefined);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') checkpointWorkspace();
