@@ -100,18 +100,35 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     schema_types = schema.get('types', [])
     schema_version = str(schema.get('version', feature_version))
     schema_hash = str(schema.get('hash', ''))
-    actual_hash = hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest()
-    # New camel-case contracts are strict and hash-pinned. Older snake-case v1
-    # contracts are read through a compatibility adapter because early Python
-    # artifacts sometimes recorded the common base features before model-specific
-    # optional columns were attached to the fitted estimator.
+    legacy_name_hash = hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest()
+    shared_schema_payload = {
+        'version': schema_version,
+        'orderedNames': list(features),
+        'types': ['float64'] * len(features),
+    }
+    actual_hash = (
+        hashlib.sha256(json.dumps(shared_schema_payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')).hexdigest()
+        if strict_schema else legacy_name_hash
+    )
+    # New camel-case contracts seal schema version, ordered names and numeric types
+    # with the same canonical JSON hash as CoreSpirit/TypeScript. Old camel-case
+    # artifacts created before dataset snapshots used a names-only hash; retain that
+    # compatibility only while they remain unsealed candidates.
     if strict_schema and list(ordered_names) != list(features):
         raise ValueError('Model feature order does not match its sealed feature schema.')
     if strict_schema and (not isinstance(schema_types, list) or len(schema_types) != len(features)
                           or any(value != 'float64' for value in schema_types)):
         raise ValueError('Model feature types do not match the required float64 inference schema.')
-    if strict_schema and schema_hash and schema_hash != actual_hash:
-        raise ValueError('Model feature schema hash does not match its ordered feature names.')
+    if strict_schema and schema_hash != actual_hash:
+        legacy_unsealed_candidate = (
+            not contract.get('datasetSnapshot') and not meta.get('dataset_snapshot')
+            and schema_hash == legacy_name_hash
+            and str(contract.get('releaseStatus', 'candidate')) == 'candidate'
+        )
+        if legacy_unsealed_candidate:
+            actual_hash = legacy_name_hash
+        else:
+            raise ValueError('Model feature schema hash does not match its ordered names, types and version.')
     if schema_version != feature_version:
         raise ValueError(f'Model feature schema version mismatch: metadata declares {schema_version}, runtime selected {feature_version}.')
 
