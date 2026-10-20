@@ -64,9 +64,9 @@ assert.match(modelArtifact, /lookback:[\s\S]*minBars:[\s\S]*preferredBars:[\s\S]
 assert.match(modelArtifact, /target:[\s\S]*forecastHorizonBars:/);
 assert.match(modelArtifact, /releaseStatus: CoreSpiritModelReleaseStatus/);
 assert.match(modelArtifact, /CoreSpiritModelDatasetSnapshot/);
-assert.match(modelArtifact, /datasetSnapshot\\?: CoreSpiritModelDatasetSnapshot/);
-assert.match(modelArtifact, /datasetSnapshot: supplied\\.datasetSnapshot \\?\\? generatedSnapshot/);
-assert.match(modelArtifact, /types: names\\.map\\(\\(\\) => 'float64'\\)/);
+assert.ok(modelArtifact.includes('datasetSnapshot?: CoreSpiritModelDatasetSnapshot'));
+assert.ok(modelArtifact.includes('datasetSnapshot: supplied.datasetSnapshot ?? generatedSnapshot'));
+assert.ok(modelArtifact.includes("types: names.map(() => 'float64')"));
 
 assert.match(mlFeatures, /LEGACY_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features\/1'/);
 assert.match(mlFeatures, /TIMEZONE_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features\/2'/);
@@ -78,7 +78,7 @@ assert.match(mlTrainer, /'contractVersion': 1/);
 assert.match(mlTrainer, /'featureSchema':/);
 assert.match(mlTrainer, /persist_immutable_dataset_snapshot/);
 assert.match(mlTrainer, /dataset-snapshots/);
-assert.match(mlTrainer, /snapshot_path\\.open\\('xb'\\)/);
+assert.ok(mlTrainer.includes("snapshot_path.open('xb')"));
 assert.match(mlTrainer, /'datasetSnapshot':/);
 assert.match(mlTrainer, /'orderedNames': list\\(features\\)[\\s\\S]*'types': \\[\'float64\'\\]/);
 assert.match(mlTrainer, /'orderedNames': list\(features\)/);
