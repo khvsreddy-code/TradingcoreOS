@@ -160,8 +160,6 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
                                          meta.get('release_status', 'candidate')))
     if release_status not in ('candidate', 'approved', 'revoked', 'retired'):
         release_status = 'candidate'
-    if release_status not in ('candidate', 'approved', 'revoked', 'retired'):
-        raise ValueError('Model release status is invalid.')
     if calibration not in ('calibrated', 'not_calibrated', 'not_applicable'):
         raise ValueError('Model probability calibration status is invalid.')
     metrics = _contract_field(validation, 'metrics', 'metrics', meta.get('metrics', {}))
