@@ -18,7 +18,7 @@ const policyValues = [...initialBlock.matchAll(/'[^']+':\s*([0-9_]+)/g)].map((ma
 assert.ok(policyValues.length > 0 && policyValues.every((value) => value === 5000), 'initial and warm policy should use the shared 5,000-bar window');
 assert.match(policy, /HISTORICAL_DATASET_MAX_BARS\s*=\s*5_000/);
 assert.match(service, /HISTORICAL_RECENT_SESSIONS\s*=\s*3/);
-assert.match(service, /refreshed = await \\(inflight\\.get\\(key\\) \\|\\| this\\.refresh\\(/, 'existing refresh work must be awaited before assigning its CacheRecord');
+assert.match(service, /refreshed = await \(inflight\.get\(key\) \|\| this\.refresh\(/, 'existing refresh work must be awaited before assigning its CacheRecord');
 assert.match(service, /HISTORICAL_SOURCE_POLICY\s*=\s*'fyers-three-sessions\+tvdatafeed-older-5000\/v1'/);
 assert.match(service, /getRecentHistoryRequestRange/);
 assert.match(service, /calendarComplete\s*===\s*true/);
