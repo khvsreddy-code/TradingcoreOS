@@ -311,10 +311,11 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .vela-workspace[data-tco-hide-positions="1"] [data-action-id="tco.positions"],
     .vela-workspace[data-tco-hide-code="1"] [data-action-id="tco.corespirit-code"] { display:none!important; }
     .vela-workspace { background:var(--tco-user-vela-ui,var(--vela-bg))!important; }
-    .vela-workspace .vela-widget-topbar { background:var(--tco-user-vela-topbar,var(--vela-surface))!important;border-bottom-color:var(--tco-user-vela-grid,var(--vela-border))!important; }
+    .vela-workspace .vela-widget-topbar { --vela-fg:var(--tco-user-vela-topbar-text,var(--vela-fg));--vela-fg-muted:color-mix(in srgb,var(--tco-user-vela-topbar-text,var(--vela-fg)) 68%,transparent);--vela-fg-bright:var(--tco-user-vela-topbar-text,var(--vela-fg-bright));background:var(--tco-user-vela-topbar,var(--vela-surface))!important;border-bottom-color:var(--tco-user-vela-grid,var(--vela-border))!important; }
     .vela-workspace .vela-ws-toolbar,
     .vela-workspace .vela-ws-strips,
-    .vela-workspace .vela-panel { background:var(--tco-user-vela-panel,var(--vela-surface))!important; }
+    .vela-workspace .vela-panel { --vela-fg:var(--tco-user-vela-panel-text,var(--vela-fg));--vela-fg-muted:color-mix(in srgb,var(--tco-user-vela-panel-text,var(--vela-fg)) 68%,transparent);--vela-fg-bright:var(--tco-user-vela-panel-text,var(--vela-fg-bright));background:var(--tco-user-vela-panel,var(--vela-surface))!important; }
+    .vela-workspace .vela-lp { --vela-fg:var(--tco-user-vela-panel-text,var(--vela-fg));--vela-fg-muted:color-mix(in srgb,var(--tco-user-vela-panel-text,var(--vela-fg)) 68%,transparent);--vela-fg-bright:var(--tco-user-vela-panel-text,var(--vela-fg-bright)); }
     .vela-workspace .vela-ws-grid { background:var(--tco-user-vela-grid,var(--vela-border-soft))!important; }
     .vela-workspace .vela-cell { background:var(--tco-user-vela-chart,var(--vela-bg))!important; }
     .vela-workspace .vela-panel { border-color:var(--tco-user-vela-grid,var(--vela-border))!important; }
@@ -395,7 +396,9 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   for (const [key, value] of Object.entries(themeTokens(uiTheme))) workspace.style.setProperty(key, value);
   workspace.style.setProperty('--tco-user-vela-ui', preferences.uiBackground);
   workspace.style.setProperty('--tco-user-vela-topbar', preferences.topbarBackground);
+  workspace.style.setProperty('--tco-user-vela-topbar-text', frameContrastColor(preferences.topbarBackground));
   workspace.style.setProperty('--tco-user-vela-panel', preferences.panelBackground);
+  workspace.style.setProperty('--tco-user-vela-panel-text', frameContrastColor(preferences.panelBackground));
   workspace.style.setProperty('--tco-user-vela-chart', preferences.chartBackground);
   workspace.style.setProperty('--tco-user-vela-grid', preferences.gridColor);
   workspace.style.setProperty('--vela-bg', preferences.uiBackground);
