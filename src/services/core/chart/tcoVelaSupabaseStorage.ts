@@ -3,8 +3,10 @@ import { getSupabaseClient } from '../../auth/supabaseClient';
 
 const LOCAL_PREFIX = 'tradingcore:vela:fallback:';
 const LOCAL_APPEARANCE_KEY = 'tradingcore:vela:appearance:v1';
+const LOCAL_APPEARANCE_UPDATED_AT_KEY = 'tradingcore:vela:appearance-updated-at:v1';
 const LOCAL_SAVED_WORKSPACES_PREFIX = 'tradingcore:vela:saved-workspaces:v1:';
 const APPEARANCE_SETTINGS_KEY = 'tradingcoreVelaAppearance';
+const APPEARANCE_UPDATED_AT_SETTINGS_KEY = 'tradingcoreVelaAppearanceUpdatedAt';
 const SAVED_WORKSPACES_SETTINGS_KEY = 'tradingcoreVelaSavedWorkspaces';
 const ACTIVE_WORKSPACE_SETTINGS_KEY = 'tradingcoreVelaActiveWorkspace';
 const WORKSPACE_SNAPSHOT_LIMIT = 20;
@@ -24,12 +26,26 @@ function localKey(broker: string, key: string): string {
   return `${LOCAL_PREFIX}${broker}:${key}`;
 }
 
+function localSavedAtKey(broker: string, key: string): string {
+  return `${LOCAL_PREFIX}${broker}:meta:${key}`;
+}
+
+function localGetUpdatedAt(broker: string, key: string): number {
+  try {
+    const value = Date.parse(localStorage.getItem(localSavedAtKey(broker, key)) ?? '');
+    return Number.isFinite(value) ? value : 0;
+  } catch { return 0; }
+}
+
 function localGet(broker: string, key: string): string | null {
   try { return localStorage.getItem(localKey(broker, key)) ?? localStorage.getItem(LOCAL_PREFIX + key); } catch { return null; }
 }
 
-function localSet(broker: string, key: string, value: string): void {
-  try { localStorage.setItem(localKey(broker, key), value); } catch {}
+function localSet(broker: string, key: string, value: string, updatedAt = new Date().toISOString()): void {
+  try {
+    localStorage.setItem(localKey(broker, key), value);
+    localStorage.setItem(localSavedAtKey(broker, key), updatedAt);
+  } catch {}
 }
 
 type TcoJournalRecord = { note: string; updatedAt: string | null };
@@ -131,6 +147,17 @@ function readLocalSavedWorkspaces(broker: string): TcoSavedWorkspace[] {
 
 function writeLocalSavedWorkspaces(broker: string, workspaces: TcoSavedWorkspace[]): void {
   try { localStorage.setItem(localSavedWorkspacesKey(broker), JSON.stringify(normalizeSavedWorkspaces(workspaces))); } catch {}
+}
+
+/** Read the active named snapshot synchronously so unload checkpoints can update the
+ * device-local copy before any account/network request is awaited. */
+export function getLocalTcoVelaSavedWorkspace(
+  id: string,
+  brokerScope: BrokerScope = 'fyers',
+): TcoSavedWorkspace | null {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) return null;
+  return readLocalSavedWorkspaces(resolveBroker(brokerScope)).find((entry) => entry.id === normalizedId) ?? null;
 }
 
 function mergeSavedWorkspaces(...groups: TcoSavedWorkspace[][]): TcoSavedWorkspace[] {
@@ -240,6 +267,7 @@ export async function deleteTcoVelaSavedWorkspace(idToRemove: string, brokerScop
 }
 
 let pendingAppearance: unknown = undefined;
+let pendingAppearanceUpdatedAt: string | null = null;
 let appearanceSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
 function localAppearanceGet(): unknown | null {
@@ -249,8 +277,16 @@ function localAppearanceGet(): unknown | null {
   } catch { return null; }
 }
 
+function localAppearanceUpdatedAt(): string | null {
+  try {
+    const value = localStorage.getItem(LOCAL_APPEARANCE_UPDATED_AT_KEY);
+    return value && Number.isFinite(Date.parse(value)) ? value : null;
+  } catch { return null; }
+}
+
 export async function loadTcoVelaAppearance(): Promise<unknown | null> {
   const local = localAppearanceGet();
+  const localUpdatedAt = localAppearanceUpdatedAt();
   const id = await currentUserId();
   if (!id) return local;
   try {
@@ -258,16 +294,37 @@ export async function loadTcoVelaAppearance(): Promise<unknown | null> {
     if (error) return local;
     const settings = objectRecord(data?.settings);
     const cloud = objectRecord(settings?.[APPEARANCE_SETTINGS_KEY]);
-    if (!cloud) return local;
-    try { localStorage.setItem(LOCAL_APPEARANCE_KEY, JSON.stringify(cloud)); } catch {}
+    if (!cloud) {
+      // A local edit made while offline should be promoted once the account becomes available.
+      if (local != null) saveTcoVelaAppearance(local);
+      return local;
+    }
+    const cloudUpdatedAt = typeof settings?.[APPEARANCE_UPDATED_AT_SETTINGS_KEY] === 'string'
+      && Number.isFinite(Date.parse(String(settings[APPEARANCE_UPDATED_AT_SETTINGS_KEY])))
+      ? String(settings[APPEARANCE_UPDATED_AT_SETTINGS_KEY]) : null;
+    if (local != null && localUpdatedAt && (!cloudUpdatedAt || Date.parse(localUpdatedAt) > Date.parse(cloudUpdatedAt))) {
+      // Keep the newest local appearance; queue a cloud repair instead of silently rolling it back.
+      saveTcoVelaAppearance(local);
+      return local;
+    }
+    const savedAt = cloudUpdatedAt ?? new Date(0).toISOString();
+    try {
+      localStorage.setItem(LOCAL_APPEARANCE_KEY, JSON.stringify(cloud));
+      localStorage.setItem(LOCAL_APPEARANCE_UPDATED_AT_KEY, savedAt);
+    } catch {}
     return cloud;
   } catch { return local; }
 }
 
 /** Persist locally immediately; coalesce rapid native color-picker input events into one cloud write. */
 export function saveTcoVelaAppearance(appearance: unknown): void {
+  const updatedAt = new Date().toISOString();
   pendingAppearance = appearance;
-  try { localStorage.setItem(LOCAL_APPEARANCE_KEY, JSON.stringify(appearance)); } catch {}
+  pendingAppearanceUpdatedAt = updatedAt;
+  try {
+    localStorage.setItem(LOCAL_APPEARANCE_KEY, JSON.stringify(appearance));
+    localStorage.setItem(LOCAL_APPEARANCE_UPDATED_AT_KEY, updatedAt);
+  } catch {}
   if (appearanceSyncTimer !== null) clearTimeout(appearanceSyncTimer);
   appearanceSyncTimer = setTimeout(() => { void flushTcoVelaAppearance(); }, 700);
 }
@@ -276,10 +333,16 @@ export async function flushTcoVelaAppearance(): Promise<boolean> {
   if (appearanceSyncTimer !== null) clearTimeout(appearanceSyncTimer);
   appearanceSyncTimer = null;
   const appearance = pendingAppearance !== undefined ? pendingAppearance : localAppearanceGet();
+  const updatedAt = pendingAppearanceUpdatedAt ?? localAppearanceUpdatedAt() ?? new Date().toISOString();
   pendingAppearance = undefined;
+  pendingAppearanceUpdatedAt = null;
   if (appearance == null) return false;
   try {
-    return await mutateUserSettings((settings) => ({ ...settings, [APPEARANCE_SETTINGS_KEY]: appearance }));
+    return await mutateUserSettings((settings) => ({
+      ...settings,
+      [APPEARANCE_SETTINGS_KEY]: appearance,
+      [APPEARANCE_UPDATED_AT_SETTINGS_KEY]: updatedAt,
+    }));
   } catch { return false; }
 }
 
@@ -328,19 +391,43 @@ function drainWorkspaceSnapshotWrites(queueKey: string): Promise<void> {
   );
 }
 
+/** Best-effort repair for a newer device-local snapshot discovered during account restore. */
+function queueWorkspaceSnapshotRetry(broker: string, id: string, requestKey: string, snapshot: string): void {
+  const sequence = (workspaceWriteSequence.get(requestKey) ?? 0) + 1;
+  workspaceWriteSequence.set(requestKey, sequence);
+  void writeWorkspaceSnapshotCloud({ sequence, broker, id, snapshot }, `${id}:${requestKey}`).catch(() => undefined);
+}
+
 export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers'): VelaStorage {
   const requestSequenceKey = () => `${resolveBroker(brokerScope)}:tradingcore-live-vela-v5`;
   return {
     async get(key) {
       const broker = resolveBroker(brokerScope);
+      const localSnapshot = localGet(broker, key);
+      const localUpdatedAt = localGetUpdatedAt(broker, key);
       const id = await currentUserId();
-      if (!id) return localGet(broker, key);
+      if (!id) return localSnapshot;
       try {
         const { data, error } = await getSupabaseClient().from('workspace_layouts')
-          .select('snapshot').eq('user_id', id).eq('broker', broker).maybeSingle();
-        if (error || !data?.snapshot) return localGet(broker, key);
-        return JSON.stringify(data.snapshot);
-      } catch { return localGet(broker, key); }
+          .select('snapshot,updated_at').eq('user_id', id).eq('broker', broker).maybeSingle();
+        if (error) return localSnapshot;
+        const requestKey = requestSequenceKey();
+        if (data?.snapshot == null) {
+          if (typeof localSnapshot === 'string') queueWorkspaceSnapshotRetry(broker, id, requestKey, localSnapshot);
+          return localSnapshot;
+        }
+        const cloudUpdatedAtText = typeof data.updated_at === 'string' && Number.isFinite(Date.parse(data.updated_at))
+          ? data.updated_at : null;
+        const cloudUpdatedAt = cloudUpdatedAtText ? Date.parse(cloudUpdatedAtText) : 0;
+        if (typeof localSnapshot === 'string' && localUpdatedAt > cloudUpdatedAt) {
+          // Cloud may be older after an offline edit. Restore local first and repair cloud in the background.
+          queueWorkspaceSnapshotRetry(broker, id, requestKey, localSnapshot);
+          return localSnapshot;
+        }
+        const serialized = JSON.stringify(data.snapshot);
+        localSet(broker, key, serialized, cloudUpdatedAtText ?? new Date(0).toISOString());
+        return serialized;
+      } catch { return localSnapshot; }
     },
     async set(key, value) {
       const broker = resolveBroker(brokerScope);
@@ -357,6 +444,7 @@ export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers')
       const broker = resolveBroker(brokerScope);
       try {
         localStorage.removeItem(localKey(broker, key));
+        localStorage.removeItem(localSavedAtKey(broker, key));
         localStorage.removeItem(LOCAL_PREFIX + key);
       } catch {}
       const id = await currentUserId();
