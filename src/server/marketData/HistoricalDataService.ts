@@ -259,6 +259,36 @@ export class HistoricalDataService {
     };
   }
 
+  private withSafeTvFallback(mapping: HistoricalInstrumentMapping): HistoricalInstrumentMapping {
+    if (mapping.tvSymbol && mapping.tvExchange) return mapping;
+    const builtInIndexMappings: Record<string, { tvSymbol: string; tvExchange: string; exchange: string }> = {
+      'NSE:NIFTY50-INDEX': { tvSymbol: 'NIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'NSE:NIFTYBANK-INDEX': { tvSymbol: 'BANKNIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'NSE:FINNIFTY-INDEX': { tvSymbol: 'FINNIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'NSE:MIDCPNIFTY-INDEX': { tvSymbol: 'MIDCPNIFTY', tvExchange: 'NSE', exchange: 'NSE' },
+      'BSE:SENSEX-INDEX': { tvSymbol: 'SENSEX', tvExchange: 'BSE', exchange: 'BSE' },
+    };
+    const index = builtInIndexMappings[mapping.fyersSymbol];
+    if (index) {
+      return {
+        ...mapping,
+        tvSymbol: mapping.tvSymbol || index.tvSymbol,
+        tvExchange: mapping.tvExchange || index.tvExchange,
+        instrumentType: mapping.instrumentType === 'unknown' ? 'index' : mapping.instrumentType,
+      };
+    }
+    const equity = /^(NSE|BSE):([A-Z0-9&._-]+)-EQ$/i.exec(mapping.fyersSymbol);
+    if (equity) {
+      return {
+        ...mapping,
+        tvSymbol: mapping.tvSymbol || equity[2]!,
+        tvExchange: mapping.tvExchange || equity[1]!.toUpperCase(),
+        instrumentType: mapping.instrumentType === 'unknown' ? 'equity' : mapping.instrumentType,
+      };
+    }
+    return mapping;
+  }
+
   private async resolveMapping(instrumentId: string): Promise<HistoricalInstrumentMapping> {
     if (this.supabase && !this.mappingTableUnavailable) {
       try {
@@ -266,13 +296,13 @@ export class HistoricalDataService {
         if (bySymbol.error) throw bySymbol.error;
         if (bySymbol.data) {
           const mapping = this.mappingFromRow(bySymbol.data as Record<string, unknown>);
-          if (mapping.fyersSymbol === instrumentId) return mapping;
+          if (mapping.fyersSymbol === instrumentId) return this.withSafeTvFallback(mapping);
         }
         const byId = await this.supabase.from(MAPPING_TABLE).select('*').eq('enabled', true).eq('instrument_id', instrumentId).maybeSingle();
         if (byId.error) throw byId.error;
         if (byId.data) {
           const mapping = this.mappingFromRow(byId.data as Record<string, unknown>);
-          if (mapping.instrumentId === instrumentId && mapping.fyersSymbol) return mapping;
+          if (mapping.instrumentId === instrumentId && mapping.fyersSymbol) return this.withSafeTvFallback(mapping);
         }
       } catch (error) {
         if (isMissingTableError(error)) this.mappingTableUnavailable = true;
@@ -298,7 +328,7 @@ export class HistoricalDataService {
         calendar_holidays: configured.calendarHolidays ?? configured.calendar_holidays,
         calendar_complete: configured.calendarComplete ?? configured.calendar_complete, enabled: configured.enabled,
       });
-      if (mapping.enabled && mapping.fyersSymbol === instrumentId) return mapping;
+      if (mapping.enabled && mapping.fyersSymbol === instrumentId) return this.withSafeTvFallback(mapping);
     }
 
     // These five broad Indian cash indices have stable, unambiguous TradingView symbols.
