@@ -7,6 +7,7 @@
  */
 
 import type { CoreSpiritOrderSizing } from './orderIntent';
+import type { CoreSpiritExecutionMode } from './types';
 
 export const CORE_SPIRIT_STRATEGY_VERSION = 1 as const;
 
@@ -29,6 +30,8 @@ export interface CoreSpiritStrategyEvent {
   timestamp: number;
   symbol: string;
   timeframe: string;
+  /** Trusted host event context used to suppress live broker effects during history/replay. */
+  executionMode?: CoreSpiritExecutionMode;
   reason: string;
   metadata?: Readonly<Record<string, string | number | boolean | null>>;
 }
