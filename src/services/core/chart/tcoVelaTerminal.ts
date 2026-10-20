@@ -84,6 +84,7 @@ export function createTcoVelaTerminalOptions(
         'tco.journal',
         'tco.positions',
         'tco.corespirit-code',
+        'tco.save-workspace',
         'tco.workspace-frame',
         'tco.chart-settings',
         'alerts',
