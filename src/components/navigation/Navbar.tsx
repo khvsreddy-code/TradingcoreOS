@@ -45,24 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="group flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tco-accent)] rounded-md p-1"
             aria-label="TradingCore Home"
           >
-            {/* Monogram Geometric Logo */}
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--tco-surface-3)] border border-[var(--tco-border)] text-[var(--tco-accent)] transition-colors group-hover:border-[#33384f]">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 3v18h18" />
-                <path d="M18 17V9" />
-                <path d="M13 17V5" />
-                <path d="M8 17v-3" />
-              </svg>
-            </div>
+            <img src="/tradingcoreos-logo.svg" alt="" aria-hidden="true" className="h-9 w-9 shrink-0 rounded-md object-contain shadow-[0_0_18px_rgba(16,185,129,.08)]" />
             <span className="text-sm font-bold tracking-tight text-[var(--tco-text)]">
               Trading<span className="text-[var(--tco-accent)]">Core</span>
             </span>
