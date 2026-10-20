@@ -232,17 +232,37 @@ function evaluateAutomationWithFrame(rule:AutomationRule,context:AutomationConte
     const previousValue=frame.previous.get(condition.field);
     const actual=actualValue!==undefined&&Number.isFinite(actualValue)?actualValue:null;
     const previousActual=previousValue!==undefined&&Number.isFinite(previousValue)?previousValue:null;
-    const threshold=safeFinite(condition.value);
     if(actual===null)return {...condition,actual,previousActual,passed:false,error:'unknown_or_unavailable_field'};
-    if(threshold===undefined)return {...condition,actual,previousActual,passed:false,error:'condition_value_must_be_finite_number'};
+
+    // A condition value may be a numeric literal or another named feature. This lets
+    // "EMA 9 crosses_above EMA 21" use the same precomputed current/previous frame,
+    // rather than reparsing candles or accidentally coercing an unknown field to zero.
+    const literalThreshold=safeFinite(condition.value);
+    const referenceField=literalThreshold===undefined&&typeof condition.value==='string'
+      ?condition.value.trim():undefined;
+    const currentReference=referenceField?frame.current.get(referenceField):undefined;
+    const previousReference=referenceField?frame.previous.get(referenceField):undefined;
+    if(referenceField&&!referenceField.length)return {...condition,actual,previousActual,passed:false,error:'condition_value_must_be_finite_number'};
+    if(referenceField&&(currentReference===undefined||!Number.isFinite(currentReference))){
+      return {...condition,actual,previousActual,passed:false,error:'unknown_or_unavailable_reference_field'};
+    }
+    const threshold=literalThreshold??currentReference;
+    const previousThreshold=literalThreshold??previousReference;
+    if(threshold===undefined||!Number.isFinite(threshold)){
+      return {...condition,actual,previousActual,passed:false,error:'condition_value_must_be_finite_number'};
+    }
     if(condition.operator==='crosses_above'||condition.operator==='crosses_below'){
       if(context.barConfirmed!==true)return {...condition,actual,previousActual,passed:false,error:'confirmed_bar_required'};
       if(previousActual===null)return {...condition,actual,previousActual,passed:false,error:'previous_bar_value_unavailable'};
+      if(previousThreshold===undefined||!Number.isFinite(previousThreshold)){
+        return {...condition,actual,previousActual,passed:false,error:referenceField?'previous_reference_field_unavailable':'previous_bar_threshold_unavailable'};
+      }
       const passed=condition.operator==='crosses_above'
-        ?previousActual<=threshold&&actual>threshold
-        :previousActual>=threshold&&actual<threshold;
+        ?previousActual<=previousThreshold&&actual>threshold
+        :previousActual>=previousThreshold&&actual<threshold;
       return {...condition,actual,previousActual,passed};
     }
+    if(referenceField)return {...condition,actual,previousActual,passed:compare(actual,threshold,condition.operator)};
     return {...condition,actual,previousActual,passed:compare(actual,threshold,condition.operator)};
   });
 
