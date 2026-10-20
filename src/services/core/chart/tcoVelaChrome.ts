@@ -22,6 +22,8 @@ import { registerIcon, svg16 } from '../../../../vendor/vela/src/ui/icons';
 import type { CoreSpiritEditorModel as CoreSpiritEditorModelType } from '../../coreSpirit/editorModel';
 import type { CoreSpiritMonacoAdapter } from '../../coreSpirit/monacoAdapter';
 import { versionedStorageKey } from '../../coreSpirit/storageSchema';
+import type { VelaTheme } from '../../../../vendor/vela/src/core/options';
+import { themeTokens } from '../../../../vendor/vela/src/core/tokens';
 
 // TCO-only topbar / panel actions need real registered SVGs. Unknown Vela ids otherwise
 // render blank spans inside clickable icon-only controls.
@@ -160,40 +162,133 @@ function panelRoot(body: HTMLElement): HTMLDivElement {
   return root;
 }
 
-type TcoFramePreferences = {
+type TcoFrameColors = {
+  uiBackground: string;
+  topbarBackground: string;
+  panelBackground: string;
+  chartBackground: string;
+  chartTextColor: string;
+  gridColor: string;
+  accent: string;
+  upColor: string;
+  downColor: string;
+};
+type TcoFramePreferences = TcoFrameColors & {
   sidebar: 'left' | 'right';
   density: 'comfortable' | 'compact';
-  accent: 'violet' | 'teal' | 'blue' | 'amber';
+  themePreset: string;
+  chartBackgroundMode: 'solid' | 'gradient';
+  chartBackgroundEnd: string;
+  chartGradientAngle: number;
   topbar: Record<string, boolean>;
 };
+type TcoFrameColorKey = keyof TcoFrameColors | 'chartBackgroundEnd';
+type TcoFrameThemePreset = { id: string; label: string; colors: TcoFrameColors };
+
 const TCO_FRAME_STORAGE_KEY = 'tradingcore:vela:frame-preferences:v1';
+const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
+  { id: 'graphite', label: 'Graphite', colors: {
+    uiBackground: '#0d0f13', topbarBackground: '#141518', panelBackground: '#111317', chartBackground: '#141518',
+    chartTextColor: '#9ca3af', gridColor: '#26282e', accent: '#8b7cff', upColor: '#089981', downColor: '#f23645',
+  } },
+  { id: 'tradingview-dark', label: 'TradingView Dark', colors: {
+    uiBackground: '#131722', topbarBackground: '#131722', panelBackground: '#171b26', chartBackground: '#131722',
+    chartTextColor: '#9ca3af', gridColor: '#1e222d', accent: '#2962ff', upColor: '#089981', downColor: '#f23645',
+  } },
+  { id: 'midnight', label: 'Midnight', colors: {
+    uiBackground: '#070b13', topbarBackground: '#0a1020', panelBackground: '#0b1220', chartBackground: '#080d18',
+    chartTextColor: '#94a3b8', gridColor: '#1d293b', accent: '#60a5fa', upColor: '#10b981', downColor: '#f43f5e',
+  } },
+  { id: 'slate', label: 'Slate', colors: {
+    uiBackground: '#0f172a', topbarBackground: '#172033', panelBackground: '#111c32', chartBackground: '#0f172a',
+    chartTextColor: '#aab8cb', gridColor: '#334155', accent: '#38bdf8', upColor: '#22c55e', downColor: '#fb7185',
+  } },
+  { id: 'ocean', label: 'Ocean', colors: {
+    uiBackground: '#061a23', topbarBackground: '#08232f', panelBackground: '#09232e', chartBackground: '#071b25',
+    chartTextColor: '#9cc8d6', gridColor: '#124253', accent: '#22d3ee', upColor: '#34d399', downColor: '#fb7185',
+  } },
+  { id: 'forest', label: 'Forest', colors: {
+    uiBackground: '#071a13', topbarBackground: '#0b2319', panelBackground: '#0d241a', chartBackground: '#081a13',
+    chartTextColor: '#a7c7b6', gridColor: '#224b37', accent: '#34d399', upColor: '#4ade80', downColor: '#f87171',
+  } },
+  { id: 'plum', label: 'Plum', colors: {
+    uiBackground: '#1b1026', topbarBackground: '#21152f', panelBackground: '#241735', chartBackground: '#180f23',
+    chartTextColor: '#c6b7d8', gridColor: '#433152', accent: '#c084fc', upColor: '#4ade80', downColor: '#fb7185',
+  } },
+  { id: 'light', label: 'Light', colors: {
+    uiBackground: '#f1f5f9', topbarBackground: '#ffffff', panelBackground: '#f8fafc', chartBackground: '#ffffff',
+    chartTextColor: '#475569', gridColor: '#e2e8f0', accent: '#2563eb', upColor: '#089981', downColor: '#ef4444',
+  } },
+] as const;
+
 const DEFAULT_FRAME_PREFERENCES: TcoFramePreferences = {
-  sidebar: 'right', density: 'comfortable', accent: 'violet',
+  sidebar: 'right',
+  density: 'comfortable',
+  themePreset: 'graphite',
+  uiBackground: '#0d0f13',
+  topbarBackground: '#141518',
+  panelBackground: '#111317',
+  chartBackground: '#141518',
+  chartTextColor: '#9ca3af',
+  gridColor: '#26282e',
+  accent: '#8b7cff',
+  upColor: '#089981',
+  downColor: '#f23645',
+  chartBackgroundMode: 'solid',
+  chartBackgroundEnd: '#1c2029',
+  chartGradientAngle: 135,
   topbar: { watchlist:true, research:true, automation:true, trading:true, journal:true, positions:true, code:true },
 };
-const TCO_FRAME_ACCENTS: Record<TcoFramePreferences['accent'], { solid:string; soft:string }> = {
-  violet:{solid:'#8b7cff',soft:'rgba(139,124,255,.18)'},
-  teal:{solid:'#14b8a6',soft:'rgba(20,184,166,.18)'},
-  blue:{solid:'#60a5fa',soft:'rgba(96,165,250,.18)'},
-  amber:{solid:'#f59e0b',soft:'rgba(245,158,11,.18)'},
-};
+
+function safeFrameColor(value: unknown, fallback: string): string {
+  const color = String(value ?? '').trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+}
+function frameContrastColor(hex: string): string {
+  const rgb = hex.replace('#', '').match(/.{2}/g)?.map((part) => parseInt(part, 16) / 255) ?? [0, 0, 0];
+  const linear = rgb.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * (linear[0] ?? 0) + 0.7152 * (linear[1] ?? 0) + 0.0722 * (linear[2] ?? 0);
+  return luminance > 0.42 ? '#111827' : '#f1f5f9';
+}
+function frameRgba(hex: string, alpha: number): string {
+  const rgb = hex.replace('#', '').match(/.{2}/g)?.map((part) => parseInt(part, 16)) ?? [139, 124, 255];
+  return \`rgba(\${rgb[0] ?? 139}, \${rgb[1] ?? 124}, \${rgb[2] ?? 255}, \${alpha})\`;
+}
 function readTcoFramePreferences(): TcoFramePreferences {
   try {
-    const raw=JSON.parse(localStorage.getItem(TCO_FRAME_STORAGE_KEY)||'{}') as Partial<TcoFramePreferences>;
+    const raw = JSON.parse(localStorage.getItem(TCO_FRAME_STORAGE_KEY) || '{}') as Partial<TcoFramePreferences> & { accent?: string };
+    const legacyAccent: Record<string, string> = { violet: '#8b7cff', teal: '#14b8a6', blue: '#60a5fa', amber: '#f59e0b' };
+    const themePreset = TCO_FRAME_THEME_PRESETS.some((preset) => preset.id === raw.themePreset) ? String(raw.themePreset) : 'custom';
     return {
-      sidebar:raw.sidebar==='left'?'left':'right',
-      density:raw.density==='compact'?'compact':'comfortable',
-      accent:raw.accent && raw.accent in TCO_FRAME_ACCENTS ? raw.accent : 'violet',
-      topbar:{...DEFAULT_FRAME_PREFERENCES.topbar,...(raw.topbar||{})},
+      ...DEFAULT_FRAME_PREFERENCES,
+      sidebar: raw.sidebar === 'left' ? 'left' : 'right',
+      density: raw.density === 'compact' ? 'compact' : 'comfortable',
+      themePreset,
+      uiBackground: safeFrameColor(raw.uiBackground, DEFAULT_FRAME_PREFERENCES.uiBackground),
+      topbarBackground: safeFrameColor(raw.topbarBackground, DEFAULT_FRAME_PREFERENCES.topbarBackground),
+      panelBackground: safeFrameColor(raw.panelBackground, DEFAULT_FRAME_PREFERENCES.panelBackground),
+      chartBackground: safeFrameColor(raw.chartBackground, DEFAULT_FRAME_PREFERENCES.chartBackground),
+      chartTextColor: safeFrameColor(raw.chartTextColor, DEFAULT_FRAME_PREFERENCES.chartTextColor),
+      gridColor: safeFrameColor(raw.gridColor, DEFAULT_FRAME_PREFERENCES.gridColor),
+      accent: safeFrameColor(raw.accent && raw.accent in legacyAccent ? legacyAccent[raw.accent] : raw.accent, DEFAULT_FRAME_PREFERENCES.accent),
+      upColor: safeFrameColor(raw.upColor, DEFAULT_FRAME_PREFERENCES.upColor),
+      downColor: safeFrameColor(raw.downColor, DEFAULT_FRAME_PREFERENCES.downColor),
+      chartBackgroundMode: raw.chartBackgroundMode === 'gradient' ? 'gradient' : 'solid',
+      chartBackgroundEnd: safeFrameColor(raw.chartBackgroundEnd, DEFAULT_FRAME_PREFERENCES.chartBackgroundEnd),
+      chartGradientAngle: Math.max(0, Math.min(360, Math.round(Number.isFinite(Number(raw.chartGradientAngle)) ? Number(raw.chartGradientAngle) : 135))),
+      topbar: { ...DEFAULT_FRAME_PREFERENCES.topbar, ...(raw.topbar || {}) },
     };
-  } catch { return {...DEFAULT_FRAME_PREFERENCES,topbar:{...DEFAULT_FRAME_PREFERENCES.topbar}}; }
+  } catch {
+    return { ...DEFAULT_FRAME_PREFERENCES, topbar: { ...DEFAULT_FRAME_PREFERENCES.topbar } };
+  }
 }
+
 function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePreferences): void {
   const doc=host.ownerDocument;
   const workspace=(host.closest('.vela-workspace') as HTMLElement|null)??(doc.querySelector('.vela-workspace') as HTMLElement|null)??host;
   let style=doc.getElementById('tco-workspace-frame-style') as HTMLStyleElement|null;
   if(!style){style=doc.createElement('style');style.id='tco-workspace-frame-style';doc.head.appendChild(style);}
-  style.textContent=`
+  style.textContent=\`
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-toolbar { order:0; }
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-panel:not([hidden]):not([data-overlay="1"]) { order:1;border-left:0;border-right:1px solid var(--vela-border); }
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-grid { order:2; }
@@ -215,6 +310,15 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .vela-workspace[data-tco-hide-journal="1"] [data-action-id="tco.journal"],
     .vela-workspace[data-tco-hide-positions="1"] [data-action-id="tco.positions"],
     .vela-workspace[data-tco-hide-code="1"] [data-action-id="tco.corespirit-code"] { display:none!important; }
+    .vela-workspace { background:var(--tco-user-vela-ui,var(--vela-bg))!important; }
+    .vela-workspace .vela-widget-topbar { background:var(--tco-user-vela-topbar,var(--vela-surface))!important;border-bottom-color:var(--tco-user-vela-grid,var(--vela-border))!important; }
+    .vela-workspace .vela-ws-toolbar,
+    .vela-workspace .vela-ws-strips,
+    .vela-workspace .vela-panel { background:var(--tco-user-vela-panel,var(--vela-surface))!important; }
+    .vela-workspace .vela-ws-grid { background:var(--tco-user-vela-grid,var(--vela-border-soft))!important; }
+    .vela-workspace .vela-cell { background:var(--tco-user-vela-chart,var(--vela-bg))!important; }
+    .vela-workspace .vela-panel { border-color:var(--tco-user-vela-grid,var(--vela-border))!important; }
+    .vela-workspace .vela-lp { background:var(--tco-user-vela-panel,var(--vela-surface))!important; }
     .tco-frame-panel { gap:12px;font-family:Inter,ui-sans-serif,system-ui,sans-serif!important; }
     .tco-frame-eyebrow { color:var(--vela-fg-muted);font-size:10px;font-weight:750;letter-spacing:.13em;text-transform:uppercase; }
     .tco-frame-card { padding:11px 12px;border:1px solid var(--vela-border);border-radius:9px;background:color-mix(in srgb,var(--vela-surface-sunken) 40%,transparent); }
@@ -227,6 +331,20 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-frame-toggle input { accent-color:var(--tco-frame-accent,#8b7cff); }
     .tco-frame-button { border:1px solid var(--vela-border);border-radius:6px;padding:7px 10px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer; }
     .tco-frame-button-primary { border-color:var(--tco-frame-accent,#8b7cff);background:var(--tco-frame-accent-soft,rgba(139,124,255,.18)); }
+    .tco-frame-theme-choice { display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left;padding:8px;border:1px solid var(--vela-border);border-radius:8px;background:var(--vela-surface-sunken);color:var(--vela-fg);cursor:pointer;transition:border-color 120ms ease,box-shadow 120ms ease,transform 120ms ease; }
+    .tco-frame-theme-choice:hover { border-color:var(--tco-frame-accent,#8b7cff);transform:translateY(-1px); }
+    .tco-frame-theme-choice[aria-pressed="true"] { border-color:var(--tco-frame-accent,#8b7cff);box-shadow:0 0 0 1px var(--tco-frame-accent,#8b7cff); }
+    .tco-frame-theme-swatches { display:flex;height:18px;overflow:hidden;border:1px solid var(--vela-border-soft);border-radius:4px; }
+    .tco-frame-theme-swatches span { display:block;flex:1 1 0;min-width:0; }
+    .tco-frame-theme-label { font-size:10px;font-weight:700;line-height:1.25; }
+    .tco-frame-color-grid { display:grid;grid-template-columns:1fr;gap:6px; }
+    .tco-frame-color-control { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 8px;border:1px solid var(--vela-border);border-radius:7px;background:var(--vela-surface-sunken);color:var(--vela-fg);cursor:pointer; }
+    .tco-frame-color-name { font-size:10px;font-weight:600; }
+    .tco-frame-color-value { font-size:9px;color:var(--vela-fg-muted);font-family:ui-monospace,monospace; }
+    .tco-frame-color-picker { width:34px;height:26px;padding:0;border:1px solid var(--vela-border);border-radius:5px;background:transparent;cursor:pointer; }
+    .tco-frame-mode { flex:1;border:1px solid var(--vela-border);border-radius:6px;padding:7px;background:transparent;color:var(--vela-fg-muted);font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer; }
+    .tco-frame-mode[aria-pressed="true"] { border-color:var(--tco-frame-accent,#8b7cff);background:var(--tco-frame-accent-soft,rgba(139,124,255,.18));color:var(--vela-fg-bright); }
+    .tco-frame-gradient-preview { height:36px;border:1px solid var(--vela-border);border-radius:7px; }
     .tco-watch-search { width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--vela-border);border-radius:7px;outline:none;background:var(--vela-surface-sunken);color:var(--vela-fg);font:11px Inter,ui-sans-serif,system-ui,sans-serif; }
     .tco-watch-search:focus { border-color:var(--tco-frame-accent,#8b7cff); }
     .tco-watch-filter { border:1px solid var(--vela-border);border-radius:6px;background:transparent;color:var(--vela-fg-muted);padding:5px 9px;font:600 10px Inter,ui-sans-serif,system-ui,sans-serif;cursor:pointer; }
@@ -239,19 +357,69 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-core-editor-frame { min-height:280px!important;flex:1 1 auto;border-color:var(--vela-border)!important;border-radius:9px!important;background:var(--vela-surface-sunken)!important; }
     .tco-core-editor-frame textarea { background:var(--vela-surface-sunken)!important; }
     .tco-core-status { border-radius:7px!important;border-color:var(--vela-border)!important;background:var(--vela-surface)!important; }
-  `;
+  \`;
   workspace.dataset.tcoSidebar=preferences.sidebar;
   workspace.dataset.tcoDensity=preferences.density;
+  workspace.dataset.tcoColorPreset=preferences.themePreset;
   for(const key of Object.keys(DEFAULT_FRAME_PREFERENCES.topbar))
-    workspace.dataset[`tcoHide${key[0]!.toUpperCase()}${key.slice(1)}`]=preferences.topbar[key]?'0':'1';
-  const accent=TCO_FRAME_ACCENTS[preferences.accent];
-  workspace.style.setProperty('--tco-frame-accent',accent.solid);
-  workspace.style.setProperty('--tco-frame-accent-soft',accent.soft);
-  workspace.style.setProperty('--vela-active',accent.soft);
-  workspace.style.setProperty('--vela-hover-strong',accent.soft);
-  workspace.style.setProperty('--vela-selected-bg',accent.solid);
-  try{localStorage.setItem(TCO_FRAME_STORAGE_KEY,JSON.stringify(preferences));}catch{}
+    workspace.dataset[\`tcoHide\${key[0]!.toUpperCase()}\${key.slice(1)}\`]=preferences.topbar[key]?'0':'1';
+
+  const chartTheme: VelaTheme = {
+    background: preferences.chartBackground,
+    ...(preferences.chartBackgroundMode === 'gradient'
+      ? { backgroundGradient: { from: preferences.chartBackground, to: preferences.chartBackgroundEnd, angle: preferences.chartGradientAngle } }
+      : {}),
+    textColor: preferences.chartTextColor,
+    gridColor: preferences.gridColor,
+    borderColor: preferences.gridColor,
+    upColor: preferences.upColor,
+    downColor: preferences.downColor,
+    fontFamily: 'Inter, system-ui, sans-serif',
+  };
+  try {
+    const liveWorkspace=(window as Window & { __TCO_VELA__?: { workspace?: { setTheme?: (theme: VelaTheme) => void } } }).__TCO_VELA__?.workspace;
+    liveWorkspace?.setTheme?.(chartTheme);
+  } catch {}
+
+  // The UI palette is intentionally distinct from the plot palette, just like a trading
+  // terminal: chart candles/canvas can change without forcing the surrounding workspace.
+  const uiTheme: VelaTheme = {
+    background: preferences.uiBackground,
+    textColor: frameContrastColor(preferences.uiBackground),
+    gridColor: preferences.gridColor,
+    borderColor: preferences.gridColor,
+    upColor: preferences.upColor,
+    downColor: preferences.downColor,
+    fontFamily: 'Inter, system-ui, sans-serif',
+  };
+  for (const [key, value] of Object.entries(themeTokens(uiTheme))) workspace.style.setProperty(key, value);
+  workspace.style.setProperty('--tco-user-vela-ui', preferences.uiBackground);
+  workspace.style.setProperty('--tco-user-vela-topbar', preferences.topbarBackground);
+  workspace.style.setProperty('--tco-user-vela-panel', preferences.panelBackground);
+  workspace.style.setProperty('--tco-user-vela-chart', preferences.chartBackground);
+  workspace.style.setProperty('--tco-user-vela-grid', preferences.gridColor);
+  workspace.style.setProperty('--vela-bg', preferences.uiBackground);
+  workspace.style.setProperty('--vela-surface', preferences.panelBackground);
+  workspace.style.setProperty('--vela-surface-elev', preferences.panelBackground);
+  workspace.style.setProperty('--vela-surface-overlay', preferences.panelBackground);
+  workspace.style.setProperty('--vela-surface-sunken', preferences.uiBackground);
+  workspace.style.setProperty('--vela-border', preferences.gridColor);
+  workspace.style.setProperty('--vela-border-soft', preferences.gridColor);
+  workspace.style.setProperty('--vela-selected-bg', preferences.accent);
+  workspace.style.setProperty('--vela-selected-fg', frameContrastColor(preferences.accent));
+  workspace.style.setProperty('--vela-accent', preferences.accent);
+  workspace.style.setProperty('--vela-accent-bright', preferences.accent);
+  workspace.style.setProperty('--vela-active', frameRgba(preferences.accent, .16));
+  workspace.style.setProperty('--vela-hover-strong', frameRgba(preferences.accent, .22));
+  workspace.style.setProperty('--tco-frame-accent', preferences.accent);
+  workspace.style.setProperty('--tco-frame-accent-soft', frameRgba(preferences.accent, .18));
+  try { localStorage.setItem(TCO_FRAME_STORAGE_KEY,JSON.stringify(preferences)); } catch {}
 }
+
+export function applySavedTcoVelaAppearance(host: HTMLElement): void {
+  applyTcoFramePreferences(host, readTcoFramePreferences());
+}
+
 function createFrameSelect(options:Array<[string,string]>,value:string):HTMLSelectElement {
   const select=document.createElement('select');select.className='tco-frame-select';
   for(const [key,label] of options){const option=document.createElement('option');option.value=key;option.textContent=label;option.selected=key===value;select.appendChild(option);}
@@ -279,16 +447,17 @@ if fast crossesBelow slow {
 }`;
 
 const workspaceFramePanel: SidePanelDescriptor = {
-  id:'tco.workspace-frame', title:'Workspace', icon:'layout', order:1, width:340, resizable:true, minWidth:300, maxWidth:480,
+  id:'tco.workspace-frame', title:'Workspace', icon:'layout', order:1, width:360, resizable:true, minWidth:320, maxWidth:480,
   mount(ctx,body,header){
     header.setTitle('Workspace appearance');
     const root=panelRoot(body);root.classList.add('tco-frame-panel');
     const intro=document.createElement('div');intro.className='tco-frame-card';
-    const eyebrow=document.createElement('div');eyebrow.className='tco-frame-eyebrow';eyebrow.textContent='TradingCoreOS frame';
+    const eyebrow=document.createElement('div');eyebrow.className='tco-frame-eyebrow';eyebrow.textContent='TradingCoreOS theme';
     const copy=document.createElement('div');copy.className='tco-frame-help';copy.style.marginTop='7px';
-    copy.textContent='Customize the single Vela command bar and chart workspace. Preferences stay in this browser; the chart engine and market-data pipeline are unchanged.';
+    copy.textContent='Choose a full terminal color scheme or tune the UI, chart canvas, grid, accent and candle colors. Changes preview immediately and persist in this browser.';
     intro.append(eyebrow,copy);root.appendChild(intro);
     let prefs=readTcoFramePreferences();
+
     const addSetting=(label:string,description:string,control:HTMLElement)=>{
       const card=document.createElement('div');card.className='tco-frame-card';
       const row=document.createElement('div');row.className='tco-frame-row';
@@ -296,19 +465,128 @@ const workspaceFramePanel: SidePanelDescriptor = {
       const help=document.createElement('div');help.className='tco-frame-help';help.style.marginTop='4px';help.textContent=description;
       text.append(title,help);row.append(text,control);card.appendChild(row);root.appendChild(card);
     };
+
+    const themeCard=document.createElement('div');themeCard.className='tco-frame-card';themeCard.style.cssText='display:flex;flex-direction:column;gap:8px;';
+    const themeTitle=document.createElement('div');themeTitle.className='tco-frame-label';themeTitle.textContent='Color scheme';
+    const themeHelp=document.createElement('div');themeHelp.className='tco-frame-help';themeHelp.textContent='TradingView-style presets, with instant active-state previews.';
+    const themeGrid=document.createElement('div');themeGrid.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;';
+    const presetButtons=new Map<string,HTMLButtonElement>();
+    const colorControls=new Map<TcoFrameColorKey,{input:HTMLInputElement;hex:HTMLElement}>();
+    const modeButtons:HTMLButtonElement[]=[];
+    let gradientEndInput: HTMLInputElement | null = null;
+    let gradientEndHex: HTMLElement | null = null;
+    let gradientPreview: HTMLDivElement | null = null;
+    let gradientAngleInput: HTMLInputElement | null = null;
+    let gradientAngleValue: HTMLElement | null = null;
+    let gradientEndRow: HTMLLabelElement | null = null;
+    let gradientAngleRow: HTMLLabelElement | null = null;
+
+    const setPresetSelection=()=>{
+      for(const [id,button] of presetButtons) button.setAttribute('aria-pressed',String(prefs.themePreset===id));
+    };
+    const syncColorControls=()=>{
+      for(const [key,control] of colorControls){
+        const value=prefs[key];control.input.value=value;control.hex.textContent=value.toUpperCase();
+      }
+      if(gradientEndInput) gradientEndInput.value=prefs.chartBackgroundEnd;
+      if(gradientEndHex) gradientEndHex.textContent=prefs.chartBackgroundEnd.toUpperCase();
+      if(gradientEndRow) gradientEndRow.hidden=prefs.chartBackgroundMode!=='gradient';
+      if(gradientAngleRow) gradientAngleRow.hidden=prefs.chartBackgroundMode!=='gradient';
+      for(const button of modeButtons) button.setAttribute('aria-pressed',String(button.dataset.mode===prefs.chartBackgroundMode));
+      if(gradientPreview){
+        gradientPreview.style.background=prefs.chartBackgroundMode==='gradient'
+          ? \`linear-gradient(\${prefs.chartGradientAngle}deg, \${prefs.chartBackground}, \${prefs.chartBackgroundEnd})\`
+          : prefs.chartBackground;
+        gradientPreview.setAttribute('aria-label',prefs.chartBackgroundMode==='gradient'?'Chart background gradient preview':'Chart background preview');
+      }
+      if(gradientAngleValue) gradientAngleValue.textContent=prefs.chartGradientAngle+'°';
+      if(gradientAngleInput) gradientAngleInput.value=String(prefs.chartGradientAngle);
+    };
+    const updatePrefs=(patch:Partial<TcoFramePreferences>)=>{
+      prefs={...prefs,...patch,themePreset:'custom'};
+      applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
+    };
+    const applyPreset=(preset:TcoFrameThemePreset)=>{
+      prefs={...prefs,...preset.colors,themePreset:preset.id,chartBackgroundMode:'solid'};
+      applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
+      ctx.toast('Color scheme applied','success');
+    };
+
+    for(const preset of TCO_FRAME_THEME_PRESETS){
+      const button=document.createElement('button');button.type='button';button.className='tco-frame-theme-choice';
+      button.setAttribute('aria-label',\`Use \${preset.label} color scheme\`);button.setAttribute('aria-pressed','false');
+      const swatches=document.createElement('span');swatches.className='tco-frame-theme-swatches';
+      for(const color of [preset.colors.uiBackground,preset.colors.topbarBackground,preset.colors.chartBackground,preset.colors.accent,preset.colors.upColor,preset.colors.downColor]){
+        const swatch=document.createElement('span');swatch.style.background=color;swatches.appendChild(swatch);
+      }
+      const label=document.createElement('span');label.className='tco-frame-theme-label';label.textContent=preset.label;
+      button.append(swatches,label);button.addEventListener('click',()=>applyPreset(preset));themeGrid.appendChild(button);presetButtons.set(preset.id,button);
+    }
+    themeCard.append(themeTitle,themeHelp,themeGrid);root.appendChild(themeCard);
+
+    const appearanceDetails=document.createElement('details');appearanceDetails.open=true;appearanceDetails.className='tco-frame-card';
+    const customizeSummary=document.createElement('summary');customizeSummary.className='tco-frame-label';customizeSummary.textContent='Customize colors';customizeSummary.style.cssText='cursor:pointer;list-style-position:inside;';
+    const colorIntro=document.createElement('div');colorIntro.className='tco-frame-help';colorIntro.style.margin='8px 0';colorIntro.textContent='Pick any color. UI surfaces, chart cosmetics and candlestick colors can be tuned independently.';
+    const colorGrid=document.createElement('div');colorGrid.className='tco-frame-color-grid';
+    const colorFields:Array<[TcoFrameColorKey,string]>=[
+      ['uiBackground','Workspace background'],
+      ['topbarBackground','Top bar'],
+      ['panelBackground','Panels and tools'],
+      ['chartBackground','Chart canvas'],
+      ['chartBackgroundEnd','Gradient end'],
+      ['chartTextColor','Chart text'],
+      ['gridColor','Grid and borders'],
+      ['accent','Accent and selection'],
+      ['upColor','Bull candle'],
+      ['downColor','Bear candle'],
+    ];
+    for(const [key,label] of colorFields){
+      const row=document.createElement('label');row.className='tco-frame-color-control';
+      const left=document.createElement('span');left.style.cssText='display:flex;flex-direction:column;gap:3px;min-width:0;';
+      const name=document.createElement('span');name.className='tco-frame-color-name';name.textContent=label;
+      const hex=document.createElement('span');hex.className='tco-frame-color-value';hex.textContent=prefs[key].toUpperCase();
+      left.append(name,hex);
+      const input=document.createElement('input');input.type='color';input.className='tco-frame-color-picker';input.value=prefs[key];input.setAttribute('aria-label',label);
+      input.addEventListener('input',()=>updatePrefs({[key]:input.value} as Partial<TcoFramePreferences>));
+      row.append(left,input);colorGrid.appendChild(row);colorControls.set(key,{input,hex});
+    }
+
+    const modeLabel=document.createElement('div');modeLabel.className='tco-frame-label';modeLabel.style.marginTop='10px';modeLabel.textContent='Chart background fill';
+    const modeControls=document.createElement('div');modeControls.style.cssText='display:flex;gap:6px;margin-top:7px;';
+    for(const [mode,label] of [['solid','Solid'],['gradient','Gradient']] as const){
+      const button=document.createElement('button');button.type='button';button.className='tco-frame-mode';button.textContent=label;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(prefs.chartBackgroundMode===mode));
+      button.addEventListener('click',()=>updatePrefs({chartBackgroundMode:mode}));modeButtons.push(button);modeControls.appendChild(button);
+    }
+
+    gradientEndRow=document.createElement('label');gradientEndRow.className='tco-frame-color-control';gradientEndRow.style.marginTop='7px';
+    const gradientEndLabel=document.createElement('span');gradientEndLabel.className='tco-frame-color-name';gradientEndLabel.textContent='Gradient end color';
+    gradientEndInput=document.createElement('input');gradientEndInput.type='color';gradientEndInput.className='tco-frame-color-picker';gradientEndInput.value=prefs.chartBackgroundEnd;gradientEndInput.setAttribute('aria-label','Gradient end color');
+    gradientEndHex=document.createElement('span');gradientEndHex.className='tco-frame-color-value';gradientEndHex.textContent=prefs.chartBackgroundEnd.toUpperCase();
+    const gradientEndCopy=document.createElement('span');gradientEndCopy.style.cssText='display:flex;flex-direction:column;gap:3px;';gradientEndCopy.append(gradientEndLabel,gradientEndHex);gradientEndRow.append(gradientEndCopy,gradientEndInput);
+    gradientEndInput.addEventListener('input',()=>updatePrefs({chartBackgroundEnd:gradientEndInput!.value}));
+
+    gradientAngleRow=document.createElement('label');gradientAngleRow.style.cssText='display:block;margin-top:9px;';
+    const gradientAngleHead=document.createElement('span');gradientAngleHead.style.cssText='display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--vela-fg);';
+    const gradientAngleLabel=document.createElement('span');gradientAngleLabel.textContent='Gradient angle';
+    gradientAngleValue=document.createElement('span');gradientAngleValue.textContent=prefs.chartGradientAngle+'°';gradientAngleHead.append(gradientAngleLabel,gradientAngleValue);
+    gradientAngleInput=document.createElement('input');gradientAngleInput.type='range';gradientAngleInput.min='0';gradientAngleInput.max='360';gradientAngleInput.step='5';gradientAngleInput.value=String(prefs.chartGradientAngle);gradientAngleInput.setAttribute('aria-label','Gradient angle');gradientAngleInput.style.cssText='width:100%;margin-top:8px;accent-color:var(--tco-frame-accent);';
+    gradientAngleInput.addEventListener('input',()=>updatePrefs({chartGradientAngle:Number(gradientAngleInput!.value)}));
+    gradientAngleRow.append(gradientAngleHead,gradientAngleInput);
+
+    gradientPreview=document.createElement('div');gradientPreview.className='tco-frame-gradient-preview';gradientPreview.setAttribute('role','img');
+    appearanceDetails.append(customizeSummary,colorIntro,colorGrid,modeLabel,modeControls,gradientEndRow,gradientAngleRow,gradientPreview);root.appendChild(appearanceDetails);
+
     const sidebar=createFrameSelect([['right','Right sidebar'],['left','Left sidebar']],prefs.sidebar);sidebar.setAttribute('aria-label','Sidebar position');
     sidebar.addEventListener('change',()=>{prefs={...prefs,sidebar:sidebar.value as TcoFramePreferences['sidebar']};applyTcoFramePreferences(ctx.host,prefs);});
     addSetting('Sidebar position','Dock panels on either side of the chart.',sidebar);
     const density=createFrameSelect([['comfortable','Comfortable'],['compact','Compact']],prefs.density);density.setAttribute('aria-label','Top bar density');
     density.addEventListener('change',()=>{prefs={...prefs,density:density.value as TcoFramePreferences['density']};applyTcoFramePreferences(ctx.host,prefs);});
     addSetting('Top bar density','Choose a roomier bar or a compact trading-terminal strip.',density);
-    const accent=createFrameSelect([['violet','Violet'],['teal','Teal'],['blue','Blue'],['amber','Amber']],prefs.accent);accent.setAttribute('aria-label','Workspace accent color');
-    accent.addEventListener('change',()=>{prefs={...prefs,accent:accent.value as TcoFramePreferences['accent']};applyTcoFramePreferences(ctx.host,prefs);});
-    addSetting('Accent color','Change focus, selected controls and active panel highlights.',accent);
+
     const tools=document.createElement('div');tools.className='tco-frame-card';
     const title=document.createElement('div');title.className='tco-frame-label';title.textContent='Top bar tools';
-    const help=document.createElement('div');help.className='tco-frame-help';help.style.margin='4px 0 8px';
-    help.textContent='Hide the actions you do not use. Symbol, timeframe, chart style, Indicators, drawing tools and settings remain available.';
+    const help=document.createElement('div');help.className='tco-frame-help';help.style.cssText='margin:4px 0 8px;';
+    help.textContent='Hide actions you do not use. Symbol, timeframe, chart style, Indicators, drawings and settings remain available.';
     tools.append(title,help);
     const toolOptions:Array<[keyof TcoFramePreferences['topbar'],string]>=[
       ['watchlist','Watchlist'],['research','Research'],['automation','Automation'],['trading','Trading'],['journal','Journal'],['positions','Positions'],['code','CoreSpirit Studio'],
@@ -323,13 +601,13 @@ const workspaceFramePanel: SidePanelDescriptor = {
     const reset=document.createElement('button');reset.type='button';reset.className='tco-frame-button tco-frame-button-primary';reset.textContent='Reset workspace appearance';
     reset.addEventListener('click',()=>{
       prefs={...DEFAULT_FRAME_PREFERENCES,topbar:{...DEFAULT_FRAME_PREFERENCES.topbar}};
-      sidebar.value=prefs.sidebar;density.value=prefs.density;accent.value=prefs.accent;
-      tools.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input,index)=>{input.checked=prefs.topbar[toolOptions[index]![0]]!==false;});
-      applyTcoFramePreferences(ctx.host,prefs);ctx.toast('Workspace appearance reset','success');
+      sidebar.value=prefs.sidebar;density.value=prefs.density;
+      applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
+      ctx.toast('Workspace appearance reset','success');
     });
     root.appendChild(reset);
-    applyTcoFramePreferences(ctx.host,prefs);
-    return {onOpen:()=>applyTcoFramePreferences(ctx.host,prefs)};
+    applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
+    return {onOpen:()=>{applyTcoFramePreferences(ctx.host,prefs);}};
   },
 };
 
