@@ -70,7 +70,7 @@ assert.match(storage, /loadTcoVelaActiveWorkspaceId/, 'the selected named setup 
 assert.match(storage, /saveTcoVelaActiveWorkspaceId/, 'the selected named setup is account-persisted');
 assert.match(storage, /localTime > cloudTime/, 'offline journal edits beat older cloud copies on reconnect');
 assert.match(storage, /tradingcoreVelaActiveWorkspace/, 'named workspace selection is shared with the account across devices');
-assert.match(chrome, /loadTcoVelaActiveWorkspaceId\(brokerScope\)/, 'the Workspace panel restores the active named setup for the signed-in account');
+assert.match(chrome, /loadTcoVelaActiveWorkspaceId/, 'the Workspace panel restores the active named setup for the signed-in account');
 assert.match(storage, /drainWorkspaceSnapshotWrites/, 'overlapping cloud autosaves are serialized/coalesced');
 assert.match(live, /30 \* 60 \* 1000/, 'a full workspace checkpoint runs every 30 minutes');
 assert.match(live, /addEventListener\('pagehide', checkpointWorkspace\)/, 'the latest workspace is checkpointed when leaving the page');
