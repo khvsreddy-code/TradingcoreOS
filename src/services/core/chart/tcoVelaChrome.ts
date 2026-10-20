@@ -665,9 +665,125 @@ const workspaceFramePanel: SidePanelDescriptor = {
       applyTcoFramePreferences(ctx.host,prefs,true);setPresetSelection();syncColorControls();
       ctx.toast('Workspace appearance reset','success');
     });
+    const savedCard=document.createElement('div');savedCard.className='tco-frame-card';savedCard.style.cssText='display:flex;flex-direction:column;gap:8px;';
+    const savedTitle=document.createElement('div');savedTitle.className='tco-frame-label';savedTitle.textContent='Saved workspaces';
+    const savedHelp=document.createElement('div');savedHelp.className='tco-frame-help';savedHelp.textContent='Chart settings, tickers, indicators, drawings, panel layout and zoom autosave as you work. Name a snapshot to keep a separate setup.';
+    const savedName=document.createElement('input');savedName.type='text';savedName.className='tco-frame-select';savedName.style.cssText='width:100%;max-width:none;';savedName.maxLength=80;savedName.placeholder='e.g. NIFTY opening-range setup';savedName.setAttribute('aria-label','Saved workspace name');
+    const savedActions=document.createElement('div');savedActions.style.cssText='display:flex;gap:6px;flex-wrap:wrap;';
+    const saveCurrent=document.createElement('button');saveCurrent.type='button';saveCurrent.className='tco-frame-button tco-frame-button-primary';saveCurrent.textContent='Save current';
+    const saveAsNew=document.createElement('button');saveAsNew.type='button';saveAsNew.className='tco-frame-button';saveAsNew.textContent='Save as new';
+    savedActions.append(saveCurrent,saveAsNew);
+    const savedStatus=document.createElement('div');savedStatus.className='tco-frame-help';savedStatus.setAttribute('role','status');savedStatus.setAttribute('aria-live','polite');savedStatus.textContent='Autosave is on · full checkpoint every 30 minutes.';
+    const savedList=document.createElement('div');savedList.style.cssText='display:flex;flex-direction:column;gap:6px;';
+    savedCard.append(savedTitle,savedHelp,savedName,savedActions,savedStatus,savedList);
+    root.appendChild(savedCard);
+
+    const brokerScope=()=>tradingCoreRuntime.getPrimaryBrokerId()??'fyers';
+    const activeKey=()=> 'tradingcore:vela:active-saved-workspace:v1:'+brokerScope();
+    let activeId='';
+    try { activeId=localStorage.getItem(activeKey())??''; } catch {}
+    let namedWorkspaces:TcoSavedWorkspace[]=[];
+    const setActive=(id:string)=>{
+      activeId=id;
+      try { if(id) localStorage.setItem(activeKey(),id); else localStorage.removeItem(activeKey()); } catch {}
+    };
+    const liveWorkspaceApi=()=>((window as Window & { __TCO_VELA__?: { workspace?: {
+      getState?:()=>unknown; applyState?:(state:unknown)=>void; saveNow?:()=>void|Promise<void>;
+    } } }).__TCO_VELA__?.workspace);
+    const newWorkspaceId=()=>typeof crypto!=='undefined'&&typeof crypto.randomUUID==='function'
+      ? crypto.randomUUID() : 'workspace-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9);
+    const refreshSavedRows=()=>{
+      savedList.replaceChildren();
+      if(!namedWorkspaces.length){
+        const empty=document.createElement('div');empty.className='tco-frame-help';empty.textContent='No named workspaces yet. Save your current chart setup above.';savedList.appendChild(empty);return;
+      }
+      for(const entry of namedWorkspaces){
+        const row=document.createElement('div');row.className='tco-frame-card';row.style.cssText='padding:8px;display:flex;flex-direction:column;gap:6px;';
+        const head=document.createElement('div');head.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;gap:8px;';
+        const labelBox=document.createElement('div');labelBox.style.cssText='min-width:0;display:flex;flex-direction:column;gap:3px;';
+        const label=document.createElement('div');label.className='tco-frame-label';label.style.overflowWrap='anywhere';label.textContent=entry.name;
+        const date=document.createElement('div');date.className='tco-frame-help';date.textContent=new Date(entry.updatedAt).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'});
+        const state=document.createElement('span');state.className='tco-frame-eyebrow';state.textContent=entry.id===activeId?'CURRENT':'SAVED';
+        labelBox.append(label,date);head.append(labelBox,state);
+        const buttons=document.createElement('div');buttons.style.cssText='display:flex;gap:5px;flex-wrap:wrap;';
+        const restore=document.createElement('button');restore.type='button';restore.className='tco-frame-button tco-frame-button-primary';restore.textContent='Restore';
+        restore.addEventListener('click',()=>{void restoreNamed(entry);});
+        const update=document.createElement('button');update.type='button';update.className='tco-frame-button';update.textContent='Update';
+        update.addEventListener('click',()=>{setActive(entry.id);savedName.value=entry.name;void saveNamed(false,entry.id);});
+        const remove=document.createElement('button');remove.type='button';remove.className='tco-frame-button';remove.textContent='Delete';
+        remove.addEventListener('click',()=>{void deleteNamed(entry);});
+        buttons.append(restore,update,remove);row.append(head,buttons);savedList.appendChild(row);
+      }
+    };
+    const refreshSaved=async()=>{
+      savedStatus.textContent='Loading saved workspaces…';
+      try {
+        namedWorkspaces=await loadTcoVelaSavedWorkspaces(brokerScope());
+        if(activeId&&!namedWorkspaces.some((entry)=>entry.id===activeId))setActive('');
+        refreshSavedRows();
+        savedStatus.textContent='Autosave is on · full checkpoint every 30 minutes · '+namedWorkspaces.length+' saved setup'+(namedWorkspaces.length===1?'':'s')+'.';
+      } catch {
+        refreshSavedRows();savedStatus.textContent='Named workspace sync is unavailable. Local autosave remains enabled.';
+      }
+    };
+    const saveNamed=async(asNew:boolean,overrideId?:string)=>{
+      const api=liveWorkspaceApi();
+      if(!api?.getState){savedStatus.textContent='The chart is still loading. Try again in a moment.';return;}
+      const previous=namedWorkspaces.find((entry)=>entry.id===(overrideId||activeId));
+      const name=(savedName.value.trim()||(!asNew?previous?.name:'')||(String(ctx.symbol||'Chart')+' '+String(ctx.timeframe||'')+' workspace')).trim().slice(0,80);
+      const id=asNew||!(overrideId||activeId)?newWorkspaceId():(overrideId||activeId);
+      saveCurrent.disabled=true;saveAsNew.disabled=true;savedStatus.textContent='Saving workspace snapshot…';
+      try {
+        await Promise.resolve(api.saveNow?.());
+        await flushTcoVelaAppearance();
+        const result=await saveTcoVelaSavedWorkspace({id,name,updatedAt:new Date().toISOString(),snapshot:{
+          schemaVersion:1,workspace:api.getState(),appearance:{...prefs,topbar:{...prefs.topbar}},
+        }},brokerScope());
+        setActive(id);savedName.value=name;await refreshSaved();
+        savedStatus.textContent=result?'Saved “'+name+'” to your account. Autosave continues in the background.':'Saved “'+name+'” in this browser. Sign in to sync across devices.';
+        ctx.toast(result?'Workspace saved to your account':'Workspace saved locally','success');
+      } catch(error) {
+        savedStatus.textContent='Cloud sync failed; your regular autosave and local fallback are still available.';
+        ctx.toast(error instanceof Error?error.message:'Workspace save failed','error');
+      } finally { saveCurrent.disabled=false;saveAsNew.disabled=false; }
+    };
+    const restoreNamed=async(entry:TcoSavedWorkspace)=>{
+      const api=liveWorkspaceApi();
+      if(!api?.applyState){savedStatus.textContent='The chart is still loading. Try again in a moment.';return;}
+      try {
+        const snapshot=entry.snapshot&&typeof entry.snapshot==='object'&&!Array.isArray(entry.snapshot)
+          ? entry.snapshot as Record<string,unknown> : {};
+        api.applyState(snapshot.workspace??snapshot.state??entry.snapshot);
+        if(snapshot.appearance&&typeof snapshot.appearance==='object'){
+          prefs=normalizeTcoFramePreferences(snapshot.appearance);
+          applyTcoFramePreferences(ctx.host,prefs,true);
+          sidebar.value=prefs.sidebar;density.value=prefs.density;
+          for(const [key,input] of toolInputs)input.checked=prefs.topbar[key]!==false;
+          setPresetSelection();syncColorControls();
+        }
+        setActive(entry.id);savedName.value=entry.name;
+        await Promise.resolve(api.saveNow?.());await flushTcoVelaAppearance();
+        savedStatus.textContent='Restored “'+entry.name+'”. Autosave is active.';
+        ctx.toast('Restored workspace: '+entry.name,'success');
+      } catch(error) {
+        savedStatus.textContent='Could not restore this snapshot. Your latest autosaved workspace was not deleted.';
+        ctx.toast(error instanceof Error?error.message:'Workspace restore failed','error');
+      }
+    };
+    const deleteNamed=async(entry:TcoSavedWorkspace)=>{
+      const cloud=await deleteTcoVelaSavedWorkspace(entry.id,brokerScope());
+      namedWorkspaces=namedWorkspaces.filter((candidate)=>candidate.id!==entry.id);
+      if(activeId===entry.id)setActive('');
+      refreshSavedRows();
+      savedStatus.textContent=cloud?'Saved workspace deleted from your account.':'Removed from this browser; account sync was unavailable.';
+    };
+    saveCurrent.addEventListener('click',()=>{void saveNamed(false);});
+    saveAsNew.addEventListener('click',()=>{void saveNamed(true);});
+    void refreshSaved();
+
     root.appendChild(reset);
     applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
-    return {onOpen:()=>{applyTcoFramePreferences(ctx.host,prefs,true);}};
+    return {onOpen:()=>{applyTcoFramePreferences(ctx.host,prefs,true);void refreshSaved();}};
   },
 };
 
