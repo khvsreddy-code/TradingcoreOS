@@ -292,7 +292,7 @@ function normalizeTcoFramePreferences(value: unknown): TcoFramePreferences {
     chartBackgroundMode: raw.chartBackgroundMode === 'gradient' ? 'gradient' : 'solid',
     chartBackgroundEnd: safeFrameColor(raw.chartBackgroundEnd, DEFAULT_FRAME_PREFERENCES.chartBackgroundEnd),
     chartGradientAngle: Math.max(0, Math.min(360, Math.round(Number.isFinite(Number(raw.chartGradientAngle)) ? Number(raw.chartGradientAngle) : 135))),
-    topbar: { ...DEFAULT_FRAME_PREFERENCES.topbar, ...topbarRaw },
+    topbar: Object.fromEntries(Object.keys(DEFAULT_FRAME_PREFERENCES.topbar).map((key) => [key, (topbarRaw as Record<string, unknown>)[key] !== false])) as Record<string, boolean>,
   };
 }
 
@@ -766,7 +766,11 @@ const workspaceFramePanel: SidePanelDescriptor = {
           setPresetSelection();syncColorControls();
         }
         setActive(entry.id);savedName.value=entry.name;
-        await Promise.resolve(api.saveNow?.());await flushTcoVelaAppearance();
+        // Restoring the chart is independent of account availability: state applies in memory,
+        // local storage is written before cloud sync, and an offline cloud save must not make
+        // a successful restore look like a failed one.
+        try { await Promise.resolve(api.saveNow?.()); } catch {}
+        await flushTcoVelaAppearance();
         savedStatus.textContent='Restored “'+entry.name+'”. Autosave is active.';
         ctx.toast('Restored workspace: '+entry.name,'success');
       } catch(error) {
