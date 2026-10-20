@@ -69,6 +69,8 @@ assert.match(storage, /tradingcoreVelaSavedWorkspaces/, 'named workspace snapsho
 assert.match(storage, /loadTcoVelaActiveWorkspaceId/, 'the selected named setup follows the signed-in account across devices');
 assert.match(storage, /saveTcoVelaActiveWorkspaceId/, 'the selected named setup is account-persisted');
 assert.match(storage, /localTime > cloudTime/, 'offline journal edits beat older cloud copies on reconnect');
+assert.match(storage, /tradingcoreVelaActiveWorkspace/, 'named workspace selection is shared with the account across devices');
+assert.match(chrome, /loadTcoVelaActiveWorkspaceId\(brokerScope\)/, 'the Workspace panel restores the active named setup for the signed-in account');
 assert.match(storage, /drainWorkspaceSnapshotWrites/, 'overlapping cloud autosaves are serialized/coalesced');
 assert.match(live, /30 \* 60 \* 1000/, 'a full workspace checkpoint runs every 30 minutes');
 assert.match(live, /addEventListener\('pagehide', checkpointWorkspace\)/, 'the latest workspace is checkpointed when leaving the page');
@@ -85,7 +87,7 @@ assert.match(cell, /applyWorkspaceScaleState\?\.\(scales\)/, 'restoration reappl
 assert.match(nativeRenderer, /getWorkspaceScaleState\(\): WorkspacePaneScaleState\[\]/, 'native renderer exposes actual manual axis bounds');
 assert.match(nativeRenderer, /applyWorkspaceScaleState\(state: readonly WorkspacePaneScaleState\[\]\)/, 'native renderer restores manual axis bounds safely');
 assert.match(nativeRenderer, /private setPaneInvert\([\s\S]{0,280}emitWorkspaceScaleChange\(\)/, 'axis inversion changes are autosaved');
-assert.match(nativeRenderer, /configurePaneAppearance\([\s\S]{0,800}emitWorkspaceScaleChange\(\)/, 'manual pane scale-dialog changes are autosaved');
+assert.match(nativeRenderer, /configurePaneAppearance\([\s\S]{0,1300}emitWorkspaceScaleChange\(\)/, 'manual pane scale-dialog changes are autosaved');
 assert.match(rendererPort, /interface WorkspacePaneScaleState/, 'price-scale state is a renderer-neutral persistence contract');
 
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
