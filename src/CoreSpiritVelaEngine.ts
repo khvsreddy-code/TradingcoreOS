@@ -789,10 +789,28 @@ export class CoreSpiritVelaEngine {
       },
       notifyBars(reason,dirtyRange) {
         if(stopped)return;
-        const currentBars=getCurrentBars(reason==='backfill',false);
-        if(reason==='backfill'||reason==='complete'){
+        const dirtyFromRaw=dirtyRange?Number(dirtyRange.from):Number.NaN;
+        const dirtyToRaw=dirtyRange?Number(dirtyRange.to):Number.NaN;
+        const hasValidDirtyRange=Number.isFinite(dirtyFromRaw)&&Number.isFinite(dirtyToRaw);
+        const dirtyFromMs=hasValidDirtyRange?Math.min(dirtyFromRaw,dirtyToRaw):Number.NaN;
+        const dirtyToMs=hasValidDirtyRange?Math.max(dirtyFromRaw,dirtyToRaw):Number.NaN;
+        // Explicit dirty ranges are a low-frequency correction signal, not the live-tick
+        // hot path. Normalize a full immutable bar snapshot so a same-length historical edit
+        // cannot be hidden by the stable-prefix cache.
+        const currentBars=getCurrentBars(reason==='backfill'||hasValidDirtyRange,false);
+        const firstBarTime=currentBars.length?barTimeMillis(currentBars[0]?.timestamp):Number.NaN;
+        const latestBarTime=currentBars.length?barTimeMillis(currentBars.at(-1)?.timestamp):Number.NaN;
+        const dirtyIntersectsLoadedHistory=hasValidDirtyRange&&currentBars.length>0&&
+          dirtyToMs>=firstBarTime&&dirtyFromMs<=latestBarTime;
+        // A range that reaches any earlier bar can change recursive EMA/RMA/RSI/VWAP
+        // state at every later bar. A tail-only update remains incremental; a historical
+        // correction gets a full canonical replay with external side effects suppressed.
+        const dirtyRangeTouchesHistoryBeforeTail=reason!=='complete'&&dirtyIntersectsLoadedHistory&&
+          dirtyFromMs<latestBarTime;
+        const historicalCorrection=reason==='backfill'||dirtyRangeTouchesHistoryBeforeTail;
+        if(historicalCorrection||reason==='complete'){
           const snapshotFingerprint=fullDatasetFingerprint(currentBars);
-          if(reason==='backfill'||snapshotFingerprint!==canonicalDatasetFingerprint)canonicalDatasetRevision+=1;
+          if(historicalCorrection||snapshotFingerprint!==canonicalDatasetFingerprint)canonicalDatasetRevision+=1;
           canonicalDatasetFingerprint=snapshotFingerprint;
           canonicalTailFingerprint=tailDatasetFingerprint(currentBars);
         }else{
@@ -802,12 +820,12 @@ export class CoreSpiritVelaEngine {
         }
         lastViewportComputationKey=undefined;
 
-        if(reason==='backfill'){
+        if(historicalCorrection){
           liveTailScheduler.clear();
           const wasHistoryInitialized=historyInitialized;
-          // A history prepend can change the recursive state of every later bar.
-          // Invalidate any in-flight main/viewport runs and rebuild from the canonical
-          // full history; maxLookback is not a safe bound for EMA/RMA/RSI/VWAP state.
+          // Prepend and explicit non-tail dirty ranges both invalidate recursive state.
+          // Reset the worker context and replay canonical columns from bar zero; maxLookback
+          // is not a safe bound for recursive EMA/RMA/RSI/VWAP state.
           if(wasHistoryInitialized){
             workerDatasetVersions.delete(mainContextKey);
             mainRunGeneration+=1;
@@ -817,9 +835,8 @@ export class CoreSpiritVelaEngine {
             liveStarted=false;
             initializationInFlight=false;
           }
-          // Before initial history completion, the normal "complete" event owns startup.
-          // Otherwise initializeLive warms all confirmed history and reapplies the forming
-          // candle in the same main context, then emits a full-range scene refresh.
+          // Rebuild semantics/visuals from canonical history, but never replay external
+          // orders, alerts or webhooks while correcting past bars.
           if(!wasHistoryInitialized||!currentBars.length)return;
           initializeFromBars(Object.freeze(currentBars.slice()) as CoreSpiritMarketBar[],true);
           return;
