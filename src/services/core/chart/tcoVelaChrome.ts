@@ -791,7 +791,16 @@ const workspaceFramePanel: SidePanelDescriptor = {
 
     root.appendChild(reset);
     applyTcoFramePreferences(ctx.host,prefs);setPresetSelection();syncColorControls();
-    return {onOpen:()=>{applyTcoFramePreferences(ctx.host,prefs,true);void refreshSaved();}};
+    return {onOpen:()=>{
+      // Reload the persisted palette on every open so a slow account-theme restore cannot
+      // leave the panel controls behind the palette already applied to the live chart.
+      prefs=readTcoFramePreferences();
+      sidebar.value=prefs.sidebar;density.value=prefs.density;
+      for(const [key,input] of toolInputs) input.checked=prefs.topbar[key]!==false;
+      setPresetSelection();syncColorControls();
+      applyTcoFramePreferences(ctx.host,prefs,true);
+      void refreshSaved();
+    }};
   },
 };
 
