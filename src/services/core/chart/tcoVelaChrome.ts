@@ -350,6 +350,11 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-frame-row { display:flex;align-items:center;justify-content:space-between;gap:12px; }
     .tco-frame-label { color:var(--vela-fg);font-size:12px;font-weight:600; }
     .tco-frame-help { color:var(--vela-fg-muted);font-size:10px;line-height:1.55; }
+    .tco-frame-save-status { display:block;padding:7px 9px;border:1px solid var(--vela-border);border-radius:7px;background:var(--vela-surface-sunken);font-variant-numeric:tabular-nums; }
+    .tco-frame-save-status[data-state="saving"] { color:#fbbf24; }
+    .tco-frame-save-status[data-state="saved"] { color:#34d399; }
+    .tco-frame-save-status[data-state="local"] { color:#fbbf24; }
+    .tco-frame-save-status[data-state="error"] { color:#fb7185; }
     .tco-frame-select { width:142px;max-width:48%;padding:7px 8px;border:1px solid var(--vela-border);border-radius:6px;background:var(--vela-surface-sunken);color:var(--vela-fg);font:11px Inter,ui-sans-serif,system-ui,sans-serif; }
     .tco-frame-toggle { display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--vela-border-soft);color:var(--vela-fg);font-size:11px; }
     .tco-frame-toggle:last-child { border-bottom:0; }
@@ -740,7 +745,14 @@ const workspaceFramePanel: SidePanelDescriptor = {
     const saveCurrent=document.createElement('button');saveCurrent.type='button';saveCurrent.className='tco-frame-button tco-frame-button-primary';saveCurrent.textContent='Save current';
     const saveAsNew=document.createElement('button');saveAsNew.type='button';saveAsNew.className='tco-frame-button';saveAsNew.textContent='Save as new';
     savedActions.append(saveCurrent,saveAsNew);
-    const savedStatus=document.createElement('div');savedStatus.className='tco-frame-help';savedStatus.setAttribute('role','status');savedStatus.setAttribute('aria-live','polite');savedStatus.textContent='Autosave is on · full checkpoint every 30 minutes.';
+    const savedStatus=document.createElement('div');savedStatus.className='tco-frame-help tco-frame-save-status';savedStatus.dataset.state='idle';savedStatus.setAttribute('role','status');savedStatus.setAttribute('aria-live','polite');savedStatus.textContent='Autosave is on · changes save as you edit; full checkpoint every 30 minutes.';
+    const onWorkspaceAutosaveStatus=(event:Event)=>{
+      const detail=(event as CustomEvent<{state?:string;message?:string}>).detail;
+      if(!detail?.message)return;
+      savedStatus.textContent=detail.message;
+      savedStatus.dataset.state=['saving','saved','local','error'].includes(String(detail.state))?String(detail.state):'idle';
+    };
+    window.addEventListener('tco:workspace-autosave-status',onWorkspaceAutosaveStatus);
     const savedList=document.createElement('div');savedList.style.cssText='display:flex;flex-direction:column;gap:6px;';
     savedCard.append(savedTitle,savedHelp,savedName,savedActions,savedStatus,savedList);
     root.appendChild(savedCard);
@@ -783,7 +795,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       }
     };
     const refreshSaved=async()=>{
-      savedStatus.textContent='Loading saved workspaces…';
+      savedStatus.textContent='Loading saved workspaces…';savedStatus.dataset.state='saving';
       try {
         namedWorkspaces=await loadTcoVelaSavedWorkspaces(brokerScope());
         const cloudActiveId=await loadTcoVelaActiveWorkspaceId(brokerScope());
@@ -794,9 +806,9 @@ const workspaceFramePanel: SidePanelDescriptor = {
           setActive('');
         }
         refreshSavedRows();
-        savedStatus.textContent='Autosave is on · full checkpoint every 30 minutes · '+namedWorkspaces.length+' saved setup'+(namedWorkspaces.length===1?'':'s')+'.';
+        savedStatus.textContent='Autosave is on · changes save as you edit; full checkpoint every 30 minutes · '+namedWorkspaces.length+' saved setup'+(namedWorkspaces.length===1?'':'s')+'.';savedStatus.dataset.state='idle';
       } catch {
-        refreshSavedRows();savedStatus.textContent='Named workspace sync is unavailable. Local autosave remains enabled.';
+        refreshSavedRows();savedStatus.textContent='Named workspace sync is unavailable. Local autosave remains enabled.';savedStatus.dataset.state='local';
       }
     };
     const saveNamed=async(asNew:boolean,overrideId?:string)=>{
@@ -805,7 +817,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       const previous=namedWorkspaces.find((entry)=>entry.id===(overrideId||activeId));
       const name=(savedName.value.trim()||(!asNew?previous?.name:'')||(String(ctx.symbol||'Chart')+' '+String(ctx.timeframe||'')+' workspace')).trim().slice(0,80);
       const id=asNew||!(overrideId||activeId)?newWorkspaceId():(overrideId||activeId);
-      saveCurrent.disabled=true;saveAsNew.disabled=true;savedStatus.textContent='Saving workspace snapshot…';
+      saveCurrent.disabled=true;saveAsNew.disabled=true;savedStatus.textContent='Saving workspace snapshot…';savedStatus.dataset.state='saving';
       try {
         const stateSnapshot=stateForNamedWorkspaceSnapshot(api.getState());
         // Local Vela persistence happens before the cloud request. A temporary failure
@@ -817,10 +829,10 @@ const workspaceFramePanel: SidePanelDescriptor = {
           schemaVersion:1,workspace:stateSnapshot,appearance:{...prefs,topbar:{...prefs.topbar}},
         }},brokerScope());
         setActive(id);savedName.value=name;await refreshSaved();
-        savedStatus.textContent=result?'Saved “'+name+'” to your account. Autosave continues in the background.':'Saved “'+name+'” in this browser. Sign in to sync across devices.';
+        savedStatus.textContent=result?'Saved “'+name+'” to your account. Autosave continues in the background.':'Saved “'+name+'” in this browser. Sign in to sync across devices.';savedStatus.dataset.state=result?'saved':'local';
         ctx.toast(result?'Workspace saved to your account':'Workspace saved locally','success');
       } catch(error) {
-        savedStatus.textContent='Cloud sync failed; your regular autosave and local fallback are still available.';
+        savedStatus.textContent='Cloud sync failed; your regular autosave and local fallback are still available.';savedStatus.dataset.state='error';
         ctx.toast(error instanceof Error?error.message:'Workspace save failed','error');
       } finally { saveCurrent.disabled=false;saveAsNew.disabled=false; }
     };
@@ -844,10 +856,10 @@ const workspaceFramePanel: SidePanelDescriptor = {
         // a successful restore look like a failed one.
         try { await Promise.resolve(api.saveNow?.()); } catch {}
         await flushTcoVelaAppearance();
-        savedStatus.textContent='Restored “'+entry.name+'”. Autosave is active.';
+        savedStatus.textContent='Restored “'+entry.name+'”. Autosave is active.';savedStatus.dataset.state='saved';
         ctx.toast('Restored workspace: '+entry.name,'success');
       } catch(error) {
-        savedStatus.textContent='Could not restore this snapshot. Your latest autosaved workspace was not deleted.';
+        savedStatus.textContent='Could not restore this snapshot. Your latest autosaved workspace was not deleted.';savedStatus.dataset.state='error';
         ctx.toast(error instanceof Error?error.message:'Workspace restore failed','error');
       }
     };
@@ -856,7 +868,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       namedWorkspaces=namedWorkspaces.filter((candidate)=>candidate.id!==entry.id);
       if(activeId===entry.id)setActive('');
       refreshSavedRows();
-      savedStatus.textContent=cloud?'Saved workspace deleted from your account.':'Removed from this browser; account sync was unavailable.';
+      savedStatus.textContent=cloud?'Saved workspace deleted from your account.':'Removed from this browser; account sync was unavailable.';savedStatus.dataset.state=cloud?'saved':'local';
     };
     saveCurrent.addEventListener('click',()=>{void saveNamed(false);});
     saveAsNew.addEventListener('click',()=>{void saveNamed(true);});
@@ -873,7 +885,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       setPresetSelection();syncColorControls();
       applyTcoFramePreferences(ctx.host,prefs,true);
       void refreshSaved();
-    }};
+    },destroy(){window.removeEventListener('tco:workspace-autosave-status',onWorkspaceAutosaveStatus);}};
   },
 };
 
