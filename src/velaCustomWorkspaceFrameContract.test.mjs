@@ -52,6 +52,8 @@ assert.match(chrome, /Save as new/, 'users can create named workspace snapshots'
 assert.match(chrome, /saveTcoVelaSavedWorkspace/, 'named workspace snapshots must be persisted');
 assert.match(chrome, /loadTcoVelaSavedWorkspaces/, 'saved workspaces must be listed and restored');
 assert.match(chrome, /deleteTcoVelaSavedWorkspace/, 'saved workspace management supports deletion');
+assert.match(chrome, /persistActiveTcoVelaSavedWorkspace/, 'manual save and periodic checkpoints update the selected named setup');
+assert.match(chrome, /stateForNamedWorkspaceSnapshot/, 'saving from the settings panel must not restore that manager as the active trading panel');
 assert.match(chrome, /api\.applyState\(snapshot\.workspace/, 'restore applies the saved Vela workspace document');
 assert.match(chrome, /appearance:\{\.\.\.prefs/, 'named workspaces include the full live UI/chart appearance');
 assert.match(storage, /tradingcoreVelaSavedWorkspaces/, 'named workspace snapshots are account-scoped');
@@ -62,5 +64,7 @@ assert.match(live, /visibilitychange/, 'backgrounding the tab triggers a workspa
 assert.match(stateDocument, /viewport\?: \{ from: number; to: number \}/, 'per-cell pan/zoom is part of the persisted state document');
 assert.match(cell, /viewport: this\.inner\?\.getVisibleRange\(\)/, 'the latest viewport is snapshotted with drawings and chart cosmetics');
 assert.match(workspace, /chart\.on\('viewport:changed',[\s\S]{0,150}markStateDirty/, 'pan/zoom changes trigger debounced persistence');
+assert.match(workspace, /saveNow\(\): Promise<void>/, 'manual Save waits for the storage adapter');
+assert.match(workspace, /async persistNow\(\): Promise<void>/, 'cloud storage errors are observable by explicit saves');
 
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
