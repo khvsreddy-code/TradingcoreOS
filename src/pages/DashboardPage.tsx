@@ -132,7 +132,7 @@ export function DashboardPage({ onNavigate, onBroker }: { onNavigate: (p: Worksp
     const unsubscribe = tradingCoreRuntime.on('TICK_UPDATE', refreshMarket);
     const timer = window.setInterval(refreshMarket, MARKET_REFRESH_MS);
     // A dashboard visit should receive fresh quotes even when the live chart hasn't
-    // been mounted in this tab yet. This is a small lite-quote set, not full chart streams.
+    // been mounted in this tab yet. Keep this to the five index instruments instead of opening history streams.
     void (async () => {
       if (!tradingCoreRuntime.hasConnectedBroker()) {
         try { await tradingCoreRuntime.restoreBrokerConnections(); } catch {}
