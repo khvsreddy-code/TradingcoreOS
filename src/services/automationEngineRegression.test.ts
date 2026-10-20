@@ -97,7 +97,7 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
 }
 
 {
-  const stable = rule({ lastRunBarKey: 'NSE:NIFTY50-INDEX|5m|1|1792468200000' });
+  const stable = rule({ lastRunBarKey: ['NSE:NIFTY50-INDEX', '5m', 1, Date.parse(candles[1]!.timestamp)].join('|') });
   const evaluation = evaluateAutomation(stable, context(), Date.parse('2026-10-20T05:00:00.000Z'));
   assert.equal(evaluation.triggered, false, 'same-bar packet/revision changes cannot re-run the rule');
 }
