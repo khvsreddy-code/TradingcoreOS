@@ -75,8 +75,7 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
             'schema_hash': hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest(),
             'release_status': str(meta.get('release_status', meta.get('status', 'candidate'))),
             'calibration_status': str(meta.get('calibration_status', 'not_calibrated')),
-            'validation_metrics': contract_validation['validation_metrics'],
-        'model_contract': model_contract,
+            'validation_metrics': meta.get('metrics', {}),
         }
 
     if int(_contract_field(contract, 'contract_version', 'contractVersion', 0)) != 1:
