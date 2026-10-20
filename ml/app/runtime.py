@@ -281,7 +281,8 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
                 or snapshot_payload.get('session_close') != expected_session_close
                 or snapshot_payload.get('session_calendar_policy') != expected_calendar_policy
                 or snapshot_payload.get('session_calendar_hash') != expected_calendar_hash):
-            raise ValueError('Immutable dataset snapshot contents do not match the sealed model contract.')        dataset_snapshot_verified = True
+            raise ValueError('Immutable dataset snapshot contents do not match the sealed model contract.')
+        dataset_snapshot_verified = True
 
     return {
         'schema_hash': actual_hash,
