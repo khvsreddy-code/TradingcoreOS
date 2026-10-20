@@ -26,6 +26,7 @@ type ChartStatusView = Readonly<{
 const CHART_QUOTE_STALE_MS = 15_000;
 
 const WORKSPACE_AUTOSAVE_STATUS_EVENT = 'tco:workspace-autosave-status';
+const WORKSPACE_FULL_CHECKPOINT_MS = 30 * 60 * 1000;
 type WorkspaceAutosaveStatusState = 'saving' | 'saved' | 'local' | 'error';
 function publishWorkspaceAutosaveStatus(state: WorkspaceAutosaveStatusState, message: string): void {
   if (typeof window === 'undefined') return;
@@ -144,6 +145,7 @@ export function LiveTradingWorkspace() {
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
     let namedWorkspaceAutosaveTimer: number | null = null;
+    let fullWorkspaceCheckpointTimer: number | null = null;
     let namedWorkspaceSelectionHydrated = false;
     let namedWorkspaceAutosavePending = false;
     let scheduleNamedWorkspaceAutosave: (() => void) | null = null;
@@ -232,6 +234,40 @@ export function LiveTradingWorkspace() {
         resolveIndicatorManifest: readCoreSpiritManifest,
       }));
       workspaceRef.current = workspace;
+
+      // Vela already persists dirty state continuously. This periodic checkpoint is an
+      // additional safety net for long sessions and the selected named setup, not a
+      // replacement for change-driven autosave.
+      const runFullWorkspaceCheckpoint = async () => {
+        if (cancelled || !workspace) return;
+        try {
+          await workspace.saveNow();
+          const named = await persistActiveTcoVelaSavedWorkspace();
+          if (cancelled) return;
+          if (named) {
+            const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            publishWorkspaceAutosaveStatus(
+              named.synced ? 'saved' : 'local',
+              named.synced
+                ? `30-minute checkpoint saved “${named.name}” at ${time}.`
+                : `30-minute checkpoint saved locally; cloud sync for “${named.name}” will retry when available.`,
+            );
+          } else {
+            publishWorkspaceAutosaveStatus('saved', '30-minute live-workspace checkpoint completed.');
+          }
+        } catch {
+          if (!cancelled) publishWorkspaceAutosaveStatus('error', 'Checkpoint failed; recent changes remain queued for the next autosave attempt.');
+        }
+      };
+      fullWorkspaceCheckpointTimer = window.setInterval(() => { void runFullWorkspaceCheckpoint(); }, WORKSPACE_FULL_CHECKPOINT_MS);
+      const checkpointOnPageHide = () => {
+        // Start the persistence work before the page is suspended. Browser shutdown cannot
+        // guarantee completion of a network write, so the local Vela adapter remains primary.
+        void workspace?.saveNow().catch(() => undefined);
+        void persistActiveTcoVelaSavedWorkspace().catch(() => undefined);
+      };
+      window.addEventListener('pagehide', checkpointOnPageHide);
+      workspaceListenerDisposers.push(() => window.removeEventListener('pagehide', checkpointOnPageHide));
 
       // Hydrate the account's selected named setup once at mount. Capture the local value
       // first so an intentional local selection made while the request is in flight wins.
@@ -413,6 +449,10 @@ export function LiveTradingWorkspace() {
       if (namedWorkspaceAutosaveTimer !== null) {
         window.clearTimeout(namedWorkspaceAutosaveTimer);
         namedWorkspaceAutosaveTimer = null;
+      }
+      if (fullWorkspaceCheckpointTimer !== null) {
+        window.clearInterval(fullWorkspaceCheckpointTimer);
+        fullWorkspaceCheckpointTimer = null;
       }
       workspaceRef.current = null;
       for (const dispose of workspaceListenerDisposers) dispose();
