@@ -32,11 +32,11 @@ assert.match(live, /workspace\.on\('state:changed', \(\) => scheduleNamedWorkspa
 assert.match(live, /namedWorkspaceAutosaveTimer = window\.setTimeout/, 'named workspace updates are coalesced rather than sent on every input event');
 assert.match(live, /}, 1_800\)/, 'named snapshots update shortly after editing pauses');
 assert.match(live, /30 \* 60 \* 1000/, 'a full checkpoint runs every 30 minutes');
-assert.match(live, /window\.addEventListener\('pagehide', checkpointOnPageHide\)/, 'a final checkpoint is attempted on page hide');
+assert.match(live, /window\.addEventListener\('pagehide', checkpointWorkspace\)/, 'a final checkpoint is attempted on page hide');
 assert.match(live, /document\.addEventListener\('visibilitychange', onVisibilityChange\)/, 'backgrounding the tab triggers an early checkpoint');
-assert.match(live, /window\.setInterval\(\(\) => \{ void runFullWorkspaceCheckpoint\(\); \}, WORKSPACE_FULL_CHECKPOINT_MS\)/, 'full workspace and named snapshot checkpoints run on a 30-minute cadence');
-assert.match(live, /window\.clearInterval\(fullWorkspaceCheckpointTimer\)/, 'the periodic checkpoint timer is cleaned up when the workspace unmounts');
-assert.match(live, /await workspace\.saveNow\(\)/, 'periodic checkpoints flush Vela state before saving the named setup');
+assert.match(live, /window\.setInterval\(checkpointWorkspace, 30 \* 60 \* 1000\)/, 'full workspace and named snapshot checkpoints run on a 30-minute cadence');
+assert.match(live, /window\.clearInterval\(checkpointTimer\)/, 'the periodic checkpoint timer is cleaned up when the workspace unmounts');
+assert.match(live, /await current\.saveNow\(\)/, 'periodic checkpoints flush Vela state before saving the named setup');
 assert.match(live, /WORKSPACE_AUTOSAVE_STATUS_EVENT/, 'save progress and outcomes are surfaced to the workspace UI');
 assert.match(live, /loadTcoVelaActiveWorkspaceId\(selectionBrokerKey\)/, 'the signed-in active named setup hydrates before named autosave is armed');
 assert.match(live, /currentLocalId === activeWorkspaceIdAtStart/, 'a newer local workspace selection wins a racing cloud hydration');
