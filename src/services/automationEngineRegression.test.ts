@@ -76,19 +76,14 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
   // We test the reference-field resolver with known feature keys rather than custom candles.
   const dynamicCrossover = evaluateAutomation(
     crossover,
-    context({
-      candles: [...candles, { timestamp: '2026-10-20T03:55:00.000Z', open: 101, high: 104, low: 100, close: 103, volume: 130 }],
-      price: 103,
-      barConfirmed: true,
-      timestamp: Date.parse('2026-10-20T03:55:00.000Z'),
-      barIndex: 2,
-    }),
+    context(),
     Date.parse('2026-10-20T05:00:00.000Z'),
   );
-  // ema9/ema21 are both available in the same precomputed frame; equality of the
-  // reference names is resolved without remapping candles inside the condition loop.
+  // The first two bars make EMA 9 move above EMA 21 after both shared series begin
+  // equal on the previous bar. The reference is calculated once in the shared frame.
+  assert.equal(dynamicCrossover.triggered, true, 'feature-to-feature crossover must use previous and current values');
+  assert.equal(dynamicCrossover.results[0]?.previousActual, dynamicCrossover.featureValues.ema21);
   assert.equal(dynamicCrossover.results[0]?.error, undefined);
-  assert.equal(typeof dynamicCrossover.results[0]?.passed, 'boolean');
   assert.equal(emaContext.candles.length, 2);
 
   const missingReference = evaluateAutomation(
