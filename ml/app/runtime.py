@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 import json, math, hashlib, re
+from collections import OrderedDict
 from pathlib import Path
 import joblib, numpy as np, pandas as pd, torch
 from .features import build_features, FEATURE_COLUMNS, FEATURE_SCHEMA_VERSION, TIMEZONE_FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION
@@ -61,6 +62,62 @@ def _apply_meta_gate(root, symbol, timeframe, frame, prob, direction):
             "direction": direction,
             "error": str(e),
         }
+
+_VERIFIED_DATASET_SNAPSHOT_CACHE = OrderedDict()
+_MAX_VERIFIED_DATASET_SNAPSHOTS = 128
+
+
+def _read_verified_dataset_snapshot(dataset_root, snapshot_hash):
+    """Verify once per immutable content-addressed file; reverify if file metadata changes."""
+    path = Path(dataset_root) / 'dataset-snapshots' / (snapshot_hash + '.json')
+    try:
+        stat = path.stat()
+    except OSError as error:
+        raise ValueError('Immutable training dataset snapshot is not available at the model artifact root.') from error
+    key = str(path.resolve())
+    cached = _VERIFIED_DATASET_SNAPSHOT_CACHE.get(key)
+    if cached and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
+        _VERIFIED_DATASET_SNAPSHOT_CACHE.move_to_end(key)
+        return cached[2]
+
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise ValueError('Immutable training dataset snapshot could not be read.') from error
+    if hashlib.sha256(raw).hexdigest() != snapshot_hash:
+        _VERIFIED_DATASET_SNAPSHOT_CACHE.pop(key, None)
+        raise ValueError('Immutable training dataset snapshot hash verification failed.')
+    try:
+        payload = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as error:
+        raise ValueError('Immutable training dataset snapshot is not valid JSON.') from error
+    try:
+        stat_after = path.stat()
+    except OSError as error:
+        raise ValueError('Immutable training dataset snapshot disappeared during verification.') from error
+    if stat_after.st_mtime_ns != stat.st_mtime_ns or stat_after.st_size != stat.st_size:
+        _VERIFIED_DATASET_SNAPSHOT_CACHE.pop(key, None)
+        raise ValueError('Immutable training dataset snapshot changed during verification.')
+    if (not isinstance(payload, dict)
+            or payload.get('schema') != 'tradingcore-ml-dataset-snapshot/1'
+            or not isinstance(payload.get('rows'), list)
+            or payload.get('row_count') != len(payload['rows'])):
+        raise ValueError('Immutable training dataset snapshot envelope is invalid.')
+
+    # Avoid retaining the complete dataset in memory for every model. The validated
+    # content hash seals all rows; inference only needs this small provenance summary.
+    summary = {name: payload.get(name) for name in (
+        'schema', 'symbol', 'timeframe', 'forecast_horizon_bars',
+        'feature_schema_version', 'source', 'exchange_timezone',
+        'session_open', 'session_close', 'session_calendar_policy',
+        'session_calendar_hash', 'session_holidays', 'from', 'to', 'row_count',
+    )}
+    _VERIFIED_DATASET_SNAPSHOT_CACHE[key] = (stat_after.st_mtime_ns, stat_after.st_size, summary)
+    _VERIFIED_DATASET_SNAPSHOT_CACHE.move_to_end(key)
+    while len(_VERIFIED_DATASET_SNAPSHOT_CACHE) > _MAX_VERIFIED_DATASET_SNAPSHOTS:
+        _VERIFIED_DATASET_SNAPSHOT_CACHE.popitem(last=False)
+    return summary
+
 
 def _contract_field(contract, snake_name, camel_name, default=None):
     value = contract.get(camel_name, contract.get(snake_name, default))
@@ -205,29 +262,26 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
                 or metadata_snapshot.get('to') != snapshot_to
                 or metadata_snapshot.get('immutable') is not True):
             raise ValueError('Model metadata and contract dataset snapshot references do not match.')
-        snapshot_path = Path(dataset_root) / 'dataset-snapshots' / (snapshot_hash + '.json')
-        try:
-            snapshot_bytes = snapshot_path.read_bytes()
-        except OSError as error:
-            raise ValueError('Immutable training dataset snapshot is not available at the model artifact root.') from error
-        if hashlib.sha256(snapshot_bytes).hexdigest() != snapshot_hash:
-            raise ValueError('Immutable training dataset snapshot hash verification failed.')
-        try:
-            snapshot_payload = json.loads(snapshot_bytes)
-        except (ValueError, UnicodeDecodeError) as error:
-            raise ValueError('Immutable training dataset snapshot is not valid JSON.') from error
-        if (not isinstance(snapshot_payload, dict)
-                or snapshot_payload.get('schema') != 'tradingcore-ml-dataset-snapshot/1'
-                or snapshot_payload.get('row_count') != snapshot_rows
-                or not isinstance(snapshot_payload.get('rows'), list)
-                or len(snapshot_payload['rows']) != snapshot_rows
-                or snapshot_payload.get('symbol') != symbol
+        snapshot_payload = _read_verified_dataset_snapshot(dataset_root, snapshot_hash)
+        expected_timezone = str(temporal.get('exchangeTimezone', temporal.get('exchange_timezone', meta.get('exchange_timezone', 'Asia/Kolkata'))))
+        expected_session_open = str(temporal.get('sessionOpen', temporal.get('session_open', meta.get('session_open', '09:15'))))
+        expected_session_close = str(temporal.get('sessionClose', temporal.get('session_close', meta.get('session_close', '15:30'))))
+        expected_calendar_policy = str(temporal.get('sessionCalendarPolicy', temporal.get('session_calendar_policy', meta.get('session_calendar_policy', 'weekday-session+explicit-holidays/v1'))))
+        expected_calendar_hash = str(temporal.get('sessionCalendarHash', temporal.get('session_calendar_hash', meta.get('session_calendar_hash', ''))))
+        if (snapshot_payload.get('symbol') != symbol
                 or snapshot_payload.get('timeframe') != timeframe
-                or str(snapshot_payload.get('source')) != snapshot_source
-                or str(snapshot_payload.get('from')) != snapshot_from
-                or str(snapshot_payload.get('to')) != snapshot_to):
-            raise ValueError('Immutable dataset snapshot contents do not match the sealed model contract.')
-        dataset_snapshot_verified = True
+                or snapshot_payload.get('forecast_horizon_bars') != horizon
+                or snapshot_payload.get('feature_schema_version') != feature_version
+                or snapshot_payload.get('source') != snapshot_source
+                or snapshot_payload.get('from') != snapshot_from
+                or snapshot_payload.get('to') != snapshot_to
+                or snapshot_payload.get('row_count') != snapshot_rows
+                or snapshot_payload.get('exchange_timezone') != expected_timezone
+                or snapshot_payload.get('session_open') != expected_session_open
+                or snapshot_payload.get('session_close') != expected_session_close
+                or snapshot_payload.get('session_calendar_policy') != expected_calendar_policy
+                or snapshot_payload.get('session_calendar_hash') != expected_calendar_hash):
+            raise ValueError('Immutable dataset snapshot contents do not match the sealed model contract.')        dataset_snapshot_verified = True
 
     return {
         'schema_hash': actual_hash,
