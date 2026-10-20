@@ -2438,6 +2438,7 @@ export class NativeRenderer implements IChartRenderer {
                 invert: opts.inverted ?? current.invert,
             };
         }
+        this.emitWorkspaceScaleChange();
         this.scheduler?.invalidate(InvalidateLevel.Full);
     }
 
@@ -4593,6 +4594,7 @@ export class NativeRenderer implements IChartRenderer {
             if (!p) return;
             p.invert = invert;
         }
+        this.emitWorkspaceScaleChange();
         this.scheduler?.invalidate(InvalidateLevel.Full);
     }
 
