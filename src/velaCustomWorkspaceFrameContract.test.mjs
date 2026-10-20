@@ -66,6 +66,9 @@ assert.match(storage, /saveTcoVelaJournal\(note: string\): Promise<boolean>/, 'j
 assert.match(chrome, /api\.applyState\(snapshot\.workspace/, 'restore applies the saved Vela workspace document');
 assert.match(chrome, /appearance:\{\.\.\.prefs/, 'named workspaces include the full live UI/chart appearance');
 assert.match(storage, /tradingcoreVelaSavedWorkspaces/, 'named workspace snapshots are account-scoped');
+assert.match(storage, /loadTcoVelaActiveWorkspaceId/, 'the selected named setup follows the signed-in account across devices');
+assert.match(storage, /saveTcoVelaActiveWorkspaceId/, 'the selected named setup is account-persisted');
+assert.match(storage, /localTime > cloudTime/, 'offline journal edits beat older cloud copies on reconnect');
 assert.match(storage, /drainWorkspaceSnapshotWrites/, 'overlapping cloud autosaves are serialized/coalesced');
 assert.match(live, /30 \* 60 \* 1000/, 'a full workspace checkpoint runs every 30 minutes');
 assert.match(live, /addEventListener\('pagehide', checkpointWorkspace\)/, 'the latest workspace is checkpointed when leaving the page');
