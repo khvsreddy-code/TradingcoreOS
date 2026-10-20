@@ -188,6 +188,7 @@ type TcoFrameThemePreset = { id: string; label: string; colors: TcoFrameColors }
 const TCO_FRAME_STORAGE_KEY = 'tradingcore:vela:frame-preferences:v1';
 // A WeakMap avoids retaining a destroyed chart workspace after the live route unmounts.
 const appliedTcoVelaThemeSignatures = new WeakMap<object, string>();
+let pendingTcoChartThemeTimer: number | null = null;
 const TCO_FRAME_THEME_PRESETS: readonly TcoFrameThemePreset[] = [
   { id: 'graphite', label: 'Graphite', colors: {
     uiBackground: '#0d0f13', topbarBackground: '#141518', panelBackground: '#111317', chartBackground: '#141518',
@@ -382,16 +383,31 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     downColor: preferences.downColor,
     fontFamily: 'Inter, system-ui, sans-serif',
   };
-  try {
-    const liveWorkspace=(window as Window & { __TCO_VELA__?: { workspace?: { setTheme?: (theme: VelaTheme) => void } } }).__TCO_VELA__?.workspace;
-    const signature=JSON.stringify(chartTheme);
-    const previousSignature=liveWorkspace ? appliedTcoVelaThemeSignatures.get(liveWorkspace) : undefined;
-    if(liveWorkspace && typeof liveWorkspace.setTheme==='function'
-      && (forceChartTheme || signature!==previousSignature)) {
-      liveWorkspace.setTheme(chartTheme);
-      appliedTcoVelaThemeSignatures.set(liveWorkspace,signature);
-    }
-  } catch {}
+  const applyChartTheme = () => {
+    try {
+      const liveWorkspace=(window as Window & { __TCO_VELA__?: { workspace?: { setTheme?: (theme: VelaTheme) => void } } }).__TCO_VELA__?.workspace;
+      const signature=JSON.stringify(chartTheme);
+      const previousSignature=liveWorkspace ? appliedTcoVelaThemeSignatures.get(liveWorkspace) : undefined;
+      if(liveWorkspace && typeof liveWorkspace.setTheme==='function'
+        && (forceChartTheme || signature!==previousSignature)) {
+        liveWorkspace.setTheme(chartTheme);
+        appliedTcoVelaThemeSignatures.set(liveWorkspace,signature);
+      }
+    } catch {}
+  };
+  if(forceChartTheme) {
+    if(pendingTcoChartThemeTimer!==null) window.clearTimeout(pendingTcoChartThemeTimer);
+    pendingTcoChartThemeTimer=null;
+    applyChartTheme();
+  } else {
+    // Native color inputs can emit dozens of input events while a user drags a picker.
+    // Debounce chart-wide redraws while DOM preview and preference save stay immediate.
+    if(pendingTcoChartThemeTimer!==null) window.clearTimeout(pendingTcoChartThemeTimer);
+    pendingTcoChartThemeTimer=window.setTimeout(()=>{
+      pendingTcoChartThemeTimer=null;
+      applyChartTheme();
+    },80);
+  }
 
   // The UI palette is intentionally distinct from the plot palette, just like a trading
   // terminal: chart candles/canvas can change without forcing the surrounding workspace.
