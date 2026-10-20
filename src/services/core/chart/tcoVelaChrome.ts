@@ -252,7 +252,7 @@ function frameContrastColor(hex: string): string {
 }
 function frameRgba(hex: string, alpha: number): string {
   const rgb = hex.replace('#', '').match(/.{2}/g)?.map((part) => parseInt(part, 16)) ?? [139, 124, 255];
-  return \`rgba(\${rgb[0] ?? 139}, \${rgb[1] ?? 124}, \${rgb[2] ?? 255}, \${alpha})\`;
+  return `rgba(${rgb[0] ?? 139}, ${rgb[1] ?? 124}, ${rgb[2] ?? 255}, ${alpha})`;
 }
 function readTcoFramePreferences(): TcoFramePreferences {
   try {
@@ -288,7 +288,7 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
   const workspace=(host.closest('.vela-workspace') as HTMLElement|null)??(doc.querySelector('.vela-workspace') as HTMLElement|null)??host;
   let style=doc.getElementById('tco-workspace-frame-style') as HTMLStyleElement|null;
   if(!style){style=doc.createElement('style');style.id='tco-workspace-frame-style';doc.head.appendChild(style);}
-  style.textContent=\`
+  style.textContent=`
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-toolbar { order:0; }
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-panel:not([hidden]):not([data-overlay="1"]) { order:1;border-left:0;border-right:1px solid var(--vela-border); }
     .vela-workspace[data-tco-sidebar="left"] .vela-ws-main > .vela-ws-grid { order:2; }
@@ -357,12 +357,12 @@ function applyTcoFramePreferences(host: HTMLElement, preferences: TcoFramePrefer
     .tco-core-editor-frame { min-height:280px!important;flex:1 1 auto;border-color:var(--vela-border)!important;border-radius:9px!important;background:var(--vela-surface-sunken)!important; }
     .tco-core-editor-frame textarea { background:var(--vela-surface-sunken)!important; }
     .tco-core-status { border-radius:7px!important;border-color:var(--vela-border)!important;background:var(--vela-surface)!important; }
-  \`;
+  `;
   workspace.dataset.tcoSidebar=preferences.sidebar;
   workspace.dataset.tcoDensity=preferences.density;
   workspace.dataset.tcoColorPreset=preferences.themePreset;
   for(const key of Object.keys(DEFAULT_FRAME_PREFERENCES.topbar))
-    workspace.dataset[\`tcoHide\${key[0]!.toUpperCase()}\${key.slice(1)}\`]=preferences.topbar[key]?'0':'1';
+    workspace.dataset[`tcoHide${key[0]!.toUpperCase()}${key.slice(1)}`]=preferences.topbar[key]?'0':'1';
 
   const chartTheme: VelaTheme = {
     background: preferences.chartBackground,
@@ -495,7 +495,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
       for(const button of modeButtons) button.setAttribute('aria-pressed',String(button.dataset.mode===prefs.chartBackgroundMode));
       if(gradientPreview){
         gradientPreview.style.background=prefs.chartBackgroundMode==='gradient'
-          ? \`linear-gradient(\${prefs.chartGradientAngle}deg, \${prefs.chartBackground}, \${prefs.chartBackgroundEnd})\`
+          ? `linear-gradient(${prefs.chartGradientAngle}deg, ${prefs.chartBackground}, ${prefs.chartBackgroundEnd})`
           : prefs.chartBackground;
         gradientPreview.setAttribute('aria-label',prefs.chartBackgroundMode==='gradient'?'Chart background gradient preview':'Chart background preview');
       }
@@ -514,7 +514,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
 
     for(const preset of TCO_FRAME_THEME_PRESETS){
       const button=document.createElement('button');button.type='button';button.className='tco-frame-theme-choice';
-      button.setAttribute('aria-label',\`Use \${preset.label} color scheme\`);button.setAttribute('aria-pressed','false');
+      button.setAttribute('aria-label',`Use ${preset.label} color scheme`);button.setAttribute('aria-pressed','false');
       const swatches=document.createElement('span');swatches.className='tco-frame-theme-swatches';
       for(const color of [preset.colors.uiBackground,preset.colors.topbarBackground,preset.colors.chartBackground,preset.colors.accent,preset.colors.upColor,preset.colors.downColor]){
         const swatch=document.createElement('span');swatch.style.background=color;swatches.appendChild(swatch);
