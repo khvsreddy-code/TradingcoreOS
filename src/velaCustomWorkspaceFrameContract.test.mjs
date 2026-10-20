@@ -5,6 +5,10 @@ const read = (path) => fs.readFileSync(path, 'utf8');
 const terminal = read('src/services/core/chart/tcoVelaTerminal.ts');
 const chrome = read('src/services/core/chart/tcoVelaChrome.ts');
 const workspace = read('vendor/vela/src/workspace/VelaWorkspace.ts');
+const live = read('src/LiveTradingWorkspace.tsx');
+const storage = read('src/services/core/chart/tcoVelaSupabaseStorage.ts');
+const cell = read('vendor/vela/src/workspace/ChartCell.ts');
+const stateDocument = read('vendor/vela/src/state/document.ts');
 const upstream = read('vendor/vela/UPSTREAM.md');
 
 assert.match(upstream, /upstream source version:\s*\*\*0\.8\.4\*\*/i, 'TCO must continue to use the official Vela 0.8.4 foundation');
@@ -35,5 +39,23 @@ assert.match(chrome, /ctx\.symbol.*ctx\.timeframe/, 'CoreSpirit Studio identifie
 assert.match(chrome, /tco-core-editor-frame/, 'CoreSpirit Studio uses the refreshed terminal-panel styling');
 assert.match(workspace, /this\.topbar = new Topbar/, 'Vela workspace remains the sole owner of the command bar');
 assert.doesNotMatch(workspace, /Quant toolbar|Quant topbar/i, 'do not add a second Quant-style header');
+
+// TradingView-style workspace save, restore and checkpoint coverage.
+assert.match(terminal, /'tco\.save-workspace'/, 'a manual Save control must remain on the existing Vela top bar');
+assert.match(chrome, /id:'tco\.save-workspace'/, 'Save action must be registered with the Vela action system');
+assert.match(chrome, /Save as new/, 'users can create named workspace snapshots');
+assert.match(chrome, /saveTcoVelaSavedWorkspace/, 'named workspace snapshots must be persisted');
+assert.match(chrome, /loadTcoVelaSavedWorkspaces/, 'saved workspaces must be listed and restored');
+assert.match(chrome, /deleteTcoVelaSavedWorkspace/, 'saved workspace management supports deletion');
+assert.match(chrome, /api\.applyState\(snapshot\.workspace/, 'restore applies the saved Vela workspace document');
+assert.match(chrome, /appearance:\{\.\.\.prefs/, 'named workspaces include the full live UI/chart appearance');
+assert.match(storage, /tradingcoreVelaSavedWorkspaces/, 'named workspace snapshots are account-scoped');
+assert.match(storage, /drainWorkspaceSnapshotWrites/, 'overlapping cloud autosaves are serialized/coalesced');
+assert.match(live, /30 \* 60 \* 1000/, 'a full workspace checkpoint runs every 30 minutes');
+assert.match(live, /addEventListener\('pagehide', checkpointWorkspace\)/, 'the latest workspace is checkpointed when leaving the page');
+assert.match(live, /visibilitychange/, 'backgrounding the tab triggers a workspace checkpoint');
+assert.match(stateDocument, /viewport\?: \{ from: number; to: number \}/, 'per-cell pan/zoom is part of the persisted state document');
+assert.match(cell, /viewport: this\.inner\?\.getVisibleRange\(\)/, 'the latest viewport is snapshotted with drawings and chart cosmetics');
+assert.match(workspace, /chart\.on\('viewport:changed',[\s\S]{0,150}markStateDirty/, 'pan/zoom changes trigger debounced persistence');
 
 console.log('TCO_CUSTOM_WORKSPACE_FRAME_CONTRACT_OK');
