@@ -453,7 +453,8 @@ async function defaultModelContract<TWeights>(input: TrainModelInput<TWeights>, 
   const featureSchema = {
     version: schemaVersion,
     orderedNames: names,
-    types: names.map(() => 'number'),
+    // Logical numeric ABI matches Python's float64 inference column contract.
+    types: names.map(() => 'float64'),
   };
   const featureSchemaHash = await coreSpiritSha256({
     version: featureSchema.version,
