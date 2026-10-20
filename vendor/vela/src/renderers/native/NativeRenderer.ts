@@ -8,6 +8,7 @@ import type {
     AxisLongPressEvent,
     InputChangeEvent,
     VisibleRange,
+    WorkspacePaneScaleState,
     IndicatorStatus,
     LegendActionView,
     LegendCalloutView,
@@ -393,6 +394,7 @@ export class NativeRenderer implements IChartRenderer {
     private layoutMode: 'mobile' | 'desktop' = 'desktop';
 
     private readonly viewportCbs = new Set<(r: VisibleRange) => void>();
+    private readonly workspaceScaleCbs = new Set<() => void>();
     private readonly crosshairCbs = new Set<(e: CrosshairEvent) => void>();
     private readonly chartTypeSettingsCbs = new Set<(typeId: string, values: Record<string, unknown>) => void>();
     private readonly configChangedCbs = new Set<() => void>();
@@ -448,6 +450,7 @@ export class NativeRenderer implements IChartRenderer {
                     return; // setPaneLog invalidates
                 }
                 this.scene.logScale = Boolean(value);
+                this.emitWorkspaceScaleChange();
                 break;
             case 'currentPriceLine':
                 this.scene.showPriceLine = Boolean(value);
@@ -540,6 +543,7 @@ export class NativeRenderer implements IChartRenderer {
                     return; // setPaneScaleMode invalidates
                 }
                 this.scene.scaleMode = asScaleMode(value);
+                this.emitWorkspaceScaleChange();
                 break;
             case 'invertScale':
                 // `{ pane, value }` targets one pane; a bare boolean is the price pane.
@@ -549,6 +553,7 @@ export class NativeRenderer implements IChartRenderer {
                     return; // setPaneInvert invalidates
                 }
                 this.scene.invertScale = Boolean(value);
+                this.emitWorkspaceScaleChange();
                 break;
             case 'autoScale':
                 // Auto on ⇒ drop every pane's frozen window so autoscale resumes (same as
@@ -557,6 +562,7 @@ export class NativeRenderer implements IChartRenderer {
                 for (const pane of this.scene.panes.values()) {
                     pane.manualScale = value ? null : { ...pane.scale };
                 }
+                this.emitWorkspaceScaleChange();
                 break;
             case 'timezone':
                 this.scene.timezone = 'Asia/Kolkata';
@@ -2708,6 +2714,68 @@ export class NativeRenderer implements IChartRenderer {
         return () => this.viewportCbs.delete(cb);
     }
 
+    getWorkspaceScaleState(): WorkspacePaneScaleState[] {
+        return this.scene.orderedPanes().flatMap((pane) => {
+            const scale = pane.manualScale ?? pane.scale;
+            if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max) || scale.max <= scale.min) return [];
+            return [{
+                id: pane.id,
+                auto: pane.manualScale == null,
+                min: scale.min,
+                max: scale.max,
+                mode: paneScaleMode(this.scene, pane),
+                log: paneLogScale(this.scene, pane),
+                invert: paneInvert(this.scene, pane),
+            }];
+        });
+    }
+
+    applyWorkspaceScaleState(state: readonly WorkspacePaneScaleState[]): void {
+        if (!Array.isArray(state) || state.length === 0) return;
+        let changed = false;
+        for (const saved of state) {
+            if (!saved || typeof saved.id !== 'string') continue;
+            const pane = this.scene.panes.get(saved.id);
+            if (!pane) continue;
+            const min = Number(saved.min);
+            const max = Number(saved.max);
+            if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) continue;
+            const mode = asScaleMode(saved.mode);
+            if (pane.kind === 'price') {
+                this.scene.scaleMode = mode;
+                this.scene.logScale = Boolean(saved.log);
+                this.scene.invertScale = Boolean(saved.invert);
+            } else {
+                pane.scaleMode = mode;
+                pane.logScale = Boolean(saved.log);
+                pane.invert = Boolean(saved.invert);
+            }
+            if (saved.auto) {
+                pane.manualScale = null;
+            } else {
+                const manual = { min, max, log: Boolean(saved.log), invert: Boolean(saved.invert) };
+                pane.manualScale = manual;
+                pane.scaleTarget = { ...manual };
+                pane.scale = { ...manual };
+                pane.initialized = true;
+            }
+            changed = true;
+        }
+        if (changed) {
+            this.axisScaleButtons?.reposition();
+            this.scheduler?.invalidate(InvalidateLevel.Full);
+        }
+    }
+
+    onWorkspaceScaleChange(cb: () => void): Unsubscribe {
+        this.workspaceScaleCbs.add(cb);
+        return () => this.workspaceScaleCbs.delete(cb);
+    }
+
+    private emitWorkspaceScaleChange(): void {
+        for (const cb of this.workspaceScaleCbs) cb();
+    }
+
     // ── viewport ──
     /**
      * Host bridge helpers. These deliberately expose only renderer-neutral geometry controls
@@ -3178,6 +3246,7 @@ export class NativeRenderer implements IChartRenderer {
         this.scaleDragHeight = res.height;
         this.scaleDragStart = { ...res.holder.scale };
         res.holder.manualScale = { ...res.holder.scale };
+        this.emitWorkspaceScaleChange();
         // The A (auto) chip must drop the moment the scale freezes — a wheel rescale
         // (or a stationary grab) changes the state with the cursor still, so the
         // hover-move re-sync never fires on its own.
@@ -3217,6 +3286,7 @@ export class NativeRenderer implements IChartRenderer {
         const res = this.resolveScaleHolder(x, y);
         if (!res) return;
         res.holder.manualScale = null;
+        this.emitWorkspaceScaleChange();
         this.axisScaleButtons?.reposition(); // relight the A chip under a still cursor
         this.scheduler.invalidate(InvalidateLevel.Full);
     }
@@ -3252,6 +3322,7 @@ export class NativeRenderer implements IChartRenderer {
         holder.scale = { ...scale };
         holder.scaleTarget = { ...scale };
         holder.initialized = true;
+        this.emitWorkspaceScaleChange();
         this.scheduler.invalidate(InvalidateLevel.Full);
     }
 
@@ -4245,6 +4316,7 @@ export class NativeRenderer implements IChartRenderer {
         this.panVelocity = 0;
         for (const pane of this.scene.panes.values()) pane.manualScale = null; // re-fit ⇒ autoscale resumes
         for (const sl of this.scene.indicatorScales.values()) sl.manualScale = null;
+        this.emitWorkspaceScaleChange();
         const visibleBars = Math.min(n, 200);
         const rightOffset = this.scene.style.margins.right;
         const v = this.clampViewport(w / ((visibleBars + rightOffset) * this.coords.spacingScale), rightOffset);
@@ -4262,6 +4334,7 @@ export class NativeRenderer implements IChartRenderer {
         this.panVelocity = 0;
         for (const pane of this.scene.panes.values()) pane.manualScale = null; // re-frame ⇒ autoscale resumes
         for (const sl of this.scene.indicatorScales.values()) sl.manualScale = null;
+        this.emitWorkspaceScaleChange();
         const v: ViewportState = { barSpacing: clampBarSpacing(this.coords.getViewport().barSpacing), rightOffset: this.scene.style.margins.right };
         this.coords.setViewport(v);
         this.targetBarSpacing = v.barSpacing;
@@ -4476,6 +4549,7 @@ export class NativeRenderer implements IChartRenderer {
         const pane = this.scene.panes.get(paneId);
         if (!pane) return;
         pane.manualScale = pane.manualScale == null ? { ...pane.scale } : null;
+        this.emitWorkspaceScaleChange();
         this.scheduler?.invalidate(InvalidateLevel.Full);
     }
 
@@ -4488,6 +4562,7 @@ export class NativeRenderer implements IChartRenderer {
             if (!p) return;
             p.scaleMode = mode;
         }
+        this.emitWorkspaceScaleChange();
         this.scheduler?.invalidate(InvalidateLevel.Full);
     }
 
@@ -4505,6 +4580,7 @@ export class NativeRenderer implements IChartRenderer {
             pane.logScale = log;
         }
         if (pane?.manualScale) pane.manualScale.log = log;
+        this.emitWorkspaceScaleChange();
         this.scheduler?.invalidate(InvalidateLevel.Full);
     }
 
