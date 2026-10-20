@@ -1160,15 +1160,21 @@ const saveWorkspaceAction: WidgetActionDescriptor = {
   run(ctx) {
     const api=(window as Window & { __TCO_VELA__?: { workspace?: { saveNow?:()=>void|Promise<void> } } }).__TCO_VELA__;
     if(!api?.workspace?.saveNow) { ctx.toast('The live workspace is not ready to save yet','error'); return; }
-    void Promise.resolve(api.workspace.saveNow()).then(async()=>{
+    void (async()=>{
+      let defaultWorkspaceSynced=true;
+      try { await Promise.resolve(api.workspace!.saveNow!()); } catch { defaultWorkspaceSynced=false; }
       const named=await persistActiveTcoVelaSavedWorkspace();
       if(named) {
-        ctx.toast(named.synced?'Saved “'+named.name+'” to your account':'Saved “'+named.name+'” on this device; account sync resumes when available','success');
+        ctx.toast(defaultWorkspaceSynced&&named.synced
+          ? 'Saved “'+named.name+'” to your account'
+          : 'Saved “'+named.name+'” locally; cloud sync will retry when available','success');
         return;
       }
       const appearanceSynced=await persistCurrentTcoVelaAppearance();
-      ctx.toast(appearanceSynced?'Workspace saved to your account':'Workspace saved on this device; account sync resumes when available','success');
-    }).catch((error:unknown)=>{
+      ctx.toast(defaultWorkspaceSynced&&appearanceSynced
+        ? 'Workspace saved to your account'
+        : 'Workspace saved on this device; account sync resumes when available','success');
+    })().catch((error:unknown)=>{
       ctx.toast('Workspace saved locally; cloud sync failed'+(error instanceof Error?': '+error.message:''),'error');
     });
   },
