@@ -123,6 +123,12 @@ export function LiveTradingWorkspace() {
   const retryChartHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const activeChartStatusKeyRef = useRef('');
   const [dismissedChartStatusKey, setDismissedChartStatusKey] = useState('');
+  const chartStatusDismissKey = `${chartStatus.phase}|${chartStatus.symbol}|${chartStatus.timeframe}`;
+  useEffect(() => {
+    // Dismiss one occurrence, not the whole phase forever: recovery or a symbol/interval
+    // switch clears the prior dismissal so a later stale-data episode can be noticed.
+    setDismissedChartStatusKey((dismissed) => dismissed && dismissed !== chartStatusDismissKey ? '' : dismissed);
+  }, [chartStatusDismissKey]);
   useEffect(() => {
     if (!host.current) return;
 
@@ -498,7 +504,7 @@ export function LiveTradingWorkspace() {
             </div>
           </div>
         )}
-        {workspaceLoadState.phase === 'ready' && dismissedChartStatusKey !== `${chartStatus.phase}|${chartStatus.symbol}|${chartStatus.timeframe}` && (
+        {workspaceLoadState.phase === 'ready' && dismissedChartStatusKey !== chartStatusDismissKey && (
           <div
             className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 pr-8 shadow-lg backdrop-blur-md relative ${
               chartStatus.tone === 'good'
@@ -518,7 +524,7 @@ export function LiveTradingWorkspace() {
               title="Dismiss notification"
               aria-label="Dismiss chart status notification"
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => setDismissedChartStatusKey(`${chartStatus.phase}|${chartStatus.symbol}|${chartStatus.timeframe}`)}
+              onClick={() => setDismissedChartStatusKey(chartStatusDismissKey)}
               className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/70 transition-colors hover:bg-white/10 hover:text-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-400"
             >
               <X size={12} aria-hidden="true" />
