@@ -97,6 +97,7 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     if not isinstance(schema, dict):
         raise ValueError('Model feature schema must be an object.')
     ordered_names = schema.get('orderedNames', schema.get('ordered_names', features))
+    schema_types = schema.get('types', [])
     schema_version = str(schema.get('version', feature_version))
     schema_hash = str(schema.get('hash', ''))
     actual_hash = hashlib.sha256('|'.join(features).encode('utf-8')).hexdigest()
@@ -106,6 +107,9 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
     # optional columns were attached to the fitted estimator.
     if strict_schema and list(ordered_names) != list(features):
         raise ValueError('Model feature order does not match its sealed feature schema.')
+    if strict_schema and (not isinstance(schema_types, list) or len(schema_types) != len(features)
+                          or any(value != 'float64' for value in schema_types)):
+        raise ValueError('Model feature types do not match the required float64 inference schema.')
     if strict_schema and schema_hash and schema_hash != actual_hash:
         raise ValueError('Model feature schema hash does not match its ordered feature names.')
     if schema_version != feature_version:
