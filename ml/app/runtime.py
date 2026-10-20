@@ -348,10 +348,11 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
         raise ValueError(f'Artifact requires {required_lookback} bars but its model contract maximum is {contract_maximum}.')
     if len(candles) < required_lookback:
         raise ValueError(f'Insufficient candle history for {model_id}: artifact requires {required_lookback} bars, received {len(candles)}.')
-    # Every artifact gets its declared bounded history window. A small-lookback model
-    # must not accidentally consume 5,000 bars, while a long-lookback model must fail
-    # explicitly if its caller cannot supply the rows it requires.
-    model_candles = candles[-contract_maximum:]
+    # Keep enough history for the artifact's required and preferred windows, but
+    # never exceed its declared maximum. The shared dataset may hold 5,000 bars; a
+    # model's inference window is independent and should remain reproducible.
+    model_window_bars = min(contract_maximum, max(contract_preferred, required_lookback))
+    model_candles = candles[-model_window_bars:]
     frame = build_features(
         model_candles,
         exchange_timezone=timezone,
