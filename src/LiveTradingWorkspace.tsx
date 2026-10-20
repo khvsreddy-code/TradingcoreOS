@@ -293,6 +293,11 @@ export function LiveTradingWorkspace() {
         }, 1_800);
       };
       workspaceListenerDisposers.push(workspace.on('state:changed', () => scheduleNamedWorkspaceAutosave?.()));
+      // Palette, accent, sidebar, density and topbar-tool edits are app appearance state,
+      // not Vela chart mutations. Include those changes in the selected named snapshot too.
+      const onWorkspaceAppearanceChanged = () => scheduleNamedWorkspaceAutosave?.();
+      window.addEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged);
+      workspaceListenerDisposers.push(() => window.removeEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged));
       const onWorkspaceAppearanceChanged = () => scheduleNamedWorkspaceAutosave?.();
       window.addEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged);
       workspaceListenerDisposers.push(() => window.removeEventListener('tco:workspace-appearance-changed', onWorkspaceAppearanceChanged));
