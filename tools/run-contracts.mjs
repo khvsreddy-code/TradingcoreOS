@@ -84,6 +84,7 @@ const contracts = [
   ['vela-drawing', ['src/velaDrawingCapabilityContract.test.mjs', false]],
   ['tco-custom-workspace-frame', ['src/velaCustomWorkspaceFrameContract.test.mjs', false]],
   ['vela-workspace-autosave', ['src/velaWorkspaceAutosaveContract.test.mjs', false]],
+  ['market-desk-news-history-warm', ['src/marketDeskAndHistoryWarmContract.test.mjs', false]],
   ['vela-active-preview-drawing-tool', ['src/velaActivePreviewDrawingToolContract.test.mjs', false]],
   ['vela-drawing-persistence-roundtrip', ['src/velaDrawingPersistenceRoundTripContract.test.mjs', true]],
   ['vela-incremental-patch', ['src/velaIncrementalPatchContract.test.mjs', false]],
