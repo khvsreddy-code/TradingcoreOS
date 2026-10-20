@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import math
 from typing import Iterable
-from .optimization import add_market_optimization_features
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .optimization import add_market_optimization_features
 import numpy as np
 import pandas as pd
 
+# Feature order is a model ABI. Never silently change the meaning of columns for an old artifact.
+LEGACY_FEATURE_SCHEMA_VERSION = 'tradingcore-market-features/1'
+FEATURE_SCHEMA_VERSION = 'tradingcore-market-features/2'
 FEATURE_COLUMNS = [
     'ret_1', 'ret_3', 'ret_5', 'ret_10',
     'range_pct', 'body_pct', 'volume_ratio',
@@ -35,7 +39,39 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.ewm(alpha=1 / period, adjust=False).mean()
 
 
-def build_features(candles: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
+def _parse_clock(value: str, label: str) -> int:
+    try:
+        parts = str(value).strip().split(':')
+        if len(parts) != 2:
+            raise ValueError
+        hour, minute = int(parts[0]), int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+        return hour * 60 + minute
+    except (TypeError, ValueError):
+        raise ValueError(f'{label} must use valid HH:MM 24-hour time') from None
+
+
+def build_features(
+    candles: Iterable[dict] | pd.DataFrame,
+    *,
+    exchange_timezone: str = 'Asia/Kolkata',
+    session_open: str = '09:15',
+    session_close: str = '15:30',
+    feature_schema_version: str = FEATURE_SCHEMA_VERSION,
+) -> pd.DataFrame:
+    if feature_schema_version not in (FEATURE_SCHEMA_VERSION, LEGACY_FEATURE_SCHEMA_VERSION):
+        raise ValueError(f'Unsupported market feature schema: {feature_schema_version}')
+    try:
+        ZoneInfo(exchange_timezone)
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        raise ValueError(f'Unknown exchange timezone: {exchange_timezone}') from None
+
+    open_minute = _parse_clock(session_open, 'session_open')
+    close_minute = _parse_clock(session_close, 'session_close')
+    if close_minute <= open_minute:
+        raise ValueError('session_close must be later than session_open on the same exchange day')
+
     if isinstance(candles, pd.DataFrame):
         df = candles.copy()
     else:
@@ -45,12 +81,23 @@ def build_features(candles: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f'Missing candle columns: {missing}')
 
+    # Store timestamps as aware UTC values for chronological joins; use the explicitly
+    # configured exchange timezone only when calculating session-based features.
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
     for col in ['open', 'high', 'low', 'close', 'volume']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     df = df.dropna(subset=required).sort_values('timestamp').drop_duplicates('timestamp').reset_index(drop=True)
-    close = df['close']
+    if df.empty:
+        raise ValueError('No valid, timestamped OHLCV candles were provided')
+    if (df[['open', 'high', 'low', 'close']].le(0).any(axis=None)
+            or df['volume'].lt(0).any()):
+        raise ValueError('OHLC prices must be positive and volume must be non-negative')
+    if (df['high'] < df[['open', 'close', 'low']].max(axis=1)).any():
+        raise ValueError('Candle high is below its OHLC range')
+    if (df['low'] > df[['open', 'close', 'high']].min(axis=1)).any():
+        raise ValueError('Candle low is above its OHLC range')
 
+    close = df['close']
     df['ret_1'] = close.pct_change(1)
     df['ret_3'] = close.pct_change(3)
     df['ret_5'] = close.pct_change(5)
@@ -73,19 +120,48 @@ def build_features(candles: Iterable[dict] | pd.DataFrame) -> pd.DataFrame:
     df['low_20_gap'] = close / rolling_low.replace(0, np.nan) - 1
     df['trend_slope'] = close.pct_change(10) / 10.0
 
-    minute = df['timestamp'].dt.hour * 60 + df['timestamp'].dt.minute
-    phase = 2 * math.pi * (minute - 9 * 60) / (6.5 * 60)
+    if feature_schema_version == LEGACY_FEATURE_SCHEMA_VERSION:
+        # Exact compatibility with previously trained artifacts: old time features
+        # used UTC clock time and assumed a fixed 09:00–15:30 clock.
+        minute = df['timestamp'].dt.hour * 60 + df['timestamp'].dt.minute
+        phase = 2 * math.pi * (minute - 9 * 60) / (6.5 * 60)
+    else:
+        local_timestamp = df['timestamp'].dt.tz_convert(exchange_timezone)
+        minute = local_timestamp.dt.hour * 60 + local_timestamp.dt.minute
+        session_phase = ((minute - open_minute) / (close_minute - open_minute)).clip(0.0, 1.0)
+        phase = 2 * math.pi * session_phase
     df['hour_sin'] = np.sin(phase)
     df['hour_cos'] = np.cos(phase)
 
     df = df.replace([np.inf, -np.inf], np.nan)
+    df.attrs['feature_schema_version'] = feature_schema_version
+    df.attrs['exchange_timezone'] = exchange_timezone
+    df.attrs['session_open'] = session_open
+    df.attrs['session_close'] = session_close
     return add_market_optimization_features(df)
 
 
-def make_supervised(candles: Iterable[dict] | pd.DataFrame, horizon: int = 1):
-    features = build_features(candles)
+def make_supervised(
+    candles: Iterable[dict] | pd.DataFrame,
+    horizon: int = 1,
+    *,
+    exchange_timezone: str = 'Asia/Kolkata',
+    session_open: str = '09:15',
+    session_close: str = '15:30',
+    feature_schema_version: str = FEATURE_SCHEMA_VERSION,
+):
+    if not isinstance(horizon, int) or horizon < 1 or horizon > 500:
+        raise ValueError('forecast horizon must be an integer in [1, 500] bars')
+    features = build_features(
+        candles,
+        exchange_timezone=exchange_timezone,
+        session_open=session_open,
+        session_close=session_close,
+        feature_schema_version=feature_schema_version,
+    )
     future_return = features['close'].shift(-horizon) / features['close'] - 1
     features['target_return'] = future_return
     features['target_up'] = (future_return > 0).astype(int)
     usable = features.dropna(subset=FEATURE_COLUMNS + ['target_return']).reset_index(drop=True)
+    usable.attrs.update(features.attrs)
     return usable
