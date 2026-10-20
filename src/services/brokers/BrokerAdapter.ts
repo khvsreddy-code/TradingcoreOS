@@ -80,6 +80,15 @@ export interface HistoricalCandle {
   low: number;
   close: number;
   volume: number;
+  /** Source of this validated bar. Unknown for legacy/caller-supplied rows. */
+  source?: 'fyers' | 'tvdatafeed' | 'unknown';
+  /** Historical/confirmed rows are separate from developing/live quote updates. */
+  phase?: 'historical' | 'confirmed' | 'developing' | 'realtime' | 'forecast';
+  confirmed?: boolean;
+  /** Earliest timestamp at which this completed OHLCV bar is available to a decision. */
+  availableAt?: string | number;
+  /** Optional provider/data-plane correction revision. */
+  revision?: number;
 }
 
 /** Provenance and bounded-window metadata shared by chart, replay and research hosts. */
