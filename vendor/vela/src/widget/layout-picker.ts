@@ -10,7 +10,6 @@
 // inside it, same as the menu positioner).
 import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
-import { holdForExit, type SurfaceExit } from '../ui/surface-exit';
 
 const STYLE_ID = 'vela-widget-layout-picker-v16';
 // One monochrome selection language across the panel: lit cells and sync ON
@@ -181,8 +180,6 @@ export class LayoutPicker {
     private readonly syncEl: HTMLElement;
 
     private isOpen = false;
-    /** The card's exit animation after a close; a reopen cancels it. */
-    private exit: SurfaceExit | null = null;
     /** Hover preview (1-based rows/cols), null = show current shape. */
     private hover: { rows: number; cols: number } | null = null;
 
@@ -194,6 +191,19 @@ export class LayoutPicker {
     // Fallback when a chart host cancels or retargets pointerdown. The trigger is
     // excluded so its own click handler can toggle an already-open picker closed.
     private readonly onDocClick = (e: MouseEvent): void => {
+        const t = e.target as Node | null;
+        if (t && (this.layer.contains(t) || this.opts.trigger.contains(t))) return;
+        this.close();
+    };
+    // Some chart/canvas interactions retarget or consume pointerdown before the document
+    // capture listener observes the original target. Pointerup is a second, idempotent
+    // dismissal edge; click remains as the keyboard/synthetic-event fallback.
+    private readonly onDocPointerUp = (e: PointerEvent): void => {
+        const t = e.target as Node | null;
+        if (t && (this.layer.contains(t) || this.opts.trigger.contains(t))) return;
+        this.close();
+    };
+    private readonly onDocFocusIn = (e: FocusEvent): void => {
         const t = e.target as Node | null;
         if (t && (this.layer.contains(t) || this.opts.trigger.contains(t))) return;
         this.close();
@@ -211,6 +221,8 @@ export class LayoutPicker {
         this.layer = doc.createElement('div');
         this.layer.className = 'vela-ui-layer vela-lp-layer';
         this.layer.style.display = 'none';
+        this.layer.style.pointerEvents = 'none';
+        this.layer.setAttribute('aria-hidden', 'true');
         const panel = doc.createElement('div');
         panel.className = 'vela-lp';
         this.layer.appendChild(panel);
@@ -300,15 +312,17 @@ export class LayoutPicker {
     open(): void {
         if (this.isOpen) return;
         this.isOpen = true;
-        this.exit?.cancel();
-        this.exit = null;
         this.hover = null;
+        this.layer.style.pointerEvents = 'auto';
+        this.layer.removeAttribute('aria-hidden');
         this.refresh();
         this.layer.style.display = '';
         this.position();
         this.opts.trigger.setAttribute('aria-expanded', 'true');
         this.doc.addEventListener('pointerdown', this.onDocPointerDown, true);
+        this.doc.addEventListener('pointerup', this.onDocPointerUp, true);
         this.doc.addEventListener('click', this.onDocClick, true);
+        this.doc.addEventListener('focusin', this.onDocFocusIn, true);
         this.doc.addEventListener('keydown', this.onDocKeydown, true);
         this.opts.onOpenChange?.(true);
     }
@@ -316,13 +330,16 @@ export class LayoutPicker {
     close(): void {
         if (!this.isOpen) return;
         this.isOpen = false;
-        this.exit = holdForExit(this.panel, () => {
-            this.exit = null;
-            if (!this.isOpen) this.layer.style.display = 'none';
-        });
+        // Hide synchronously: CSS exit animation is optional, but a dismissed popover must
+        // never leave a transparent layer able to swallow chart gestures or other controls.
+        this.layer.style.pointerEvents = 'none';
+        this.layer.setAttribute('aria-hidden', 'true');
+        this.layer.style.display = 'none';
         this.opts.trigger.setAttribute('aria-expanded', 'false');
         this.doc.removeEventListener('pointerdown', this.onDocPointerDown, true);
+        this.doc.removeEventListener('pointerup', this.onDocPointerUp, true);
         this.doc.removeEventListener('click', this.onDocClick, true);
+        this.doc.removeEventListener('focusin', this.onDocFocusIn, true);
         this.doc.removeEventListener('keydown', this.onDocKeydown, true);
         this.opts.onOpenChange?.(false);
     }
@@ -337,7 +354,6 @@ export class LayoutPicker {
 
     destroy(): void {
         this.close();
-        this.exit?.finish();
         this.infoTip.destroy();
         this.layer.remove();
     }
