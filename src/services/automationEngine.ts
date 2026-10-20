@@ -221,8 +221,10 @@ function evaluateAutomationWithFrame(rule:AutomationRule,context:AutomationConte
   const lastCandle=context.candles.at(-1);
   const rawBarTimestamp=lastCandle?.timestamp??context.columns?.time?.[currentBarIndex]??context.timestamp;
   const canonicalBarTimestamp=timestampMs(rawBarTimestamp);
-  const barKey=[context.symbol,String(context.timeframe||''),currentBarIndex,canonicalBarTimestamp??String(rawBarTimestamp??'unknown')].join('|');
-  // Ignore packet IDs and bar revisions: a single confirmed candle must not submit twice.
+  // Absolute candle time, not array index or packet revision, is the idempotency key:
+  // older-history prepend and reconnect corrections must not turn the same candle into a new event.
+  const barIdentity=canonicalBarTimestamp!==undefined?String(canonicalBarTimestamp):'index:'+String(currentBarIndex);
+  const barKey=[context.symbol,String(context.timeframe||''),barIdentity].join('|');
   if(rule.lastRunBarKey&&rule.lastRunBarKey===barKey)return noAction('duplicate_bar_event');
 
   const results:AutomationConditionResult[]=rule.conditions.map(condition=>{
@@ -251,7 +253,7 @@ function evaluateAutomationWithFrame(rule:AutomationRule,context:AutomationConte
   // Paper/history/replay can still emit signals/notifications but cannot request a broker order.
   const canSubmitLiveOrder=rule.mode==='Live'&&isAutomationLive(rule.lifecycle)
     &&rule.allowOrderExecution&&!rule.requireConfirmation&&context.executionMode==='live'
-    &&context.barConfirmed===true;
+    &&context.barConfirmed===true&&canonicalBarTimestamp!==undefined;
   const actions:AutomationAction[]=[];
   const blockedActions:AutomationAction[]=[];
   for(const action of rule.actions){
@@ -265,7 +267,7 @@ function evaluateAutomationWithFrame(rule:AutomationRule,context:AutomationConte
   rule.lastRunBarKey=barKey;
   return {
     triggered:true,results,actions,blockedActions,
-    reason:blockedActions.length?(context.barConfirmed!==true?'matched_order_action_blocked_unconfirmed_bar':'matched_order_action_blocked_by_execution_boundary'):'matched',
+    reason:blockedActions.length?(context.barConfirmed!==true?'matched_order_action_blocked_unconfirmed_bar':canonicalBarTimestamp===undefined?'matched_order_action_blocked_missing_bar_timestamp':'matched_order_action_blocked_by_execution_boundary'):'matched',
     runTimestamps:nextRuns,lastRunAt:now,lastRunBarKey:barKey,featureValues,
   };
 }
