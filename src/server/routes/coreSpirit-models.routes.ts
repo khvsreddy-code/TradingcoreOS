@@ -29,7 +29,7 @@ export const coreSpiritModelRoutes = Router();
 coreSpiritModelRoutes.use(requireUser);
 
 const MAX_SOURCE_BYTES = 64 * 1024;
-const MAX_ROWS = 1024;
+const MAX_ROWS = 5_000;
 const MAX_FEATURES = 16;
 
 function fail(res: Response, status: number, message: string): void {
@@ -132,12 +132,13 @@ function rangeBounds(range: { from: string; to: string }): { from: number; to: n
 
 function parseRows(value: unknown, featureNames: readonly string[], range: { from: string; to: string }) {
   if (!Array.isArray(value) || value.length < 12 || value.length > MAX_ROWS) {
-    throw new Error('Training snapshot must contain 12–1024 historical rows.');
+    throw new Error('Training snapshot must contain 12–5000 confirmed historical rows.');
   }
   const bounds = rangeBounds(range);
   const confirmedRows = validateConfirmedResearchRows(
     value as ResearchFeatureRow[],
     featureNames,
+    { maxRows: MAX_ROWS },
   );
   return confirmedRows.map((row, index) => {
     if (row.timestamp < bounds.from || row.timestamp > bounds.to) {
