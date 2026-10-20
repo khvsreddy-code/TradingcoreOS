@@ -321,6 +321,23 @@ export class HistoricalDataService {
       };
     }
 
+    // FYERS's standard cash-equity suffix has a deterministic TradingView cash symbol.
+    // Use that mapping for any active NSE/BSE equity without requiring per-ticker rows.
+    // Do not apply this shortcut to BE/SM/ST series, indices, futures, options or spreads:
+    // those require explicit source mappings and, for derivatives, matching contract identity.
+    const cashEquity = /^(NSE|BSE):([A-Z0-9&._-]+)-EQ$/i.exec(instrumentId);
+    if (cashEquity) {
+      const exchange = cashEquity[1]!.toUpperCase();
+      const tvSymbol = cashEquity[2]!;
+      return {
+        instrumentId, fyersSymbol: instrumentId, exchange, instrumentType: 'equity',
+        tvSymbol, tvExchange: exchange,
+        timezone: 'Asia/Kolkata', sessionOpen: '09:15', sessionClose: '15:30',
+        adjustmentPolicy: 'none', fyersAdjustmentPolicy: 'none', tvAdjustmentPolicy: 'none',
+        calendarHolidays: [], calendarComplete: false, enabled: true,
+      };
+    }
+
     return {
       instrumentId, fyersSymbol: instrumentId, exchange: instrumentId.includes(':') ? instrumentId.split(':')[0]! : 'NSE',
       instrumentType: /-INDEX$/i.test(instrumentId) ? 'index' : 'unknown',
