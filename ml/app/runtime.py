@@ -171,14 +171,14 @@ def _validate_model_contract(meta, contract, symbol, timeframe, model_id, featur
         snapshot_source = str(dataset_snapshot.get('source', ''))
         snapshot_from = str(dataset_snapshot.get('from', ''))
         snapshot_to = str(dataset_snapshot.get('to', ''))
+        from_timestamp = pd.to_datetime(snapshot_from, utc=True, errors='coerce')
+        to_timestamp = pd.to_datetime(snapshot_to, utc=True, errors='coerce')
         if (not re.fullmatch(r'[a-f0-9]{64}', snapshot_hash) or snapshot_version != snapshot_hash
                 or not isinstance(snapshot_rows, int) or isinstance(snapshot_rows, bool)
                 or not 12 <= snapshot_rows <= 5000
                 or snapshot_source not in ('user_supplied', 'broker_history', 'trusted_feature_pipeline')
                 or dataset_snapshot.get('immutable') is not True
-                or not math.isfinite(pd.to_datetime(snapshot_from, utc=True, errors='coerce').timestamp()) 
-                or not math.isfinite(pd.to_datetime(snapshot_to, utc=True, errors='coerce').timestamp())
-                or pd.to_datetime(snapshot_from, utc=True, errors='coerce') >= pd.to_datetime(snapshot_to, utc=True, errors='coerce')):
+                or pd.isna(from_timestamp) or pd.isna(to_timestamp) or from_timestamp >= to_timestamp):
             raise ValueError('Model dataset snapshot contract is incomplete, unbounded, or invalid.')
         if not isinstance(metadata_snapshot, dict):
             raise ValueError('Model metadata is missing the dataset snapshot reference.')
