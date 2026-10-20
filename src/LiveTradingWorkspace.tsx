@@ -506,7 +506,7 @@ export function LiveTradingWorkspace() {
         )}
         {workspaceLoadState.phase === 'ready' && dismissedChartStatusKey !== chartStatusDismissKey && (
           <div
-            className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 pr-8 shadow-lg backdrop-blur-md relative ${
+            className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 pr-8 shadow-lg backdrop-blur-md ${
               chartStatus.tone === 'good'
                 ? 'border-emerald-800/70 bg-[#041b13]/90 text-emerald-200'
                 : chartStatus.tone === 'error'
@@ -529,7 +529,7 @@ export function LiveTradingWorkspace() {
             >
               <X size={12} aria-hidden="true" />
             </button>
-            <div className="flex items-start gap-2">
+            <div className="relative flex items-start gap-2">
               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
                 chartStatus.tone === 'good' ? 'bg-emerald-400'
                   : chartStatus.tone === 'error' ? 'bg-red-400'
