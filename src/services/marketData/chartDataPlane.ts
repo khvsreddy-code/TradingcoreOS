@@ -749,14 +749,16 @@ export class ChartDataPlane {
    * Warm a rarely-used dataset without competing with a selected chart. If the user
    * selects it while queued, the foreground request promotes this same single-flight.
    */
-  prewarmHistory(limitOverride?: number): Promise<void> {
-    if (this.state.historyPromise || this.state.historyReady) return Promise.resolve();
+  prewarmHistory(limitOverride?: number): Promise<number> {
     const interval = CHART_TIMEFRAME_INTERVALS[this.timeframe] || this.timeframe;
+    if (this.state.historyPromise) return this.state.historyPromise.then(rows => rows.length);
+    if (this.state.historyReady) return Promise.resolve(this.state.columns?.time.length || this.state.candles.length || this.canonicalPlane.length);
     const baseLimit = initialHistoryCandles(this.timeframe);
     const requestedLimit = Number.isFinite(Number(limitOverride))
       ? Math.max(baseLimit, Math.min(5000, Math.floor(Number(limitOverride))))
       : baseLimit;
-    if (historyStore.get(this.brokerId, this.instrumentKey, interval)?.length) return Promise.resolve();
+    const cached = historyStore.get(this.brokerId, this.instrumentKey, interval);
+    if (cached?.length) return Promise.resolve(cached.length);
 
     const requestKey = `${this.key}:initial:${requestedLimit}`;
     return chartHistoryCoordinator.request(requestKey, async () => {
@@ -764,9 +766,8 @@ export class ChartDataPlane {
       const normalized = normalizeHistory(rows);
       if (normalized.length) historyStore.set(this.brokerId, this.instrumentKey, interval, normalized, requestedLimit);
       return normalized;
-    }, 'warm').then(() => undefined);
+    }, 'warm').then(rows => rows.length);
   }
-
   /** Cold-start columnar loader used by Vela's native renderer. Falls back to the ordinary broker path when unsupported. */
   async ensureReadyColumns(limitOverride?: number): Promise<HistoricalCandle[]> {
     if (this.state.historyPromise) return this.state.historyPromise;
