@@ -107,6 +107,18 @@ assert.match(mlRuntime, /model_candles = candles\[-model_window_bars:\]/, 'infer
 assert.match(mlRuntime, /Model required lookback exceeds the contract maximum/, 'an internally inconsistent artifact lookback must be rejected');
 assert.match(mlRuntime, /dataset_snapshot_verified = True/, 'immutable dataset snapshot success is recorded after contract verification');
 assert.match(mlRuntime, /'expected_return': expected_return/);
+assert.match(mlRuntime, /default_preferred = 5000 if not model_contract else min\(contract_maximum, max\(contract_minimum, 500, neural_sequence\)\)/, 'legacy artifacts keep their full bounded history when no preferred window was sealed');
+const classicalStart = mlRuntime.indexOf("if kind == 'classical':");
+const ensembleStart = mlRuntime.indexOf("\n    elif kind == 'ensemble':", classicalStart);
+assert.ok(classicalStart >= 0 && ensembleStart > classicalStart, 'classical inference branch must exist');
+const classicalBlock = mlRuntime.slice(classicalStart, ensembleStart);
+const classifierStart = classicalBlock.indexOf("if hasattr(model, 'predict_proba'):");
+const classifierElse = classicalBlock.indexOf("\n        else:", classifierStart);
+assert.ok(classifierStart >= 0 && classifierElse > classifierStart, 'classifier probability branch must be explicit');
+const classifierProbabilityBranch = classicalBlock.slice(classifierStart, classifierElse);
+assert.match(classifierProbabilityBranch, /classifier_probability_not_calibrated/);
+assert.doesNotMatch(classifierProbabilityBranch, /expected_return\s*=/, 'direction probabilities must not be converted into an expected return');
+assert.match(classicalBlock, /if target_kind == 'return':\s*expected_return = score/, 'only a model trained for return targets may produce a trained return estimate');
 assert.match(mlRuntime, /'production_eligible': release_status == 'approved'/, 'unapproved artifacts must never be marked production eligible');
 assert.match(mlRuntime, /'entry_allowed': False/, 'candidate/revoked artifacts must not produce an execution-allowed gate');
 
