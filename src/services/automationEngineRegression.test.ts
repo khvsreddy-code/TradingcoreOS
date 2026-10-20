@@ -107,9 +107,15 @@ const rule = (overrides: Partial<AutomationRule> = {}): AutomationRule => ({
     rule({ id: 'batch-price-a' }),
     rule({ id: 'batch-price-b', conditions: [{ field: 'price', operator: '>', value: 100 }] }),
   ];
+  const singleRules = rules.map(item => ({
+    ...item,
+    conditions: item.conditions.map(condition => ({ ...condition })),
+    actions: item.actions.map(action => ({ ...action })),
+    runTimestamps: [...(item.runTimestamps ?? [])],
+  }));
   const now = Date.parse('2026-10-20T05:00:00.000Z');
   const batch = evaluateAutomationBatch(rules, context(), now);
-  const singles = rules.map(item => evaluateAutomation(item, context(), now));
+  const singles = singleRules.map(item => evaluateAutomation(item, context(), now));
   assert.deepEqual(batch.map(item => [item.triggered, item.results.map(result => result.actual), item.reason]),
     singles.map(item => [item.triggered, item.results.map(result => result.actual), item.reason]),
     'batch evaluation must preserve per-rule semantics while sharing one per-bar feature frame');
