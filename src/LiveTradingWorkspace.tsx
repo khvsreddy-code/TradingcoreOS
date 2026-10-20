@@ -25,6 +25,15 @@ type ChartStatusView = Readonly<{
 
 const CHART_QUOTE_STALE_MS = 15_000;
 
+const WORKSPACE_AUTOSAVE_STATUS_EVENT = 'tco:workspace-autosave-status';
+type WorkspaceAutosaveStatusState = 'saving' | 'saved' | 'local' | 'error';
+function publishWorkspaceAutosaveStatus(state: WorkspaceAutosaveStatusState, message: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(WORKSPACE_AUTOSAVE_STATUS_EVENT, {
+    detail: { state, message, savedAt: state === 'saved' || state === 'local' ? Date.now() : null },
+  }));
+}
+
 function chartStatusView(snapshot: TcoVelaChartStatusSnapshot, now = Date.now()): ChartStatusView {
   const instrument = snapshot.symbol || 'Active instrument';
   const timeframe = snapshot.timeframe || '—';
@@ -134,6 +143,7 @@ export function LiveTradingWorkspace() {
 
     let workspace: VelaWorkspaceInstance | null = null;
     const workspaceListenerDisposers: Array<() => void> = [];
+    let namedWorkspaceAutosaveTimer: number | null = null;
     let stopChartStatus: (() => void) | undefined;
     let chartStatusGeneration = 0;
     let cancelled = false;
@@ -219,6 +229,43 @@ export function LiveTradingWorkspace() {
         resolveIndicatorManifest: readCoreSpiritManifest,
       }));
       workspaceRef.current = workspace;
+
+      // The Vela document adapter already saves the live workspace on every dirty burst.
+      // When a named setup is active, also update that named snapshot after the user pauses
+      // editing, so "Restore" never trails the live chart until the 30-minute checkpoint.
+      const scheduleNamedWorkspaceAutosave = () => {
+        if (cancelled) return;
+        const brokerKey = String(tradingCoreRuntime.getPrimaryBrokerId() ?? 'fyers').trim().toLowerCase();
+        let activeNamedId = '';
+        try {
+          activeNamedId = localStorage.getItem(`tradingcore:vela:active-saved-workspace:v1:${brokerKey}`) ?? '';
+        } catch {}
+        // No named setup selected: the canonical Vela workspace is already autosaved on
+        // every state change; do not make redundant user_settings requests.
+        if (!activeNamedId) return;
+        if (namedWorkspaceAutosaveTimer !== null) window.clearTimeout(namedWorkspaceAutosaveTimer);
+        publishWorkspaceAutosaveStatus('saving', 'Saving changes to the active workspace…');
+        namedWorkspaceAutosaveTimer = window.setTimeout(() => {
+          namedWorkspaceAutosaveTimer = null;
+          void persistActiveTcoVelaSavedWorkspace().then((result) => {
+            if (cancelled) return;
+            const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            if (!result) {
+              publishWorkspaceAutosaveStatus('local', 'Live chart autosave is active. Named-workspace sync will retry at the next checkpoint.');
+              return;
+            }
+            publishWorkspaceAutosaveStatus(
+              result.synced ? 'saved' : 'local',
+              result.synced
+                ? `Saved “${result.name}” at ${time}. Your charts, drawings and settings are up to date.`
+                : `Saved “${result.name}” locally at ${time}; account sync will retry when available.`,
+            );
+          }).catch(() => {
+            if (!cancelled) publishWorkspaceAutosaveStatus('error', 'Local autosave remains available; named-workspace cloud sync failed.');
+          });
+        }, 1_800);
+      };
+      workspaceListenerDisposers.push(workspace.on('state:changed', scheduleNamedWorkspaceAutosave));
 
       // Warm common index history in the background once the broker is ready.
       // The workspace itself is already mounted, and its own getBars call is
@@ -331,6 +378,10 @@ export function LiveTradingWorkspace() {
 
     return () => {
       cancelled = true;
+      if (namedWorkspaceAutosaveTimer !== null) {
+        window.clearTimeout(namedWorkspaceAutosaveTimer);
+        namedWorkspaceAutosaveTimer = null;
+      }
       workspaceRef.current = null;
       for (const dispose of workspaceListenerDisposers) dispose();
       workspaceListenerDisposers.length = 0;
@@ -452,15 +503,50 @@ export function LiveTradingWorkspace() {
         };
       }
     }, 1000);
+    let checkpointInFlight: Promise<void> | null = null;
     const checkpointWorkspace = () => {
-      const checkpoint = async () => {
+      if (checkpointInFlight) return; // pagehide + visibilitychange may fire back-to-back
+      publishWorkspaceAutosaveStatus('saving', 'Saving a full workspace checkpoint…');
+      checkpointInFlight = (async () => {
         const current = workspaceRef.current;
-        try { if (current) await current.saveNow(); } catch { /* local fallback was written before cloud sync */ }
+        let workspaceSynced = !current;
+        try {
+          if (current) {
+            await current.saveNow();
+            workspaceSynced = true;
+          }
+        } catch {
+          // The adapter has already written its device-local fallback before cloud sync.
+          workspaceSynced = false;
+        }
         const named = await persistActiveTcoVelaSavedWorkspace();
-        // When no named setup is active, keep the account-level appearance in sync as well.
-        if (!named) await persistCurrentTcoVelaAppearance();
-      };
-      void checkpoint().catch(() => undefined);
+        if (named) {
+          const cloudSynced = workspaceSynced && named.synced;
+          const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+          publishWorkspaceAutosaveStatus(
+            cloudSynced ? 'saved' : 'local',
+            cloudSynced
+              ? `Full checkpoint saved at ${time} · charts, tickers, indicators, drawings and workspace settings are synced.`
+              : `Full checkpoint saved on this device at ${time}; account sync will retry when available.`,
+          );
+          return;
+        }
+        // The main Vela document saves continuously; also checkpoint the separately stored
+        // workspace appearance so it survives a browser restart and account sign-in.
+        const appearanceSynced = await persistCurrentTcoVelaAppearance();
+        const cloudSynced = workspaceSynced && appearanceSynced;
+        const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        publishWorkspaceAutosaveStatus(
+          cloudSynced ? 'saved' : 'local',
+          cloudSynced
+            ? `Full checkpoint saved at ${time} · charts, drawings, indicators and appearance are synced. Next checkpoint in 30 minutes.`
+            : `Full checkpoint saved on this device at ${time}; account sync will retry when available.`,
+        );
+      })().catch(() => {
+        publishWorkspaceAutosaveStatus('error', 'Autosave could not confirm cloud sync. Your last local workspace snapshot is retained.');
+      }).finally(() => {
+        checkpointInFlight = null;
+      });
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') checkpointWorkspace();
