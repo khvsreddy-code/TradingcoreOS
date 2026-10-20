@@ -135,9 +135,9 @@ export function LiveTradingWorkspace() {
     try { return localStorage.getItem('tradingcore:chart-status-dismissed:v1') ?? ''; } catch { return ''; }
   });
   const statusMessage = `${chartStatus.title} ${chartStatus.detail}`;
-  const statusCategory = chartStatus.phase === 'stale' || /quote is stale|last tick received\s+\d+s ago/i.test(statusMessage)
-    ? 'stale-quote'
-    : `${chartStatus.phase}|${chartStatus.title}`;
+  const feedWarning = ['stale', 'waiting-tick', 'connecting', 'reconnecting'].includes(chartStatus.phase)
+    || /quote (?:is|may be) stale|last tick received\s+\d+s ago|live feed disconnected|waiting for tick/i.test(statusMessage);
+  const statusCategory = feedWarning ? 'market-feed-stale' : `${chartStatus.phase}|${chartStatus.title}`;
   const now = new Date();
   const localDayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   // The quote-age detail changes every few seconds, so dismissal is keyed by warning
