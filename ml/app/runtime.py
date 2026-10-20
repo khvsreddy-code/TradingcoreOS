@@ -333,7 +333,7 @@ def predict_artifact(root, symbol, timeframe, model_id, candles, requested_horiz
     neural_sequence = int(meta.get('sequence_length', 60)) if kind == 'neural' else 0
     contract_lookback = model_contract.get('lookback', {}) if isinstance(model_contract.get('lookback'), dict) else {}
     contract_minimum = int(_contract_field(contract_lookback, 'min_bars', 'minBars', 80))
-    contract_preferred = int(_contract_field(contract_lookback, 'preferred_bars', 'preferredBars', max(80, neural_sequence)))
+    contract_preferred = int(_contract_field(contract_lookback, 'preferred_bars', 'preferredBars', max(contract_minimum, 80, neural_sequence)))
     contract_maximum = int(_contract_field(contract_lookback, 'max_bars', 'maxBars', 5000))
     if not 1 <= contract_minimum <= contract_preferred <= contract_maximum <= 5000:
         raise ValueError('Artifact lookback contract must satisfy 1 <= minBars <= preferredBars <= maxBars <= 5000.')
