@@ -43,8 +43,11 @@ app.use((req: TradingCoreRequest, res, next) => {
   next();
 });
 
-// CoreSpirit training uploads are bounded by row/feature quotas in the route; the
-// parser limit accommodates a compact <=1024-row dataset snapshot without accepting unbounded payloads.
+// Keep the global body cap tight, but give explicitly bounded history/research routes
+// enough space for up to 5000 OHLCV bars or 5000 x 16 scalar research rows. Route schemas
+// enforce row/feature limits, and these parsers run before the global 512 KiB parser.
+app.use('/api/predictions/production', express.json({ limit: '3mb' }));
+app.use('/api/corespirit/models', express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '512kb' }));
 app.use(createRateLimiter({ windowMs: 60_000, max: 180, name: 'api', key: (req) => req.ip || 'unknown' }));
 
