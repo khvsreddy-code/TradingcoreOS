@@ -135,7 +135,7 @@ export function LiveTradingWorkspace() {
     try { return localStorage.getItem('tradingcore:chart-status-dismissed:v1') ?? ''; } catch { return ''; }
   });
   const statusMessage = `${chartStatus.title} ${chartStatus.detail}`;
-  const statusCategory = chartStatus.phase === 'stale' || /quote is stale|last tick received\\s+\\d+s ago/i.test(statusMessage)
+  const statusCategory = chartStatus.phase === 'stale' || /quote is stale|last tick received\s+\d+s ago/i.test(statusMessage)
     ? 'stale-quote'
     : `${chartStatus.phase}|${chartStatus.title}`;
   const now = new Date();
