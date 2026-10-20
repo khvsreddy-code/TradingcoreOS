@@ -682,7 +682,7 @@ export function LiveTradingWorkspace() {
               onClick={() => {
                 setDismissedChartStatusKey(chartStatusDismissKey);
                 try { localStorage.setItem('tradingcore:chart-status-dismissed:v1', chartStatusDismissKey); } catch {}
-              }
+              }}
               className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/70 transition-colors hover:bg-white/10 hover:text-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-400"
             >
               <X size={12} aria-hidden="true" />
