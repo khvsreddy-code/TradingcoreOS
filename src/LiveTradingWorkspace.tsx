@@ -7,7 +7,7 @@ import { BrokerSettingsModal } from './components/brokers/BrokerSettingsModal';
 import { tradingCoreRuntime } from './services/runtime/TradingCoreRuntime';
 import { applySavedTcoVelaAppearance } from './services/core/chart/tcoVelaChrome';
 import './services/core/chart/tcoVelaNativeExtensions';
-import { createTcoVelaSupabaseStorage, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
+import { createTcoVelaSupabaseStorage, flushTcoVelaAppearance, loadTcoVelaDefaults } from './services/core/chart/tcoVelaSupabaseStorage';
 import { chartPerformanceTelemetry } from './services/marketData/chartPerformanceTelemetry';
 import { createTcoVelaTerminalOptions } from './services/core/chart/tcoVelaTerminal';
 
@@ -241,6 +241,8 @@ export function LiveTradingWorkspace() {
           getPerformanceStats: () => workspace?.getPerformanceStats?.() ?? [],
           setLayout: (layout: string) => workspace?.setLayout(layout),
           saveNow: () => workspace?.saveNow(),
+          getState: () => workspace?.getState(),
+          applyState: (state: unknown) => workspace?.applyState(state),
           getCellHealth: async () => {
             const cells = workspace?.cells?.() ?? [];
             await Promise.all(cells.map(cell => cell.chart.ready().catch(() => undefined)));
@@ -450,10 +452,25 @@ export function LiveTradingWorkspace() {
         };
       }
     }, 1000);
-    const timer = window.setInterval(() => {
-      workspaceRef.current?.saveNow();
-    }, 15 * 60 * 1000);
-    return () => { window.clearInterval(perfTimer); window.clearInterval(timer); };
+    const checkpointWorkspace = () => {
+      const current = workspaceRef.current;
+      if (current) void Promise.resolve(current.saveNow()).catch(() => undefined);
+      // flushTcoVelaAppearance has already written local storage synchronously; this awaits
+      // the queued account write when the page is backgrounded or closed.
+      void flushTcoVelaAppearance().catch(() => undefined);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') checkpointWorkspace();
+    };
+    const checkpointTimer = window.setInterval(checkpointWorkspace, 30 * 60 * 1000);
+    window.addEventListener('pagehide', checkpointWorkspace);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.clearInterval(perfTimer);
+      window.clearInterval(checkpointTimer);
+      window.removeEventListener('pagehide', checkpointWorkspace);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   return (
