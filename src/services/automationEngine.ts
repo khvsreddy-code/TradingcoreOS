@@ -171,7 +171,9 @@ function buildAutomationFeatureFrame(context:AutomationContext):{
     if(index<0||index>=count)return values;
     const candle=candles[index];
     const close=Number(closes[index]);
-    const price=isCurrent?(safeFinite(context.price)??close):close;
+    // A confirmed close is authoritative for confirmed-bar decisions; never let an
+    // LTP snapshot replace its close after the bar has been finalized.
+    const price=isCurrent?(context.barConfirmed===true?close:(safeFinite(context.price)??close)):close;
     const e9=ema9[index],e21=ema21[index];
     values.set('price',price);
     values.set('prediction_confidence',safeFinite(context.prediction?.confidence));
@@ -271,7 +273,8 @@ export function evaluateAutomation(rule:AutomationRule,context:AutomationContext
   // A real order intent is only exposed by an explicitly live, armed execution context.
   // Paper/history/replay can still emit signals/notifications but cannot request a broker order.
   const canSubmitLiveOrder=rule.mode==='Live'&&isAutomationLive(rule.lifecycle)
-    &&rule.allowOrderExecution&&!rule.requireConfirmation&&context.executionMode==='live';
+    &&rule.allowOrderExecution&&!rule.requireConfirmation&&context.executionMode==='live'
+    &&context.barConfirmed===true;
   const actions:AutomationAction[]=[];
   const blockedActions:AutomationAction[]=[];
   for(const action of rule.actions){
@@ -285,7 +288,7 @@ export function evaluateAutomation(rule:AutomationRule,context:AutomationContext
   rule.lastRunBarKey=barKey;
   return {
     triggered:true,results,actions,blockedActions,
-    reason:blockedActions.length?'matched_order_action_blocked_by_execution_boundary':'matched',
+    reason:blockedActions.length?(context.barConfirmed!==true?'matched_order_action_blocked_unconfirmed_bar':'matched_order_action_blocked_by_execution_boundary'):'matched',
     runTimestamps:nextRuns,lastRunAt:now,lastRunBarKey:barKey,featureValues,
   };
 }
