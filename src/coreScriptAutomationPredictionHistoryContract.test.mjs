@@ -80,7 +80,7 @@ assert.match(mlTrainer, /persist_immutable_dataset_snapshot/);
 assert.match(mlTrainer, /dataset-snapshots/);
 assert.ok(mlTrainer.includes("snapshot_path.open('xb')"));
 assert.match(mlTrainer, /'datasetSnapshot':/);
-assert.match(mlTrainer, /'orderedNames': list\\(features\\)[\\s\\S]*'types': \\[\'float64\'\\]/);
+assert.ok(mlTrainer.includes("'orderedNames': list(features)") && mlTrainer.includes("'types': ['float64']"));
 assert.match(mlTrainer, /'orderedNames': list\(features\)/);
 assert.match(mlTrainer, /'calibrationStatus': 'not_calibrated'/, 'score metrics must not claim calibration without fitting a calibrator');
 assert.match(mlTrainer, /expected_calibration_error/);
