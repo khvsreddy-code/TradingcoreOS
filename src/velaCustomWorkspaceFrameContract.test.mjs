@@ -78,6 +78,10 @@ assert.match(storage, /localTime > cloudTime/, 'offline journal edits beat older
 assert.match(storage, /tradingcoreVelaActiveWorkspace/, 'named workspace selection is shared with the account across devices');
 assert.match(chrome, /loadTcoVelaActiveWorkspaceId/, 'the Workspace panel restores the active named setup for the signed-in account');
 assert.match(storage, /drainWorkspaceSnapshotWrites/, 'overlapping cloud autosaves are serialized/coalesced');
+assert.match(storage, /publishWorkspaceStorageStatus\('saving'/, 'the chart save indicator reflects in-progress persistence');
+assert.match(storage, /publishWorkspaceStorageStatus\('saved'/, 'successful cloud chart saves are reflected in the topbar');
+assert.match(storage, /publishWorkspaceStorageStatus\('local'/, 'offline chart saves are clearly marked as device-local');
+assert.match(storage, /workspaceWriteSequence\.get\(requestKey\) === sequence/, 'superseded saves must not overwrite the newest save status');
 assert.match(live, /30 \* 60 \* 1000/, 'a full workspace checkpoint runs every 30 minutes');
 assert.match(live, /await current\.saveNow\(\)/, 'periodic checkpoint flushes the canonical Vela document before account snapshot sync');
 assert.match(live, /persistCurrentTcoVelaAppearance\(\)/, 'periodic checkpoint flushes appearance preferences to account storage');
