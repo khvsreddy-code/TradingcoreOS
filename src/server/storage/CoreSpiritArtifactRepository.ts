@@ -153,7 +153,9 @@ export class CoreSpiritArtifactRepository implements ModelArtifactStore<unknown>
       sourceProvenance: String(data.source_provenance ?? 'user_supplied') as 'user_supplied' | 'broker_history' | 'trusted_feature_pipeline',
       sourceVerified: data.source_verified === true,
       sourceAttestationHash: typeof data.source_attestation_hash === 'string' ? data.source_attestation_hash : null,
-      rows: data.rows as ResearchFeatureRow[],
+      // The public snapshot contract is mutable for callers; clone immutable validation rows
+      // (especially their readonly values arrays) instead of casting away readonly safety.
+      rows: (data.rows as ResearchFeatureRow[]).map((row) => ({ ...row, values: [...row.values] })),
     };
   }
 
