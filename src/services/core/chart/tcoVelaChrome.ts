@@ -764,7 +764,7 @@ const workspaceFramePanel: SidePanelDescriptor = {
     });
     const savedCard=document.createElement('div');savedCard.className='tco-frame-card';savedCard.style.cssText='display:flex;flex-direction:column;gap:8px;';
     const savedTitle=document.createElement('div');savedTitle.className='tco-frame-label';savedTitle.textContent='Saved workspaces';
-    const savedHelp=document.createElement('div');savedHelp.className='tco-frame-help';savedHelp.textContent='Tickers, intervals, zoom, chart styles, indicators, drawings, panel layout and UI theme are saved. Broker positions and orders refresh live from your broker and are never replayed from an old snapshot.';
+    const savedHelp=document.createElement('div');savedHelp.className='tco-frame-help';savedHelp.textContent='Tickers, intervals, chart type, pan/zoom, indicators and their settings, drawings (including Long/Short Position and risk/reward tools), panel/layout choices and UI/chart colors are saved. Live broker positions and orders refresh from your broker after reload and are never replayed from an old snapshot.';
     const savedName=document.createElement('input');savedName.type='text';savedName.className='tco-frame-select';savedName.style.cssText='width:100%;max-width:none;';savedName.maxLength=80;savedName.placeholder='e.g. NIFTY opening-range setup';savedName.setAttribute('aria-label','Saved workspace name');
     const savedActions=document.createElement('div');savedActions.style.cssText='display:flex;gap:6px;flex-wrap:wrap;';
     const saveCurrent=document.createElement('button');saveCurrent.type='button';saveCurrent.className='tco-frame-button tco-frame-button-primary';saveCurrent.textContent='Save current';
