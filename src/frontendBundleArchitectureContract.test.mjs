@@ -34,6 +34,7 @@ assert(!editor.includes("from '../services/coreSpirit';"), 'editor still imports
 
 
 assert(!viteConfig.includes("return 'vendor-other';"), 'unclassified vendor dependencies must not be forced into one catch-all chunk');
+assert(!viteConfig.includes("normalized.includes('/src/services/core/chart/') return 'tco-live-chart'"), 'small shared chart helpers must not force the entire live-chart implementation into unrelated route bundles');
 assert(bundleBudget.includes('TCO_MAX_INITIAL_GZIP_KB'), 'initial entry graph must have an explicit gzip budget');
 assert(bundleBudget.includes("requireKey('src/pages/ModelsPage.tsx'"), 'models research must be an explicit measured route');
 assert(bundleBudget.includes("requireKey('src/pages/PredictionCenterPage.tsx'"), 'prediction research must be an explicit measured route');
