@@ -11,6 +11,14 @@ const SAVED_WORKSPACES_SETTINGS_KEY = 'tradingcoreVelaSavedWorkspaces';
 const ACTIVE_WORKSPACE_SETTINGS_KEY = 'tradingcoreVelaActiveWorkspace';
 const WORKSPACE_SNAPSHOT_LIMIT = 20;
 
+type WorkspaceAutosaveState = 'saving' | 'saved' | 'local' | 'error';
+function publishWorkspaceStorageStatus(state:WorkspaceAutosaveState,message:string):void {
+  if(typeof window==='undefined') return;
+  window.dispatchEvent(new CustomEvent('tco:workspace-autosave-status',{
+    detail:{state,message,savedAt:state==='saved'||state==='local'?Date.now():null},
+  }));
+}
+
 async function currentUserId(): Promise<string | null> {
   try { return (await getSupabaseClient().auth.getUser()).data.user?.id ?? null; } catch { return null; }
 }
@@ -431,14 +439,30 @@ export function createTcoVelaSupabaseStorage(brokerScope: BrokerScope = 'fyers')
     },
     async set(key, value) {
       const broker = resolveBroker(brokerScope);
+      // Local durability is immediate; the status indicator tracks the account sync separately.
       localSet(broker, key, value);
+      publishWorkspaceStorageStatus('saving','Saving chart layout and drawings…');
       const requestKey = requestSequenceKey();
       const sequence = (workspaceWriteSequence.get(requestKey) ?? 0) + 1;
       workspaceWriteSequence.set(requestKey, sequence);
-      const id = await currentUserId();
-      if (!id || workspaceWriteSequence.get(requestKey) !== sequence) return;
-      const queueKey = `${id}:${requestKey}`;
-      await writeWorkspaceSnapshotCloud({ sequence, broker, id, snapshot: value }, queueKey);
+      try {
+        const id = await currentUserId();
+        // A newer state write superseded this one while auth was resolving; let the newest
+        // write report status so an old request cannot flash a stale "saved" indicator.
+        if (workspaceWriteSequence.get(requestKey) !== sequence) return;
+        if (!id) {
+          publishWorkspaceStorageStatus('local','Changes saved on this device. Sign in to sync across devices.');
+          return;
+        }
+        const queueKey = `${id}:${requestKey}`;
+        await writeWorkspaceSnapshotCloud({ sequence, broker, id, snapshot: value }, queueKey);
+        if (workspaceWriteSequence.get(requestKey) === sequence)
+          publishWorkspaceStorageStatus('saved','Chart layout and drawings synced to your account.');
+      } catch (error) {
+        if (workspaceWriteSequence.get(requestKey) === sequence)
+          publishWorkspaceStorageStatus('local','Changes remain saved on this device; account sync will retry.');
+        throw error;
+      }
     },
     async remove(key) {
       const broker = resolveBroker(brokerScope);
