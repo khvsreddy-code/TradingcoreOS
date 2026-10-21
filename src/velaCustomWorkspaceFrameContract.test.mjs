@@ -50,6 +50,12 @@ assert.match(live, /applyState: \(state: unknown\) => workspace\?\.applyState\(s
 // TradingView-style workspace save, restore and checkpoint coverage.
 assert.match(terminal, /'tco\.save-workspace'/, 'a manual Save control must remain on the existing Vela top bar');
 assert.match(chrome, /id:'tco\.save-workspace'/, 'Save action must be registered with the Vela action system');
+assert.match(chrome, /function updateTcoWorkspaceSaveIndicator/, 'the topbar Save control exposes its current persistence state');
+assert.match(chrome, /data-tco-save-state="saving"/, 'saving state has a visible progress indicator');
+assert.match(chrome, /data-tco-save-state="local"/, 'offline/local-only saves are distinguishable from account sync');
+assert.match(chrome, /data-tco-save-state="error"/, 'failed saves are visually distinct and accessible');
+assert.match(chrome, /aria-label',label/, 'save state is announced accessibly to assistive technology');
+assert.match(chrome, /tco:workspace-autosave-status/, 'periodic and edit-driven autosave updates the topbar indicator');
 assert.match(chrome, /Save as new/, 'users can create named workspace snapshots');
 assert.match(chrome, /saveTcoVelaSavedWorkspace/, 'named workspace snapshots must be persisted');
 assert.match(chrome, /loadTcoVelaSavedWorkspaces/, 'saved workspaces must be listed and restored');
