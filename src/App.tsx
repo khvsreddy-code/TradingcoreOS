@@ -7,7 +7,7 @@ import { WORKSPACE_ROUTES, isWorkspaceRoute } from './routing/appRoutes';
 import { LoadingScreen } from './components/common/LoadingScreen';
 import { LandingShell } from './appShells/LandingShell';
 import { TradingWorkspaceShell } from './appShells/TradingWorkspaceShell';
-import { LiveTradingShell } from './appShells/LiveTradingShell';
+const LiveTradingShell = lazy(() => import('./appShells/LiveTradingShell').then(m => ({ default: m.LiveTradingShell })));
 import { ThemeProvider } from './theme/ThemeContext';
 import { loadTradingCoreRuntime } from './services/runtime/tradingCoreRuntimeLoader';
 import type { TradingCoreRuntimeApi } from './services/runtime/tradingCoreRuntimeLoader';
