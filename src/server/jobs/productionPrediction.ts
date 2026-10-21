@@ -62,8 +62,8 @@ export function parseProductionPredictionInput(body: any): ProductionPredictionI
   const timeframe = String(body?.timeframe || '').trim();
   const candles = parseCandleRows(body?.candles);
   const requestedModels = Array.isArray(body?.models) ? body.models : DEFAULT_MODELS;
-  const models = [...new Set(requestedModels.map((model: unknown) => String(model))
-    .filter((model: string) => ALLOWED_PRODUCTION_MODELS.has(model)))].slice(0, 24);
+  const models: string[] = [...new Set<string>(requestedModels.map((model: unknown) => String(model))
+    .filter((model) => ALLOWED_PRODUCTION_MODELS.has(model)))].slice(0, 24);
   const rawHorizon = body?.horizon ?? 1;
   const horizon = Number(rawHorizon);
   if (!symbol || !timeframe || candles.length < 80) {
