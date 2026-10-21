@@ -24,7 +24,10 @@ export default defineConfig(() => {
             // for the live terminal implementation.
             if (normalized.includes('/src/LiveTradingWorkspace.tsx')) return 'tco-live-workspace';
             if (normalized.includes('/src/CoreSpiritVelaEngine.ts')) return 'tco-corespirit-engine';
-            if (normalized.includes('/src/services/core/chart/')) return 'tco-live-chart';
+            // Do not collapse every chart service into one manual chunk: a small shared
+            // helper imported by the dashboard would otherwise pull the entire live-chart
+            // implementation into the dashboard's initial static graph. Let Rollup split
+            // these services by their actual static/dynamic reachability.
             if (normalized.includes('/src/TcoVelaDataProvider.ts')) return 'tco-live-data';
 
             // Keep the generic authenticated broker/runtime plane separate from Vela itself.
