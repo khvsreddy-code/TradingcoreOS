@@ -96,7 +96,7 @@ const routeRoots = {
   landing: requireKey('src/pages/LandingPage.tsx', 'landing'),
   login: requireKey('src/pages/LoginPage.tsx', 'login'),
   workspace: requireKey('src/pages/DashboardPage.tsx', 'dashboard/workspace'),
-  chart: requireKey('src/LiveTradingTerminal.tsx', 'live chart'),
+  chart: keyFor('src/LiveTradingTerminal.tsx') || entries.find(([, value]) => /(?:^|\/)LiveTradingTerminal-[^/]+\.js$/.test(String(value?.file || '')))?.[0] || requireKey('src/LiveTradingTerminal.tsx', 'live chart'),
   corespiritEditor: requireKey('src/pages/CoreSpiritEditorPage.tsx', 'CoreSpirit editor'),
   models: requireKey('src/pages/ModelsPage.tsx', 'models research'),
   predictions: requireKey('src/pages/PredictionCenterPage.tsx', 'prediction research'),
