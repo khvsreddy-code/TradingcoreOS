@@ -7,7 +7,7 @@ const {
   normalizeDeclaredType,
   compatible,
 } = await import('./typeSystem.ts');
-const { parseCoreSpiritTemporalType } = await import('./temporalTypes.ts');
+const { parseCoreSpiritTemporalType, temporalAssignmentCompatible } = await import('./temporalTypes.ts');
 
 assert.equal(normalizeDeclaredType('series<float>'), 'series<float>');
 assert.equal(normalizeDeclaredType('state<float>'), 'state<float>');
@@ -17,6 +17,14 @@ assert(isSeriesType('series<price>'));
 assert(isStateType('state<float>'));
 assert(isWindowType('window<float>'));
 assert.deepEqual(parseCoreSpiritTemporalType('developing<number>'), { container: 'developing', element: 'number', phase: 'developing' });
+assert.deepEqual(parseCoreSpiritTemporalType('series<number> @confirmed'), { container: 'series', element: 'number', phase: 'confirmed' });
+assert(!temporalAssignmentCompatible('series<number> @confirmed', 'series<number> @developing'),
+  'a developing series must not satisfy a confirmed-data contract');
+assert(!temporalAssignmentCompatible('series<number> @confirmed', 'series<number>'),
+  'unqualified temporal provenance must not satisfy an explicitly confirmed contract');
+assert(temporalAssignmentCompatible('series<number> @confirmed', 'series<number> @confirmed'));
+assert(!temporalAssignmentCompatible('series<number> @forecast', 'series<number> @realtime'),
+  'forecast values must not be assigned to realtime-observation contracts');
 assert(compatible('state<float>', 'state<number>'));
 assert(!compatible('state<float>', 'series<float>'));
 
