@@ -29,7 +29,7 @@ export type CoreSpiritTemporalTypeSpec = Readonly<{
   phase?: CoreSpiritTemporalPhase;
 }>;
 
-const temporalTypePattern = /^(scalar|series|window|state|event|snapshot|stream|confirmed|developing|forecast)<(.+?)>(?:\\s+@([a-z]+))?$/;
+const temporalTypePattern = /^(scalar|series|window|state|event|snapshot|stream|confirmed|developing|forecast)<(.+?)>(?:\s+@([a-z]+))?$/;
 
 export function parseCoreSpiritTemporalType(typeName: string): CoreSpiritTemporalTypeSpec | undefined {
   const normalized = typeName.trim();
