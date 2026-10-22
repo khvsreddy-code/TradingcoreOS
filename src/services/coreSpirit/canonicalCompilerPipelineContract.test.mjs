@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { CoreSpiritCompiler } from './compiler.ts';
+import { clearCoreSpiritCompileCache, compileCoreSpirit } from './coreSpiritPipeline.ts';
 import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline.ts';
-import { validateCoreSpiritIr } from './irContract.ts';
+import { validateCoreSpiritIr, CORE_SPIRIT_IR_VERSION } from './irContract.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { createCoreSpiritCompilationUnit } from './compilerPipeline.ts';
 import { normalizeCoreSpiritSource } from './syntax.ts';
@@ -21,7 +22,14 @@ assert.match(compilerSource, /analyzeCoreSpirit\(ast/);
 assert.match(compilerSource, /semanticContainers/, 'matrix/tensor capability flags must derive from semantic types');
 assert.doesNotMatch(compilerSource, /const hasMatrix\s*=\s*\//, 'matrix capability must not use source-text regex');
 assert.doesNotMatch(compilerSource, /const hasTensor\s*=\s*\//, 'tensor capability must not use source-text regex');
-assert.match(artifactIdentitySource, /compilerPipeline:'semantic-v3'/, 'persisted artifacts from the previous compiler pipeline must use a different cache identity');
+assert.match(artifactIdentitySource, /compilerPipeline:\s*'semantic-v3'/, 'persisted artifacts from the previous compiler pipeline must use a different cache identity');
+assert.match(artifactIdentitySource, /irVersion:\s*CORE_SPIRIT_IR_VERSION/,
+  'cache identity must change with the canonical IR contract version');
+assert.match(artifactIdentitySource, /languageVersion:\s*CORE_SCRIPT_LANGUAGE_VERSION/);
+assert.match(artifactIdentitySource, /CORE_SPIRIT_STANDARD_LIBRARY/,
+  'builtin contract changes must invalidate stale compile artifacts');
+assert.match(artifactIdentitySource, /CORE_SPIRIT_ARTIFACT_SCHEMA_VERSION/);
+assert.match(artifactIdentitySource, /CORE_SPIRIT_COMPILER_PIPELINE_VERSION/);
 
 const partial = createCoreSpiritCompilationUnit('let fast = ema(close, 9)');
 assert.equal(partial.kind, 'partial');
@@ -34,9 +42,17 @@ assert.ok(result.ir, result.diagnostics.map(item => item.message).join('\n'));
 assert.ok(result.artifact, 'successful compilation must emit a VM artifact');
 assert.ok(result.symbols?.some(symbol => symbol.name === 'fast'), 'IDE symbols must come from the canonical semantic pass');
 assert.equal(validateCoreSpiritIr(result.ir), true, 'VM boundary must be the validated IR contract');
+assert.equal(result.ir.version, CORE_SPIRIT_IR_VERSION, 'compiler and VM must import the same canonical IR version');
 assert.equal(validateCoreSpiritCompilerPipelineTrace(result.ir.compilerPipeline), true);
 assert.deepEqual(result.ir.compilerPipeline.stages, CORE_SPIRIT_COMPILER_STAGE_ORDER);
 assert.equal(result.ir.compilerPipeline.runtimeBoundary, 'CoreSpiritExecutionVM');
+clearCoreSpiritCompileCache();
+const facadeResult = compileCoreSpirit('let fast = ema(close, 9)', 'canonical-pipeline-contract');
+assert.ok(facadeResult.artifact, 'canonical facade must produce an executable artifact');
+assert.equal(facadeResult.artifact.abi.artifactHash, result.artifact.abi.artifactHash,
+  'the facade/worker entry point and compiler entry point must emit the same artifact identity for the same script/source id');
+assert.deepEqual(facadeResult.ir, result.ir,
+  'canonical compilation entry points must produce identical executable semantics');
 
 // Comments and string literals are data, not capability use. The old source-regex
 // capability check incorrectly treated both as requests for host privileges.
