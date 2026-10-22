@@ -29,20 +29,25 @@ export type CoreSpiritTemporalTypeSpec = Readonly<{
   phase?: CoreSpiritTemporalPhase;
 }>;
 
-const temporalTypePattern = /^(scalar|series|window|state|event|snapshot|stream|confirmed|developing|forecast)<(.+)>$/;
+const temporalTypePattern = /^(scalar|series|window|state|event|snapshot|stream|confirmed|developing|forecast)<(.+?)>(?:\\s+@([a-z]+))?$/;
 
 export function parseCoreSpiritTemporalType(typeName: string): CoreSpiritTemporalTypeSpec | undefined {
   const normalized = typeName.trim();
   const match = normalized.match(temporalTypePattern);
-  if (!match) return undefined;
+  if (!match || !match[2]!.trim()) return undefined;
+  const container = match[1] as CoreSpiritTemporalContainer;
+  const suffixPhase = match[3] as CoreSpiritTemporalPhase | undefined;
+  if (suffixPhase && !(CORE_SPIRIT_TEMPORAL_PHASES as readonly string[]).includes(suffixPhase)) return undefined;
+  const intrinsicPhase: CoreSpiritTemporalPhase | undefined =
+    container === 'confirmed' ? 'confirmed' :
+    container === 'developing' ? 'developing' :
+    container === 'forecast' ? 'forecast' : undefined;
+  // Reject contradictory certainty (for example confirmed<T> @developing).
+  if (intrinsicPhase && suffixPhase && intrinsicPhase !== suffixPhase) return undefined;
   return Object.freeze({
-    container: match[1] as CoreSpiritTemporalContainer,
+    container,
     element: match[2]!.trim(),
-    phase:
-      match[1] === 'confirmed' ? 'confirmed' :
-      match[1] === 'developing' ? 'developing' :
-      match[1] === 'forecast' ? 'forecast' :
-      undefined,
+    phase: suffixPhase ?? intrinsicPhase,
   });
 }
 
@@ -51,9 +56,24 @@ export function makeCoreSpiritTemporalType(
   element: string,
   phase?: CoreSpiritTemporalPhase,
 ): string {
-  return phase
-    ? `${container}<${element}> @${phase}`
-    : `${container}<${element}>`;
+  const normalizedElement = element.trim();
+  if (!normalizedElement || /[<>]/.test(normalizedElement)) {
+    throw new TypeError('Temporal element type must be non-empty and cannot contain angle brackets.');
+  }
+  const intrinsicPhase: CoreSpiritTemporalPhase | undefined =
+    container === 'confirmed' ? 'confirmed' :
+    container === 'developing' ? 'developing' :
+    container === 'forecast' ? 'forecast' : undefined;
+  if (phase && !(CORE_SPIRIT_TEMPORAL_PHASES as readonly string[]).includes(phase)) {
+    throw new TypeError(`Unsupported temporal phase: ${String(phase)}`);
+  }
+  if (intrinsicPhase && phase && intrinsicPhase !== phase) {
+    throw new TypeError(`Container '${container}' conflicts with phase '${phase}'.`);
+  }
+  const effectivePhase = phase ?? intrinsicPhase;
+  return effectivePhase
+    ? `${container}<${normalizedElement}> @${effectivePhase}`
+    : `${container}<${normalizedElement}>`;
 }
 
 export function temporalElementType(typeName: string): string | undefined {
@@ -124,6 +144,9 @@ export function temporalAssignmentCompatible(expected: string, actual: string): 
   if (!e || !a) return false;
   if (e.container === 'scalar' && a.container === 'scalar') return e.element === a.element || e.element === 'number' || a.element === 'number';
   if (e.container !== a.container) return false;
+  // An explicitly required phase is a safety contract: developing values must
+  // never satisfy a confirmed-value requirement, nor forecasts satisfy live data.
+  if (e.phase && e.phase !== a.phase) return false;
   if (e.element === a.element || e.element === 'number' || a.element === 'number') return true;
   return false;
 }
