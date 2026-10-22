@@ -17,6 +17,7 @@ import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreS
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
 import { makeCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
+import { withCoreSpiritCompositionMetadata } from './surfaceForms';
 import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import { planCoreSpiritExecution } from './executionPlanner';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan';
@@ -103,7 +104,8 @@ export class CoreSpiritCompiler {
     const symbols = symbolsFromSemantic(semantic);
     const stageDiagnostics = Array.from(new Map([...names.diagnostics.map(d => ({ ...d })), ...semantic.diagnostics].map(d => [`${d.code ?? ''}|${d.message}|${d.start ?? ''}`, d])).values());
     if (stageDiagnostics.some(d => d.severity === 'error')) return { diagnostics: stageDiagnostics, symbols };
-    const surface = options.surface ?? makeCoreSpiritSurfaceMetadata([]);
+    const baseSurface = options.surface ?? makeCoreSpiritSurfaceMetadata([]);
+    const surface = withCoreSpiritCompositionMetadata(ast, semantic, baseSurface);
     const semanticDependencyGraph = buildCoreSpiritSemanticDependencyGraph(ast, semantic, surface);
     const instructions: CoreSpiritIrInstruction[] = [];
     const locals: string[] = [];
