@@ -47,28 +47,44 @@ export class TradingKillSwitchRepository {
     const brokerId = input.brokerId.trim().toLowerCase();
     if (!/^[a-z0-9_-]{1,64}$/.test(brokerId)) throw new Error('Invalid broker scope for trading kill-switch lookup.');
 
-    const { data, error } = await this.db()
-      .from('trading_kill_switches')
+    const db = this.db();
+    // Query the exact account key first, then (when present) the exact strategy
+    // key. Do not use a capped list here: more than 100 active strategy switches
+    // must never hide an account-wide stop from the execution boundary.
+    const account = await db.from('trading_kill_switches')
       .select('scope,scope_id,reason,updated_at')
       .eq('user_id', input.userId)
       .eq('broker_id', brokerId)
+      .eq('scope', 'account')
+      .eq('scope_id', 'account')
       .eq('is_active', true)
-      .order('updated_at', { ascending: false })
-      .limit(100);
-    if (error) throw new Error(`Unable to verify trading kill switches: ${error.message}`);
+      .maybeSingle();
+    if (account.error) throw new Error(`Unable to verify account trading kill switch: ${account.error.message}`);
+    if (account.data) {
+      return {
+        scope: 'account',
+        scopeId: 'account',
+        reason: String(account.data.reason ?? ''),
+        updatedAt: String(account.data.updated_at ?? ''),
+      };
+    }
 
-    const rows = (data ?? []) as Array<Record<string, unknown>>;
-    const account = rows.find(row => row.scope === 'account' && row.scope_id === 'account');
-    const strategy = input.strategyId
-      ? rows.find(row => row.scope === 'strategy' && row.scope_id === input.strategyId)
-      : undefined;
-    const row = account ?? strategy;
-    if (!row) return null;
+    if (!input.strategyId) return null;
+    const strategy = await db.from('trading_kill_switches')
+      .select('scope,scope_id,reason,updated_at')
+      .eq('user_id', input.userId)
+      .eq('broker_id', brokerId)
+      .eq('scope', 'strategy')
+      .eq('scope_id', input.strategyId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (strategy.error) throw new Error(`Unable to verify strategy trading kill switch: ${strategy.error.message}`);
+    if (!strategy.data) return null;
     return {
-      scope: row.scope as TradingKillSwitchScope,
-      scopeId: String(row.scope_id),
-      reason: String(row.reason ?? ''),
-      updatedAt: String(row.updated_at ?? ''),
+      scope: 'strategy',
+      scopeId: String(strategy.data.scope_id),
+      reason: String(strategy.data.reason ?? ''),
+      updatedAt: String(strategy.data.updated_at ?? ''),
     };
   }
 
