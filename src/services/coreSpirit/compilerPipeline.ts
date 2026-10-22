@@ -7,7 +7,15 @@ import { normalizeCoreSpiritSource } from './syntax';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 
+/**
+ * Diagnostic/editor-only result from the lightweight compilation-unit builder.
+ * This contract intentionally has no IR/artifact field and is not executable.
+ * Production runners must use CoreSpiritCompiler/compileCoreSpirit and validate
+ * the resulting CoreSpiritExecutableArtifact at the VM boundary.
+ */
 export type CoreSpiritCompilationUnit = {
+  kind: 'partial';
+  executable: false;
   source: string;
   normalizedSource: string;
   ast: CoreSpiritAst;
@@ -37,7 +45,7 @@ export function createCoreSpiritCompilationUnit(
     ...syntaxDiagnostics.map(d => ({ severity:'error' as const, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })),
     ...(semantic?.diagnostics ?? []),
   ];
-  return { source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
+  return { kind: 'partial', executable: false, source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
 }
 
 
