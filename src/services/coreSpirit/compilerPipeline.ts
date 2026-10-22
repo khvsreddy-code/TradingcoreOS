@@ -1,5 +1,6 @@
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import type { CoreSpiritSemanticResult } from './semanticAnalyzer';
+import type { CoreSpiritDiagnostic } from './semanticAnalyzer';
 import type { CoreSpiritAst } from './ast';
 import { CoreSpiritParser } from './parser';
 import { analyzeCoreSpirit } from './semanticAnalyzer';
@@ -13,6 +14,52 @@ import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
  * Production runners must use CoreSpiritCompiler/compileCoreSpirit and validate
  * the resulting CoreSpiritExecutableArtifact at the VM boundary.
  */
+/**
+ * Canonical diagnostic shape shared by editor, CLI and executable compilation.
+ * The fallback code is intentionally stage-neutral but stable; producers should
+ * supply more specific codes whenever they know the violated contract.
+ */
+export function normalizeCoreSpiritDiagnostics(
+  diagnostics: readonly CoreSpiritDiagnostic[],
+  source: string,
+): CoreSpiritDiagnostic[] {
+  const text = String(source ?? '');
+  const lineStarts = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10) lineStarts.push(index + 1);
+  }
+  const clamp = (value: number) => Math.max(0, Math.min(text.length, Math.trunc(value)));
+  return diagnostics.map((diagnostic) => {
+    const requestedLine = Number.isInteger(diagnostic.line) && (diagnostic.line ?? 0) > 0
+      ? Math.min(diagnostic.line as number, lineStarts.length)
+      : 1;
+    const requestedColumn = Number.isInteger(diagnostic.column) && (diagnostic.column ?? 0) > 0
+      ? diagnostic.column as number
+      : 1;
+    const start = clamp(Number.isInteger(diagnostic.start)
+      ? diagnostic.start as number
+      : lineStarts[requestedLine - 1] + requestedColumn - 1);
+    const end = clamp(Number.isInteger(diagnostic.end) && (diagnostic.end as number) >= start
+      ? diagnostic.end as number
+      : start < text.length ? start + 1 : start);
+    let low = 0;
+    let high = lineStarts.length;
+    while (low + 1 < high) {
+      const middle = (low + high) >>> 1;
+      if (lineStarts[middle] <= start) low = middle;
+      else high = middle;
+    }
+    return {
+      ...diagnostic,
+      code: diagnostic.code || (diagnostic.severity === 'warning' ? 'COMPILER_WARNING' : 'COMPILER_ERROR'),
+      start,
+      end,
+      line: low + 1,
+      column: start - lineStarts[low] + 1,
+    };
+  });
+}
+
 export type CoreSpiritCompilationUnit = {
   kind: 'partial';
   executable: false;
@@ -39,12 +86,12 @@ export function createCoreSpiritCompilationUnit(
   const original = String(source ?? '');
   const normalizedSource = normalizeCoreSpiritSource(original);
   const parsed = new CoreSpiritParser(normalizedSource).parseDetailed();
-  const syntaxDiagnostics = parsed.diagnostics;
+  const syntaxDiagnostics = parsed.diagnostics.map(d => ({ ...d, code: 'SYNTAX_ERROR' }));
   const semantic = syntaxDiagnostics.length ? null : analyzeCoreSpirit(parsed.ast, options);
-  const diagnostics = [
-    ...syntaxDiagnostics.map(d => ({ severity:'error' as const, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })),
+  const diagnostics = normalizeCoreSpiritDiagnostics([
+    ...syntaxDiagnostics.map(d => ({ severity:'error' as const, code:d.code, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })),
     ...(semantic?.diagnostics ?? []),
-  ];
+  ], normalizedSource);
   return { kind: 'partial', executable: false, source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
 }
 
