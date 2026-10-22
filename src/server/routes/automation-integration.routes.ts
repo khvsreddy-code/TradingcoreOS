@@ -803,6 +803,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         order: submitPayload,
         live: true,
         checkMargin: false,
+        precheckedRequiredMargin: risk.requiredMargin,
       });
     } catch (error) {
       const message = getErrorMessage(error, 'Unable to refresh pre-dispatch risk snapshots; no order was submitted.');
