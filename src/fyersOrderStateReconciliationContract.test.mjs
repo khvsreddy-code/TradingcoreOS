@@ -84,6 +84,11 @@ assert.match(terminalHardening, /v_current_status in \('CANCELLED','EXPIRED'\) a
 assert.match(engine, /AuditLogRepository\.appendOnce/,
   'canonical order-state observations must be hash-chained and retry-safe');
 assert.match(engine, /broker\.order\.state_observed/);
+assert.match(engine, /event\.type === 'OrderUpdate' \|\| event\.type === 'Fill'/,
+  'both status updates and individual fill ticks must be audited through the canonical reducer');
+assert.match(engine, /broker\.order\.fill_observed/);
+assert.match(engine, /filledQuantity: Math\.max\(currentFilled, incomingFilled\)/,
+  'stale snapshots must not lower the previously observed cumulative filled quantity');
 assert.match(auditRepository, /append_execution_audit_event_once/);
 assert.match(auditMigration, /primary key \(user_id, event_key\)/i,
   'a broker-event retry must complete its missing audit append without a duplicate chain entry');
