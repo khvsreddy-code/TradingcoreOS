@@ -4,6 +4,7 @@ import { FyersApiClient } from '../core/FyersApiClient.js';
 import { resolveFyersCapabilities } from '../core/FyersCapabilities.js';
 import { canonicalSha256 } from '../../utils/canonicalJson.js';
 import { marketEventBus } from '../../marketData/MarketEventBus.js';
+import { AuditLogRepository } from '../../storage/AuditLogRepository.js';
 import { normalizeFyersOrderPayload, type FyersNormalizedOrderEvent } from './fyersOrderEventNormalizer.js';
 
 export type FyersOrderStateStatus =
@@ -296,6 +297,39 @@ export class FyersOrderStateEngine {
     const storedEvent = domainEvent(row.event_payload);
     const storedState = domainEvent(row.state_payload);
     let events: DomainMarketEvent[] = [];
+
+    if (event.type === 'OrderUpdate') {
+      const canonicalOrder = storedState?.type === 'OrderUpdate'
+        ? storedState
+        : storedEvent?.type === 'OrderUpdate'
+          ? storedEvent
+          : withSequence(event, sequence);
+      // Broker events are durably reduced first, then appended exactly once to
+      // the user's immutable audit hash chain. If audit persistence fails, the
+      // caller retries/reconciles; the event-key ledger lets that retry finish
+      // the audit write even though the reducer now identifies it as a duplicate.
+      await AuditLogRepository.appendOnce({
+        userId,
+        actorType: source === 'tradingcore' ? 'system' : 'broker',
+        eventType: 'broker.order.state_observed',
+        correlationId: String(event.clientOrderId || event.brokerOrderId || event.orderId || eventKey),
+        payload: {
+          brokerId: 'fyers',
+          source,
+          eventKey,
+          brokerOrderId: canonicalOrder.brokerOrderId || canonicalOrder.orderId || null,
+          clientOrderId: canonicalOrder.clientOrderId || event.clientOrderId || null,
+          receivedStatus: event.status,
+          canonicalStatus: canonicalOrder.status,
+          quantity: canonicalOrder.quantity ?? null,
+          filledQuantity: canonicalOrder.filledQuantity ?? null,
+          averagePrice: canonicalOrder.averagePrice ?? null,
+          sequence,
+          applied,
+          duplicate,
+        },
+      }, `fyers-order-state:${eventKey}`);
+    }
 
     if (event.type === 'OrderUpdate') {
       if (source === 'reconciliation' && storedState?.type === 'OrderUpdate') {
