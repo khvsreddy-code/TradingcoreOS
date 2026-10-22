@@ -115,6 +115,7 @@ export class TradingKillSwitchRepository {
     scopeId: string;
     active: boolean;
     reason: string;
+    requestId?: string | null;
   }): Promise<TradingKillSwitchRecord> {
     const brokerId = input.brokerId.trim().toLowerCase();
     const scopeId = input.scope === 'account' ? 'account' : input.scopeId.trim();
@@ -122,31 +123,26 @@ export class TradingKillSwitchRepository {
     if (!input.userId.trim() || !scopeId || scopeId.length > 128) throw new Error('Invalid owner or scope id for trading kill switch.');
     if (input.scope !== 'account' && input.scope !== 'strategy') throw new Error('Invalid trading kill-switch scope.');
 
-    const now = new Date().toISOString();
     const reason = String(input.reason ?? '').trim().slice(0, 500);
-    const { data, error } = await this.db()
-      .from('trading_kill_switches')
-      .upsert({
-        user_id: input.userId,
-        broker_id: brokerId,
-        scope: input.scope,
-        scope_id: scopeId,
-        is_active: input.active,
-        reason,
-        updated_by: input.userId,
-        updated_at: now,
-      }, { onConflict: 'user_id,broker_id,scope,scope_id' })
-      .select('user_id,broker_id,scope,scope_id,is_active,reason,updated_at')
-      .single();
-    if (error || !data) throw new Error(`Unable to persist trading kill switch: ${error?.message || 'missing row'}`);
+    const { data, error } = await this.db().rpc('set_trading_kill_switch', {
+      p_user_id: input.userId,
+      p_broker_id: brokerId,
+      p_scope: input.scope,
+      p_scope_id: scopeId,
+      p_active: input.active,
+      p_reason: reason,
+      p_request_id: input.requestId || null,
+    });
+    const row = Array.isArray(data) ? data[0] as Record<string, unknown> | undefined : data as Record<string, unknown> | null;
+    if (error || !row) throw new Error(`Unable to atomically persist and audit trading kill switch: ${error?.message || 'missing row'}`);
     return {
-      userId: String(data.user_id),
-      brokerId: String(data.broker_id),
-      scope: data.scope as TradingKillSwitchScope,
-      scopeId: String(data.scope_id),
-      active: data.is_active === true,
-      reason: String(data.reason ?? ''),
-      updatedAt: String(data.updated_at ?? ''),
+      userId: String(row.user_id),
+      brokerId: String(row.broker_id),
+      scope: row.scope as TradingKillSwitchScope,
+      scopeId: String(row.scope_id),
+      active: row.is_active === true,
+      reason: String(row.reason ?? ''),
+      updatedAt: String(row.updated_at ?? ''),
     };
   }
 }
