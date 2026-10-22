@@ -279,10 +279,6 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
           symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
           side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
         });
-        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'SUBMITTED', {
-          symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
-          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
-        });
       } catch (lifecycleError: unknown) {
         // No broker request has been made yet, so this attempt is safe to close
         // as failed rather than leaving an unresolvable in-flight idempotency key.
@@ -315,6 +311,59 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, {
         success: false, orderSubmitted: false, error: message, requestId: requestId || null,
       }).catch(() => undefined);
+      res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+      return;
+    }
+    // Record SUBMITTED immediately before dispatch, then check the durable
+    // kill switch again as the last admission check at the execution boundary.
+    if (clientOrderId) {
+      try {
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'SUBMITTED', {
+          symbol: orderPayload.symbol,
+          quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        });
+      } catch (lifecycleError: unknown) {
+        const message = getErrorMessage(lifecycleError, 'Unable to persist FYERS submission state; no broker request was made.');
+        const failure = { success: false, orderSubmitted: false, error: message, requestId: requestId || null };
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, failure).catch(() => undefined);
+        res.status(503).json(failure);
+        return;
+      }
+    }
+    try {
+      const activeSwitch = await TradingKillSwitchRepository.activeBlock({ userId, brokerId });
+      if (activeSwitch) {
+        const reason = activeSwitch.reason || 'Trading is paused by an active kill switch.';
+        if (clientOrderId) {
+          await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'REJECTED', {
+            symbol: orderPayload.symbol,
+            quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+            side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+            message: 'Blocked by trading kill switch immediately before broker dispatch.',
+          });
+        }
+        const response = { success: false, orderSubmitted: false, blockedByKillSwitch: true, scope: activeSwitch.scope, reason };
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response);
+        await AuditLogRepository.appendRequired({
+          userId, actorType: 'system', eventType: 'order.blocked.kill_switch',
+          requestId, correlationId: idempotencyKey,
+          payload: { brokerId, idempotencyKey, scope: activeSwitch.scope, scopeId: activeSwitch.scopeId, reason, blockedAtExecutionBoundary: true },
+        });
+        res.status(423).json(response);
+        return;
+      }
+    } catch (killSwitchError: unknown) {
+      const message = getErrorMessage(killSwitchError, 'Kill-switch state could not be verified immediately before broker dispatch.');
+      if (clientOrderId) {
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'REJECTED', {
+          symbol: orderPayload.symbol,
+          quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+          message: 'Blocked because kill-switch verification failed before dispatch.',
+        }).catch(() => undefined);
+      }
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, { success: false, orderSubmitted: false, error: message }).catch(() => undefined);
       res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
       return;
     }
