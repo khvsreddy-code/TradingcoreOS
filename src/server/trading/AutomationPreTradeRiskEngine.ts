@@ -142,6 +142,7 @@ async function evaluatePreTradeRiskWithPolicy(input: {
   broker: BaseBroker;
   order: BrokerOrderPayload;
   live: boolean;
+  checkMargin?: boolean;
   policy: PreTradeRiskPolicy;
 }): Promise<AutomationRiskVerdict> {
   const checks: Record<string, unknown>[] = [];
@@ -376,7 +377,7 @@ async function evaluatePreTradeRiskWithPolicy(input: {
   }
 
   let requiredMargin: number | null = null;
-  if (input.live) {
+  if (input.live && input.checkMargin !== false) {
     try {
       if (input.policy.brokerId === 'fyers') {
         requiredMargin = await estimateFyersRequiredMargin({ userId: input.userId, accessToken: input.accessToken, order: input.order });
@@ -430,6 +431,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
   integration: AutomationIntegration;
   order: BrokerOrderPayload;
   live: boolean;
+  checkMargin?: boolean;
 }): Promise<AutomationRiskVerdict> {
   return evaluatePreTradeRiskWithPolicy({
     userId: input.userId,
@@ -437,6 +439,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
     broker: input.broker,
     order: input.order,
     live: input.live,
+    checkMargin: input.checkMargin,
     policy: {
       brokerId: input.integration.brokerId,
       strategyId: input.integration.automationId,
@@ -456,6 +459,7 @@ export async function evaluateManualPreTradeRisk(input: {
   broker: BaseBroker;
   order: BrokerOrderPayload;
   live: boolean;
+  checkMargin?: boolean;
 }): Promise<AutomationRiskVerdict> {
   const symbol = String(input.order.symbol ?? '').trim().toUpperCase();
   let maxOrderQuantity = Number(process.env.TRADINGCORE_MANUAL_MAX_ORDER_QUANTITY ?? 1000);
@@ -470,6 +474,7 @@ export async function evaluateManualPreTradeRisk(input: {
     broker: input.broker,
     order: input.order,
     live: input.live,
+    checkMargin: input.checkMargin,
     policy: {
       brokerId: input.broker.brokerId,
       allowedSymbols: [symbol],
