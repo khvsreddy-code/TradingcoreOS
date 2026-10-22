@@ -8,6 +8,14 @@ assert.equal(canTransitionFyersOrderStatus('OPEN', 'FILLED'), true);
 assert.equal(canTransitionFyersOrderStatus('FILLED', 'OPEN'), false);
 assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'PARTIAL'), false);
 assert.equal(canTransitionFyersOrderStatus('CANCEL_PENDING', 'FILLED'), true);
+assert.equal(canTransitionFyersOrderStatus('FILLED', 'CANCELLED', 'reconciliation'), false,
+  'a stale REST cancellation must never regress a previously confirmed full fill');
+assert.equal(canTransitionFyersOrderStatus('FILLED', 'REJECTED', 'reconciliation'), false,
+  'a terminal full fill must not be rewritten by a stale reject frame');
+assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'reconciliation'), true,
+  'a confirmed full fill may correct a cancellation race');
+assert.equal(canTransitionFyersOrderStatus('EXPIRED', 'FILLED', 'websocket'), true,
+  'a live fill can race with expiry and must win over the stale terminal status');
 
 const event = {
   type: 'OrderUpdate', orderId: 'FY-1', brokerOrderId: 'FY-1', clientOrderId: 'TCO-1',
@@ -29,6 +37,7 @@ const normalizer = read('src/server/fyers/trading/fyersOrderEventNormalizer.ts')
 const route = read('src/server/routes/trading.routes.ts');
 const streamRoute = read('src/server/routes/fyers-order-stream.routes.ts');
 const migration = read('supabase/migrations/20261011100000_fyers_order_state_reconciliation.sql');
+const terminalHardening = read('supabase/migrations/20261022192000_harden_filled_order_terminal_state.sql');
 
 assert.match(transport, /FyersOrderStateEngine\.reconcile\(/,
   'every fresh/reconnected socket must reconcile before publishing deltas');
@@ -66,5 +75,8 @@ assert.match(route, /markRecoveryRequired\(userId, brokerId, idempotencyKey, rec
 assert.match(route, /FYERS accepted the request but returned no broker order id/);
 assert.match(route, /recordLifecycle\(userId, '', 'CANCEL_PENDING', \{ brokerOrderId: orderId \}\)/,
   'cancel intent must be durable before issuing the broker cancellation request');
+
+assert.match(terminalHardening, /v_current_status = 'FILLED'[\s\S]*?v_applied := false;/);
+assert.match(terminalHardening, /v_current_status in \('CANCELLED','EXPIRED'\) and v_status = 'FILLED'/);
 
 console.log('FYERS_ORDER_RECONCILIATION_STATE_MACHINE_CONTRACT_OK');
