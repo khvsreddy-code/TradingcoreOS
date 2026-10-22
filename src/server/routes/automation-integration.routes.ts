@@ -790,6 +790,102 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       return await rejectAndStore(503, message);
     }
 
+    // Refresh provider quotes, account funds and all open-position marks after
+    // the write/audit work above. A previous approval is not reusable once its
+    // snapshots have aged. Re-use the broker margin preview from the first pass.
+    let dispatchRisk: Awaited<ReturnType<typeof evaluateAutomationPreTradeRisk>>;
+    try {
+      dispatchRisk = await evaluateAutomationPreTradeRisk({
+        userId: integration.userId,
+        accessToken,
+        broker,
+        integration,
+        order: submitPayload,
+        live: true,
+        checkMargin: false,
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to refresh pre-dispatch risk snapshots; no order was submitted.');
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+      }).catch(() => undefined);
+      const response = { success: false, error: message, requestId: externalRequestId, orderSubmitted: false, recoveryRequired: false, clientOrderId };
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
+      }).catch(() => undefined);
+      await AuditLogRepository.append({
+        userId: integration.userId, actorType: 'system', eventType: 'automation.order.pre_dispatch_risk_unavailable',
+        requestId, correlationId: externalRequestId,
+        payload: { ...executionProvenance, clientOrderId, internalIdempotencyKey, error: message },
+      }).catch(() => undefined);
+      return res.status(503).json(response);
+    }
+    if (!dispatchRisk.approved) {
+      const response = {
+        success: false, error: dispatchRisk.reason, requestId: externalRequestId,
+        orderSubmitted: false, recoveryRequired: false, clientOrderId,
+        riskChecks: dispatchRisk.checks, estimatedNotional: dispatchRisk.estimatedNotional,
+        quotedPrice: dispatchRisk.quotedPrice,
+        projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+      };
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        message: `Pre-dispatch risk recheck rejected: ${dispatchRisk.reason}`,
+      }).catch(() => undefined);
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: dispatchRisk.checks,
+      }).catch(() => undefined);
+      try {
+        await AuditLogRepository.appendRequired({
+          userId: integration.userId, actorType: 'system', eventType: 'automation.order.pre_dispatch_risk_rejected',
+          requestId, correlationId: externalRequestId,
+          payload: {
+            ...executionProvenance, clientOrderId, internalIdempotencyKey,
+            verdict: 'rejected', reason: dispatchRisk.reason, checks: dispatchRisk.checks,
+            quotedPrice: dispatchRisk.quotedPrice, projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+          },
+        });
+      } catch {
+        // The request has already been closed as "not submitted". Do not dispatch
+        // when its rejection cannot be appended to the mandatory audit chain.
+        return res.status(503).json({ ...response, error: 'Pre-dispatch risk rejection could not be durably audited.' });
+      }
+      return res.status(422).json(response);
+    }
+    try {
+      await AuditLogRepository.appendRequired({
+        userId: integration.userId, actorType: 'system', eventType: 'automation.order.pre_dispatch_risk_approved',
+        requestId, correlationId: externalRequestId,
+        payload: {
+          ...executionProvenance, clientOrderId, internalIdempotencyKey,
+          verdict: 'approved', checks: dispatchRisk.checks,
+          quotedPrice: dispatchRisk.quotedPrice,
+          estimatedNotional: dispatchRisk.estimatedNotional,
+          projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+          basedOnFreshSnapshot: true,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, 'Fresh pre-dispatch risk verdict could not be audited; order submission is blocked.');
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+      }).catch(() => undefined);
+      const response = { success: false, error: message, requestId: externalRequestId, orderSubmitted: false, recoveryRequired: false, clientOrderId };
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: dispatchRisk.checks,
+      }).catch(() => undefined);
+      return res.status(503).json(response);
+    }
+
     // Last-moment server-side admission check. UI state and the earlier risk
     // verdict are not authority if an operator flips a kill switch during evaluation.
     try {
