@@ -770,6 +770,11 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         response: { success: false, state: 'INTENT', orderSubmitted: false, requestId: externalRequestId },
         clientOrderId, signalId, estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
       });
+      await AuditLogRepository.appendRequired({
+        userId: integration.userId, actorType: 'automation', eventType: 'automation.order.submitting',
+        requestId, correlationId: externalRequestId,
+        payload: { ...executionProvenance, requestId: externalRequestId, clientOrderId, internalIdempotencyKey, requestHash, riskVerdict: 'approved', estimatedNotional: risk.estimatedNotional, submittedOrder: { symbol: submitPayload.symbol, side: submitPayload.side, quantity: submitPayload.quantity, orderType: submitPayload.orderType, product: submitPayload.product } },
+      });
       await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'SUBMITTED', {
         symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
         side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
@@ -778,11 +783,6 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         state: 'SUBMITTED',
         response: { success: false, state: 'SUBMITTED', orderSubmitted: 'pending', requestId: externalRequestId },
         clientOrderId, signalId, estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
-      });
-      await AuditLogRepository.append({
-        userId: integration.userId, actorType: 'automation', eventType: 'automation.order.submitting',
-        requestId, correlationId: externalRequestId,
-        payload: { ...executionProvenance, requestId: externalRequestId, clientOrderId, internalIdempotencyKey, requestHash, riskVerdict: 'approved', estimatedNotional: risk.estimatedNotional, submittedOrder: { symbol: submitPayload.symbol, side: submitPayload.side, quantity: submitPayload.quantity, orderType: submitPayload.orderType, product: submitPayload.product } },
       });
     } catch (error) {
       const message = getErrorMessage(error, 'Unable to persist order intent and audit before broker submission.');
