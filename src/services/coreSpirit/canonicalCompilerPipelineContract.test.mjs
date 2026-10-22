@@ -36,6 +36,14 @@ assert.equal(partial.kind, 'partial');
 assert.equal(partial.executable, false);
 assert.equal(Object.hasOwn(partial, 'ir'), false, 'partial editor compilation must never masquerade as executable IR');
 assert.equal(Object.hasOwn(partial, 'artifact'), false, 'partial editor compilation must never expose an executable artifact');
+assert.ok(partial.diagnostics.every(d => typeof d.code === 'string' && Number.isInteger(d.start) && Number.isInteger(d.end)),
+  'partial editor diagnostics must always have stable machine-readable codes and source spans');
+const invalid = new CoreSpiritCompiler().compileSource('let broken =', 'canonical-diagnostic-contract');
+assert.ok(invalid.diagnostics.length > 0, 'invalid source must produce at least one diagnostic');
+assert.ok(invalid.diagnostics.every(d =>
+  typeof d.code === 'string' && Number.isInteger(d.start) && Number.isInteger(d.end) &&
+  Number.isInteger(d.line) && Number.isInteger(d.column)),
+  'canonical compiler diagnostics must always have codes, offsets and line/column source spans');
 
 const result = new CoreSpiritCompiler().compileSource('let fast = ema(close, 9)', 'canonical-pipeline-contract');
 assert.ok(result.ir, result.diagnostics.map(item => item.message).join('\n'));
