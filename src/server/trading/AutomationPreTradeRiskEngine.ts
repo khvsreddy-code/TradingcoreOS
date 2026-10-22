@@ -4,6 +4,7 @@ import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 import { validateFyersManualOrderPreflight } from './fyersOrderExecution.js';
 import type { AutomationIntegration } from '../automation/AutomationIntegrationRepository.js';
+import { TradingKillSwitchRepository } from '../storage/TradingKillSwitchRepository.js';
 
 export interface AutomationRiskVerdict {
   approved: boolean;
@@ -127,6 +128,26 @@ export async function evaluateAutomationPreTradeRisk(input: {
   live: boolean;
 }): Promise<AutomationRiskVerdict> {
   const checks: Record<string, unknown>[] = [];
+  if (input.live) {
+    try {
+      const activeSwitch = await TradingKillSwitchRepository.activeBlock({
+        userId: input.userId,
+        brokerId: input.integration.brokerId,
+        strategyId: input.integration.automationId,
+      });
+      if (activeSwitch) {
+        checks.push({ check: 'trading-kill-switch', passed: false, scope: activeSwitch.scope, scopeId: activeSwitch.scopeId });
+        return reject(
+          `Live order submission is blocked by the active ${activeSwitch.scope} kill switch.${activeSwitch.reason ? ` Reason: ${activeSwitch.reason}` : ''}`,
+          checks,
+        );
+      }
+      checks.push({ check: 'trading-kill-switch', passed: true });
+    } catch {
+      checks.push({ check: 'trading-kill-switch', passed: false, reason: 'unavailable' });
+      return reject('Kill-switch state could not be verified. Live order submission is blocked.', checks);
+    }
+  }
   try {
     validateFyersManualOrderPreflight(input.order);
   } catch (error) {
@@ -147,6 +168,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
   let quotes: Record<string, { ltp: number; timestamp: string }>;
   let funds: Awaited<ReturnType<BaseBroker['getFunds']>>;
   let positions: Awaited<ReturnType<BaseBroker['getPositions']>>;
+  const riskSnapshotStartedAt = Date.now();
   try {
     [quotes, funds, positions] = await Promise.all([
       input.broker.getMarketQuotes(input.accessToken, [symbol]),
@@ -156,6 +178,11 @@ export async function evaluateAutomationPreTradeRisk(input: {
   } catch {
     return reject('Fresh broker quote, funds, and position snapshots are required. The broker risk snapshot could not be verified.', checks);
   }
+  const riskSnapshotFetchMs = Date.now() - riskSnapshotStartedAt;
+  if (riskSnapshotFetchMs > 8_000) {
+    return reject('Broker account and position snapshots took too long to verify. Retry with a fresh snapshot; no order was submitted.', checks);
+  }
+  checks.push({ check: 'broker-risk-snapshot-latency', passed: true, fetchMs: riskSnapshotFetchMs, maxMs: 8_000 });
 
   const quote = findQuote(quotes, symbol);
   if (!quote || !finite(quote.ltp) || quote.ltp <= 0) return reject('No valid live broker quote is available for this symbol.', checks);
