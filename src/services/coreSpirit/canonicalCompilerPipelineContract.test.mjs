@@ -4,6 +4,7 @@ import { CoreSpiritCompiler } from './compiler.ts';
 import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
 import { CoreSpiritParser } from './parser.ts';
+import { createCoreSpiritCompilationUnit } from './compilerPipeline.ts';
 import { normalizeCoreSpiritSource } from './syntax.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
 import { validateCoreScriptCapabilityRequirementsFromAst } from './coreScriptLanguagePolicy.ts';
@@ -21,6 +22,12 @@ assert.match(compilerSource, /semanticContainers/, 'matrix/tensor capability fla
 assert.doesNotMatch(compilerSource, /const hasMatrix\s*=\s*\//, 'matrix capability must not use source-text regex');
 assert.doesNotMatch(compilerSource, /const hasTensor\s*=\s*\//, 'tensor capability must not use source-text regex');
 assert.match(artifactIdentitySource, /compilerPipeline:'semantic-v3'/, 'persisted artifacts from the previous compiler pipeline must use a different cache identity');
+
+const partial = createCoreSpiritCompilationUnit('let fast = ema(close, 9)');
+assert.equal(partial.kind, 'partial');
+assert.equal(partial.executable, false);
+assert.equal(Object.hasOwn(partial, 'ir'), false, 'partial editor compilation must never masquerade as executable IR');
+assert.equal(Object.hasOwn(partial, 'artifact'), false, 'partial editor compilation must never expose an executable artifact');
 
 const result = new CoreSpiritCompiler().compileSource('let fast = ema(close, 9)', 'canonical-pipeline-contract');
 assert.ok(result.ir, result.diagnostics.map(item => item.message).join('\n'));
