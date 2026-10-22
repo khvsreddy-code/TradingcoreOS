@@ -192,4 +192,12 @@ assert.match(brokerAdapters, /return '';/,
 assert.doesNotMatch(brokerAdapters.slice(brokerAdapters.indexOf('async getMarketQuotes'), brokerAdapters.indexOf('async getHistoricalData')), /timestamp: new Date\(\)\.toISOString\(\)/,
   'quote normalization must not manufacture provider freshness');
 
+assert.match(manualTrading, /checkMargin: false/,
+  'last-moment validation must refresh live snapshots without a second expensive margin preview');
+assert.match(manualTrading, /order\.pre_dispatch_risk_approved/);
+assert.match(integrationRoutes, /checkMargin: false/);
+assert.match(integrationRoutes, /automation\.order\.pre_dispatch_risk_approved/);
+assert.match(risk, /TRADINGCORE_MANUAL_MAX_ACCOUNT_EXPOSURE_MULTIPLE/,
+  'manual tickets must use server-owned account-relative caps, not UI supplied limits');
+
 console.log('EXTERNAL_AUTOMATION_TRADING_BOUNDARY_OK');
