@@ -110,7 +110,13 @@ export function canTransitionFyersOrderStatus(
   if (current === 'UNKNOWN') return next !== 'UNKNOWN';
   if (next === 'UNKNOWN') return false;
   if (TERMINAL.has(current)) {
-    return source === 'reconciliation' && TERMINAL.has(next);
+    // FILLED is an absorbing state: stale orderbook/cancel frames must never
+    // turn a confirmed execution into a cancelled or rejected order.
+    if (current === 'FILLED') return false;
+    // Cancellation and expiry can race with a real execution. Let an explicit
+    // FILLED fact correct those states, but never allow arbitrary terminal swaps.
+    if ((current === 'CANCELLED' || current === 'EXPIRED') && next === 'FILLED') return true;
+    return false;
   }
   if (source === 'reconciliation') return true;
   if (current === 'INTENT') return ['SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED'].includes(next);
