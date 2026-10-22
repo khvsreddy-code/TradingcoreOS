@@ -19,6 +19,7 @@ import {
   type AutomationRequestState,
   type AutomationIntegrationScope,
   type AutomationOrderRequestRecord,
+  type AutomationSignalRecord,
 } from '../automation/AutomationIntegrationRepository.js';
 import { evaluateAutomationPreTradeRisk } from '../trading/AutomationPreTradeRiskEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway } from '../trading/fyersOrderExecution.js';
@@ -518,6 +519,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
   let orderPayload: BrokerOrderPayload;
   let requestedMode: 'PAPER' | 'LIVE';
   let signalId: string | null = null;
+  let signalProvenance: AutomationSignalRecord | undefined;
   const externalRequestId = String(req.get('Idempotency-Key') ?? '').trim();
   if (!/^[A-Za-z0-9._:-]{8,128}$/.test(externalRequestId)) {
     return jsonError(res, 400, 'Idempotency-Key header must be 8–128 safe characters and is required for every order request.');
@@ -623,6 +625,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       if (signalId) {
         const signal = await AutomationIntegrationRepository.getSignal(integration.id, signalId);
         if (!signal) return await rejectAndStore(422, 'Linked CoreSpirit signal was not found for this integration.');
+        signalProvenance = signal;
         const signalConflict = assertSignalMatchesOrder({
           eventType: signal.eventType, symbol: signal.symbol, mode: signal.mode, signalTimestamp: signal.signalTimestamp,
         }, orderPayload);
@@ -645,7 +648,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       await AuditLogRepository.append({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.risk_rejected',
         requestId: req.get('x-request-id'), correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, reason: risk.reason, checks: risk.checks },
+        payload: { integrationId: integration.id, automationId: integration.automationId, signalId, sourceId: signalProvenance?.sourceId ?? null, runId: signalProvenance?.runId ?? null, programChecksum: typeof signalProvenance?.payload.programChecksum === 'string' ? signalProvenance.payload.programChecksum : null, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, riskVerdict: 'rejected', reason: risk.reason, checks: risk.checks },
       }).catch(() => undefined);
       return await rejectAndStore(422, risk.reason, { riskChecks: risk.checks });
     }
@@ -709,12 +712,27 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       }
     }
 
+    const executionProvenance = {
+      integrationId: integration.id,
+      automationId: integration.automationId,
+      signalId: signalProvenance?.id ?? signalId,
+      sourceId: signalProvenance?.sourceId ?? null,
+      runId: signalProvenance?.runId ?? null,
+      barIndex: signalProvenance?.barIndex ?? null,
+      signalTimestamp: signalProvenance?.signalTimestamp ?? null,
+      signalPayloadHash: signalProvenance?.payloadHash ?? null,
+      programChecksum: typeof signalProvenance?.payload.programChecksum === 'string'
+        ? signalProvenance.payload.programChecksum
+        : null,
+      origin: signalProvenance ? 'corespirit-signal' : 'authorized-external-order-intent',
+    };
+
     // Required audit writes must succeed before the broker side effect begins.
     try {
-      await AuditLogRepository.append({
+      await AuditLogRepository.appendRequired({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.risk_approved',
         requestId: req.get('x-request-id'), correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, requestId: externalRequestId, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, riskChecks: risk.checks, estimatedNotional: risk.estimatedNotional },
+        payload: { ...executionProvenance, requestId: externalRequestId, idempotencyHash: requestHash, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, riskVerdict: 'approved', riskChecks: risk.checks, estimatedNotional: risk.estimatedNotional, projectedAccountExposure: risk.projectedAccountExposure, requiredMargin: risk.requiredMargin },
       });
     } catch (error) {
       return await rejectAndStore(503, getErrorMessage(error, 'Durable risk audit is unavailable; no broker order was submitted.'));
@@ -764,7 +782,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       await AuditLogRepository.append({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.submitting',
         requestId, correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, clientOrderId, internalIdempotencyKey },
+        payload: { ...executionProvenance, requestId: externalRequestId, clientOrderId, internalIdempotencyKey, requestHash, riskVerdict: 'approved', estimatedNotional: risk.estimatedNotional, submittedOrder: { symbol: submitPayload.symbol, side: submitPayload.side, quantity: submitPayload.quantity, orderType: submitPayload.orderType, product: submitPayload.product } },
       });
     } catch (error) {
       const message = getErrorMessage(error, 'Unable to persist order intent and audit before broker submission.');
@@ -916,10 +934,10 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         message: 'Broker acknowledged the order request. This is not a fill confirmation; poll order state or wait for broker reconciliation.',
       };
       await OrderIdempotencyRepository.complete(integration.userId, integration.brokerId, internalIdempotencyKey, response);
-      await AuditLogRepository.append({
+      await AuditLogRepository.appendRequired({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.acknowledged',
         requestId, correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, clientOrderId, brokerOrderId: String(brokerOrderId), state: 'ACKNOWLEDGED', filled: false },
+        payload: { ...executionProvenance, requestId: externalRequestId, clientOrderId, brokerOrderId: String(brokerOrderId), state: 'ACKNOWLEDGED', filled: false, riskVerdict: 'approved', estimatedNotional: risk.estimatedNotional },
       });
       await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
         state: 'ACKNOWLEDGED', response, clientOrderId, brokerOrderId: String(brokerOrderId), signalId,
