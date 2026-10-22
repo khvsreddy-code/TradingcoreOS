@@ -12,6 +12,8 @@ import { getErrorMessage, getErrorStatus, isRecord } from '../../services/bounda
 import { createHash } from 'node:crypto';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
+import { TradingKillSwitchRepository } from '../storage/TradingKillSwitchRepository.js';
+import { AutomationIntegrationRepository } from '../automation/AutomationIntegrationRepository.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
@@ -49,6 +51,62 @@ async function injectBrokerSession(req: BrokerSessionRequest, res: Response, nex
 
 tradingRoutes.use(requireUser);
 const orderRateLimiter = createRateLimiter({ windowMs: 60_000, max: 20, name: 'orders', key: (req) => (req as AuthenticatedRequest).tradingCoreUserId || req.ip || 'unknown' });
+
+/** Read active and inactive switches so the operator can see the durable state. */
+tradingRoutes.get('/:brokerId/kill-switch', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const data = await TradingKillSwitchRepository.listForAccount(req.tradingCoreUserId!, req.params.brokerId);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, data });
+  } catch (error: unknown) {
+    res.status(503).json({ success: false, error: getErrorMessage(error, 'Unable to read trading kill-switch state.') });
+  }
+});
+
+/** Account and automation kill-switch mutations are authenticated server actions. */
+tradingRoutes.put('/:brokerId/kill-switch', async (req: AuthenticatedRequest, res: Response) => {
+  const body = isRecord(req.body) ? req.body : null;
+  if (!body || typeof body.active !== 'boolean' || (body.scope !== 'account' && body.scope !== 'strategy')) {
+    res.status(400).json({ success: false, error: "Expected { scope: 'account' | 'strategy', active: boolean, strategyId?: string, reason?: string }." });
+    return;
+  }
+  const userId = req.tradingCoreUserId!;
+  const brokerId = req.params.brokerId.toLowerCase();
+  let scopeId = 'account';
+  if (body.scope === 'strategy') {
+    const strategyId = typeof body.strategyId === 'string' ? body.strategyId.trim() : '';
+    if (!strategyId || strategyId.length > 128) {
+      res.status(400).json({ success: false, error: 'strategyId is required for a strategy kill switch.' });
+      return;
+    }
+    try {
+      const owned = await AutomationIntegrationRepository.getAutomationForOwner(userId, strategyId);
+      if (!owned) { res.status(404).json({ success: false, error: 'Automation strategy was not found for this user.' }); return; }
+    } catch (error: unknown) {
+      res.status(503).json({ success: false, error: getErrorMessage(error, 'Unable to verify automation ownership.') });
+      return;
+    }
+    scopeId = strategyId;
+  }
+  const active = body.active;
+  const reason = typeof body.reason === 'string'
+    ? body.reason.trim().slice(0, 500)
+    : active ? 'Operator enabled the trading kill switch.' : 'Operator disabled the trading kill switch.';
+  try {
+    const data = await TradingKillSwitchRepository.set({ userId, brokerId, scope: body.scope, scopeId, active, reason });
+    await AuditLogRepository.appendRequired({
+      userId, actorType: 'user',
+      eventType: active ? 'trading.kill_switch.enabled' : 'trading.kill_switch.disabled',
+      requestId: req.get('x-request-id'),
+      correlationId: `kill-switch:${brokerId}:${body.scope}:${scopeId}`,
+      payload: { brokerId, scope: body.scope, scopeId, active, reason, updatedAt: data.updatedAt },
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, data });
+  } catch (error: unknown) {
+    res.status(503).json({ success: false, error: getErrorMessage(error, 'Unable to persist the trading kill switch.') });
+  }
+});
 
 tradingRoutes.get('/:brokerId/profile', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
   try { const data = await req.brokerAdapter.getProfile(req.accessToken); res.json({ success: true, data }); }
@@ -178,6 +236,27 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     return;
   }
   try {
+    const activeSwitch = await TradingKillSwitchRepository.activeBlock({ userId, brokerId });
+    if (activeSwitch) {
+      await AuditLogRepository.appendRequired({
+        userId, actorType: 'system', eventType: 'order.blocked.kill_switch',
+        requestId: req.get('x-request-id'), correlationId: idempotencyKey,
+        payload: { brokerId, idempotencyKey, scope: activeSwitch.scope, scopeId: activeSwitch.scopeId, reason: activeSwitch.reason },
+      }).catch(() => undefined);
+      res.status(423).json({
+        success: false, orderSubmitted: false, blockedByKillSwitch: true,
+        scope: activeSwitch.scope, reason: activeSwitch.reason || 'Trading is paused by an active kill switch.',
+      });
+      return;
+    }
+  } catch (error: unknown) {
+    res.status(503).json({
+      success: false, orderSubmitted: false,
+      error: getErrorMessage(error, 'Kill-switch state could not be verified; order submission is blocked.'),
+    });
+    return;
+  }
+  try {
     const claim = await OrderIdempotencyRepository.claim(userId, brokerId, idempotencyKey, orderPayload);
     if (!claim.claimed) {
       if (claim.conflict === 'request_mismatch') { res.status(409).json({ success: false, error: 'Idempotency-Key was already used for a different order payload.' }); return; }
@@ -213,6 +292,31 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
         res.status(503).json({ ...failure, orderSubmitted: false });
         return;
       }
+    }
+    try {
+      await AuditLogRepository.appendRequired({
+        userId, actorType: 'user', eventType: 'order.intent',
+        requestId, correlationId: idempotencyKey,
+        payload: {
+          origin: 'server-order-route', brokerId, idempotencyKey,
+          requestHash: claim.record?.requestHash ?? null,
+          clientOrderId: clientOrderId ?? null,
+          order: {
+            symbol: String(orderPayload.symbol ?? ''),
+            side: String(orderPayload.side ?? '').toUpperCase(),
+            quantity: Number(orderPayload.quantity ?? orderPayload.qty),
+            orderType: String(orderPayload.orderType ?? 'MARKET').toUpperCase(),
+            product: String(orderPayload.product ?? ''),
+          },
+        },
+      });
+    } catch (auditError: unknown) {
+      const message = getErrorMessage(auditError, 'Mandatory order intent audit could not be persisted.');
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, {
+        success: false, orderSubmitted: false, error: message, requestId: requestId || null,
+      }).catch(() => undefined);
+      res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+      return;
     }
     let data: unknown;
     try {
@@ -268,8 +372,16 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     }
     const response = { success: true, data };
     try {
+      await AuditLogRepository.appendRequired({
+        userId, actorType: 'broker', eventType: 'order.broker_acknowledged',
+        requestId, correlationId: idempotencyKey,
+        payload: { brokerId, idempotencyKey, orderId, clientOrderId: clientOrderId ?? null, brokerState: clientOrderId ? 'ACKNOWLEDGED' : 'acknowledged' },
+      });
       await OrderIdempotencyRepository.complete(userId, brokerId, idempotencyKey, response);
-      void AuditLogRepository.append({ userId, actorType: 'user', eventType: 'order.completed', requestId, correlationId: idempotencyKey, payload: { brokerId, idempotencyKey, orderId } }).catch(() => undefined);
+      await AuditLogRepository.appendRequired({
+        userId, actorType: 'user', eventType: 'order.completed',
+        requestId, correlationId: idempotencyKey, payload: { brokerId, idempotencyKey, orderId },
+      });
       res.json(response);
     } catch (ledgerError: unknown) {
       const message = getErrorMessage(ledgerError, 'Order accepted but safety ledger completion failed');
