@@ -268,7 +268,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       : undefined;
     if (clientOrderId) orderPayload = { ...orderPayload, orderTag: clientOrderId };
 
-    let riskVerdict;
+    let riskVerdict: Awaited<ReturnType<typeof evaluateManualPreTradeRisk>>;
     try {
       riskVerdict = await evaluateManualPreTradeRisk({
         userId, accessToken: req.accessToken, broker: req.brokerAdapter, order: orderPayload, live: true,
@@ -384,6 +384,77 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
         return;
       }
     }
+    // Re-fetch live broker snapshots at the execution boundary. The first risk
+    // verdict can age while audit/state persistence runs; this pass refreshes
+    // quotes, funds and position marks without making a second margin-preview call.
+    let dispatchRisk: Awaited<ReturnType<typeof evaluateManualPreTradeRisk>>;
+    try {
+      dispatchRisk = await evaluateManualPreTradeRisk({
+        userId, accessToken: req.accessToken, broker: req.brokerAdapter,
+        order: orderPayload, live: true, checkMargin: false,
+      });
+    } catch (riskError: unknown) {
+      const message = getErrorMessage(riskError, 'Unable to refresh pre-dispatch risk snapshots; no order was submitted.');
+      if (clientOrderId) await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'REJECTED', {
+        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+      }).catch(() => undefined);
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, { success: false, orderSubmitted: false, error: message }).catch(() => undefined);
+      await AuditLogRepository.append({
+        userId, actorType: 'system', eventType: 'order.pre_dispatch_risk_unavailable',
+        requestId, correlationId: idempotencyKey,
+        payload: { brokerId, idempotencyKey, clientOrderId: clientOrderId ?? null, error: message },
+      }).catch(() => undefined);
+      res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+      return;
+    }
+    if (!dispatchRisk.approved) {
+      const response = {
+        success: false, orderSubmitted: false, error: dispatchRisk.reason, requestId: requestId || null,
+        riskChecks: dispatchRisk.checks, estimatedNotional: dispatchRisk.estimatedNotional,
+        quotedPrice: dispatchRisk.quotedPrice, projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+      };
+      if (clientOrderId) await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'REJECTED', {
+        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        message: `Pre-dispatch risk recheck rejected: ${dispatchRisk.reason}`,
+      }).catch(() => undefined);
+      try {
+        await AuditLogRepository.appendRequired({
+          userId, actorType: 'system', eventType: 'order.pre_dispatch_risk_rejected',
+          requestId, correlationId: idempotencyKey,
+          payload: { brokerId, idempotencyKey, clientOrderId: clientOrderId ?? null, verdict: 'rejected', reason: dispatchRisk.reason, checks: dispatchRisk.checks },
+        });
+      } catch (auditError: unknown) {
+        response.error = getErrorMessage(auditError, 'Pre-dispatch risk rejection could not be durably audited.');
+      }
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response).catch(() => undefined);
+      res.status(422).json(response);
+      return;
+    }
+    try {
+      await AuditLogRepository.appendRequired({
+        userId, actorType: 'system', eventType: 'order.pre_dispatch_risk_approved',
+        requestId, correlationId: idempotencyKey,
+        payload: {
+          brokerId, idempotencyKey, clientOrderId: clientOrderId ?? null, verdict: 'approved',
+          checks: dispatchRisk.checks, quotedPrice: dispatchRisk.quotedPrice,
+          estimatedNotional: dispatchRisk.estimatedNotional,
+          projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+          basedOnFreshSnapshot: true,
+        },
+      });
+    } catch (auditError: unknown) {
+      const message = getErrorMessage(auditError, 'Fresh pre-dispatch risk verdict could not be audited; order submission is blocked.');
+      if (clientOrderId) await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'REJECTED', {
+        symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+        side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+      }).catch(() => undefined);
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, { success: false, orderSubmitted: false, error: message }).catch(() => undefined);
+      res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+      return;
+    }
+
     // Record SUBMITTED immediately before dispatch, then check the durable
     // kill switch again as the last admission check at the execution boundary.
     if (clientOrderId) {
