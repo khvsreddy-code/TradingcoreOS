@@ -392,6 +392,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       dispatchRisk = await evaluateManualPreTradeRisk({
         userId, accessToken: req.accessToken, broker: req.brokerAdapter,
         order: orderPayload, live: true, checkMargin: false,
+        precheckedRequiredMargin: riskVerdict.requiredMargin,
       });
     } catch (riskError: unknown) {
       const message = getErrorMessage(riskError, 'Unable to refresh pre-dispatch risk snapshots; no order was submitted.');
