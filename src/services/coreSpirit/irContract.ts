@@ -1,12 +1,12 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
+import { CORE_SPIRIT_IR_FORMAT, CORE_SPIRIT_IR_VERSION } from './VERSION';
+export { CORE_SPIRIT_IR_FORMAT, CORE_SPIRIT_IR_VERSION } from './VERSION';
 
 /**
  * Stable CoreSpirit VM contract. The VM executes this contract, never AST nodes.
  * Keep opcode names and operand meaning backwards compatible within this version.
  */
-export const CORE_SPIRIT_IR_FORMAT = 'coreSpirit-ir' as const;
-export const CORE_SPIRIT_IR_VERSION = 1 as const;
 
 export const CORE_SPIRIT_IR_OPCODES = [
   'const','loadSeries','loadState','move','unary','binary','call','index','setLocal','setState',
