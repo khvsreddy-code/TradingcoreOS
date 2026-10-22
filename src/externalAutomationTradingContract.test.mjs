@@ -6,6 +6,7 @@ const integrationRoutes = read('./server/routes/automation-integration.routes.ts
 const ingestRoutes = read('./server/routes/automation-signal-ingest.routes.ts');
 const integrations = read('./server/automation/AutomationIntegrationRepository.ts');
 const risk = read('./server/trading/AutomationPreTradeRiskEngine.ts');
+const brokerAdapters = read('./server/brokers/adapters/BrokerAdapters.ts');
 const sharedExecution = read('./server/trading/fyersOrderExecution.ts');
 const manualTrading = read('./server/routes/trading.routes.ts');
 const killSwitchRepository = read('./server/storage/TradingKillSwitchRepository.ts');
@@ -171,5 +172,24 @@ assert.match(integrationRoutes, /AuditLogRepository\.appendRequired\([\s\S]*?eve
 assert.match(stateEngine, /AuditLogRepository\.appendOnce/);
 assert.match(auditChainMigration, /append_execution_audit_event_once/);
 assert.match(auditChainMigration, /primary key \(user_id, event_key\)/i);
+
+assert.match(risk, /export async function evaluateManualPreTradeRisk/,
+  'manual tickets and automation must share one server-owned risk evaluator');
+assert.match(risk, /input\.live \? 5_000 : 20_000/,
+  'live decisions must require more recent source timestamps than paper checks');
+assert.match(risk, /fresh-open-position-marks/,
+  'account gross exposure must use freshly quoted marks for every open position');
+assert.match(manualTrading, /evaluateManualPreTradeRisk\(/);
+assert.ok(manualTrading.indexOf('evaluateManualPreTradeRisk(') < manualTrading.indexOf("eventType: 'order.intent'"),
+  'manual risk evaluation must happen before order-intent audit or broker state transitions');
+const manualRiskAudit = manualTrading.indexOf("eventType: 'order.risk_approved'");
+assert.ok(manualRiskAudit >= 0 && manualDispatch > manualRiskAudit,
+  'manual approval verdict must be audit chained before order dispatch');
+assert.match(brokerAdapters, /quote\.v\?\.tt/,
+  'FYERS quote freshness must come from the provider timestamp, not local Date.now()');
+assert.match(brokerAdapters, /return '';/,
+  'missing provider time must remain invalid instead of being replaced with a fresh local timestamp');
+assert.doesNotMatch(brokerAdapters.slice(brokerAdapters.indexOf('async getMarketQuotes'), brokerAdapters.indexOf('async getHistoricalData')), /timestamp: new Date\(\)\.toISOString\(\)/,
+  'quote normalization must not manufacture provider freshness');
 
 console.log('EXTERNAL_AUTOMATION_TRADING_BOUNDARY_OK');
