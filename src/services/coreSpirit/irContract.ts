@@ -1,6 +1,6 @@
 import type { CoreSpiritIrInstruction, CoreSpiritIrProgram } from './ir';
 import { validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
-import { CORE_SPIRIT_IR_FORMAT, CORE_SPIRIT_IR_VERSION } from './VERSION';
+import { CORE_SPIRIT_IR_VERSION } from './VERSION';
 export { CORE_SPIRIT_IR_FORMAT, CORE_SPIRIT_IR_VERSION } from './VERSION';
 
 /**
