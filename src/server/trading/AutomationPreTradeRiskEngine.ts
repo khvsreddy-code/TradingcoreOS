@@ -143,6 +143,7 @@ async function evaluatePreTradeRiskWithPolicy(input: {
   order: BrokerOrderPayload;
   live: boolean;
   checkMargin?: boolean;
+  precheckedRequiredMargin?: number | null;
   policy: PreTradeRiskPolicy;
 }): Promise<AutomationRiskVerdict> {
   const checks: Record<string, unknown>[] = [];
@@ -377,33 +378,44 @@ async function evaluatePreTradeRiskWithPolicy(input: {
   }
 
   let requiredMargin: number | null = null;
-  if (input.live && input.checkMargin !== false) {
-    try {
-      if (input.policy.brokerId === 'fyers') {
-        requiredMargin = await estimateFyersRequiredMargin({ userId: input.userId, accessToken: input.accessToken, order: input.order });
-      } else if (product === 'CNC') {
-        // Generic broker adapters do not have a uniform margin-preview contract.
-        // For cash delivery we conservatively reserve full buy notional and never
-        // infer intraday/derivative margin from an unrelated broker's API shape.
-        requiredMargin = side === 'BUY' ? estimatedNotional : 0;
-      } else {
-        return reject('This broker does not expose a verified margin-preview contract for the requested leveraged product. Live order submission is blocked.', checks, {
+  if (input.live) {
+    if (input.checkMargin !== false) {
+      try {
+        if (input.policy.brokerId === 'fyers') {
+          requiredMargin = await estimateFyersRequiredMargin({ userId: input.userId, accessToken: input.accessToken, order: input.order });
+        } else if (product === 'CNC') {
+          // Generic broker adapters do not have a uniform margin-preview contract.
+          // For cash delivery we conservatively reserve full buy notional and never
+          // infer intraday/derivative margin from an unrelated broker's API shape.
+          requiredMargin = side === 'BUY' ? estimatedNotional : 0;
+        } else {
+          return reject('This broker does not expose a verified margin-preview contract for the requested leveraged product. Live order submission is blocked.', checks, {
+            estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
+          });
+        }
+      } catch (error) {
+        return reject(error instanceof Error ? error.message : 'Broker order-margin check failed.', checks, {
           estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
         });
       }
-    } catch (error) {
-      return reject(error instanceof Error ? error.message : 'Broker order-margin check failed.', checks, {
-        estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
-      });
+    } else {
+      if (!finite(input.precheckedRequiredMargin) || input.precheckedRequiredMargin < 0) {
+        return reject('A prior verified margin result is required for dispatch-time revalidation.', checks, {
+          estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
+        });
+      }
+      requiredMargin = input.precheckedRequiredMargin;
     }
     const bufferedMargin = requiredMargin * (1 + input.policy.marginBufferPercent / 100);
     if (bufferedMargin > funds.availableMargin) {
-      return reject('Available broker margin does not cover the broker-calculated requirement plus the configured safety buffer.', checks, {
+      return reject('Available broker margin does not cover the verified requirement plus the configured safety buffer on the latest account snapshot.', checks, {
         estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure, requiredMargin,
       });
     }
     checks.push({
-      check: input.policy.brokerId === 'fyers' ? 'broker-calculated-margin' : 'conservative-cash-delivery-margin',
+      check: input.checkMargin === false
+        ? 'broker-margin-revalidated-against-current-funds'
+        : input.policy.brokerId === 'fyers' ? 'broker-calculated-margin' : 'conservative-cash-delivery-margin',
       passed: true,
       marginBufferPercent: input.policy.marginBufferPercent,
       requiredMargin,
@@ -411,7 +423,7 @@ async function evaluatePreTradeRiskWithPolicy(input: {
     });
   }
 
-  return {
+  const verdict: AutomationRiskVerdict = {
     approved: true,
     reason: input.live ? 'Configured policy, fresh account/market snapshots, position limits, and broker margin checks passed.' : 'Paper request passed configured policy and fresh broker snapshot checks; no order will be submitted.',
     checks,
@@ -421,6 +433,33 @@ async function evaluatePreTradeRiskWithPolicy(input: {
     projectedAccountExposure,
     requiredMargin,
   };
+
+  // Margin preview can add material latency. Refresh all decision inputs after it
+  // returns so the approval does not carry forward an already-aged quote/account
+  // snapshot. This recursive second pass is bounded by checkMargin=false.
+  if (input.live && input.checkMargin !== false) {
+    const refreshed = await evaluatePreTradeRiskWithPolicy({
+      ...input,
+      checkMargin: false,
+      precheckedRequiredMargin: requiredMargin,
+    });
+    if (!refreshed.approved) {
+      return {
+        ...refreshed,
+        reason: `Post-margin execution snapshot rejected: ${refreshed.reason}`,
+        checks: [...checks, { check: 'post-margin-freshness', passed: false }, ...refreshed.checks],
+        requiredMargin,
+      };
+    }
+    return {
+      ...refreshed,
+      reason: 'Risk and margin checks passed, followed by a fresh post-margin broker snapshot.',
+      checks: [...checks, { check: 'post-margin-freshness', passed: true }, ...refreshed.checks],
+      requiredMargin,
+    };
+  }
+
+  return verdict;
 }
 
 
@@ -432,6 +471,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
   order: BrokerOrderPayload;
   live: boolean;
   checkMargin?: boolean;
+  precheckedRequiredMargin?: number | null;
 }): Promise<AutomationRiskVerdict> {
   return evaluatePreTradeRiskWithPolicy({
     userId: input.userId,
@@ -440,6 +480,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
     order: input.order,
     live: input.live,
     checkMargin: input.checkMargin,
+    precheckedRequiredMargin: input.precheckedRequiredMargin,
     policy: {
       brokerId: input.integration.brokerId,
       strategyId: input.integration.automationId,
@@ -460,6 +501,7 @@ export async function evaluateManualPreTradeRisk(input: {
   order: BrokerOrderPayload;
   live: boolean;
   checkMargin?: boolean;
+  precheckedRequiredMargin?: number | null;
 }): Promise<AutomationRiskVerdict> {
   const symbol = String(input.order.symbol ?? '').trim().toUpperCase();
   let maxOrderQuantity = Number(process.env.TRADINGCORE_MANUAL_MAX_ORDER_QUANTITY ?? 1000);
@@ -475,6 +517,7 @@ export async function evaluateManualPreTradeRisk(input: {
     order: input.order,
     live: input.live,
     checkMargin: input.checkMargin,
+    precheckedRequiredMargin: input.precheckedRequiredMargin,
     policy: {
       brokerId: input.broker.brokerId,
       allowedSymbols: [symbol],
