@@ -119,21 +119,38 @@ function reject(reason: string, checks: Record<string, unknown>[], values: Parti
  * cannot choose its risk limits, skip fresh account/position data, or manufacture
  * a broker margin approval. Every failed/ambiguous prerequisite blocks live submission.
  */
-export async function evaluateAutomationPreTradeRisk(input: {
+type PreTradeRiskPolicy = Readonly<{
+  brokerId: string;
+  strategyId?: string;
+  allowedSymbols: readonly string[];
+  maxOrderQuantity: number;
+  maxOrderNotional?: number;
+  maxPositionNotional?: number;
+  maxAccountExposureNotional?: number;
+  marginBufferPercent: number;
+}>;
+
+function positiveSetting(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const value = raw === undefined || raw.trim() === '' ? Number.NaN : Number(raw);
+  return finite(value) && value > 0 ? value : fallback;
+}
+
+async function evaluatePreTradeRiskWithPolicy(input: {
   userId: string;
   accessToken: string;
   broker: BaseBroker;
-  integration: AutomationIntegration;
   order: BrokerOrderPayload;
   live: boolean;
+  policy: PreTradeRiskPolicy;
 }): Promise<AutomationRiskVerdict> {
   const checks: Record<string, unknown>[] = [];
   if (input.live) {
     try {
       const activeSwitch = await TradingKillSwitchRepository.activeBlock({
         userId: input.userId,
-        brokerId: input.integration.brokerId,
-        strategyId: input.integration.automationId,
+        brokerId: input.policy.brokerId,
+        strategyId: input.policy.strategyId,
       });
       if (activeSwitch) {
         checks.push({ check: 'trading-kill-switch', passed: false, scope: activeSwitch.scope, scopeId: activeSwitch.scopeId });
@@ -158,10 +175,10 @@ export async function evaluateAutomationPreTradeRisk(input: {
   const side = String(input.order.side ?? '').trim().toUpperCase();
   const product = String(input.order.product ?? '').trim().toUpperCase();
   const quantity = Number(input.order.quantity ?? input.order.qty);
-  if (!input.integration.allowedSymbols.includes(symbol)) return reject('Symbol is outside the integration allowlist.', checks);
+  if (!input.policy.allowedSymbols.includes(symbol)) return reject('Symbol is outside the integration allowlist.', checks);
   checks.push({ check: 'symbol-allowlist', passed: true });
-  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > input.integration.maxOrderQuantity) {
-    return reject(`Quantity exceeds this integration's per-order cap of ${input.integration.maxOrderQuantity}.`, checks);
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > input.policy.maxOrderQuantity) {
+    return reject(`Quantity exceeds this integration's per-order cap of ${input.policy.maxOrderQuantity}.`, checks);
   }
   checks.push({ check: 'quantity-cap', passed: true, quantity });
 
@@ -205,8 +222,8 @@ export async function evaluateAutomationPreTradeRisk(input: {
   // hard limit price because the broker cannot execute them beyond that price.
   const riskPrice = orderType === 'MARKET' ? basePrice * 1.02 : basePrice;
   const estimatedNotional = riskPrice * quantity;
-  if (!Number.isFinite(estimatedNotional) || estimatedNotional <= 0 || estimatedNotional > input.integration.maxOrderNotional) {
-    return reject(`Estimated order notional exceeds the integration cap of ${input.integration.maxOrderNotional}.`, checks, {
+  if (!Number.isFinite(estimatedNotional) || estimatedNotional <= 0 || estimatedNotional > input.policy.maxOrderNotional) {
+    return reject(`Estimated order notional exceeds the integration cap of ${input.policy.maxOrderNotional}.`, checks, {
       estimatedNotional, quotedPrice: quote.ltp,
     });
   }
@@ -217,8 +234,8 @@ export async function evaluateAutomationPreTradeRisk(input: {
     .filter(position => String(position.symbol).toUpperCase() === symbol && finite(position.quantity))
     .reduce((sum, position) => sum + position.quantity, 0);
   const projectedSymbolExposure = Math.abs(existingNetQuantity + signedQuantity) * quote.ltp;
-  if (!Number.isFinite(projectedSymbolExposure) || projectedSymbolExposure > input.integration.maxPositionNotional) {
-    return reject(`Projected net exposure exceeds the per-symbol cap of ${input.integration.maxPositionNotional}.`, checks, {
+  if (!Number.isFinite(projectedSymbolExposure) || projectedSymbolExposure > input.policy.maxPositionNotional) {
+    return reject(`Projected net exposure exceeds the per-symbol cap of ${input.policy.maxPositionNotional}.`, checks, {
       estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure,
     });
   }
@@ -243,11 +260,11 @@ export async function evaluateAutomationPreTradeRisk(input: {
     if (positionSymbol === symbol) existingSymbolGrossExposure += exposure;
   }
   const projectedAccountExposure = Math.max(0, existingGrossExposure - existingSymbolGrossExposure + projectedSymbolExposure);
-  const accountCapExceeded = projectedAccountExposure > input.integration.maxAccountExposureNotional;
+  const accountCapExceeded = projectedAccountExposure > input.policy.maxAccountExposureNotional;
   const riskReducingWhileOverCap = projectedAccountExposure < existingGrossExposure;
   if (!Number.isFinite(projectedAccountExposure) ||
       (accountCapExceeded && !riskReducingWhileOverCap)) {
-    return reject(`Projected account exposure exceeds the integration cap of ${input.integration.maxAccountExposureNotional}.`, checks, {
+    return reject(`Projected account exposure exceeds the integration cap of ${input.policy.maxAccountExposureNotional}.`, checks, {
       estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
     });
   }
@@ -294,7 +311,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
         estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure,
       });
     }
-    const bufferedMargin = requiredMargin * (1 + input.integration.marginBufferPercent / 100);
+    const bufferedMargin = requiredMargin * (1 + input.policy.marginBufferPercent / 100);
     if (bufferedMargin > funds.availableMargin) {
       return reject('Available broker margin does not cover the broker-calculated requirement plus the configured safety buffer.', checks, {
         estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure, requiredMargin,
@@ -303,7 +320,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
     checks.push({
       check: 'broker-calculated-margin',
       passed: true,
-      marginBufferPercent: input.integration.marginBufferPercent,
+      marginBufferPercent: input.policy.marginBufferPercent,
       requiredMargin,
       bufferedMargin,
     });
