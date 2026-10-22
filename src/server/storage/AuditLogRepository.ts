@@ -19,6 +19,14 @@ export class AuditLogRepository {
     return url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
   }
 
+  /** Mandatory audit write for order-side effects. Unlike best-effort telemetry,
+   * a missing audit store is a submission failure for callers using this method. */
+  static async appendRequired(event: TradingCoreAuditEvent): Promise<void> {
+    if (!this.supabase) throw new Error('Durable execution audit storage is unavailable.');
+    if (!event.eventType) throw new Error('Execution audit event type is required.');
+    await this.append(event);
+  }
+
   static async append(event: TradingCoreAuditEvent): Promise<void> {
     if (!this.supabase || !event.eventType) return;
     const payload = event.payload ?? null;
