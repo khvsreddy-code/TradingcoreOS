@@ -1,4 +1,6 @@
 import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
+import type { CoreSpiritAst } from './ast';
+import type { CoreSpiritSemanticResult } from './semanticAnalyzer';
 import { extractCoreSpiritSurfaceMetadata, formatCoreSpiritSurfaceLiteral, parseCoreSpiritDeclarationProperty, parseCoreSpiritInputDeclaration, parseCoreSpiritCapabilityRequirement } from './languageConcepts';
 import { inferCoreSpiritPointCall, parseCoreSpiritCoordinatePair } from './visualSurface';
 import { modelSurfaceNames, normalizeCoreSpiritModelReferences, normalizedModelReference, isModelNameExpression } from './modelSurface';
@@ -718,13 +720,17 @@ export function normalizeCoreSpiritSource(source: string): string {
   return out.join('\n');
 }
 
-export function describeCoreSpiritSurface(source: string, options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritSurfaceMetadata {
-  const surface = extractCoreSpiritSurfaceMetadata(source);
-  const normalized = normalizeCoreSpiritSource(source);
-  const parsed = new CoreSpiritParser(normalized).parseDetailed();
-  const semantic = parsed.diagnostics.length ? null : analyzeCoreSpirit(parsed.ast,{ surface, components: options.components });
-  if (!semantic) return surface;
-  const graph = buildCoreSpiritCompositionGraph(parsed.ast,semantic,surface);
+/**
+ * Add the composition graph to already-parsed, semantically analyzed source.
+ * The executable compiler uses this seam so it does not need to parse and run
+ * semantic analysis a second time merely to decorate the surface metadata.
+ */
+export function withCoreSpiritCompositionMetadata(
+  ast: CoreSpiritAst,
+  semantic: CoreSpiritSemanticResult,
+  surface: CoreSpiritSurfaceMetadata,
+): CoreSpiritSurfaceMetadata {
+  const graph = buildCoreSpiritCompositionGraph(ast, semantic, surface);
   return {
     ...surface,
     composition: {
@@ -734,4 +740,13 @@ export function describeCoreSpiritSurface(source: string, options: { components?
       edges: graph.edges.map(edge => ({ from: edge.from, to: edge.to, relation: edge.relation })),
     },
   };
+}
+
+export function describeCoreSpiritSurface(source: string, options: { components?: CoreSpiritComponentRegistryLike } = {}): CoreSpiritSurfaceMetadata {
+  const surface = extractCoreSpiritSurfaceMetadata(source);
+  const normalized = normalizeCoreSpiritSource(source);
+  const parsed = new CoreSpiritParser(normalized).parseDetailed();
+  const semantic = parsed.diagnostics.length ? null : analyzeCoreSpirit(parsed.ast,{ surface, components: options.components });
+  if (!semantic) return surface;
+  return withCoreSpiritCompositionMetadata(parsed.ast, semantic, surface);
 }
