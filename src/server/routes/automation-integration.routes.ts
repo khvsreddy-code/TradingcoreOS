@@ -9,6 +9,7 @@ import type { BrokerOrderPayload } from '../brokers/contracts.js';
 import { OrderIdempotencyRepository } from '../storage/OrderIdempotencyRepository.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
+import { TradingKillSwitchRepository } from '../storage/TradingKillSwitchRepository.js';
 import { getErrorMessage, getErrorStatus, isRecord } from '../../services/boundary/brokerApiValidation.js';
 import { canonicalSha256 } from '../utils/canonicalJson.js';
 import {
@@ -769,6 +770,65 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       const message = getErrorMessage(error, 'Unable to persist order intent and audit before broker submission.');
       await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, { success: false, error: message }).catch(() => undefined);
       return await rejectAndStore(503, message);
+    }
+
+    // Last-moment server-side admission check. UI state and the earlier risk
+    // verdict are not authority if an operator flips a kill switch during evaluation.
+    try {
+      const activeSwitch = await TradingKillSwitchRepository.activeBlock({
+        userId: integration.userId,
+        brokerId: integration.brokerId,
+        strategyId: integration.automationId,
+      });
+      if (activeSwitch) {
+        const reason = activeSwitch.reason || 'Trading is paused by an active kill switch.';
+        const response = {
+          success: false, error: reason, orderSubmitted: false, blockedByKillSwitch: true,
+          scope: activeSwitch.scope, requestId: externalRequestId, clientOrderId,
+        };
+        await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+          symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+          side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
+          message: 'Blocked by trading kill switch immediately before broker dispatch.',
+        });
+        await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response);
+        await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+          state: 'REJECTED', response, clientOrderId, signalId,
+          estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
+        });
+        await AuditLogRepository.appendRequired({
+          userId: integration.userId, actorType: 'system', eventType: 'automation.order.blocked.kill_switch',
+          requestId, correlationId: externalRequestId,
+          payload: {
+            integrationId: integration.id, automationId: integration.automationId,
+            clientOrderId, internalIdempotencyKey, scope: activeSwitch.scope,
+            scopeId: activeSwitch.scopeId, reason, blockedAtExecutionBoundary: true,
+          },
+        });
+        return res.status(423).json(response);
+      }
+    } catch (error) {
+      // Verification failure is a hard stop before the network call. Persist a
+      // terminal no-submit record when possible; never turn a switch DB outage
+      // into permission to trade.
+      const message = getErrorMessage(error, 'Kill-switch state could not be verified; live dispatch was blocked.');
+      const response = { success: false, error: message, orderSubmitted: false, recoveryRequired: false, requestId: externalRequestId, clientOrderId };
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        message: 'Blocked because kill-switch verification failed before dispatch.',
+      }).catch(() => undefined);
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
+      }).catch(() => undefined);
+      await AuditLogRepository.append({
+        userId: integration.userId, actorType: 'system', eventType: 'automation.order.blocked.kill_switch_unavailable',
+        requestId, correlationId: externalRequestId,
+        payload: { integrationId: integration.id, automationId: integration.automationId, clientOrderId, error: message },
+      }).catch(() => undefined);
+      return res.status(503).json(response);
     }
 
     let brokerData: unknown;
