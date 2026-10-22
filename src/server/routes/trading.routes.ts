@@ -17,6 +17,7 @@ import { AutomationIntegrationRepository } from '../automation/AutomationIntegra
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
+import { evaluateManualPreTradeRisk } from '../trading/AutomationPreTradeRiskEngine.js';
 
 export const tradingRoutes = Router();
 
@@ -265,24 +266,77 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     const clientOrderId = brokerId === 'fyers'
       ? createHash('sha256').update(`tco:fyers:${userId}:${idempotencyKey}`).digest('hex').slice(0, 30)
       : undefined;
-    if (clientOrderId) {
-      orderPayload = { ...orderPayload, orderTag: clientOrderId };
-      // Persist before the broker side effect. In production this deliberately
-      // fails closed if the reconciliation migration/service credentials are absent.
+    if (clientOrderId) orderPayload = { ...orderPayload, orderTag: clientOrderId };
+
+    let riskVerdict;
+    try {
+      riskVerdict = await evaluateManualPreTradeRisk({
+        userId, accessToken: req.accessToken, broker: req.brokerAdapter, order: orderPayload, live: true,
+      });
+    } catch (riskError: unknown) {
+      const message = getErrorMessage(riskError, 'Live pre-trade risk could not be evaluated; no order was submitted.');
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, {
+        success: false, orderSubmitted: false, error: message, requestId: requestId || null,
+      }).catch(() => undefined);
+      res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+      return;
+    }
+    if (!riskVerdict.approved) {
+      const response = {
+        success: false, orderSubmitted: false, error: riskVerdict.reason, requestId: requestId || null,
+        riskChecks: riskVerdict.checks, estimatedNotional: riskVerdict.estimatedNotional,
+        quotedPrice: riskVerdict.quotedPrice, projectedSymbolExposure: riskVerdict.projectedSymbolExposure,
+        projectedAccountExposure: riskVerdict.projectedAccountExposure, requiredMargin: riskVerdict.requiredMargin,
+      };
       try {
-        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'INTENT', {
-          symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
-          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        await AuditLogRepository.appendRequired({
+          userId, actorType: 'system', eventType: 'order.risk_rejected', requestId,
+          correlationId: idempotencyKey,
+          payload: {
+            brokerId, idempotencyKey, requestHash: claim.record?.requestHash ?? null,
+            clientOrderId: clientOrderId ?? null, verdict: 'rejected', reason: riskVerdict.reason,
+            checks: riskVerdict.checks, estimatedNotional: riskVerdict.estimatedNotional,
+            projectedAccountExposure: riskVerdict.projectedAccountExposure,
+          },
         });
-      } catch (lifecycleError: unknown) {
-        // No broker request has been made yet, so this attempt is safe to close
-        // as failed rather than leaving an unresolvable in-flight idempotency key.
-        const message = getErrorMessage(lifecycleError, 'Unable to persist FYERS order intent');
-        const failure = { success: false, error: message, requestId: requestId || null };
-        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, failure).catch(() => undefined);
-        res.status(503).json({ ...failure, orderSubmitted: false });
+      } catch (auditError: unknown) {
+        const message = getErrorMessage(auditError, 'Risk rejection audit could not be persisted.');
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, { ...response, error: message }).catch(() => undefined);
+        res.status(503).json({ ...response, error: message });
         return;
       }
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response).catch(() => undefined);
+      res.status(422).json(response);
+      return;
+    }
+
+    try {
+      await AuditLogRepository.appendRequired({
+        userId, actorType: 'system', eventType: 'order.risk_approved', requestId,
+        correlationId: idempotencyKey,
+        payload: {
+          brokerId, idempotencyKey, requestHash: claim.record?.requestHash ?? null,
+          clientOrderId: clientOrderId ?? null, verdict: 'approved', checks: riskVerdict.checks,
+          quotedPrice: riskVerdict.quotedPrice, estimatedNotional: riskVerdict.estimatedNotional,
+          projectedSymbolExposure: riskVerdict.projectedSymbolExposure,
+          projectedAccountExposure: riskVerdict.projectedAccountExposure,
+          requiredMargin: riskVerdict.requiredMargin,
+          order: {
+            symbol: String(orderPayload.symbol ?? ''),
+            side: String(orderPayload.side ?? '').toUpperCase(),
+            quantity: Number(orderPayload.quantity ?? orderPayload.qty),
+            orderType: String(orderPayload.orderType ?? 'MARKET').toUpperCase(),
+            product: String(orderPayload.product ?? ''),
+          },
+        },
+      });
+    } catch (auditError: unknown) {
+      const message = getErrorMessage(auditError, 'Mandatory risk approval audit could not be persisted.');
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, {
+        success: false, orderSubmitted: false, error: message, requestId: requestId || null,
+      }).catch(() => undefined);
+      res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+      return;
     }
     try {
       await AuditLogRepository.appendRequired({
@@ -308,6 +362,27 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       }).catch(() => undefined);
       res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
       return;
+    }
+    if (clientOrderId) {
+      try {
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'INTENT', {
+          symbol: orderPayload.symbol,
+          quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        });
+      } catch (lifecycleError: unknown) {
+        const message = getErrorMessage(lifecycleError, 'Unable to persist FYERS order intent before submission.');
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, {
+          success: false, orderSubmitted: false, error: message, requestId: requestId || null,
+        }).catch(() => undefined);
+        await AuditLogRepository.append({
+          userId, actorType: 'system', eventType: 'order.intent_persistence_failed',
+          requestId, correlationId: idempotencyKey,
+          payload: { brokerId, idempotencyKey, clientOrderId, error: message },
+        }).catch(() => undefined);
+        res.status(503).json({ success: false, orderSubmitted: false, error: message, requestId: requestId || null });
+        return;
+      }
     }
     // Record SUBMITTED immediately before dispatch, then check the durable
     // kill switch again as the last admission check at the execution boundary.
