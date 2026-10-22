@@ -93,13 +93,8 @@ tradingRoutes.put('/:brokerId/kill-switch', async (req: AuthenticatedRequest, re
     ? body.reason.trim().slice(0, 500)
     : active ? 'Operator enabled the trading kill switch.' : 'Operator disabled the trading kill switch.';
   try {
-    const data = await TradingKillSwitchRepository.set({ userId, brokerId, scope: body.scope, scopeId, active, reason });
-    await AuditLogRepository.appendRequired({
-      userId, actorType: 'user',
-      eventType: active ? 'trading.kill_switch.enabled' : 'trading.kill_switch.disabled',
-      requestId: req.get('x-request-id'),
-      correlationId: `kill-switch:${brokerId}:${body.scope}:${scopeId}`,
-      payload: { brokerId, scope: body.scope, scopeId, active, reason, updatedAt: data.updatedAt },
+    const data = await TradingKillSwitchRepository.set({
+      userId, brokerId, scope: body.scope, scopeId, active, reason, requestId: req.get('x-request-id'),
     });
     res.setHeader('Cache-Control', 'no-store');
     res.json({ success: true, data });
