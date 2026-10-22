@@ -298,32 +298,32 @@ export class FyersOrderStateEngine {
     const storedState = domainEvent(row.state_payload);
     let events: DomainMarketEvent[] = [];
 
-    if (event.type === 'OrderUpdate') {
+    if (event.type === 'OrderUpdate' || event.type === 'Fill') {
       const canonicalOrder = storedState?.type === 'OrderUpdate'
         ? storedState
         : storedEvent?.type === 'OrderUpdate'
           ? storedEvent
-          : withSequence(event, sequence);
-      // Broker events are durably reduced first, then appended exactly once to
-      // the user's immutable audit hash chain. If audit persistence fails, the
-      // caller retries/reconciles; the event-key ledger lets that retry finish
-      // the audit write even though the reducer now identifies it as a duplicate.
+          : undefined;
+      // Status snapshots and individual fill ticks both affect the same
+      // canonical order state. Persist both event kinds into one idempotent
+      // hash-chain so partial fills cannot disappear from execution history.
       await AuditLogRepository.appendOnce({
         userId,
         actorType: source === 'tradingcore' ? 'system' : 'broker',
-        eventType: 'broker.order.state_observed',
+        eventType: event.type === 'Fill' ? 'broker.order.fill_observed' : 'broker.order.state_observed',
         correlationId: String(event.clientOrderId || event.brokerOrderId || event.orderId || eventKey),
         payload: {
           brokerId: 'fyers',
           source,
           eventKey,
-          brokerOrderId: canonicalOrder.brokerOrderId || canonicalOrder.orderId || null,
-          clientOrderId: canonicalOrder.clientOrderId || event.clientOrderId || null,
-          receivedStatus: event.status,
-          canonicalStatus: canonicalOrder.status,
-          quantity: canonicalOrder.quantity ?? null,
-          filledQuantity: canonicalOrder.filledQuantity ?? null,
-          averagePrice: canonicalOrder.averagePrice ?? null,
+          brokerOrderId: canonicalOrder?.brokerOrderId || canonicalOrder?.orderId || event.brokerOrderId || event.orderId || null,
+          clientOrderId: canonicalOrder?.clientOrderId || event.clientOrderId || null,
+          receivedStatus: event.type === 'Fill' ? 'FILL' : event.status,
+          canonicalStatus: canonicalOrder?.status ?? (event.type === 'Fill' ? 'FILL' : event.status),
+          quantity: canonicalOrder?.quantity ?? (event.type === 'Fill' ? event.quantity ?? null : event.quantity ?? null),
+          fillQuantity: event.type === 'Fill' ? event.quantity ?? null : null,
+          filledQuantity: canonicalOrder?.filledQuantity ?? (event.type === 'Fill' ? event.quantity ?? null : null),
+          averagePrice: canonicalOrder?.averagePrice ?? (event.type === 'Fill' ? event.price ?? null : null),
           sequence,
           applied,
           duplicate,
