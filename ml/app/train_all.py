@@ -8,6 +8,12 @@ from .features import build_features, make_supervised, FEATURE_COLUMNS, FEATURE_
 from .optimization import fit_meta_labeler, OPT_FEATURES
 from .all_models import *
 
+try:
+    from ..training_input import validate_training_csv, validate_training_identity
+except ImportError:
+    # Supports the backwards-compatible "python ml/train.py" entrypoint.
+    from training_input import validate_training_csv, validate_training_identity
+
 MODEL_NAMES = {
 'xgb-direction':'XGBoost Direction','rf-direction':'Random Forest Direction','logistic-direction':'Logistic Regression',
 'gb-volatility':'Gradient Boosting Volatility','xgb-breakout':'XGBoost Breakout','momentum-regime':'Momentum Regime',
@@ -216,7 +222,10 @@ def main():
     ap.add_argument('--out',default='models');ap.add_argument('--horizon',type=int,default=1);ap.add_argument('--epochs',type=int,default=20)
     ap.add_argument('--exchange-timezone',default='Asia/Kolkata');ap.add_argument('--session-open',default='09:15');ap.add_argument('--session-close',default='15:30')
     ap.add_argument('--session-holidays',default='',help='comma-separated exchange-local YYYY-MM-DD holidays for the feature calendar')
-    args=ap.parse_args(); random.seed(42);np.random.seed(42)
+    args=ap.parse_args()
+    validate_training_identity(args.symbol, args.timeframe, args.horizon)
+    validate_training_csv(args.csv)
+    random.seed(42);np.random.seed(42)
     session_holidays=sorted({value.strip() for value in args.session_holidays.split(',') if value.strip()})
     if any(not __import__('re').fullmatch(r'\d{4}-\d{2}-\d{2}', value) for value in session_holidays):
         raise ValueError('--session-holidays accepts comma-separated YYYY-MM-DD dates')
