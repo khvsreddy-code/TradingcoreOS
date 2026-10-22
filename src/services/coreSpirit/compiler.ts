@@ -16,7 +16,7 @@ import type { CoreSpiritSurfaceMetadata } from './languageConcepts';
 import { coreSpiritComponentRegistry, resolveCoreSpiritComponent } from './coreSpiritComponents';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 import { isCoreSpiritLibraryNamespace, resolveCoreSpiritLibraryCall } from './standardLibraryNamespaces';
-import { makeCoreSpiritCompilerPipelineTrace } from './compilerPipeline';
+import { makeCoreSpiritCompilerPipelineTrace, normalizeCoreSpiritDiagnostics } from './compilerPipeline';
 import { withCoreSpiritCompositionMetadata } from './surfaceForms';
 import { buildCoreSpiritSemanticDependencyGraph } from './semanticDependencyGraph';
 import { planCoreSpiritExecution } from './executionPlanner';
@@ -79,21 +79,35 @@ export class CoreSpiritCompiler {
     } catch (error) {
       const failure = error as { message?: string; position?: { offset?: number; line?: number; column?: number } };
       const start = Math.max(0, Number(failure?.position?.offset) || 0);
-      return { diagnostics: [{ severity: 'error', code: 'SYNTAX_ERROR', message: failure?.message || String(error), start, end: start + 1, line: failure?.position?.line ?? 1, column: failure?.position?.column ?? 1 }], symbols: [] };
+      return {
+        diagnostics: normalizeCoreSpiritDiagnostics([{
+          severity: 'error', code: 'SYNTAX_ERROR',
+          message: failure?.message || String(error),
+          start, end: start + 1, line: failure?.position?.line ?? 1, column: failure?.position?.column ?? 1,
+        }], normalizedSource),
+        symbols: [],
+      };
     }
     if (parsed.diagnostics.length) {
       return {
-        diagnostics: parsed.diagnostics.map(d => ({ severity: 'error' as const, code: 'SYNTAX_ERROR', message: d.message, line: d.line, column: d.column, start: d.start, end: d.end })),
+        diagnostics: normalizeCoreSpiritDiagnostics(
+          parsed.diagnostics.map(d => ({ severity: 'error' as const, code: 'SYNTAX_ERROR', message: d.message, line: d.line, column: d.column, start: d.start, end: d.end })),
+          normalizedSource,
+        ),
         symbols: [],
       };
     }
     const surface = options.surface ?? extractCoreSpiritSurfaceMetadata(original);
-    return this.compile(parsed.ast, sourceId, {
+    const compiled = this.compile(parsed.ast, sourceId, {
       ...options,
       surface,
       researchSource: original,
       artifactContext: { source: original, normalizedSource, semanticFingerprint: this.semanticFingerprint(options) },
     });
+    return {
+      ...compiled,
+      diagnostics: normalizeCoreSpiritDiagnostics(compiled.diagnostics, normalizedSource),
+    };
   }
 
   compile(ast: CoreSpiritAst, sourceId = 'coreSpirit', options: CoreSpiritCompilerOptions = {}): CoreSpiritCompileResult {
