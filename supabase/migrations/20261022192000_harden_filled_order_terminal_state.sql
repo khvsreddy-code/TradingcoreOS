@@ -1,0 +1,231 @@
+-- P0 order recovery hardening.
+-- Keep the database reducer authoritative: a filled order can never regress
+-- to cancelled/rejected/expired because of a delayed WebSocket or REST frame.
+-- A real fill may correct a prior CANCELLED/EXPIRED state during reconciliation.
+create or replace function public.apply_broker_order_event(
+  p_user_id uuid,
+  p_broker_id text,
+  p_event_key text,
+  p_event jsonb,
+  p_source text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_sequence bigint;
+  v_event public.broker_state_events%rowtype;
+  v_state public.broker_order_states%rowtype;
+  v_event_payload jsonb;
+  v_state_payload jsonb;
+  v_order_id text;
+  v_client_id text;
+  v_event_type text;
+  v_status text;
+  v_current_status text;
+  v_applied boolean := false;
+  v_duplicate boolean := false;
+  v_timestamp timestamptz;
+  v_received_at timestamptz;
+  v_quantity numeric;
+  v_filled numeric;
+  v_average numeric;
+  v_symbol text;
+  v_source text;
+begin
+  if p_user_id is null or nullif(trim(p_broker_id), '') is null
+     or nullif(trim(p_event_key), '') is null or p_event is null
+     or jsonb_typeof(p_event) <> 'object' then
+    raise exception 'user, broker, event key and object event are required';
+  end if;
+  if p_source not in ('websocket','reconciliation','tradingcore') then
+    raise exception 'unsupported broker event source';
+  end if;
+
+  v_source := p_source;
+  v_event_type := coalesce(p_event->>'type','Unknown');
+  v_order_id := nullif(trim(coalesce(p_event->>'brokerOrderId', p_event->>'orderId', '')), '');
+  v_client_id := nullif(trim(coalesce(p_event->>'clientOrderId', '')), '');
+  v_status := upper(coalesce(nullif(trim(p_event->>'status'),''),'UNKNOWN'));
+  if v_status not in (
+    'INTENT','SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED',
+    'CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED','UNKNOWN'
+  ) then v_status := 'UNKNOWN'; end if;
+
+  if coalesce(p_event->>'timestamp','') ~ '^[0-9]+(\\.[0-9]+)?$' then
+    v_timestamp := to_timestamp((p_event->>'timestamp')::numeric / 1000.0);
+  elsif coalesce(p_event->>'timestamp','') <> '' then
+    begin v_timestamp := (p_event->>'timestamp')::timestamptz;
+    exception when others then v_timestamp := now(); end;
+  else v_timestamp := now(); end if;
+
+  if coalesce(p_event->>'receivedAt','') ~ '^[0-9]+(\\.[0-9]+)?$' then
+    v_received_at := to_timestamp((p_event->>'receivedAt')::numeric / 1000.0);
+  else v_received_at := now(); end if;
+
+  insert into public.broker_state_events (
+    user_id, broker_id, event_key, event_type, broker_order_id, client_order_id,
+    status, ingest_source, event_timestamp, received_at, payload
+  ) values (
+    p_user_id, lower(p_broker_id), p_event_key, v_event_type, v_order_id, v_client_id,
+    case when v_event_type = 'OrderUpdate' then v_status else null end,
+    v_source, v_timestamp, v_received_at, p_event
+  )
+  on conflict (user_id, broker_id, event_key) do nothing
+  returning sequence into v_sequence;
+
+  if v_sequence is null then
+    v_duplicate := true;
+    select * into v_event from public.broker_state_events
+    where user_id = p_user_id and broker_id = lower(p_broker_id) and event_key = p_event_key;
+    v_sequence := v_event.sequence;
+    v_event_payload := v_event.payload;
+  else
+    v_event_payload := jsonb_set(
+      jsonb_set(p_event, '{sequence}', to_jsonb(v_sequence), true),
+      '{revision}', to_jsonb(v_sequence), true
+    );
+    update public.broker_state_events
+      set payload = v_event_payload
+      where sequence = v_sequence;
+  end if;
+
+  if not v_duplicate and v_event_type = 'OrderUpdate' and v_order_id is not null then
+    v_quantity := nullif(p_event->>'quantity','')::numeric;
+    v_filled := nullif(p_event->>'filledQuantity','')::numeric;
+    v_average := nullif(p_event->>'averagePrice','')::numeric;
+    v_symbol := coalesce(nullif(p_event->>'symbol',''),'UNKNOWN');
+
+    select * into v_state from public.broker_order_states
+      where user_id = p_user_id and broker_id = lower(p_broker_id) and broker_order_id = v_order_id
+      for update;
+
+    if not found then
+      v_applied := true;
+    else
+      -- Snapshot rows can lag a just-received fill. Never regress cumulative
+      -- execution fields when reconciling a stale REST response.
+      v_quantity := coalesce(v_quantity, v_state.quantity);
+      v_filled := greatest(coalesce(v_filled, 0), coalesce(v_state.filled_quantity, 0));
+      v_average := coalesce(v_average, v_state.average_price);
+      if v_quantity is not null and v_quantity > 0 and v_filled >= v_quantity then
+        v_status := 'FILLED';
+      elsif v_filled > 0 and v_status in ('OPEN','ACKNOWLEDGED','SUBMITTED') then
+        v_status := 'PARTIAL';
+      end if;
+      v_current_status := v_state.status;
+      if v_status = v_current_status then
+        v_applied := true;
+      elsif v_status = 'UNKNOWN' then
+        v_applied := false;
+      elsif v_current_status = 'FILLED' then
+        -- A stored full fill is absorbing. A lagging orderbook snapshot may
+        -- never rewrite a filled execution as cancelled/rejected/expired.
+        v_applied := false;
+      elsif v_current_status in ('CANCELLED','EXPIRED') and v_status = 'FILLED' then
+        -- A cancellation can race with an actual fill. The reconciled broker
+        -- fact that the order filled must correct a prior cancellation/expiry.
+        v_applied := true;
+      elsif v_current_status in ('CANCELLED','REJECTED','EXPIRED') then
+        -- Conflicting terminal facts require manual/REST reconciliation; do
+        -- not let one terminal state silently overwrite another.
+        v_applied := false;
+      elsif v_source = 'reconciliation' then
+        v_applied := true;
+      else
+        v_applied := case v_current_status
+          when 'INTENT' then v_status in ('SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED')
+          when 'SUBMITTED' then v_status in ('ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED')
+          when 'ACKNOWLEDGED' then v_status in ('OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED')
+          when 'OPEN' then v_status in ('PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED')
+          when 'PARTIAL' then v_status in ('PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED')
+          when 'CANCEL_PENDING' then v_status in ('OPEN','PARTIAL','FILLED','CANCELLED','REJECTED','EXPIRED')
+          when 'UNKNOWN' then v_status in ('INTENT','SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED')
+          else false
+        end;
+      end if;
+    end if;
+
+    if v_applied then
+      insert into public.broker_order_states (
+        user_id, broker_id, broker_order_id, client_order_id, status, sequence,
+        event_timestamp, received_at, quantity, filled_quantity, average_price,
+        symbol, payload, updated_at
+      ) values (
+        p_user_id, lower(p_broker_id), v_order_id, v_client_id, v_status, v_sequence,
+        v_timestamp, v_received_at, v_quantity, v_filled, v_average, v_symbol,
+        v_event_payload, now()
+      )
+      on conflict (user_id, broker_id, broker_order_id) do update set
+        client_order_id = coalesce(excluded.client_order_id, broker_order_states.client_order_id),
+        status = excluded.status,
+        sequence = excluded.sequence,
+        event_timestamp = excluded.event_timestamp,
+        received_at = excluded.received_at,
+        quantity = coalesce(excluded.quantity, broker_order_states.quantity),
+        filled_quantity = coalesce(excluded.filled_quantity, broker_order_states.filled_quantity),
+        average_price = coalesce(excluded.average_price, broker_order_states.average_price),
+        symbol = case when excluded.symbol = 'UNKNOWN' then broker_order_states.symbol else excluded.symbol end,
+        payload = excluded.payload,
+        updated_at = now();
+    end if;
+    update public.broker_state_events set applied = v_applied where sequence = v_sequence;
+  elsif not v_duplicate and v_event_type = 'Fill' and v_source = 'websocket' and v_order_id is not null then
+    -- A unique fill may advance a partially-filled order. Duplicate fill frames
+    -- never reach this branch because the event-key constraint is transactional.
+    select * into v_state from public.broker_order_states
+      where user_id = p_user_id and broker_id = lower(p_broker_id) and broker_order_id = v_order_id
+      for update;
+    if found then
+      v_quantity := nullif(p_event->>'quantity','')::numeric;
+      v_filled := coalesce(v_state.filled_quantity,0) + coalesce(v_quantity,0);
+      v_status := case
+        when v_state.quantity is not null and v_state.quantity > 0 and v_filled >= v_state.quantity then 'FILLED'
+        when v_state.status in ('FILLED','CANCELLED','REJECTED','EXPIRED') then v_state.status
+        when v_filled > 0 then 'PARTIAL'
+        else v_state.status
+      end;
+      v_state_payload := jsonb_set(
+        jsonb_set(
+          jsonb_set(v_state.payload, '{filledQuantity}', to_jsonb(v_filled), true),
+          '{status}', to_jsonb(v_status), true
+        ),
+        '{sequence}', to_jsonb(v_sequence), true
+      );
+      v_state_payload := jsonb_set(v_state_payload, '{revision}', to_jsonb(v_sequence), true);
+      update public.broker_order_states set
+        status = v_status, sequence = v_sequence, filled_quantity = v_filled,
+        payload = v_state_payload, received_at = v_received_at, updated_at = now()
+      where user_id = p_user_id and broker_id = lower(p_broker_id) and broker_order_id = v_order_id;
+      v_applied := true;
+      update public.broker_state_events set applied = true where sequence = v_sequence;
+    end if;
+  else
+    if not v_duplicate then
+      v_applied := true;
+      update public.broker_state_events set applied = true where sequence = v_sequence;
+    end if;
+  end if;
+
+  if v_order_id is not null then
+    select * into v_state from public.broker_order_states
+      where user_id = p_user_id and broker_id = lower(p_broker_id) and broker_order_id = v_order_id;
+    if found then v_state_payload := v_state.payload; else v_state_payload := null; end if;
+  else
+    v_state_payload := null;
+  end if;
+
+  return jsonb_build_object(
+    'duplicate', v_duplicate,
+    'applied', v_applied,
+    'sequence', v_sequence,
+    'event_payload', v_event_payload,
+    'state_payload', v_state_payload
+  );
+end;
+$$;
+
+revoke all on function public.apply_broker_order_event(uuid, text, text, jsonb, text) from public, anon, authenticated;
+
+grant execute on function public.apply_broker_order_event(uuid, text, text, jsonb, text) to service_role;

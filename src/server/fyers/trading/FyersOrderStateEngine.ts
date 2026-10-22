@@ -4,6 +4,7 @@ import { FyersApiClient } from '../core/FyersApiClient.js';
 import { resolveFyersCapabilities } from '../core/FyersCapabilities.js';
 import { canonicalSha256 } from '../../utils/canonicalJson.js';
 import { marketEventBus } from '../../marketData/MarketEventBus.js';
+import { AuditLogRepository } from '../../storage/AuditLogRepository.js';
 import { normalizeFyersOrderPayload, type FyersNormalizedOrderEvent } from './fyersOrderEventNormalizer.js';
 
 export type FyersOrderStateStatus =
@@ -110,7 +111,13 @@ export function canTransitionFyersOrderStatus(
   if (current === 'UNKNOWN') return next !== 'UNKNOWN';
   if (next === 'UNKNOWN') return false;
   if (TERMINAL.has(current)) {
-    return source === 'reconciliation' && TERMINAL.has(next);
+    // FILLED is an absorbing state: stale orderbook/cancel frames must never
+    // turn a confirmed execution into a cancelled or rejected order.
+    if (current === 'FILLED') return false;
+    // Cancellation and expiry can race with a real execution. Let an explicit
+    // FILLED fact correct those states, but never allow arbitrary terminal swaps.
+    if ((current === 'CANCELLED' || current === 'EXPIRED') && next === 'FILLED') return true;
+    return false;
   }
   if (source === 'reconciliation') return true;
   if (current === 'INTENT') return ['SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED'].includes(next);
@@ -290,6 +297,39 @@ export class FyersOrderStateEngine {
     const storedEvent = domainEvent(row.event_payload);
     const storedState = domainEvent(row.state_payload);
     let events: DomainMarketEvent[] = [];
+
+    if (event.type === 'OrderUpdate' || event.type === 'Fill') {
+      const canonicalOrder = storedState?.type === 'OrderUpdate'
+        ? storedState
+        : storedEvent?.type === 'OrderUpdate'
+          ? storedEvent
+          : undefined;
+      // Status snapshots and individual fill ticks both affect the same
+      // canonical order state. Persist both event kinds into one idempotent
+      // hash-chain so partial fills cannot disappear from execution history.
+      await AuditLogRepository.appendOnce({
+        userId,
+        actorType: source === 'tradingcore' ? 'system' : 'broker',
+        eventType: event.type === 'Fill' ? 'broker.order.fill_observed' : 'broker.order.state_observed',
+        correlationId: String(event.clientOrderId || event.brokerOrderId || event.orderId || eventKey),
+        payload: {
+          brokerId: 'fyers',
+          source,
+          eventKey,
+          brokerOrderId: canonicalOrder?.brokerOrderId || canonicalOrder?.orderId || event.brokerOrderId || event.orderId || null,
+          clientOrderId: canonicalOrder?.clientOrderId || event.clientOrderId || null,
+          receivedStatus: event.type === 'Fill' ? 'FILL' : event.status,
+          canonicalStatus: canonicalOrder?.status ?? (event.type === 'Fill' ? 'FILL' : event.status),
+          quantity: canonicalOrder?.quantity ?? (event.type === 'Fill' ? event.quantity ?? null : event.quantity ?? null),
+          fillQuantity: event.type === 'Fill' ? event.quantity ?? null : null,
+          filledQuantity: canonicalOrder?.filledQuantity ?? (event.type === 'Fill' ? event.quantity ?? null : null),
+          averagePrice: canonicalOrder?.averagePrice ?? (event.type === 'Fill' ? event.price ?? null : null),
+          sequence,
+          applied,
+          duplicate,
+        },
+      }, `fyers-order-state:${eventKey}`);
+    }
 
     if (event.type === 'OrderUpdate') {
       if (source === 'reconciliation' && storedState?.type === 'OrderUpdate') {

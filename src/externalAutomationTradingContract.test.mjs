@@ -6,8 +6,12 @@ const integrationRoutes = read('./server/routes/automation-integration.routes.ts
 const ingestRoutes = read('./server/routes/automation-signal-ingest.routes.ts');
 const integrations = read('./server/automation/AutomationIntegrationRepository.ts');
 const risk = read('./server/trading/AutomationPreTradeRiskEngine.ts');
+const brokerAdapters = read('./server/brokers/adapters/BrokerAdapters.ts');
 const sharedExecution = read('./server/trading/fyersOrderExecution.ts');
 const manualTrading = read('./server/routes/trading.routes.ts');
+const killSwitchRepository = read('./server/storage/TradingKillSwitchRepository.ts');
+const killSwitchMigration = read('../supabase/migrations/20261022193000_trading_kill_switches.sql');
+const auditChainMigration = read('../supabase/migrations/20261022194000_idempotent_broker_state_audit.sql');
 const stateEngine = read('./server/fyers/trading/FyersOrderStateEngine.ts');
 const migration = read('../supabase/migrations/20261016130000_external_automation_gateway.sql');
 const automationUi = read('./pages/AutomationsPage.tsx');
@@ -137,5 +141,63 @@ assert.match(docs, /Persistent order state machine/);
 assert.match(docs, /UNKNOWN.*RECOVERY_REQUIRED/s);
 assert.match(docs, /strict allowlist/);
 assert.match(docs, /same key and same body/);
+
+assert.match(killSwitchRepository, /activeBlock\(/);
+assert.match(killSwitchRepository, /\.rpc\('set_trading_kill_switch'/,
+  'kill-switch mutation must be atomically committed with its audit event');
+assert.match(killSwitchMigration, /primary key \(user_id, broker_id, scope, scope_id\)/i);
+assert.match(killSwitchMigration, /public\.append_execution_audit_event\(/);
+assert.match(killSwitchMigration, /revoke all on function public\.set_trading_kill_switch/i);
+assert.match(risk, /TradingKillSwitchRepository\.activeBlock/);
+assert.match(risk, /riskSnapshotFetchMs > 8_000/,
+  'slow account/funds/position snapshots must fail closed rather than silently age during risk evaluation');
+assert.equal((manualTrading.match(/TradingKillSwitchRepository\.activeBlock\(/g) ?? []).length, 2,
+  'manual orders must check both the initial gate and the final execution boundary');
+assert.match(manualTrading, /tradingRoutes\.put\('\/:brokerId\/kill-switch'/);
+assert.match(manualTrading, /tradingRoutes\.get\('\/:brokerId\/kill-switch'/);
+const manualIntentAudit = manualTrading.indexOf("eventType: 'order.intent'");
+const manualDispatch = manualTrading.indexOf('placeFyersOrderViaFixedIpGateway(req.accessToken');
+assert.ok(manualIntentAudit >= 0 && manualDispatch > manualIntentAudit,
+  'manual order intent must be audit-recorded before broker dispatch');
+assert.ok(manualTrading.lastIndexOf('TradingKillSwitchRepository.activeBlock(') < manualDispatch,
+  'manual route must fail closed on the final kill-switch check before dispatch');
+const automationKillSwitch = integrationRoutes.lastIndexOf('TradingKillSwitchRepository.activeBlock(');
+const automationDispatch = integrationRoutes.indexOf('placeFyersOrderViaFixedIpGateway(accessToken, submitPayload');
+assert.ok(automationKillSwitch >= 0 && automationDispatch > automationKillSwitch,
+  'automation must re-read durable kill switches immediately before broker dispatch');
+assert.match(integrationRoutes, /signalPayloadHash/);
+assert.match(integrationRoutes, /programChecksum/);
+assert.match(integrationRoutes, /riskVerdict: 'approved'/);
+assert.match(integrationRoutes, /AuditLogRepository\.appendRequired\([\s\S]*?eventType: 'automation\.order\.submitting'/);
+assert.match(stateEngine, /AuditLogRepository\.appendOnce/);
+assert.match(auditChainMigration, /append_execution_audit_event_once/);
+assert.match(auditChainMigration, /primary key \(user_id, event_key\)/i);
+
+assert.match(risk, /export async function evaluateManualPreTradeRisk/,
+  'manual tickets and automation must share one server-owned risk evaluator');
+assert.match(risk, /input\.live \? 5_000 : 20_000/,
+  'live decisions must require more recent source timestamps than paper checks');
+assert.match(risk, /fresh-open-position-marks/,
+  'account gross exposure must use freshly quoted marks for every open position');
+assert.match(manualTrading, /evaluateManualPreTradeRisk\(/);
+assert.ok(manualTrading.indexOf('evaluateManualPreTradeRisk(') < manualTrading.indexOf("eventType: 'order.intent'"),
+  'manual risk evaluation must happen before order-intent audit or broker state transitions');
+const manualRiskAudit = manualTrading.indexOf("eventType: 'order.risk_approved'");
+assert.ok(manualRiskAudit >= 0 && manualDispatch > manualRiskAudit,
+  'manual approval verdict must be audit chained before order dispatch');
+assert.match(brokerAdapters, /quote\.v\?\.tt/,
+  'FYERS quote freshness must come from the provider timestamp, not local Date.now()');
+assert.match(brokerAdapters, /return '';/,
+  'missing provider time must remain invalid instead of being replaced with a fresh local timestamp');
+assert.doesNotMatch(brokerAdapters.slice(brokerAdapters.indexOf('async getMarketQuotes'), brokerAdapters.indexOf('async getHistoricalData')), /timestamp: new Date\(\)\.toISOString\(\)/,
+  'quote normalization must not manufacture provider freshness');
+
+assert.match(manualTrading, /checkMargin: false/,
+  'last-moment validation must refresh live snapshots without a second expensive margin preview');
+assert.match(manualTrading, /order\.pre_dispatch_risk_approved/);
+assert.match(integrationRoutes, /checkMargin: false/);
+assert.match(integrationRoutes, /automation\.order\.pre_dispatch_risk_approved/);
+assert.match(risk, /TRADINGCORE_MANUAL_MAX_ACCOUNT_EXPOSURE_MULTIPLE/,
+  'manual tickets must use server-owned account-relative caps, not UI supplied limits');
 
 console.log('EXTERNAL_AUTOMATION_TRADING_BOUNDARY_OK');

@@ -9,6 +9,7 @@ import type { BrokerOrderPayload } from '../brokers/contracts.js';
 import { OrderIdempotencyRepository } from '../storage/OrderIdempotencyRepository.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { AuditLogRepository } from '../storage/AuditLogRepository.js';
+import { TradingKillSwitchRepository } from '../storage/TradingKillSwitchRepository.js';
 import { getErrorMessage, getErrorStatus, isRecord } from '../../services/boundary/brokerApiValidation.js';
 import { canonicalSha256 } from '../utils/canonicalJson.js';
 import {
@@ -18,6 +19,7 @@ import {
   type AutomationRequestState,
   type AutomationIntegrationScope,
   type AutomationOrderRequestRecord,
+  type AutomationSignalRecord,
 } from '../automation/AutomationIntegrationRepository.js';
 import { evaluateAutomationPreTradeRisk } from '../trading/AutomationPreTradeRiskEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway } from '../trading/fyersOrderExecution.js';
@@ -517,6 +519,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
   let orderPayload: BrokerOrderPayload;
   let requestedMode: 'PAPER' | 'LIVE';
   let signalId: string | null = null;
+  let signalProvenance: AutomationSignalRecord | undefined;
   const externalRequestId = String(req.get('Idempotency-Key') ?? '').trim();
   if (!/^[A-Za-z0-9._:-]{8,128}$/.test(externalRequestId)) {
     return jsonError(res, 400, 'Idempotency-Key header must be 8–128 safe characters and is required for every order request.');
@@ -622,6 +625,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       if (signalId) {
         const signal = await AutomationIntegrationRepository.getSignal(integration.id, signalId);
         if (!signal) return await rejectAndStore(422, 'Linked CoreSpirit signal was not found for this integration.');
+        signalProvenance = signal;
         const signalConflict = assertSignalMatchesOrder({
           eventType: signal.eventType, symbol: signal.symbol, mode: signal.mode, signalTimestamp: signal.signalTimestamp,
         }, orderPayload);
@@ -644,7 +648,7 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       await AuditLogRepository.append({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.risk_rejected',
         requestId: req.get('x-request-id'), correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, reason: risk.reason, checks: risk.checks },
+        payload: { integrationId: integration.id, automationId: integration.automationId, signalId, sourceId: signalProvenance?.sourceId ?? null, runId: signalProvenance?.runId ?? null, programChecksum: typeof signalProvenance?.payload.programChecksum === 'string' ? signalProvenance.payload.programChecksum : null, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, riskVerdict: 'rejected', reason: risk.reason, checks: risk.checks },
       }).catch(() => undefined);
       return await rejectAndStore(422, risk.reason, { riskChecks: risk.checks });
     }
@@ -708,12 +712,27 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
       }
     }
 
+    const executionProvenance = {
+      integrationId: integration.id,
+      automationId: integration.automationId,
+      signalId: signalProvenance?.id ?? signalId,
+      sourceId: signalProvenance?.sourceId ?? null,
+      runId: signalProvenance?.runId ?? null,
+      barIndex: signalProvenance?.barIndex ?? null,
+      signalTimestamp: signalProvenance?.signalTimestamp ?? null,
+      signalPayloadHash: signalProvenance?.payloadHash ?? null,
+      programChecksum: typeof signalProvenance?.payload.programChecksum === 'string'
+        ? signalProvenance.payload.programChecksum
+        : null,
+      origin: signalProvenance ? 'corespirit-signal' : 'authorized-external-order-intent',
+    };
+
     // Required audit writes must succeed before the broker side effect begins.
     try {
-      await AuditLogRepository.append({
+      await AuditLogRepository.appendRequired({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.risk_approved',
         requestId: req.get('x-request-id'), correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, requestId: externalRequestId, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, riskChecks: risk.checks, estimatedNotional: risk.estimatedNotional },
+        payload: { ...executionProvenance, requestId: externalRequestId, idempotencyHash: requestHash, symbol: orderPayload.symbol, side: orderPayload.side, quantity: orderPayload.quantity, riskVerdict: 'approved', riskChecks: risk.checks, estimatedNotional: risk.estimatedNotional, projectedAccountExposure: risk.projectedAccountExposure, requiredMargin: risk.requiredMargin },
       });
     } catch (error) {
       return await rejectAndStore(503, getErrorMessage(error, 'Durable risk audit is unavailable; no broker order was submitted.'));
@@ -751,6 +770,11 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         response: { success: false, state: 'INTENT', orderSubmitted: false, requestId: externalRequestId },
         clientOrderId, signalId, estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
       });
+      await AuditLogRepository.appendRequired({
+        userId: integration.userId, actorType: 'automation', eventType: 'automation.order.submitting',
+        requestId, correlationId: externalRequestId,
+        payload: { ...executionProvenance, requestId: externalRequestId, clientOrderId, internalIdempotencyKey, requestHash, riskVerdict: 'approved', estimatedNotional: risk.estimatedNotional, submittedOrder: { symbol: submitPayload.symbol, side: submitPayload.side, quantity: submitPayload.quantity, orderType: submitPayload.orderType, product: submitPayload.product } },
+      });
       await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'SUBMITTED', {
         symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
         side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
@@ -760,15 +784,166 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         response: { success: false, state: 'SUBMITTED', orderSubmitted: 'pending', requestId: externalRequestId },
         clientOrderId, signalId, estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
       });
-      await AuditLogRepository.append({
-        userId: integration.userId, actorType: 'automation', eventType: 'automation.order.submitting',
-        requestId, correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, clientOrderId, internalIdempotencyKey },
-      });
     } catch (error) {
       const message = getErrorMessage(error, 'Unable to persist order intent and audit before broker submission.');
       await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, { success: false, error: message }).catch(() => undefined);
       return await rejectAndStore(503, message);
+    }
+
+    // Refresh provider quotes, account funds and all open-position marks after
+    // the write/audit work above. A previous approval is not reusable once its
+    // snapshots have aged. Re-use the broker margin preview from the first pass.
+    let dispatchRisk: Awaited<ReturnType<typeof evaluateAutomationPreTradeRisk>>;
+    try {
+      dispatchRisk = await evaluateAutomationPreTradeRisk({
+        userId: integration.userId,
+        accessToken,
+        broker,
+        integration,
+        order: submitPayload,
+        live: true,
+        checkMargin: false,
+        precheckedRequiredMargin: risk.requiredMargin,
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to refresh pre-dispatch risk snapshots; no order was submitted.');
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+      }).catch(() => undefined);
+      const response = { success: false, error: message, requestId: externalRequestId, orderSubmitted: false, recoveryRequired: false, clientOrderId };
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
+      }).catch(() => undefined);
+      await AuditLogRepository.append({
+        userId: integration.userId, actorType: 'system', eventType: 'automation.order.pre_dispatch_risk_unavailable',
+        requestId, correlationId: externalRequestId,
+        payload: { ...executionProvenance, clientOrderId, internalIdempotencyKey, error: message },
+      }).catch(() => undefined);
+      return res.status(503).json(response);
+    }
+    if (!dispatchRisk.approved) {
+      const response = {
+        success: false, error: dispatchRisk.reason, requestId: externalRequestId,
+        orderSubmitted: false, recoveryRequired: false, clientOrderId,
+        riskChecks: dispatchRisk.checks, estimatedNotional: dispatchRisk.estimatedNotional,
+        quotedPrice: dispatchRisk.quotedPrice,
+        projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+      };
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        message: `Pre-dispatch risk recheck rejected: ${dispatchRisk.reason}`,
+      }).catch(() => undefined);
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: dispatchRisk.checks,
+      }).catch(() => undefined);
+      try {
+        await AuditLogRepository.appendRequired({
+          userId: integration.userId, actorType: 'system', eventType: 'automation.order.pre_dispatch_risk_rejected',
+          requestId, correlationId: externalRequestId,
+          payload: {
+            ...executionProvenance, clientOrderId, internalIdempotencyKey,
+            verdict: 'rejected', reason: dispatchRisk.reason, checks: dispatchRisk.checks,
+            quotedPrice: dispatchRisk.quotedPrice, projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+          },
+        });
+      } catch {
+        // The request has already been closed as "not submitted". Do not dispatch
+        // when its rejection cannot be appended to the mandatory audit chain.
+        return res.status(503).json({ ...response, error: 'Pre-dispatch risk rejection could not be durably audited.' });
+      }
+      return res.status(422).json(response);
+    }
+    try {
+      await AuditLogRepository.appendRequired({
+        userId: integration.userId, actorType: 'system', eventType: 'automation.order.pre_dispatch_risk_approved',
+        requestId, correlationId: externalRequestId,
+        payload: {
+          ...executionProvenance, clientOrderId, internalIdempotencyKey,
+          verdict: 'approved', checks: dispatchRisk.checks,
+          quotedPrice: dispatchRisk.quotedPrice,
+          estimatedNotional: dispatchRisk.estimatedNotional,
+          projectedAccountExposure: dispatchRisk.projectedAccountExposure,
+          basedOnFreshSnapshot: true,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, 'Fresh pre-dispatch risk verdict could not be audited; order submission is blocked.');
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
+      }).catch(() => undefined);
+      const response = { success: false, error: message, requestId: externalRequestId, orderSubmitted: false, recoveryRequired: false, clientOrderId };
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: dispatchRisk.checks,
+      }).catch(() => undefined);
+      return res.status(503).json(response);
+    }
+
+    // Last-moment server-side admission check. UI state and the earlier risk
+    // verdict are not authority if an operator flips a kill switch during evaluation.
+    try {
+      const activeSwitch = await TradingKillSwitchRepository.activeBlock({
+        userId: integration.userId,
+        brokerId: integration.brokerId,
+        strategyId: integration.automationId,
+      });
+      if (activeSwitch) {
+        const reason = activeSwitch.reason || 'Trading is paused by an active kill switch.';
+        const response = {
+          success: false, error: reason, orderSubmitted: false, blockedByKillSwitch: true,
+          scope: activeSwitch.scope, requestId: externalRequestId, clientOrderId,
+        };
+        await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+          symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+          side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
+          message: 'Blocked by trading kill switch immediately before broker dispatch.',
+        });
+        await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response);
+        await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+          state: 'REJECTED', response, clientOrderId, signalId,
+          estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
+        });
+        await AuditLogRepository.appendRequired({
+          userId: integration.userId, actorType: 'system', eventType: 'automation.order.blocked.kill_switch',
+          requestId, correlationId: externalRequestId,
+          payload: {
+            integrationId: integration.id, automationId: integration.automationId,
+            clientOrderId, internalIdempotencyKey, scope: activeSwitch.scope,
+            scopeId: activeSwitch.scopeId, reason, blockedAtExecutionBoundary: true,
+          },
+        });
+        return res.status(423).json(response);
+      }
+    } catch (error) {
+      // Verification failure is a hard stop before the network call. Persist a
+      // terminal no-submit record when possible; never turn a switch DB outage
+      // into permission to trade.
+      const message = getErrorMessage(error, 'Kill-switch state could not be verified; live dispatch was blocked.');
+      const response = { success: false, error: message, orderSubmitted: false, recoveryRequired: false, requestId: externalRequestId, clientOrderId };
+      await FyersOrderStateEngine.recordLifecycle(integration.userId, clientOrderId, 'REJECTED', {
+        symbol: submitPayload.symbol, quantity: Number(submitPayload.quantity),
+        side: String(submitPayload.side).toUpperCase() === 'SELL' ? 'sell' : 'buy',
+        message: 'Blocked because kill-switch verification failed before dispatch.',
+      }).catch(() => undefined);
+      await OrderIdempotencyRepository.fail(integration.userId, integration.brokerId, internalIdempotencyKey, response).catch(() => undefined);
+      await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
+        state: 'REJECTED', response, clientOrderId, signalId,
+        estimatedNotional: risk.estimatedNotional, riskChecks: risk.checks,
+      }).catch(() => undefined);
+      await AuditLogRepository.append({
+        userId: integration.userId, actorType: 'system', eventType: 'automation.order.blocked.kill_switch_unavailable',
+        requestId, correlationId: externalRequestId,
+        payload: { integrationId: integration.id, automationId: integration.automationId, clientOrderId, error: message },
+      }).catch(() => undefined);
+      return res.status(503).json(response);
     }
 
     let brokerData: unknown;
@@ -856,10 +1031,10 @@ automationGatewayRoutes.post('/v1/orders', requireAutomationScope('orders:reques
         message: 'Broker acknowledged the order request. This is not a fill confirmation; poll order state or wait for broker reconciliation.',
       };
       await OrderIdempotencyRepository.complete(integration.userId, integration.brokerId, internalIdempotencyKey, response);
-      await AuditLogRepository.append({
+      await AuditLogRepository.appendRequired({
         userId: integration.userId, actorType: 'automation', eventType: 'automation.order.acknowledged',
         requestId, correlationId: externalRequestId,
-        payload: { integrationId: integration.id, automationId: integration.automationId, clientOrderId, brokerOrderId: String(brokerOrderId), state: 'ACKNOWLEDGED', filled: false },
+        payload: { ...executionProvenance, requestId: externalRequestId, clientOrderId, brokerOrderId: String(brokerOrderId), state: 'ACKNOWLEDGED', filled: false, riskVerdict: 'approved', estimatedNotional: risk.estimatedNotional },
       });
       await AutomationIntegrationRepository.updateOrderRequest(integration.id, externalRequestId, {
         state: 'ACKNOWLEDGED', response, clientOrderId, brokerOrderId: String(brokerOrderId), signalId,

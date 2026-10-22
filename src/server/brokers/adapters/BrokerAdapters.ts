@@ -216,7 +216,16 @@ export class FyersAdapter extends BaseBroker {
         volume: Number(quote.v?.volume ?? 0),
         bid: Number(quote.v?.bid ?? 0),
         ask: Number(quote.v?.ask ?? 0),
-        timestamp: new Date().toISOString(),
+        // FYERS exposes the provider's last-traded timestamp as epoch seconds in v.tt.
+        // Never replace missing/invalid source time with Date.now(): doing so makes
+        // a stale quote indistinguishable from a fresh one in live pre-trade risk.
+        timestamp: (() => {
+          const providerTime = Number(quote.v?.tt);
+          if (!Number.isFinite(providerTime) || providerTime <= 0) return '';
+          const timestampMs = providerTime < 1_000_000_000_000 ? providerTime * 1000 : providerTime;
+          const timestamp = new Date(timestampMs);
+          return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : '';
+        })(),
       },
     ]));
   }
