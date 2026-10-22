@@ -247,7 +247,13 @@ self.onmessage=(event:MessageEvent<Message>)=>{
       // If an incremental tick arrives before a context has warmed (for
       // example after an input/artifact swap), reconstruct history read-only.
       // Only the actual forming-bar executeBar call may follow that baseline.
-      const warmReadOnly=message.readOnly||(message.mode==='incremental'&&!context.initialized);
+      // Historical and correction replay must reconstruct deterministic outputs
+      // without dispatching external effects. Only the explicitly incremental
+      // live path may invoke effectful execution.
+      const replayReadOnly=message.readOnly ||
+        message.mode==='historical' ||
+        message.suppressExternalEffectsForRun===true;
+      const warmReadOnly=replayReadOnly||(message.mode==='incremental'&&!context.initialized);
       result=warmReadOnly
         ? context.runtime.executeIrReadOnly(context.artifact.ir,context.bars)
         : context.runtime.executeIr(context.artifact.ir,context.bars);

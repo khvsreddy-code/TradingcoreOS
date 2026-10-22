@@ -29,6 +29,11 @@ assert.throws(() => makeCoreSpiritTemporalType('confirmed', 'number', 'developin
 assert.throws(() => makeCoreSpiritTemporalType('series', '', 'confirmed'), /non-empty/);
 assert(compatible('state<float>', 'state<number>'));
 assert(!compatible('state<float>', 'series<float>'));
+assert(!temporalAssignmentCompatible('series<number> @confirmed', 'series<number>'),
+  'unqualified temporal provenance must not satisfy an explicitly confirmed contract');
+assert(temporalAssignmentCompatible('series<number> @confirmed', 'series<number> @confirmed'));
+assert(!temporalAssignmentCompatible('series<number> @confirmed', 'series<number> @developing'),
+  'developing values must not satisfy a confirmed-data contract');
 
 const { CoreSpiritStateStore } = await import('./stateStore.ts');
 const stateStore = new CoreSpiritStateStore();

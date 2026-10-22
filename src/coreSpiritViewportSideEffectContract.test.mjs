@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 
+const workerSource = fs.readFileSync('src/services/coreSpirit/coreSpirit.worker.ts', 'utf8');
+assert.match(workerSource, /const replayReadOnly=message\.readOnly\s*\|\|\s*message\.mode==='historical'\s*\|\|\s*message\.suppressExternalEffectsForRun===true/,
+  'historical and correction replay must use read-only execution even if the caller omits readOnly');
+assert.match(workerSource, /replayReadOnly\s*\?\s*context\.runtime\.executeIrReadOnly/,
+  'the replay guard must route full-history reconstruction through the side-effect-free runtime');
+
 const bar = {
   timestamp: '2026-10-01T09:15:00.000Z',
   open: 100, high: 102, low: 99, close: 101, volume: 1000,
