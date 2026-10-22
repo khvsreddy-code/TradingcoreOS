@@ -38,6 +38,8 @@ const route = read('src/server/routes/trading.routes.ts');
 const streamRoute = read('src/server/routes/fyers-order-stream.routes.ts');
 const migration = read('supabase/migrations/20261011100000_fyers_order_state_reconciliation.sql');
 const terminalHardening = read('supabase/migrations/20261022192000_harden_filled_order_terminal_state.sql');
+const auditRepository = read('src/server/storage/AuditLogRepository.ts');
+const auditMigration = read('supabase/migrations/20261022194000_idempotent_broker_state_audit.sql');
 
 assert.match(transport, /FyersOrderStateEngine\.reconcile\(/,
   'every fresh/reconnected socket must reconcile before publishing deltas');
@@ -78,5 +80,13 @@ assert.match(route, /recordLifecycle\(userId, '', 'CANCEL_PENDING', \{ brokerOrd
 
 assert.match(terminalHardening, /v_current_status = 'FILLED'[\s\S]*?v_applied := false;/);
 assert.match(terminalHardening, /v_current_status in \('CANCELLED','EXPIRED'\) and v_status = 'FILLED'/);
+
+assert.match(engine, /AuditLogRepository\.appendOnce/,
+  'canonical order-state observations must be hash-chained and retry-safe');
+assert.match(engine, /broker\.order\.state_observed/);
+assert.match(auditRepository, /append_execution_audit_event_once/);
+assert.match(auditMigration, /primary key \(user_id, event_key\)/i,
+  'a broker-event retry must complete its missing audit append without a duplicate chain entry');
+assert.match(auditMigration, /public\.append_execution_audit_event\(/);
 
 console.log('FYERS_ORDER_RECONCILIATION_STATE_MACHINE_CONTRACT_OK');
