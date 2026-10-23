@@ -4,7 +4,7 @@
  * it must never import the kernel implementation or a compute provider.
  */
 export type CoreSpiritKernelOperationName =
-  | 'rollingMean' | 'rollingVariance' | 'rollingStd' | 'rollingMin' | 'rollingMax'
+  | 'rollingMean' | 'rollingSum' | 'rollingVariance' | 'rollingStd' | 'rollingMin' | 'rollingMax'
   | 'ema' | 'rma' | 'wma' | 'atr' | 'rsi' | 'linearRegression'
   | 'correlation' | 'covariance' | 'zScore' | 'dotProduct' | 'matrixMultiply'
   | 'matrixDecomposition' | 'softmax' | 'logSumExp';
@@ -13,6 +13,8 @@ const BUILTIN_KERNEL_MAP: Readonly<Record<string, CoreSpiritKernelOperationName>
   sma: 'rollingMean',
   mean: 'rollingMean',
   rollingMean: 'rollingMean',
+  sum: 'rollingSum',
+  rollingSum: 'rollingSum',
   variance: 'rollingVariance',
   rollingVariance: 'rollingVariance',
   stdev: 'rollingStd',
