@@ -79,7 +79,13 @@ type SnapshotValidationContext = Pick<CoreSpiritDataResolutionContext, 'asOfTime
   Partial<Pick<CoreSpiritDataResolutionContext, 'executionMode'>>;
 
 function isConfirmedSnapshot(snapshot: CoreSpiritDataSnapshot): boolean {
-  if (snapshot.confirmationPhase) return snapshot.confirmationPhase === 'confirmed';
+  // Conflicting metadata fails closed. A "confirmed" phase cannot override a
+  // developing/realtime state (or vice versa).
+  if (snapshot.confirmationPhase === 'developing' ||
+      snapshot.state === 'developing' || snapshot.state === 'realtime') return false;
+  if (snapshot.confirmationPhase === 'confirmed') {
+    return snapshot.state == null || snapshot.state === 'confirmed' || snapshot.state === 'historical';
+  }
   return snapshot.state === 'confirmed' || snapshot.state === 'historical';
 }
 
@@ -108,18 +114,26 @@ export function validateSynchronizedSnapshot(
   if (typeof snapshot.symbol !== 'string' || typeof snapshot.timeframe !== 'string' ||
       !snapshot.symbol.trim() || !snapshot.timeframe.trim() || typeof snapshot.source !== 'string') return null;
   if (snapshot.timestamp != null && !Number.isFinite(Number(snapshot.timestamp))) return null;
+  if (snapshot.closeTimestamp != null && !Number.isFinite(Number(snapshot.closeTimestamp))) return null;
   if (snapshot.timestamp != null && Number(snapshot.timestamp) > context.asOfTimestamp) return null;
+  if (snapshot.timestamp != null && snapshot.closeTimestamp != null &&
+      Number(snapshot.closeTimestamp) < Number(snapshot.timestamp)) return null;
 
   const confirmedOnly = context.executionMode != null
     ? context.executionMode !== 'realtime'
     : context.alignment === 'last-confirmed' || context.alignment === 'nearest-confirmed';
+  const requiresClosedSample = confirmedOnly ||
+    context.alignment === 'last-confirmed' || context.alignment === 'nearest-confirmed';
+  if (requiresClosedSample && snapshot.closeTimestamp != null &&
+      Number(snapshot.closeTimestamp) > context.asOfTimestamp) return null;
   // A confirmed historical/replay decision must never consume a developing or
   // unlabelled higher-timeframe sample, even when the requested alignment is exact.
   if (confirmedOnly && !isConfirmedSnapshot(snapshot)) return null;
   if ((snapshot.confirmationPhase === 'developing' || snapshot.state === 'developing' || snapshot.state === 'realtime') &&
       context.alignment !== 'developing') return null;
-  if (context.maxStalenessMs != null && snapshot.timestamp != null &&
-      Math.max(0, context.asOfTimestamp - Number(snapshot.timestamp)) * 1000 > context.maxStalenessMs) return null;
+  const freshnessTimestamp = snapshot.closeTimestamp ?? snapshot.timestamp;
+  if (context.maxStalenessMs != null && freshnessTimestamp != null &&
+      Math.max(0, context.asOfTimestamp - Number(freshnessTimestamp)) * 1000 > context.maxStalenessMs) return null;
   const dataRevision = snapshotRevision(snapshot);
   return Object.freeze({
     ...snapshot,
