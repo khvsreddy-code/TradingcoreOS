@@ -124,3 +124,38 @@ for(let sample=0;sample<64;sample++){
   }
 }
 console.log('CORESPIRIT_OPTIMIZER_GENERATED_DIFFERENTIAL_OK');
+
+
+// An eventGate must have observably different active and inactive paths; keep
+// its target remapping and downstream effect order covered in both VM tiers.
+for (const eventName of ['bar', 'trade']) {
+  const gateInstructions = [
+    { op:'eventGate', eventName, target:4 },
+    { op:'const', dest:'gateValue', value:1 },
+    { op:'emit', kind:'plot', args:['gateValue'], outputId:'gate:active' },
+    { op:'jump', target:6 },
+    { op:'const', dest:'gateValue', value:0 },
+    { op:'emit', kind:'plot', args:['gateValue'], outputId:'gate:inactive' },
+    { op:'emit', kind:'alert', args:['gateValue'], outputId:'gate:alert' },
+  ];
+  const gateProgram = {
+    version:1,
+    sourceId:'event-gate-differential:' + eventName,
+    entry:{instructions:gateInstructions},
+    locals:[],
+    maxLookback:0,
+    diagnostics:[],
+    sourceMap:{version:1,sourceId:'event-gate-differential:' + eventName,entries:[]},
+  };
+  const optimizedGateProgram = optimizeCoreSpiritIr(gateProgram);
+  for (const seed of [0, 1, 4]) {
+    const expected = execute(gateInstructions, seed, CoreSpiritExecutionVM);
+    assert.equal(normalize(execute(gateInstructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(expected),
+      'reference/optimized eventGate mismatch for ' + eventName);
+    assert.equal(normalize(execute(optimizedGateProgram.entry.instructions,seed)),normalize(expected),
+      'optimizer eventGate rewrite mismatch for ' + eventName);
+    assert.equal(normalize(execute(optimizedGateProgram.entry.instructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(expected),
+      'optimized IR + VM eventGate mismatch for ' + eventName);
+  }
+}
+console.log('CORESPIRIT_OPTIMIZER_EVENT_GATE_DIFFERENTIAL_OK');
