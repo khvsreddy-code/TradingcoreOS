@@ -26,6 +26,11 @@ assert.equal(confirmedAligned[1]?.value, 10);
 assert.equal(confirmedAligned[2]?.value, 10, 'carry-forward uses only the last eligible confirmed observation');
 assert.equal(confirmedAligned[3]?.value, 20, 'a developing revision must not resurrect an older confirmed revision at the same timestamp');
 assert.equal(confirmedAligned[4]?.value, 20);
+assert.deepEqual(
+  alignTimeframeSnapshots([500, 1000, 1500, 3000, 3500], [...snapshots].reverse()),
+  confirmedAligned,
+  'batch order and delivery order must not change canonical aligned values',
+);
 
 const includesDeveloping = alignSnapshots([3000], snapshots, { confirmedOnly:false });
 assert.equal(includesDeveloping[0]?.value, 33, 'explicit non-confirmed alignment may inspect the latest developing revision');
@@ -50,6 +55,11 @@ assert.equal(validateSynchronizedSnapshot({
 }, {
   asOfTimestamp:11_000, alignment:'last-confirmed', executionMode:'historical', maxStalenessMs:undefined,
 }), null, 'unlabelled samples fail closed in confirmed-only historical mode');
+assert.equal(validateSynchronizedSnapshot({
+  symbol:'ALPHA', timeframe:'1D', timestamp:10_000, value:77, source:'feed', state:'confirmed', revision:1,
+}, {
+  asOfTimestamp:11_000, alignment:'last-confirmed', executionMode:'historical', maxStalenessMs:5_000,
+}), null, 'maxStalenessMs must be compared in milliseconds when data timestamps use epoch seconds');
 
 const synchronized = synchronizeMarketSnapshots([
   { symbol:'ALPHA', timeframe:'1m', timestamp:1000, value:1, source:'a', state:'confirmed', revision:1 },
