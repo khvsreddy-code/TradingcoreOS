@@ -90,4 +90,37 @@ const invalidHistory=[
 assert.equal(normalize(execute(invalidHistory,0,CoreSpiritOptimizedExecutionVM)),normalize(execute(invalidHistory,0,CoreSpiritExecutionVM)),
   'missing historical data errors must match on both VMs');
 
+
+for(let sample=0;sample<64;sample++){
+  const chosenBranch=rand(2)===0;
+  const yesValue=[null,0,1,-3,Number.NaN,Number.POSITIVE_INFINITY][rand(6)];
+  const noValue=[null,2,-2,4,Number.NaN,Number.NEGATIVE_INFINITY][rand(6)];
+  const sideEffectValue=sample+10;
+  const branchInstructions=[
+    {op:'const',dest:'branchCondition',value:chosenBranch},
+    {op:'jumpIfFalse',condition:'branchCondition',target:5},
+    {op:'const',dest:'branchValue',value:yesValue},
+    {op:'emit',kind:'plot',args:['branchValue'],outputId:'generated-branch:'+sample},
+    {op:'jump',target:7},
+    {op:'const',dest:'branchValue',value:noValue},
+    {op:'emit',kind:'plot',args:['branchValue'],outputId:'generated-branch:'+sample},
+    {op:'const',dest:'orderPayload',value:sideEffectValue},
+    {op:'setState',name:'lastGeneratedSignal',source:'orderPayload'},
+    {op:'emit',kind:'order',args:['orderPayload'],outputId:'generated-order:'+sample},
+    {op:'emit',kind:'drawing',args:['orderPayload'],outputId:'generated-drawing:'+sample},
+    {op:'const',dest:'alertPayload',value:-sideEffectValue},
+    {op:'emit',kind:'alert',args:['alertPayload'],outputId:'generated-alert:'+sample},
+  ];
+  const branchProgram={version:1,sourceId:'generated-control-flow:'+sample,entry:{instructions:branchInstructions},locals:[],maxLookback:0,diagnostics:[],sourceMap:{version:1,sourceId:'generated-control-flow:'+sample,entries:[]}};
+  const optimizedProgram=optimizeCoreSpiritIr(branchProgram);
+  for(const seed of [0,1,3]){
+    const reference=execute(branchInstructions,seed,CoreSpiritExecutionVM);
+    assert.equal(normalize(execute(branchInstructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(reference),
+      `reference/optimized control-flow mismatch sample=${sample}, seed=${seed}`);
+    assert.equal(normalize(execute(optimizedProgram.entry.instructions,seed)),normalize(reference),
+      `optimizer control-flow rewrite mismatch sample=${sample}, seed=${seed}`);
+    assert.equal(normalize(execute(optimizedProgram.entry.instructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(reference),
+      `optimized control-flow rewrite + VM mismatch sample=${sample}, seed=${seed}`);
+  }
+}
 console.log('CORESPIRIT_OPTIMIZER_GENERATED_DIFFERENTIAL_OK');
