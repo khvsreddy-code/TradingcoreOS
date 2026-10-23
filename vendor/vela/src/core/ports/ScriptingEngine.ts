@@ -13,7 +13,7 @@ import type { DirtyRange, ScenePatch } from '../model/patch';
  * this so they get real, correctly-resolved data (no aggregation; timeframes
  * kept separate). Provided by the orchestrator, backed by `MarketDataFeed`.
  */
-export type FetchSeries = (symbol: string, timeframe: string, range: BarRange) => Promise<OHLCV[]>;
+export type FetchSeries = (symbol: string, timeframe: string, range: BarRange & { signal?: AbortSignal }) => Promise<OHLCV[]>;
 
 /** The chart's visible bar-time window (epoch ms of the left/right edges). */
 export interface VisibleBarRange {
