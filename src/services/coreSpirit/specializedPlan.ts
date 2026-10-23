@@ -159,7 +159,7 @@ export function buildCoreSpiritSpecializedPlan(
     const seriesInstructions=fanout.stages.map((stage)=>stage.instruction);
     const instructions=Object.freeze([...seriesInstructions,...scalar].sort((a,b)=>a-b));
     const outputRegisters=Object.freeze(scalar.length ? scalar.map((index)=>('dest' in lowered[index]! ? (lowered[index] as any).dest : -1)).filter((id)=>id>=0) : fanout.stages.map((stage)=>stage.dest));
-    const stateful=fanout.stages.some((stage)=>['ema','rma','rsi','atr','vwap','change','pctchange','persistence'].includes(stage.name));
+    const stateful=fanout.stages.some((stage)=>['ema','rma','rsi','atr','vwap','persistence'].includes(stage.name));
     regions.push(Object.freeze({
       id:`fused-kernel:${groupIndex}`,
       inputRegister:fanout.inputRegister,

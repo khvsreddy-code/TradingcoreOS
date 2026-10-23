@@ -23,7 +23,7 @@ export type CoreSpiritSeriesDispatchContext = Readonly<{
   minGpuWorkUnits?: number;
   backends?: readonly CoreSpiritSeriesBackendProfile[];
   /** Optional telemetry hook when an accelerator is rejected or fails. */
-  onBackendFallback?: (backend: 'wasm' | 'gpu', error?: unknown) => void;
+  onBackendFallback?: (backend: 'wasm' | 'gpu', error?: unknown) => void;\n  /** Reports the backend that actually completed, including CPU fallback. */\n  onBackendExecution?: (event: Readonly<{requested:'cpu'|'wasm'|'gpu';executed:'cpu'|'wasm'|'gpu';reason:string;elapsedMs:number;fallbackReason?:string}>) => void;
   allowStatefulWasm?: boolean;
   maxStatefulWasmBars?: number;
 }>;
@@ -43,7 +43,7 @@ function workUnits(c: CoreSpiritSeriesDispatchContext, g: CoreSpiritSeriesFusion
   return Math.max(1, c.bars) * Math.max(1, c.symbols ?? 1) * Math.max(1, c.timeframes ?? 1) * Math.max(1, g.operations.length);
 }
 function hasRecurrence(g: CoreSpiritSeriesFusionGroup): boolean {
-  return g.operations.some((x) => ['ema', 'rma', 'change', 'pctchange', 'persistence', 'rsi', 'atr', 'vwap'].includes(x.name));
+  return g.operations.some((x) => ['ema', 'rma', 'persistence', 'rsi', 'atr', 'vwap'].includes(x.name));
 }
 
 function notifyBackendFallback(
