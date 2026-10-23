@@ -333,7 +333,20 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     const response = { success: true, data };
     try {
       await OrderIdempotencyRepository.complete(userId, brokerId, idempotencyKey, response);
-      void AuditLogRepository.append({ userId, actorType: 'user', eventType: 'order.completed', requestId, correlationId: idempotencyKey, payload: { brokerId, idempotencyKey, orderId } }).catch(() => undefined);
+      await AuditLogRepository.appendRequired({
+        userId,
+        actorType: 'user',
+        eventType: 'order.completed',
+        requestId,
+        correlationId: idempotencyKey,
+        payload: {
+          brokerId,
+          idempotencyKey,
+          orderId,
+          clientOrderId: clientOrderId ?? null,
+          requestHash: claim.record?.requestHash ?? null,
+        },
+      });
       res.json(response);
     } catch (ledgerError: unknown) {
       const message = getErrorMessage(ledgerError, 'Order accepted but safety ledger completion failed');
