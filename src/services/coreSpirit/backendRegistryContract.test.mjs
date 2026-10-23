@@ -21,6 +21,7 @@ const defaults = createCoreSpiritBackendRegistry();
 assert.equal(defaults.get('js-scalar')?.available, true);
 assert.equal(defaults.get('cpu-optimized')?.available, true);
 assert.equal(defaults.get('wasm-simd')?.available, false);
+assert.equal(defaults.get('wasm-scalar')?.available, false);
 assert.equal(defaults.get('webgpu')?.available, false);
 assert.equal(defaults.get('remote-research')?.available, false);
 
@@ -35,8 +36,8 @@ let wasmRuns = 0;
 const wasm = {
   isLoaded: () => true,
   profile: () => ({ backend: 'wasm', available: true, deterministic: true, vectorized: true }),
-  hasKernel: (name) => name === 'rollingMean' || name === 'matrixMultiply',
-  kernelVariant: (name) => name === 'rollingMean' || name === 'matrixMultiply' ? 'simd' : undefined,
+  hasKernel: (name) => ['rollingMean', 'rollingSum', 'matrixMultiply'].includes(name),
+  kernelVariant: (name) => name === 'rollingMean' || name === 'matrixMultiply' ? 'simd' : name === 'rollingSum' ? 'scalar' : undefined,
 };
 const accelerated = createCoreSpiritBackendRegistry({
   wasm,
@@ -52,6 +53,8 @@ const accelerated = createCoreSpiritBackendRegistry({
   },
 });
 assert.equal(accelerated.get('wasm-simd')?.available, true);
+assert.equal(accelerated.get('wasm-scalar')?.available, true);
+assert.deepEqual(accelerated.get('wasm-scalar')?.supportedOperations, ['rollingSum']);
 assert.equal(accelerated.get('webgpu')?.available, true);
 const legacyProfiles = toLegacyCoreSpiritBackendProfiles(accelerated);
 assert.deepEqual(
@@ -64,14 +67,28 @@ const medium = planCoreSpiritBackend({
   workUnits: 30_000, inputElements: 20_000,
 }, accelerated);
 assert.equal(medium.backend, 'wasm-simd');
+const scalarWasmPlan = planCoreSpiritBackend({
+  operation: 'rollingSum', purpose: 'historical', workload: 'series',
+  workUnits: 30_000, inputElements: 20_000,
+}, accelerated);
+assert.equal(scalarWasmPlan.backend, 'wasm-scalar',
+  'scalar kernels must be available without being mislabeled as SIMD');
+
 const gpuNeedsOptOutOfDeterminism = planCoreSpiritBackend({
   operation: 'rollingMean', purpose: 'historical', workload: 'series',
   workUnits: 2_000_000, inputElements: 2_000_000,
 }, accelerated);
 assert.equal(gpuNeedsOptOutOfDeterminism.backend, 'wasm-simd');
-const gpuAllowed = planCoreSpiritBackend({
+const gpuRemainsOptIn = planCoreSpiritBackend({
   operation: 'rollingMean', purpose: 'historical', workload: 'series',
   workUnits: 2_000_000, inputElements: 2_000_000, deterministic: false,
+}, accelerated);
+assert.equal(gpuRemainsOptIn.backend, 'wasm-simd',
+  'a registered WebGPU adapter must not be selected without explicit allowWebGpu');
+
+const gpuAllowed = planCoreSpiritBackend({
+  operation: 'rollingMean', purpose: 'historical', workload: 'series',
+  workUnits: 2_000_000, inputElements: 2_000_000, deterministic: false, allowWebGpu: true,
 }, accelerated);
 assert.equal(gpuAllowed.backend, 'webgpu');
 const trainingNotRemoteByDefault = planCoreSpiritBackend({
@@ -91,7 +108,7 @@ const remoteResult = await executePlannedExternalCoreSpiritBackend(trainingOpted
 assert.deepEqual(remoteResult, { accepted: true });
 const gpuResult = await executePlannedExternalCoreSpiritBackend(gpuAllowed, {
   operation: 'rollingMean', purpose: 'historical', workload: 'series',
-  workUnits: 2_000_000, inputElements: 2_000_000, deterministic: false,
+  workUnits: 2_000_000, inputElements: 2_000_000, deterministic: false, allowWebGpu: true,
 }, accelerated);
 assert.equal(gpuResult, undefined, 'registered adapter must actually be invoked');
 assert.equal(wasmRuns, 1);
