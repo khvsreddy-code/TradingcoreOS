@@ -99,6 +99,23 @@ const deterministic = planCoreSpiritExecution(program, {
 });
 assert.equal(deterministic.backendCapabilityPlans.find(item => item.operation === 'rollingMean')?.backend, 'wasm-simd',
   'deterministic plans must not select nondeterministic WebGPU');
+const gpuOptIn = planCoreSpiritExecution(program, {
+  barCount: 2_000_000,
+  backendPurpose: 'historical',
+  backendRegistry: statelessWithGpu,
+  requireDeterministic: false,
+  allowWebGpu: true,
+});
+assert.equal(gpuOptIn.backendCapabilityPlans.find(item => item.operation === 'rollingMean')?.backend, 'webgpu',
+  'WebGPU must only be eligible in the whole-program planner after explicit opt-in');
+const gpuOptInDisabled = planCoreSpiritExecution(program, {
+  barCount: 2_000_000,
+  backendPurpose: 'historical',
+  backendRegistry: statelessWithGpu,
+  requireDeterministic: false,
+});
+assert.equal(gpuOptInDisabled.backendCapabilityPlans.find(item => item.operation === 'rollingMean')?.backend, 'wasm-simd',
+  'the planner must keep WebGPU disabled by default even if a provider is registered');
 
 const forgedLegacyProfiles = planCoreSpiritExecution(program, {
   barCount: 20_000,
