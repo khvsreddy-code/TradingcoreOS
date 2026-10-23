@@ -168,7 +168,10 @@ export class CoreSpiritOptimizedExecutionVM {
     const version = cacheVersion(versions);
     const current = variants.get(key);
     if (current?.cacheVersion === version) return;
-    try { variants.set(key, compilePlan(instructions, seriesRegistry, specializedPlan, version)); }
+    // A supplied specialization cannot survive a version change. Re-lower the
+    // canonical IR unless the caller supplies a different plan object/key.
+    const planForVersion = current ? undefined : specializedPlan;
+    try { variants.set(key, compilePlan(instructions, seriesRegistry, planForVersion, version)); }
     catch { /* An invalid/stale specialization is deliberately handled by the reference path in run(). */ }
   }
 
@@ -191,8 +194,9 @@ export class CoreSpiritOptimizedExecutionVM {
     const version = cacheVersion(options);
     let plan = variants.get(key);
     if (!plan || plan.cacheVersion !== version) {
+      const planForVersion = plan ? undefined : options.specializedPlan;
       try {
-        plan = compilePlan(instructions, options.seriesRegistry, options.specializedPlan, version);
+        plan = compilePlan(instructions, options.seriesRegistry, planForVersion, version);
         variants.set(key, plan);
       } catch {
         // Do not run a malformed slot plan. The reference VM has no register lowering and is the safe fallback.
