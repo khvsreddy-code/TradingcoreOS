@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   selectCoreSpiritSeriesBackend,
   executeCoreSpiritSeriesFusionGroupDispatched,
+  loadCoreSpiritBundledWasmSeriesRuntime,
 } from './seriesBackendDispatcher.ts';
+import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion.ts';
 
 const group = {
   id: 'g', nodeIds: ['a', 'b'], instructions: [1, 2],
@@ -142,5 +145,77 @@ assert.equal(selectCoreSpiritSeriesBackend(gpuOnlyGroup, {
 assert.equal(selectCoreSpiritSeriesBackend(gpuOnlyGroup, {
   realtime: false, bars: 2_000_000, deterministic: false, allowGpu: true, backends: gpuProfiles,
 }).requested, 'gpu', 'explicit research/batch opt-in may select the available stateless GPU profile');
+
+
+
+// Exercise the actual bundled binary through the series dispatcher, not only a
+// synthetic executor profile. Loading includes the module's per-kernel warm-up.
+const wasmBytes = await readFile(new URL('../../../public/coreSpirit/numerical-kernels-simd.wasm', import.meta.url));
+const wasmRuntime = await loadCoreSpiritBundledWasmSeriesRuntime({ source: wasmBytes });
+assert.equal(wasmRuntime.backend.lifecycle().state, 'ready');
+assert.equal(wasmRuntime.backend.kernelVariant('rollingMean'), 'simd');
+assert.equal(wasmRuntime.backend.kernelVariant('rollingMax'), 'scalar');
+const parityGroup = {
+  ...group,
+  id: 'bundled-wasm-series-parity',
+  operations: [{ name: 'sma', length: 3 }, { name: 'highest', length: 2 }],
+};
+const parityInput = {
+  register: 'src',
+  values: Float64Array.from([10, 12, 11, 14, 13, 15, 12, 14, 18, 17, 19, 16]),
+};
+const cpuParityOutput = new Float64Array(parityInput.values.length);
+const wasmParityOutput = new Float64Array(parityInput.values.length);
+executeCoreSpiritSeriesFusionGroupInto(parityGroup, parityInput, cpuParityOutput);
+let actualExecution;
+const actualBackend = executeCoreSpiritSeriesFusionGroupDispatched(
+  parityGroup,
+  parityInput,
+  wasmParityOutput,
+  {
+    realtime: false,
+    bars: parityInput.values.length,
+    minWasmWorkUnits: 1,
+    onBackendExecution: event => { actualExecution = event; },
+    backends: wasmRuntime.backends,
+  },
+  wasmRuntime.executors,
+);
+assert.equal(actualBackend, 'wasm', 'a real warm WASM executor should run the supported historical fusion group');
+assert.equal(actualExecution.selected, 'wasm');
+assert.equal(actualExecution.executed, 'wasm');
+assert.ok(actualExecution.elapsedMs >= 0);
+for (let index = 0; index < cpuParityOutput.length; index += 1) {
+  const expected = cpuParityOutput[index];
+  const actual = wasmParityOutput[index];
+  if (Number.isNaN(expected)) {
+    assert.ok(Number.isNaN(actual), 'WASM parity: expected NaN at index ' + index);
+  } else {
+    assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= 1e-7 * Math.max(1, Math.abs(expected)),
+      'WASM/CPU fused series mismatch at index ' + index + ': expected ' + expected + ', got ' + actual);
+  }
+}
+
+// The exact same available metadata without its executor must never masquerade
+// as acceleration; the published output must come from the CPU reference path.
+const missingExecutorOutput = new Float64Array(parityInput.values.length).fill(999);
+let missingExecutorTelemetry;
+const missingExecutorBackend = executeCoreSpiritSeriesFusionGroupDispatched(
+  parityGroup,
+  parityInput,
+  missingExecutorOutput,
+  {
+    realtime: false,
+    bars: parityInput.values.length,
+    minWasmWorkUnits: 1,
+    onBackendExecution: event => { missingExecutorTelemetry = event; },
+    backends: wasmRuntime.backends,
+  },
+);
+assert.equal(missingExecutorBackend, 'cpu');
+assert.equal(missingExecutorTelemetry.selected, 'wasm');
+assert.equal(missingExecutorTelemetry.executed, 'cpu');
+assert.match(missingExecutorTelemetry.fallbackReason, /executor unavailable/);
+assert.deepEqual(missingExecutorOutput, cpuParityOutput);
 
 console.log('CoreSpirit series backend dispatcher safety contract: OK');
