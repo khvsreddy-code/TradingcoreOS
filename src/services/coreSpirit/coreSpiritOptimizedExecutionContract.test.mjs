@@ -189,7 +189,7 @@ const versionedSource = [
   {op:'emit',kind:'plot',args:['versionedValue'],outputId:'versioned-plan'},
 ];
 const suppliedPlan = buildCoreSpiritSpecializedPlan(versionedSource);
-function runSuppliedPlan(version, source) {
+function runSuppliedPlan(versions, source) {
   const output = new CoreSpiritOutputCollector(8);
   const host = {
     maxStepsPerBar:32,throwIfAborted(){},loadSeries(){return null;},moveLocal(){return null;},
@@ -197,13 +197,19 @@ function runSuppliedPlan(version, source) {
     tryFused(){return false;},call(){return null;},loadIndexed(){return null;},truthy(value){return !!value;},eventActive(){return true;},
     emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:'versioned-plan'});},
   };
-  versionedPlanVm.run(source,0,host,output,{specializedPlan:suppliedPlan,compilerVersion:version});
+  versionedPlanVm.run(source,0,host,output,{specializedPlan:suppliedPlan,...versions});
   return output.values().at(-1)?.value;
 }
-assert.equal(runSuppliedPlan('compiler-1',versionedSource),12);
+assert.equal(runSuppliedPlan({compilerVersion:'compiler-1'},versionedSource),12);
 versionedSource[0].value=15;
-assert.equal(runSuppliedPlan('compiler-2',versionedSource),15,
+assert.equal(runSuppliedPlan({compilerVersion:'compiler-2'},versionedSource),15,
   'a supplied specialized plan must not survive a compiler-version change');
+versionedSource[0].value=18;
+assert.equal(runSuppliedPlan({componentDefinitionVersion:'component-v2'},versionedSource),18,
+  'a supplied specialized plan must not survive a component-definition version change');
+versionedSource[0].value=21;
+assert.equal(runSuppliedPlan({executionConfigurationVersion:'research-deterministic-v2'},versionedSource),21,
+  'a supplied specialized plan must not survive an execution-configuration version change');
 
 console.log('CORESPIRIT_OPTIMIZED_VM_CACHE_AND_CONTEXT_CONTRACT_OK');
 
