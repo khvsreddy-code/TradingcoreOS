@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { CoreSpiritCompiler } from './compiler.ts';
 import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace, createCoreSpiritCompilationUnit } from './compilerPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
+import { executeCoreSpirit } from './coreSpiritPipeline.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { normalizeCoreSpiritSource } from './syntax.ts';
 import { extractCoreSpiritSurfaceMetadata } from './languageConcepts.ts';
@@ -44,6 +45,8 @@ assert.equal(partial.kind, 'partial-diagnostics');
 assert.equal(partial.executable, false);
 assert.ok(partial.diagnostics.some(item => item.severity === 'error'));
 assert.equal('artifact' in partial, false);
+assert.throws(() => executeCoreSpirit('let x = (', []),
+  'a recovered/partial parse must never reach the executable runtime');
 
 // Comments and string literals are data, not capability use. The old source-regex
 // capability check incorrectly treated both as requests for host privileges.
