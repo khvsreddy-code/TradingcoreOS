@@ -52,6 +52,12 @@ async function injectBrokerSession(req: BrokerSessionRequest, res: Response, nex
 tradingRoutes.use(requireUser);
 const orderRateLimiter = createRateLimiter({ windowMs: 60_000, max: 20, name: 'orders', key: (req) => (req as AuthenticatedRequest).tradingCoreUserId || req.ip || 'unknown' });
 
+function isDefiniteOrderRejection(status: number): boolean {
+  // Do not infer rejection from arbitrary 4xx responses: 409/429 and gateway
+  // edge cases may describe a prior accepted order or an ambiguous outcome.
+  return [400, 401, 403, 404, 422].includes(status);
+}
+
 tradingRoutes.get('/:brokerId/profile', injectBrokerSession, async (req: BrokerSessionRequest, res: Response) => {
   try { const data = await req.brokerAdapter.getProfile(req.accessToken); res.json({ success: true, data }); }
   catch (err: unknown) { res.status(500).json({ success: false, error: getErrorMessage(err, 'Broker request failed') }); }
@@ -288,7 +294,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       const status = getErrorStatus(err);
       const response = { success: false, error: message, requestId: requestId || null };
       if (clientOrderId) {
-        const isDefiniteReject = status >= 400 && status < 500 && status !== 408 && status !== 429;
+        const isDefiniteReject = isDefiniteOrderRejection(status);
         await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, isDefiniteReject ? 'REJECTED' : 'UNKNOWN', {
           symbol: orderPayload.symbol, quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
           side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy', message,
@@ -296,7 +302,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       }
       // Transport failures leave broker acceptance ambiguous. Keep the ledger in UNKNOWN
       // rather than marking the request as safely failed and risking a duplicate retry.
-      const isClientReject = status >= 400 && status < 500 && status !== 408 && status !== 429;
+      const isClientReject = isDefiniteOrderRejection(status);
       if (isClientReject) {
         await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response);
         void AuditLogRepository.append({ userId, actorType: 'broker', eventType: 'order.rejected', requestId, correlationId: idempotencyKey, payload: { brokerId, error: message, status } }).catch(() => undefined);
