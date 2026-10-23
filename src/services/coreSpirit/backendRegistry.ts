@@ -234,7 +234,7 @@ export function planCoreSpiritBackend(
   if (!Number.isInteger(request.inputElements) || request.inputElements < 0) throw new Error('inputElements must be a non-negative integer');
 
   const deterministicRequired = request.deterministic !== false;
-  const wasmThreshold = Math.max(1, Math.floor(request.minWasmWorkUnits ?? 10_000));
+  const wasmThreshold = Math.max(1, Math.floor(request.minWasmWorkUnits ?? 100_000));
   const gpuThreshold = Math.max(1, Math.floor(request.minWebGpuWorkUnits ?? 1_000_000));
   const stateful = request.stateful === true;
   const candidates: CoreSpiritBackendProfile[] = [];
