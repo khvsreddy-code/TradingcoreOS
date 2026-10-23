@@ -62,6 +62,8 @@ export interface CoreSpiritExecutionPlannerOptions {
   backendPurpose?: CoreSpiritBackendPurpose;
   backendRegistry?: CoreSpiritBackendRegistry;
   allowRemoteResearchBackend?: boolean;
+  /** WebGPU is opt-in for explicitly selected research/batch executions. */
+  allowWebGpu?: boolean;
   /** Optional measured cost model; conservative defaults avoid tiny-workload offload. */
   estimatedCpuWorkUnitsPerMs?: number;
   estimatedWasmWorkUnitsPerMs?: number;
@@ -319,6 +321,7 @@ export function planCoreSpiritExecution(
       stateful: call.stateful,
       deterministic: requireDeterministic,
       allowRemoteResearch: options.allowRemoteResearchBackend === true,
+      allowWebGpu: options.allowWebGpu === true,
     }, backendRegistry),
   ));
   const effectNodes = nodes.filter(node => node.effectful);
