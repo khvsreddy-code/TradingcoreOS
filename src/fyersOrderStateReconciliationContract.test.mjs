@@ -72,6 +72,12 @@ assert.match(terminalMigration, /old\.status = 'FILLED' and new\.status <> 'FILL
 assert.match(terminalMigration, /coalesce\(new\.filled_quantity, 0\) < new\.quantity/,
   'cancel-to-filled correction requires evidence of a complete fill');
 const killSwitch = read('src/server/trading/TradingKillSwitchRepository.ts');
+assert.match(route, /eventType: 'order\.submission_intent_persisted'/,
+  'submission intent must be durably audited before broker side effects');
+assert.match(route, /eventType: 'order\.broker_acknowledged'/,
+  'broker acknowledgement must be linked to the same idempotency and client-order IDs');
+assert.match(route, /AuditLogRepository\.appendRequired\(/,
+  'critical execution audit events must fail closed if persistence is unavailable');
 assert.match(route, /TradingKillSwitchRepository\.assertOrderSubmissionAllowed\(userId, strategyId\)/,
   'kill switches must be enforced at the server order boundary');
 assert.match(killSwitch, /TRADINGCORE_ORDER_KILL_SWITCH/);
