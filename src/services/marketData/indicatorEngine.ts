@@ -9,7 +9,7 @@ import type { IndicatorSettingsSchema } from '../coreSpirit/indicatorSettingsSch
 export type IndicatorKind =
   | 'EMA' | 'SMA' | 'HMA' | 'VWAP' | 'Bollinger Bands' | 'Keltner Channels' | 'Donchian Channels'
   | 'RSI' | 'MACD' | 'ATR' | 'ADX' | 'Stochastic' | 'CCI' | 'OBV' | 'MFI'
-  | 'Supertrend' | 'Ichimoku Cloud' | 'Pivot Points' | 'CPR' | 'Key Levels' | 'Opening Range' | 'Weekly Levels' | 'Swing Levels' | 'Gap Levels' | 'Market Structure' | 'Fair Value Gaps' | 'Dynamic Support/Resistance' | 'Liquidity Sweeps' | 'Order Blocks' | 'Previous Day Levels' | 'Previous Week Levels' | 'Previous Month Levels' | 'Opening Range Pro' | 'Gap Zones' | 'Equal Highs/Lows' | 'Liquidity Pools' | 'BOS / CHOCH' | 'FVG + Mitigation' | 'Order Blocks + Mitigation' | 'Breakout / Retest' | 'Failed Breakout' | 'Rejection Candles' | 'Inside Bar Breakout' | 'Engulfing Patterns' | 'Pin Bars' | 'NR7 Volatility Contraction' | 'Developing Day High/Low' | 'VWAP Deviation Bands' | 'Anchored VWAP' | 'CPR R1-R5 / S1-S5' | 'Camarilla Pivots' | 'Fibonacci Pivots' | 'Weekly Pivots' | 'Monthly Pivots' | 'TradingCore V Price Action'
+  | 'Supertrend' | 'Ichimoku Cloud' | 'Pivot Points' | 'Reversal Price' | 'CPR' | 'Key Levels' | 'Opening Range' | 'Weekly Levels' | 'Swing Levels' | 'Gap Levels' | 'Market Structure' | 'Fair Value Gaps' | 'Dynamic Support/Resistance' | 'Liquidity Sweeps' | 'Order Blocks' | 'Previous Day Levels' | 'Previous Week Levels' | 'Previous Month Levels' | 'Opening Range Pro' | 'Gap Zones' | 'Equal Highs/Lows' | 'Liquidity Pools' | 'BOS / CHOCH' | 'FVG + Mitigation' | 'Order Blocks + Mitigation' | 'Breakout / Retest' | 'Failed Breakout' | 'Rejection Candles' | 'Inside Bar Breakout' | 'Engulfing Patterns' | 'Pin Bars' | 'NR7 Volatility Contraction' | 'Developing Day High/Low' | 'VWAP Deviation Bands' | 'Anchored VWAP' | 'CPR R1-R5 / S1-S5' | 'Camarilla Pivots' | 'Fibonacci Pivots' | 'Weekly Pivots' | 'Monthly Pivots' | 'TradingCore V Price Action'
   | 'Adaptive Ehlers' | 'ATR Percentile Bands' | 'CVD Profiles' | 'Delta Sigma Heatmap'
   | 'Dual Phase Reversal' | 'Fractional EMA Kalman Filter' | 'Harmonic Lab' | 'HTF 3 Candle System'
   | 'HTF Volume Spike & Imbalance Projection' | 'Initial Balance Auction Intelligence'
@@ -46,6 +46,7 @@ export const INDICATOR_LIBRARY: Array<{ kind: IndicatorKind; description: string
   { kind: 'Supertrend', description: 'ATR-based trend direction and trailing band.', overlay: true, defaults: { period: 10, multiplier: 3 } },
   { kind: 'Ichimoku Cloud', description: 'Trend, momentum and support/resistance cloud.', overlay: true, defaults: { period: 9, slow: 26, displacement: 26 } },
   { kind: 'Pivot Points', description: 'Classic daily pivot, support and resistance levels.', overlay: true, defaults: {} },
+  { kind: 'Reversal Price', description: 'Experimental five-level, prior-session pivot ladder with Trend Decide Price. Reverse-engineered approximation; not OptionMate’s verified proprietary formula.', overlay: true, defaults: {} },
   { kind: 'CPR', description: 'Indian-market Central Pivot Range with P, TC, BC and S/R.', overlay: true, defaults: {} },
   { kind: 'Key Levels', description: 'PDH, PDL, previous close, day open, weekly open and current session extremes.', overlay: true, defaults: {} },
   { kind: 'Opening Range', description: 'NSE 15-minute opening range with breakout reference levels.', overlay: true, defaults: { period: 15 } },
@@ -375,6 +376,50 @@ export function indianKeyLevels(c: HistoricalCandle[]): KeyLevel[] {
     );
   }
   return out;
+}
+
+/**
+ * Experimental Reversal Price approximation.
+ *
+ * This deliberately uses only the last completed India-market session:
+ * P = (H + L + C) / 3 is the Trend Decide Price;
+ * R1/S1 are the classic inner pivot levels; R2/S2 extend by the prior range.
+ * The original OptionMate formula has not been verified. Keeping the previous
+ * session as the input makes today's levels stable as the current candle forms.
+ */
+export function reversalPriceLevels(c: HistoricalCandle[]): KeyLevel[] {
+  if (c.length < 2) return [];
+
+  const sessions = new Map<string, HistoricalCandle[]>();
+  for (const candle of c) {
+    const key = indiaDate(candle.timestamp);
+    const session = sessions.get(key) || [];
+    session.push(candle);
+    sessions.set(key, session);
+  }
+
+  const keys = [...sessions.keys()];
+  if (keys.length < 2) return [];
+  const previous = sessions.get(keys[keys.length - 2]);
+  const current = sessions.get(keys[keys.length - 1]);
+  if (!previous?.length || !current?.length) return [];
+
+  const high = Math.max(...previous.map(candle => candle.high));
+  const low = Math.min(...previous.map(candle => candle.low));
+  const close = previous[previous.length - 1]!.close;
+  const pivot = (high + low + close) / 3;
+  const priorRange = high - low;
+  const time = Math.floor(new Date(current[0]!.timestamp).getTime() / 1000);
+
+  const levels: KeyLevel[] = [
+    { time, price: pivot + priorRange, label: 'Reversal Price R2', side: 'resistance' },
+    { time, price: 2 * pivot - low, label: 'Reversal Price R1', side: 'resistance' },
+    { time, price: pivot, label: 'Trend Decide Price', side: 'neutral' },
+    { time, price: 2 * pivot - high, label: 'Reversal Price S1', side: 'support' },
+    { time, price: pivot - priorRange, label: 'Reversal Price S2', side: 'support' },
+  ];
+
+  return levels.filter(level => Number.isFinite(level.price));
 }
 
 export function classicPivots(c: HistoricalCandle[]): IndicatorPoint[] {
