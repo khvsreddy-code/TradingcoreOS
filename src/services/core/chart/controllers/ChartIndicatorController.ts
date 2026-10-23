@@ -107,7 +107,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        const options={color:appearance.line.color,lineWidth:appearance.line.width,lineStyle:appearance.line.style==='solid'?0:appearance.line.style==='dashed'?1:2,opacity:appearance.line.opacity,gradient:appearance.line.gradient,gradientColor:appearance.line.gradientColor,glow:appearance.line.glow,glowStrength:appearance.line.glowStrength,visible:appearance.visible,lastValueVisible:cfg.display?.showValues!==false};
        const group=indicatorSeriesMap.get(cfg.id)||[];
        const isLevelIndicator=LEVEL_APPEARANCE_KINDS.has(String(cfg.kind));
-       group.forEach((series,index)=>{try{const roleColors=['#60a5fa','#ef4444','#374151','#3b82f6','#ef4444'];const studyOptions=cfg.kind==='Reversal Price'&&!cfg.color?{...options,color:roleColors[index]||options.color}:options;(series as any).applyOptions(studyOptions); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}});
+       group.forEach((series,index)=>{try{const roleColors=['#ef4444','#60a5fa','#374151','#3b82f6','#ef4444'];const studyOptions=cfg.kind==='Reversal Price'&&!cfg.color?{...options,color:roleColors[index]||options.color}:options;(series as any).applyOptions(studyOptions); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:cfg.kind==='Reversal Price'&&index===2?Math.max(2,appearance.levels.width):appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}});
        const worker=workerSeriesMap.get(cfg.id)||[];
        for(const series of worker){try{(series as any).applyOptions({...options, ...(isLevelIndicator?{visible:appearance.visible&&appearance.levels.enabled}: {})});}catch{}}
      }
@@ -148,11 +148,11 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        if(cfg.kind==='Reversal Price'){
          const levels=reversalPriceLevels(data);
          const end=Math.floor(new Date(data[data.length-1]!.timestamp).getTime()/1000) as Time;
-         const roleColors=['#60a5fa','#ef4444','#374151','#3b82f6','#ef4444'];
+         const roleColors=['#ef4444','#60a5fa','#374151','#3b82f6','#ef4444'];
          for(let index=0;index<levels.length;index++){
            const level=levels[index]!;
            const roleColor=cfg.color||roleColors[index]||'#94a3b8';
-           const s=chart.current.addSeries(LineSeries,{title:level.label,color:roleColor,lineWidth:level.label==='Trend Decide Price'?2:1,lineStyle:level.label==='Trend Decide Price'?0:2,priceLineVisible:false,lastValueVisible:true});
+           const s=chart.current.addSeries(LineSeries,{title:level.label==='Trend Decide Price'?'Trend Decide Price':'Reversal Price',color:roleColor,lineWidth:level.label==='Trend Decide Price'?2:1,lineStyle:level.label==='Trend Decide Price'?0:2,priceLineVisible:false,lastValueVisible:true});
            s.setData([{time:level.time as Time,value:level.price},{time:end,value:level.price}] as any);
            registerIndicatorSeries(cfg.id,s);
          }
