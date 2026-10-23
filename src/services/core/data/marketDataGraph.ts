@@ -272,8 +272,12 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     if(alignment==='exact')return node.time[index]===asOf?index:-1;
     if(alignment==='last-confirmed'||alignment==='nearest-confirmed'){
       const seconds=timeframeSeconds(node.timeframe);
-      while(index>=0&&(node.closeTime?.[index] ??
-        (seconds>0 ? node.time[index]!+seconds : Number.POSITIVE_INFINITY))>asOf)index-=1;
+      while(index>=0) {
+        const close=node.closeTime?.[index] ??
+          (seconds>0 ? node.time[index]!+seconds : Number.POSITIVE_INFINITY);
+        if(!Number.isFinite(close)||close>asOf)index-=1;
+        else break;
+      }
     }
     return index;
   }
@@ -295,7 +299,7 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
       (barDurationSeconds>0 ? timestamp+barDurationSeconds : Number.NaN);
     const closeTime = Number.isFinite(closeTimeCandidate) ? closeTimeCandidate : undefined;
     const dataRevision = node.dataRevision ?? node.revision;
-    const effectiveStaleAgeMs = closeTime == null ? Number.POSITIVE_INFINITY : Math.max(0,asOf-closeTime)*1000;
+    const effectiveStaleAgeMs = Math.max(0,asOf-(closeTime ?? timestamp))*1000;
     const isConfirmed=closeTime != null && closeTime<=asOf;
     if (closeTime == null && ctx && ctx.executionMode !== 'realtime') {
       return {
@@ -306,7 +310,10 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&effectiveStaleAgeMs>ctx.maxStalenessMs){
       return {
         value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,
-        timestamp,...(closeTime==null?{}:{closeTimestamp:closeTime}),state:'historical',confirmationPhase:'confirmed',revision:node.revision,dataRevision,
+        timestamp,...(closeTime==null?{}:{closeTimestamp:closeTime}),
+        state:closeTime==null?'developing':'historical',
+        confirmationPhase:closeTime==null?'developing':'confirmed',
+        revision:node.revision,dataRevision,
       };
     }
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
@@ -348,8 +355,12 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     let index=this.indexAt(node,effectiveContext.asOfTimestamp,effectiveContext.alignment);
     const seconds=timeframeSeconds(node.timeframe);
     if (effectiveContext.executionMode !== 'realtime') {
-      while (index >= 0 && (node.closeTime?.[index] ??
-        (seconds>0 ? Number(node.time[index])+seconds : Number.POSITIVE_INFINITY)) > effectiveContext.asOfTimestamp) index -= 1;
+      while (index >= 0) {
+        const close=node.closeTime?.[index] ??
+          (seconds>0 ? Number(node.time[index])+seconds : Number.POSITIVE_INFINITY);
+        if(!Number.isFinite(close)||close>effectiveContext.asOfTimestamp) index -= 1;
+        else break;
+      }
     }
     return Array.from(columns[request.field]?.subarray(0,Math.max(0,index+1))??[]);
   };
