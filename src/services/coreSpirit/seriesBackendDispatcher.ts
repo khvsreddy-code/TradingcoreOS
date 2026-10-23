@@ -101,7 +101,10 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
 ): CoreSpiritSeriesBackend {
   const choice = selectCoreSpiritSeriesBackend(group, context);
   if (choice.requested === 'cpu') {
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
+    const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    notifyBackendExecution(context,{requested:'cpu',executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started)});
     return 'cpu';
   }
 
@@ -110,20 +113,29 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
     // Availability metadata is not an executor. Never report acceleration that
     // did not happen, and never skip the CPU calculation because an adapter is absent.
     notifyBackendFallback(context, choice.requested);
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
+    const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    notifyBackendExecution(context,{requested:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started),fallbackReason:'executor unavailable'});
     return 'cpu';
   }
 
   // Isolate accelerator output: a failing/partial kernel must not leak corrupted
   // values into the chart. CPU fallback overwrites the caller's output buffer.
   const stagedOutput = new Float64Array(output.length);
+  const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
   try {
     executor(group, input, stagedOutput);
     output.set(stagedOutput);
+    const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    notifyBackendExecution(context,{requested:choice.requested,executed:choice.requested,reason:choice.reason,elapsedMs:Math.max(0,ended-started)});
     return choice.requested;
   } catch (error) {
     notifyBackendFallback(context, choice.requested, error);
+    const fallbackStarted = typeof performance !== 'undefined' ? performance.now() : Date.now();
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
+    const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    notifyBackendExecution(context,{requested:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-fallbackStarted),fallbackReason:error instanceof Error ? error.message : String(error)});
     return 'cpu';
   }
 }
