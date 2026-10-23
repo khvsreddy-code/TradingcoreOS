@@ -277,7 +277,8 @@ export class CoreSpiritVelaEngine {
         if (returnedBeforeComplete && changedData) {
           try {
             const currentBars=getCurrentBars();
-            if (currentBars.length) {
+            const backfillIncomplete=req.mode==='live'&&req.historyState==='backfill'&&!historyInitialized;
+            if (currentBars.length && !backfillIncomplete) {
               liveTailScheduler.clear();
               mainRunGeneration+=1;
               liveRunGeneration+=1;
