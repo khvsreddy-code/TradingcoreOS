@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { optimizeCoreSpiritIr } from './optimizer.ts';
 import { CoreSpiritExecutionVM } from './executionVM.ts';
+import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM.ts';
 import { CoreSpiritOutputCollector } from './outputCollector.ts';
 
 const normalize=(value)=>JSON.stringify(value,(_key,item)=>
   typeof item==='number'&&Number.isNaN(item)?'__NaN__':item===Infinity?'__Infinity__':item===-Infinity?'__-Infinity__':item);
-function execute(instructions, seed) {
+function execute(instructions, seed, Executor = CoreSpiritExecutionVM, maxStepsPerBar = 128) {
   const output=new CoreSpiritOutputCollector(128);
   const state={locals:{},states:{},effects:[]};
   const host={
-    maxStepsPerBar:128,throwIfAborted(){},loadSeries(name,offset){const sample=[null,1,2,Number.NaN,Number.POSITIVE_INFINITY,-3];return name==='close'?sample[(seed+offset+sample.length)%sample.length]:null;},
+    maxStepsPerBar,throwIfAborted(){},loadSeries(name,offset){const sample=[null,1,2,Number.NaN,Number.POSITIVE_INFINITY,-3];return name==='close'?sample[(seed+offset+sample.length)%sample.length]:null;},
     moveLocal(name){return state.locals[name];},loadState(name){return state.states[name]??null;},
     setLocal(name,value){state.locals[name]=value;state.effects.push(['local',name,value]);},
     setState(name,value){state.states[name]=value;state.effects.push(['state',name,value]);},
@@ -43,7 +44,13 @@ for(let sample=0;sample<128;sample++){
   const program={version:1,sourceId:'optimizer-differential:'+sample,entry:{instructions},locals:[],maxLookback:4,diagnostics:[],sourceMap:{version:1,sourceId:'optimizer-differential:'+sample,entries:[]}};
   const optimized=optimizeCoreSpiritIr(program);
   for(let seed=0;seed<6;seed++){
-    assert.equal(normalize(execute(optimized.entry.instructions,seed)),normalize(execute(instructions,seed)),`optimizer differential mismatch sample=${sample}, seed=${seed}`);
+    const reference = execute(instructions, seed, CoreSpiritExecutionVM);
+    assert.equal(normalize(execute(instructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(reference),
+      `reference/optimized VM mismatch sample=${sample}, seed=${seed}`);
+    assert.equal(normalize(execute(optimized.entry.instructions,seed)),normalize(reference),
+      `optimizer rewrite mismatch sample=${sample}, seed=${seed}`);
+    assert.equal(normalize(execute(optimized.entry.instructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(reference),
+      `optimized IR + optimized VM mismatch sample=${sample}, seed=${seed}`);
   }
 }
 // A non-loop control-flow graph exercises remapped branch destinations with side effects and two output families.
@@ -56,13 +63,31 @@ const branchInstructions=[
  {op:'const',dest:'selected',value:99},
  {op:'emit',kind:'plot',args:['selected'],outputId:'branch:false'},
  {op:'const',dest:'orderValue',value:7},
+ {op:'setState',name:'lastSignal',source:'orderValue'},
  {op:'emit',kind:'order',args:['orderValue'],outputId:'order:1'},
+ {op:'emit',kind:'drawing',args:['orderValue'],outputId:'drawing:1'},
  {op:'const',dest:'alertValue',value:3},
  {op:'emit',kind:'alert',args:['alertValue'],outputId:'alert:1'},
 ];
 const branchProgram={version:1,sourceId:'branch-differential',entry:{instructions:branchInstructions},locals:[],maxLookback:0,diagnostics:[],sourceMap:{version:1,sourceId:'branch-differential',entries:[]}};
 const branchOptimized=optimizeCoreSpiritIr(branchProgram);
 for(const seed of [0,1,2]){
- assert.equal(normalize(execute(branchOptimized.entry.instructions,seed)),normalize(execute(branchInstructions,seed)),'control-flow/effect order must survive optimization');
+ const reference=execute(branchInstructions,seed,CoreSpiritExecutionVM);
+ assert.equal(normalize(execute(branchOptimized.entry.instructions,seed)),normalize(reference),'optimizer control-flow/effect order must survive rewriting');
+ assert.equal(normalize(execute(branchInstructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(reference),'optimized VM must preserve branch and side-effect order');
+ assert.equal(normalize(execute(branchOptimized.entry.instructions,seed,CoreSpiritOptimizedExecutionVM)),normalize(reference),'combined optimizer + optimized VM must preserve effects');
 }
+const loop=[{op:'jump',target:0}];
+assert.equal(normalize(execute(loop,0,CoreSpiritOptimizedExecutionVM,12)),normalize(execute(loop,0,CoreSpiritExecutionVM,12)),
+  'loop-limit errors must match on the reference and optimized VMs');
+assert.match(execute(loop,0,CoreSpiritOptimizedExecutionVM,12).error,/execution step limit exceeded/);
+const invalidHistory=[
+ {op:'const',dest:'historyTarget',value:0},
+ {op:'const',dest:'historyIndex',value:4},
+ {op:'index',dest:'historyValue',target:'historyTarget',index:'historyIndex',seriesName:'close'},
+ {op:'emit',kind:'plot',args:['historyValue'],outputId:'history:boundary'},
+];
+assert.equal(normalize(execute(invalidHistory,0,CoreSpiritOptimizedExecutionVM)),normalize(execute(invalidHistory,0,CoreSpiritExecutionVM)),
+  'missing historical data errors must match on both VMs');
+
 console.log('CORESPIRIT_OPTIMIZER_GENERATED_DIFFERENTIAL_OK');
