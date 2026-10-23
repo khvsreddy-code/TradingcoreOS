@@ -9,7 +9,7 @@
  */
 import { CORE_SPIRIT_NUMERICAL_KERNEL_OPERATIONS, type CoreSpiritNumericalKernelOperation } from './numericalKernels';
 
-export type CoreSpiritBackendKind = 'js-scalar' | 'cpu-optimized' | 'wasm-simd' | 'webgpu' | 'remote-research';
+export type CoreSpiritBackendKind = 'js-scalar' | 'cpu-optimized' | 'wasm-simd' | 'wasm-scalar' | 'webgpu' | 'remote-research';
 export type CoreSpiritBackendPurpose = 'live' | 'historical' | 'research-training';
 export type CoreSpiritBackendWorkload = 'scalar' | 'series' | 'matrix' | 'model-training';
 
@@ -34,6 +34,10 @@ export type CoreSpiritBackendRequest = Readonly<{
   stateful?: boolean;
   deterministic?: boolean;
   allowRemoteResearch?: boolean;
+  /** WebGPU must be explicitly opted into for batch/research work. */
+  allowWebGpu?: boolean;
+  /** Advisory backend preference; planner still enforces capability and cost gates. */
+  preferredBackend?: CoreSpiritBackendKind;
   allowStatefulWasm?: boolean;
   minWasmWorkUnits?: number;
   minWebGpuWorkUnits?: number;
@@ -133,44 +137,54 @@ export function createCoreSpiritBackendRegistry(options: CoreSpiritBackendRegist
   let wasmProfile: ReturnType<CoreSpiritWasmBackendHandle['profile']>;
   try { wasmProfile = options.wasm?.profile(); } catch { wasmProfile = undefined; }
   const wasmIsUsable = (): boolean => {
-    try { return options.wasm?.isLoaded() === true && wasmProfile?.available === true && wasmProfile.vectorized === true; }
+    try { return options.wasm?.isLoaded() === true && wasmProfile?.available === true; }
     catch { return false; }
   };
-  const wasmOperations = ALL_NUMERICAL_OPERATIONS.filter((operation) => {
+  const operationsForVariant = (variant: 'simd' | 'scalar'): string[] => ALL_NUMERICAL_OPERATIONS.filter((operation) => {
     const kernel = options.wasmKernelNames?.[operation as CoreSpiritNumericalKernelOperation] ?? operation;
     try {
       return Boolean(wasmIsUsable() && options.wasm?.hasKernel(kernel) &&
-        options.wasm.kernelVariant(kernel) === 'simd');
+        options.wasm.kernelVariant(kernel) === variant);
     } catch {
-      // A module/device capability exception removes eligibility; it must not
-      // crash compilation or leak into the chart's planning hot path.
+      // A failed runtime capability probe must only remove that capability.
       return false;
     }
   });
-  const wasm: CoreSpiritBackendProfile = Object.freeze({
+  const wasmSimdOperations = operationsForVariant('simd');
+  const wasmScalarOperations = operationsForVariant('scalar');
+  const wasmSimd: CoreSpiritBackendProfile = Object.freeze({
     backend: 'wasm-simd',
-    available: wasmOperations.length > 0,
+    available: wasmSimdOperations.length > 0,
     deterministic: wasmProfile?.deterministic ?? true,
-    vectorized: wasmOperations.length > 0,
+    vectorized: wasmSimdOperations.length > 0,
     realtimeSafe: false,
-    // Deliberately false unless the adapter explicitly advertises validated,
-    // bounded recurrence support.
     supportsStatefulSeries: options.wasm?.supportsStatefulSeries === true,
-    maxInputElements: wasmOperations.length ? DEFAULT_MAX_ELEMENTS : 0,
-    supportedOperations: Object.freeze(wasmOperations),
-    reason: wasmOperations.length ? 'loaded WASM module exports registered SIMD kernels' : 'no loaded WASM SIMD kernels are registered',
+    maxInputElements: wasmSimdOperations.length ? DEFAULT_MAX_ELEMENTS : 0,
+    supportedOperations: Object.freeze(wasmSimdOperations),
+    reason: wasmSimdOperations.length ? 'loaded WASM module exports these validated SIMD kernels' : 'no loaded WASM SIMD kernels are registered',
   });
-
+  const wasmScalar: CoreSpiritBackendProfile = Object.freeze({
+    backend: 'wasm-scalar',
+    available: wasmScalarOperations.length > 0,
+    deterministic: wasmProfile?.deterministic ?? true,
+    vectorized: false,
+    realtimeSafe: false,
+    supportsStatefulSeries: false,
+    maxInputElements: wasmScalarOperations.length ? DEFAULT_MAX_ELEMENTS : 0,
+    supportedOperations: Object.freeze(wasmScalarOperations),
+    reason: wasmScalarOperations.length ? 'loaded WASM module exports these validated scalar kernels' : 'no loaded WASM scalar kernels are registered',
+  });
   const profiles = Object.freeze([
     scalar,
     cpu,
-    wasm,
+    wasmSimd,
+    wasmScalar,
     externalProfile('webgpu', options.webgpu, 'no executable WebGPU adapter is registered'),
     externalProfile('remote-research', options.remoteResearch, 'no executable remote research adapter is registered'),
   ]);
   const byBackend = new Map(profiles.map((profile) => [profile.backend, profile]));
   const adapters = new Map<CoreSpiritBackendKind, CoreSpiritExternalBackendAdapter | CoreSpiritWasmBackendHandle>();
-  if (options.wasm) adapters.set('wasm-simd', options.wasm);
+  if (options.wasm) { adapters.set('wasm-simd', options.wasm); adapters.set('wasm-scalar', options.wasm); }
   if (options.webgpu && safelyAvailable(options.webgpu)) adapters.set('webgpu', options.webgpu);
   if (options.remoteResearch && safelyAvailable(options.remoteResearch)) adapters.set('remote-research', options.remoteResearch);
   return Object.freeze({
@@ -235,22 +249,27 @@ export function planCoreSpiritBackend(
   }
 
   if (candidates.length === 0 && request.purpose !== 'live') {
-    const wasm = registry.get('wasm-simd');
+    const wasmSimd = registry.get('wasm-simd');
+    const wasmScalar = registry.get('wasm-scalar');
     const webgpu = registry.get('webgpu');
 
     // Put the GPU candidate first only after it clears its much higher launch
     // threshold. Deterministic mode naturally rejects non-deterministic devices
     // and then continues to a compatible WASM/CPU path.
-    if (!stateful && request.workUnits >= gpuThreshold && eligible(webgpu, request, deterministicRequired)) candidates.push(webgpu);
-    if (request.workUnits >= wasmThreshold && (!stateful || (
+    if (request.allowWebGpu === true && !stateful && request.workUnits >= gpuThreshold && eligible(webgpu, request, deterministicRequired)) candidates.push(webgpu);
+    const statefulWasmEligible = !stateful || (
       request.allowStatefulWasm === true &&
       request.inputElements <= Math.max(1, Math.floor(request.maxStatefulWasmElements ?? 16_384)) &&
-      wasm?.supportsStatefulSeries === true
-    )) && eligible(wasm, request, deterministicRequired)) candidates.push(wasm);
+      wasmSimd?.supportsStatefulSeries === true
+    );
+    if (request.workUnits >= wasmThreshold && statefulWasmEligible && eligible(wasmSimd, request, deterministicRequired)) candidates.push(wasmSimd);
+    if (request.workUnits >= wasmThreshold && !stateful && eligible(wasmScalar, request, deterministicRequired)) candidates.push(wasmScalar);
     candidates.push(registry.get('cpu-optimized')!, registry.get('js-scalar')!);
   }
 
-  const chosen = candidates.find((profile) => eligible(profile, request, deterministicRequired));
+  const preferred = request.preferredBackend;
+  const chosen = (preferred ? candidates.find(profile => profile.backend === preferred && eligible(profile, request, deterministicRequired)) : undefined) ??
+    candidates.find((profile) => eligible(profile, request, deterministicRequired));
   if (!chosen) {
     throw new Error('No registered backend can safely accept this workload; split it into bounded batches or register a compatible adapter');
   }
@@ -301,7 +320,7 @@ export async function executePlannedExternalCoreSpiritBackend(
   if (plan.operation !== request.operation || plan.backend === 'js-scalar' || plan.backend === 'cpu-optimized') {
     throw new Error('execution plan does not target a registered external backend for this operation');
   }
-  if (plan.backend === 'wasm-simd') {
+  if (plan.backend === 'wasm-simd' || plan.backend === 'wasm-scalar') {
     throw new Error('WASM SIMD plans must be dispatched through the registered WASM kernel runner, not a generic external adapter');
   }
   const currentPlan = planCoreSpiritBackend(request, registry);
