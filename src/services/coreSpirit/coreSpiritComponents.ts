@@ -194,6 +194,10 @@ export function validateCoreSpiritComponentInvocation(
 export class CoreSpiritComponentRegistry {
   private readonly registrations = new Map<string, CoreSpiritComponentRegistration>();
   private readonly names = new Map<string, string>();
+  private _definitionVersion = 0;
+
+  /** Monotonic cache-invalidation token for registry definition mutations. */
+  get definitionVersion(): number { return this._definitionVersion; }
 
   register(contract: CoreSpiritComponentContract, execute?: CoreSpiritComponentExecutor): void {
     const errors = validateCoreSpiritComponent(contract);
@@ -207,6 +211,7 @@ export class CoreSpiritComponentRegistry {
     const registration = Object.freeze({ contract, ...(execute ? { execute } : {}) });
     this.registrations.set(contract.id, registration);
     for (const name of callableNames) this.names.set(name, contract.id);
+    this._definitionVersion += 1;
   }
 
   resolve(nameOrId: string): CoreSpiritComponentContract | undefined {
@@ -230,10 +235,12 @@ export class CoreSpiritComponentRegistry {
     for (const name of [registration.contract.name, ...(registration.contract.aliases ?? [])]) {
       if (this.names.get(name) === id) this.names.delete(name);
     }
+    this._definitionVersion += 1;
     return true;
   }
 
   clear(): void {
+    if (this.registrations.size > 0 || this.names.size > 0) this._definitionVersion += 1;
     this.registrations.clear();
     this.names.clear();
   }
