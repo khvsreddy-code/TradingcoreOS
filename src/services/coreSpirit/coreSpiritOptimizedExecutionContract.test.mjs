@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { CoreSpiritExecutionVM } from './executionVM.ts';
 import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM.ts';
 import { CoreSpiritOutputCollector } from './outputCollector.ts';
+import { buildCoreSpiritSpecializedPlan } from './specializedPlan.ts';
 
 const instructions = [
   { op:'const', dest:'t0', value:2 },
@@ -161,4 +162,23 @@ assert.equal(runContext(contextB,20),21);
 const recomputeDerived = new Set([1,2,3]);
 assert.equal(runContext(contextA,999,recomputeDerived),11,'context A retains its own source register on a derived-only update');
 assert.equal(runContext(contextB,999,recomputeDerived),21,'context B retains its own source register on a derived-only update');
+// A same-shape plan compiled from an earlier IR revision must be rejected and
+// executed with the reference VM instead of silently reusing stale constants.
+const staleSource = [
+  { op:'const', dest:'safe', value:9 },
+  { op:'emit', kind:'plot', args:['safe'], outputId:'stale-plan' },
+];
+const stalePlan = buildCoreSpiritSpecializedPlan(staleSource);
+const revisedSource = [{ ...staleSource[0], value:10 }, staleSource[1]];
+const staleOutput = new CoreSpiritOutputCollector(8);
+const staleHost = {
+  maxStepsPerBar:32,throwIfAborted(){},loadSeries(){return null;},moveLocal(){return null;},
+  loadState(){return null;},setState(){},setLocal(){},unary(){return null;},binary(){return null;},
+  tryFused(){return false;},call(){return null;},loadIndexed(){return null;},truthy(value){return !!value;},eventActive(){return true;},
+  emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:'stale-plan'});},
+};
+new CoreSpiritOptimizedExecutionVM().run(revisedSource,0,staleHost,staleOutput,{specializedPlan:stalePlan,compilerVersion:'new-compiler'});
+assert.equal(staleOutput.values().at(-1)?.value,10,
+  'invalid/stale specialized plans must fall back to the reference VM');
+
 console.log('CORESPIRIT_OPTIMIZED_VM_CACHE_AND_CONTEXT_CONTRACT_OK');
