@@ -145,7 +145,7 @@ export class CoreSpiritWasmBackend {
 
   profile():Readonly<{backend:'wasm';available:boolean;deterministic:boolean;vectorized:boolean;supportedOperations:readonly string[];kernelVariants:Readonly<Record<string,CoreSpiritWasmKernelVariant>>;lifecycleState:CoreSpiritWasmLifecycleState}>|undefined {
     if (!this.isLoaded() || !this.manifest) return undefined;
-    return Object.freeze({backend:'wasm',available:true,deterministic:this.manifest.kernels.every(k=>k.deterministic),vectorized:this.manifest.kernels.some(k=>k.variant==='simd'),supportedOperations:Object.freeze(this.manifest.kernels.map(k=>k.name)),kernelVariants:Object.freeze(Object.fromEntries(this.manifest.kernels.map(k=>[k.name,k.variant]))),lifecycleState:this.lifecycleState});
+    return Object.freeze({backend:'wasm',available:true,deterministic:this.manifest.kernels.every(k=>k.deterministic),vectorized:true,supportedOperations:Object.freeze(this.manifest.kernels.map(k=>k.name)),kernelVariants:Object.freeze(Object.fromEntries(this.manifest.kernels.map(k=>[k.name,k.variant]))),lifecycleState:this.lifecycleState});
   }
 
   executeSync(request:CoreSpiritWasmExecutionRequest):CoreSpiritWasmExecutionResult {
