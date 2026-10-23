@@ -11,8 +11,13 @@ import { validateCoreScriptCapabilityRequirementsFromAst } from './coreScriptLan
 const compilerSource = readFileSync('src/services/coreSpirit/compiler.ts', 'utf8');
 const artifactIdentitySource = readFileSync('src/services/coreSpirit/artifactLookupIdentity.ts', 'utf8');
 const capabilityPolicySource = readFileSync('src/services/coreSpirit/coreScriptLanguagePolicy.ts', 'utf8');
+const coreSpiritPipelineSource = readFileSync('src/services/coreSpirit/coreSpiritPipeline.ts', 'utf8');
 assert.doesNotMatch(compilerSource, /createCoreSpiritCompilationUnit/, 'the executable path must not analyze a unit and then analyze it again');
 assert.match(compilerSource, /resolveCoreSpiritNames\(ast/);
+assert.match(coreSpiritPipelineSource, /const compiled = compileCoreSpirit\(source, sourceId\)/,
+  'convenience execution must use the canonical executable compiler');
+assert.doesNotMatch(coreSpiritPipelineSource, /runtime\.executeIr\(runtime\.loadProgram\(program\),bars\)/,
+  'the convenience execution path may not bypass canonical artifact validation');
 assert.match(compilerSource, /validateCoreScriptCapabilityRequirementsFromAst\(ast, surface, semanticDependencyGraph\.nodes\)/, 'host capability requirements must be derived from canonical AST and semantic metadata');
 assert.doesNotMatch(capabilityPolicySource, /\.split\('\\n'\)/, 'capability usage must not be found by splitting and regex-scanning source lines');
 assert.doesNotMatch(compilerSource, /validateCoreScriptCapabilityRequirements\(options\.researchSource/, 'the compiler may not infer privileged capability requirements from source regex');
