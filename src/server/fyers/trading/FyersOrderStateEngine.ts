@@ -98,6 +98,7 @@ export function canTransitionFyersOrderStatus(
   currentValue: string | undefined,
   nextValue: string,
   source: FyersOrderIngestSource = 'websocket',
+  evidence?: { quantity?: number; filledQuantity?: number },
 ): boolean {
   const next = (KNOWN_STATUSES.has(nextValue as FyersOrderStateStatus) ? nextValue : 'UNKNOWN') as FyersOrderStateStatus;
   const current = currentValue && KNOWN_STATUSES.has(currentValue as FyersOrderStateStatus)
@@ -117,7 +118,9 @@ export function canTransitionFyersOrderStatus(
     // REST reconciliation to correct CANCELLED -> FILLED; other terminal
     // outcomes remain stable unless a future broker-specific policy proves
     // the correction is safe.
-    return source === 'reconciliation' && current === 'CANCELLED' && next === 'FILLED';
+    return source === 'reconciliation' && current === 'CANCELLED' && next === 'FILLED' &&
+      typeof evidence?.quantity === 'number' && Number.isFinite(evidence.quantity) && evidence.quantity > 0 &&
+      typeof evidence.filledQuantity === 'number' && Number.isFinite(evidence.filledQuantity) && evidence.filledQuantity >= evidence.quantity;
   }
   if (source === 'reconciliation') return true;
   if (current === 'INTENT') return ['SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED'].includes(next);
@@ -339,7 +342,7 @@ export class FyersOrderStateEngine {
     const canonical = withSequence(event, sequence);
     if (event.type === 'OrderUpdate') {
       const canonicalOrder = canonical as OrderUpdate;
-      if (!brokerOrderId || canTransitionFyersOrderStatus(current?.status, event.status, source)) {
+      if (!brokerOrderId || canTransitionFyersOrderStatus(current?.status, event.status, source, { quantity: event.quantity, filledQuantity: event.filledQuantity })) {
         if (brokerOrderId) {
           const incomingFilled = Number(canonicalOrder.filledQuantity || 0);
           const currentFilled = Number(current?.filledQuantity || 0);
