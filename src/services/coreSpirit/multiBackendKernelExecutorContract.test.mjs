@@ -49,6 +49,18 @@ for (const [name, referenceKernel, expectedBackend] of kernelChecks) {
   assert.equal(execution.selectedBackend, expectedBackend, name + ' selected backend must match its manifest variant');
   assertSeriesClose(execution.result, reference, name + ' WASM/CPU differential');
 }
+
+// Non-finite values are treated as invalid observations by both the CPU reference
+// and the ABI-2 WASM kernels; no infinity or warm-up value may leak through a window.
+const nonFiniteProbeInput = Float64Array.from([1, 2, Number.POSITIVE_INFINITY, 4, Number.NaN, Number.NEGATIVE_INFINITY, 7, 8, 9, 10, 11]);
+for (const [name, referenceKernel, expectedBackend] of kernelChecks) {
+  const reference = referenceKernel(nonFiniteProbeInput, 3);
+  const execution = await executeCoreSpiritNumericalKernelPlanned(name, [nonFiniteProbeInput], [3], {
+    purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
+  });
+  assert.equal(execution.backend, expectedBackend, name + ' non-finite case must use the advertised WASM variant');
+  assertSeriesClose(execution.result, reference, name + ' WASM/CPU non-finite differential');
+}
 const historicalValues = Float64Array.from({ length: 64 }, (_, i) => 5000 + i);
 const acceleratedMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
   purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
