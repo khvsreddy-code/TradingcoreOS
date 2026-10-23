@@ -136,6 +136,7 @@ const contracts = [
   ['corespirit-artifact-cache-abi', ['src/coreSpiritArtifactCacheAbiContract.test.mjs', false]],
   ['corespirit-editor-off-thread-pipeline', ['src/coreSpiritEditorCompilerContract.test.mjs', false]],
   ['corespirit-copilot-compile-before-run', ['src/coreSpiritCopilotContract.test.mjs', false]],
+  ['corespirit-timeframe-temporal-alignment', ['src/services/coreSpirit/timeframeAlignmentTemporalContract.test.mjs', true]],
   ['market-data-graph', ['src/services/core/data/marketDataGraphContract.test.ts', true]],
   ['frontend-performance', ['src/frontendPerformanceContract.test.mjs', false]],
   ['fyers-order-latency', ['src/fyersOrderLatencyContract.test.mjs', false]],
