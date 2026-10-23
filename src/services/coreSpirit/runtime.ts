@@ -852,6 +852,60 @@ export class CoreSpiritRuntime {
     };
   }
 
+  /**
+   * Combine the runtime's bar-history generation with canonical external dataset
+   * identities. If a required external source cannot provide an identity, restore
+   * is disabled rather than trusting a potentially stale cache.
+   */
+  private externalKernelDataRevision(): string | number {
+    const dependencies = this.compiledIr?.tradingNativePlan?.dataDependencies ?? [];
+    const external: string[] = [];
+    for (const dependency of dependencies) {
+      const symbol = dependency.symbol === 'current' ? this.options.symbol : dependency.symbol;
+      const timeframe = dependency.timeframe === 'chart' ? this.options.timeframe : dependency.timeframe;
+      const isPrimaryChart = dependency.domain === 'market' &&
+        symbol.trim().toUpperCase() === String(this.options.symbol ?? '').trim().toUpperCase() &&
+        String(timeframe).trim().toLowerCase() === String(this.options.timeframe ?? '').trim().toLowerCase();
+      if (isPrimaryChart) continue;
+      const fields = dependency.fields.filter((field): field is CoreSpiritDataRequest['field'] =>
+        ['open','high','low','close','volume','time'].includes(field),
+      );
+      if (dependency.domain !== 'market' || !fields.length || !this.dataResolver?.cacheKey) {
+        external.push('unversioned:' + dependency.id);
+        continue;
+      }
+      for (const field of fields) {
+        try {
+          external.push(this.dataResolver.cacheKey({ symbol, timeframe, field, offset:0 }));
+        } catch {
+          external.push('unversioned:' + dependency.id + ':' + field);
+        }
+      }
+    }
+    if (!external.length) return this.kernelDataRevision;
+    external.sort();
+    return JSON.stringify([this.kernelDataRevision, ...external]);
+  }
+
+  private hasUnversionedExternalKernelInputs(): boolean {
+    const dependencies = this.compiledIr?.tradingNativePlan?.dataDependencies ?? [];
+    return dependencies.some(dependency => {
+      const symbol = dependency.symbol === 'current' ? this.options.symbol : dependency.symbol;
+      const timeframe = dependency.timeframe === 'chart' ? this.options.timeframe : dependency.timeframe;
+      const isPrimaryChart = dependency.domain === 'market' &&
+        symbol.trim().toUpperCase() === String(this.options.symbol ?? '').trim().toUpperCase() &&
+        String(timeframe).trim().toLowerCase() === String(this.options.timeframe ?? '').trim().toLowerCase();
+      if (isPrimaryChart) return false;
+      const fields = dependency.fields.filter(field => ['open','high','low','close','volume','time'].includes(field));
+      if (dependency.domain !== 'market' || !fields.length || !this.dataResolver?.cacheKey) return true;
+      try {
+        return fields.some(field => typeof this.dataResolver?.cacheKey?.({symbol,timeframe,field:field as CoreSpiritDataRequest['field'],offset:0}) !== 'string');
+      } catch {
+        return true;
+      }
+    });
+  }
+
   private kernelSnapshotIdentity(
     family: CoreSpiritKernelState['family'],
     key: string,
@@ -860,7 +914,7 @@ export class CoreSpiritRuntime {
     return {
       modelVersion:this.kernelModelVersion(),
       ...this.kernelSnapshotConfiguration(family,key),
-      dataRevision:this.kernelDataRevision,
+      dataRevision:this.externalKernelDataRevision(),
       nextBarIndex,
     };
   }
@@ -898,6 +952,15 @@ export class CoreSpiritRuntime {
 
   private restoreKernelSnapshotsAtBar(barIndex: number): Readonly<{complete:boolean;expected:number;restored:number}> {
     if (!this.compiledIr || barIndex < -1) return Object.freeze({ complete:false, expected:0, restored:0 });
+    const activeKernelCount = this.fusedCursors.size + this.directKernelCursors.size +
+      this.rsiKernels.size + this.atrKernels.size + this.vwapKernels.size +
+      this.betaKernels.size + this.trendStrengthKernels.size;
+    if (activeKernelCount > 0 && this.hasUnversionedExternalKernelInputs()) {
+      // No cache identity means no proof that secondary data stayed unchanged.
+      // Keep the live result correct by replaying instead of restoring any cursor.
+      this.recoveryStats.checkpointRestoreFailures += activeKernelCount;
+      return Object.freeze({complete:false,expected:activeKernelCount,restored:0});
+    }
     const modelVersion = this.kernelModelVersion();
     let expectedCount = 0;
     let restoredCount = 0;
