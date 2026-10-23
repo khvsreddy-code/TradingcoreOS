@@ -141,8 +141,8 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     const snapshot = this.snapshots.get(nodeId);
     if (!snapshot || snapshot.modelVersion !== modelVersion || snapshot.barIndex !== barIndex ||
         !sameStringSet(snapshot.inputDependencies, inputDependencies) || !identityMatches(snapshot, expected)) return false;
-    copyFrom(target, snapshot.state);
-    return true;
+    try { copyFrom(target, snapshot.state); return true; }
+    catch { return false; }
   }
 
   restoreAt(
