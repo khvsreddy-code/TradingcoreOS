@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { CoreSpiritExecutionVM } from './executionVM.ts';
 import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM.ts';
 import { CoreSpiritOutputCollector } from './outputCollector.ts';
+import { CoreSpiritComponentRegistry } from './coreSpiritComponents.ts';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan.ts';
 
 const instructions = [
@@ -205,3 +206,34 @@ assert.equal(runSuppliedPlan('compiler-2',versionedSource),15,
   'a supplied specialized plan must not survive a compiler-version change');
 
 console.log('CORESPIRIT_OPTIMIZED_VM_CACHE_AND_CONTEXT_CONTRACT_OK');
+
+
+// Component registry mutations carry their own monotonic cache invalidation token.
+const revisionRegistry = new CoreSpiritComponentRegistry();
+const revisionBase = revisionRegistry.definitionVersion;
+const componentContract = (id, name) => ({
+  version: 1,
+  id,
+  name,
+  kind: 'component',
+  inputs: [],
+  outputs: [{ name: 'value', type: { kind: 'scalar' }, required: true }],
+  nodeIds: ['node:' + id],
+  dependencies: [],
+  deterministic: true,
+  stateful: false,
+  capabilities: [],
+});
+revisionRegistry.register(componentContract('cache-component-v1', 'cacheComponent'));
+assert.equal(revisionRegistry.definitionVersion, revisionBase + 1,
+  'registering a component must invalidate lowered VM plans');
+assert.equal(revisionRegistry.unregister('cache-component-v1'), true);
+assert.equal(revisionRegistry.definitionVersion, revisionBase + 2,
+  'unregistering a component must invalidate lowered VM plans');
+revisionRegistry.register(componentContract('cache-component-v2', 'cacheComponentV2'));
+const registeredRevision = revisionRegistry.definitionVersion;
+revisionRegistry.clear();
+assert.equal(revisionRegistry.definitionVersion, registeredRevision + 1,
+  'clearing component definitions must invalidate lowered VM plans');
+
+console.log('CORESPIRIT_COMPONENT_REGISTRY_DEFINITION_VERSION_OK');
