@@ -211,6 +211,12 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       res.status(claim.record?.state === 'completed' ? 200 : 502).json(claim.record?.response ?? { success: false, error: 'Previous order result is unavailable.' }); return;
     }
     const requestId = req.get('x-request-id');
+    // Bind risk evidence, broker submission and reconciliation to the exact same
+    // deterministic logical order intent, including the broker-visible client tag.
+    const clientOrderId = brokerId === 'fyers'
+      ? createHash('sha256').update(`tco:fyers:${userId}:${idempotencyKey}`).digest('hex').slice(0, 30)
+      : undefined;
+    if (clientOrderId) orderPayload = { ...orderPayload, orderTag: clientOrderId };
     {
       const risk = await evaluateManualPreTradeRisk({
         userId,
@@ -259,13 +265,9 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
         return;
       }
     }
-    // A deterministic broker-visible client tag ties REST acknowledgements,
-    // reconnect snapshots and WS updates back to this idempotent TCO request.
-    const clientOrderId = brokerId === 'fyers'
-      ? createHash('sha256').update(`tco:fyers:${userId}:${idempotencyKey}`).digest('hex').slice(0, 30)
-      : undefined;
+    // The client tag was bound to the payload before risk evaluation so the
+    // approved hash and actual broker submission describe the same order.
     if (clientOrderId) {
-      orderPayload = { ...orderPayload, orderTag: clientOrderId };
       // Persist before the broker side effect. In production this deliberately
       // fails closed if the reconciliation migration/service credentials are absent.
       try {
