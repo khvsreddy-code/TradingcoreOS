@@ -345,15 +345,34 @@ export class CoreSpiritVelaEngine {
         version:1,
         revision:secondaryGraphRevision,
         nodes:secondaryDependencies.map(dep=>{
-          const rows=secondaryData.get(dependencyKey(dep.symbol,dep.timeframe))??[];
+          const timeframe=normalizeCoreSpiritTimeframe(dep.timeframe);
+          const timeframeMs=Math.max(0,timeframeSeconds(timeframe))*1000;
+          const sourceRows=secondaryData.get(dependencyKey(dep.symbol,dep.timeframe))??[];
+          const temporalRows=sourceRows.flatMap(row=>{
+            const openTimeMs=barTimeMillis(row.timestamp);
+            let calendarCloseMs:number|null|undefined;
+            try {
+              calendarCloseMs=req.marketCalendar?.resolveBarCloseTime(dep.symbol,timeframe,openTimeMs);
+            } catch {
+              // A broken calendar is a data-quality failure; omit the sample
+              // rather than quietly confirming it at a nominal UTC boundary.
+              return [];
+            }
+            if(req.marketCalendar && calendarCloseMs===null)return [];
+            const closeTimeMs=calendarCloseMs===undefined?openTimeMs+timeframeMs:calendarCloseMs;
+            if(!Number.isFinite(openTimeMs)||!Number.isFinite(closeTimeMs)||closeTimeMs<=openTimeMs)return [];
+            return [{row,openTimeMs,closeTimeMs}];
+          });
+          const rows=temporalRows.map(item=>item.row);
           return {
             id:`vela-secondary:${dependencyKey(dep.symbol,dep.timeframe)}`,
             symbol:dep.symbol,
-            timeframe:normalizeCoreSpiritTimeframe(dep.timeframe),
+            timeframe,
             revision:secondaryDataRevisions.get(dependencyKey(dep.symbol,dep.timeframe))??0,
             dataRevision:secondaryDataRevisions.get(dependencyKey(dep.symbol,dep.timeframe))??0,
+            calendarId:req.marketCalendar?.id,
             time:Float64Array.from(rows,row=>Math.floor(barTimeMillis(row.timestamp)/1000)),
-            closeTime:Float64Array.from(rows,row=>Math.floor(barTimeMillis(row.timestamp)/1000)+Math.max(0,timeframeSeconds(normalizeCoreSpiritTimeframe(dep.timeframe)))),
+            closeTime:Float64Array.from(temporalRows,item=>Math.floor(item.closeTimeMs/1000)),
             open:Float64Array.from(rows,row=>row.open),
             high:Float64Array.from(rows,row=>row.high),
             low:Float64Array.from(rows,row=>row.low),
