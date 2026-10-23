@@ -77,7 +77,6 @@ export function createTcoVelaTerminalOptions(
     topbar:{
       left:['symbol','timeframes','style','layout','indicators'],
       right:[
-        'tco.watchlist',
         'tco.research',
         'tco.automation',
         'tco.trading',
@@ -88,6 +87,7 @@ export function createTcoVelaTerminalOptions(
         'tco.workspace-frame',
         'tco.chart-settings',
         'alerts',
+        'tco.watchlist',
       ],
     },
     sync:{

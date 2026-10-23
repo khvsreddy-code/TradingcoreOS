@@ -659,7 +659,9 @@ export function LiveTradingWorkspace() {
             </div>
           </div>
         )}
-        {workspaceLoadState.phase === 'ready' && dismissedChartStatusKey !== chartStatusDismissKey && (
+        {workspaceLoadState.phase === 'ready'
+          && (chartStatus.tone === 'warn' || chartStatus.tone === 'error')
+          && dismissedChartStatusKey !== chartStatusDismissKey && (
           <div
             className={`pointer-events-auto absolute left-[56px] top-[58px] z-[105] max-w-[min(430px,calc(100vw-72px))] rounded-lg border px-3 py-2 pr-8 shadow-lg backdrop-blur-md ${
               chartStatus.tone === 'good'

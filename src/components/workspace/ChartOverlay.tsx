@@ -74,7 +74,6 @@ export function ChartOverlay({
       <button title="AI prediction models" aria-label="AI prediction models" onClick={()=>{setShowPredictionMenu(!showPredictionMenu);setShowIndicatorMenu(false);setShowDrawingMenu(false)}} className={`toolbar-pill ${predictionModelIds.length?'toolbar-pill-active':''}`}><Sparkles className="inline h-3.5 w-3.5"/>AI {predictionModelIds.length}</button>
       <button title="Drawing tools" aria-label="Drawing tools" onClick={()=>{setShowDrawingMenu(!showDrawingMenu);setShowIndicatorMenu(false);setShowPredictionMenu(false)}} className={`toolbar-pill ${drawingTool!=='none'?'toolbar-pill-active':''}`}><Pencil className="inline h-3.5 w-3.5"/>Draw</button>
       <button title="Support and resistance levels" aria-label="Support and resistance levels" onClick={()=>setShowLevels(!showLevels)} className={`toolbar-pill ${showLevels?'toolbar-pill-active':''}`}><Layers3 className="inline h-3.5 w-3.5"/>Levels</button>
-      <button title="Open interest" aria-label="Open interest" onClick={()=>setShowOI(!showOI)} className={`toolbar-pill ${showOI?'toolbar-pill-active':''}`}><Activity className="inline h-3.5 w-3.5"/>OI</button>
       <button title="Market depth (Level 2)" aria-label="Market depth (Level 2)" onClick={()=>setShowDepth(!showDepth)} className={`toolbar-pill ${showDepth?'toolbar-pill-active':''}`}><PanelRight className="inline h-3.5 w-3.5"/>L2</button>
       <button title="Volume" aria-label="Volume" onClick={()=>setShowVolume(!showVolume)} className={`toolbar-pill ${showVolume?'toolbar-pill-active-blue':''}`}><Volume2 className="inline h-3.5 w-3.5"/>Volume</button>
       <span className="ml-1 font-mono text-[var(--tco-dim)]">{indicators.filter(x=>x.enabled).length} indicators</span>
@@ -110,6 +109,23 @@ export function ChartOverlay({
       <div className="flex gap-2 p-2"><div className="flex flex-1 items-center gap-1 rounded border border-[var(--tco-border)] bg-[var(--tco-code-bg)] px-2"><Search size={12} className="text-[var(--tco-dim)]"/><input value={predictionQuery} onChange={e=>setPredictionQuery(e.target.value)} placeholder="Search models…" className="min-w-0 flex-1 bg-transparent py-1 text-[9px] text-white outline-none"/></div><button onClick={()=>{setPredictionModelIds([]);savePredictionModelIds([])}} className="rounded border border-[var(--tco-border)] px-2 text-[8px]">Clear</button></div>
       <div className="max-h-[52vh] overflow-y-auto">
         <div className="px-3 py-2 text-[8px] text-[var(--tco-dim)]">Model execution stays off the candle render path. Configure active models from the prediction center.</div>
+      </div>
+      <div className="mt-2 border-t border-[var(--tco-border)] px-2 pt-2">
+        <div className="mb-1 text-[8px] font-mono uppercase tracking-widest text-[var(--tco-dim)]">Chart overlays</div>
+        <button
+          type="button"
+          aria-pressed={showOI}
+          title="Toggle open interest levels on the chart"
+          onClick={() => setShowOI(!showOI)}
+          className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${showOI ? 'border-[#a78bfa]/50 bg-[#a78bfa]/10' : 'border-[var(--tco-control)] hover:border-[#a78bfa]/30'}`}
+        >
+          <Activity className={`h-4 w-4 shrink-0 ${showOI ? 'text-[#a78bfa]' : 'text-[var(--tco-dim)]'}`} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[10px] font-semibold text-white">Open interest levels</span>
+            <span className="block text-[8px] text-[var(--tco-dim)]">Show or hide OI levels on this chart</span>
+          </span>
+          <span className={`rounded px-1.5 py-0.5 text-[8px] font-mono ${showOI ? 'bg-[#a78bfa]/15 text-[#c4b5fd]' : 'bg-[var(--tco-bg)] text-[var(--tco-dim)]'}`}>{showOI ? 'ON' : 'OFF'}</span>
+        </button>
       </div>
       <div className="border-t border-[var(--tco-border)] px-2 pt-2 text-[8px] text-[var(--tco-dim)]">{predictionModelIds.length} selected</div>
     </div>}
