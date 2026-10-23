@@ -16,7 +16,7 @@ function execute(instructions, seed, Executor = CoreSpiritExecutionVM, maxStepsP
     setState(name,value){state.states[name]=value;state.effects.push(['state',name,value]);},
     unary(op,value){if(op==='!')return !value;if(op==='-')return -Number(value);return Number(value);},
     binary(op,left,right){if(op==='+')return Number(left)+Number(right);if(op==='-')return Number(left)-Number(right);if(op==='*')return Number(left)*Number(right);if(op==='==')return left===right;return null;},
-    tryFused(){return false;},call(ins,args){state.effects.push(['call',ins.name,...args]);return ins.name==='pureDouble'?Number(args[0])*2:args[0];},
+    tryFused(){return false;},call(ins,args){if(!(ins.componentPure===true&&ins.componentStateful!==true&&ins.componentDeterministic!==false))state.effects.push(['call',ins.name,...args]);return ins.name==='pureDouble'?Number(args[0])*2:args[0];},
     loadIndexed(ins,index){if(index<0||!Number.isInteger(index))throw new Error('invalid historical index '+index);if(index>3)throw new Error('historical data unavailable');return [null,Number.NaN,Number.POSITIVE_INFINITY,7][index];},
     truthy(value){return !!value;},eventActive(name){return name==='bar';},
     emit(ins,values,out){const payload={kind:ins.kind,time:seed,value:values.get(ins.args[0]),seriesId:ins.outputId??ins.kind};state.effects.push(['emit',ins.kind,payload.value]);if(ins.kind==='plot'||ins.kind==='series')out.push(payload);},
