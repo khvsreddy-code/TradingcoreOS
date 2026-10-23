@@ -223,7 +223,23 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
       if (node.time.length !== node.open.length || node.time.length !== node.high.length ||
           node.time.length !== node.low.length || node.time.length !== node.close.length ||
           node.time.length !== node.volume.length ||
-          (node.closeTime != null && node.closeTime.length !== node.time.length)) continue;
+          (node.closeTime != null && node.closeTime.length !== node.time.length) ||
+          !node.symbol?.trim() || !node.timeframe?.trim()) continue;
+      // Resolver alignment relies on a strictly increasing canonical timeline.
+      // Reject malformed/duplicate timelines rather than binary-searching them.
+      let previousTime = Number.NEGATIVE_INFINITY;
+      let validTimeline = true;
+      for (let index = 0; index < node.time.length; index += 1) {
+        const timestamp = Number(node.time[index]);
+        if (!Number.isFinite(timestamp) || timestamp <= previousTime ||
+            (node.closeTime != null && (!Number.isFinite(Number(node.closeTime[index])) ||
+              Number(node.closeTime[index]) < timestamp))) {
+          validTimeline = false;
+          break;
+        }
+        previousTime = timestamp;
+      }
+      if (!validTimeline) continue;
       this.nodes.set(graphKey(node.symbol,node.timeframe),node);
     }
   }
