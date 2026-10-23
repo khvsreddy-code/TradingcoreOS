@@ -689,7 +689,14 @@ export class CoreSpiritRuntime {
   getRealtimeLifecycle(): 'idle'|'evaluating'|'committed' { return this.realtimeLifecycle; }
 
   /** Recovery counters are cumulative for this runtime instance and safe to sample in telemetry. */
-  getRecoveryStats(): Readonly<typeof this.recoveryStats> {
+  getRecoveryStats(): Readonly<{
+    barsReused:number;
+    barsReplayed:number;
+    checkpointsRestored:number;
+    checkpointRestoreFailures:number;
+    fullReplayFallbacks:number;
+    lastReplayFrom:number;
+  }> {
     return Object.freeze({ ...this.recoveryStats });
   }
 
@@ -745,13 +752,103 @@ export class CoreSpiritRuntime {
   ): { nodeId: string; inputDependencies: readonly string[] } {
     const remembered = this.kernelNodeIdentities.get(`${family}:${key}`);
     if (remembered) return remembered;
-    const instructionIndex = this.compiledIr?.entry.instructions.findIndex((instruction) =>
+    const group = family === 'fused'
+      ? this.fusedGroupById.get(key) ?? this.seriesFusionPlan?.groups.find(item => item.id === key)
+      : undefined;
+    const instructionIndex = group?.instructions[0] ?? this.compiledIr?.entry.instructions.findIndex((instruction) =>
       instruction.op === 'call' && (instruction.callId || instruction.dest) === key,
     ) ?? -1;
     const node = instructionIndex >= 0 ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
     return {
       nodeId: node?.id ?? `kernel:${family}:${key}`,
-      inputDependencies: Object.freeze([...(node?.inputs ?? [])]),
+      inputDependencies: Object.freeze([...(node?.inputs?.length ? node.inputs : group ? [group.inputRegister] : [])]),
+    };
+  }
+
+  /** Describe the reaching definition of a kernel argument so parameter edits invalidate checkpoints. */
+  private registerConfiguration(register: string, beforeIndex: number, visiting = new Set<string>()): unknown {
+    const visitKey = `${register}@${beforeIndex}`;
+    if (visiting.has(visitKey)) return { register, cycle: true };
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(visitKey);
+    const instructions = this.compiledIr?.entry.instructions ?? [];
+    const describe = (name: string, index: number) => this.registerConfiguration(name, index, nextVisiting);
+    for (let index = Math.min(beforeIndex - 1, instructions.length - 1); index >= 0; index -= 1) {
+      const instruction = instructions[index]!;
+      if ('dest' in instruction && instruction.dest === register) {
+        switch (instruction.op) {
+          case 'const': return { op:instruction.op, value:instruction.value };
+          case 'loadSeries': return { op:instruction.op, name:instruction.name, offset:instruction.offset };
+          case 'loadState': return { op:instruction.op, name:instruction.name };
+          case 'move': return { op:instruction.op, source:describe(instruction.source,index) };
+          case 'unary': return { op:instruction.op, operator:instruction.operator, operand:describe(instruction.operand,index) };
+          case 'binary': return { op:instruction.op, operator:instruction.operator, left:describe(instruction.left,index), right:describe(instruction.right,index) };
+          case 'call': return {
+            op:instruction.op, name:instruction.name,
+            args:instruction.args.map(name=>describe(name,index)),
+            seriesArgs:instruction.seriesArgs ?? [], seriesSources:instruction.seriesSources ?? [],
+            componentId:instruction.componentId ?? null,
+            componentPure:instruction.componentPure ?? null,
+            componentStateful:instruction.componentStateful ?? null,
+            componentDeterministic:instruction.componentDeterministic ?? null,
+          };
+          case 'index': return { op:instruction.op, seriesName:instruction.seriesName ?? null, target:describe(instruction.target,index), index:describe(instruction.index,index) };
+          default: return { op:instruction.op };
+        }
+      }
+      if ((instruction.op === 'setLocal' || instruction.op === 'setState') && instruction.name === register) {
+        return { op:instruction.op, name:instruction.name, source:describe(instruction.source,index) };
+      }
+    }
+    return { register, external:true };
+  }
+
+  private kernelSnapshotConfiguration(
+    family: CoreSpiritKernelState['family'],
+    key: string,
+  ): Readonly<{ kernelType:string; kernelVersion:string|number; parametersSignature:string }> {
+    const group = family === 'fused'
+      ? this.fusedGroupById.get(key) ?? this.seriesFusionPlan?.groups.find(item => item.id === key)
+      : undefined;
+    if (group) return {
+      kernelType:'fused-series',
+      kernelVersion:1,
+      parametersSignature:JSON.stringify({ operations:group.operations.map(operation=>({name:operation.name,length:operation.length,parameter:operation.parameter})) }),
+    };
+    const instructions = this.compiledIr?.entry.instructions ?? [];
+    const instructionIndex = instructions.findIndex(instruction =>
+      instruction.op === 'call' && (instruction.callId || instruction.dest) === key,
+    );
+    const instruction = instructionIndex >= 0 ? instructions[instructionIndex] : undefined;
+    const isCall = instruction?.op === 'call';
+    const parametersSignature = JSON.stringify({
+      family,
+      key,
+      name:isCall ? instruction.name : null,
+      args:isCall ? instruction.args.map(register=>this.registerConfiguration(register,instructionIndex)) : [],
+      seriesArgs:isCall ? instruction.seriesArgs ?? [] : [],
+      seriesSources:isCall ? instruction.seriesSources ?? [] : [],
+      componentId:isCall ? instruction.componentId ?? null : null,
+      componentStateful:isCall ? instruction.componentStateful ?? null : null,
+      componentDeterministic:isCall ? instruction.componentDeterministic ?? null : null,
+    });
+    return {
+      kernelType:`${family}:${isCall ? instruction.name : key}`,
+      kernelVersion:1,
+      parametersSignature,
+    };
+  }
+
+  private kernelSnapshotIdentity(
+    family: CoreSpiritKernelState['family'],
+    key: string,
+    nextBarIndex: number,
+  ): CoreSpiritKernelSnapshotIdentity {
+    return {
+      modelVersion:this.kernelModelVersion(),
+      ...this.kernelSnapshotConfiguration(family,key),
+      dataRevision:this.kernelDataRevision,
+      nextBarIndex,
     };
   }
 
@@ -764,11 +861,12 @@ export class CoreSpiritRuntime {
     const identity = this.kernelIdentity(family, key);
     this.kernelStateSnapshots.capture(
       {
-        nodeId: identity.nodeId,
-        revision: this.state.barState.revision,
-        inputDependencies: identity.inputDependencies,
+        nodeId:identity.nodeId,
+        revision:this.state.barState.revision,
+        inputDependencies:identity.inputDependencies,
         barIndex,
-        modelVersion: this.kernelModelVersion(),
+        nextBarIndex:barIndex + 1,
+        ...this.kernelSnapshotIdentity(family,key,barIndex + 1),
       },
       { family, state } as CoreSpiritKernelState,
       cloneCoreSpiritKernelState,
@@ -777,22 +875,7 @@ export class CoreSpiritRuntime {
 
   private snapshotKernelsForBar(barIndex: number): void {
     if (!this.compiledIr || barIndex < -1) return;
-    for (const [groupId, cursor] of this.fusedCursors) {
-      const group = this.seriesFusionPlan?.groups.find((item) => item.id === groupId);
-      const instructionIndex = group?.instructions[0];
-      const node = instructionIndex != null ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
-      this.kernelStateSnapshots.capture(
-        {
-          nodeId: node?.id ?? `kernel:fused:${groupId}`,
-          revision: this.state.barState.revision,
-          inputDependencies: Object.freeze([...(node?.inputs ?? [])]),
-          barIndex,
-          modelVersion: this.kernelModelVersion(),
-        },
-        { family:'fused', state:cursor },
-        cloneCoreSpiritKernelState,
-      );
-    }
+    for (const [groupId, cursor] of this.fusedCursors) this.captureKernelSnapshot('fused', groupId, cursor, barIndex);
     for (const [key, cursor] of this.directKernelCursors) this.captureKernelSnapshot('direct', key, cursor, barIndex);
     for (const [key, kernel] of this.rsiKernels) this.captureKernelSnapshot('rsi', key, kernel, barIndex);
     for (const [key, kernel] of this.atrKernels) this.captureKernelSnapshot('atr', key, kernel, barIndex);
@@ -801,23 +884,33 @@ export class CoreSpiritRuntime {
     for (const [key, kernel] of this.trendStrengthKernels) this.captureKernelSnapshot('trend', key, kernel, barIndex);
   }
 
-  private restoreKernelSnapshotsAtBar(barIndex: number): void {
-    if (!this.compiledIr || barIndex < -1) return;
+  private restoreKernelSnapshotsAtBar(barIndex: number): Readonly<{complete:boolean;expected:number;restored:number}> {
+    if (!this.compiledIr || barIndex < -1) return Object.freeze({ complete:false, expected:0, restored:0 });
     const modelVersion = this.kernelModelVersion();
+    let expectedCount = 0;
+    let restoredCount = 0;
     const restore = <T extends CoreSpiritKernelState>(
       family: T['family'],
       key: string,
       state: T['state'],
     ): void => {
+      expectedCount += 1;
       const identity = this.kernelIdentity(family, key);
-      this.kernelStateSnapshots.restoreAt(
+      const restored = this.kernelStateSnapshots.restoreAt(
         { family, state } as T,
         identity.nodeId,
         modelVersion,
         identity.inputDependencies,
         barIndex,
         (target, source) => copyCoreSpiritKernelState(target as CoreSpiritKernelState, source as CoreSpiritKernelState),
+        this.kernelSnapshotIdentity(family,key,barIndex + 1),
       );
+      if (restored) {
+        restoredCount += 1;
+        this.recoveryStats.checkpointsRestored += 1;
+      } else {
+        this.recoveryStats.checkpointRestoreFailures += 1;
+      }
     };
     for (const [key, cursor] of this.directKernelCursors) restore('direct', key, cursor);
     for (const [key, kernel] of this.rsiKernels) restore('rsi', key, kernel);
@@ -825,21 +918,8 @@ export class CoreSpiritRuntime {
     for (const [key, kernel] of this.vwapKernels) restore('vwap', key, kernel);
     for (const [key, kernel] of this.betaKernels) restore('beta', key, kernel);
     for (const [key, kernel] of this.trendStrengthKernels) restore('trend', key, kernel);
-
-    for (const [groupId, cursor] of this.fusedCursors) {
-      const group = this.seriesFusionPlan?.groups.find((item) => item.id === groupId);
-      const instructionIndex = group?.instructions[0];
-      const node = instructionIndex != null ? this.dirtyGraph?.nodeForInstruction(instructionIndex) : undefined;
-      const nodeId = node?.id ?? `kernel:fused:${groupId}`;
-      this.kernelStateSnapshots.restoreAt(
-        { family:'fused', state:cursor },
-        nodeId,
-        modelVersion,
-        Object.freeze([...(node?.inputs ?? [])]),
-        barIndex,
-        (target, source) => copyCoreSpiritKernelState(target, source),
-      );
-    }
+    for (const [groupId, cursor] of this.fusedCursors) restore('fused', groupId, cursor);
+    return Object.freeze({ complete:expectedCount === restoredCount, expected:expectedCount, restored:restoredCount });
   }
 
   getKernelStateSnapshots(): readonly CoreSpiritKernelSnapshot<CoreSpiritKernelState>[] {
