@@ -272,7 +272,8 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     if(alignment==='exact')return node.time[index]===asOf?index:-1;
     if(alignment==='last-confirmed'||alignment==='nearest-confirmed'){
       const seconds=timeframeSeconds(node.timeframe);
-      while(index>=0&&seconds>0&&(node.closeTime?.[index] ?? node.time[index]!+seconds)>asOf)index-=1;
+      while(index>=0&&(node.closeTime?.[index] ??
+        (seconds>0 ? node.time[index]!+seconds : Number.POSITIVE_INFINITY))>asOf)index-=1;
     }
     return index;
   }
@@ -290,14 +291,22 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     if(index<0||index>=node.time.length)return {value:null,source:alignment==='exact'?'data-graph:unaligned':'data-graph:empty',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
     const timestamp=Number(node.time[index]);
     const barDurationSeconds=timeframeSeconds(node.timeframe);
-    const closeTime = node.closeTime?.[index] ?? timestamp+(barDurationSeconds>0?barDurationSeconds:0);
+    const closeTimeCandidate = node.closeTime?.[index] ??
+      (barDurationSeconds>0 ? timestamp+barDurationSeconds : Number.NaN);
+    const closeTime = Number.isFinite(closeTimeCandidate) ? closeTimeCandidate : undefined;
     const dataRevision = node.dataRevision ?? node.revision;
-    const effectiveStaleAgeMs = Math.max(0,asOf-closeTime)*1000;
-    const isConfirmed=barDurationSeconds<=0||closeTime<=asOf;
+    const effectiveStaleAgeMs = closeTime == null ? Number.POSITIVE_INFINITY : Math.max(0,asOf-closeTime)*1000;
+    const isConfirmed=closeTime != null && closeTime<=asOf;
+    if (closeTime == null && ctx && ctx.executionMode !== 'realtime') {
+      return {
+        value:null,source:'data-graph:unconfirmed',symbol:node.symbol,timeframe:node.timeframe,
+        timestamp,state:'developing',confirmationPhase:'developing',revision:node.revision,dataRevision,
+      };
+    }
     if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&effectiveStaleAgeMs>ctx.maxStalenessMs){
       return {
         value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,
-        timestamp,closeTimestamp:closeTime,state:'historical',confirmationPhase:'confirmed',revision:node.revision,dataRevision,
+        timestamp,...(closeTime==null?{}:{closeTimestamp:closeTime}),state:'historical',confirmationPhase:'confirmed',revision:node.revision,dataRevision,
       };
     }
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
@@ -306,7 +315,7 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
       symbol:node.symbol,
       timeframe:node.timeframe,
       timestamp,
-      closeTimestamp:closeTime,
+      ...(closeTime==null?{}:{closeTimestamp:closeTime}),
       revision:node.revision,
       dataRevision:node.dataRevision ?? node.revision,
       confirmationPhase:isConfirmed ? 'confirmed' as const : 'developing' as const,
@@ -338,8 +347,9 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
     let index=this.indexAt(node,effectiveContext.asOfTimestamp,effectiveContext.alignment);
     const seconds=timeframeSeconds(node.timeframe);
-    if (effectiveContext.executionMode !== 'realtime' && seconds > 0) {
-      while (index >= 0 && (node.closeTime?.[index] ?? Number(node.time[index])+seconds) > effectiveContext.asOfTimestamp) index -= 1;
+    if (effectiveContext.executionMode !== 'realtime') {
+      while (index >= 0 && (node.closeTime?.[index] ??
+        (seconds>0 ? Number(node.time[index])+seconds : Number.POSITIVE_INFINITY)) > effectiveContext.asOfTimestamp) index -= 1;
     }
     return Array.from(columns[request.field]?.subarray(0,Math.max(0,index+1))??[]);
   };
