@@ -20,14 +20,14 @@ const snapshots = [
   { symbol:'ALPHA', timeframe:'5m', timestamp:2000, value:20, source:'feed', state:'confirmed', revision:1 },
 ];
 
-const confirmedAligned = alignTimeframeSnapshots([500, 1000, 1500, 3000, 3500], snapshots);
+const confirmedAligned = alignTimeframeSnapshots([500, 1300, 1800, 3300, 3500], snapshots);
 assert.equal(confirmedAligned[0]?.value, null, 'alignment must not invent a value before the first confirmed observation');
-assert.equal(confirmedAligned[1]?.value, 10);
+assert.equal(confirmedAligned[1]?.value, 10, 'a 5m candle becomes available only at its close boundary');
 assert.equal(confirmedAligned[2]?.value, 10, 'carry-forward uses only the last eligible confirmed observation');
 assert.equal(confirmedAligned[3]?.value, 20, 'a developing revision must not resurrect an older confirmed revision at the same timestamp');
 assert.equal(confirmedAligned[4]?.value, 20);
 assert.deepEqual(
-  alignTimeframeSnapshots([500, 1000, 1500, 3000, 3500], [...snapshots].reverse()),
+  alignTimeframeSnapshots([500, 1300, 1800, 3300, 3500], [...snapshots].reverse()),
   confirmedAligned,
   'batch order and delivery order must not change canonical aligned values',
 );
