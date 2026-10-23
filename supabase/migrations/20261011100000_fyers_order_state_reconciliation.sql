@@ -175,8 +175,19 @@ begin
         v_applied := true;
       elsif v_status = 'UNKNOWN' then
         v_applied := false;
-      elsif v_current_status in ('FILLED','CANCELLED','REJECTED','EXPIRED') then
-        v_applied := (v_source = 'reconciliation' and v_status in ('FILLED','CANCELLED','REJECTED','EXPIRED'));
+      elsif v_current_status = 'FILLED' then
+        -- A filled order is immutable; stale snapshots cannot downgrade it.
+        v_applied := false;
+      elsif v_current_status = 'CANCELLED' then
+        -- Cancellation can race a final execution. Correct it only when the
+        -- authoritative REST snapshot proves the complete requested quantity filled.
+        v_applied := (
+          v_source = 'reconciliation' and v_status = 'FILLED'
+          and v_quantity is not null and v_quantity > 0
+          and coalesce(v_filled, 0) >= v_quantity
+        );
+      elsif v_current_status in ('REJECTED','EXPIRED') then
+        v_applied := false;
       elsif v_source = 'reconciliation' then
         v_applied := true;
       else
