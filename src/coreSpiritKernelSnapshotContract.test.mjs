@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CoreSpiritRuntime } from './services/coreSpirit/runtime.ts';
 import { compileCoreSpirit } from './services/coreSpirit/coreSpiritPipeline.ts';
 import { CoreSpiritFusedSeriesCursor } from './services/coreSpirit/seriesVector.ts';
+import { CoreSpiritKernelSnapshotStore } from './services/coreSpirit/kernelStateSnapshots.ts';
 
 function bars(count: number) {
   return Array.from({ length: count }, (_, index) => {
@@ -44,6 +45,50 @@ assert.equal(snapshot.barIndex, history.length - 1);
 assert.ok(snapshot.modelVersion.length > 0);
 assert.ok(snapshot.inputDependencies.length >= 1);
 assert.ok(snapshot.inputDependencies.includes('close'));
+assert.ok(snapshot.kernelType.length > 0, 'snapshot must identify the concrete kernel type');
+assert.ok(snapshot.kernelVersion === 1 || typeof snapshot.kernelVersion === 'string', 'snapshot must carry the kernel state schema version');
+assert.ok(snapshot.parametersSignature.length > 0, 'snapshot must bind to its resolved parameter configuration');
+assert.equal(snapshot.nextBarIndex, snapshot.barIndex + 1, 'snapshot must identify the next legal observation index');
+assert.equal(typeof snapshot.dataRevision, 'number', 'snapshot must carry an input-history revision');
+
+
+// Snapshot-store adversarial tests: same bar index is not enough when the kernel
+// configuration or input-history generation has changed.
+const snapshotStore = new CoreSpiritKernelSnapshotStore<{ cursor:number }>(4);
+const checkpointMetadata = {
+  nodeId:'test:ema', revision:0, inputDependencies:['close'],
+  barIndex:4, nextBarIndex:5, modelVersion:'ir-v1',
+  kernelType:'ema', kernelVersion:2, parametersSignature:'period=3',
+  dataRevision:17,
+};
+snapshotStore.capture(checkpointMetadata, { cursor:42 }, state=>({ ...state }));
+const restoredTarget = { cursor:0 };
+const compatibleIdentity = {
+  modelVersion:'ir-v1', kernelType:'ema', kernelVersion:2,
+  parametersSignature:'period=3', dataRevision:17, nextBarIndex:5,
+};
+const copy = (target, source) => { target.cursor = source.cursor; };
+assert.equal(snapshotStore.restoreAt(restoredTarget,'test:ema','ir-v1',['close'],4,copy,compatibleIdentity),true);
+assert.equal(restoredTarget.cursor,42);
+for (const mismatch of [
+  { parametersSignature:'period=5' },
+  { kernelVersion:3 },
+  { kernelType:'rma' },
+  { dataRevision:18 },
+  { nextBarIndex:6 },
+  { modelVersion:'ir-v2' },
+]) {
+  assert.equal(
+    snapshotStore.restoreAt({cursor:0},'test:ema','ir-v1',['close'],4,copy,{...compatibleIdentity,...mismatch}),
+    false,
+    'mismatched checkpoint identity must fail closed: '+JSON.stringify(mismatch),
+  );
+}
+assert.throws(
+  ()=>snapshotStore.capture({...checkpointMetadata,nextBarIndex:4},{cursor:1},state=>({...state})),
+  /nextBarIndex/,
+  'a checkpoint cannot claim a different next execution position',
+);
 
 const cursorUpdate = CoreSpiritFusedSeriesCursor.prototype.update;
 const cursorCopyFrom = CoreSpiritFusedSeriesCursor.prototype.copyFrom;
