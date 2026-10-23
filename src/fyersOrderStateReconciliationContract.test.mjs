@@ -8,6 +8,12 @@ assert.equal(canTransitionFyersOrderStatus('OPEN', 'FILLED'), true);
 assert.equal(canTransitionFyersOrderStatus('FILLED', 'OPEN'), false);
 assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'PARTIAL'), false);
 assert.equal(canTransitionFyersOrderStatus('CANCEL_PENDING', 'FILLED'), true);
+assert.equal(canTransitionFyersOrderStatus('FILLED', 'CANCELLED', 'reconciliation'), false,
+  'a stale REST cancellation must never downgrade a confirmed full fill');
+assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'websocket'), false,
+  'a websocket terminal correction is not authoritative enough to resolve a cancel race');
+assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'reconciliation'), true,
+  'a reconciliation can correct a cancel race when the durable reducer has full-fill evidence');
 
 const event = {
   type: 'OrderUpdate', orderId: 'FY-1', brokerOrderId: 'FY-1', clientOrderId: 'TCO-1',
@@ -69,6 +75,14 @@ assert.match(route, /TradingKillSwitchRepository\.assertOrderSubmissionAllowed\(
 assert.match(killSwitch, /TRADINGCORE_ORDER_KILL_SWITCH/);
 assert.match(killSwitch, /scope: 'account'/);
 assert.match(killSwitch, /scope: 'strategy'/);
+const riskEngine = read('src/server/trading/AutomationPreTradeRiskEngine.ts');
+assert.match(route, /evaluateManualPreTradeRisk\(/,
+  'manual orders must pass the same server-owned snapshot/exposure risk boundary as automation');
+assert.match(riskEngine, /fresh-broker-quote/);
+assert.match(riskEngine, /account-funds-snapshot/);
+assert.match(riskEngine, /projected-account-exposure-cap/);
+assert.match(riskEngine, /conservative-full-notional-reserve/,
+  'adapters without broker-specific margin endpoints must reserve full notional plus buffer');
 const idempotency = read('src/server/storage/OrderIdempotencyRepository.ts');
 assert.match(idempotency, /\.in\('state', \[\.\.\.allowedCurrentStates\]\)/,
   'stale completion/rejection writes must not overwrite an already advanced idempotency state');
