@@ -42,6 +42,15 @@ function validateSpecializedPlan(
   plan: CoreSpiritSpecializedPlan,
 ): void {
   if (plan.version !== 1 || plan.instructions.length !== source.length) throw new Error('specialized plan version/instruction count mismatch');
+  if (!Number.isInteger(plan.slotCount) || plan.slotCount < 0 || plan.slotByName.size !== plan.slotCount) {
+    throw new Error('specialized plan has an invalid slot table');
+  }
+  const slots = [...plan.slotByName.values()];
+  if (slots.some(slot => !Number.isInteger(slot) || slot < 0 || slot >= plan.slotCount) ||
+      new Set(slots).size !== plan.slotCount) {
+    throw new Error('specialized plan slot table is not a dense unique mapping');
+  }
+
   for (let index = 0; index < source.length; index += 1) {
     const original = source[index]!;
     const lowered = plan.instructions[index]!;
@@ -50,18 +59,42 @@ function validateSpecializedPlan(
       if (!('dest' in lowered) || typeof lowered.dest !== 'number') throw new Error(`specialized plan missing destination slot at instruction ${index}`);
       assertSlot(plan, original.dest, lowered.dest, `instruction ${index} destination`);
     }
+
     switch (original.op) {
+      case 'const':
+        if (lowered.op !== 'const' || !Object.is(lowered.value, original.value)) throw new Error(`specialized constant is stale at instruction ${index}`);
+        break;
+      case 'loadSeries':
+        if (lowered.op !== 'loadSeries' || lowered.name !== original.name || lowered.offset !== original.offset) throw new Error(`specialized series load is stale at instruction ${index}`);
+        break;
+      case 'loadState':
+        if (lowered.op !== 'loadState' || lowered.name !== original.name) throw new Error(`specialized state load is stale at instruction ${index}`);
+        break;
+      case 'move':
+        if (lowered.op !== 'move' || lowered.source !== original.source) throw new Error(`specialized move is stale at instruction ${index}`);
+        break;
+      case 'setLocal':
+        if (lowered.op !== 'setLocal' || lowered.name !== original.name || lowered.series !== (original.series !== false)) {
+          throw new Error(`specialized setLocal metadata is stale at instruction ${index}`);
+        }
+        assertSlot(plan, original.source, lowered.source, `instruction ${index} local source`);
+        break;
+      case 'setState':
+        if (lowered.op !== 'setState' || lowered.name !== original.name) throw new Error(`specialized setState metadata is stale at instruction ${index}`);
+        assertSlot(plan, original.source, lowered.source, `instruction ${index} state source`);
+        break;
       case 'unary':
-        if (lowered.op !== 'unary') throw new Error('invalid lowered unary instruction');
+        if (lowered.op !== 'unary' || lowered.operator !== original.operator) throw new Error(`specialized unary metadata is stale at instruction ${index}`);
         assertSlot(plan, original.operand, lowered.operand, `instruction ${index} operand`);
         break;
       case 'binary':
-        if (lowered.op !== 'binary') throw new Error('invalid lowered binary instruction');
+        if (lowered.op !== 'binary' || lowered.operator !== original.operator) throw new Error(`specialized binary metadata is stale at instruction ${index}`);
         assertSlot(plan, original.left, lowered.left, `instruction ${index} left operand`);
         assertSlot(plan, original.right, lowered.right, `instruction ${index} right operand`);
         break;
       case 'call':
-        if (lowered.op !== 'call' || lowered.instruction !== original || lowered.args.length !== original.args.length) throw new Error(`specialized call metadata is stale at instruction ${index}`);
+        if (lowered.op !== 'call' || lowered.instruction !== original || lowered.name !== original.name ||
+            lowered.args.length !== original.args.length) throw new Error(`specialized call metadata is stale at instruction ${index}`);
         original.args.forEach((name, argIndex) => assertSlot(plan, name, lowered.args[argIndex]!, `instruction ${index} argument ${argIndex}`));
         break;
       case 'index':
@@ -69,22 +102,22 @@ function validateSpecializedPlan(
         assertSlot(plan, original.index, lowered.index, `instruction ${index} index`);
         assertSlot(plan, original.target, lowered.target, `instruction ${index} target`);
         break;
-      case 'setLocal':
-        if (lowered.op !== 'setLocal') throw new Error('invalid lowered setLocal instruction');
-        assertSlot(plan, original.source, lowered.source, `instruction ${index} local source`);
+      case 'eventGate':
+        if (lowered.op !== 'eventGate' || lowered.eventName !== original.eventName || lowered.target !== original.target) {
+          throw new Error(`specialized event gate is stale at instruction ${index}`);
+        }
         break;
-      case 'setState':
-        if (lowered.op !== 'setState') throw new Error('invalid lowered setState instruction');
-        assertSlot(plan, original.source, lowered.source, `instruction ${index} state source`);
+      case 'jumpIfFalse':
+        if (lowered.op !== 'jumpIfFalse' || lowered.target !== original.target) throw new Error(`specialized conditional jump is stale at instruction ${index}`);
+        assertSlot(plan, original.condition, lowered.condition, `instruction ${index} condition`);
         break;
       case 'jump':
-      case 'jumpIfFalse':
-      case 'eventGate':
-        if (lowered.op !== original.op || lowered.target !== original.target) throw new Error(`specialized control-flow target mismatch at instruction ${index}`);
-        if (original.op === 'jumpIfFalse' && lowered.op === 'jumpIfFalse') assertSlot(plan, original.condition, lowered.condition, `instruction ${index} condition`);
+        if (lowered.op !== 'jump' || lowered.target !== original.target) throw new Error(`specialized jump is stale at instruction ${index}`);
         break;
       case 'emit':
-        if (lowered.op !== 'emit' || lowered.instruction !== original) throw new Error(`specialized emit metadata is stale at instruction ${index}`);
+        if (lowered.op !== 'emit' || lowered.instruction !== original ||
+            lowered.args.length !== Math.max(0, original.args.length - 1)) throw new Error(`specialized emit metadata is stale at instruction ${index}`);
+        original.args.slice(1).forEach((name, argIndex) => assertSlot(plan, name, lowered.args[argIndex]!, `instruction ${index} emitted argument ${argIndex}`));
         break;
     }
   }
