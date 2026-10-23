@@ -7,7 +7,10 @@ import { normalizeCoreSpiritSource } from './syntax';
 import type { CoreSpiritProgramLayer } from './layeredPlatformContract';
 import type { CoreSpiritComponentRegistryLike } from './coreSpiritComponents';
 
+/** Editor-only result. This value may contain a recovered/partial AST and is never executable. */
 export type CoreSpiritCompilationUnit = {
+  kind: 'partial-diagnostics';
+  executable: false;
   source: string;
   normalizedSource: string;
   ast: CoreSpiritAst;
@@ -37,7 +40,7 @@ export function createCoreSpiritCompilationUnit(
     ...syntaxDiagnostics.map(d => ({ severity:'error' as const, message:d.message, line:d.line, column:d.column, start:d.start, end:d.end })),
     ...(semantic?.diagnostics ?? []),
   ];
-  return { source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
+  return { kind: 'partial-diagnostics', executable: false, source: original, normalizedSource, ast: parsed.ast, semantic, syntaxDiagnostics, diagnostics };
 }
 
 
