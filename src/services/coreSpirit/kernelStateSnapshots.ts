@@ -95,10 +95,21 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     if (!metadata.modelVersion.trim()) throw new Error('CoreSpirit kernel snapshot modelVersion is required.');
     if (!metadata.kernelType.trim()) throw new Error('CoreSpirit kernel snapshot kernelType is required.');
     if ((typeof metadata.kernelVersion !== 'string' && typeof metadata.kernelVersion !== 'number') ||
-        String(metadata.kernelVersion).trim() === '') throw new Error('CoreSpirit kernel snapshot kernelVersion is required.');
-    if (!metadata.parametersSignature) throw new Error('CoreSpirit kernel snapshot parametersSignature is required.');
-    if (metadata.dataRevision == null || String(metadata.dataRevision).trim() === '') {
-      throw new Error('CoreSpirit kernel snapshot dataRevision is required.');
+        String(metadata.kernelVersion).trim() === '' ||
+        (typeof metadata.kernelVersion === 'number' && !Number.isSafeInteger(metadata.kernelVersion))) {
+      throw new Error('CoreSpirit kernel snapshot kernelVersion is invalid.');
+    }
+    if (typeof metadata.parametersSignature !== 'string' || !metadata.parametersSignature.trim()) {
+      throw new Error('CoreSpirit kernel snapshot parametersSignature is required.');
+    }
+    if ((typeof metadata.dataRevision !== 'string' && typeof metadata.dataRevision !== 'number') ||
+        String(metadata.dataRevision).trim() === '' ||
+        (typeof metadata.dataRevision === 'number' && !Number.isSafeInteger(metadata.dataRevision))) {
+      throw new Error('CoreSpirit kernel snapshot dataRevision is invalid.');
+    }
+    if (!Array.isArray(metadata.inputDependencies) ||
+        metadata.inputDependencies.some(value => typeof value !== 'string' || !value.trim())) {
+      throw new Error('CoreSpirit kernel snapshot inputDependencies are invalid.');
     }
 
     const snapshot: CoreSpiritKernelSnapshot<TState> = Object.freeze({
