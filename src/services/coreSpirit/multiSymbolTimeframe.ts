@@ -151,7 +151,8 @@ export function validateSynchronizedSnapshot(
   if (requiresClosedSample && resolvedCloseTimestamp == null) return null;
   if (requiresClosedSample && resolvedCloseTimestamp != null &&
       resolvedCloseTimestamp > context.asOfTimestamp) return null;
-  if (confirmedOnly && !isConfirmedSnapshot(snapshot)) return null;
+  const explicitRealtimeDeveloping = context.executionMode === 'realtime' && context.alignment === 'developing';
+  if (!isConfirmedSnapshot(snapshot) && !explicitRealtimeDeveloping) return null;
 
   const markedDeveloping = snapshot.confirmationPhase === 'developing' ||
     snapshot.state === 'developing' || snapshot.state === 'realtime';
