@@ -7,7 +7,11 @@ export type CoreSpiritWasmNumericalExecutor = CoreSpiritWasmBackendHandle & Read
 }>;
 export type CoreSpiritNumericalKernelExecution = Readonly<{
   operation: CoreSpiritNumericalKernelOperation;
+  /** Backend that actually produced result (CPU when an accelerator failed). */
   backend: CoreSpiritBackendKind;
+  requestedBackend: CoreSpiritBackendKind | 'auto';
+  /** Selected by capability/cost planning, even when execution later fell back. */
+  selectedBackend: CoreSpiritBackendKind;
   result: CoreSpiritNumericalKernelResult;
   plan: CoreSpiritBackendPlan;
   elapsedMs: number;
@@ -25,11 +29,15 @@ export type CoreSpiritNumericalKernelExecutorOptions = Readonly<{
   minWebGpuWorkUnits?: number;
   allowStatefulWasm?: boolean;
   maxStatefulWasmElements?: number;
-  onBackendFallback?: (backend: 'wasm-simd' | 'webgpu', error?: unknown) => void;
+  requestedBackend?: CoreSpiritBackendKind | 'auto';
+  /** WebGPU remains disabled unless a caller explicitly opts into batch/research execution. */
+  allowWebGpu?: boolean;
+  onBackendFallback?: (backend: 'wasm-simd' | 'wasm-scalar' | 'webgpu', error?: unknown) => void;
+  onBackendExecution?: (event: Readonly<{operation:CoreSpiritNumericalKernelOperation;requestedBackend:CoreSpiritBackendKind|'auto';selectedBackend:CoreSpiritBackendKind;executedBackend:CoreSpiritBackendKind;elapsedMs:number;reason:string;fallbackReason?:string}>) => void;
 }>;
 
 const WASM_SERIES_LAYOUT: Readonly<Partial<Record<CoreSpiritNumericalKernelOperation, Readonly<{ inputs: number; outputs: number }>>>> = Object.freeze({
-  rollingMean: { inputs: 1, outputs: 1 }, rollingVariance: { inputs: 1, outputs: 1 },
+  rollingMean: { inputs: 1, outputs: 1 }, rollingSum: { inputs: 1, outputs: 1 }, rollingVariance: { inputs: 1, outputs: 1 },
   rollingStd: { inputs: 1, outputs: 1 }, rollingMin: { inputs: 1, outputs: 1 }, rollingMax: { inputs: 1, outputs: 1 },
   ema: { inputs: 1, outputs: 1 }, rma: { inputs: 1, outputs: 1 }, wma: { inputs: 1, outputs: 1 },
   atr: { inputs: 3, outputs: 1 }, rsi: { inputs: 1, outputs: 1 }, linearRegression: { inputs: 1, outputs: 4 },
@@ -46,6 +54,30 @@ function isWasmNumericalExecutor(value: unknown): value is CoreSpiritWasmNumeric
     typeof candidate.execute === 'function';
 }
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+
+function finishExecution(
+  operation: CoreSpiritNumericalKernelOperation,
+  result: CoreSpiritNumericalKernelResult,
+  plan: CoreSpiritBackendPlan,
+  executedBackend: CoreSpiritBackendKind,
+  started: number,
+  options: CoreSpiritNumericalKernelExecutorOptions,
+  fallbackReason?: string,
+): CoreSpiritNumericalKernelExecution {
+  const elapsedMs = Math.max(0, now() - started);
+  const requestedBackend = options.requestedBackend ?? 'auto';
+  const event = Object.freeze({
+    operation, requestedBackend, selectedBackend: plan.backend, executedBackend,
+    elapsedMs, reason: plan.reason,
+    ...(fallbackReason === undefined ? {} : { fallbackReason }),
+  });
+  try { options.onBackendExecution?.(event); } catch { /* telemetry must never affect calculation availability */ }
+  return Object.freeze({
+    operation, requestedBackend, selectedBackend: plan.backend,
+    backend: executedBackend, result, plan, elapsedMs,
+    ...(fallbackReason === undefined ? {} : { fallbackReason }),
+  });
+}
 
 function validateInputs(inputs: readonly CoreSpiritNumericSeries[]): CoreSpiritNumericSeries[] {
   if (!Array.isArray(inputs)) throw new Error('numerical kernel inputs must be an array');
@@ -98,7 +130,7 @@ function validExternalResult(
   }
   return value instanceof Float64Array && value.length === inputLength;
 }
-function notifyFallback(options: CoreSpiritNumericalKernelExecutorOptions, backend: 'wasm-simd' | 'webgpu', error?: unknown): void {
+function notifyFallback(options: CoreSpiritNumericalKernelExecutorOptions, backend: 'wasm-simd' | 'wasm-scalar' | 'webgpu', error?: unknown): void {
   try { options.onBackendFallback?.(backend, error); } catch { /* telemetry cannot break fallback */ }
 }
 function estimateWorkUnits(operation: CoreSpiritNumericalKernelOperation, inputs: readonly CoreSpiritNumericSeries[], parameters: readonly number[]): number {
@@ -124,10 +156,13 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   let wasmAdapter = options.wasm;
   let wasmLoadError: unknown;
 
-  // The built-in SIMD asset currently accelerates rollingMean only. Load it on
-  // demand for sufficiently large non-live history, never on the chart hot path.
+  // Load the bundled ABI only for the exact rolling kernels it implements.
+  // WASM loading and data transfer never run on the live chart path.
+  const bundledWasmOperations = new Set<CoreSpiritNumericalKernelOperation>([
+    'rollingMean', 'rollingSum', 'rollingVariance', 'rollingStd', 'rollingMin', 'rollingMax',
+  ]);
   if (!options.registry && !wasmAdapter && purpose !== 'live' &&
-      operation === 'rollingMean' && wasmOutputs &&
+      bundledWasmOperations.has(operation) && wasmOutputs &&
       workUnits >= Math.max(1, Math.floor(options.minWasmWorkUnits ?? 10_000))) {
     try {
       wasmAdapter = await loadCoreSpiritBundledWasmSimdBackend();
@@ -142,7 +177,7 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   });
   // Dispatch through the exact adapter snapshot used by the planner. When callers
   // inject a registry directly, they need not pass the same adapter twice.
-  const registeredWasmAdapter = registry.getAdapter('wasm-simd');
+  const registeredWasmAdapter = registry.getAdapter('wasm-simd') ?? registry.getAdapter('wasm-scalar');
   const wasmExecutor = isWasmNumericalExecutor(registeredWasmAdapter) ? registeredWasmAdapter : undefined;
   const maxElements = Math.max(0, ...inputs.map(input => input.length));
   const request = {
@@ -150,24 +185,30 @@ export async function executeCoreSpiritNumericalKernelPlanned(
     workload: operation === 'matrixMultiply' || operation === 'matrixDecomposition' ? 'matrix' as const : 'series' as const,
     workUnits, inputElements: maxElements,
     stateful: STATEFUL_SERIES_OPERATIONS.has(operation), deterministic: options.deterministic,
+    allowWebGpu: options.allowWebGpu === true,
+    preferredBackend: options.requestedBackend && options.requestedBackend !== 'auto' ? options.requestedBackend : undefined,
     minWasmWorkUnits: options.minWasmWorkUnits, minWebGpuWorkUnits: options.minWebGpuWorkUnits,
     allowStatefulWasm: options.allowStatefulWasm, maxStatefulWasmElements: options.maxStatefulWasmElements,
-    excludedBackends: wasmOutputs ? [] : ['wasm-simd'] as const,
+    excludedBackends: wasmOutputs ? [] : ['wasm-simd', 'wasm-scalar'] as const,
     payload: { operation, inputs, parameters },
   };
   const plan = planCoreSpiritBackend(request, registry);
-  if (plan.backend === 'wasm-simd') {
+  if (plan.backend === 'wasm-simd' || plan.backend === 'wasm-scalar') {
     try {
-      if (!wasmExecutor || !wasmExecutor.isLoaded() || !wasmOutputs) throw new Error('WASM execution requires the registered loaded executor and compatible equal-length series ABI');
+      const matchingAdapter = registry.getAdapter(plan.backend);
+      const executor = isWasmNumericalExecutor(matchingAdapter) ? matchingAdapter : wasmExecutor;
+      if (!executor || !executor.isLoaded() || !executor.hasKernel(options.wasmKernelNames?.[operation] ?? operation) || !wasmOutputs) {
+        throw new Error('WASM execution requires the registered loaded kernel and compatible equal-length series ABI');
+      }
       const kernel = options.wasmKernelNames?.[operation] ?? operation;
-      await wasmExecutor.execute({ kernel, inputs: toFloat64(inputs), outputs: wasmOutputs, params: parameters });
+      await executor.execute({ kernel, inputs: toFloat64(inputs), outputs: wasmOutputs, params: parameters });
       const result = wasmResult(operation, wasmOutputs);
       if (!validExternalResult(operation, result, maxElements, parameters)) throw new Error(`WASM kernel '${kernel}' returned an invalid result shape`);
-      return Object.freeze({ operation, backend: plan.backend, result, plan, elapsedMs: now() - started });
+      return finishExecution(operation, result, plan, plan.backend, started, options);
     } catch (error) {
-      notifyFallback(options, 'wasm-simd', error);
+      notifyFallback(options, plan.backend as 'wasm-simd' | 'wasm-scalar', error);
       const result = executeCoreSpiritNumericalKernel(operation, inputs, parameters);
-      return Object.freeze({ operation, backend: 'cpu-optimized', result, plan, elapsedMs: now() - started, fallbackReason: error instanceof Error ? error.message : String(error) });
+      return finishExecution(operation, result, plan, 'cpu-optimized', started, options, error instanceof Error ? error.message : String(error));
     }
   }
   if (plan.backend === 'webgpu') {
@@ -175,16 +216,16 @@ export async function executeCoreSpiritNumericalKernelPlanned(
       const isolatedRequest = { ...request, payload: { operation, inputs: toFloat64(inputs), parameters } };
       const result = await executePlannedExternalCoreSpiritBackend(plan, isolatedRequest, registry);
       if (!validExternalResult(operation, result, maxElements, parameters)) throw new Error(`WebGPU adapter returned an invalid result shape for '${operation}'`);
-      return Object.freeze({ operation, backend: plan.backend, result, plan, elapsedMs: now() - started });
+      return finishExecution(operation, result as CoreSpiritNumericalKernelResult, plan, plan.backend, started, options);
     } catch (error) {
       notifyFallback(options, 'webgpu', error);
       const result = executeCoreSpiritNumericalKernel(operation, inputs, parameters);
-      return Object.freeze({ operation, backend: 'cpu-optimized', result, plan, elapsedMs: now() - started, fallbackReason: error instanceof Error ? error.message : String(error) });
+      return finishExecution(operation, result, plan, 'cpu-optimized', started, options, error instanceof Error ? error.message : String(error));
     }
   }
   const result = executeCoreSpiritNumericalKernel(operation, inputs, parameters);
-  return Object.freeze({
-    operation, backend: plan.backend, result, plan, elapsedMs: now() - started,
-    ...(wasmLoadError === undefined ? {} : { fallbackReason: wasmLoadError instanceof Error ? wasmLoadError.message : String(wasmLoadError) }),
-  });
+  return finishExecution(
+    operation, result, plan, plan.backend, started, options,
+    wasmLoadError === undefined ? undefined : wasmLoadError instanceof Error ? wasmLoadError.message : String(wasmLoadError),
+  );
 }
