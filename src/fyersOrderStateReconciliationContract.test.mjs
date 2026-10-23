@@ -99,6 +99,11 @@ assert.match(route, /recordLifecycle\(userId, clientOrderId, 'INTENT'/);
 assert.match(route, /recordLifecycle\(userId, clientOrderId, 'SUBMITTED'/);
 assert.match(route, /recordLifecycle\(userId, clientOrderId, 'ACKNOWLEDGED'/);
 assert.match(route, /markRecoveryRequired\(userId, brokerId, idempotencyKey, recoveryResponse/);
+assert.match(route, /function isDefiniteOrderRejection\(status: number\)/,
+  'only a narrow set of broker/gateway validation responses may be classified as definite rejection');
+assert.match(route, /return \[400, 401, 403, 404, 422\]\.includes\(status\)/);
+assert.match(route, /const isClientReject = isDefiniteOrderRejection\(status\)/,
+  'timeouts, rate limits, conflicts and other ambiguous responses remain unknown');
 assert.match(route, /FYERS accepted the request but returned no broker order id/);
 assert.match(route, /recordLifecycle\(userId, '', 'CANCEL_PENDING', \{ brokerOrderId: orderId \}\)/,
   'cancel intent must be durable before issuing the broker cancellation request');
