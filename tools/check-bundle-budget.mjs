@@ -173,19 +173,20 @@ if (compilerChunk) {
   console.log('  CoreSpirit compiler isolation: no dedicated compiler chunk emitted; inspect the production graph.');
 }
 
-for (const fragment of [
-  'vendor/vela/src/core/drawings/advancedRegistryChannels.ts',
-  'vendor/vela/src/core/drawings/advancedRegistryFibonacci.ts',
-  'vendor/vela/src/core/drawings/advancedRegistryPatterns.ts',
+// Drawing-family loading policy: these tools are intentionally part of the initial chart
+// graph so clicking a family only opens its flyout. Check emitted chart assets—not just
+// source imports—so a future dynamic-import regression is caught by the bundle gate.
+const chartBundleSource = [...chartFiles]
+  .map((file) => fs.readFileSync(path.join(distDir, file), 'utf8'))
+  .join('\n');
+for (const [fragment, marker] of [
+  ['vendor/vela/src/core/drawings/advancedRegistryChannels.ts', 'Parallel Channel'],
+  ['vendor/vela/src/core/drawings/advancedRegistryFibonacci.ts', 'Fib Retracement'],
+  ['vendor/vela/src/core/drawings/advancedRegistryPatterns.ts', 'Gartley'],
 ]) {
-  const familyKey = keyFor(fragment);
-  if (!familyKey) {
-    throw new Error(`Advanced Vela drawing family is missing from the production manifest: ${fragment}`);
-  }
-  const familyFile = manifest[familyKey]?.file;
-  if (familyFile && chartFiles.has(familyFile)) {
-    throw new Error(`Advanced Vela drawing family ${fragment} leaked into the chart's initial static graph.`);
+  if (!chartBundleSource.includes(marker)) {
+    throw new Error(`Eager Vela drawing family is missing from the chart's initial static bundle: ${fragment} (marker: ${marker})`);
   }
 }
-console.log('  Vela drawing-family isolation: OK — channels, Fibonacci/Gann and patterns/harmonics stay deferred.');
-console.log('  Note: this validates the emitted manifest graph. Confirm the real browser Network waterfall on the deployed build as a separate release check.');
+console.log('  Vela drawing readiness: OK — channel, Fibonacci/Gann and pattern/harmonic tools are present before any family is clicked.');
+console.log('  Note: this checks the emitted initial chart graph; confirm the browser Network waterfall on the deployed build as a separate release check.');
