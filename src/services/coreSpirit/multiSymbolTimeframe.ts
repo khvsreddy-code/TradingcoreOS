@@ -140,14 +140,11 @@ export function synchronizeMarketSnapshots(
     const existing = bySymbol.get(identity);
     const time = Number(valid.timestamp ?? -Infinity);
     const oldTime = Number(existing?.timestamp ?? -Infinity);
-    const revision = snapshotRevision(valid);
-    const oldRevision = existing ? snapshotRevision(existing) : undefined;
-    const revisionIsNewer = revision != null && oldRevision == null
-      ? true
-      : typeof revision === 'number' && typeof oldRevision === 'number'
-        ? revision > oldRevision
-        : String(revision ?? '') > String(oldRevision ?? '');
-    if (!existing || time > oldTime || (time === oldTime && revisionIsNewer)) bySymbol.set(identity, valid);
+    const revisionOrder = !existing ? 1 :
+      typeof valid.revision === 'number' && typeof existing.revision === 'number' && valid.revision !== existing.revision
+        ? valid.revision > existing.revision ? 1 : -1
+        : String(snapshotRevision(valid)).localeCompare(String(snapshotRevision(existing)));
+    if (!existing || time > oldTime || (time === oldTime && revisionOrder > 0)) bySymbol.set(identity, valid);
   }
   return bySymbol;
 }
