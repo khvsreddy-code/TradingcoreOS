@@ -74,6 +74,7 @@ const contracts = [
   ['routes', ['src/routeContract.test.mjs', false]],
   ['indicator-dependency-graph', ['src/indicatorDependencyGraphContract.test.mjs', false]],
   ['indicator-incremental', ['src/indicatorIncrementalContract.test.mjs', false]],
+  ['reversal-price-levels', ['src/services/marketData/reversalPriceLevels.test.ts', true]],
   ['indicator-appearance', ['src/indicatorAppearanceContract.test.mjs', false]],
   ['indicator-parameter-system', ['src/indicatorParameterSystemContract.test.mjs', false]],
   ['indicator-conditional-settings', ['src/indicatorConditionalSettingsContract.test.mjs', false]],
