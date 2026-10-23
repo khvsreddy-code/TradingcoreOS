@@ -124,4 +124,17 @@ const callbackThrowsResult = executeCoreSpiritSeriesFusionGroupDispatched(
 );
 assert.equal(callbackThrowsResult, 'cpu', 'telemetry failures must not prevent safe CPU fallback');
 
+const gpuOnlyGroup = { ...group, eligibleBackends: ['cpu', 'gpu'] };
+const gpuProfiles = [
+  { backend: 'cpu', available: true, deterministic: true, vectorized: true },
+  { backend: 'wasm', available: false, deterministic: true, vectorized: true },
+  { backend: 'gpu', available: true, deterministic: false, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
+];
+assert.equal(selectCoreSpiritSeriesBackend(gpuOnlyGroup, {
+  realtime: false, bars: 2_000_000, deterministic: false, backends: gpuProfiles,
+}).requested, 'cpu', 'GPU must stay disabled unless explicitly opted in');
+assert.equal(selectCoreSpiritSeriesBackend(gpuOnlyGroup, {
+  realtime: false, bars: 2_000_000, deterministic: false, allowGpu: true, backends: gpuProfiles,
+}).requested, 'gpu', 'explicit research/batch opt-in may select the available stateless GPU profile');
+
 console.log('CoreSpirit series backend dispatcher safety contract: OK');
