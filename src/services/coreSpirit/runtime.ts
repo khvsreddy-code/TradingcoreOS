@@ -41,6 +41,7 @@ import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, ty
 import { CoreSpiritColumnarHistory } from './columnarMarketData';
 import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot, type CoreSpiritKernelSnapshotIdentity } from './kernelStateSnapshots';
 import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandbox } from './capabilitySandbox';
+import { validateSynchronizedSnapshot } from './multiSymbolTimeframe';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
 export type CoreSpiritModelPredictionResolver = (input: { modelName:string; field:'prediction'|'probability'; inputs:Readonly<Record<string,unknown>> }) => unknown;
@@ -1475,7 +1476,8 @@ export class CoreSpiritRuntime {
       const objectRef=ref && typeof ref==='object' ? ref as Record<string,unknown> : undefined;
       const symbol=objectRef?.kind==='market' ? String(objectRef.symbol ?? this.executionContext.symbol) : this.executionContext.symbol;
       const timeframe=objectRef?.kind==='market' ? String(objectRef.timeframe ?? this.executionContext.timeframe) : this.executionContext.timeframe;
-      if(objectRef?.kind==='market' && this.dataResolver?.requestAt){
+      if(objectRef?.kind==='market'){
+        if(!this.dataResolver?.requestAt) return finish(null);
         const ctx:CoreSpiritDataResolutionContext={
           asOfTimestamp:this.toEpoch(bar.timestamp),
           baseSymbol:this.executionContext.symbol,
@@ -1484,10 +1486,12 @@ export class CoreSpiritRuntime {
           revision:this.state.barState.revision,
           alignment:'last-confirmed',
         };
-        const now=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:0},ctx) as any;
-        const prior=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:1},ctx) as any;
-        current=Number(now?.value ?? now ?? Number.NaN);
-        previous=Number(prior?.value ?? prior ?? Number.NaN);
+        const now=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:0},ctx);
+        const prior=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:1},ctx);
+        const confirmedNow=now && typeof now==='object' ? validateSynchronizedSnapshot(now as CoreSpiritDataSnapshot,ctx) : null;
+        const confirmedPrior=prior && typeof prior==='object' ? validateSynchronizedSnapshot(prior as CoreSpiritDataSnapshot,ctx) : null;
+        current=Number(confirmedNow?.value ?? Number.NaN);
+        previous=Number(confirmedPrior?.value ?? Number.NaN);
       }else{
         current=Number(bars[index]?.close ?? Number.NaN);
         previous=Number(bars[Math.max(0,index-1)]?.close ?? Number.NaN);
@@ -1588,7 +1592,10 @@ export class CoreSpiritRuntime {
             const resolver=this.dataResolver;
             const value=resolver?.requestAt ? resolver.requestAt(req,ctx) : resolver?.request?.(req);
             if(value && typeof (value as any).then==='function') return finish(null);
-            const resolved=(value as any)?.value ?? null;
+            const validated=value && typeof value==='object'
+              ? validateSynchronizedSnapshot(value as CoreSpiritDataSnapshot,ctx)
+              : null;
+            const resolved=validated?.value ?? null;
             this.dataMemo.set(memoKey,resolved);
             return finish(resolved);
           }
@@ -1621,8 +1628,10 @@ export class CoreSpiritRuntime {
       // Async providers must prefetch into the host-owned snapshot before VM execution.
       if(value && typeof (value as any).then==='function') return finish(null);
       const snapshot=value as CoreSpiritDataSnapshot|undefined;
-      if(snapshot?.timestamp!=null && Number(snapshot.timestamp)>asOfTimestamp) return finish(null);
-      const resolved=snapshot?.value ?? null;
+      const validated=snapshot && typeof snapshot==='object'
+        ? validateSynchronizedSnapshot(snapshot,ctx)
+        : null;
+      const resolved=validated?.value ?? null;
       this.dataMemo.set(key,resolved);
       return finish(resolved);
     }
