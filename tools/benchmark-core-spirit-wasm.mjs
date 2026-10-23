@@ -1,19 +1,28 @@
 #!/usr/bin/env node
 import fs from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
-import { CoreSpiritExecutionVM } from '../src/services/coreSpirit/executionVM.ts';
-import { CoreSpiritOutputCollector } from '../src/services/coreSpirit/outputCollector.ts';
-import { CoreSpiritFusedSeriesCursor } from '../src/services/coreSpirit/seriesVector.ts';
-import { CoreSpiritWasmBackend } from '../src/services/coreSpirit/wasmBackend.ts';
+import {
+  CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH,
+  rollingMean, rollingSum, rollingVariance, rollingStd, rollingMin, rollingMax,
+} from '../src/services/coreSpirit/numericalKernels.ts';
+import { loadCoreSpiritBundledWasmSimdBackend } from '../src/services/coreSpirit/wasmBackend.ts';
 
-const DEFAULT_SIZES = [50_000, 500_000, 5_000_000];
+const DEFAULT_SIZES = [50_000, 250_000, 1_000_000];
+const DEFAULT_PERIOD = 20;
 
 function sizes() {
   const raw = process.env.TCO_BENCH_BAR_COUNTS;
-  if (!raw) return DEFAULT_SIZES;
-  return raw.split(',').map((x) => Math.max(1, Math.floor(Number(x)))).filter(Number.isFinite);
+  const requested = raw ? raw.split(',').map(value => Number(value.trim())) : DEFAULT_SIZES;
+  if (!requested.length || requested.some(value => !Number.isInteger(value) || value < 1 || value > CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH)) {
+    throw new Error(`TCO_BENCH_BAR_COUNTS must be comma-separated integers in [1, ${CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH}]`);
+  }
+  return requested;
 }
-
+function iterations() {
+  const value = Number(process.env.TCO_BENCH_ITERATIONS ?? 5);
+  if (!Number.isInteger(value) || value < 3 || value > 25) throw new Error('TCO_BENCH_ITERATIONS must be an integer in [3, 25]');
+  return value;
+}
 function makeCloseSeries(length) {
   const out = new Float64Array(length);
   let value = 100;
@@ -23,152 +32,101 @@ function makeCloseSeries(length) {
   }
   return out;
 }
-
-function bench(fn) {
-  const start = performance.now();
-  fn();
-  const elapsed = performance.now() - start;
-  return Object.freeze({ ms: elapsed, barsPerSecond: elapsed > 0 ? Math.round(1_000 * (fn.bars || 0) / elapsed) : Infinity });
+function median(values) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
-
-function runJsVm(input) {
-  const instructions = [
-    { op:'loadSeries', dest:'t0', name:'close', offset:0 },
-    { op:'const', dest:'t1', value:20 },
-    { op:'call', dest:'t2', name:'ema', args:['t0','t1'], seriesArgs:['close'], callId:'bench:ema' },
-    { op:'const', dest:'t3', value:14 },
-    { op:'call', dest:'t4', name:'sma', args:['t0','t3'], seriesArgs:['close'], callId:'bench:sma' },
-  ];
-  const vm = new CoreSpiritExecutionVM();
-  const output = new CoreSpiritOutputCollector(1);
-  const ema = { seed:[], value:null };
-  const sma = [];
-  let last = 0;
-  const host = {
-    maxStepsPerBar:100,
-    throwIfAborted(){},
-    loadSeries(name, offset){ return name === 'close' && offset === 0 ? input[last] : null; },
-    moveLocal(){ return null; },
-    setLocal(){},
-    unary(){ return null; },
-    binary(){ return null; },
-    tryFused(){ return false; },
-    call(instruction,args){
-      const x = Number(args[0]);
-      const period = Math.max(1, Math.floor(Number(args[1] ?? 20)));
-      if (instruction.name === 'sma') {
-        sma.push(x);
-        if (sma.length > period) sma.shift();
-        if (sma.length < period) return null;
-        let sum = 0;
-        for (let i = sma.length - period; i < sma.length; i += 1) sum += sma[i];
-        return sum / period;
-      }
-      if (instruction.name === 'ema') {
-        ema.seed.push(x);
-        if (ema.seed.length < period) return null;
-        if (ema.seed.length === period && ema.value == null) {
-          let sum = 0;
-          for (const value of ema.seed) sum += value;
-          ema.value = sum / period;
-          return ema.value;
-        }
-        if (ema.seed.length > period) ema.seed.shift();
-        const alpha = 2 / (period + 1);
-        ema.value = alpha * x + (1 - alpha) * ema.value;
-        return ema.value;
-      }
-      return null;
-    },
-    loadIndexed(){ return null; },
-    truthy(value){ return !!value; },
-    emit(){},
-    setLocalBySeriesId(){},
-    loadIndexedSeriesById(){ return null; },
-  };
-  for (last = 0; last < input.length; last += 1) vm.run(instructions, last, host, output);
-  return ema.value;
+function assertEquivalent(actual, expected, label, tolerance = 1e-7) {
+  if (actual.length !== expected.length) throw new Error(`${label}: output length mismatch ${actual.length} !== ${expected.length}`);
+  for (let i = 0; i < expected.length; i += 1) {
+    const want = expected[i], got = actual[i];
+    if (Number.isNaN(want)) {
+      if (!Number.isNaN(got)) throw new Error(`${label}: expected NaN at index ${i}, got ${got}`);
+    } else if (!Number.isFinite(want)) {
+      if (got !== want) throw new Error(`${label}: expected ${want} at index ${i}, got ${got}`);
+    } else if (!Number.isFinite(got) || Math.abs(got - want) > tolerance * Math.max(1, Math.abs(want))) {
+      throw new Error(`${label}: numerical mismatch at index ${i}, expected ${want}, got ${got}`);
+    }
+  }
 }
-
-function runJsFused(input) {
-  const cursor = new CoreSpiritFusedSeriesCursor([
-    { name:'sma', length:20 },
-    { name:'ema', length:20 },
-  ]);
-  const output = new Float64Array(input.length);
-  for (let i = 0; i < input.length; i += 1) output[i] = cursor.update(input[i], i)[1] ?? Number.NaN;
-  return output[input.length - 1];
-}
-
-async function loadWasm(path, variant) {
-  if (!path) return null;
-  const bytes = await fs.readFile(path);
-  const backend = new CoreSpiritWasmBackend();
-  const manifest = {
-    abiVersion:1,
-    simd:variant === 'simd',
-    kernels:[{name:'bench.sma_ema',variant,inputCount:1,outputCount:1,stateful:true,deterministic:true}],
-  };
-  await backend.load(bytes, manifest);
-  return backend;
-}
+const KERNELS = [
+  { name: 'rollingMean', reference: (input, period) => rollingMean(input, period), params: period => [period] },
+  { name: 'rollingSum', reference: (input, period) => rollingSum(input, period), params: period => [period] },
+  { name: 'rollingVariance', reference: (input, period) => rollingVariance(input, period), params: period => [period] },
+  { name: 'rollingStd', reference: (input, period) => rollingStd(input, period), params: period => [period] },
+  { name: 'rollingMin', reference: (input, period) => rollingMin(input, period), params: period => [period] },
+  { name: 'rollingMax', reference: (input, period) => rollingMax(input, period), params: period => [period] },
+];
 
 async function main() {
-  const scalarWasm = await loadWasm(process.env.TCO_CORESPIRIT_WASM_SCALAR, 'scalar');
-  const simdWasm = await loadWasm(process.env.TCO_CORESPIRIT_WASM_SIMD, 'simd');
-
+  const barCounts = sizes();
+  const repeatCount = iterations();
+  const bytes = await fs.readFile(new URL('../public/coreSpirit/numerical-kernels-simd.wasm', import.meta.url));
+  const wasm = await loadCoreSpiritBundledWasmSimdBackend({ source: bytes });
+  const lifecycle = wasm.lifecycle();
+  if (lifecycle.state !== 'ready') throw new Error('bundled WASM failed its load/warm-up lifecycle');
   const rows = [];
-  for (const bars of sizes()) {
+  for (const bars of barCounts) {
     const input = makeCloseSeries(bars);
+    for (const kernel of KERNELS) {
+      const expected = kernel.reference(input, DEFAULT_PERIOD);
+      const warmOutput = new Float64Array(bars);
+      const warmResult = await wasm.execute({ kernel: kernel.name, inputs: [input], outputs: [warmOutput], params: kernel.params(DEFAULT_PERIOD) });
+      assertEquivalent(warmOutput, expected, kernel.name + ' warm-up parity');
 
-    const vmStart = performance.now();
-    const vmLast = runJsVm(input);
-    const vmMs = performance.now() - vmStart;
-
-    const fusedStart = performance.now();
-    const fusedLast = runJsFused(input);
-    const fusedMs = performance.now() - fusedStart;
-
-    const row = {
-      bars,
-      jsVmMs: Number(vmMs.toFixed(3)),
-      jsVmBarsPerSec: Math.round(1_000 * bars / Math.max(vmMs, 0.001)),
-      jsVmLast: Number(vmLast ?? NaN),
-      jsFusedMs: Number(fusedMs.toFixed(3)),
-      jsFusedBarsPerSec: Math.round(1_000 * bars / Math.max(fusedMs, 0.001)),
-      jsFusedLast: Number(fusedLast ?? NaN),
-      wasmScalarMs:'not-configured',
-      wasmScalarBarsPerSec:'not-configured',
-      wasmSimdMs:'not-configured',
-      wasmSimdBarsPerSec:'not-configured',
-    };
-
-    const runWasm = async (backend, key) => {
-      if (!backend) return;
-      const output = new Float64Array(bars);
-      const start = performance.now();
-      await backend.execute({ kernel:'bench.sma_ema', inputs:[input], outputs:[output], params:[20] });
-      const elapsed = performance.now() - start;
-      row[key + 'Ms'] = Number(elapsed.toFixed(3));
-      row[key + 'BarsPerSec'] = Math.round(1_000 * bars / Math.max(elapsed, 0.001));
-    };
-
-    await runWasm(scalarWasm, 'wasmScalar');
-    await runWasm(simdWasm, 'wasmSimd');
-    rows.push(row);
+      const cpuSamples = [];
+      for (let i = 0; i < repeatCount; i += 1) {
+        const started = performance.now();
+        const output = kernel.reference(input, DEFAULT_PERIOD);
+        cpuSamples.push(performance.now() - started);
+        if (i === 0) assertEquivalent(output, expected, kernel.name + ' CPU repeat parity');
+      }
+      const wasmEndToEndSamples = [];
+      const wasmKernelSamples = [];
+      let lastOutput;
+      for (let i = 0; i < repeatCount; i += 1) {
+        const output = new Float64Array(bars);
+        const started = performance.now();
+        const result = await wasm.execute({ kernel: kernel.name, inputs: [input], outputs: [output], params: kernel.params(DEFAULT_PERIOD) });
+        wasmEndToEndSamples.push(performance.now() - started);
+        wasmKernelSamples.push(result.wasmElapsedMs);
+        lastOutput = output;
+      }
+      assertEquivalent(lastOutput, expected, kernel.name + ' measured parity');
+      const cpuMedianMs = median(cpuSamples);
+      const wasmEndToEndMedianMs = median(wasmEndToEndSamples);
+      const wasmKernelMedianMs = median(wasmKernelSamples);
+      rows.push({
+        bars,
+        operation: kernel.name,
+        actualKernelVariant: wasm.kernelVariant(kernel.name),
+        actualBackend: wasm.kernelVariant(kernel.name) === 'simd' ? 'wasm-simd' : 'wasm-scalar',
+        cpuMedianMs: Number(cpuMedianMs.toFixed(3)),
+        wasmKernelMedianMs: Number(wasmKernelMedianMs.toFixed(3)),
+        wasmEndToEndMedianMs: Number(wasmEndToEndMedianMs.toFixed(3)),
+        cpuBarsPerSecond: Math.round(bars * 1000 / Math.max(cpuMedianMs, 0.001)),
+        wasmEndToEndBarsPerSecond: Math.round(bars * 1000 / Math.max(wasmEndToEndMedianMs, 0.001)),
+        endToEndSpeedup: Number((cpuMedianMs / Math.max(wasmEndToEndMedianMs, 0.001)).toFixed(3)),
+        inputOutputBytes: bars * Float64Array.BYTES_PER_ELEMENT * 2,
+        parity: 'passed',
+        wasmLoadWarmupKernelMs: Number(warmResult.wasmElapsedMs.toFixed(3)),
+      });
+    }
   }
-
   console.table(rows);
   console.log(JSON.stringify({
-    benchmark:'CoreSpirit backend comparison',
-    lanes:['js VM','js fused','WASM scalar','WASM SIMD'],
-    sizes:sizes(),
-    wasmAbi:1,
-    note:'WASM results appear only when TCO_CORESPIRIT_WASM_SCALAR and/or TCO_CORESPIRIT_WASM_SIMD point to compatible kernel modules.',
+    benchmark: 'CoreSpirit bundled numerical kernel backend comparison',
+    wasmAbi: 2,
+    wasmLifecycle: lifecycle,
+    kernelVariants: Object.fromEntries(KERNELS.map(kernel => [kernel.name, wasm.kernelVariant(kernel.name)])),
+    period: DEFAULT_PERIOD,
+    sizes: barCounts,
+    iterations: repeatCount,
+    tolerance: '1e-7 relative for finite outputs; NaN and infinities must match exactly',
+    measurements: ['CPU typed-array reference', 'WASM kernel-only time', 'WASM end-to-end time including transfer/allocation'],
+    policy: 'Performance ratios are measured per environment; the benchmark never labels WASM as a win unless end-to-end speedup exceeds 1.0x.',
+    results: rows,
   }, null, 2));
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(error => { console.error(error); process.exitCode = 1; });
