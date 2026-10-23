@@ -16,7 +16,7 @@ import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
 import { TradingKillSwitchRepository } from '../trading/TradingKillSwitchRepository.js';
-import { evaluateManualFyersPreTradeRisk } from '../trading/AutomationPreTradeRiskEngine.js';
+import { evaluateManualPreTradeRisk } from '../trading/AutomationPreTradeRiskEngine.js';
 
 export const tradingRoutes = Router();
 
@@ -202,12 +202,13 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       res.status(claim.record?.state === 'completed' ? 200 : 502).json(claim.record?.response ?? { success: false, error: 'Previous order result is unavailable.' }); return;
     }
     const requestId = req.get('x-request-id');
-    if (brokerId === 'fyers') {
-      const risk = await evaluateManualFyersPreTradeRisk({
+    {
+      const risk = await evaluateManualPreTradeRisk({
         userId,
         accessToken: req.accessToken,
         broker: req.brokerAdapter,
         order: orderPayload,
+        brokerMarginCheck: brokerId === 'fyers',
       });
       if (!risk.approved) {
         const response = {
