@@ -83,8 +83,21 @@ function isConfirmedSnapshot(snapshot: CoreSpiritDataSnapshot): boolean {
   return snapshot.state === 'confirmed' || snapshot.state === 'historical';
 }
 
-function snapshotRevision(snapshot: CoreSpiritDataSnapshot): string | number | undefined {
-  return snapshot.dataRevision ?? snapshot.revision;
+function snapshotRevision(snapshot: CoreSpiritDataSnapshot): string | number {
+  const explicit = snapshot.dataRevision ?? snapshot.revision;
+  if (explicit != null) return explicit;
+  // Compatibility providers may not issue an explicit revision. Derive a
+  // deterministic content identity so cache keys still change when the sample
+  // payload changes and result selection never depends on arrival order.
+  return 'content:' + JSON.stringify([
+    snapshot.symbol.trim().toUpperCase(),
+    snapshot.timeframe.trim().toLowerCase(),
+    snapshot.timestamp ?? null,
+    snapshot.value,
+    snapshot.source,
+    snapshot.state ?? null,
+    snapshot.confirmationPhase ?? null,
+  ]);
 }
 
 export function validateSynchronizedSnapshot(
@@ -92,7 +105,8 @@ export function validateSynchronizedSnapshot(
   context: SnapshotValidationContext,
 ): CoreSpiritDataSnapshot | null {
   if (!snapshot) return null;
-  if (!snapshot.symbol.trim() || !snapshot.timeframe.trim()) return null;
+  if (typeof snapshot.symbol !== 'string' || typeof snapshot.timeframe !== 'string' ||
+      !snapshot.symbol.trim() || !snapshot.timeframe.trim() || typeof snapshot.source !== 'string') return null;
   if (snapshot.timestamp != null && !Number.isFinite(Number(snapshot.timestamp))) return null;
   if (snapshot.timestamp != null && Number(snapshot.timestamp) > context.asOfTimestamp) return null;
 
@@ -106,13 +120,14 @@ export function validateSynchronizedSnapshot(
       context.alignment !== 'developing') return null;
   if (context.maxStalenessMs != null && snapshot.timestamp != null &&
       context.asOfTimestamp - Number(snapshot.timestamp) > context.maxStalenessMs) return null;
-  // Reading a snapshot without revision metadata remains a compatibility path;
-  // the graph/cache adapter emits an explicit dataRevision for canonical data.
-  void snapshotRevision(snapshot);
-  return snapshot;
+  const dataRevision = snapshotRevision(snapshot);
+  return Object.freeze({
+    ...snapshot,
+    dataRevision,
+  });
 }
 
-/** Pick the latest eligible sample per symbol at the same base clock. */
+/** Pick the latest eligible sample per canonical symbol/timeframe identity at the same base clock. */
 export function synchronizeMarketSnapshots(
   snapshots: readonly CoreSpiritDataSnapshot[],
   context: SnapshotValidationContext,
