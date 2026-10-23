@@ -14,6 +14,25 @@ export type CoreSpiritTimeframeAlignmentOptions = Readonly<{
   calendar?: CoreSpiritIntrabarCalendar;
 }>;
 
+function nominalTimeframeSeconds(value: string): number {
+  const raw = String(value ?? '').trim();
+  if (/^\d+$/.test(raw)) return Number(raw) * 60;
+  const match = /^(\d+)\s*(m|min|minute|h|hr|hour|d|day)$/i.exec(raw);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  const unit = match[2]!.toLowerCase();
+  if (unit === 'm' || unit === 'min' || unit === 'minute') return amount * 60;
+  if (unit === 'h' || unit === 'hr' || unit === 'hour') return amount * 3600;
+  return amount * 86400;
+}
+
+function closeTimestamp(snapshot: CoreSpiritDataSnapshot): number | undefined {
+  if (snapshot.closeTimestamp != null) return Number(snapshot.closeTimestamp);
+  if (snapshot.timestamp == null) return undefined;
+  const duration = nominalTimeframeSeconds(snapshot.timeframe);
+  return duration > 0 ? Number(snapshot.timestamp) + duration : undefined;
+}
+
 function confirmed(snapshot: CoreSpiritDataSnapshot): boolean {
   if (snapshot.confirmationPhase === 'developing' ||
       snapshot.state === 'developing' || snapshot.state === 'realtime') return false;
@@ -27,7 +46,8 @@ function eligibleAt(snapshot: CoreSpiritDataSnapshot, targetTimestamp: number, c
   if (snapshot.timestamp == null || Number(snapshot.timestamp) > targetTimestamp) return false;
   if (!confirmedOnly) return true;
   if (!confirmed(snapshot)) return false;
-  return snapshot.closeTimestamp == null || Number(snapshot.closeTimestamp) <= targetTimestamp;
+  const close = closeTimestamp(snapshot);
+  return close != null && Number.isFinite(close) && close <= targetTimestamp;
 }
 
 function compareRevision(a: CoreSpiritDataSnapshot, b: CoreSpiritDataSnapshot): number {
@@ -97,7 +117,8 @@ export function alignSnapshots(
     while (index >= 0 && !eligibleAt(ordered[index]!, timestamp, confirmedOnly)) index -= 1;
     const current = index >= 0 ? ordered[index] : undefined;
     if (!current) return { timestamp, value:null, state:'historical' as const };
-    const closeNotReached = current.closeTimestamp != null && Number(current.closeTimestamp) > timestamp;
+    const currentCloseTimestamp = closeTimestamp(current);
+    const closeNotReached = currentCloseTimestamp == null || currentCloseTimestamp > timestamp;
     const isDeveloping = !confirmed(current) || closeNotReached;
     return {
       timestamp,
