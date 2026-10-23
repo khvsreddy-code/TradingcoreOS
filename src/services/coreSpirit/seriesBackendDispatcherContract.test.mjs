@@ -6,6 +6,7 @@ import {
   loadCoreSpiritBundledWasmSeriesRuntime,
 } from './seriesBackendDispatcher.ts';
 import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion.ts';
+import { coreSpiritSeriesExecutionClass } from './seriesVector.ts';
 
 const group = {
   id: 'g', nodeIds: ['a', 'b'], instructions: [1, 2],
@@ -16,6 +17,17 @@ const group = {
 };
 
 assert.equal(selectCoreSpiritSeriesBackend(group, { realtime: true, bars: 100_000 }).requested, 'cpu');
+
+assert.equal(coreSpiritSeriesExecutionClass('change'), 'stateless',
+  'fixed-lag change must not be mistaken for a recursive indicator');
+assert.equal(coreSpiritSeriesExecutionClass('pctchange'), 'stateless',
+  'fixed-lag percentage change must not be mistaken for a recursive indicator');
+assert.equal(coreSpiritSeriesExecutionClass('sma'), 'rolling-state',
+  'finite-window calculations should be distinguished from recursive indicators');
+assert.equal(coreSpiritSeriesExecutionClass('persistence'), 'rolling-state',
+  'bounded persistence windows are rolling state, not prior-output recurrence');
+assert.equal(coreSpiritSeriesExecutionClass('ema'), 'recursive');
+assert.equal(coreSpiritSeriesExecutionClass('rma'), 'recursive');
 
 const deterministic = selectCoreSpiritSeriesBackend(group, {
   realtime: false, bars: 2_000_000, deterministic: true,
