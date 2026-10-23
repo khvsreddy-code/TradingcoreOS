@@ -246,7 +246,7 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     if(alignment==='exact')return node.time[index]===asOf?index:-1;
     if(alignment==='last-confirmed'||alignment==='nearest-confirmed'){
       const seconds=timeframeSeconds(node.timeframe);
-      while(index>=0&&seconds>0&&node.time[index]!+seconds>asOf)index-=1;
+      while(index>=0&&seconds>0&&(node.closeTime?.[index] ?? node.time[index]!+seconds)>asOf)index-=1;
     }
     return index;
   }
@@ -265,7 +265,6 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     const timestamp=Number(node.time[index]);
     const barDurationSeconds=timeframeSeconds(node.timeframe);
     const freshnessTimestamp=timestamp+(barDurationSeconds>0?barDurationSeconds:0);
-    const staleAgeMs=Math.max(0,asOf-freshnessTimestamp)*1000;
     const dataRevision = node.dataRevision ?? node.revision;
     const closeTime = node.closeTime?.[index] ?? freshnessTimestamp;
     const effectiveStaleAgeMs = Math.max(0,asOf-closeTime)*1000;
