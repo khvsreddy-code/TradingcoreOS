@@ -36,6 +36,7 @@ export type {
   EngineCapabilities,
   PreparedScript,
   ExecutionRequest,
+  ExecutionMarketCalendar,
   ExecutionHandlers,
   ExecutionSession,
 } from '../../../../vendor/vela/src/core/ports/ScriptingEngine';
