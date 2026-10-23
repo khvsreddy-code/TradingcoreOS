@@ -211,7 +211,6 @@ function cloneSnapshotNode(
 
 export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
   private nodes=new Map<string,CoreSpiritGraphSnapshotNode>();
-  private snapshotRevision = 0;
   constructor(
     snapshot:CoreSpiritGraphSnapshot,
     private readonly baseSymbol='current',
@@ -220,7 +219,6 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
 
   replaceSnapshot(snapshot:CoreSpiritGraphSnapshot):void{
     this.nodes.clear();
-    this.snapshotRevision = snapshot.revision;
     for(const node of snapshot.nodes) {
       if (node.time.length !== node.open.length || node.time.length !== node.high.length ||
           node.time.length !== node.low.length || node.time.length !== node.close.length ||
@@ -334,6 +332,7 @@ export function graphSnapshotTransferables(snapshot:CoreSpiritGraphSnapshot):Tra
   const transferables:Transferable[]=[];
   for(const node of snapshot.nodes){
     transferables.push(node.time.buffer,node.open.buffer,node.high.buffer,node.low.buffer,node.close.buffer,node.volume.buffer);
+    if (node.closeTime) transferables.push(node.closeTime.buffer);
   }
   return transferables;
 }
