@@ -28,6 +28,7 @@ const contracts = [
   ['corespirit-mutation-conformance', ['src/services/coreSpirit/mutationConformance.test.ts', true]],
   ['corespirit-canonical-pipeline', ['src/services/coreSpirit/canonicalCompilerPipelineContract.test.mjs', true]],
   ['corespirit-optimizer-production', ['src/services/coreSpirit/optimizerProductionContract.test.mjs', true]],
+  ['corespirit-optimized-execution-cache-context', ['src/services/coreSpirit/coreSpiritOptimizedExecutionContract.test.mjs', true]],
   ['corespirit-optimizer-register-version', ['src/services/coreSpirit/optimizerRegisterVersionContract.test.mjs', true]],
   ['corespirit-optimizer-constant-register-version', ['src/services/coreSpirit/optimizerConstantRegisterVersionContract.test.mjs', true]],
   ['corespirit-optimizer-control-flow-reassignment', ['src/services/coreSpirit/optimizerControlFlowReassignmentContract.test.mjs', true]],
