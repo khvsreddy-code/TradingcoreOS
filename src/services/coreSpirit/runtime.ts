@@ -432,9 +432,10 @@ export class CoreSpiritRuntime {
   }
 
   /**
-   * Detect a historical correction before executeIr resets state. Index-stable edits
-   * get an explicit causal plan; structural timeline changes stay on full replay.
-   * When no safe restore point is being used, execution deliberately replays from bar zero.
+   * Detect a historical correction before executeIr resets state. The runtime currently
+   * rebuilds the full execution context for every executeIr(), so the public plan must
+   * report a full replay even when the dirty graph identifies a narrower causal range.
+   * The original changed range remains attached for diagnostics and future safe replay.
    */
   private planHistoricalCorrection(
     previousIr: CoreSpiritIrProgram | undefined,
@@ -452,7 +453,7 @@ export class CoreSpiritRuntime {
           changedRange: Object.freeze({ from:0, to:nextBars.length }),
           replayFrom:0,
           requiresStateRestore,
-          reason: requiresStateRestore ? 'full-replay-no-safe-checkpoint' : 'stateless-range',
+          reason: requiresStateRestore ? 'full-replay-no-safe-checkpoint' : 'full-replay-conservative',
         }),
       };
     };
@@ -477,7 +478,24 @@ export class CoreSpiritRuntime {
       for (const source of changed) changedSources.add(source);
     }
     if (to <= from) return undefined;
-    return this.dirtyGraph.planCorrection([...changedSources], { from, to }, nextBars.length);
+
+    const causalPlan = this.dirtyGraph.planCorrection([...changedSources], { from, to }, nextBars.length);
+    // executeIr below resets kernel state and processes all bars in chronological
+    // order. Never publish the narrower causal-plan ranges as if they were the
+    // work actually performed. Keep its changedRange, but report the real full
+    // replay and remove any checkpoint claim (none is restored in this path).
+    const requiresStateRestore = causalPlan.correction?.requiresStateRestore === true;
+    const full = this.dirtyGraph.planFull(nextBars.length);
+    return {
+      ...full,
+      sourceFields: causalPlan.sourceFields,
+      correction: Object.freeze({
+        changedRange: Object.freeze({ from, to }),
+        replayFrom: 0,
+        requiresStateRestore,
+        reason: requiresStateRestore ? 'full-replay-no-safe-checkpoint' : 'full-replay-conservative',
+      }),
+    };
   }
 
   loadProgram(program: CoreSpiritProgram): CoreSpiritIrProgram {
