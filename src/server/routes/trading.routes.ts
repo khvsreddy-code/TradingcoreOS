@@ -177,7 +177,10 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
   }
   let orderPayload: BrokerOrderPayload;
   try {
-    orderPayload = parseBrokerOrderPayload(req.body);
+    const brokerRequestBody = isRecord(req.body)
+      ? Object.fromEntries(Object.entries(req.body).filter(([key]) => key !== 'strategyId'))
+      : req.body;
+    orderPayload = parseBrokerOrderPayload(brokerRequestBody);
     if (brokerId === 'fyers') validateFyersManualOrderPreflight(orderPayload);
   } catch (error: unknown) {
     res.status(getErrorStatus(error) >= 400 && getErrorStatus(error) < 500 ? getErrorStatus(error) : 400).json({
