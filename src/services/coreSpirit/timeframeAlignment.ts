@@ -47,7 +47,12 @@ function canonicalTimeline(
   confirmedOnly: boolean,
 ): CoreSpiritDataSnapshot[] {
   const ordered = snapshots
-    .filter(snapshot => snapshot.timestamp != null && Number.isFinite(Number(snapshot.timestamp)))
+    .filter(snapshot =>
+      snapshot.timestamp != null &&
+      Number.isFinite(Number(snapshot.timestamp)) &&
+      (snapshot.closeTimestamp == null ||
+        (Number.isFinite(Number(snapshot.closeTimestamp)) && Number(snapshot.closeTimestamp) >= Number(snapshot.timestamp))),
+    )
     .slice()
     .sort((a, b) => {
       const timestamp = Number(a.timestamp) - Number(b.timestamp);
