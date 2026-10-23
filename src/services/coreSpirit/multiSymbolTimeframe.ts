@@ -119,7 +119,7 @@ export function validateSynchronizedSnapshot(
   if ((snapshot.confirmationPhase === 'developing' || snapshot.state === 'developing' || snapshot.state === 'realtime') &&
       context.alignment !== 'developing') return null;
   if (context.maxStalenessMs != null && snapshot.timestamp != null &&
-      context.asOfTimestamp - Number(snapshot.timestamp) > context.maxStalenessMs) return null;
+      Math.max(0, context.asOfTimestamp - Number(snapshot.timestamp)) * 1000 > context.maxStalenessMs) return null;
   const dataRevision = snapshotRevision(snapshot);
   return Object.freeze({
     ...snapshot,
