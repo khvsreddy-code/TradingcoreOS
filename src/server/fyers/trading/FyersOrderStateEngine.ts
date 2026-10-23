@@ -110,7 +110,14 @@ export function canTransitionFyersOrderStatus(
   if (current === 'UNKNOWN') return next !== 'UNKNOWN';
   if (next === 'UNKNOWN') return false;
   if (TERMINAL.has(current)) {
-    return source === 'reconciliation' && TERMINAL.has(next);
+    // FILLED is an irreversible fact: a delayed cancellation/rejection snapshot
+    // must never downgrade an order after its complete fill was observed.
+    if (current === 'FILLED') return false;
+    // A cancellation can race a final execution. Permit only an authoritative
+    // REST reconciliation to correct CANCELLED -> FILLED; other terminal
+    // outcomes remain stable unless a future broker-specific policy proves
+    // the correction is safe.
+    return source === 'reconciliation' && current === 'CANCELLED' && next === 'FILLED';
   }
   if (source === 'reconciliation') return true;
   if (current === 'INTENT') return ['SUBMITTED','ACKNOWLEDGED','OPEN','PARTIAL','FILLED','CANCEL_PENDING','CANCELLED','REJECTED','EXPIRED'].includes(next);
