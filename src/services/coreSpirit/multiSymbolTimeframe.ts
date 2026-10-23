@@ -11,6 +11,7 @@ import type {
   CoreSpiritDataAlignment,
   CoreSpiritDataRequest,
 } from './types';
+import { timeframeSeconds } from '../core/data/marketDataGraph';
 
 export const CORE_SPIRIT_MULTI_SYMBOL_TIMEFRAME_VERSION = 1 as const;
 
@@ -76,7 +77,7 @@ export function createTimeframeReference(
 }
 
 type SnapshotValidationContext = Pick<CoreSpiritDataResolutionContext, 'asOfTimestamp' | 'alignment' | 'maxStalenessMs'> &
-  Partial<Pick<CoreSpiritDataResolutionContext, 'executionMode'>>;
+  Partial<Pick<CoreSpiritDataResolutionContext, 'executionMode' | 'baseTimeframe'>>;
 
 function isConfirmedSnapshot(snapshot: CoreSpiritDataSnapshot): boolean {
   // Conflicting metadata fails closed. A "confirmed" phase cannot override a
@@ -89,6 +90,19 @@ function isConfirmedSnapshot(snapshot: CoreSpiritDataSnapshot): boolean {
   return snapshot.state === 'confirmed' || snapshot.state === 'historical';
 }
 
+function effectiveCloseTimestamp(
+  snapshot: CoreSpiritDataSnapshot,
+  context: Pick<CoreSpiritDataResolutionContext,'baseTimeframe'>,
+): number | undefined {
+  if (snapshot.closeTimestamp != null) return Number(snapshot.closeTimestamp);
+  if (snapshot.timestamp == null) return undefined;
+  const timeframe = snapshot.timeframe.trim().toLowerCase() === 'chart'
+    ? context.baseTimeframe
+    : snapshot.timeframe;
+  const durationSeconds = timeframeSeconds(timeframe);
+  return durationSeconds > 0 ? Number(snapshot.timestamp) + durationSeconds : undefined;
+}
+
 function snapshotRevision(snapshot: CoreSpiritDataSnapshot): string | number {
   const explicit = snapshot.dataRevision ?? snapshot.revision;
   if (explicit != null) return explicit;
@@ -99,6 +113,7 @@ function snapshotRevision(snapshot: CoreSpiritDataSnapshot): string | number {
     snapshot.symbol.trim().toUpperCase(),
     snapshot.timeframe.trim().toLowerCase(),
     snapshot.timestamp ?? null,
+    snapshot.closeTimestamp ?? null,
     snapshot.value,
     snapshot.source,
     snapshot.state ?? null,
@@ -113,30 +128,49 @@ export function validateSynchronizedSnapshot(
   if (!snapshot) return null;
   if (typeof snapshot.symbol !== 'string' || typeof snapshot.timeframe !== 'string' ||
       !snapshot.symbol.trim() || !snapshot.timeframe.trim() || typeof snapshot.source !== 'string') return null;
-  if (snapshot.timestamp != null && !Number.isFinite(Number(snapshot.timestamp))) return null;
+  // Timestamp is mandatory. Without an open time the value cannot be causally
+  // placed on the decision timeline, even if the provider labels it confirmed.
+  if (snapshot.timestamp == null || !Number.isFinite(Number(snapshot.timestamp))) return null;
+  if (Number(snapshot.timestamp) > context.asOfTimestamp) return null;
+
+  const resolvedCloseTimestamp = effectiveCloseTimestamp(snapshot, {
+    baseTimeframe:context.baseTimeframe ?? 'unknown',
+  });
   if (snapshot.closeTimestamp != null && !Number.isFinite(Number(snapshot.closeTimestamp))) return null;
-  if (snapshot.timestamp != null && Number(snapshot.timestamp) > context.asOfTimestamp) return null;
-  if (snapshot.timestamp != null && snapshot.closeTimestamp != null &&
-      Number(snapshot.closeTimestamp) < Number(snapshot.timestamp)) return null;
+  if (resolvedCloseTimestamp != null && (!Number.isFinite(resolvedCloseTimestamp) ||
+      resolvedCloseTimestamp < Number(snapshot.timestamp))) return null;
 
   const confirmedOnly = context.executionMode != null
     ? context.executionMode !== 'realtime'
     : context.alignment === 'last-confirmed' || context.alignment === 'nearest-confirmed';
   const requiresClosedSample = confirmedOnly ||
     context.alignment === 'last-confirmed' || context.alignment === 'nearest-confirmed';
-  if (requiresClosedSample && snapshot.closeTimestamp != null &&
-      Number(snapshot.closeTimestamp) > context.asOfTimestamp) return null;
-  // A confirmed historical/replay decision must never consume a developing or
-  // unlabelled higher-timeframe sample, even when the requested alignment is exact.
+
+  // If this mode requires a finalized sample, both the close boundary and
+  // confirmation metadata must prove eligibility. Unknown timeframes fail closed.
+  if (requiresClosedSample && resolvedCloseTimestamp == null) return null;
+  if (requiresClosedSample && resolvedCloseTimestamp != null &&
+      resolvedCloseTimestamp > context.asOfTimestamp) return null;
   if (confirmedOnly && !isConfirmedSnapshot(snapshot)) return null;
-  if ((snapshot.confirmationPhase === 'developing' || snapshot.state === 'developing' || snapshot.state === 'realtime') &&
-      context.alignment !== 'developing') return null;
-  const freshnessTimestamp = snapshot.closeTimestamp ?? snapshot.timestamp;
-  if (context.maxStalenessMs != null && freshnessTimestamp != null &&
-      Math.max(0, context.asOfTimestamp - Number(freshnessTimestamp)) * 1000 > context.maxStalenessMs) return null;
+
+  const markedDeveloping = snapshot.confirmationPhase === 'developing' ||
+    snapshot.state === 'developing' || snapshot.state === 'realtime';
+  if (markedDeveloping && context.alignment !== 'developing') return null;
+  const closeNotReached = resolvedCloseTimestamp != null &&
+    resolvedCloseTimestamp > context.asOfTimestamp;
+  // A future close is usable only in an explicit realtime/developing context,
+  // and is normalized to developing even if a provider mislabeled it confirmed.
+  if (closeNotReached &&
+      (context.executionMode !== 'realtime' || context.alignment !== 'developing')) return null;
+
+  const freshnessTimestamp = resolvedCloseTimestamp ?? Number(snapshot.timestamp);
+  if (context.maxStalenessMs != null &&
+      Math.max(0, context.asOfTimestamp - freshnessTimestamp) * 1000 > context.maxStalenessMs) return null;
   const dataRevision = snapshotRevision(snapshot);
   return Object.freeze({
     ...snapshot,
+    ...(resolvedCloseTimestamp == null ? {} : { closeTimestamp:resolvedCloseTimestamp }),
+    ...(closeNotReached ? {state:'developing' as const,confirmationPhase:'developing' as const} : {}),
     dataRevision,
   });
 }
