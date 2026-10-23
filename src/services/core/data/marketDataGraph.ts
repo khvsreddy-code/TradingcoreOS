@@ -290,25 +290,23 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     if(index<0||index>=node.time.length)return {value:null,source:alignment==='exact'?'data-graph:unaligned':'data-graph:empty',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
     const timestamp=Number(node.time[index]);
     const barDurationSeconds=timeframeSeconds(node.timeframe);
-    const freshnessTimestamp=timestamp+(barDurationSeconds>0?barDurationSeconds:0);
+    const closeTime = node.closeTime?.[index] ?? timestamp+(barDurationSeconds>0?barDurationSeconds:0);
     const dataRevision = node.dataRevision ?? node.revision;
-    const closeTime = node.closeTime?.[index] ?? freshnessTimestamp;
     const effectiveStaleAgeMs = Math.max(0,asOf-closeTime)*1000;
+    const isConfirmed=barDurationSeconds<=0||closeTime<=asOf;
     if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&effectiveStaleAgeMs>ctx.maxStalenessMs){
       return {
         value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,
-        timestamp,state:'historical',confirmationPhase:'confirmed',revision:node.revision,dataRevision,
+        timestamp,closeTimestamp:closeTime,state:'historical',confirmationPhase:'confirmed',revision:node.revision,dataRevision,
       };
     }
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
     const value=columns[request.field]?.[index];
-    const seconds=timeframeSeconds(node.timeframe);
-    const closeBoundary=node.closeTime?.[index] ?? timestamp+seconds;
-    const isConfirmed=seconds<=0||closeBoundary<=asOf;
     const common = {
       symbol:node.symbol,
       timeframe:node.timeframe,
       timestamp,
+      closeTimestamp:closeTime,
       revision:node.revision,
       dataRevision:node.dataRevision ?? node.revision,
       confirmationPhase:isConfirmed ? 'confirmed' as const : 'developing' as const,
