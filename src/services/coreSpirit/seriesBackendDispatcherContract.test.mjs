@@ -167,6 +167,21 @@ const wasmRuntime = await loadCoreSpiritBundledWasmSeriesRuntime({ source: wasmB
 assert.equal(wasmRuntime.backend.lifecycle().state, 'ready');
 assert.equal(wasmRuntime.backend.kernelVariant('rollingMean'), 'simd');
 assert.equal(wasmRuntime.backend.kernelVariant('rollingMax'), 'scalar');
+
+const wasmCapabilities = wasmRuntime.backend.profile();
+assert.ok(wasmCapabilities?.available, 'only a warmed module may advertise available capabilities');
+assert.deepEqual(
+  [...(wasmCapabilities?.supportedOperations ?? [])].sort(),
+  ['rollingMax', 'rollingMean', 'rollingMin', 'rollingStd', 'rollingSum', 'rollingVariance'],
+  'the advertised capability inventory must match the six ABI operations implemented by the bundled binary',
+);
+for (const operation of wasmCapabilities.supportedOperations) {
+  assert.equal(wasmRuntime.backend.hasKernel(operation), true, 'advertised kernel must be executable: ' + operation);
+  assert.ok(['scalar', 'simd'].includes(wasmRuntime.backend.kernelVariant(operation)),
+    'advertised kernel must have a verified variant: ' + operation);
+}
+assert.equal(wasmRuntime.backend.hasKernel('ema'), false, 'recursive kernels must not be advertised until compiled and warmed');
+assert.equal(wasmRuntime.backend.hasKernel('pctchange'), false, 'unimplemented aliases must not be advertised as WASM kernels');
 const parityGroup = {
   ...group,
   id: 'bundled-wasm-series-parity',
