@@ -8,6 +8,27 @@ export type CoreSpiritSeriesOperationName =
   | 'wma' | 'median' | 'zscore' | 'normalize' | 'persistence'
   | 'ema' | 'rma';
 
+/**
+ * Describes the temporal dependency of a series operation, not how its
+ * implementation happens to store state while processing a batch.
+ *
+ * - stateless: output depends only on the current value and its fixed lag(s)
+ * - rolling-state: bounded window state; each output is independently defined
+ *   by a finite window (e.g. SMA, extrema, persistence)
+ * - recursive: output depends on a prior output/state (e.g. EMA/RMA)
+ */
+export type CoreSpiritSeriesExecutionClass = 'stateless' | 'rolling-state' | 'recursive';
+
+const STATELESS_SERIES_OPERATIONS: ReadonlySet<string> = new Set(['change', 'pctchange']);
+const RECURSIVE_SERIES_OPERATIONS: ReadonlySet<string> = new Set(['ema', 'rma']);
+
+export function coreSpiritSeriesExecutionClass(name: string): CoreSpiritSeriesExecutionClass | undefined {
+  if (STATELESS_SERIES_OPERATIONS.has(name)) return 'stateless';
+  if (RECURSIVE_SERIES_OPERATIONS.has(name)) return 'recursive';
+  if (isCoreSpiritSeriesOperationFusible(name)) return 'rolling-state';
+  return undefined;
+}
+
 export type CoreSpiritSeriesOperation = Readonly<{
   name: CoreSpiritSeriesOperationName;
   length?: number;
