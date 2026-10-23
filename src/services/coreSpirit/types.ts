@@ -186,6 +186,8 @@ export type CoreSpiritDataSnapshot = {
   timeframe: string;
   /** Canonical bar open timestamp, in the same unit as the resolution context. */
   timestamp?: number;
+  /** Canonical bar close boundary, in the same timestamp unit; used for non-lookahead confirmation. */
+  closeTimestamp?: number;
   state?: CoreSpiritDataState;
   /** Explicitly distinguishes an eligible closed sample from an in-progress sample. */
   confirmationPhase?: CoreSpiritConfirmationPhase;
