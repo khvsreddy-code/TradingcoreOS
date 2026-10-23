@@ -89,7 +89,8 @@ await updated;
 assert.equal(runtimeError, undefined, runtimeError?.message);
 assert.equal(modelCount, 1, 'a partial safe result may render while secondary data is pending');
 
-const secondaryTime = bars.at(-1).time - 600;
+// Current chart time is 4 minutes after this secondary candle opens: the host calendar closes it after 60 seconds, but nominal 5m arithmetic would keep it developing.
+const secondaryTime = bars.at(-1).time - 240;
 pending[2].resolve([secondaryBar(222, secondaryTime)]);
 const latestValues = (context) => Object.values(context?.plots ?? {}).map((points) => points.at(-1)?.value);
 let freshContext;
