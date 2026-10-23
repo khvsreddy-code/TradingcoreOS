@@ -15,8 +15,19 @@ export type CoreSpiritTimeframeAlignmentOptions = Readonly<{
 }>;
 
 function confirmed(snapshot: CoreSpiritDataSnapshot): boolean {
-  if (snapshot.confirmationPhase) return snapshot.confirmationPhase === 'confirmed';
+  if (snapshot.confirmationPhase === 'developing' ||
+      snapshot.state === 'developing' || snapshot.state === 'realtime') return false;
+  if (snapshot.confirmationPhase === 'confirmed') {
+    return snapshot.state == null || snapshot.state === 'confirmed' || snapshot.state === 'historical';
+  }
   return snapshot.state === 'confirmed' || snapshot.state === 'historical';
+}
+
+function eligibleAt(snapshot: CoreSpiritDataSnapshot, targetTimestamp: number, confirmedOnly: boolean): boolean {
+  if (snapshot.timestamp == null || Number(snapshot.timestamp) > targetTimestamp) return false;
+  if (!confirmedOnly) return true;
+  if (!confirmed(snapshot)) return false;
+  return snapshot.closeTimestamp == null || Number(snapshot.closeTimestamp) <= targetTimestamp;
 }
 
 function compareRevision(a: CoreSpiritDataSnapshot, b: CoreSpiritDataSnapshot): number {
@@ -45,8 +56,8 @@ function canonicalTimeline(
       if (revision !== 0) return revision;
       // Conflicting payloads with the same revision still have a deterministic
       // tie-break; data providers should never issue such duplicates.
-      return JSON.stringify([a.value, a.source, a.state, a.confirmationPhase])
-        .localeCompare(JSON.stringify([b.value, b.source, b.state, b.confirmationPhase]));
+      return JSON.stringify([a.value, a.source, a.state, a.confirmationPhase, a.closeTimestamp])
+        .localeCompare(JSON.stringify([b.value, b.source, b.state, b.confirmationPhase, b.closeTimestamp]));
     });
 
   // Choose the latest revision at each timestamp BEFORE applying confirmation
@@ -76,12 +87,17 @@ export function alignSnapshots(
       if (Number(ordered[mid]!.timestamp) <= timestamp) lo = mid + 1;
       else hi = mid;
     }
-    const current = lo > 0 ? ordered[lo - 1] : undefined;
+    const confirmedOnly = options.confirmedOnly === true;
+    let index = lo - 1;
+    while (index >= 0 && !eligibleAt(ordered[index]!, timestamp, confirmedOnly)) index -= 1;
+    const current = index >= 0 ? ordered[index] : undefined;
     if (!current) return { timestamp, value:null, state:'historical' as const };
+    const closeNotReached = current.closeTimestamp != null && Number(current.closeTimestamp) > timestamp;
+    const isDeveloping = !confirmed(current) || closeNotReached;
     return {
       timestamp,
       value:current.value,
-      state:current.confirmationPhase === 'developing' ? 'developing' as const : current.state ?? 'historical' as const,
+      state:isDeveloping ? 'developing' as const : current.state ?? 'historical' as const,
       source:current.source,
     };
   });
