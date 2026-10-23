@@ -193,7 +193,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     return;
   }
   try {
-    const claim = await OrderIdempotencyRepository.claim(userId, brokerId, idempotencyKey, orderPayload);
+    const claim = await OrderIdempotencyRepository.claim(userId, brokerId, idempotencyKey, { order: orderPayload, strategyId });
     if (!claim.claimed) {
       if (claim.conflict === 'request_mismatch') { res.status(409).json({ success: false, error: 'Idempotency-Key was already used for a different order payload.' }); return; }
       if (claim.conflict === 'in_flight') { res.status(409).json({ success: false, error: 'An order with this Idempotency-Key is already being processed.' }); return; }
