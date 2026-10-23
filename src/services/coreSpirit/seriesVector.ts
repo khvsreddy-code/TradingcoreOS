@@ -20,7 +20,7 @@ export type CoreSpiritSeriesOperationName =
 export type CoreSpiritSeriesExecutionClass = 'stateless' | 'rolling-state' | 'recursive';
 
 const STATELESS_SERIES_OPERATIONS: ReadonlySet<string> = new Set(['change', 'pctchange']);
-const RECURSIVE_SERIES_OPERATIONS: ReadonlySet<string> = new Set(['ema', 'rma']);
+const RECURSIVE_SERIES_OPERATIONS: ReadonlySet<string> = new Set(['ema', 'rma', 'wilder', 'rsi', 'atr', 'vwap']);
 
 export function coreSpiritSeriesExecutionClass(name: string): CoreSpiritSeriesExecutionClass | undefined {
   if (STATELESS_SERIES_OPERATIONS.has(name)) return 'stateless';
