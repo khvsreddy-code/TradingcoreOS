@@ -219,29 +219,36 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
           requestId: requestId || null,
         };
         await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response);
-        await AuditLogRepository.append({
+        await AuditLogRepository.appendRequired({
           userId,
           actorType: 'system',
           eventType: 'order.risk_rejected',
           requestId,
           correlationId: idempotencyKey,
           payload: { brokerId, riskVerdict: risk, orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex') },
-        }).catch(() => undefined);
+        });
         res.status(422).json(response);
         return;
       }
-      await AuditLogRepository.append({
-        userId,
-        actorType: 'system',
-        eventType: 'order.risk_approved',
-        requestId,
-        correlationId: idempotencyKey,
-        payload: {
-          brokerId,
-          riskVerdict: risk,
-          orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex'),
-        },
-      }).catch(() => undefined);
+      try {
+        await AuditLogRepository.appendRequired({
+          userId,
+          actorType: 'system',
+          eventType: 'order.risk_approved',
+          requestId,
+          correlationId: idempotencyKey,
+          payload: {
+            brokerId,
+            riskVerdict: risk,
+            orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex'),
+          },
+        });
+      } catch {
+        const response = { success: false, orderSubmitted: false, error: 'The execution audit ledger is unavailable; order submission was blocked.', requestId: requestId || null };
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response).catch(() => undefined);
+        res.status(503).json(response);
+        return;
+      }
     }
     // A deterministic broker-visible client tag ties REST acknowledgements,
     // reconnect snapshots and WS updates back to this idempotent TCO request.
