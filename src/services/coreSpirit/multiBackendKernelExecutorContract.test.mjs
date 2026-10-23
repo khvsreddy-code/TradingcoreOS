@@ -57,7 +57,8 @@ assert.equal(acceleratedMean.backend, 'wasm-simd',
   'large historical rolling mean should execute the bundled SIMD kernel when explicitly supplied');
 assert.ok(Math.abs(acceleratedMean.result[63] - 5059.5) < 1e-8);
 const previousFetch = globalThis.fetch;
-globalThis.fetch = async () => new Response(bundledWasmBytes, { status: 200 });
+let bundledFetchCount = 0;
+globalThis.fetch = async () => { bundledFetchCount += 1; return new Response(bundledWasmBytes, { status: 200 }); };
 try {
   const autoLoadedMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
     purpose: 'historical', minWasmWorkUnits: 1,
@@ -70,6 +71,7 @@ try {
   });
   assert.equal(autoLoadedSum.backend, 'wasm-scalar');
   assert.equal(autoLoadedSum.result[63], 40476);
+  assert.equal(bundledFetchCount, 1, 'multiple historical kernel calls should reuse the same warmed bundled WASM module');
 } finally {
   globalThis.fetch = previousFetch;
 }
@@ -84,10 +86,17 @@ assert.equal(gapMean.result[4], 4.5);
 assert.equal(gapMean.result[5], 5.5);
 
 let fallbackCount=0;
+let fallbackTelemetry;
 const brokenWasm={isLoaded:()=>true,profile:()=>({backend:'wasm',available:true,deterministic:true,vectorized:true}),hasKernel:name=>name==='rollingMean',kernelVariant:name=>name==='rollingMean'?'simd':undefined,execute:async()=>{throw new Error('simulated WASM trap');}};
 const registry=createCoreSpiritBackendRegistry({wasm:brokenWasm});
-const fallback=await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{purpose:'historical',wasm:brokenWasm,registry,minWasmWorkUnits:1,onBackendFallback:()=>{fallbackCount++;}});
+const fallback=await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{purpose:'historical',wasm:brokenWasm,registry,minWasmWorkUnits:1,onBackendFallback:()=>{fallbackCount++;},onBackendExecution:event=>{fallbackTelemetry=event;}});
 assert.equal(fallback.plan.backend,'wasm-simd');assert.equal(fallback.backend,'cpu-optimized');assert.equal(fallback.fallbackReason,'simulated WASM trap');assert.equal(fallbackCount,1);
+assert.equal(fallback.requestedBackend,'auto');
+assert.equal(fallback.selectedBackend,'wasm-simd');
+assert.equal(fallbackTelemetry.selectedBackend,'wasm-simd');
+assert.equal(fallbackTelemetry.executedBackend,'cpu-optimized');
+assert.equal(fallbackTelemetry.fallbackReason,'simulated WASM trap');
+
 let executionTelemetry;
 const telemetryResult = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
   purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
