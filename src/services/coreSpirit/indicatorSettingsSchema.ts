@@ -565,7 +565,7 @@ function nativeSchema(kind: string, item?: Record<string, unknown>): IndicatorSe
   const outputs = OUTPUTS[kind] ?? ['value'];
   const timeframeOptions: readonly IndicatorSettingOption[] = COMMON_TIMEFRAME_OPTIONS;
   const markerKinds = new Set(['Market Structure','BOS / CHOCH','Fair Value Gaps','FVG + Mitigation','Order Blocks','Order Blocks + Mitigation','Signals','Rejection Candles','Inside Bar Breakout','Engulfing Patterns','Pin Bars','NR7 Volatility Contraction','Liquidity Sweeps','Equal Highs/Lows','LTF Volume Microburst Bubbles']);
-  const levelKinds = new Set(['Pivot Points','CPR','Key Levels','Opening Range','Opening Range Pro','Weekly Levels','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots','Developing Day High/Low','Dynamic Support/Resistance','Liquidity Pools']);
+  const levelKinds = new Set(['Reversal Price','Pivot Points','CPR','Key Levels','Opening Range','Opening Range Pro','Weekly Levels','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots','Developing Day High/Low','Dynamic Support/Resistance','Liquidity Pools']);
   const style: IndicatorSettingField[] = [
     colorField('appearance.line.color', 'Line color', primary),
     advanced(numberField('appearance.line.opacity', 'Line opacity', 1, 0.05, 1, 0.05)),
