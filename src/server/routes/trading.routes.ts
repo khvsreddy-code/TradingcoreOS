@@ -15,6 +15,7 @@ import { AuditLogRepository } from '../storage/AuditLogRepository.js';
 import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
+import { TradingKillSwitchRepository } from '../trading/TradingKillSwitchRepository.js';
 
 export const tradingRoutes = Router();
 
@@ -174,6 +175,20 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
   } catch (error: unknown) {
     res.status(getErrorStatus(error) >= 400 && getErrorStatus(error) < 500 ? getErrorStatus(error) : 400).json({
       success: false, orderSubmitted: false, error: getErrorMessage(error, 'Invalid order payload'),
+    });
+    return;
+  }
+  try {
+    const rawStrategyId = isRecord(req.body) ? req.body.strategyId : undefined;
+    const strategyId = typeof rawStrategyId === 'string' && rawStrategyId.trim() && rawStrategyId.length <= 256
+      ? rawStrategyId.trim()
+      : undefined;
+    await TradingKillSwitchRepository.assertOrderSubmissionAllowed(userId, strategyId);
+  } catch (error: unknown) {
+    res.status(503).json({
+      success: false,
+      orderSubmitted: false,
+      error: getErrorMessage(error, 'Trading kill-switch state could not be verified; order submission is blocked.'),
     });
     return;
   }
