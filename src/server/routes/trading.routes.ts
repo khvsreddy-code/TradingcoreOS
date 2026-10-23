@@ -16,6 +16,7 @@ import { API_LATENCY_BUDGET_MS } from '../latency/budgets.js';
 import { FyersOrderStateEngine } from '../fyers/trading/FyersOrderStateEngine.js';
 import { parseBrokerOrderPayload, placeFyersOrderViaFixedIpGateway, validateFyersManualOrderPreflight } from '../trading/fyersOrderExecution.js';
 import { TradingKillSwitchRepository } from '../trading/TradingKillSwitchRepository.js';
+import { evaluateManualFyersPreTradeRisk } from '../trading/AutomationPreTradeRiskEngine.js';
 
 export const tradingRoutes = Router();
 
@@ -201,6 +202,46 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       res.status(claim.record?.state === 'completed' ? 200 : 502).json(claim.record?.response ?? { success: false, error: 'Previous order result is unavailable.' }); return;
     }
     const requestId = req.get('x-request-id');
+    if (brokerId === 'fyers') {
+      const risk = await evaluateManualFyersPreTradeRisk({
+        userId,
+        accessToken: req.accessToken,
+        broker: req.brokerAdapter,
+        order: orderPayload,
+      });
+      if (!risk.approved) {
+        const response = {
+          success: false,
+          orderSubmitted: false,
+          error: risk.reason,
+          riskVerdict: risk,
+          requestId: requestId || null,
+        };
+        await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response);
+        await AuditLogRepository.append({
+          userId,
+          actorType: 'system',
+          eventType: 'order.risk_rejected',
+          requestId,
+          correlationId: idempotencyKey,
+          payload: { brokerId, riskVerdict: risk, orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex') },
+        }).catch(() => undefined);
+        res.status(422).json(response);
+        return;
+      }
+      await AuditLogRepository.append({
+        userId,
+        actorType: 'system',
+        eventType: 'order.risk_approved',
+        requestId,
+        correlationId: idempotencyKey,
+        payload: {
+          brokerId,
+          riskVerdict: risk,
+          orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex'),
+        },
+      }).catch(() => undefined);
+    }
     // A deterministic broker-visible client tag ties REST acknowledgements,
     // reconnect snapshots and WS updates back to this idempotent TCO request.
     const clientOrderId = brokerId === 'fyers'
