@@ -21,11 +21,13 @@ export type CoreSpiritSeriesDispatchContext = Readonly<{
   deterministic?: boolean;
   minWasmWorkUnits?: number;
   minGpuWorkUnits?: number;
+  /** WebGPU stays disabled unless explicitly enabled for batch/research workloads. */
+  allowGpu?: boolean;
   backends?: readonly CoreSpiritSeriesBackendProfile[];
   /** Optional telemetry hook when an accelerator is rejected or fails. */
   onBackendFallback?: (backend: 'wasm' | 'gpu', error?: unknown) => void;
   /** Reports the backend that actually completed, including CPU fallback. */
-  onBackendExecution?: (event: Readonly<{requested:'cpu'|'wasm'|'gpu';executed:'cpu'|'wasm'|'gpu';reason:string;elapsedMs:number;fallbackReason?:string}>) => void;
+  onBackendExecution?: (event: Readonly<{requested:'cpu'|'wasm'|'gpu';selected:'cpu'|'wasm'|'gpu';executed:'cpu'|'wasm'|'gpu';reason:string;elapsedMs:number;fallbackReason?:string}>) => void;
   allowStatefulWasm?: boolean;
   maxStatefulWasmBars?: number;
 }>;
@@ -82,7 +84,7 @@ export function selectCoreSpiritSeriesBackend(
   if (context.realtime) return { requested: 'cpu', workUnits: units, reason: 'realtime work stays on fused CPU' };
   const deterministic = context.deterministic !== false;
   const gpu = profiles.find((x) => x.backend === 'gpu');
-  if (gpu && supportsGroup(gpu, group) && (group.eligibleBackends?.includes('gpu') ?? true) && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
+  if (context.allowGpu === true && gpu && supportsGroup(gpu, group) && (group.eligibleBackends?.includes('gpu') ?? true) && !hasRecurrence(group) && units >= Math.max(1, Math.floor(context.minGpuWorkUnits ?? 1_000_000)) && (!deterministic || gpu.deterministic)) {
     return { requested: 'gpu', workUnits: units, reason: 'large stateless historical workload' };
   }
   const wasm = profiles.find((x) => x.backend === 'wasm');
@@ -106,7 +108,7 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
     const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
     const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    notifyBackendExecution(context,{requested:'cpu',executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started)});
+    notifyBackendExecution(context,{requested:choice.requested,selected:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started)});
     return 'cpu';
   }
 
@@ -118,7 +120,7 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
     const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
     const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    notifyBackendExecution(context,{requested:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started),fallbackReason:'executor unavailable'});
+    notifyBackendExecution(context,{requested:choice.requested,selected:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started),fallbackReason:'executor unavailable'});
     return 'cpu';
   }
 
@@ -130,7 +132,7 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
     executor(group, input, stagedOutput);
     output.set(stagedOutput);
     const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    notifyBackendExecution(context,{requested:choice.requested,executed:choice.requested,reason:choice.reason,elapsedMs:Math.max(0,ended-started)});
+    notifyBackendExecution(context,{requested:choice.requested,selected:choice.requested,executed:choice.requested,reason:choice.reason,elapsedMs:Math.max(0,ended-started)});
     return choice.requested;
   } catch (error) {
     notifyBackendFallback(context, choice.requested, error);
