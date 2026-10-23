@@ -7,6 +7,7 @@ import {
 } from './seriesBackendDispatcher.ts';
 import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion.ts';
 import { coreSpiritSeriesExecutionClass } from './seriesVector.ts';
+import { CoreSpiritWasmBackend, loadCoreSpiritBundledWasmSimdBackend } from './wasmBackend.ts';
 
 const group = {
   id: 'g', nodeIds: ['a', 'b'], instructions: [1, 2],
@@ -163,6 +164,26 @@ assert.equal(selectCoreSpiritSeriesBackend(gpuOnlyGroup, {
 // Exercise the actual bundled binary through the series dispatcher, not only a
 // synthetic executor profile. Loading includes the module's per-kernel warm-up.
 const wasmBytes = await readFile(new URL('../../../public/coreSpirit/numerical-kernels-simd.wasm', import.meta.url));
+
+// A failed load must be observable and recoverable on the same backend instance.
+const lifecycleBackend = new CoreSpiritWasmBackend();
+const lifecycleEvents = [];
+await assert.rejects(() => loadCoreSpiritBundledWasmSimdBackend({
+  backend: lifecycleBackend,
+  source: new Uint8Array([0, 1, 2]),
+  onStateChange: state => lifecycleEvents.push(state.state),
+}));
+assert.deepEqual(lifecycleEvents, ['loading', 'failed']);
+assert.equal(lifecycleBackend.lifecycle().state, 'failed');
+lifecycleEvents.length = 0;
+await loadCoreSpiritBundledWasmSimdBackend({
+  backend: lifecycleBackend,
+  source: wasmBytes,
+  onStateChange: state => lifecycleEvents.push(state.state),
+});
+assert.deepEqual(lifecycleEvents, ['loading', 'ready']);
+assert.equal(lifecycleBackend.isLoaded(), true, 'a failed backend instance must recover after a successful reload');
+
 const wasmRuntime = await loadCoreSpiritBundledWasmSeriesRuntime({ source: wasmBytes });
 assert.equal(wasmRuntime.backend.lifecycle().state, 'ready');
 assert.equal(wasmRuntime.backend.kernelVariant('rollingMean'), 'simd');
