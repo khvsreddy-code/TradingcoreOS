@@ -100,6 +100,18 @@ export interface ExecutionMarket {
  * the session is poked); `mode: 'live'` keeps a streaming context that emits per
  * tick (only requested when `capabilities.streaming`).
  */
+/**
+ * Optional canonical exchange-calendar adapter used by secondary-series alignment.
+ * Timestamps are epoch milliseconds. Return null for a bar that belongs to a
+ * holiday/session closure; return its actual close boundary for a valid bar;
+ * return undefined only when the calendar cannot resolve that bar, in which
+ * case the engine applies a conservative nominal-timeframe fallback.
+ */
+export type ExecutionMarketCalendar = Readonly<{
+    id: string;
+    resolveBarCloseTime: (symbol: string, timeframe: string, barOpenTimeMs: number) => number | null | undefined;
+}>;
+
 export interface ExecutionRequest {
     prepared: PreparedScript;
     market: ExecutionMarket;
@@ -113,6 +125,8 @@ export interface ExecutionRequest {
      * gateway (secondary fetches degrade to empty).
      */
     fetchSeries?: FetchSeries;
+    /** Optional exchange/session close semantics for canonical secondary data. */
+    marketCalendar?: ExecutionMarketCalendar;
     inputs?: Record<string, InputValue>;
     /** Declaration-prop overrides, keyed like `PreparedScript.props`. Only meaningful
      *  when `capabilities.props`; other engines ignore it. */
