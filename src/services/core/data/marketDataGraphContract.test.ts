@@ -136,6 +136,33 @@ if(timeframeSeconds('5')!==300||timeframeSeconds('15')!==900||timeframeSeconds('
   throw new Error('CoreSpirit graph timeframe normalization is incomplete');
 }
 
+// Cache identities follow the requested symbol/timeframe data revision, not
+// the global graph revision. An unrelated symbol refresh is not a cache miss.
+const cacheSnapshotBefore=graph.snapshot([
+  {symbol:'NIFTY',timeframe:'5m',fields:['close']},
+  {symbol:'BANKNIFTY',timeframe:'5m',fields:['close']},
+],'NIFTY','1m');
+const cacheResolver=createGraphResolver(cacheSnapshotBefore,'NIFTY','1m');
+const cacheRequest={symbol:'NIFTY',timeframe:'5m',field:'close' as const,offset:0};
+const bankRequest={symbol:'BANKNIFTY',timeframe:'5m',field:'close' as const,offset:0};
+const niftyKeyBefore=cacheResolver.cacheKey?.(cacheRequest);
+const bankKeyBefore=cacheResolver.cacheKey?.(bankRequest);
+graph.syncBase('BANKNIFTY','1m',base.map(row=>({...row,close:row.close+25,open:row.open+25,high:row.high+25,low:row.low+25})));
+const bankUpdatedSnapshot=graph.snapshot([
+  {symbol:'NIFTY',timeframe:'5m',fields:['close']},
+  {symbol:'BANKNIFTY',timeframe:'5m',fields:['close']},
+],'NIFTY','1m');
+cacheResolver.replaceSnapshot(bankUpdatedSnapshot);
+assert.equal(cacheResolver.cacheKey?.(cacheRequest),niftyKeyBefore,
+  'unrelated BANKNIFTY updates must not invalidate the NIFTY 5m cache identity');
+assert.notEqual(cacheResolver.cacheKey?.(bankRequest),bankKeyBefore,
+  'BANKNIFTY cache identity must change when its canonical source data changes');
+graph.syncBase('NIFTY','1m',base.map(row=>({...row,close:row.close+50,open:row.open+50,high:row.high+50,low:row.low+50})));
+const niftyUpdatedSnapshot=graph.snapshot([{symbol:'NIFTY',timeframe:'5m',fields:['close']}],'NIFTY','1m');
+cacheResolver.replaceSnapshot(niftyUpdatedSnapshot);
+assert.notEqual(cacheResolver.cacheKey?.(cacheRequest),niftyKeyBefore,
+  'the requested NIFTY cache identity must change after its own canonical revision advances');
+
 
 // Exchange-calendar fixture: daily buckets align to the actual session open,
 // ignore lunch breaks/holidays, and use the real session close for confirmation.
