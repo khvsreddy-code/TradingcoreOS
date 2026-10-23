@@ -64,12 +64,12 @@ assert.deepEqual(
 );
 const medium = planCoreSpiritBackend({
   operation: 'rollingMean', purpose: 'historical', workload: 'series',
-  workUnits: 30_000, inputElements: 20_000,
+  workUnits: 30_000, inputElements: 20_000, minWasmWorkUnits: 1,
 }, accelerated);
 assert.equal(medium.backend, 'wasm-simd');
 const scalarWasmPlan = planCoreSpiritBackend({
   operation: 'rollingSum', purpose: 'historical', workload: 'series',
-  workUnits: 30_000, inputElements: 20_000,
+  workUnits: 30_000, inputElements: 20_000, minWasmWorkUnits: 1,
 }, accelerated);
 assert.equal(scalarWasmPlan.backend, 'wasm-scalar',
   'scalar kernels must be available without being mislabeled as SIMD');
