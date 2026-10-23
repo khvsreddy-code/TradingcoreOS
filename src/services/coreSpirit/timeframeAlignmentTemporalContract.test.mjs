@@ -56,7 +56,7 @@ assert.deepEqual(
   'a close boundary earlier than the candle open is malformed and must be rejected',
 );
 
-const reverseTargets = alignTimeframeSnapshots([3500, 1000, 500], snapshots);
+const reverseTargets = alignTimeframeSnapshots([3500, 1300, 500], snapshots);
 assert.deepEqual(reverseTargets.map(point => point.value), [20, 10, null],
   'arbitrary target order must not change each target timestamp’s canonical answer');
 
