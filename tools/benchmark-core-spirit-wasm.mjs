@@ -63,7 +63,9 @@ async function main() {
   const barCounts = sizes();
   const repeatCount = iterations();
   const bytes = await fs.readFile(new URL('../public/coreSpirit/numerical-kernels-simd.wasm', import.meta.url));
+  const loadStarted = performance.now();
   const wasm = await loadCoreSpiritBundledWasmSimdBackend({ source: bytes });
+  const moduleLoadAndWarmupMs = performance.now() - loadStarted;
   const lifecycle = wasm.lifecycle();
   if (lifecycle.state !== 'ready') throw new Error('bundled WASM failed its load/warm-up lifecycle');
   const rows = [];
@@ -86,8 +88,8 @@ async function main() {
       const wasmKernelSamples = [];
       let lastOutput;
       for (let i = 0; i < repeatCount; i += 1) {
-        const output = new Float64Array(bars);
         const started = performance.now();
+        const output = new Float64Array(bars);
         const result = await wasm.execute({ kernel: kernel.name, inputs: [input], outputs: [output], params: kernel.params(DEFAULT_PERIOD) });
         wasmEndToEndSamples.push(performance.now() - started);
         wasmKernelSamples.push(result.wasmElapsedMs);
@@ -108,8 +110,10 @@ async function main() {
         cpuBarsPerSecond: Math.round(bars * 1000 / Math.max(cpuMedianMs, 0.001)),
         wasmEndToEndBarsPerSecond: Math.round(bars * 1000 / Math.max(wasmEndToEndMedianMs, 0.001)),
         endToEndSpeedup: Number((cpuMedianMs / Math.max(wasmEndToEndMedianMs, 0.001)).toFixed(3)),
+        endToEndWin: cpuMedianMs > wasmEndToEndMedianMs,
         inputOutputBytes: bars * Float64Array.BYTES_PER_ELEMENT * 2,
         parity: 'passed',
+        wasmModuleLoadAndWarmupMs: Number(moduleLoadAndWarmupMs.toFixed(3)),
         wasmLoadWarmupKernelMs: Number(warmResult.wasmElapsedMs.toFixed(3)),
       });
     }
@@ -119,6 +123,7 @@ async function main() {
     benchmark: 'CoreSpirit bundled numerical kernel backend comparison',
     wasmAbi: 2,
     wasmLifecycle: lifecycle,
+    moduleLoadAndWarmupMs: Number(moduleLoadAndWarmupMs.toFixed(3)),
     kernelVariants: Object.fromEntries(KERNELS.map(kernel => [kernel.name, wasm.kernelVariant(kernel.name)])),
     period: DEFAULT_PERIOD,
     sizes: barCounts,
