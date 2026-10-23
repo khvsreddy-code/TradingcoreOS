@@ -125,10 +125,12 @@ export async function evaluateAutomationPreTradeRisk(input: {
   integration: AutomationIntegration;
   order: BrokerOrderPayload;
   live: boolean;
+  brokerMarginCheck?: boolean;
+  validateFyersShape?: boolean;
 }): Promise<AutomationRiskVerdict> {
   const checks: Record<string, unknown>[] = [];
   try {
-    validateFyersManualOrderPreflight(input.order);
+    if (input.validateFyersShape !== false) validateFyersManualOrderPreflight(input.order);
   } catch (error) {
     return reject(error instanceof Error ? error.message : 'Order payload failed the canonical TradingCore preflight.', checks);
   }
@@ -259,7 +261,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
   }
 
   let requiredMargin: number | null = null;
-  if (input.live) {
+  if (input.live && input.brokerMarginCheck !== false) {
     try {
       requiredMargin = await estimateFyersRequiredMargin({ userId: input.userId, accessToken: input.accessToken, order: input.order });
     } catch (error) {
@@ -307,11 +309,12 @@ function manualRiskLimit(name: string, fallback: number): number {
  * bypass quote freshness, account/position exposure or broker-margin checks.
  * Limits are server-owned environment policy, never client-supplied values.
  */
-export async function evaluateManualFyersPreTradeRisk(input: {
+export async function evaluateManualPreTradeRisk(input: {
   userId: string;
   accessToken: string;
   broker: BaseBroker;
   order: BrokerOrderPayload;
+  brokerMarginCheck?: boolean;
 }): Promise<AutomationRiskVerdict> {
   const symbol = String(input.order.symbol ?? '').trim().toUpperCase();
   try {
@@ -347,6 +350,8 @@ export async function evaluateManualFyersPreTradeRisk(input: {
       integration,
       order: input.order,
       live: true,
+      brokerMarginCheck: input.brokerMarginCheck !== false,
+      validateFyersShape: false,
     });
   } catch (error) {
     return reject(error instanceof Error ? error.message : 'Manual order risk policy could not be evaluated.', []);
