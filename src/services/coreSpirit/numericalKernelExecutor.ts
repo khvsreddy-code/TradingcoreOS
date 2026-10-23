@@ -55,6 +55,37 @@ function isWasmNumericalExecutor(value: unknown): value is CoreSpiritWasmNumeric
 }
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 
+const BUNDLED_WASM_OPERATIONS = new Set<CoreSpiritNumericalKernelOperation>([
+  'rollingMean', 'rollingSum', 'rollingVariance', 'rollingStd', 'rollingMin', 'rollingMax',
+]);
+let bundledWasmBackendPromise: Promise<CoreSpiritWasmNumericalExecutor> | undefined;
+let bundledWasmBackendInstance: CoreSpiritWasmNumericalExecutor | undefined;
+
+/** One warmed module per worker/runtime; failed loads are evicted so later calls can recover. */
+async function getBundledWasmBackend(): Promise<CoreSpiritWasmNumericalExecutor> {
+  if (bundledWasmBackendInstance?.isLoaded()) return bundledWasmBackendInstance;
+  if (bundledWasmBackendPromise) return bundledWasmBackendPromise;
+  const pending = loadCoreSpiritBundledWasmSimdBackend() as Promise<CoreSpiritWasmNumericalExecutor>;
+  bundledWasmBackendPromise = pending;
+  try {
+    const backend = await pending;
+    if (bundledWasmBackendPromise === pending) bundledWasmBackendInstance = backend;
+    return backend;
+  } catch (error) {
+    if (bundledWasmBackendPromise === pending) {
+      bundledWasmBackendPromise = undefined;
+      bundledWasmBackendInstance = undefined;
+    }
+    throw error;
+  }
+}
+function invalidateBundledWasmBackend(backend: CoreSpiritWasmNumericalExecutor): void {
+  if (bundledWasmBackendInstance !== backend) return;
+  bundledWasmBackendInstance = undefined;
+  bundledWasmBackendPromise = undefined;
+  try { (backend as CoreSpiritWasmNumericalExecutor & { unload?: () => void }).unload?.(); } catch { /* recover on next request */ }
+}
+
 function finishExecution(
   operation: CoreSpiritNumericalKernelOperation,
   result: CoreSpiritNumericalKernelResult,
@@ -153,22 +184,22 @@ export async function executeCoreSpiritNumericalKernelPlanned(
   const inputs = validateInputs(inputSeries), started = now(), purpose = options.purpose ?? 'historical';
   const wasmOutputs = wasmOutputBuffers(operation, inputs);
   const workUnits = estimateWorkUnits(operation, inputs, parameters);
+  const minWasmWorkUnits = Math.max(1, Math.floor(options.minWasmWorkUnits ?? 100_000));
   let wasmAdapter = options.wasm;
+  let usingBundledWasm = false;
   let wasmLoadError: unknown;
 
   // Load the bundled ABI only for the exact rolling kernels it implements.
   // WASM loading and data transfer never run on the live chart path.
-  const bundledWasmOperations = new Set<CoreSpiritNumericalKernelOperation>([
-    'rollingMean', 'rollingSum', 'rollingVariance', 'rollingStd', 'rollingMin', 'rollingMax',
-  ]);
   if (!options.registry && !wasmAdapter && purpose !== 'live' &&
-      bundledWasmOperations.has(operation) && wasmOutputs &&
-      workUnits >= Math.max(1, Math.floor(options.minWasmWorkUnits ?? 10_000))) {
+      BUNDLED_WASM_OPERATIONS.has(operation) && wasmOutputs &&
+      workUnits >= minWasmWorkUnits) {
     try {
-      wasmAdapter = await loadCoreSpiritBundledWasmSimdBackend();
+      wasmAdapter = await getBundledWasmBackend();
+      usingBundledWasm = true;
     } catch (error) {
       wasmLoadError = error;
-      notifyFallback(options, 'wasm-simd', error);
+      notifyFallback(options, operation === 'rollingMean' ? 'wasm-simd' : 'wasm-scalar', error);
     }
   }
 
@@ -187,7 +218,7 @@ export async function executeCoreSpiritNumericalKernelPlanned(
     stateful: STATEFUL_SERIES_OPERATIONS.has(operation), deterministic: options.deterministic,
     allowWebGpu: options.allowWebGpu === true,
     preferredBackend: options.requestedBackend && options.requestedBackend !== 'auto' ? options.requestedBackend : undefined,
-    minWasmWorkUnits: options.minWasmWorkUnits, minWebGpuWorkUnits: options.minWebGpuWorkUnits,
+    minWasmWorkUnits, minWebGpuWorkUnits: options.minWebGpuWorkUnits,
     allowStatefulWasm: options.allowStatefulWasm, maxStatefulWasmElements: options.maxStatefulWasmElements,
     excludedBackends: wasmOutputs ? [] : ['wasm-simd', 'wasm-scalar'] as const,
     payload: { operation, inputs, parameters },
@@ -207,6 +238,7 @@ export async function executeCoreSpiritNumericalKernelPlanned(
       return finishExecution(operation, result, plan, plan.backend, started, options);
     } catch (error) {
       notifyFallback(options, plan.backend as 'wasm-simd' | 'wasm-scalar', error);
+      if (usingBundledWasm && wasmExecutor) invalidateBundledWasmBackend(wasmExecutor);
       const result = executeCoreSpiritNumericalKernel(operation, inputs, parameters);
       return finishExecution(operation, result, plan, 'cpu-optimized', started, options, error instanceof Error ? error.message : String(error));
     }
