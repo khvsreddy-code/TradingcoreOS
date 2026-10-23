@@ -293,7 +293,7 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
       await AuditLogRepository.appendRequired({
         userId,
         actorType: 'system',
-        eventType: 'order.submitted',
+        eventType: 'order.submission_intent_persisted',
         requestId,
         correlationId: idempotencyKey,
         payload: {
@@ -373,6 +373,21 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     }
     const response = { success: true, data };
     try {
+      await AuditLogRepository.appendRequired({
+        userId,
+        actorType: 'broker',
+        eventType: 'order.broker_acknowledged',
+        requestId,
+        correlationId: idempotencyKey,
+        payload: {
+          brokerId,
+          idempotencyKey,
+          clientOrderId: clientOrderId ?? null,
+          brokerOrderId: orderId == null ? null : String(orderId),
+          requestHash: claim.record?.requestHash ?? null,
+          orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex'),
+        },
+      });
       await OrderIdempotencyRepository.complete(userId, brokerId, idempotencyKey, response);
       await AuditLogRepository.appendRequired({
         userId,
