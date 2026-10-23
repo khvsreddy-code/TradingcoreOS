@@ -26,7 +26,7 @@ export interface CoreSpiritHistoricalCorrection {
   readonly replayFrom: number;
   readonly checkpointNextBarIndex?: number;
   readonly requiresStateRestore: boolean;
-  readonly reason: 'stateless-range' | 'checkpoint-replay' | 'full-replay-no-safe-checkpoint';
+  readonly reason: 'stateless-range' | 'checkpoint-replay' | 'full-replay-no-safe-checkpoint' | 'full-replay-conservative';
 }
 
 export interface CoreSpiritDirtyExecutionPlan {
