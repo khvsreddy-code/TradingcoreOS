@@ -39,7 +39,7 @@ import { CoreSpiritSeriesRegistry, type CoreSpiritSeriesId } from './seriesRegis
 import { CoreSpiritProfiler, type CoreSpiritProfilerOptions, type CoreSpiritProfilerSnapshot } from './profiler';
 import { buildCoreSpiritDirtyGraph, CoreSpiritDirtyGraph, dirtySourcesForBar, type CoreSpiritDirtyExecutionPlan } from './dirtyGraph';
 import { CoreSpiritColumnarHistory } from './columnarMarketData';
-import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot } from './kernelStateSnapshots';
+import { CoreSpiritKernelSnapshotStore, type CoreSpiritKernelSnapshot, type CoreSpiritKernelSnapshotIdentity } from './kernelStateSnapshots';
 import { CoreSpiritCapabilitySandbox, validateCoreScriptCapabilitiesAgainstSandbox } from './capabilitySandbox';
 
 export type CoreSpiritModelOutputResolver = (input: { modelName:string; field:string; binding?: { kind:string; locator:string }; inputs?: Readonly<Record<string,unknown>> }) => unknown;
@@ -277,6 +277,16 @@ export class CoreSpiritRuntime {
    */
   private readonly kernelStateSnapshots = new CoreSpiritKernelSnapshotStore<CoreSpiritKernelState>(4);
   private readonly kernelNodeIdentities = new Map<string, { nodeId:string; inputDependencies:readonly string[] }>();
+  /** Changes only when the loaded/history generation is rebuilt, not on forming-bar ticks. */
+  private kernelDataRevision = 0;
+  private readonly recoveryStats = {
+    barsReused: 0,
+    barsReplayed: 0,
+    checkpointsRestored: 0,
+    checkpointRestoreFailures: 0,
+    fullReplayFallbacks: 0,
+    lastReplayFrom: 0,
+  };
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
@@ -378,6 +388,7 @@ export class CoreSpiritRuntime {
   }
 
   reset(): void {
+    this.kernelDataRevision += 1;
     this.uiRuntime.reset();
     this.appRuntime.reset();
     this.declarativeVisualState = { version:1, revision:0, specs:[] };
@@ -492,11 +503,14 @@ export class CoreSpiritRuntime {
   executeBar(bar: HistoricalCandle, profilePhase: 'historical'|'realtime' = 'realtime'): CoreSpiritExecutionResult {
     this.throwIfAborted();
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
+    const normalized = { ...bar };
+    // Validate before touching history, transactions, or kernel cursors. A
+    // late/out-of-order packet must not be appended and then rejected.
+    this.validateBar(normalized);
     this.profiler.beginBar(profilePhase, this.compiledIr.entry.instructions.length);
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
-    const normalized = { ...bar };
     this.profiler.recordAllocation(1);
     const last = this.history[this.history.length - 1];
     const sameBucket = !!last && this.toEpoch(last.timestamp) === this.toEpoch(normalized.timestamp);
@@ -518,7 +532,20 @@ export class CoreSpiritRuntime {
       this.realtimeEventTransactionId = `${this.options.sourceId}:${this.history.length}:${this.realtimeRevision}`;
       this.eventRouter.beginTransaction(this.realtimeEventTransactionId);
       const confirmedBarIndex = this.currentBarSnapshot ? this.currentBarSnapshot.historyLength - 1 : this.history.length - 1;
-      this.restoreKernelSnapshotsAtBar(confirmedBarIndex);
+      const restored = this.restoreKernelSnapshotsAtBar(confirmedBarIndex);
+      if (!restored.complete) {
+        // A missing or incompatible checkpoint means the forming-bar state may
+        // already contain the previous tick. Rebuild confirmed history from zero,
+        // suppress historical external effects, then replay this live observation.
+        const confirmedHistory = this.history.slice(0, this.currentBarSnapshot.historyLength).map(item => ({ ...item }));
+        this.recoveryStats.fullReplayFallbacks += 1;
+        const previousSuppression = this.suppressExternalEffects;
+        this.suppressExternalEffects = true;
+        try { this.executeIr(this.compiledIr!, confirmedHistory); }
+        finally { this.suppressExternalEffects = previousSuppression; }
+        return this.executeBar(normalized, profilePhase);
+      }
+      this.recoveryStats.barsReused += this.currentBarSnapshot.historyLength;
       this.history[this.history.length - 1] = normalized;
       this.columnarHistory.replaceLast(normalized);
     } else {
@@ -541,7 +568,6 @@ export class CoreSpiritRuntime {
     this.plotOrdinal = 0;
     this.indicatorMemo.clear();
     this.outputCount = 0;
-    this.validateBar(normalized);
     this.state.barState = { index:barIndex, time:this.state.time, isFirst:barIndex===0, isLast:false, isRealtime:true, isConfirmed:false, revision:this.realtimeRevision, symbol:this.options.symbol, timeframe:this.options.timeframe, mode:this.executionContext.mode };
     this.executionContext.frame = createCoreSpiritExecutionFrame({ timestamp:this.state.time*1000, barIndex, symbol:this.options.symbol, timeframe:this.options.timeframe, timezone:this.timezone, mode:this.executionContext.mode, isRealtime:true, isConfirmed:false, isNewBar:this.realtimeRevision===0, revision:this.realtimeRevision, isFirst:barIndex===0, isLast:false });
     this.executionContext.session = this.executionContext.frame.session;
@@ -636,9 +662,18 @@ export class CoreSpiritRuntime {
     this.stateStore.rollbackRealtimeTransaction();
     this.eventRouter.rollbackTransaction(this.realtimeEventTransactionId);
     this.realtimeEventTransactionId = undefined;
-    this.restoreKernelSnapshotsAtBar(this.currentBarSnapshot.historyLength - 1);
-    this.history=this.history.slice(0,this.currentBarSnapshot.historyLength);
+    const confirmedHistory = this.history.slice(0, this.currentBarSnapshot.historyLength).map(item => ({ ...item }));
+    const restored = this.restoreKernelSnapshotsAtBar(this.currentBarSnapshot.historyLength - 1);
+    this.history = confirmedHistory;
     this.columnarHistory.trimTo(this.currentBarSnapshot.historyLength);
+    if (!restored.complete && this.compiledIr) {
+      this.recoveryStats.fullReplayFallbacks += 1;
+      const previousSuppression = this.suppressExternalEffects;
+      this.suppressExternalEffects = true;
+      try { this.executeIr(this.compiledIr, confirmedHistory); }
+      finally { this.suppressExternalEffects = previousSuppression; }
+      return;
+    }
     this.state.barIndex=this.history.length-1;
     this.state.time=this.history.length?this.toEpoch(this.history.at(-1)!.timestamp):0;
     this.realtimeRevision=0;
@@ -652,6 +687,11 @@ export class CoreSpiritRuntime {
   }
 
   getRealtimeLifecycle(): 'idle'|'evaluating'|'committed' { return this.realtimeLifecycle; }
+
+  /** Recovery counters are cumulative for this runtime instance and safe to sample in telemetry. */
+  getRecoveryStats(): Readonly<typeof this.recoveryStats> {
+    return Object.freeze({ ...this.recoveryStats });
+  }
 
   /** Direct typed-column input boundary for quant and ML feature builders. */
   getMarketFrame(): CoreSpiritMarketFrame | undefined {
@@ -855,9 +895,11 @@ export class CoreSpiritRuntime {
     // Corrections rebuild semantic state without firing the same order intents,
     // alerts, webhooks, or host events a second time.
     if (historicalCorrectionPlan) this.suppressExternalEffects = true;
+    this.recoveryStats.lastReplayFrom = 0;
     try {
     for (let i = 0; i < bars.length; i++) {
       this.throwIfAborted();
+      this.recoveryStats.barsReplayed += 1;
       this.profiler.beginBar('historical', ir.entry.instructions.length);
       this.plotOrdinal = 0;
       this.indicatorMemo.clear();
