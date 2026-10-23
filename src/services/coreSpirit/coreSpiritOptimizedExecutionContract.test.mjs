@@ -79,3 +79,86 @@ for(let sample=0;sample<160;sample++){
   assert.equal(normalize(optimized),normalize(reference),'reference/optimized VM mismatch in generated sample '+sample);
 }
 console.log('CORESPIRIT_OPTIMIZED_VM_GENERATED_DIFFERENTIAL_OK');
+
+
+// Cache revisions must rebuild a specialization even when an upstream caller retains
+// the same instruction-array object.
+const cacheVm = new CoreSpiritOptimizedExecutionVM();
+const mutableInstructions = [
+  { op:'const', dest:'cacheValue', value:1 },
+  { op:'emit', kind:'plot', args:['cacheValue'], outputId:'cache-version' },
+];
+function runVersion(versions) {
+  const output = new CoreSpiritOutputCollector(8);
+  const host = {
+    maxStepsPerBar:32, throwIfAborted(){}, loadSeries(){return null;}, moveLocal(){return null;},
+    loadState(){return null;}, setState(){}, setLocal(){}, unary(){return null;}, binary(){return null;},
+    tryFused(){return false;}, call(){return null;}, loadIndexed(){return null;}, truthy(value){return !!value;},
+    eventActive(){return true;}, emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:'cache'});},
+  };
+  cacheVm.run(mutableInstructions,0,host,output,versions);
+  return output.values().at(-1)?.value;
+}
+assert.equal(runVersion({compilerVersion:'compiler-a'}),1);
+mutableInstructions[0].value=2;
+assert.equal(runVersion({compilerVersion:'compiler-b'}),2,'compiler-version change invalidates cached slots');
+mutableInstructions[0].value=3;
+assert.equal(runVersion({componentDefinitionVersion:'component-b'}),3,'component-definition change invalidates cached slots');
+mutableInstructions[0].value=4;
+assert.equal(runVersion({executionConfigurationVersion:'config-b'}),4,'execution-configuration change invalidates cached slots');
+
+// Re-entrant calls on the same VM/plan must never overwrite the outer register file.
+const reentrantVm = new CoreSpiritOptimizedExecutionVM();
+const reentrantInstructions = [
+  {op:'loadSeries',dest:'price',name:'close',offset:0},
+  {op:'call',dest:'sentinel',name:'reenter',args:[],componentPure:false,componentStateful:true,componentDeterministic:true},
+  {op:'binary',dest:'answer',operator:'+',left:'price',right:'sentinel'},
+  {op:'emit',kind:'plot',args:['answer'],outputId:'reentrant'},
+];
+const reentrantState = { depth:false, nested:undefined };
+function makeHost(output) {
+  return {
+    maxStepsPerBar:64,throwIfAborted(){},loadSeries(){return reentrantState.depth?20:10;},moveLocal(){return null;},
+    loadState(){return null;},setState(){},setLocal(){},unary(){return null;},
+    binary(op,left,right){return op==='+'?Number(left)+Number(right):null;},
+    tryFused(){return false;},
+    call(){if(!reentrantState.depth){reentrantState.depth=true;try{
+      const nested=new CoreSpiritOutputCollector(8);
+      reentrantVm.run(reentrantInstructions,0,makeHost(nested),nested,{reuseValues:true,executionContextKey:reentrantState});
+      reentrantState.nested=nested.values().at(-1)?.value;
+    }finally{reentrantState.depth=false;}}return 1;},
+    loadIndexed(){return null;},truthy(value){return !!value;},eventActive(){return true;},
+    emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:'reentrant'});},
+  };
+}
+const reentrantOutput=new CoreSpiritOutputCollector(8);
+reentrantVm.run(reentrantInstructions,0,makeHost(reentrantOutput),reentrantOutput,{reuseValues:true,executionContextKey:reentrantState});
+assert.equal(reentrantState.nested,21,'nested invocation executes in its own register file');
+assert.equal(reentrantOutput.values().at(-1)?.value,11,'nested invocation preserves the outer register values');
+
+// Incremental reusable values are isolated per execution context, not shared by symbol/model.
+const isolatedVm = new CoreSpiritOptimizedExecutionVM();
+const isolatedInstructions = [
+  {op:'loadSeries',dest:'price',name:'close',offset:0},
+  {op:'const',dest:'one',value:1},
+  {op:'binary',dest:'next',operator:'+',left:'price',right:'one'},
+  {op:'emit',kind:'plot',args:['next'],outputId:'context-isolation'},
+];
+function runContext(key, price, dirtyInstructions) {
+  const output = new CoreSpiritOutputCollector(8);
+  const host = {
+    maxStepsPerBar:32,throwIfAborted(){},loadSeries(){return price;},moveLocal(){return null;},
+    loadState(){return null;},setState(){},setLocal(){},unary(){return null;},binary(op,a,b){return op==='+'?Number(a)+Number(b):null;},
+    tryFused(){return false;},call(){return null;},loadIndexed(){return null;},truthy(value){return !!value;},eventActive(){return true;},
+    emit(ins,values,out){out.push({kind:'series',time:1,value:values.get(ins.args[0]),seriesId:String(key)});},
+  };
+  isolatedVm.run(isolatedInstructions,0,host,output,{reuseValues:true,executionContextKey:key,dirtyInstructions});
+  return output.values().at(-1)?.value;
+}
+const contextA={}, contextB={};
+assert.equal(runContext(contextA,10),11);
+assert.equal(runContext(contextB,20),21);
+const recomputeDerived = new Set([1,2,3]);
+assert.equal(runContext(contextA,999,recomputeDerived),11,'context A retains its own source register on a derived-only update');
+assert.equal(runContext(contextB,999,recomputeDerived),21,'context B retains its own source register on a derived-only update');
+console.log('CORESPIRIT_OPTIMIZED_VM_CACHE_AND_CONTEXT_CONTRACT_OK');
