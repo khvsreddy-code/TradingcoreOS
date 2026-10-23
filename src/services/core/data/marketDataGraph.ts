@@ -3,8 +3,17 @@ import type { CoreSpiritDataAlignment, CoreSpiritDataRequest, CoreSpiritDataReso
 
 export const CORE_SPIRIT_DATA_GRAPH_VERSION = 1 as const;
 
+export type MarketDataGraphTradingSession = Readonly<{
+  id: string;
+  openSeconds: number;
+  closeSeconds: number;
+}>;
+
+/** Calendar-aware aggregation. Return null for holidays, overnight periods and session breaks. */
 export type MarketDataGraphSessionProfile = Readonly<{
   anchorSecondsUtc?: number;
+  calendarId?: string;
+  sessionAt?: (timestampSeconds: number) => MarketDataGraphTradingSession | null;
 }>;
 
 export type MarketDataGraphNodeKey = string;
@@ -25,6 +34,9 @@ export type CoreSpiritGraphSnapshotNode = {
   symbol:string;
   timeframe:string;
   revision:number;
+  /** Revision of this exact canonical symbol/timeframe dataset. */
+  dataRevision?: number | string;
+  calendarId?: string;
   time:Float64Array;
   open:Float64Array;
   high:Float64Array;
@@ -45,6 +57,7 @@ type GraphNode={
   sourceKey?:string;
   intervalSeconds:number;
   anchorSecondsUtc:number;
+  sessionProfile:MarketDataGraphSessionProfile;
   sourceRevision:number;
 };
 
@@ -90,12 +103,30 @@ function graphKey(symbol:string,timeframe:string):string{
   return `${String(symbol).trim().toUpperCase()}::${normalizeTimeframe(timeframe)}`;
 }
 
-function bucketStart(timestamp:number,intervalSeconds:number,anchorSecondsUtc:number):number{
+function bucketStart(
+  timestamp:number,
+  intervalSeconds:number,
+  anchorSecondsUtc:number,
+  sessionProfile?:MarketDataGraphSessionProfile,
+):number {
+  if (sessionProfile?.sessionAt) {
+    const session = sessionProfile.sessionAt(timestamp);
+    if (!session || !Number.isFinite(session.openSeconds) || !Number.isFinite(session.closeSeconds) ||
+        session.closeSeconds <= session.openSeconds || timestamp < session.openSeconds || timestamp >= session.closeSeconds) return Number.NaN;
+    if (intervalSeconds >= 86400) return session.openSeconds;
+    return session.openSeconds + Math.floor((timestamp - session.openSeconds) / intervalSeconds) * intervalSeconds;
+  }
   if(intervalSeconds>=86400)return Math.floor((timestamp-anchorSecondsUtc)/86400)*86400+anchorSecondsUtc;
   return Math.floor((timestamp-anchorSecondsUtc)/intervalSeconds)*intervalSeconds+anchorSecondsUtc;
 }
 
-function aggregateRows(source:CanonicalDataPlane,target:CanonicalDataPlane,intervalSeconds:number,anchorSecondsUtc:number):void{
+function aggregateRows(
+  source:CanonicalDataPlane,
+  target:CanonicalDataPlane,
+  intervalSeconds:number,
+  anchorSecondsUtc:number,
+  sessionProfile?:MarketDataGraphSessionProfile,
+):void {
   const view=source.market.views();
   const out:number[]=[];
   let currentBucket=Number.NaN;
@@ -109,7 +140,12 @@ function aggregateRows(source:CanonicalDataPlane,target:CanonicalDataPlane,inter
   for(let i=0;i<view.time.length;i+=1){
     const t=Number(view.time[i]);
     if(!Number.isFinite(t))continue;
-    const bucket=bucketStart(t,intervalSeconds,anchorSecondsUtc);
+    const bucket=bucketStart(t,intervalSeconds,anchorSecondsUtc,sessionProfile);
+    if (!Number.isFinite(bucket)) {
+      flush();
+      currentBucket = Number.NaN;
+      continue;
+    }
     if(bucket!==currentBucket){
       flush();
       currentBucket=bucket;
@@ -146,6 +182,7 @@ function cloneSnapshotNode(plane:CanonicalDataPlane,descriptor:MarketDataGraphNo
     symbol:descriptor.symbol,
     timeframe:descriptor.timeframe,
     revision:descriptor.revision,
+    dataRevision:descriptor.revision,
     time:new Float64Array(view.time),
     open:new Float64Array(view.open),
     high:new Float64Array(view.high),
@@ -157,6 +194,7 @@ function cloneSnapshotNode(plane:CanonicalDataPlane,descriptor:MarketDataGraphNo
 
 export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
   private nodes=new Map<string,CoreSpiritGraphSnapshotNode>();
+  private snapshotRevision = 0;
   constructor(
     snapshot:CoreSpiritGraphSnapshot,
     private readonly baseSymbol='current',
@@ -165,7 +203,13 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
 
   replaceSnapshot(snapshot:CoreSpiritGraphSnapshot):void{
     this.nodes.clear();
-    for(const node of snapshot.nodes)this.nodes.set(graphKey(node.symbol,node.timeframe),node);
+    this.snapshotRevision = snapshot.revision;
+    for(const node of snapshot.nodes) {
+      if (node.time.length !== node.open.length || node.time.length !== node.high.length ||
+          node.time.length !== node.low.length || node.time.length !== node.close.length ||
+          node.time.length !== node.volume.length) continue;
+      this.nodes.set(graphKey(node.symbol,node.timeframe),node);
+    }
   }
 
   private pickNode(symbol:string,timeframe:string):CoreSpiritGraphSnapshotNode|undefined{
@@ -192,7 +236,10 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
 
   private valueAt(request:CoreSpiritDataRequest,ctx?:CoreSpiritDataResolutionContext):CoreSpiritDataSnapshot{
     const node=this.pickNode(request.symbol,request.timeframe);
-    if(!node)return {value:null,source:'data-graph:missing',symbol:request.symbol,timeframe:request.timeframe,state:'historical'};
+    if(!node)return {
+      value:null,source:'data-graph:missing',symbol:request.symbol,timeframe:request.timeframe,
+      state:'historical',confirmationPhase:'confirmed',dataRevision:'missing',
+    };
     const alignment=ctx?.alignment??'last-confirmed';
     const asOf=ctx?.asOfTimestamp??Number.POSITIVE_INFINITY;
     let index=this.indexAt(node,asOf,alignment);
@@ -202,15 +249,37 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     const barDurationSeconds=timeframeSeconds(node.timeframe);
     const freshnessTimestamp=timestamp+(barDurationSeconds>0?barDurationSeconds:0);
     const staleAgeMs=Math.max(0,asOf-freshnessTimestamp)*1000;
+    const dataRevision = node.dataRevision ?? node.revision;
     if(ctx?.maxStalenessMs!=null&&Number.isFinite(asOf)&&staleAgeMs>ctx.maxStalenessMs){
-      return {value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,timestamp,state:'historical'};
+      return {
+        value:null,source:'data-graph:stale',symbol:node.symbol,timeframe:node.timeframe,
+        timestamp,state:'historical',confirmationPhase:'confirmed',revision:node.revision,dataRevision,
+      };
     }
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
     const value=columns[request.field]?.[index];
-    if(value==null||!Number.isFinite(Number(value)))return {value:null,source:'data-graph',symbol:node.symbol,timeframe:node.timeframe,timestamp:Number(node.time[index]),state:'historical'};
     const seconds=timeframeSeconds(node.timeframe);
-    const confirmed=seconds<=0||timestamp+seconds<=asOf;
-    return {value:Number(value),source:'data-graph',symbol:node.symbol,timeframe:node.timeframe,timestamp,state:confirmed?'confirmed':'developing'};
+    const isConfirmed=seconds<=0||timestamp+seconds<=asOf;
+    const common = {
+      symbol:node.symbol,
+      timeframe:node.timeframe,
+      timestamp,
+      revision:node.revision,
+      dataRevision:node.dataRevision ?? node.revision,
+      confirmationPhase:isConfirmed ? 'confirmed' as const : 'developing' as const,
+    };
+    if (ctx && ctx.executionMode !== 'realtime' && !isConfirmed && seconds > 0) {
+      return { ...common, value:null, source:'data-graph:unconfirmed', state:'developing' };
+    }
+    if(value==null||!Number.isFinite(Number(value))) {
+      return { ...common, value:null, source:'data-graph', state:isConfirmed?'historical':'developing' };
+    }
+    return {
+      ...common,
+      value:Number(value),
+      source:'data-graph',
+      state:isConfirmed?'confirmed':'developing',
+    };
   }
 
   request=(request:CoreSpiritDataRequest)=>this.valueAt(request);
@@ -220,10 +289,20 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     const node=this.pickNode(request.symbol,request.timeframe);
     if(!node)return [];
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
-    const index=ctx?this.indexAt(node,ctx.asOfTimestamp,ctx.alignment):node.time.length-1;
+    let index=ctx?this.indexAt(node,ctx.asOfTimestamp,ctx.alignment):node.time.length-1;
+    const seconds=timeframeSeconds(node.timeframe);
+    if (ctx && ctx.executionMode !== 'realtime' && seconds > 0) {
+      while (index >= 0 && Number(node.time[index]) + seconds > ctx.asOfTimestamp) index -= 1;
+    }
     return Array.from(columns[request.field]?.subarray(0,Math.max(0,index+1))??[]);
   };
-  cacheKey=(request:CoreSpiritDataRequest)=>`data-graph:${graphKey(request.symbol==='current'?this.baseSymbol:request.symbol,request.timeframe==='chart'?this.baseTimeframe:request.timeframe)}`;
+  cacheKey=(request:CoreSpiritDataRequest)=>{
+    const symbol=request.symbol==='current'?this.baseSymbol:request.symbol;
+    const timeframe=request.timeframe==='chart'?this.baseTimeframe:request.timeframe;
+    const node=this.nodes.get(graphKey(symbol,timeframe));
+    const dataRevision=node?.dataRevision ?? node?.revision ?? 'missing';
+    return `data-graph:${this.snapshotRevision}:${dataRevision}:${graphKey(symbol,timeframe)}`;
+  };
 }
 
 export function createGraphResolver(snapshot:CoreSpiritGraphSnapshot,baseSymbol='current',baseTimeframe='chart'):CoreSpiritDataGraphResolver{
@@ -253,7 +332,11 @@ export class MarketDataGraph{
     if(existing)return existing;
     const plane=getCanonicalDataPlane(`graph:${key}`);
     const descriptor:MarketDataGraphNodeDescriptor={id:`graph:${key}`,key,symbol:String(symbol).trim(),timeframe:normalized,kind:'base',revision:0,length:0};
-    const node:GraphNode={descriptor,plane,intervalSeconds:timeframeSeconds(normalized),anchorSecondsUtc:this.defaultSession.anchorSecondsUtc??0,sourceRevision:0};
+    const sessionProfile:MarketDataGraphSessionProfile = {
+      ...this.defaultSession,
+      anchorSecondsUtc:this.defaultSession.anchorSecondsUtc??0,
+    };
+    const node:GraphNode={descriptor,plane,intervalSeconds:timeframeSeconds(normalized),anchorSecondsUtc:sessionProfile.anchorSecondsUtc??0,sessionProfile,sourceRevision:0};
     this.nodes.set(key,node);
     return node;
   }
@@ -261,6 +344,7 @@ export class MarketDataGraph{
   syncBase(symbol:string,timeframe:string,candles:readonly {timestamp:string;open:number;high:number;low:number;close:number;volume:number}[],session?:MarketDataGraphSessionProfile):void{
     const node=this.ensureBase(symbol,timeframe);
     if(session?.anchorSecondsUtc!=null)node.anchorSecondsUtc=session.anchorSecondsUtc;
+    if (session) node.sessionProfile = { ...node.sessionProfile, ...session };
     node.plane.replaceHistoricalCandleRows(candles);
     node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
     this.rebuildDependents(node.descriptor.key);
@@ -304,9 +388,10 @@ export class MarketDataGraph{
     const key=graphKey(symbol,normalized);
     const plane=getCanonicalDataPlane(`graph:${key}`);
     const descriptor:MarketDataGraphNodeDescriptor={id:`graph:${key}`,key,symbol:String(symbol).trim(),timeframe:normalized,sourceKey:source.descriptor.key,kind:'derived',revision:0,length:0};
-    const node:GraphNode={descriptor,plane,sourceKey:source.descriptor.key,intervalSeconds:targetSeconds,anchorSecondsUtc:source.anchorSecondsUtc,sourceRevision:0};
+    const sessionProfile = source.sessionProfile;
+    const node:GraphNode={descriptor,plane,sourceKey:source.descriptor.key,intervalSeconds:targetSeconds,anchorSecondsUtc:source.anchorSecondsUtc,sessionProfile,sourceRevision:0};
     this.nodes.set(key,node);
-    aggregateRows(source.plane,plane,targetSeconds,node.anchorSecondsUtc);
+    aggregateRows(source.plane,plane,targetSeconds,node.anchorSecondsUtc,node.sessionProfile);
     node.descriptor={...node.descriptor,revision:plane.revision,length:plane.length};
     this.revision+=1;
     return node;
@@ -333,7 +418,7 @@ export class MarketDataGraph{
         if(node.sourceKey!==current)continue;
         const source=this.nodes.get(node.sourceKey);
         if(!source)continue;
-        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc);
+        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
         node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
         node.sourceRevision=source.plane.revision;
         queue.push(node.descriptor.key);
@@ -350,11 +435,12 @@ export class MarketDataGraph{
       const sourceView=source.plane.market.views();
       const lastIndex=sourceView.time.length-1;
       const lastTimestamp=Number(sourceView.time[lastIndex]);
-      const bucket=bucketStart(lastTimestamp,node.intervalSeconds,node.anchorSecondsUtc);
+      const bucket=bucketStart(lastTimestamp,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
+      if (!Number.isFinite(bucket)) continue;
       let from=lastIndex;
       while(from>0){
         const previousTimestamp=Number(sourceView.time[from-1]);
-        if(!Number.isFinite(previousTimestamp)||bucketStart(previousTimestamp,node.intervalSeconds,node.anchorSecondsUtc)!==bucket)break;
+        if(!Number.isFinite(previousTimestamp)||bucketStart(previousTimestamp,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile)!==bucket)break;
         from-=1;
       }
 
@@ -377,7 +463,7 @@ export class MarketDataGraph{
       else if(!Number.isFinite(targetLastTime)||bucket>targetLastTime)node.plane.append(row);
       else {
         // Out-of-order corrections are rare; rebuild once rather than corrupting alignment.
-        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc);
+        aggregateRows(source.plane,node.plane,node.intervalSeconds,node.anchorSecondsUtc,node.sessionProfile);
       }
       node.descriptor={...node.descriptor,revision:node.plane.revision,length:node.plane.length};
       node.sourceRevision=source.plane.revision;
