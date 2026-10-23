@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { CoreSpiritCompiler } from './compiler.ts';
-import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace } from './compilerPipeline.ts';
+import { CORE_SPIRIT_COMPILER_STAGE_ORDER, validateCoreSpiritCompilerPipelineTrace, createCoreSpiritCompilationUnit } from './compilerPipeline.ts';
 import { validateCoreSpiritIr } from './irContract.ts';
 import { CoreSpiritParser } from './parser.ts';
 import { normalizeCoreSpiritSource } from './syntax.ts';
@@ -30,6 +30,15 @@ assert.equal(validateCoreSpiritIr(result.ir), true, 'VM boundary must be the val
 assert.equal(validateCoreSpiritCompilerPipelineTrace(result.ir.compilerPipeline), true);
 assert.deepEqual(result.ir.compilerPipeline.stages, CORE_SPIRIT_COMPILER_STAGE_ORDER);
 assert.equal(result.ir.compilerPipeline.runtimeBoundary, 'CoreSpiritExecutionVM');
+
+// Editor recovery/partial parsing is explicitly non-executable, even when it
+// returns an AST useful for diagnostics. Only the compiler's validated artifact
+// can cross the VM boundary.
+const partial = createCoreSpiritCompilationUnit('let x = (', {});
+assert.equal(partial.kind, 'partial-diagnostics');
+assert.equal(partial.executable, false);
+assert.ok(partial.diagnostics.some(item => item.severity === 'error'));
+assert.equal('artifact' in partial, false);
 
 // Comments and string literals are data, not capability use. The old source-regex
 // capability check incorrectly treated both as requests for host privileges.
