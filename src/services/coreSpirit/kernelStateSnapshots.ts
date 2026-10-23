@@ -1,18 +1,27 @@
 /**
  * Bounded, runtime-only checkpoints for stateful CoreSpirit execution kernels.
  *
- * A snapshot is deliberately richer than a raw kernel clone: the runtime can
- * validate that the snapshot belongs to the same compiled model and that its
- * dependency surface is still compatible before restoring it for an intrabar
- * revision.
+ * A checkpoint is reusable only when both the compiled kernel configuration
+ * and the input-history generation match. Bar index alone is not an identity:
+ * it can survive a correction, symbol switch, parameter edit, or a different
+ * implementation of the same indicator.
  */
 export type CoreSpiritKernelSnapshot<TState> = Readonly<{
   nodeId: string;
   state: TState;
+  /** Intrabar execution revision (diagnostic; not the historical data revision). */
   revision: number;
   inputDependencies: readonly string[];
+  /** Index of the last observation represented by state, -1 for the empty baseline. */
   barIndex: number;
+  /** Index that the next update to this state must consume. */
+  nextBarIndex: number;
   modelVersion: string;
+  kernelType: string;
+  kernelVersion: string | number;
+  parametersSignature: string;
+  /** Monotonic input-history generation; unchanged by updates to a forming bar. */
+  dataRevision: string | number;
 }>;
 
 export type CoreSpiritKernelSnapshotMetadata = Readonly<{
@@ -20,8 +29,18 @@ export type CoreSpiritKernelSnapshotMetadata = Readonly<{
   revision: number;
   inputDependencies: readonly string[];
   barIndex: number;
+  nextBarIndex: number;
   modelVersion: string;
+  kernelType: string;
+  kernelVersion: string | number;
+  parametersSignature: string;
+  dataRevision: string | number;
 }>;
+
+export type CoreSpiritKernelSnapshotIdentity = Readonly<Pick<
+  CoreSpiritKernelSnapshotMetadata,
+  'modelVersion' | 'kernelType' | 'kernelVersion' | 'parametersSignature' | 'dataRevision' | 'nextBarIndex'
+>>;
 
 function sameStringSet(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
@@ -29,6 +48,19 @@ function sameStringSet(a: readonly string[], b: readonly string[]): boolean {
   if (left.size !== b.length) return false;
   for (const value of b) if (!left.has(value)) return false;
   return true;
+}
+
+function identityMatches<TState>(
+  snapshot: CoreSpiritKernelSnapshot<TState>,
+  expected?: CoreSpiritKernelSnapshotIdentity,
+): boolean {
+  if (!expected) return true;
+  return snapshot.modelVersion === expected.modelVersion &&
+    snapshot.kernelType === expected.kernelType &&
+    snapshot.kernelVersion === expected.kernelVersion &&
+    snapshot.parametersSignature === expected.parametersSignature &&
+    snapshot.dataRevision === expected.dataRevision &&
+    snapshot.nextBarIndex === expected.nextBarIndex;
 }
 
 export class CoreSpiritKernelSnapshotStore<TState> {
@@ -55,21 +87,35 @@ export class CoreSpiritKernelSnapshotStore<TState> {
   ): CoreSpiritKernelSnapshot<TState> {
     if (!metadata.nodeId.trim()) throw new Error('CoreSpirit kernel snapshot nodeId is required.');
     if (!Number.isInteger(metadata.barIndex) || metadata.barIndex < -1) throw new Error('CoreSpirit kernel snapshot barIndex is invalid.');
+    if (!Number.isSafeInteger(metadata.nextBarIndex) || metadata.nextBarIndex < 0 ||
+        metadata.nextBarIndex !== metadata.barIndex + 1) {
+      throw new Error('CoreSpirit kernel snapshot nextBarIndex is inconsistent with its represented bar.');
+    }
     if (!Number.isInteger(metadata.revision) || metadata.revision < 0) throw new Error('CoreSpirit kernel snapshot revision is invalid.');
     if (!metadata.modelVersion.trim()) throw new Error('CoreSpirit kernel snapshot modelVersion is required.');
+    if (!metadata.kernelType.trim()) throw new Error('CoreSpirit kernel snapshot kernelType is required.');
+    if ((typeof metadata.kernelVersion !== 'string' && typeof metadata.kernelVersion !== 'number') ||
+        String(metadata.kernelVersion).trim() === '') throw new Error('CoreSpirit kernel snapshot kernelVersion is required.');
+    if (!metadata.parametersSignature) throw new Error('CoreSpirit kernel snapshot parametersSignature is required.');
+    if (metadata.dataRevision == null || String(metadata.dataRevision).trim() === '') {
+      throw new Error('CoreSpirit kernel snapshot dataRevision is required.');
+    }
 
     const snapshot: CoreSpiritKernelSnapshot<TState> = Object.freeze({
-      nodeId: metadata.nodeId,
+      ...metadata,
       state: clone(state),
-      revision: metadata.revision,
       inputDependencies: Object.freeze([...metadata.inputDependencies]),
-      barIndex: metadata.barIndex,
-      modelVersion: metadata.modelVersion,
     });
     this.snapshots.set(metadata.nodeId, snapshot);
 
     const previous = this.history.get(metadata.nodeId) ?? [];
-    const next = [snapshot, ...previous.filter((item) => item.barIndex !== snapshot.barIndex)];
+    const next = [snapshot, ...previous.filter((item) =>
+      item.barIndex !== snapshot.barIndex ||
+      item.dataRevision !== snapshot.dataRevision ||
+      item.parametersSignature !== snapshot.parametersSignature ||
+      item.kernelType !== snapshot.kernelType ||
+      item.kernelVersion !== snapshot.kernelVersion,
+    )];
     this.history.set(metadata.nodeId, next.slice(0, this.historyLimit));
     return snapshot;
   }
@@ -90,12 +136,11 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     inputDependencies: readonly string[],
     barIndex: number,
     copyFrom: (target: TState, source: TState) => void,
+    expected?: CoreSpiritKernelSnapshotIdentity,
   ): boolean {
     const snapshot = this.snapshots.get(nodeId);
-    if (!snapshot) return false;
-    if (snapshot.modelVersion !== modelVersion) return false;
-    if (snapshot.barIndex !== barIndex) return false;
-    if (!sameStringSet(snapshot.inputDependencies, inputDependencies)) return false;
+    if (!snapshot || snapshot.modelVersion !== modelVersion || snapshot.barIndex !== barIndex ||
+        !sameStringSet(snapshot.inputDependencies, inputDependencies) || !identityMatches(snapshot, expected)) return false;
     copyFrom(target, snapshot.state);
     return true;
   }
@@ -107,11 +152,11 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     inputDependencies: readonly string[],
     barIndex: number,
     copyFrom: (target: TState, source: TState) => void,
+    expected?: CoreSpiritKernelSnapshotIdentity,
   ): boolean {
     const snapshot = this.at(nodeId, barIndex);
-    if (!snapshot) return false;
-    if (snapshot.modelVersion !== modelVersion) return false;
-    if (!sameStringSet(snapshot.inputDependencies, inputDependencies)) return false;
+    if (!snapshot || snapshot.modelVersion !== modelVersion ||
+        !sameStringSet(snapshot.inputDependencies, inputDependencies) || !identityMatches(snapshot, expected)) return false;
     copyFrom(target, snapshot.state);
     return true;
   }
