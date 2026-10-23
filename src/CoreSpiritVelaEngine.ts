@@ -11,7 +11,7 @@ import type { CoreSpiritGraphSnapshot } from './services/core/data/marketDataGra
 import type { CoreSpiritWorkerRuntimeOptions } from './services/coreSpirit/coreSpiritWorkerPool.ts';
 import type { CoreSpiritObject } from './services/coreSpirit/types.ts';
 import type { CoreSpiritMarketBar } from './services/coreSpirit/marketData.ts';
-import { normalizeCoreSpiritTimeframe } from './services/core/data/marketDataGraph.ts';
+import { normalizeCoreSpiritTimeframe, timeframeSeconds } from './services/core/data/marketDataGraph.ts';
 import { adaptCoreSpiritOutputsForVela, coreSpiritTimeToVelaMillis, normalizeVelaBarToCoreSpirit, normalizeVelaBarsToCoreSpirit, safeVelaNormalizationStart, type CoreSpiritVelaOhlcv } from './services/coreSpirit/velaOutputAdapter.ts';
 import { CoreSpiritSceneDiff } from './services/core/chart/coreSpiritSceneDiff.ts';
 import { buildCoreSpiritVelaIndicatorModel } from './services/core/chart/tcoVelaSemanticAdapter.ts';
@@ -141,11 +141,13 @@ export class CoreSpiritVelaEngine {
     };
     const secondaryData = new Map<string, CoreSpiritMarketBar[]>();
     let secondaryGraphRevision=0;
-    let secondaryGraphDirty=false;
     let cachedSecondaryGraphSnapshot:CoreSpiritGraphSnapshot|undefined;
     let secondaryRefreshPromise: Promise<void>|undefined;
-    // Forced refreshes may overlap. Only the newest generation is allowed to
-    // mutate the shared secondary-data snapshot used by live execution.
+    let secondaryAbortController:AbortController|undefined;
+    const secondaryDataRevisions = new Map<string,number>();
+    // Forced refreshes cancel their predecessor when possible and always fence
+    // late responses by generation, so a switched symbol/timeframe cannot leak
+    // old values into the active strategy.
     let secondaryRequestVersion = 0;
     let secondaryLastRefreshAt=0;
     let secondaryDegraded=false;
@@ -154,7 +156,14 @@ export class CoreSpiritVelaEngine {
     // not rebuild the runtime or emit a scene after a newer update takes over.
     let updateVersion = 0;
     const secondaryFailed = new Set<string>();
+    const secondaryPending = new Set<string>();
     const secondaryWarnings:string[]=[];
+
+    const publishSecondaryGraphChange=(key:string):void=>{
+      secondaryDataRevisions.set(key,(secondaryDataRevisions.get(key)??0)+1);
+      secondaryGraphRevision+=1;
+      cachedSecondaryGraphSnapshot=undefined;
+    };
     const dataDependencies = token.ir.tradingNativePlan?.dataDependencies ?? [];
     const secondaryDependencies = [...new Map(
       dataDependencies
@@ -183,48 +192,67 @@ export class CoreSpiritVelaEngine {
     const loadSecondaryData = async (force=false): Promise<void> => {
       if (stopped || !req.fetchSeries || !secondaryDependencies.length) return;
       const now=Date.now();
-      if (!force && secondaryRefreshPromise) return secondaryRefreshPromise;
+      // Never let a non-forced refresh wait behind a slow dependency request.
+      if (!force && secondaryRefreshPromise) return;
       if (!force && now-secondaryLastRefreshAt<1500) return;
+
+      if (force) secondaryAbortController?.abort();
+      const controller = new AbortController();
+      secondaryAbortController = controller;
       const requestVersion = ++secondaryRequestVersion;
+      secondaryPending.clear();
+      for (const dep of secondaryDependencies) secondaryPending.add(dependencyKey(dep.symbol,dep.timeframe));
+      secondaryDegraded = secondaryFailed.size>0 || secondaryPending.size>0;
+
       const latestBars = req.getBars ? normalizeVelaBarsToCoreSpirit(req.getBars() as unknown as VelaOhlcv[]) : bars;
       const endTime=latestBars.length?barTimeMillis(latestBars[latestBars.length-1]?.timestamp):undefined;
       const limit=Math.min(50000,Math.max(5000,latestBars.length+token.ir.maxLookback+64));
+      let changedData = false;
+      let returnedBeforeComplete = false;
+
       const task=Promise.all(secondaryDependencies.map(async dep=>{
         const key=dependencyKey(dep.symbol,dep.timeframe);
         try{
-          const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{to:Number.isFinite(endTime)?endTime:undefined,limit});
-          // A slower request must never overwrite a newer symbol/timeframe snapshot.
-          if (stopped || requestVersion !== secondaryRequestVersion) return;
+          const rows=await req.fetchSeries!(dep.symbol,dep.timeframe,{
+            to:Number.isFinite(endTime)?endTime:undefined,
+            limit,
+            signal:controller.signal,
+          });
+          // An older request is never allowed to mutate the active strategy's data.
+          if (stopped || controller.signal.aborted || requestVersion !== secondaryRequestVersion) return;
           if(rows?.length){
             const existing=secondaryData.get(key);
-            // Vela's cache-backed fetch can return the exact same 5k–50k candles
-            // on consecutive refreshes. Avoid reallocating object bars and
-            // retransferring identical graph columns when nothing changed.
+            // Identical provider snapshots preserve object identity and don't
+            // advance the dependency's revision.
             if(!secondaryRowsMatch(existing,rows as unknown as VelaOhlcv[])){
               secondaryData.set(key,normalizeVelaBarsToCoreSpirit(rows as unknown as VelaOhlcv[]));
-              secondaryGraphDirty=true;
+              publishSecondaryGraphChange(key);
+              changedData=true;
             }
             secondaryFailed.delete(key);
           }else{
-            // Do not leave an old cross-symbol snapshot addressable after a
-            // refresh reports no data. Signals/order intents are already gated,
-            // and the new worker graph must not expose stale values either.
-            if(secondaryData.delete(key))secondaryGraphDirty=true;
+            // A failed refresh must not keep exposing a stale secondary series.
+            if(secondaryData.delete(key)){
+              publishSecondaryGraphChange(key);
+              changedData=true;
+            }
             secondaryFailed.add(key);
-            secondaryDegraded = true;
             if(req.mode==='live'){
-              const warning=`Secondary market data unavailable for ${dep.symbol} ${dep.timeframe}`;
+              const warning="Secondary market data unavailable for "+dep.symbol+" "+dep.timeframe;
               secondaryWarnings.push(warning);
               if(secondaryWarnings.length>100)secondaryWarnings.splice(0,secondaryWarnings.length-100);
               handlers.onWarning?.({message:warning,method:'secondary-data',bar:Math.max(0,latestBars.length-1)});
             }
           }
         }catch(error){
-          if (stopped || requestVersion !== secondaryRequestVersion) return;
-          if(secondaryData.delete(key))secondaryGraphDirty=true;
+          if (stopped || controller.signal.aborted || requestVersion !== secondaryRequestVersion) return;
+          if(secondaryData.delete(key)){
+            publishSecondaryGraphChange(key);
+            changedData=true;
+          }
           secondaryFailed.add(key);
           if(req.mode==='live'){
-            const warning=`Secondary market data refresh failed for ${dep.symbol} ${dep.timeframe}: ${error instanceof Error?error.message:String(error)}`;
+            const warning="Secondary market data refresh failed for "+dep.symbol+" "+dep.timeframe+": "+(error instanceof Error?error.message:String(error));
             secondaryWarnings.push(warning);
             if(secondaryWarnings.length>100)secondaryWarnings.splice(0,secondaryWarnings.length-100);
             handlers.onWarning?.({
@@ -232,24 +260,54 @@ export class CoreSpiritVelaEngine {
               method:'secondary-data',bar:Math.max(0,latestBars.length-1)
             });
           }
+        }finally{
+          if (!stopped && requestVersion === secondaryRequestVersion) {
+            secondaryPending.delete(key);
+            secondaryDegraded = secondaryFailed.size>0 || secondaryPending.size>0;
+          }
         }
-      })).then(async ()=>{
-        if (stopped) return;
-        if (requestVersion !== secondaryRequestVersion) {
-          // Keep a superseded caller (for example startup) from proceeding with a
-          // partially populated cache while the latest forced refresh is still running.
-          await secondaryRefreshPromise;
-          return;
-        }
+      })).then(()=>{
+        if (stopped || controller.signal.aborted || requestVersion !== secondaryRequestVersion) return;
         secondaryLastRefreshAt=Date.now();
-        secondaryDegraded=secondaryFailed.size>0;
-        if(secondaryGraphDirty){secondaryGraphRevision+=1;cachedSecondaryGraphSnapshot=undefined;secondaryGraphDirty=false;}
+        secondaryDegraded=secondaryFailed.size>0 || secondaryPending.size>0;
+
+        // Calculations were allowed to proceed with missing secondary inputs,
+        // but any outputs produced while data was pending were fail-closed for
+        // trading side effects. Rebuild with the now-stable graph snapshot.
+        if (returnedBeforeComplete && changedData) {
+          try {
+            const currentBars=getCurrentBars();
+            if (currentBars.length) {
+              liveTailScheduler.clear();
+              mainRunGeneration+=1;
+              liveRunGeneration+=1;
+              viewportRunGeneration+=1;
+              historyInitialized=false;
+              liveStarted=false;
+              initializationInFlight=false;
+              lastViewportComputationKey=undefined;
+              initializeFromBars(Object.freeze(currentBars.slice()) as CoreSpiritMarketBar[],true);
+            }
+          } catch(error) {
+            if (!stopped && requestVersion === secondaryRequestVersion) {
+              handlers.onError?.(error instanceof Error?error:new Error(String(error)));
+            }
+          }
+        }
       }).finally(()=>{
-        // An older task's finally must not clear the current task's in-flight handle.
-        if (requestVersion === secondaryRequestVersion) secondaryRefreshPromise=undefined;
+        // An older task's finally must not clear a newer request or its controller.
+        if (requestVersion === secondaryRequestVersion) {
+          secondaryRefreshPromise=undefined;
+          if (secondaryAbortController === controller) secondaryAbortController=undefined;
+        }
       });
       secondaryRefreshPromise=task;
-      return task;
+
+      // Deliberately do not await the slowest secondary symbol/timeframe. The
+      // rest of the program can execute, while missing-data state suppresses
+      // order intents/signals until all required dependencies settle.
+      returnedBeforeComplete=true;
+      return;
     };
 
     let currentMetadata = resolveCoreSpiritVelaMetadata(token.source, token.ir, {
@@ -290,9 +348,11 @@ export class CoreSpiritVelaEngine {
           return {
             id:`vela-secondary:${dependencyKey(dep.symbol,dep.timeframe)}`,
             symbol:dep.symbol,
-            timeframe:dep.timeframe,
-            revision:secondaryGraphRevision,
+            timeframe:normalizeCoreSpiritTimeframe(dep.timeframe),
+            revision:secondaryDataRevisions.get(dependencyKey(dep.symbol,dep.timeframe))??0,
+            dataRevision:secondaryDataRevisions.get(dependencyKey(dep.symbol,dep.timeframe))??0,
             time:Float64Array.from(rows,row=>Math.floor(barTimeMillis(row.timestamp)/1000)),
+            closeTime:Float64Array.from(rows,row=>Math.floor(barTimeMillis(row.timestamp)/1000)+Math.max(0,timeframeSeconds(normalizeCoreSpiritTimeframe(dep.timeframe)))),
             open:Float64Array.from(rows,row=>row.open),
             high:Float64Array.from(rows,row=>row.high),
             low:Float64Array.from(rows,row=>row.low),
@@ -334,7 +394,7 @@ export class CoreSpiritVelaEngine {
         baseTimeframe:req.market.timeframe,
         graphSnapshot:makeSecondaryGraphSnapshot(),
         readOnly,
-        suppressExternalEffectsForRun,
+        suppressExternalEffectsForRun: suppressExternalEffectsForRun || secondaryDegraded,
         runtimeOptions,
       }).then(result => {
         // One adapter owns the CoreSpirit(epoch-seconds) → Vela(epoch-milliseconds)
@@ -673,6 +733,10 @@ export class CoreSpiritVelaEngine {
         stopped = true;
         liveTailScheduler.dispose();
         secondaryRequestVersion += 1;
+        secondaryAbortController?.abort();
+        secondaryAbortController=undefined;
+        secondaryPending.clear();
+        secondaryDataRevisions.clear();
         updateVersion += 1;
         mainRunGeneration += 1;
         liveRunGeneration += 1;
