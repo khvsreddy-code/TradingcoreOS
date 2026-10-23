@@ -178,11 +178,11 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
     });
     return;
   }
+  const rawStrategyId = isRecord(req.body) ? req.body.strategyId : undefined;
+  const strategyId = typeof rawStrategyId === 'string' && rawStrategyId.trim() && rawStrategyId.length <= 256
+    ? rawStrategyId.trim()
+    : undefined;
   try {
-    const rawStrategyId = isRecord(req.body) ? req.body.strategyId : undefined;
-    const strategyId = typeof rawStrategyId === 'string' && rawStrategyId.trim() && rawStrategyId.length <= 256
-      ? rawStrategyId.trim()
-      : undefined;
     await TradingKillSwitchRepository.assertOrderSubmissionAllowed(userId, strategyId);
   } catch (error: unknown) {
     res.status(503).json({
