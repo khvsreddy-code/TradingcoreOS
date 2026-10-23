@@ -11,7 +11,6 @@ import type {
   CoreSpiritDataAlignment,
   CoreSpiritDataRequest,
 } from './types';
-import { timeframeSeconds } from '../core/data/marketDataGraph';
 
 export const CORE_SPIRIT_MULTI_SYMBOL_TIMEFRAME_VERSION = 1 as const;
 
@@ -90,6 +89,19 @@ function isConfirmedSnapshot(snapshot: CoreSpiritDataSnapshot): boolean {
   return snapshot.state === 'confirmed' || snapshot.state === 'historical';
 }
 
+/** Small dependency-free duration parser for snapshot validation only. */
+function snapshotTimeframeSeconds(value: string): number {
+  const raw = String(value ?? '').trim();
+  if (/^\d+$/.test(raw)) return Number(raw) * 60;
+  const match = /^(\d+)\s*(m|min|minute|h|hr|hour|d|day)$/i.exec(raw);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  const unit = match[2]!.toLowerCase();
+  if (unit === 'm' || unit === 'min' || unit === 'minute') return amount * 60;
+  if (unit === 'h' || unit === 'hr' || unit === 'hour') return amount * 3600;
+  return amount * 86400;
+}
+
 function effectiveCloseTimestamp(
   snapshot: CoreSpiritDataSnapshot,
   context: Pick<CoreSpiritDataResolutionContext,'baseTimeframe'>,
@@ -99,7 +111,7 @@ function effectiveCloseTimestamp(
   const timeframe = snapshot.timeframe.trim().toLowerCase() === 'chart'
     ? context.baseTimeframe
     : snapshot.timeframe;
-  const durationSeconds = timeframeSeconds(timeframe);
+  const durationSeconds = snapshotTimeframeSeconds(timeframe);
   return durationSeconds > 0 ? Number(snapshot.timestamp) + durationSeconds : undefined;
 }
 
