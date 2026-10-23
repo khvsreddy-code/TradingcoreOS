@@ -173,11 +173,14 @@ export class CoreSpiritVelaEngine {
             dependencyKey('timeframe',dep.timeframe) === dependencyKey('timeframe',req.market.timeframe))
         ))
         .map(dep => {
-          // current is a symbol alias, not a statement that the dependency is
-          // always the chart's primary timeframe. A current/15m request on a
-          // 5m chart must fetch the selected symbol's 15m series explicitly.
+          // "chart" is a context alias, never a cache/fetch identity. Resolve it
+          // to the concrete active chart timeframe before fetching or building
+          // the snapshot; a secondary symbol on chart TF is still independent.
           const symbol=dep.symbol.trim().toUpperCase()==='CURRENT'?req.market.symbol:dep.symbol;
-          return [dependencyKey(symbol,dep.timeframe),{symbol,timeframe:dep.timeframe}] as const;
+          const timeframe=normalizeCoreSpiritTimeframe(
+            dep.timeframe.trim().toLowerCase()==='chart' ? req.market.timeframe : dep.timeframe,
+          );
+          return [dependencyKey(symbol,timeframe),{symbol,timeframe}] as const;
         }),
     ).values()];
 
