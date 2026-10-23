@@ -504,9 +504,13 @@ export class CoreSpiritRuntime {
     this.throwIfAborted();
     if (!this.compiledIr) throw new Error('CoreSpirit program is not loaded');
     const normalized = { ...bar };
-    // Validate before touching history, transactions, or kernel cursors. A
-    // late/out-of-order packet must not be appended and then rejected.
+    // Validate before touching history, transactions, or kernel cursors. Historical
+    // corrections must arrive through executeIr(), never as a live tail append.
     this.validateBar(normalized);
+    const currentTail = this.history.at(-1);
+    if (currentTail && this.toEpoch(normalized.timestamp) < this.toEpoch(currentTail.timestamp)) {
+      throw new Error('out-of-order bar update rejected; use executeIr() to reconcile historical corrections');
+    }
     this.profiler.beginBar(profilePhase, this.compiledIr.entry.instructions.length);
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
@@ -725,7 +729,15 @@ export class CoreSpiritRuntime {
   private kernelModelVersion(): string {
     const ir = this.compiledIr;
     if (!ir) throw new Error('CoreSpirit kernel snapshots require a loaded IR.');
-    return `ir${ir.version}:${ir.sourceId}:${ir.graphs?.semantic.checksum ?? 'no-graph'}`;
+    const versions = this.optimizedExecutionCacheVersions();
+    return [
+      `ir${ir.version}`,
+      ir.sourceId,
+      ir.graphs?.semantic.checksum ?? 'no-graph',
+      `compiler=${versions.compilerVersion ?? 'unknown'}`,
+      `components=${versions.componentDefinitionVersion ?? 'unknown'}`,
+      `execution=${versions.executionConfigurationVersion ?? 'unknown'}`,
+    ].join(':');
   }
 
   private rememberKernelIdentity(
@@ -865,7 +877,6 @@ export class CoreSpiritRuntime {
         revision:this.state.barState.revision,
         inputDependencies:identity.inputDependencies,
         barIndex,
-        nextBarIndex:barIndex + 1,
         ...this.kernelSnapshotIdentity(family,key,barIndex + 1),
       },
       { family, state } as CoreSpiritKernelState,
