@@ -54,6 +54,26 @@ assert.match(migration, /v_state\.status in \('FILLED','CANCELLED','REJECTED','E
   'late fills must not reopen terminal orders unless the order is fully filled');
 assert.match(engine, /Math\.max\(currentFilled, incomingFilled\)/);
 assert.match(engine, /TERMINAL\.has\(current\.status as FyersOrderStateStatus\)/);
+assert.match(engine, /if \(current === 'FILLED'\) return false/,
+  'FILLED is immutable against stale cancellation/rejection events');
+assert.match(engine, /current === 'CANCELLED' && next === 'FILLED'/,
+  'only reconciliation may correct a cancellation race to a confirmed fill');
+const terminalMigration = read('supabase/migrations/20261023100000_fyers_order_terminal_monotonicity.sql');
+assert.match(terminalMigration, /old\.status = 'FILLED' and new\.status <> 'FILLED'/,
+  'database trigger must prevent a stale write from downgrading a filled order');
+assert.match(terminalMigration, /coalesce\(new\.filled_quantity, 0\) < new\.quantity/,
+  'cancel-to-filled correction requires evidence of a complete fill');
+const killSwitch = read('src/server/trading/TradingKillSwitchRepository.ts');
+assert.match(route, /TradingKillSwitchRepository\.assertOrderSubmissionAllowed\(userId, strategyId\)/,
+  'kill switches must be enforced at the server order boundary');
+assert.match(killSwitch, /TRADINGCORE_ORDER_KILL_SWITCH/);
+assert.match(killSwitch, /scope: 'account'/);
+assert.match(killSwitch, /scope: 'strategy'/);
+const idempotency = read('src/server/storage/OrderIdempotencyRepository.ts');
+assert.match(idempotency, /\.in\('state', \[\.\.\.allowedCurrentStates\]\)/,
+  'stale completion/rejection writes must not overwrite an already advanced idempotency state');
+assert.match(route, /\{ order: orderPayload, strategyId \}/,
+  'strategy identity participates in the idempotency request hash');
 assert.match(normalizer, /brokerOrderId: orderId/);
 assert.match(normalizer, /clientOrderId: clientOrderId \|\| null/);
 assert.match(route, /digest\('hex'\)\.slice\(0, 30\)/,
