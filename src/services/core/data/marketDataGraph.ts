@@ -228,6 +228,17 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     }
   }
 
+  private defaultContext():CoreSpiritDataResolutionContext {
+    return {
+      asOfTimestamp:Math.floor(Date.now()/1000),
+      baseSymbol:this.baseSymbol,
+      baseTimeframe:this.baseTimeframe,
+      executionMode:'historical',
+      revision:0,
+      alignment:'last-confirmed',
+    };
+  }
+
   private pickNode(symbol:string,timeframe:string):CoreSpiritGraphSnapshotNode|undefined{
     const actualSymbol=symbol==='current'?this.baseSymbol:symbol;
     const actualTimeframe=timeframe==='chart'?this.baseTimeframe:timeframe;
@@ -300,17 +311,21 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     };
   }
 
-  request=(request:CoreSpiritDataRequest)=>this.valueAt(request);
+  request=(request:CoreSpiritDataRequest)=>this.valueAt(request,this.defaultContext());
   requestAt=(request:CoreSpiritDataRequest,ctx:CoreSpiritDataResolutionContext)=>this.valueAt(request,ctx);
-  requestBatch=(requests:CoreSpiritDataRequest[],ctx?:CoreSpiritDataResolutionContext)=>requests.map(request=>this.valueAt(request,ctx));
+  requestBatch=(requests:CoreSpiritDataRequest[],ctx?:CoreSpiritDataResolutionContext)=>{
+    const effectiveContext=ctx??this.defaultContext();
+    return requests.map(request=>this.valueAt(request,effectiveContext));
+  };
   series=(request:CoreSpiritDataRequest,ctx?:CoreSpiritDataResolutionContext)=>{
+    const effectiveContext=ctx??this.defaultContext();
     const node=this.pickNode(request.symbol,request.timeframe);
     if(!node)return [];
     const columns:Record<string,Float64Array>={time:node.time,open:node.open,high:node.high,low:node.low,close:node.close,volume:node.volume};
-    let index=ctx?this.indexAt(node,ctx.asOfTimestamp,ctx.alignment):node.time.length-1;
+    let index=this.indexAt(node,effectiveContext.asOfTimestamp,effectiveContext.alignment);
     const seconds=timeframeSeconds(node.timeframe);
-    if (ctx && ctx.executionMode !== 'realtime' && seconds > 0) {
-      while (index >= 0 && (node.closeTime?.[index] ?? Number(node.time[index])+seconds) > ctx.asOfTimestamp) index -= 1;
+    if (effectiveContext.executionMode !== 'realtime' && seconds > 0) {
+      while (index >= 0 && (node.closeTime?.[index] ?? Number(node.time[index])+seconds) > effectiveContext.asOfTimestamp) index -= 1;
     }
     return Array.from(columns[request.field]?.subarray(0,Math.max(0,index+1))??[]);
   };
