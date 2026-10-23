@@ -19,6 +19,13 @@ export class AuditLogRepository {
     return url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
   }
 
+  /** Required audit path for execution decisions that must fail closed. */
+  static async appendRequired(event: TradingCoreAuditEvent): Promise<void> {
+    if (!this.supabase) throw new Error('Durable execution audit storage is not configured.');
+    if (!event.eventType) throw new Error('Execution audit event type is required.');
+    await this.append(event);
+  }
+
   static async append(event: TradingCoreAuditEvent): Promise<void> {
     if (!this.supabase || !event.eventType) return;
     const payload = event.payload ?? null;
