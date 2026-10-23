@@ -37,6 +37,16 @@ plot(banknifty.close)
 const bars = makeBars(20);
 const mutableBars = bars.map((bar) => ({ ...bar }));
 const pending = [];
+const calendarCalls = [];
+const marketCalendar = {
+  id: 'secondary-test-session-v1',
+  resolveBarCloseTime(symbol, timeframe, barOpenTimeMs) {
+    calendarCalls.push({symbol, timeframe, barOpenTimeMs});
+    // Test session-aware close boundaries: intentionally not equal to the
+    // nominal five-minute end so the resolver must preserve host semantics.
+    return barOpenTimeMs + 60_000;
+  },
+};
 const fetchSeries = (symbol, timeframe, range) => new Promise((resolve, reject) => pending.push({
   symbol, timeframe, signal:range.signal, resolve, reject,
 }));
@@ -51,6 +61,7 @@ const session = engine.execute({
   bars,
   getBars: () => mutableBars,
   fetchSeries,
+  marketCalendar,
   mode: 'live',
   historyState: 'complete',
 }, {
@@ -90,6 +101,8 @@ for (let attempt = 0; attempt < 40; attempt += 1) {
 assert.equal(runtimeError, undefined, runtimeError?.message);
 assert.ok(latestValues(freshContext).some((value) => Number(value) === 222),
   'the newest secondary response should be visible to CoreSpirit after re-evaluation');
+assert.ok(calendarCalls.some(call => call.symbol === 'BANKNIFTY' && call.timeframe === '5'),
+  'chart timeframe aliases must be resolved to the actual chart timeframe before applying the exchange calendar');
 assert.equal(modelCount, 2, 'a changed secondary dataset should cause one fresh model result after the initial partial result');
 assert.match((await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url), 'utf8'), /time:Float64Array\.from\(rows,row=>Math\.floor\(barTimeMillis\(row\.timestamp\)\/1000\)\)/,
   'Vela secondary candle timestamps must be normalized to epoch seconds for the CoreSpirit market graph resolver');
