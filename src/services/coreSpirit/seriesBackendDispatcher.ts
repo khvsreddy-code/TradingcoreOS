@@ -1,7 +1,7 @@
 import type { CoreSpiritSeriesFusionGroup, CoreSpiritFusedSeriesInput } from './seriesFusion';
 import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion';
 import { coreSpiritKernelOperationForBuiltin } from './kernelOperationMap';
-import { coreSpiritSeriesLength } from './seriesVector';
+import { coreSpiritSeriesLength, coreSpiritSeriesExecutionClass } from './seriesVector';
 import { loadCoreSpiritBundledWasmSimdBackend } from './wasmBackend';
 
 export type CoreSpiritSeriesBackend = 'cpu' | 'wasm' | 'gpu';
@@ -123,7 +123,10 @@ function workUnits(c: CoreSpiritSeriesDispatchContext, g: CoreSpiritSeriesFusion
   return Math.max(1, c.bars) * Math.max(1, c.symbols ?? 1) * Math.max(1, c.timeframes ?? 1) * Math.max(1, g.operations.length);
 }
 function hasRecurrence(g: CoreSpiritSeriesFusionGroup): boolean {
-  return g.operations.some((x) => ['ema', 'rma', 'persistence', 'rsi', 'atr', 'vwap'].includes(x.name));
+  // Don't infer recurrence from implementation-side state objects. Fixed-lag
+  // change/pctchange and rolling-window indicators are batch-safe; only an
+  // operation with a prior-output dependency requires chronological execution.
+  return g.operations.some((operation) => coreSpiritSeriesExecutionClass(operation.name) === 'recursive');
 }
 
 function notifyBackendFallback(
