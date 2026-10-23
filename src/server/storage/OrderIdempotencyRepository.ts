@@ -94,6 +94,7 @@ export class OrderIdempotencyRepository {
     const { data, error } = await this.supabase.from('order_idempotency')
       .update({ state: 'recovery_required', response, broker_order_id: this.extractBrokerOrderId(response), last_error: reason, updated_at: now })
       .eq('user_id', userId).eq('broker_id', brokerId.toLowerCase()).eq('idempotency_key', key)
+      .in('state', ['pending', 'unknown', 'recovery_required', 'completed'])
       .select('*').maybeSingle();
     if (error) throw new Error(`Unable to mark order recovery state: ${error.message}`);
     return data ? this.fromRow(data) : undefined;
