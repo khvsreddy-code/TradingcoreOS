@@ -37,7 +37,9 @@ plot(banknifty.close)
 const bars = makeBars(20);
 const mutableBars = bars.map((bar) => ({ ...bar }));
 const pending = [];
-const fetchSeries = () => new Promise((resolve, reject) => pending.push({ resolve, reject }));
+const fetchSeries = (symbol, timeframe, range) => new Promise((resolve, reject) => pending.push({
+  symbol, timeframe, signal:range.signal, resolve, reject,
+}));
 
 let signalModelReady;
 const updated = new Promise((resolve) => { signalModelReady = resolve; });
@@ -67,17 +69,28 @@ assert.equal(pending.length, 1, 'initial execution should start one secondary-se
 session.update({scale:2});
 session.update({scale:3});
 assert.equal(pending.length, 3, 'each forced update starts a new refresh generation');
+assert.equal(pending[0].signal?.aborted, true, 'a forced refresh must cancel the previous secondary request');
+assert.equal(pending[1].signal?.aborted, true, 'only the latest symbol/timeframe generation may remain active');
+assert.equal(pending[2].signal?.aborted, false, 'the current request signal must remain live');
+
+// Local/main computation must not wait for the slow secondary provider.
+await updated;
+assert.equal(runtimeError, undefined, runtimeError?.message);
+assert.equal(modelCount, 1, 'a partial safe result may render while secondary data is pending');
 
 const secondaryTime = bars.at(-1).time - 600;
 pending[2].resolve([secondaryBar(222, secondaryTime)]);
-await updated;
-await new Promise((resolve) => setImmediate(resolve));
-assert.equal(runtimeError, undefined, runtimeError?.message);
-assert.equal(modelCount, 1, 'superseded updates and startup must not emit duplicate models');
-const freshContext = await session.getContext();
 const latestValues = (context) => Object.values(context?.plots ?? {}).map((points) => points.at(-1)?.value);
+let freshContext;
+for (let attempt = 0; attempt < 40; attempt += 1) {
+  await new Promise((resolve) => setImmediate(resolve));
+  freshContext = await session.getContext();
+  if (latestValues(freshContext).some((value) => Number(value) === 222)) break;
+}
+assert.equal(runtimeError, undefined, runtimeError?.message);
 assert.ok(latestValues(freshContext).some((value) => Number(value) === 222),
-  'the newest secondary response should be visible to CoreSpirit');
+  'the newest secondary response should be visible to CoreSpirit after re-evaluation');
+assert.equal(modelCount, 2, 'a changed secondary dataset should cause one fresh model result after the initial partial result');
 assert.match((await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url), 'utf8'), /time:Float64Array\.from\(rows,row=>Math\.floor\(barTimeMillis\(row\.timestamp\)\/1000\)\)/,
   'Vela secondary candle timestamps must be normalized to epoch seconds for the CoreSpirit market graph resolver');
 const velaEngineSource=(await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url),'utf8');
@@ -109,7 +122,7 @@ assert.ok(latestValues(afterStaleCompletion).some((value) => Number(value) === 2
   'a stale secondary response must not replace the latest snapshot');
 assert.ok(!latestValues(afterStaleCompletion).some((value) => Number(value) === 111 || Number(value) === 333),
   'a stale secondary response leaked into live execution');
-assert.equal(modelCount, 1, 'stale async update callbacks emitted a duplicate model');
+assert.equal(modelCount, 2, 'stale async update callbacks emitted a model beyond the expected refreshed result');
 
 session.stop();
 
@@ -122,7 +135,7 @@ const stoppedSession = engine.execute({
   market: { symbol: 'NSE:NIFTY50-INDEX', timeframe: '5' },
   bars,
   getBars: () => bars,
-  fetchSeries: () => new Promise((resolve, reject) => stopPending.push({ resolve, reject })),
+  fetchSeries: (symbol, timeframe, range) => new Promise((resolve, reject) => stopPending.push({ symbol, timeframe, signal:range.signal, resolve, reject })),
   mode: 'live',
   historyState: 'complete',
 }, {
@@ -133,7 +146,9 @@ const stoppedSession = engine.execute({
 assert.equal(stopPending.length, 1);
 stoppedSession.update({scale:2});
 assert.equal(stopPending.length, 2);
+assert.equal(stopPending[0].signal?.aborted, true, 'changing the execution configuration must cancel the previous dependency request');
 stoppedSession.stop();
+assert.equal(stopPending[1].signal?.aborted, true, 'stopping the engine must abort its in-flight dependency request');
 stopPending[1].resolve([secondaryBar(222, secondaryTime)]);
 stopPending[0].resolve([secondaryBar(111, secondaryTime)]);
 await new Promise((resolve) => setImmediate(resolve));
