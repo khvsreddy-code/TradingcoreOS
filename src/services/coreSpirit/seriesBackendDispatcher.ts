@@ -1,6 +1,8 @@
 import type { CoreSpiritSeriesFusionGroup, CoreSpiritFusedSeriesInput } from './seriesFusion';
 import { executeCoreSpiritSeriesFusionGroupInto } from './seriesFusion';
 import { coreSpiritKernelOperationForBuiltin } from './kernelOperationMap';
+import { coreSpiritSeriesLength } from './seriesVector';
+import { loadCoreSpiritBundledWasmSimdBackend } from './wasmBackend';
 
 export type CoreSpiritSeriesBackend = 'cpu' | 'wasm' | 'gpu';
 export type CoreSpiritSeriesBackendProfile = Readonly<{
@@ -42,6 +44,80 @@ export const CORE_SPIRIT_SERIES_BACKENDS: readonly CoreSpiritSeriesBackendProfil
   { backend: 'wasm', available: false, deterministic: true, vectorized: true },
   { backend: 'gpu', available: false, deterministic: false, vectorized: true },
 ]);
+
+/**
+ * Loads and warms the bundled WASM module, then exposes its real capabilities
+ * as a series-group executor. Create it outside the live chart loop; callers
+ * pass its profiles/executors only to historical or research dispatches.
+ */
+export async function loadCoreSpiritBundledWasmSeriesRuntime(
+  options: Parameters<typeof loadCoreSpiritBundledWasmSimdBackend>[0] = {},
+): Promise<Readonly<{
+  backend: Awaited<ReturnType<typeof loadCoreSpiritBundledWasmSimdBackend>>;
+  backends: readonly CoreSpiritSeriesBackendProfile[];
+  executors: Readonly<Partial<Record<'wasm' | 'gpu', CoreSpiritSeriesBackendExecutor>>>;
+}>> {
+  const backend = await loadCoreSpiritBundledWasmSimdBackend(options);
+  const capability = backend.profile();
+  if (!capability?.available || !backend.isLoaded()) {
+    throw new Error('bundled CoreSpirit WASM runtime did not reach the ready state');
+  }
+
+  // The capability list comes from the validated, warm-up-tested manifest,
+  // never from hardware presence or optimistic planner metadata.
+  const wasmProfile: CoreSpiritSeriesBackendProfile = Object.freeze({
+    backend: 'wasm',
+    available: true,
+    deterministic: capability.deterministic,
+    // Scalar WASM kernels still process whole typed-array series. Exact ISA
+    // variants remain available through backend.kernelVariant(operation).
+    vectorized: true,
+    supportedOperations: Object.freeze([...capability.supportedOperations]),
+    supportsStatefulSeries: false,
+  });
+  const backends = Object.freeze(CORE_SPIRIT_SERIES_BACKENDS.map(profile =>
+    profile.backend === 'wasm' ? wasmProfile : profile,
+  ));
+
+  const executeWasmGroup: CoreSpiritSeriesBackendExecutor = (group, input, output) => {
+    if (input.register !== group.inputRegister) {
+      throw new Error("fusion input register mismatch: expected '" + group.inputRegister + "', got '" + input.register + "'");
+    }
+    if (input.values.length !== output.length) {
+      throw new Error('WASM fusion input/output lengths must match');
+    }
+
+    let current: Float64Array = input.values instanceof Float64Array
+      ? input.values
+      : Float64Array.from(input.values);
+    for (let index = 0; index < group.operations.length; index += 1) {
+      const operation = group.operations[index]!;
+      const kernel = coreSpiritKernelOperationForBuiltin(operation.name);
+      if (!kernel || !backend.hasKernel(kernel)) {
+        throw new Error("bundled WASM does not implement fused operation '" + operation.name + "'");
+      }
+      // Intermediate arrays are private; the final stage writes directly into
+      // the dispatcher's staged output. Any error falls back to the CPU pipeline.
+      const target = index === group.operations.length - 1
+        ? output
+        : new Float64Array(output.length);
+      backend.executeSync({
+        kernel,
+        inputs: [current],
+        outputs: [target],
+        params: [coreSpiritSeriesLength(operation)],
+      });
+      current = target;
+    }
+  };
+
+  return Object.freeze({
+    backend,
+    backends,
+    executors: Object.freeze({ wasm: executeWasmGroup }),
+  });
+}
+
 
 function workUnits(c: CoreSpiritSeriesDispatchContext, g: CoreSpiritSeriesFusionGroup): number {
   return Math.max(1, c.bars) * Math.max(1, c.symbols ?? 1) * Math.max(1, c.timeframes ?? 1) * Math.max(1, g.operations.length);
