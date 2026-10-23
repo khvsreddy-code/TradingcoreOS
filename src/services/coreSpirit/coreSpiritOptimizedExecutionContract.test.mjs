@@ -3,6 +3,9 @@ import { CoreSpiritExecutionVM } from './executionVM.ts';
 import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM.ts';
 import { CoreSpiritOutputCollector } from './outputCollector.ts';
 import { CoreSpiritComponentRegistry } from './coreSpiritComponents.ts';
+import { coreSpiritComponentRegistry } from './coreSpiritComponents.ts';
+import { CoreSpiritRuntime } from './runtime.ts';
+import { CORE_SPIRIT_COMPILER_VERSION } from './VERSION.ts';
 import { buildCoreSpiritSpecializedPlan } from './specializedPlan.ts';
 
 const instructions = [
@@ -243,3 +246,48 @@ assert.equal(revisionRegistry.definitionVersion, registeredRevision + 1,
   'clearing component definitions must invalidate lowered VM plans');
 
 console.log('CORESPIRIT_COMPONENT_REGISTRY_DEFINITION_VERSION_OK');
+
+
+// Verify the production CoreSpiritRuntime passes the cache-version tuple into
+// every optimized run, and reflects live component-registry revisions.
+const cacheRuntime = new CoreSpiritRuntime({
+  executionTarget: 'chart',
+  executionTier: 'optimized',
+  executionMode: 'historical',
+  maxStepsPerBar: 128,
+});
+const cacheIr = {
+  version: 1,
+  sourceId: 'runtime-cache-version-integration',
+  entry: { instructions: [{ op: 'const', dest: 'value', value: 7 }] },
+  locals: [],
+  maxLookback: 0,
+  diagnostics: [],
+  sourceMap: { version: 1, sourceId: 'runtime-cache-version-integration', entries: [] },
+};
+const runtimeVm = cacheRuntime.optimizedExecutionVm;
+const executeOptimized = runtimeVm.run.bind(runtimeVm);
+let capturedRuntimeCacheOptions;
+runtimeVm.run = (...args) => {
+  capturedRuntimeCacheOptions = args[4];
+  return executeOptimized(...args);
+};
+cacheRuntime.executeIr(cacheIr, [{
+  timestamp: 1_700_000_000_000,
+  open: 1, high: 2, low: 0, close: 1, volume: 10,
+}]);
+assert.ok(capturedRuntimeCacheOptions.compilerVersion.includes(CORE_SPIRIT_COMPILER_VERSION));
+assert.ok(capturedRuntimeCacheOptions.componentDefinitionVersion.length > 0);
+assert.ok(capturedRuntimeCacheOptions.executionConfigurationVersion.length > 0);
+const beforeRegistryMutation = cacheRuntime.optimizedExecutionCacheVersions();
+const runtimeCacheComponent = componentContract('runtime-cache-version-test', 'runtimeCacheVersionTest');
+coreSpiritComponentRegistry.register(runtimeCacheComponent);
+try {
+  const afterRegistryMutation = cacheRuntime.optimizedExecutionCacheVersions();
+  assert.notEqual(afterRegistryMutation.componentDefinitionVersion, beforeRegistryMutation.componentDefinitionVersion,
+    'the runtime cache key must change when a registered component definition changes');
+} finally {
+  coreSpiritComponentRegistry.unregister(runtimeCacheComponent.id);
+}
+
+console.log('CORESPIRIT_RUNTIME_CACHE_VERSION_INTEGRATION_OK');
