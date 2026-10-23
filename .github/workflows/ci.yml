@@ -13,7 +13,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
@@ -22,8 +22,30 @@ jobs:
         with:
           node-version: 24
       - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: npm run test:contracts
-      - run: npm run build
-      - run: npm run typecheck
-      - run: npm run bundle:budget
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Install WASM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld
+      - name: Rebuild numerical kernels from source
+        run: npm run build:corespirit:wasm
+      - name: Run contract suite (VM differential + backend parity)
+        run: npm run test:contracts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build and bundle budgets
+        run: npm run build
+      - name: Benchmark WASM kernels against CPU references
+        env:
+          TCO_BENCH_BAR_COUNTS: 50000,250000
+          TCO_BENCH_ITERATIONS: 5
+        run: npm run benchmark:corespirit:wasm 2>&1 | tee core-spirit-wasm-benchmark.txt
+      - name: Archive backend benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-spirit-wasm-benchmark-${{ github.sha }}
+          path: core-spirit-wasm-benchmark.txt
+          if-no-files-found: warn
+          retention-days: 14
