@@ -102,7 +102,7 @@ for (let attempt = 0; attempt < 40; attempt += 1) {
 assert.equal(runtimeError, undefined, runtimeError?.message);
 assert.ok(latestValues(freshContext).some((value) => Number(value) === 222),
   'the newest secondary response should be visible to CoreSpirit after re-evaluation');
-assert.ok(calendarCalls.some(call => call.symbol === 'BANKNIFTY' && call.timeframe === '5'),
+assert.ok(calendarCalls.some(call => call.symbol === 'BANKNIFTY' && call.timeframe === '5m'),
   'chart timeframe aliases must be resolved to the actual chart timeframe before applying the exchange calendar');
 assert.equal(modelCount, 2, 'a changed secondary dataset should cause one fresh model result after the initial partial result');
 assert.match((await import('node:fs')).readFileSync(new URL('./CoreSpiritVelaEngine.ts', import.meta.url), 'utf8'), /time:Float64Array\.from\(rows,row=>Math\.floor\(barTimeMillis\(row\.timestamp\)\/1000\)\)/,
