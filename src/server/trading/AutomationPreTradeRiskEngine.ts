@@ -4,6 +4,7 @@ import { FyersApiClient } from '../fyers/core/FyersApiClient.js';
 import { resolveFyersCapabilities } from '../fyers/core/FyersCapabilities.js';
 import { validateFyersManualOrderPreflight } from './fyersOrderExecution.js';
 import type { AutomationIntegration } from '../automation/AutomationIntegrationRepository.js';
+import { TradingKillSwitchRepository } from './TradingKillSwitchRepository.js';
 
 export interface AutomationRiskVerdict {
   approved: boolean;
@@ -127,6 +128,7 @@ export async function evaluateAutomationPreTradeRisk(input: {
   live: boolean;
   brokerMarginCheck?: boolean;
   validateFyersShape?: boolean;
+  checkKillSwitch?: boolean;
 }): Promise<AutomationRiskVerdict> {
   const checks: Record<string, unknown>[] = [];
   try {
@@ -145,6 +147,15 @@ export async function evaluateAutomationPreTradeRisk(input: {
     return reject(`Quantity exceeds this integration's per-order cap of ${input.integration.maxOrderQuantity}.`, checks);
   }
   checks.push({ check: 'quantity-cap', passed: true, quantity });
+
+  if (input.live && input.checkKillSwitch !== false) {
+    try {
+      await TradingKillSwitchRepository.assertOrderSubmissionAllowed(input.userId, input.integration.automationId);
+      checks.push({ check: 'account-and-strategy-kill-switches', passed: true });
+    } catch (error) {
+      return reject(error instanceof Error ? error.message : 'Trading kill-switch state could not be verified.', checks);
+    }
+  }
 
   let quotes: Record<string, { ltp: number; timestamp: string }>;
   let funds: Awaited<ReturnType<BaseBroker['getFunds']>>;
@@ -375,6 +386,7 @@ export async function evaluateManualPreTradeRisk(input: {
       live: true,
       brokerMarginCheck: input.brokerMarginCheck !== false,
       validateFyersShape: false,
+      checkKillSwitch: false,
     });
   } catch (error) {
     return reject(error instanceof Error ? error.message : 'Manual order risk policy could not be evaluated.', []);
