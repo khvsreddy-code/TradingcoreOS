@@ -69,7 +69,7 @@ function realtimeServiceConfigChanged(previousSha, currentSha) {
     const raw = execFileSync('git', ['show', `${sha}:vercel.json`], { encoding: 'utf8' });
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') throw new Error('vercel.json is not an object');
-    return parsed.services?.realtimegateway ?? null;
+    return parsed.services?.['realtimegateway-live'] ?? null;
   };
 
   // Rewrites, headers and web/API service changes do not affect the realtime
@@ -102,7 +102,7 @@ export function runRealtimeIgnoreCommand(env = process.env) {
   // Some Vercel multi-service builds do not expose VERCEL_GIT_PREVIOUS_SHA to a
   // service-level ignore command. For that case, compare the deployed commit with
   // its first parent. This still rebuilds for a runtime change in this commit (or
-  // a realtimegateway service-config change), while frontend-only commits can reuse
+  // a realtimegateway-live service-config change), while frontend-only commits can reuse
   // the last successful gateway image instead of consuming another registry slot.
   // If the parent cannot be proved locally, fail open and rebuild.
   if (!previousSha) {
@@ -124,7 +124,7 @@ export function runRealtimeIgnoreCommand(env = process.env) {
     const relevant = changed.filter(isRealtimeRuntimePath);
 
     if (changed.includes('vercel.json') && realtimeServiceConfigChanged(previousSha, currentSha)) {
-      relevant.push('vercel.json (realtimegateway service configuration)');
+      relevant.push('vercel.json (realtimegateway-live service configuration)');
     }
 
     if (relevant.length) {
