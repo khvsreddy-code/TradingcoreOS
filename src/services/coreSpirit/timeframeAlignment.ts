@@ -117,6 +117,9 @@ export function groupIntrabars(
             (_, index) => parent.timestamp + index * childMs,
           );
       const expected = [...expectedRaw].sort((a,b)=>a-b);
+      // Without a calendar, completeness is provable only when the parent
+      // interval is an exact multiple of the child interval.
+      const regularGridCoversInterval = Boolean(options.calendar) || (end - parent.timestamp) % childMs === 0;
       const expectedSet = new Set(expected);
       const uniquePoints = new Set(points.map(point=>point.timestamp));
       const expectedIsValid = expected.every(timestamp =>
@@ -128,7 +131,7 @@ export function groupIntrabars(
         // A calendar-confirmed holiday/session closure has no expected bars.
         complete = points.length === 0;
       } else {
-        complete = expected.length > 0 && expectedIsValid && observationsAreValid &&
+        complete = expected.length > 0 && regularGridCoversInterval && expectedIsValid && observationsAreValid &&
           expected.every(timestamp => uniquePoints.has(timestamp));
       }
     }
