@@ -77,15 +77,15 @@ export class OrderIdempotencyRepository {
   }
 
   static async complete(userId: string, brokerId: string, key: string, response: unknown): Promise<void> {
-    await this.update(userId, brokerId, key, 'completed', response, this.extractBrokerOrderId(response), null);
+    await this.update(userId, brokerId, key, 'completed', response, this.extractBrokerOrderId(response), null, ['pending']);
   }
 
   static async fail(userId: string, brokerId: string, key: string, response: unknown): Promise<void> {
-    await this.update(userId, brokerId, key, 'failed', response, this.extractBrokerOrderId(response), this.extractError(response));
+    await this.update(userId, brokerId, key, 'failed', response, this.extractBrokerOrderId(response), this.extractError(response), ['pending']);
   }
 
   static async markUnknown(userId: string, brokerId: string, key: string, response: unknown, errorMessage?: string): Promise<void> {
-    await this.update(userId, brokerId, key, 'unknown', response, this.extractBrokerOrderId(response), errorMessage || this.extractError(response));
+    await this.update(userId, brokerId, key, 'unknown', response, this.extractBrokerOrderId(response), errorMessage || this.extractError(response), ['pending', 'unknown']);
   }
 
   static async markRecoveryRequired(userId: string, brokerId: string, key: string, response: unknown = null, reason = 'Order outcome requires reconciliation.'): Promise<OrderIdempotencyRecord | undefined> {
@@ -109,10 +109,27 @@ export class OrderIdempotencyRepository {
     return data?.length ?? 0;
   }
 
-  private static async update(userId: string, brokerId: string, key: string, state: OrderIdempotencyState, response: unknown, brokerOrderId: string | null, lastError: string | null): Promise<void> {
+  private static async update(
+    userId: string,
+    brokerId: string,
+    key: string,
+    state: OrderIdempotencyState,
+    response: unknown,
+    brokerOrderId: string | null,
+    lastError: string | null,
+    allowedCurrentStates: readonly OrderIdempotencyState[],
+  ): Promise<void> {
     if (!this.supabase) throw new Error('Order idempotency storage is not configured');
-    const { error } = await this.supabase.from('order_idempotency').update({ state, response, broker_order_id: brokerOrderId, last_error: lastError, updated_at: new Date().toISOString() }).eq('user_id', userId).eq('broker_id', brokerId.toLowerCase()).eq('idempotency_key', key);
+    const { data, error } = await this.supabase.from('order_idempotency')
+      .update({ state, response, broker_order_id: brokerOrderId, last_error: lastError, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('broker_id', brokerId.toLowerCase())
+      .eq('idempotency_key', key)
+      .in('state', [...allowedCurrentStates])
+      .select('idempotency_key')
+      .maybeSingle();
     if (error) throw new Error(`Unable to update order idempotency record: ${error.message}`);
+    if (!data) throw new Error(`Order idempotency state conflict: refusing to change a record to '${state}' from an unexpected state.`);
   }
 
   private static extractBrokerOrderId(response: unknown): string | null {
