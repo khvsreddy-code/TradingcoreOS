@@ -29,6 +29,9 @@ assert.equal(coreSpiritSeriesExecutionClass('persistence'), 'rolling-state',
   'bounded persistence windows are rolling state, not prior-output recurrence');
 assert.equal(coreSpiritSeriesExecutionClass('ema'), 'recursive');
 assert.equal(coreSpiritSeriesExecutionClass('rma'), 'recursive');
+assert.equal(coreSpiritSeriesExecutionClass('rsi'), 'recursive');
+assert.equal(coreSpiritSeriesExecutionClass('atr'), 'recursive');
+assert.equal(coreSpiritSeriesExecutionClass('vwap'), 'recursive');
 
 const deterministic = selectCoreSpiritSeriesBackend(group, {
   realtime: false, bars: 2_000_000, deterministic: true,
