@@ -203,7 +203,7 @@ if(liveDeveloping?.value!==121||liveDeveloping.confirmationPhase!=='developing')
 const atSessionClose=dailyResolver.requestAt?.({
   symbol:'TEST',timeframe:'1D',field:'close',offset:0,
 },{
-  asOfTimestamp:openOfDay(1)+16*3600,
+  asOfTimestamp:openOfDay(1)+7*3600,
   baseSymbol:'TEST',baseTimeframe:'1m',executionMode:'historical',
   revision:dailySnapshot.revision,alignment:'last-confirmed',
 });
