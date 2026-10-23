@@ -23,7 +23,9 @@ export type CoreSpiritSeriesDispatchContext = Readonly<{
   minGpuWorkUnits?: number;
   backends?: readonly CoreSpiritSeriesBackendProfile[];
   /** Optional telemetry hook when an accelerator is rejected or fails. */
-  onBackendFallback?: (backend: 'wasm' | 'gpu', error?: unknown) => void;\n  /** Reports the backend that actually completed, including CPU fallback. */\n  onBackendExecution?: (event: Readonly<{requested:'cpu'|'wasm'|'gpu';executed:'cpu'|'wasm'|'gpu';reason:string;elapsedMs:number;fallbackReason?:string}>) => void;
+  onBackendFallback?: (backend: 'wasm' | 'gpu', error?: unknown) => void;
+  /** Reports the backend that actually completed, including CPU fallback. */
+  onBackendExecution?: (event: Readonly<{requested:'cpu'|'wasm'|'gpu';executed:'cpu'|'wasm'|'gpu';reason:string;elapsedMs:number;fallbackReason?:string}>) => void;
   allowStatefulWasm?: boolean;
   maxStatefulWasmBars?: number;
 }>;
