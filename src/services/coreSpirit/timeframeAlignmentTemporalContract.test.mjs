@@ -34,6 +34,28 @@ assert.deepEqual(
 
 const includesDeveloping = alignSnapshots([3000], snapshots, { confirmedOnly:false });
 assert.equal(includesDeveloping[0]?.value, 33, 'explicit non-confirmed alignment may inspect the latest developing revision');
+
+const closeBoundedSamples = [
+  {symbol:'ALPHA',timeframe:'1D',timestamp:1000,closeTimestamp:1200,value:10,source:'calendar',state:'confirmed',confirmationPhase:'confirmed',revision:1},
+  {symbol:'ALPHA',timeframe:'1D',timestamp:2000,closeTimestamp:4000,value:40,source:'calendar',state:'confirmed',confirmationPhase:'confirmed',revision:1},
+];
+assert.deepEqual(
+  alignTimeframeSnapshots([1500,2500,4500], closeBoundedSamples).map(point=>point.value),
+  [10,10,40],
+  'a dataset-finalized higher-timeframe candle must remain unavailable before its canonical close boundary',
+);
+const explicitDevelopingClose = alignSnapshots([2500], closeBoundedSamples, {confirmedOnly:false})[0];
+assert.equal(explicitDevelopingClose?.value,40);
+assert.equal(explicitDevelopingClose?.state,'developing',
+  'an explicitly developing value must be labeled developing before its close timestamp');
+assert.deepEqual(
+  alignTimeframeSnapshots([2500], [
+    {...closeBoundedSamples[0], timestamp:2000, closeTimestamp:1000, value:999},
+  ]).map(point=>point.value),
+  [null],
+  'a close boundary earlier than the candle open is malformed and must be rejected',
+);
+
 const reverseTargets = alignTimeframeSnapshots([3500, 1000, 500], snapshots);
 assert.deepEqual(reverseTargets.map(point => point.value), [20, 10, null],
   'arbitrary target order must not change each target timestamp’s canonical answer');
