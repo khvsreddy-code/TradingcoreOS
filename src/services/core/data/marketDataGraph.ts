@@ -311,7 +311,7 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
       dataRevision:node.dataRevision ?? node.revision,
       confirmationPhase:isConfirmed ? 'confirmed' as const : 'developing' as const,
     };
-    if (ctx && ctx.executionMode !== 'realtime' && !isConfirmed && seconds > 0) {
+    if (ctx && ctx.executionMode !== 'realtime' && !isConfirmed) {
       return { ...common, value:null, source:'data-graph:unconfirmed', state:'developing' };
     }
     if(value==null||!Number.isFinite(Number(value))) {
