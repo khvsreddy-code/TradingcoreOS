@@ -78,10 +78,30 @@ assert.equal(validateSynchronizedSnapshot({
   asOfTimestamp:11_000, alignment:'last-confirmed', executionMode:'historical', maxStalenessMs:undefined,
 }), null, 'unlabelled samples fail closed in confirmed-only historical mode');
 assert.equal(validateSynchronizedSnapshot({
-  symbol:'ALPHA', timeframe:'1D', timestamp:10_000, value:77, source:'feed', state:'confirmed', revision:1,
+  symbol:'ALPHA', timeframe:'1m', timestamp:10_000, closeTimestamp:10_950,
+  value:77, source:'feed', state:'confirmed', confirmationPhase:'confirmed', revision:1,
 }, {
-  asOfTimestamp:11_000, alignment:'last-confirmed', executionMode:'historical', maxStalenessMs:5_000,
-}), null, 'maxStalenessMs must be compared in milliseconds when data timestamps use epoch seconds');
+  asOfTimestamp:11_000, alignment:'last-confirmed', executionMode:'historical', maxStalenessMs:10_000,
+}), null, 'maxStalenessMs must be compared in milliseconds when timestamps use epoch seconds');
+assert.equal(validateSynchronizedSnapshot({
+  symbol:'ALPHA', timeframe:'1D', timestamp:10_000, closeTimestamp:10_950,
+  value:77, source:'feed', state:'confirmed', confirmationPhase:'confirmed', revision:1,
+}, {
+  asOfTimestamp:11_000, alignment:'last-confirmed', executionMode:'historical', maxStalenessMs:100_000,
+})?.value, 77, 'staleness must be measured from the true close boundary, not the older bar-open timestamp');
+const mislabeledDeveloping = {
+  symbol:'ALPHA', timeframe:'1D', timestamp:10_000, closeTimestamp:20_000,
+  value:88, source:'feed', state:'confirmed', confirmationPhase:'confirmed', revision:2,
+};
+assert.equal(validateSynchronizedSnapshot(mislabeledDeveloping, {
+  asOfTimestamp:11_000, alignment:'developing', executionMode:'historical', maxStalenessMs:undefined,
+}), null, 'historical mode rejects not-yet-closed candles even when alignment says developing');
+const realtimeDeveloping = validateSynchronizedSnapshot(mislabeledDeveloping, {
+  asOfTimestamp:11_000, alignment:'developing', executionMode:'realtime', maxStalenessMs:undefined,
+});
+assert.equal(realtimeDeveloping?.state, 'developing');
+assert.equal(realtimeDeveloping?.confirmationPhase, 'developing',
+  'an explicitly realtime developing read must normalize inconsistent provider labels');
 
 const synchronized = synchronizeMarketSnapshots([
   { symbol:'ALPHA', timeframe:'1m', timestamp:1000, value:1, source:'a', state:'confirmed', revision:1 },
