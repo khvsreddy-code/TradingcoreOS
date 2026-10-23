@@ -157,9 +157,9 @@ export class DrawingToolbar {
     }
 
     /**
-     * Resolve metadata only for families already downloaded or explicitly requested.
-     * The production chart must not hydrate the entire advanced catalog just because
-     * a toolbar definition was rendered.
+     * Refresh toolbar labels and icons from the fully preloaded drawing registry.
+     * The canonical catalog is synchronously hydrated before the first chart render;
+     * this refresh is retained for defensive compatibility with existing callers.
      */
     private hydrateLoadedTools(): void {
         const hydrate = (tool: ToolGroup['tools'][number]) => {

@@ -222,9 +222,9 @@ export class UserDrawingController implements IDrawingsRendererPort {
     showToolbar(visible: boolean): void {
         this.toolbarVisible = visible;
         this.toolbar.setVisible(visible && !this.mobileLayout);
-        // Showing the lightweight toolbar is not permission to download every advanced
-        // drawing family. The toolbar resolves each family only when the user opens that
-        // group's flyout or arms one of its tools.
+        // All advanced drawing families are synchronously registered by the drawing
+        // core before the toolbar is constructed. The first visible frame therefore has
+        // every tool's real label, icon, and factory already available.
         this.syncToolbarGutter(); // reserve/release the left gutter so the bar never overlaps the plot
     }
 

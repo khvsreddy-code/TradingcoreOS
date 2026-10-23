@@ -20,7 +20,10 @@ const tcoChromeSource = readFileSync(new URL('./services/core/chart/tcoVelaChrom
 assert.match(userDrawingSource, /isCanonicalToolbarDefinition/);
 assert.match(userDrawingSource, /this\.customToolbar = !isCanonicalToolbarDefinition\(def\)/);
 assert.match(drawingRegistrySource, /function lazyDrawingIcon/);
-assert.match(drawingRegistrySource, /advancedFamilyPromises\.get\(family\) === promise\) advancedFamilyPromises\.delete\(family\)/, 'failed drawing-family imports must be evicted so Retry can start a fresh load');
+assert.match(drawingRegistrySource, /registerAdvancedChannelTypes\(\);/);
+assert.match(drawingRegistrySource, /registerAdvancedFibonacciTypes\(\);/);
+assert.match(drawingRegistrySource, /registerAdvancedPatternTypes\(\);/);
+assert.match(drawingRegistrySource, /Eagerly hydrate every advanced family before the first chart toolbar is built/);
 assert.doesNotMatch(drawingRegistrySource, /icon: svg24\('<circle cx="12" cy="12" r="7"\/>/);
 assert.match(nativeRendererSource, /private settingsEnabled = true/);
 for (const iconId of ['activity','briefcase','shield','list','layers','table','user','layout','play']) {
@@ -38,9 +41,12 @@ for (const type of advancedTypes) {
 }
 
 const before = new Set(drawingTypes().map((meta) => meta.type));
-assert.equal(before.has('parallelchannel'), false);
-assert.equal(before.has('fibretracement'), false);
-assert.equal(before.has('gartley'), false);
+for (const type of advancedTypes) {
+  assert.ok(before.has(type), 'advanced drawing type must be ready before any family is clicked: ' + type);
+}
+assert.ok(before.has('fibretracement'), 'Fibonacci tools should be registered at initial module load');
+assert.ok(before.has('gartley'), 'pattern tools should be registered at initial module load');
+assert.ok(before.has('parallelchannel'), 'channel tools should be registered at initial module load');
 
 const toolbar = defaultToolbar();
 assert.ok(toolbar.groups.some((group) => group.id === 'fibonacci-gann'));
@@ -49,12 +55,12 @@ assert.ok(toolbar.groups.some((group) => group.id === 'patterns-waves-harmonics'
 await loadDrawingFamily('channels');
 const channelsAfter = new Set(drawingTypes().map((meta) => meta.type));
 assert.equal(channelsAfter.has('parallelchannel'), true);
-assert.equal(channelsAfter.has('fibretracement'), false, 'loading channels must not hydrate fibonacci');
+assert.equal(channelsAfter.has('fibretracement'), true, 'Fibonacci tools must already be available before opening another family');
 
 await loadDrawingFamily('patterns');
 const patternsAfter = new Set(drawingTypes().map((meta) => meta.type));
 assert.equal(patternsAfter.has('gartley'), true);
-assert.equal(patternsAfter.has('fibretracement'), false, 'loading patterns must not hydrate fibonacci');
+assert.equal(patternsAfter.has('fibretracement'), true, 'Fibonacci tools must remain ready independent of which family is selected');
 
 await loadDrawingFamily('fibonacci');
 await loadAdvancedDrawingCatalog();
