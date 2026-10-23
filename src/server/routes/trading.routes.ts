@@ -289,6 +289,36 @@ tradingRoutes.post('/:brokerId/order', orderRateLimiter, injectBrokerSession, as
         return;
       }
     }
+    try {
+      await AuditLogRepository.appendRequired({
+        userId,
+        actorType: 'system',
+        eventType: 'order.submitted',
+        requestId,
+        correlationId: idempotencyKey,
+        payload: {
+          brokerId,
+          idempotencyKey,
+          clientOrderId: clientOrderId ?? null,
+          requestHash: claim.record?.requestHash ?? null,
+          orderHash: createHash('sha256').update(JSON.stringify(orderPayload)).digest('hex'),
+        },
+      });
+    } catch {
+      if (clientOrderId) {
+        await FyersOrderStateEngine.recordLifecycle(userId, clientOrderId, 'REJECTED', {
+          symbol: orderPayload.symbol,
+          quantity: Number(orderPayload.quantity || orderPayload.qty || 0),
+          side: String(orderPayload.side || '').toUpperCase() === 'SELL' ? 'sell' : 'buy',
+          message: 'Execution audit ledger unavailable; broker request was not made.',
+        }).catch(() => undefined);
+      }
+      const response = { success: false, orderSubmitted: false, error: 'The execution audit ledger is unavailable; broker submission was blocked.', requestId: requestId || null };
+      await OrderIdempotencyRepository.fail(userId, brokerId, idempotencyKey, response).catch(() => undefined);
+      res.status(503).json(response);
+      return;
+    }
+
     let data: unknown;
     try {
       data = brokerId === 'fyers'
