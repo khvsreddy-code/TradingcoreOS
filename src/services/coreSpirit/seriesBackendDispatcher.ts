@@ -166,8 +166,15 @@ export function selectCoreSpiritSeriesBackend(
   const wasm = profiles.find((x) => x.backend === 'wasm');
   const recurrence = hasRecurrence(group);
   const statefulWasmEligible = !recurrence || (context.allowStatefulWasm === true && wasm?.supportsStatefulSeries === true && context.bars <= Math.max(1, Math.floor(context.maxStatefulWasmBars ?? 16_384)));
-  if (wasm && supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 100_000))) {
-    return { requested: 'wasm', workUnits: units, reason: 'long historical workload' };
+  // The group adapter currently executes one whole-array WASM call per operation,
+  // with input/output transfer and private intermediate allocations at each stage.
+  // Keep the production threshold at least 100k bars per stage. Tests/research can
+  // explicitly lower minWasmWorkUnits when measuring smaller batches.
+  const minWasmWorkUnits = Math.max(1, Math.floor(
+    context.minWasmWorkUnits ?? 100_000 * Math.max(1, group.operations.length),
+  ));
+  if (wasm && supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= minWasmWorkUnits) {
+    return { requested: 'wasm', workUnits: units, reason: 'long historical workload after per-stage transfer/allocation threshold' };
   }
   return { requested: 'cpu', workUnits: units, reason: hasRecurrence(group) ? 'chronological recurrence stays on fused CPU' : 'CPU threshold/availability fallback' };
 }
