@@ -284,9 +284,32 @@ export async function evaluateAutomationPreTradeRisk(input: {
     });
   }
 
+  if (input.live && input.brokerMarginCheck === false) {
+    // No broker-specific margin API exists for this adapter. Reserve the full
+    // buffered notional instead of assuming an optimistic leverage requirement.
+    const bufferedNotionalReserve = estimatedNotional * (1 + input.integration.marginBufferPercent / 100);
+    if (bufferedNotionalReserve > funds.availableMargin) {
+      return reject('This broker has no verified margin estimator; available funds must cover the full order notional plus the configured safety buffer.', checks, {
+        estimatedNotional, quotedPrice: quote.ltp, projectedSymbolExposure, projectedAccountExposure, requiredMargin: estimatedNotional,
+      });
+    }
+    requiredMargin = estimatedNotional;
+    checks.push({
+      check: 'conservative-full-notional-reserve',
+      passed: true,
+      requiredMargin: estimatedNotional,
+      bufferedMargin: bufferedNotionalReserve,
+      marginBufferPercent: input.integration.marginBufferPercent,
+    });
+  }
+
   return {
     approved: true,
-    reason: input.live ? 'Configured policy, fresh account/market snapshots, position limits, and broker margin checks passed.' : 'Paper request passed configured policy and fresh broker snapshot checks; no order will be submitted.',
+    reason: input.live
+      ? (input.brokerMarginCheck === false
+        ? 'Configured policy, fresh account/market snapshots, position limits, and a conservative full-notional funds reserve passed.'
+        : 'Configured policy, fresh account/market snapshots, position limits, and broker margin checks passed.')
+      : 'Paper request passed configured policy and fresh broker snapshot checks; no order will be submitted.',
     checks,
     estimatedNotional,
     quotedPrice: quote.ltp,
