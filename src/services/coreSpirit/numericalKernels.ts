@@ -14,7 +14,7 @@ export const CORE_SPIRIT_MAX_KERNEL_SERIES_LENGTH = 4_194_304;
 export const CORE_SPIRIT_MAX_KERNEL_MATRIX_DIMENSION = 256;
 
 export const CORE_SPIRIT_NUMERICAL_KERNEL_OPERATIONS = Object.freeze([
-  'rollingMean', 'rollingVariance', 'rollingStd', 'rollingMin', 'rollingMax',
+  'rollingMean', 'rollingSum', 'rollingVariance', 'rollingStd', 'rollingMin', 'rollingMax',
   'ema', 'rma', 'wma', 'atr', 'rsi', 'linearRegression', 'correlation',
   'covariance', 'zScore', 'dotProduct', 'matrixMultiply', 'matrixDecomposition',
   'softmax', 'logSumExp',
@@ -79,6 +79,27 @@ export function rollingMean(values: CoreSpiritNumericSeries, periodValue: number
       else invalid -= 1;
     }
     if (i >= period - 1 && invalid === 0) result[i] = sum / period;
+  }
+  return result;
+}
+
+/** Rolling sum with the same right-aligned, finite-window contract as rollingMean. */
+export function rollingSum(values: CoreSpiritNumericSeries, periodValue: number): Float64Array {
+  const length = validateSeries(values);
+  const period = validatePeriod(periodValue);
+  const result = output(length);
+  let sum = 0;
+  let invalid = 0;
+  for (let i = 0; i < length; i += 1) {
+    const current = Number(values[i]);
+    if (Number.isFinite(current)) sum += current;
+    else invalid += 1;
+    if (i >= period) {
+      const leaving = Number(values[i - period]);
+      if (Number.isFinite(leaving)) sum -= leaving;
+      else invalid -= 1;
+    }
+    if (i >= period - 1 && invalid === 0) result[i] = sum;
   }
   return result;
 }
@@ -500,6 +521,7 @@ export function executeCoreSpiritNumericalKernel(
   };
   switch (operation) {
     case 'rollingMean': requireInputs(1); return rollingMean(inputs[0]!, p(0));
+    case 'rollingSum': requireInputs(1); return rollingSum(inputs[0]!, p(0));
     case 'rollingVariance': requireInputs(1); return rollingVariance(inputs[0]!, p(0), p(1, 0));
     case 'rollingStd': requireInputs(1); return rollingStd(inputs[0]!, p(0), p(1, 0));
     case 'rollingMin': requireInputs(1); return rollingMin(inputs[0]!, p(0));
