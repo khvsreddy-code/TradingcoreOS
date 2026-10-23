@@ -166,7 +166,7 @@ export function selectCoreSpiritSeriesBackend(
   const wasm = profiles.find((x) => x.backend === 'wasm');
   const recurrence = hasRecurrence(group);
   const statefulWasmEligible = !recurrence || (context.allowStatefulWasm === true && wasm?.supportsStatefulSeries === true && context.bars <= Math.max(1, Math.floor(context.maxStatefulWasmBars ?? 16_384)));
-  if (wasm && supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 10_000))) {
+  if (wasm && supportsGroup(wasm, group) && statefulWasmEligible && (group.eligibleBackends?.includes('wasm') ?? true) && (!deterministic || wasm.deterministic) && units >= Math.max(1, Math.floor(context.minWasmWorkUnits ?? 100_000))) {
     return { requested: 'wasm', workUnits: units, reason: 'long historical workload' };
   }
   return { requested: 'cpu', workUnits: units, reason: hasRecurrence(group) ? 'chronological recurrence stays on fused CPU' : 'CPU threshold/availability fallback' };
