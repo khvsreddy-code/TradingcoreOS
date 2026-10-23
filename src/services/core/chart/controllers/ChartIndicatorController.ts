@@ -5,7 +5,7 @@ import {
   dynamicSupportResistance, equalHighLow, extendedCpr, fairValueGaps, gapLevels, gapZones,
   ichimoku, indianKeyLevels, liquidityPools, liquiditySweeps, marketStructure, macd, nr7,
   openingRange, orderBlocks, periodPivots, pivots, priceActionEvents, previousDayLevels, swingLevels,
-  previousPeriodLevels, rsi, series, stochastic, supertrend, tradingCoreVPriceAction,
+  previousPeriodLevels, reversalPriceLevels, rsi, series, stochastic, supertrend, tradingCoreVPriceAction,
   vwapDeviationBands,
 } from '../../../marketData/indicatorEngine';
 import type { ChartDataPlane } from '../../../marketData/chartDataPlane';
@@ -29,7 +29,7 @@ const safeNamedPoints=safeLinePoints;
 const colorWithOpacity=(color:string|undefined,opacity:number|undefined,fallback:string)=>{const raw=String(color||fallback).trim();const alpha=Math.max(.15,Math.min(1,Number(opacity??1)));if(!/^#[0-9a-f]{6}$/i.test(raw)||alpha>=.999)return raw;return raw+Math.round(alpha*255).toString(16).padStart(2,'0');};
 const line=(chart:IChartApi,color:string,width=1,lineStyle:0|1|2=0)=>chart.addSeries(LineSeries,{color,lineWidth:width,lineStyle,priceLineVisible:false,lastValueVisible:true});
 
-const LEVEL_APPEARANCE_KINDS=new Set(['Dynamic Support/Resistance','CPR','Key Levels','Opening Range','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range Pro','Developing Day High/Low','Equal Highs/Lows','Liquidity Pools','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots']);
+const LEVEL_APPEARANCE_KINDS=new Set(['Reversal Price','Dynamic Support/Resistance','CPR','Key Levels','Opening Range','Swing Levels','Gap Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range Pro','Developing Day High/Low','Equal Highs/Lows','Liquidity Pools','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots']);
 
 export type ChartIndicatorControllerDeps = {
   chart: Ref<IChartApi|null>;
@@ -107,7 +107,7 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        const options={color:appearance.line.color,lineWidth:appearance.line.width,lineStyle:appearance.line.style==='solid'?0:appearance.line.style==='dashed'?1:2,opacity:appearance.line.opacity,gradient:appearance.line.gradient,gradientColor:appearance.line.gradientColor,glow:appearance.line.glow,glowStrength:appearance.line.glowStrength,visible:appearance.visible,lastValueVisible:cfg.display?.showValues!==false};
        const group=indicatorSeriesMap.get(cfg.id)||[];
        const isLevelIndicator=LEVEL_APPEARANCE_KINDS.has(String(cfg.kind));
-       for(const series of group){try{(series as any).applyOptions(options); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}}
+       group.forEach((series,index)=>{try{const roleColors=['#60a5fa','#ef4444','#374151','#3b82f6','#ef4444'];const studyOptions=cfg.kind==='Reversal Price'&&!cfg.color?{...options,color:roleColors[index]||options.color}:options;(series as any).applyOptions(studyOptions); if(isLevelIndicator){(series as any).applyOptions({visible:appearance.visible&&appearance.levels.enabled,lineWidth:appearance.levels.width,lineStyle:appearance.levels.style==='solid'?0:appearance.levels.style==='dashed'?1:2,lastValueVisible:appearance.levels.label&&appearance.levels.labelPlacement==='axis'});}}catch{}});
        const worker=workerSeriesMap.get(cfg.id)||[];
        for(const series of worker){try{(series as any).applyOptions({...options, ...(isLevelIndicator?{visible:appearance.visible&&appearance.levels.enabled}: {})});}catch{}}
      }
@@ -145,6 +145,19 @@ export function createChartIndicatorController(deps: ChartIndicatorControllerDep
        if(cfg.kind==='Dynamic Support/Resistance'){const levels=dynamicSupportResistance(data,cfg.period||5).slice(-10);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const x of levels){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='support'?'#3b82f6':'#ef4444'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??2,priceLineVisible:false,lastValueVisible:false});s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
        if(cfg.kind==='Liquidity Sweeps'){const sweeps=liquiditySweeps(data,cfg.period||5).slice(-12);for(const x of sweeps){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(x.side==='sell-side'?'#3b82f6':'#f59e0b'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||2)),lineStyle:cfg.lineStyle??0,priceLineVisible:false,lastValueVisible:false});const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;s.setData([{time:x.time as Time,value:x.price},{time:end,value:x.price}] as any);registerIndicatorSeries(cfg.id,s);}continue;}
        if(cfg.kind==='Order Blocks'){const zones=orderBlocks(data,cfg.period||5).slice(-8);const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;for(const z of zones){for(const price of [z.upper,z.lower]){const s=chart.current.addSeries(LineSeries,{color:cfg.color||(z.kind==='bullish'?'#38bdf8':'#fb7185'),lineWidth:Math.max(1,Math.min(6,cfg.lineWidth||1)),lineStyle:cfg.lineStyle??1,priceLineVisible:false,lastValueVisible:false});s.setData([{time:z.time as Time,value:price},{time:end,value:price}] as any);registerIndicatorSeries(cfg.id,s);}}continue;}
+       if(cfg.kind==='Reversal Price'){
+         const levels=reversalPriceLevels(data);
+         const end=Math.floor(new Date(data[data.length-1]!.timestamp).getTime()/1000) as Time;
+         const roleColors=['#60a5fa','#ef4444','#374151','#3b82f6','#ef4444'];
+         for(let index=0;index<levels.length;index++){
+           const level=levels[index]!;
+           const roleColor=cfg.color||roleColors[index]||'#94a3b8';
+           const s=chart.current.addSeries(LineSeries,{title:level.label,color:roleColor,lineWidth:level.label==='Trend Decide Price'?2:1,lineStyle:level.label==='Trend Decide Price'?0:2,priceLineVisible:false,lastValueVisible:true});
+           s.setData([{time:level.time as Time,value:level.price},{time:end,value:level.price}] as any);
+           registerIndicatorSeries(cfg.id,s);
+         }
+         continue;
+       }
        if(cfg.kind==='CPR' || cfg.kind==='Key Levels' || cfg.kind==='Opening Range' || cfg.kind==='Weekly Levels' || cfg.kind==='Swing Levels' || cfg.kind==='Gap Levels'){
          const levels=cfg.kind==='CPR'?cpr(data):cfg.kind==='Key Levels'?indianKeyLevels(data):cfg.kind==='Opening Range'?openingRange(data,cfg.period||15):cfg.kind==='Swing Levels'?swingLevels(data,cfg.period||3):gapLevels(data);
          const end=Math.floor(new Date(data[data.length-1].timestamp).getTime()/1000) as Time;
