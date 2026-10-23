@@ -14,7 +14,7 @@ const groups: Record<string, string[]> = {
   Volatility: ['Bollinger Bands','Keltner Channels','Donchian Channels','ATR'],
   Momentum: ['RSI','MACD','Stochastic','CCI','ADX'],
   Volume: ['VWAP','OBV','MFI'],
-  'India Levels': ['CPR','Key Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range','Opening Range Pro','Weekly Levels','Swing Levels','Gap Levels','Gap Zones','Developing Day High/Low','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots','Pivot Points'],
+  'India Levels': ['Reversal Price','CPR','Key Levels','Previous Day Levels','Previous Week Levels','Previous Month Levels','Opening Range','Opening Range Pro','Weekly Levels','Swing Levels','Gap Levels','Gap Zones','Developing Day High/Low','CPR R1-R5 / S1-S5','Camarilla Pivots','Fibonacci Pivots','Weekly Pivots','Monthly Pivots','Pivot Points'],
   'Price Action': ['Market Structure','BOS / CHOCH','Swing Levels','Equal Highs/Lows','Liquidity Pools','Fair Value Gaps','FVG + Mitigation','Dynamic Support/Resistance','Liquidity Sweeps','Order Blocks','Order Blocks + Mitigation','Breakout / Retest','Failed Breakout','Rejection Candles','Inside Bar Breakout','Engulfing Patterns','Pin Bars','NR7 Volatility Contraction'],
   'Anchored / VWAP': ['VWAP','VWAP Deviation Bands','Anchored VWAP'],
 };
