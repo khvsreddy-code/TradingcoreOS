@@ -21,7 +21,7 @@ function execute(instructions, seed, Executor = CoreSpiritExecutionVM, maxStepsP
     truthy(value){return !!value;},eventActive(name){return name==='bar';},
     emit(ins,values,out){const payload={kind:ins.kind,time:seed,value:values.get(ins.args[0]),seriesId:ins.outputId??ins.kind};state.effects.push(['emit',ins.kind,payload.value]);if(ins.kind==='plot'||ins.kind==='series')out.push(payload);},
   };
-  try { new CoreSpiritExecutionVM().run(instructions,seed,host,output);return {output:output.values().map(x=>({...x})),state:{...state},error:null}; }
+  try { new Executor().run(instructions,seed,host,output);return {output:output.values().map(x=>({...x})),state:{...state},error:null}; }
   catch(error) { return {output:output.values().map(x=>({...x})),state:{...state},error:String(error?.message??error)}; }
 }
 let random=0xc0e5f1;
