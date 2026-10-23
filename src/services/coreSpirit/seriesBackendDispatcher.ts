@@ -139,7 +139,7 @@ export function executeCoreSpiritSeriesFusionGroupDispatched(
     const fallbackStarted = typeof performance !== 'undefined' ? performance.now() : Date.now();
     executeCoreSpiritSeriesFusionGroupInto(group, input, output);
     const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    notifyBackendExecution(context,{requested:choice.requested,selected:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-fallbackStarted),fallbackReason:error instanceof Error ? error.message : String(error)});
+    notifyBackendExecution(context,{requested:choice.requested,selected:choice.requested,executed:'cpu',reason:choice.reason,elapsedMs:Math.max(0,ended-started),fallbackReason:error instanceof Error ? error.message : String(error)});
     return 'cpu';
   }
 }
