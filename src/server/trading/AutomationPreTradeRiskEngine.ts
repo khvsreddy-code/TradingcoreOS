@@ -293,3 +293,62 @@ export async function evaluateAutomationPreTradeRisk(input: {
     requiredMargin,
   };
 }
+
+function manualRiskLimit(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`Invalid server-side risk limit ${name}; live order submission is blocked.`);
+  return parsed;
+}
+
+/**
+ * Reuses the automation risk policy for manual FYERS orders so the UI cannot
+ * bypass quote freshness, account/position exposure or broker-margin checks.
+ * Limits are server-owned environment policy, never client-supplied values.
+ */
+export async function evaluateManualFyersPreTradeRisk(input: {
+  userId: string;
+  accessToken: string;
+  broker: BaseBroker;
+  order: BrokerOrderPayload;
+}): Promise<AutomationRiskVerdict> {
+  const symbol = String(input.order.symbol ?? '').trim().toUpperCase();
+  try {
+    const quantityLimit = manualRiskLimit('TRADINGCORE_MANUAL_MAX_ORDER_QUANTITY', 1000);
+    const integration: AutomationIntegration = {
+      id: 'manual-order-policy',
+      userId: input.userId,
+      automationId: 'manual-order',
+      name: 'Server-owned manual order policy',
+      brokerId: 'fyers',
+      tokenPrefix: '',
+      scopes: ['orders:request'],
+      allowedSymbols: [symbol],
+      maxOrderQuantity: Math.floor(Math.min(quantityLimit, 1000)),
+      maxOrderNotional: manualRiskLimit('TRADINGCORE_MANUAL_MAX_ORDER_NOTIONAL', 500_000),
+      maxPositionNotional: manualRiskLimit('TRADINGCORE_MANUAL_MAX_POSITION_NOTIONAL', 1_000_000),
+      maxAccountExposureNotional: manualRiskLimit('TRADINGCORE_MANUAL_MAX_ACCOUNT_EXPOSURE', 2_000_000),
+      maxDailyOrders: 20,
+      marginBufferPercent: Number(process.env.TRADINGCORE_MANUAL_MARGIN_BUFFER_PERCENT ?? 15),
+      allowLiveOrders: true,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      revokedAt: null,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+    };
+    if (!Number.isFinite(integration.marginBufferPercent) || integration.marginBufferPercent < 0 || integration.marginBufferPercent > 100) {
+      throw new Error('Invalid TRADINGCORE_MANUAL_MARGIN_BUFFER_PERCENT; live order submission is blocked.');
+    }
+    return await evaluateAutomationPreTradeRisk({
+      userId: input.userId,
+      accessToken: input.accessToken,
+      broker: input.broker,
+      integration,
+      order: input.order,
+      live: true,
+    });
+  } catch (error) {
+    return reject(error instanceof Error ? error.message : 'Manual order risk policy could not be evaluated.', []);
+  }
+}
