@@ -1488,6 +1488,7 @@ export class CoreSpiritRuntime {
         };
         const now=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:0},ctx);
         const prior=this.dataResolver.requestAt({symbol,timeframe,field:'close',offset:1},ctx);
+        if ((now && typeof (now as any).then==='function') || (prior && typeof (prior as any).then==='function')) return finish(null);
         const confirmedNow=now && typeof now==='object' ? validateSynchronizedSnapshot(now as CoreSpiritDataSnapshot,ctx) : null;
         const confirmedPrior=prior && typeof prior==='object' ? validateSynchronizedSnapshot(prior as CoreSpiritDataSnapshot,ctx) : null;
         current=Number(confirmedNow?.value ?? Number.NaN);
