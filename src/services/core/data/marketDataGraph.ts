@@ -222,7 +222,8 @@ export class CoreSpiritDataGraphResolver implements CoreSpiritDataResolver{
     for(const node of snapshot.nodes) {
       if (node.time.length !== node.open.length || node.time.length !== node.high.length ||
           node.time.length !== node.low.length || node.time.length !== node.close.length ||
-          node.time.length !== node.volume.length) continue;
+          node.time.length !== node.volume.length ||
+          (node.closeTime != null && node.closeTime.length !== node.time.length)) continue;
       this.nodes.set(graphKey(node.symbol,node.timeframe),node);
     }
   }
