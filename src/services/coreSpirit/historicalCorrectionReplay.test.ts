@@ -40,6 +40,11 @@ assert.equal(
 );
 assert.notEqual(Number(replayed.state.locals.average), originalAverage, 'correction must change downstream EMA state');
 assert.equal(runtime.getState().barIndex, corrected.length - 1, 'runtime should finish on the latest corrected bar');
+assert.throws(
+  () => runtime.executeBar({ ...corrected[2]!, timestamp: corrected[2]!.timestamp }),
+  /out-of-order bar update rejected/,
+  'a late bar delivered through the live-tail API must be rejected without mutating canonical history',
+);
 assert.ok(runtime.getRecoveryStats().barsReplayed >= corrected.length, 'full-history correction replay must account for every replayed bar');
 assert.equal(runtime.getRecoveryStats().lastReplayFrom, 0, 'recursive correction replay must report the safe origin');
 
@@ -69,7 +74,8 @@ outOfOrderReferenceRuntime.executeBar(formingBar);
 const referenceLive = outOfOrderReferenceRuntime.executeBar({ ...formingBar, high: 23, close: 22, volume: 175 });
 assert.equal(Number(correctedLive.state.locals.average), Number(referenceLive.state.locals.average),
   'a live tick after correction must match clean replay plus the same forming-bar updates');
-const seriesValues = result => result.outputs.filter(item => item.kind === 'series').map(item => item.kind === 'series' ? item.value : null);
+const seriesValues = (result: ReturnType<CoreSpiritRuntime['executeBar']>) =>
+  result.outputs.filter(item => item.kind === 'series').map(item => item.kind === 'series' ? item.value : null);
 assert.deepEqual(seriesValues(correctedLive), seriesValues(referenceLive),
   'post-correction live outputs must match reference outputs');
 assert.ok(runtime.getRecoveryStats().checkpointsRestored > 0,
