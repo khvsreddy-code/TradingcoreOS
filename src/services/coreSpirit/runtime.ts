@@ -106,29 +106,46 @@ function copyCoreSpiritKernelState(target: CoreSpiritKernelState, source: CoreSp
 // This fingerprint covers the statically declared builtin contract surface. Implementation
 // changes must also bump CORE_SPIRIT_COMPILER_VERSION; dynamic component changes have their
 // own monotonically increasing registry definitionVersion.
-const CORE_SPIRIT_STATIC_BUILTIN_DEFINITION_VERSION = CORE_SPIRIT_STDLIB.map((builtin) => [
-  builtin.name,
-  builtin.minArgs,
-  builtin.maxArgs ?? '',
-  JSON.stringify(builtin.returnType),
-  builtin.pure,
-  builtin.capability ?? '',
-  builtin.emitKind ?? '',
-  builtin.category,
-  JSON.stringify(builtin.seriesExecution ?? null),
-  JSON.stringify(builtin.temporalSafety ?? null),
-].join(':')).join('|');
-
-function safelySerializeExecutionConfiguration(value: unknown): string {
-  try {
-    return JSON.stringify(value, (_key, item) => typeof item === 'function' ? '[function]' : item) ?? String(value);
-  } catch {
-    return Object.prototype.toString.call(value);
+function fingerprintExecutionDefinition(value: string): string {
+  // Two small independent rolling hashes keep the hot-bar cache-version token compact.
+  // The compiler release token remains the authoritative invalidation for implementation changes.
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x85ebca6b);
   }
+  return `${(first >>> 0).toString(16)}-${(second >>> 0).toString(16)}-${value.length}`;
+}
+
+const CORE_SPIRIT_STATIC_BUILTIN_DEFINITION_VERSION = fingerprintExecutionDefinition(
+  CORE_SPIRIT_STDLIB.map((builtin) => [
+    builtin.name,
+    builtin.minArgs,
+    builtin.maxArgs ?? '',
+    JSON.stringify(builtin.returnType),
+    builtin.pure,
+    builtin.capability ?? '',
+    builtin.emitKind ?? '',
+    builtin.category,
+    JSON.stringify(builtin.seriesExecution ?? null),
+    JSON.stringify(builtin.temporalSafety ?? null),
+  ].join(':')).join('|'),
+);
+
+function fingerprintExecutionConfiguration(value: unknown): string {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value, (_key, item) => typeof item === 'function' ? '[function]' : item) ?? String(value);
+  } catch {
+    serialized = Object.prototype.toString.call(value);
+  }
+  return fingerprintExecutionDefinition(serialized);
 }
 
 function componentSignatureForIr(ir: CoreSpiritIrProgram): string {
-  return ir.entry.instructions.flatMap((instruction) => instruction.op === 'call' ? [[
+  const signature = ir.entry.instructions.flatMap((instruction) => instruction.op === 'call' ? [[
     instruction.name,
     instruction.componentId ?? '',
     instruction.componentPure ?? '',
@@ -137,6 +154,7 @@ function componentSignatureForIr(ir: CoreSpiritIrProgram): string {
     ...(instruction.seriesArgs ?? []),
     ...(instruction.seriesSources ?? []).flatMap(source => [source.ref, source.field]),
   ].map(String).join(':')] : []).join('|');
+  return fingerprintExecutionDefinition(signature);
 }
 
 export type CoreSpiritRuntimeState = {
@@ -347,7 +365,7 @@ export class CoreSpiritRuntime {
         `registry-${coreSpiritComponentRegistry.definitionVersion}`,
         this.optimizedComponentDefinitionSignature,
       ].join(':'),
-      executionConfigurationVersion: safelySerializeExecutionConfiguration({
+      executionConfigurationVersion: fingerprintExecutionConfiguration({
         target: this.executionTarget,
         layer: this.layer,
         executionTier: this.executionTier,
