@@ -12,8 +12,10 @@ assert.equal(canTransitionFyersOrderStatus('FILLED', 'CANCELLED', 'reconciliatio
   'a stale REST cancellation must never downgrade a confirmed full fill');
 assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'websocket'), false,
   'a websocket terminal correction is not authoritative enough to resolve a cancel race');
-assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'reconciliation'), true,
-  'a reconciliation can correct a cancel race when the durable reducer has full-fill evidence');
+assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'reconciliation'), false,
+  'a terminal correction without fill evidence must be rejected');
+assert.equal(canTransitionFyersOrderStatus('CANCELLED', 'FILLED', 'reconciliation', { quantity: 10, filledQuantity: 10 }), true,
+  'a reconciliation can correct a cancel race only when the complete quantity is proven filled');
 
 const event = {
   type: 'OrderUpdate', orderId: 'FY-1', brokerOrderId: 'FY-1', clientOrderId: 'TCO-1',
