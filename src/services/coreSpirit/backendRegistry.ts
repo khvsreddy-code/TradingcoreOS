@@ -280,7 +280,9 @@ export function planCoreSpiritBackend(
       ? 'explicitly opted-in model training may execute remotely; live inference remains separate'
       : chosen.backend === 'wasm-simd'
         ? 'historical workload exceeds the WASM threshold and the exact SIMD kernel is registered'
-        : chosen.backend === 'webgpu'
+        : chosen.backend === 'wasm-scalar'
+          ? 'historical workload exceeds the WASM threshold and the exact scalar kernel is registered'
+          : chosen.backend === 'webgpu'
           ? 'large stateless workload exceeds the WebGPU threshold and has an executable adapter'
           : chosen.backend === 'cpu-optimized'
             ? (stateful ? 'stateful recurrence stays chronological on the CPU kernel path' : 'local typed-array kernels avoid accelerator launch/transfer overhead')
