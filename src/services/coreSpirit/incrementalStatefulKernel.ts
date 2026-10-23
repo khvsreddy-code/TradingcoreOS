@@ -8,6 +8,10 @@ import { ema, rma } from './numericalKernels';
 export type CoreSpiritSmootherKind = 'ema' | 'rma';
 export type CoreSpiritSmootherSnapshot = Readonly<{
   version: 1;
+  kernelType: CoreSpiritSmootherKind;
+  kernelVersion: 1;
+  parametersSignature: string;
+  dataRevision: string | number;
   kind: CoreSpiritSmootherKind;
   period: number;
   nextBarIndex: number;
@@ -25,15 +29,20 @@ export class CoreSpiritIncrementalSmoother {
   readonly kind: CoreSpiritSmootherKind;
   readonly period: number;
   private nextBarIndex = 0;
+  private dataRevision: string | number;
   private state: SmootherState = { previous: null, seedCount: 0, seedSum: 0 };
   private currentBarIndex: number | null = null;
   private currentValue: number | null = null;
   private stateBeforeCurrent: SmootherState | null = null;
 
-  constructor(kind: CoreSpiritSmootherKind, period: number) {
+  constructor(kind: CoreSpiritSmootherKind, period: number, dataRevision: string | number = 0) {
     if (!Number.isInteger(period) || period < 1) throw new Error('period must be a positive integer');
+    if ((typeof dataRevision !== 'number' && typeof dataRevision !== 'string') ||
+        (typeof dataRevision === 'number' && !Number.isSafeInteger(dataRevision)) ||
+        String(dataRevision).trim() === '') throw new Error('dataRevision must be a non-empty string or safe integer');
     this.kind = kind;
     this.period = period;
+    this.dataRevision = dataRevision;
   }
 
   update(barIndex: number, value: number, confirmed = false): number {
@@ -60,7 +69,11 @@ export class CoreSpiritIncrementalSmoother {
   }
 
   /** Rebuild after a historical correction. The supplied values are the complete corrected history. */
-  replay(values: ArrayLike<number>): Float64Array {
+  replay(values: ArrayLike<number>, dataRevision: string | number = this.dataRevision): Float64Array {
+    if ((typeof dataRevision !== 'number' && typeof dataRevision !== 'string') ||
+        (typeof dataRevision === 'number' && !Number.isSafeInteger(dataRevision)) ||
+        String(dataRevision).trim() === '') throw new Error('dataRevision must be a non-empty string or safe integer');
+    this.dataRevision = dataRevision;
     this.reset();
     const result = new Float64Array(values.length);
     result.fill(Number.NaN);
@@ -71,6 +84,10 @@ export class CoreSpiritIncrementalSmoother {
   snapshot(): CoreSpiritSmootherSnapshot {
     return Object.freeze({
       version: 1,
+      kernelType: this.kind,
+      kernelVersion: 1,
+      parametersSignature: `${this.kind}:period=${this.period}`,
+      dataRevision: this.dataRevision,
       kind: this.kind,
       period: this.period,
       nextBarIndex: this.nextBarIndex,
@@ -84,7 +101,10 @@ export class CoreSpiritIncrementalSmoother {
   }
 
   restore(snapshot: CoreSpiritSmootherSnapshot): void {
-    if (snapshot.version !== 1 || snapshot.kind !== this.kind || snapshot.period !== this.period ||
+    if (snapshot.version !== 1 || snapshot.kernelVersion !== 1 || snapshot.kernelType !== this.kind ||
+        snapshot.kind !== this.kind || snapshot.period !== this.period ||
+        snapshot.parametersSignature !== `${this.kind}:period=${this.period}` ||
+        snapshot.dataRevision !== this.dataRevision ||
         !Number.isSafeInteger(snapshot.nextBarIndex) || snapshot.nextBarIndex < 0 ||
         !Number.isInteger(snapshot.seedCount) || snapshot.seedCount < 0 || snapshot.seedCount >= this.period ||
         !Number.isFinite(snapshot.seedSum) ||
