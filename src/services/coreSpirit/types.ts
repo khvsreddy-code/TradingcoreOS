@@ -177,15 +177,23 @@ export type CoreSpiritDataRequest = {
 
 export type CoreSpiritDataState = 'historical' | 'confirmed' | 'developing' | 'realtime';
 
+export type CoreSpiritConfirmationPhase = 'confirmed' | 'developing';
+
 export type CoreSpiritDataSnapshot = {
   value: number | null;
   source: string;
   symbol: string;
   timeframe: string;
+  /** Canonical bar open timestamp, in the same unit as the resolution context. */
   timestamp?: number;
   state?: CoreSpiritDataState;
+  /** Explicitly distinguishes an eligible closed sample from an in-progress sample. */
+  confirmationPhase?: CoreSpiritConfirmationPhase;
   receivedAt?: number;
+  /** Compatibility revision field; new data-plane adapters should also provide dataRevision. */
   revision?: number;
+  /** Revision of the canonical input dataset that produced this value. */
+  dataRevision?: string | number;
 };
 
 export type CoreSpiritAlignedPoint = {
