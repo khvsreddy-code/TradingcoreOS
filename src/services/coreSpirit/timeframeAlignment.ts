@@ -20,6 +20,11 @@ function confirmed(snapshot: CoreSpiritDataSnapshot): boolean {
 }
 
 function compareRevision(a: CoreSpiritDataSnapshot, b: CoreSpiritDataSnapshot): number {
+  // revision is the ordered sample revision. dataRevision is primarily a cache
+  // identity and may be an opaque hash/string, so it must not outrank sequence.
+  if (typeof a.revision === 'number' && typeof b.revision === 'number' && a.revision !== b.revision) {
+    return a.revision - b.revision;
+  }
   const ar = a.dataRevision ?? a.revision;
   const br = b.dataRevision ?? b.revision;
   if (typeof ar === 'number' && typeof br === 'number') return ar - br;
@@ -99,22 +104,32 @@ export function groupIntrabars(
   if (childMs != null && (!Number.isFinite(childMs) || childMs <= 0)) throw new Error('lowerTimeframeMs must be a positive finite number');
 
   return parentBars.map(parent => {
+    if (!Number.isFinite(parent.timestamp)) throw new Error('parent bar timestamp must be finite');
     const end = parent.endTimestamp ?? parent.timestamp + parentDurationMs;
+    if (!Number.isFinite(end) || end <= parent.timestamp) throw new Error('parent bar end must be finite and after its start');
     const points = ordered.filter(point => point.timestamp >= parent.timestamp && point.timestamp < end);
     let complete = false;
     if (childMs != null) {
-      const expected = options.calendar
+      const expectedRaw = options.calendar
         ? [...options.calendar.expectedTimestamps(parent.timestamp, end, childMs)]
         : Array.from(
-            { length: Math.max(0, Math.ceil((end - parent.timestamp) / childMs)) },
+            { length: Math.floor((end - parent.timestamp) / childMs) },
             (_, index) => parent.timestamp + index * childMs,
-          ).filter(timestamp => timestamp < end);
-      if (options.calendar && expected.length === 0) {
+          );
+      const expected = [...expectedRaw].sort((a,b)=>a-b);
+      const expectedSet = new Set(expected);
+      const uniquePoints = new Set(points.map(point=>point.timestamp));
+      const expectedIsValid = expected.every(timestamp =>
+        Number.isFinite(timestamp) && timestamp >= parent.timestamp && timestamp < end,
+      ) && expectedSet.size === expected.length;
+      const observationsAreValid = uniquePoints.size === points.length &&
+        points.every(point=>expectedSet.has(point.timestamp));
+      if (expected.length === 0 && options.calendar && expectedIsValid) {
         // A calendar-confirmed holiday/session closure has no expected bars.
         complete = points.length === 0;
       } else {
-        const present = new Set(points.map(point => point.timestamp));
-        complete = expected.length > 0 && expected.every(timestamp => present.has(timestamp));
+        complete = expected.length > 0 && expectedIsValid && observationsAreValid &&
+          expected.every(timestamp => uniquePoints.has(timestamp));
       }
     }
     return {
