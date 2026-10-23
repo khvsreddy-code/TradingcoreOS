@@ -47,6 +47,7 @@ assert.throws(
 );
 assert.ok(runtime.getRecoveryStats().barsReplayed >= corrected.length, 'full-history correction replay must account for every replayed bar');
 assert.equal(runtime.getRecoveryStats().lastReplayFrom, 0, 'recursive correction replay must report the safe origin');
+assert.equal(correctionPlan?.allHistory, true, 'the published correction plan must describe the full replay that actually ran');
 
 // Corrections arrive out of chronological order: first alter a later bar, then
 // alter an earlier one. Each accepted update must match a clean replay.
@@ -80,4 +81,18 @@ assert.deepEqual(seriesValues(correctedLive), seriesValues(referenceLive),
   'post-correction live outputs must match reference outputs');
 assert.ok(runtime.getRecoveryStats().checkpointsRestored > 0,
   'compatible pre-bar checkpoints should be counted when the forming bar is revised');
+
+// Even a stateless correction is currently handled by executeIr's full replay.
+// The diagnostic must not claim a narrower replay range than was actually run.
+const statelessCompilation = new CoreSpiritCompiler().compileSource('let shifted = close + 1', 'stateless-correction-contract');
+assert.ok(statelessCompilation.ir, statelessCompilation.diagnostics.map(item=>item.message).join('\n'));
+const statelessRuntime = new CoreSpiritRuntime({sourceId:'stateless-correction-contract'});
+statelessRuntime.executeIr(statelessCompilation.ir!, bars);
+const statelessCorrection = bars.map(bar=>({...bar}));
+statelessCorrection[3] = {...statelessCorrection[3]!, close:statelessCorrection[3]!.close+2, high:statelessCorrection[3]!.high+2};
+statelessRuntime.executeIr(statelessCompilation.ir!, statelessCorrection);
+assert.equal(statelessRuntime.getLastDirtyPlan()?.allHistory, true);
+assert.equal(statelessRuntime.getLastDirtyPlan()?.correction?.replayFrom, 0);
+assert.equal(statelessRuntime.getLastDirtyPlan()?.correction?.reason, 'full-replay-conservative',
+  'stateless dirty ranges must not masquerade as incremental execution while the runtime replays every bar');
 console.log('CORESPIRIT_HISTORICAL_CORRECTION_REPLAY_OK');
