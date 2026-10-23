@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { loadCoreSpiritBundledWasmSimdBackend } from './wasmBackend.ts';
 import { executeCoreSpiritNumericalKernelPlanned } from './numericalKernelExecutor.ts';
 import { createCoreSpiritBackendRegistry } from './backendRegistry.ts';
+import { rollingMean, rollingSum, rollingVariance, rollingStd, rollingMin, rollingMax } from './numericalKernels.ts';
 import { makeCoreSpiritCompilerPipelineTrace, validateCoreSpiritCompilerPipelineTrace, CORE_SPIRIT_COMPILER_STAGE_ORDER } from './compilerPipeline.ts';
 
 const trace=makeCoreSpiritCompilerPipelineTrace();
@@ -20,6 +21,34 @@ assert.equal(live.backend,'cpu-optimized');assert.equal(live.result[4],4.5);
 const bundledWasmBytes = await readFile(new URL('../../../public/coreSpirit/numerical-kernels-simd.wasm', import.meta.url));
 const bundledWasm = await loadCoreSpiritBundledWasmSimdBackend({ source: bundledWasmBytes });
 assert.equal(bundledWasm.profile()?.vectorized, true);
+const kernelProbeInput = Float64Array.from([1, 2, 3, 4, Number.NaN, 6, 7, 8, -2, 10, 12]);
+const kernelChecks = [
+  ['rollingMean', rollingMean, 'wasm-simd'],
+  ['rollingSum', rollingSum, 'wasm-scalar'],
+  ['rollingVariance', rollingVariance, 'wasm-scalar'],
+  ['rollingStd', rollingStd, 'wasm-scalar'],
+  ['rollingMin', rollingMin, 'wasm-scalar'],
+  ['rollingMax', rollingMax, 'wasm-scalar'],
+];
+function assertSeriesClose(actual, expected, label, tolerance = 1e-7) {
+  assert.equal(actual.length, expected.length, label + ' output length');
+  for (let i = 0; i < expected.length; i += 1) {
+    const a = actual[i], e = expected[i];
+    if (Number.isNaN(e)) { assert.ok(Number.isNaN(a), label + ' expected NaN at index ' + i + ', got ' + a); continue; }
+    if (!Number.isFinite(e)) { assert.equal(a, e, label + ' non-finite value at index ' + i); continue; }
+    assert.ok(Number.isFinite(a) && Math.abs(a - e) <= tolerance * Math.max(1, Math.abs(e)),
+      label + ' mismatch at index ' + i + ': expected ' + e + ', got ' + a);
+  }
+}
+for (const [name, referenceKernel, expectedBackend] of kernelChecks) {
+  const reference = referenceKernel(kernelProbeInput, 3);
+  const execution = await executeCoreSpiritNumericalKernelPlanned(name, [kernelProbeInput], [3], {
+    purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
+  });
+  assert.equal(execution.backend, expectedBackend, name + ' must report the kernel variant that actually ran');
+  assert.equal(execution.selectedBackend, expectedBackend, name + ' selected backend must match its manifest variant');
+  assertSeriesClose(execution.result, reference, name + ' WASM/CPU differential');
+}
 const historicalValues = Float64Array.from({ length: 64 }, (_, i) => 5000 + i);
 const acceleratedMean = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
   purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
@@ -36,6 +65,11 @@ try {
   assert.equal(autoLoadedMean.backend, 'wasm-simd',
     'large historical rollingMean should lazy-load and dispatch to the bundled SIMD module');
   assert.ok(Math.abs(autoLoadedMean.result[63] - 5059.5) < 1e-8);
+  const autoLoadedSum = await executeCoreSpiritNumericalKernelPlanned('rollingSum', [historicalValues], [8], {
+    purpose: 'historical', minWasmWorkUnits: 1,
+  });
+  assert.equal(autoLoadedSum.backend, 'wasm-scalar');
+  assert.equal(autoLoadedSum.result[63], 40476);
 } finally {
   globalThis.fetch = previousFetch;
 }
@@ -54,6 +88,17 @@ const brokenWasm={isLoaded:()=>true,profile:()=>({backend:'wasm',available:true,
 const registry=createCoreSpiritBackendRegistry({wasm:brokenWasm});
 const fallback=await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{purpose:'historical',wasm:brokenWasm,registry,minWasmWorkUnits:1,onBackendFallback:()=>{fallbackCount++;}});
 assert.equal(fallback.plan.backend,'wasm-simd');assert.equal(fallback.backend,'cpu-optimized');assert.equal(fallback.fallbackReason,'simulated WASM trap');assert.equal(fallbackCount,1);
+let executionTelemetry;
+const telemetryResult = await executeCoreSpiritNumericalKernelPlanned('rollingMean', [historicalValues], [8], {
+  purpose: 'historical', wasm: bundledWasm, minWasmWorkUnits: 1,
+  onBackendExecution: event => { executionTelemetry = event; },
+});
+assert.equal(telemetryResult.backend, 'wasm-simd');
+assert.equal(executionTelemetry.requestedBackend, 'auto');
+assert.equal(executionTelemetry.selectedBackend, 'wasm-simd');
+assert.equal(executionTelemetry.executedBackend, 'wasm-simd');
+assert.ok(executionTelemetry.elapsedMs >= 0);
+
 const registryOnlyFallback = await executeCoreSpiritNumericalKernelPlanned('rollingMean',[values],[2],{
  purpose:'historical',registry,minWasmWorkUnits:1,
 });
