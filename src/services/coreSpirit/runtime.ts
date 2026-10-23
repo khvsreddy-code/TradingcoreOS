@@ -24,7 +24,10 @@ import { planCoreSpiritSeriesFusion, type CoreSpiritSeriesFusionPlan } from './s
 import { CoreSpiritFusedSeriesCursor, type CoreSpiritSeriesOperationName } from './seriesVector';
 import { CoreSpiritExecutionVM } from './executionVM';
 import type { CoreSpiritExecutionVMHost } from './executionVM';
-import { CoreSpiritOptimizedExecutionVM } from './optimizedExecutionVM';
+import { CoreSpiritOptimizedExecutionVM, type CoreSpiritExecutionCacheVersions } from './optimizedExecutionVM';
+import { coreSpiritComponentRegistry } from './coreSpiritComponents';
+import { CORE_SPIRIT_STDLIB } from './standardLibrary';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_OPTIMIZER_ABI, CORE_SPIRIT_RUNTIME_VERSION } from './VERSION';
 import type { CoreSpiritValueStore } from './executionValueStore';
 import type { CoreSpiritExecutionTier } from './executionTier';
 import { CoreSpiritStateStore } from './stateStore';
@@ -98,6 +101,42 @@ function copyCoreSpiritKernelState(target: CoreSpiritKernelState, source: CoreSp
     case 'beta': target.state.copyFrom(source.state as RollingBetaState); break;
     case 'trend': target.state.copyFrom(source.state as RollingCorrelationState); break;
   }
+}
+
+// This fingerprint covers the statically declared builtin contract surface. Implementation
+// changes must also bump CORE_SPIRIT_COMPILER_VERSION; dynamic component changes have their
+// own monotonically increasing registry definitionVersion.
+const CORE_SPIRIT_STATIC_BUILTIN_DEFINITION_VERSION = CORE_SPIRIT_STDLIB.map((builtin) => [
+  builtin.name,
+  builtin.minArgs,
+  builtin.maxArgs ?? '',
+  JSON.stringify(builtin.returnType),
+  builtin.pure,
+  builtin.capability ?? '',
+  builtin.emitKind ?? '',
+  builtin.category,
+  JSON.stringify(builtin.seriesExecution ?? null),
+  JSON.stringify(builtin.temporalSafety ?? null),
+].join(':')).join('|');
+
+function safelySerializeExecutionConfiguration(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_key, item) => typeof item === 'function' ? '[function]' : item) ?? String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
+}
+
+function componentSignatureForIr(ir: CoreSpiritIrProgram): string {
+  return ir.entry.instructions.flatMap((instruction) => instruction.op === 'call' ? [[
+    instruction.name,
+    instruction.componentId ?? '',
+    instruction.componentPure ?? '',
+    instruction.componentStateful ?? '',
+    instruction.componentDeterministic ?? '',
+    ...(instruction.seriesArgs ?? []),
+    ...(instruction.seriesSources ?? []).flatMap(source => [source.ref, source.field]),
+  ].map(String).join(':')] : []).join('|');
 }
 
 export type CoreSpiritRuntimeState = {
@@ -223,6 +262,7 @@ export class CoreSpiritRuntime {
   private realtimeTransactionId?: string;
   private readonly executionVm = new CoreSpiritExecutionVM();
   private readonly optimizedExecutionVm = new CoreSpiritOptimizedExecutionVM();
+  private optimizedComponentDefinitionSignature = '';
   private readonly executionTier: Exclude<CoreSpiritExecutionTier, 'auto'>;
   private readonly inputValues: Readonly<Record<string, CoreSpiritValue>>;
   private readonly propValues: Readonly<Record<string, CoreSpiritValue>>;
@@ -283,6 +323,40 @@ export class CoreSpiritRuntime {
       }) ?? null,
       this.eventResolver,
     );
+  }
+
+  private updateOptimizedComponentDefinitionSignature(ir: CoreSpiritIrProgram): void {
+    this.optimizedComponentDefinitionSignature = componentSignatureForIr(ir);
+  }
+
+  /**
+   * Pass release, registry and execution-policy identity into the actual VM calls.
+   * Registry revisions are read dynamically, so registering/unregistering a component
+   * between bars invalidates its cached lowered plan before it can be reused.
+   */
+  private optimizedExecutionCacheVersions(): CoreSpiritExecutionCacheVersions {
+    return {
+      compilerVersion: [
+        CORE_SPIRIT_COMPILER_VERSION,
+        CORE_SPIRIT_RUNTIME_VERSION,
+        `ir-${this.compiledIr?.version ?? 1}`,
+        `optimizer-${CORE_SPIRIT_OPTIMIZER_ABI}`,
+      ].join(':'),
+      componentDefinitionVersion: [
+        CORE_SPIRIT_STATIC_BUILTIN_DEFINITION_VERSION,
+        `registry-${coreSpiritComponentRegistry.definitionVersion}`,
+        this.optimizedComponentDefinitionSignature,
+      ].join(':'),
+      executionConfigurationVersion: safelySerializeExecutionConfiguration({
+        target: this.executionTarget,
+        layer: this.layer,
+        executionTier: this.executionTier,
+        mode: this.executionContext.mode,
+        timezone: this.timezone,
+        maxStepsPerBar: this.options.maxStepsPerBar,
+        policy: this.executionContext.policy ?? null,
+      }),
+    };
   }
 
   reset(): void {
@@ -381,13 +455,14 @@ export class CoreSpiritRuntime {
     const errors = compiled.diagnostics.filter(d => d.severity === 'error');
     if (!compiled.ir || errors.length) throw new Error(errors.map(d => d.message).join('; ') || 'CoreSpirit compilation failed');
     this.compiledIr = compiled.ir; this.loadedProgramId = program.id; this.loadedSurface = program.surface;
+    this.updateOptimizedComponentDefinitionSignature(compiled.ir);
     this.installSeriesFusion(compiled.ir);
     // State retention must always cover the program's declared lookback plus a safety margin.
     if (compiled.ir.maxLookback + 32 > this.stateHistoryLimit) this.stateHistoryLimit = Math.min(this.maxHistoryBars, compiled.ir.maxLookback + 32);
     this.reset();
     this.installDirtyGraph(compiled.ir);
     this.prepareSeriesBindings(compiled.ir);
-    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry, compiled.ir.specializedPlan);
+    this.optimizedExecutionVm.prepare(compiled.ir.entry.instructions, this.seriesRegistry, compiled.ir.specializedPlan, this.optimizedExecutionCacheVersions());
     return compiled.ir;
   }
 
@@ -756,7 +831,7 @@ export class CoreSpiritRuntime {
     const diagnostics: string[] = [];
     this.outputCollector.beginBar(true);
     const outputs = this.outputCollector.values();
-    this.compiledIr = ir; this.installSeriesFusion(ir); this.reset(); this.installDirtyGraph(ir); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan);
+    this.compiledIr = ir; this.updateOptimizedComponentDefinitionSignature(ir); this.installSeriesFusion(ir); this.reset(); this.installDirtyGraph(ir); this.prepareSeriesBindings(ir); this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan, this.optimizedExecutionCacheVersions());
     const historicalCorrectionPlan = this.planHistoricalCorrection(previousIr, previousBars, ir, bars);
     const priorEffectSuppression = this.suppressExternalEffects;
     // Corrections rebuild semantic state without firing the same order intents,
@@ -809,9 +884,10 @@ export class CoreSpiritRuntime {
     this.kernelNodeIdentities.clear();
     this.compiledIr = ir;
     this.loadedProgramId = ir.sourceId;
+    this.updateOptimizedComponentDefinitionSignature(ir);
     this.installDirtyGraph(ir);
     this.prepareSeriesBindings(ir);
-    this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry);
+    this.optimizedExecutionVm.prepare(ir.entry.instructions, this.seriesRegistry, ir.specializedPlan, this.optimizedExecutionCacheVersions());
     this.installSeriesFusion(ir);
     this.stateHistoryLimit = Math.min(this.maxHistoryBars, Math.max(this.stateHistoryLimit, ir.maxLookback + 32));
   }
@@ -948,7 +1024,7 @@ export class CoreSpiritRuntime {
       profileInstruction: this.profiler.hooks(),
     };
     if (this.executionTier === 'reference') this.executionVm.run(instructions, barIndex, host, outputs);
-    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan });
+    else this.optimizedExecutionVm.run(instructions, barIndex, host, outputs, { ...executionOptions, seriesRegistry:this.seriesRegistry, specializedPlan:this.compiledIr?.specializedPlan, ...this.optimizedExecutionCacheVersions() });
   }
 
   private prefetchTradingNativeData(barIndex:number, asOfTimestamp:number): void {
