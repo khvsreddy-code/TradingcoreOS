@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  rollingMean, rollingVariance, rollingStd, rollingMin, rollingMax,
+  rollingMean, rollingSum, rollingVariance, rollingStd, rollingMin, rollingMax,
   ema, rma, wma, atr, rsi, linearRegression, correlation, covariance,
   zScore, dotProduct, matrixMultiply, matrixDecomposition, softmax, logSumExp,
   executeCoreSpiritNumericalKernel,
@@ -11,6 +11,8 @@ const values = Float64Array.from([1, 2, 3, 4]);
 assert.deepEqual(Array.from(rollingMean(values, 2), Number.isNaN), [true, false, false, false]);
 close(rollingMean(values, 2)[1], 1.5);
 close(rollingMean(values, 2)[3], 3.5);
+assert.deepEqual(Array.from(rollingSum(values, 2), Number.isNaN), [true, false, false, false]);
+close(rollingSum(values, 2)[3], 7);
 close(rollingVariance(Float64Array.from([1, 2, 3]), 2)[1], 0.25);
 const highLevelPrices = Float64Array.from([1e12 + 0.125, 1e12 + 0.25, 1e12 + 0.375, 1e12 + 0.5]);
 const highLevelVariance = rollingVariance(highLevelPrices, 3);
@@ -74,7 +76,12 @@ const probabilities = softmax(Float64Array.from([1000, 1001]));
 close(probabilities[0] + probabilities[1], 1);
 close(probabilities[1], 1 / (1 + Math.exp(-1)));
 assert.ok(executeCoreSpiritNumericalKernel('rollingMean', [values], [2]) instanceof Float64Array);
+assert.deepEqual(Array.from(executeCoreSpiritNumericalKernel('rollingSum', [values], [2]), Number.isNaN), [true, false, false, false]);
 
+const withSumGap = rollingSum(Float64Array.from([1, Number.NaN, 3, 4]), 2);
+assert.ok(Number.isNaN(withSumGap[1]));
+assert.ok(Number.isNaN(withSumGap[2]));
+close(withSumGap[3], 7);
 const withGap = rollingMean(Float64Array.from([1, Number.NaN, 3, 4]), 2);
 assert.ok(Number.isNaN(withGap[1]));
 assert.ok(Number.isNaN(withGap[2]));
