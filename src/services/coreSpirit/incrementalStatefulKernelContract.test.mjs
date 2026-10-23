@@ -60,5 +60,23 @@ for (const kind of ['ema', 'rma']) {
   assert.throws(() => smoother.restore({ ...smoother.snapshot(), period: 0 }), /checkpoint/);
 }
 
+const revisionBound = new CoreSpiritIncrementalSmoother('ema', 3, 'dataset-A');
+revisionBound.replay([10, 11, 12], 'dataset-A');
+const revisionSnapshot = revisionBound.snapshot();
+assert.equal(revisionSnapshot.kernelType, 'ema');
+assert.equal(revisionSnapshot.parametersSignature, 'ema:period=3');
+assert.equal(revisionSnapshot.nextBarIndex, 3);
+assert.equal(revisionSnapshot.dataRevision, 'dataset-A');
+assert.throws(
+  () => new CoreSpiritIncrementalSmoother('ema', 3, 'dataset-B').restore(revisionSnapshot),
+  /checkpoint/,
+  'a smoother checkpoint from another canonical data revision must be rejected',
+);
+assert.throws(
+  () => new CoreSpiritIncrementalSmoother('rma', 3, 'dataset-A').restore(revisionSnapshot),
+  /checkpoint/,
+  'EMA state must not restore into a different kernel type',
+);
+
 assert.throws(() => new CoreSpiritIncrementalSmoother('ema', 0), /period/);
 console.log('CoreSpirit incremental stateful kernel contract: OK');
