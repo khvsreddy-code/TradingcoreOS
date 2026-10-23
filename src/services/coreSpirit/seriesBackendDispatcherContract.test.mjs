@@ -95,10 +95,11 @@ assert.equal(executorCalled, true);
 assert.deepEqual(Array.from(acceleratedOutput), [9, 9], 'successful WASM execution publishes staged results');
 
 let fallbackObserved = false;
+let fallbackExecution;
 const fallbackOutput = new Float64Array(2);
 const failedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, fallbackOutput,
-  { realtime: false, bars: 20_000, onBackendFallback: (backend, error) => {
+  { realtime: false, bars: 20_000, onBackendExecution: event => { fallbackExecution = event; }, onBackendFallback: (backend, error) => {
     assert.equal(backend, 'wasm');
     assert.ok(error instanceof Error);
     fallbackObserved = true;
@@ -111,6 +112,11 @@ const failedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
 );
 assert.equal(failedBackend, 'cpu');
 assert.equal(fallbackObserved, true, 'accelerator failure must be observable');
+assert.equal(fallbackExecution.selected, 'wasm');
+assert.equal(fallbackExecution.executed, 'cpu');
+assert.match(fallbackExecution.fallbackReason, /simulated WASM trap/);
+assert.ok(fallbackExecution.elapsedMs >= 0);
+
 assert.notEqual(fallbackOutput[0], 999, 'partial accelerator writes must not leak into the published output');
 
 const callbackThrowsOutput = new Float64Array(2);
