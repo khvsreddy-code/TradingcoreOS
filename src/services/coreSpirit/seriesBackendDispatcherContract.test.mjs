@@ -72,7 +72,7 @@ let called = false;
 const output = new Float64Array(2);
 const actual = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, output,
-  { realtime: false, bars: 20_000, backends: [
+  { realtime: false, bars: 20_000, minWasmWorkUnits: 1, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
     { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
@@ -86,7 +86,7 @@ let executorCalled = false;
 const acceleratedOutput = new Float64Array(2);
 const acceleratedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, acceleratedOutput,
-  { realtime: false, bars: 20_000, backends: [
+  { realtime: false, bars: 20_000, minWasmWorkUnits: 1, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
     { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
@@ -102,7 +102,7 @@ let fallbackExecution;
 const fallbackOutput = new Float64Array(2);
 const failedBackend = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, fallbackOutput,
-  { realtime: false, bars: 20_000, onBackendExecution: event => { fallbackExecution = event; }, onBackendFallback: (backend, error) => {
+  { realtime: false, bars: 20_000, minWasmWorkUnits: 1, onBackendExecution: event => { fallbackExecution = event; }, onBackendFallback: (backend, error) => {
     assert.equal(backend, 'wasm');
     assert.ok(error instanceof Error);
     fallbackObserved = true;
@@ -125,7 +125,7 @@ assert.notEqual(fallbackOutput[0], 999, 'partial accelerator writes must not lea
 const callbackThrowsOutput = new Float64Array(2);
 const callbackThrowsResult = executeCoreSpiritSeriesFusionGroupDispatched(
   group, { register: 'src', values: Float64Array.from([1, 2]) }, callbackThrowsOutput,
-  { realtime: false, bars: 20_000, onBackendFallback: () => { throw new Error('telemetry backend unavailable'); }, backends: [
+  { realtime: false, bars: 20_000, minWasmWorkUnits: 1, onBackendFallback: () => { throw new Error('telemetry backend unavailable'); }, backends: [
     { backend: 'cpu', available: true, deterministic: true, vectorized: true },
     { backend: 'wasm', available: true, deterministic: true, vectorized: true, supportedOperations: ['rollingMean', 'rollingMax'] },
     { backend: 'gpu', available: false, deterministic: false, vectorized: true },
