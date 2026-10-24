@@ -28,6 +28,14 @@ assert.ok(first.summary.feesPaid>0);
 assert.equal(first.assumptions.liveBrokerOrdersSubmitted,false);
 assert.ok(first.ledger.some(e=>e.eventType==='signal'&&e.signalId==='signal-1'),'ledger preserves original strategy signals');
 
+const betweenBars=runStrategySimulation({strategyId:'between-bars',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
+ actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp)+60_000,intent:{
+   orderId:'between-order',signalId:'between-signal',symbol:'NSE:TEST',side:'buy',type:'market',quantity:1,
+ }}],config});
+const betweenFill=betweenBars.ledger.find(e=>e.eventType==='fill'&&e.orderId==='between-order');
+assert.equal(betweenFill?.timestampMs,Date.parse(bars[1]!.timestamp),'a signal between bars becomes eligible on the next bar, without an extra bar of delay');
+
+
 const stopLimit=runStrategySimulation({strategyId:'stop-limit-gap',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
  actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{
    orderId:'stop-limit-1',signalId:'stop-limit-signal',symbol:'NSE:TEST',side:'buy',type:'stop-limit',quantity:2,stopPrice:102,limitPrice:104,
