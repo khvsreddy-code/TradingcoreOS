@@ -61,18 +61,21 @@ const outOfOrderReferenceRuntime = new CoreSpiritRuntime({ sourceId: 'historical
 const afterOutOfOrderReference = outOfOrderReferenceRuntime.executeIr(ir, earlierCorrection);
 assert.deepEqual(afterOutOfOrder.state.locals, afterOutOfOrderReference.state.locals,
   'out-of-order historical corrections must match every final local, not only the selected EMA');
-const observableOutputs = (result: { outputs: Array<Record<string, unknown>> }) => result.outputs.map(output => ({
-  kind:output.kind,
-  time:output.time,
-  value:output.value,
-  side:output.side,
-  confidence:output.confidence,
-  id:output.id,
-  price:output.price,
-  text:output.text,
-  stop:output.stop,
-  target:output.target,
-}));
+const observableOutputs = (result: { outputs: unknown[] }) => result.outputs.map(raw => {
+  const output = raw as Record<string, unknown>;
+  return {
+    kind:output.kind,
+    time:output.time,
+    value:output.value,
+    side:output.side,
+    confidence:output.confidence,
+    id:output.id,
+    price:output.price,
+    text:output.text,
+    stop:output.stop,
+    target:output.target,
+  };
+});
 assert.deepEqual(observableOutputs(afterOutOfOrder), observableOutputs(afterOutOfOrderReference),
   'out-of-order corrections must reproduce the full observable output set after replay');
 
