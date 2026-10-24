@@ -610,16 +610,17 @@ export class SceneGraph {
         return undefined;
     }
 
-    ensurePane(id: string, kind: PaneKind, order: number, heightWeight: number): PaneNode {
+    /** Create or update a pane. A user-resized weight is preserved when callers omit it. */
+    ensurePane(id: string, kind: PaneKind, order: number, heightWeight?: number): PaneNode {
         this.orderedCache = null; // order/membership may change
         const existing = this.panes.get(id);
         if (existing) {
             existing.order = order;
-            existing.heightWeight = heightWeight;
+            if (heightWeight !== undefined) existing.heightWeight = heightWeight;
             existing.kind = kind;
             return existing;
         }
-        const pane: PaneNode = { id, kind, order, heightWeight, bounds: { top: 0, height: 0 }, scale: { min: 0, max: 1 }, scaleTarget: { min: 0, max: 1 }, initialized: false, manualScale: null, collapsed: false, percentBaseline: 0 };
+        const pane: PaneNode = { id, kind, order, heightWeight: heightWeight ?? (kind === 'price' ? 3 : 1), bounds: { top: 0, height: 0 }, scale: { min: 0, max: 1 }, scaleTarget: { min: 0, max: 1 }, initialized: false, manualScale: null, collapsed: false, percentBaseline: 0 };
         this.panes.set(id, pane);
         this.retained.upsert({ id: `pane:${id}`, kind: 'pane', zIndex: order, visibility: true, payload: pane, dirty: SceneDirty.Layout | SceneDirty.Structure });
         return pane;
