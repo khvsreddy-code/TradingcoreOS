@@ -352,6 +352,16 @@ export class CoreSpiritGaussianHMM {
     return this.decodeLatest();
   }
 
+  /** Force a final bounded EM fit on the latest training window before artifact sealing. */
+  fitFinal(): void {
+    if (this.observations.length < Math.max(12, this.states * 4)) {
+      throw new Error('Cannot finalize an HMM before enough historical observations have been collected.');
+    }
+    this.checkBudget?.();
+    this.fitBounded();
+    this.updatesSinceFit = 0;
+  }
+
   decodeLatest(): number | null {
     if (!this.fitted || !this.latestPosterior.length) return null;
     let best = 0;
