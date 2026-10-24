@@ -3626,7 +3626,10 @@ export class NativeRenderer implements IChartRenderer {
         const groups: DataWindowGroup[] = [];
         for (const model of this.scene.indicators.values()) {
             const rows = this.readoutRowsFor(model, idx, pricePane, 'dataWindow');
-            if (rows.length) groups.push({ name: model.title, rows });
+            if (!rows.length) continue;
+            const paneId = model.paneId ?? 'price';
+            const paneKind = paneId === 'price' ? 'price' : 'study';
+            groups.push({ name: model.title, paneId, paneKind, rows });
         }
         return groups;
     }
