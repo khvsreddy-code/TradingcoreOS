@@ -11,6 +11,7 @@ const routes = read('./server/routes/coreSpirit-models.routes.ts');
 const artifacts = read('./services/coreSpirit/modelArtifacts.ts');
 const migration = read('../supabase/migrations/20261024120000_corespirit_batch_dataset_chunks.sql');
 const lifecycleMigration = read('../supabase/migrations/20261024133000_corespirit_dataset_batch_session_guards.sql');
+const reuseMigration = read('../supabase/migrations/20261024140000_allow_dataset_manifest_reuse.sql');
 const server = read('../server.ts');
 
 assert.match(limits, /CORESPIRIT_BATCH_MAX_DATASET_ROWS/);
@@ -52,6 +53,6 @@ assert.match(migration, /guard_corespirit_dataset_batch_chunk_insert/);
 assert.match(migration, /revoke all on public\.corespirit_dataset_batch_sessions, public\.corespirit_dataset_batch_chunks from anon, authenticated/);
 assert.match(lifecycleMigration, /guard_corespirit_dataset_batch_session_update/,
   'session lifecycle transitions and immutable declarations must be enforced in the database');
-assert.match(lifecycleMigration, /drop index if exists public\.corespirit_dataset_batch_session_snapshot_unique/,
+assert.match(reuseMigration, /drop index if exists public\.corespirit_dataset_batch_session_snapshot_unique/,
   'identical immutable manifests may be reused across sessions without duplicate-content collisions');
 console.log('CORESPIRIT_BOUNDED_CHUNKED_RESEARCH_CONTRACT_OK');
