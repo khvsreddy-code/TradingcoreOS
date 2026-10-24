@@ -26,6 +26,31 @@ assert.ok(first.ledger.some(e=>e.eventType==='order_submitted'&&e.orderId==='ord
 assert.ok(first.ledger.some(e=>e.eventType==='fill'&&e.orderId==='order-1'),'market order fills on a later bar, never its signal bar');
 assert.ok(first.summary.feesPaid>0);
 assert.equal(first.assumptions.liveBrokerOrdersSubmitted,false);
+assert.ok(first.ledger.some(e=>e.eventType==='signal'&&e.signalId==='signal-1'),'ledger preserves original strategy signals');
+
+const stopLimit=runStrategySimulation({strategyId:'stop-limit-gap',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
+ actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{
+   orderId:'stop-limit-1',signalId:'stop-limit-signal',symbol:'NSE:TEST',side:'buy',type:'stop-limit',quantity:2,stopPrice:102,limitPrice:104,
+ }}],config:{...config,intrabarPolicy:'stop-first'}});
+const stopLimitFill=stopLimit.ledger.find(e=>e.eventType==='fill'&&e.orderId==='stop-limit-1');
+assert.ok(stopLimitFill,'stop-limit order has an explicit trigger/execution path');
+assert.ok((stopLimitFill?.fillPrice??Infinity)<=104,'a buy stop-limit must never fill above its limit');
+
+const modified=runStrategySimulation({strategyId:'modified-limit',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
+ actions:[
+  {kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{orderId:'modify-1',signalId:'modify-signal',symbol:'NSE:TEST',side:'buy',type:'limit',quantity:2,limitPrice:90}},
+  {kind:'modify',sequence:2,signalTimeMs:Date.parse(bars[1]!.timestamp),orderId:'modify-1',updates:{limitPrice:101}},
+ ],config});
+assert.ok(modified.ledger.some(e=>e.eventType==='order_modified'&&e.orderId==='modify-1'));
+assert.ok(modified.ledger.some(e=>e.eventType==='fill'&&e.orderId==='modify-1'),'modification becomes effective only on later bars');
+
+const cancelled=runStrategySimulation({strategyId:'cancelled-limit',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
+ actions:[
+  {kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{orderId:'cancel-1',signalId:'cancel-signal',symbol:'NSE:TEST',side:'buy',type:'limit',quantity:2,limitPrice:90}},
+  {kind:'cancel',sequence:2,signalTimeMs:Date.parse(bars[1]!.timestamp),orderId:'cancel-1',reason:'signal invalidated'},
+ ],config});
+assert.ok(cancelled.ledger.some(e=>e.eventType==='order_cancelled'&&e.orderId==='cancel-1'));
+assert.equal(cancelled.ledger.some(e=>e.eventType==='fill'&&e.orderId==='cancel-1'),false,'bar-close cancellation prevents later fills');
 
 const partial=runStrategySimulation({strategyId:'volume-limited',sourceProgramChecksum:checksum,datasetId:'dataset-v1',datasets,
  actions:[{kind:'submit',sequence:1,signalTimeMs:Date.parse(bars[0]!.timestamp),intent:{orderId:'partial-1',signalId:'partial-signal',symbol:'NSE:TEST',side:'buy',type:'limit',quantity:30,limitPrice:101}}],

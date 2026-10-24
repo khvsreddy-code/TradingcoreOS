@@ -97,6 +97,7 @@ function validateIntent(i:SimulationIntent,c:SimulationConfig):string|undefined{
   if(!finitePositive(i.quantity)||Math.abs(i.quantity-lotFloor(i.quantity,c.lotSize))>1e-8)return 'Quantity must be positive and lot-aligned.';
   if((i.type==='limit'||i.type==='stop-limit')&&!finitePositive(i.limitPrice))return 'Limit orders require a positive limitPrice.';
   if((i.type==='stop'||i.type==='stop-limit')&&!finitePositive(i.stopPrice))return 'Stop orders require a positive stopPrice.';
+  if(i.type==='stop-limit'&&i.stopPrice!=null&&i.limitPrice!=null&&(i.side==='buy'?i.limitPrice<i.stopPrice:i.limitPrice>i.stopPrice))return 'Stop-limit price must be executable at or beyond the stop in the order direction.';
   if(i.stopLossPrice!=null&&!finitePositive(i.stopLossPrice))return 'stopLossPrice must be positive when supplied.';
   if(i.takeProfitPrice!=null&&!finitePositive(i.takeProfitPrice))return 'takeProfitPrice must be positive when supplied.';
   if(i.stopLossPrice!=null&&i.takeProfitPrice!=null&&(i.side==='buy'?i.stopLossPrice>=i.takeProfitPrice:i.stopLossPrice<=i.takeProfitPrice))return 'Stop-loss and target levels conflict with order direction.';
@@ -166,6 +167,9 @@ function findCandidate(order:WorkingOrder,bar:HistoricalCandle,policy:IntrabarPo
       return undefined;
     }
     if(policy==='target-first')return undefined;
+    // Under stop-first, a stop-limit triggered inside this OHLC bar becomes
+    // executable only after the stop. Never fill it at the earlier bar open.
+    return {basePrice:stop,phase:'intrabar',limit,isLimit:true};
   }
   return atOpen?{basePrice:o,phase:'open',limit,isLimit:true}:{basePrice:limit,phase:'intrabar',limit,isLimit:true};
 }
@@ -294,54 +298,6 @@ export function runStrategySimulation(input:{
     const liquidity=new Map<string,number>();
     for(const [symbol,bar] of frame.bars){marks.set(symbol,Number(bar.close));liquidity.set(symbol,lotFloor(Number(bar.volume)*config.maxParticipationRate,config.lotSize));}
     processBrackets(frame,liquidity,false);
-    while(actionCursor<actions.length&&actions[actionCursor]!.signalTimeMs<=frame.time){
-      const action=actions[actionCursor++]!;
-      const barIndex=frame.index;
-      if(action.kind==='submit'){
-        const original=Object.freeze({...action.intent}) as SimulationIntent;
-        if(orders.has(original.orderId)){
-          record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-            originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
-        }
-        const state:WorkingOrder={original,intent:original,signalTimeMs:action.signalTimeMs,sequence:action.sequence,status:'pending',
-          filled:0,remaining:Number(original.quantity)||0,eligibleBars:0,stopTriggered:false,fixedFeeCharged:false};
-        orders.set(original.orderId,state);
-        const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
-        if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
-          side:original.side,originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason:error,
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});}
-        else record({eventType:'order_submitted',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
-          originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,
-          reason:action.reason??'Simulation-only order intent accepted; no live order was submitted.',
-          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
-          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-      }else{
-        const state=orders.get(action.orderId);
-        if(!state||!active(state.status)){
-          record({eventType:'order_rejected',orderId:action.orderId,signalId:state?.intent.signalId,symbol:state?.intent.symbol,side:state?.intent.side,
-            originalIntent:state?.original,currentIntent:state?.intent,reason:'Order is not working; cancel/modify had no effect.',
-            timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
-        }
-        if(action.kind==='cancel'){
-          state.status='cancelled';record({eventType:'order_cancelled',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,
-            side:state.intent.side,originalIntent:state.original,currentIntent:state.intent,remainingQuantity:state.remaining,
-            reason:action.reason??'Cancelled before the next eligible symbol bar.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-        }else{
-          const next=Object.freeze({...state.intent,...action.updates}) as SimulationIntent,invalid=validateIntent(next,config);
-          if(invalid||next.quantity<state.filled){
-            record({eventType:'order_rejected',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
-              originalIntent:state.original,currentIntent:state.intent,reason:invalid??'Modified quantity is less than already-filled quantity.',
-              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
-          }else{
-            const old=state.intent;state.intent=next;state.remaining=lotFloor(next.quantity-state.filled,config.lotSize);
-            if(old.type!==next.type||old.stopPrice!==next.stopPrice)state.stopTriggered=false;
-            record({eventType:'order_modified',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
-              originalIntent:state.original,currentIntent:state.intent,requestedQuantity:next.quantity,remainingQuantity:state.remaining,
-              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',reason:'Modified order becomes effective before later fills.'});
-          }
-        }
-      }
-    }
     const activeOrders=[...orders.values()].filter(o=>active(o.status)&&o.signalTimeMs<frame.time&&frame.bars.has(o.intent.symbol))
       .sort((a,b)=>a.signalTimeMs-b.signalTimeMs||a.sequence-b.sequence||a.intent.orderId.localeCompare(b.intent.orderId));
     for(const order of activeOrders){
@@ -419,6 +375,62 @@ export function runStrategySimulation(input:{
       }
     }
     processBrackets(frame,liquidity,true);pruneBrackets();
+    while(actionCursor<actions.length&&actions[actionCursor]!.signalTimeMs<=frame.time){
+      const action=actions[actionCursor++]!;
+      const barIndex=frame.index;
+      if(action.kind==='submit'){
+        const original=Object.freeze({...action.intent}) as SimulationIntent;
+        record({
+          eventType:'signal',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+          originalIntent:original,currentIntent:original,
+          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
+          reason:action.reason??'Strategy signal captured for deterministic simulation.',
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',
+        });
+        if(orders.has(original.orderId)){
+          record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+            originalIntent:original,currentIntent:original,reason:'Duplicate order ID within this run.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        const state:WorkingOrder={original,intent:original,signalTimeMs:action.signalTimeMs,sequence:action.sequence,status:'pending',
+          filled:0,remaining:Number(original.quantity)||0,eligibleBars:0,stopTriggered:false,fixedFeeCharged:false};
+        orders.set(original.orderId,state);
+        const error=validateIntent(original,config)??(!symbols.has(original.symbol)?'No validated dataset exists for the order symbol.':undefined);
+        if(error){state.status='rejected';record({eventType:'order_rejected',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,
+          side:original.side,originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,reason:error,
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});}
+        else record({eventType:'order_submitted',orderId:original.orderId,signalId:original.signalId,symbol:original.symbol,side:original.side,
+          originalIntent:original,currentIntent:original,requestedQuantity:original.quantity,
+          reason:action.reason??'Simulation-only order intent accepted; no live order was submitted.',
+          originalSignal:Object.freeze({id:original.signalId,timestampMs:action.signalTimeMs,reason:action.reason??'Strategy signal'}),
+          timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+      }else{
+        const state=orders.get(action.orderId);
+        if(!state||!active(state.status)){
+          record({eventType:'order_rejected',orderId:action.orderId,signalId:state?.intent.signalId,symbol:state?.intent.symbol,side:state?.intent.side,
+            originalIntent:state?.original,currentIntent:state?.intent,reason:'Order is not working; cancel/modify had no effect.',
+            timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});continue;
+        }
+        if(action.kind==='cancel'){
+          state.status='cancelled';record({eventType:'order_cancelled',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,
+            side:state.intent.side,originalIntent:state.original,currentIntent:state.intent,remainingQuantity:state.remaining,
+            reason:action.reason??'Cancelled before the next eligible symbol bar.',timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+        }else{
+          const next=Object.freeze({...state.intent,...action.updates}) as SimulationIntent,invalid=validateIntent(next,config);
+          if(invalid||next.quantity<state.filled){
+            record({eventType:'order_rejected',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
+              originalIntent:state.original,currentIntent:state.intent,reason:invalid??'Modified quantity is less than already-filled quantity.',
+              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close'});
+          }else{
+            const old=state.intent;state.intent=next;state.remaining=lotFloor(next.quantity-state.filled,config.lotSize);
+            if(old.type!==next.type||old.stopPrice!==next.stopPrice)state.stopTriggered=false;
+            record({eventType:'order_modified',orderId:action.orderId,signalId:state.intent.signalId,symbol:state.intent.symbol,side:state.intent.side,
+              originalIntent:state.original,currentIntent:state.intent,requestedQuantity:next.quantity,remainingQuantity:state.remaining,
+              timestampMs:action.signalTimeMs,barIndex,phase:'bar-close',reason:'Modified order becomes effective before later fills.'});
+          }
+        }
+      }
+    }
+
     const eq=equity(),ex=gross();maxGross=Math.max(maxGross,ex);
     equityCurve.push({timestampMs:frame.time,cash:rounded(cash),equity:rounded(eq),grossExposure:rounded(ex)});
     record({eventType:'mark',timestampMs:frame.time,barIndex:frame.index,phase:'intrabar',
