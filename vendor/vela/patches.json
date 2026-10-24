@@ -19,7 +19,7 @@
       ],
       "purpose": "Persist validated per-pane height weights in the versioned chart document, restore once each pane exists, preserve pending pane weights during progressive loading, and mark workspace state dirty after separator or pane lifecycle changes.",
       "tests": [
-        "src/velaPaneLayoutPersistenceContract.test.mjs",
+        "src/velaPaneLayoutPersistence.test.ts",
         "src/vela083FoundationContract.test.mjs",
         "src/velaLiveUiCoreSpiritContract.test.mjs"
       ]
@@ -83,6 +83,7 @@
       ],
       "purpose": "Preserve native chart rendering, pane-aware interaction and TCO visual/chrome integration, including local attribution-compatible branding, price-axis behavior and custom rendering layers.",
       "tests": [
+        "src/vela085ConformanceContract.test.mjs",
         "src/vela083FoundationContract.test.mjs",
         "src/velaLiveUiCoreSpiritContract.test.mjs",
         "src/velaTcoWorkspaceUxContract.test.mjs",
@@ -119,7 +120,7 @@
       "purpose": "Keep the TradingCoreOS workspace shell, local picker/search behavior, pane/context-menu integration and state serialization extensions compatible with the pinned Vela baseline.",
       "tests": [
         "src/velaWorkspaceAutosaveContract.test.mjs",
-        "src/velaPaneLayoutPersistenceContract.test.mjs",
+        "src/velaPaneLayoutPersistence.test.ts",
         "src/velaLiveUiCoreSpiritContract.test.mjs",
         "src/vela083FoundationContract.test.mjs"
       ]
