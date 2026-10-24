@@ -4,7 +4,7 @@
 - Upstream source version: **0.8.5**
 - Upstream source commit: `596cbbdeba15406cfb72465afd07f8c60c6b1852`
 - Previous source base: Vela 0.8.4 at `850fa1f431e2065e9b0074c4b0555a48a2999eaf`.
-- The 0.8.5 release commit was verified from upstream on 2026-10-24.
+- The 0.8.5 release commit descends from 0.8.4 and was verified from upstream on 2026-10-24.
 - Source lives in `vendor/vela/src`; the app compiles against these sources directly.
 - `vendor/vela/CHANGELOG.md` records 0.8.5 and earlier upstream releases.
 - `vendor/vela/NOTICE` is byte-for-byte identical to the upstream 0.8.5 notice and retains Vela's chart-level attribution requirement.
