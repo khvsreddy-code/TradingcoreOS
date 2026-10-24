@@ -21,7 +21,7 @@ const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
 
 assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
-assert.match(provenance, /descends from 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
+assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
 assert.match(releaseNotes, /^## \[0\.8\.5\]/m, 'vendored changelog must include the 0.8.5 release notes');
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
