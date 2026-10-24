@@ -54,7 +54,9 @@ function identityMatches<TState>(
   snapshot: CoreSpiritKernelSnapshot<TState>,
   expected?: CoreSpiritKernelSnapshotIdentity,
 ): boolean {
-  if (!expected) return true;
+  // An index-only restore is unsafe: bar indices survive parameter edits,
+  // kernel upgrades and historical corrections. Missing identity must fail closed.
+  if (!expected) return false;
   return snapshot.modelVersion === expected.modelVersion &&
     snapshot.kernelType === expected.kernelType &&
     snapshot.kernelVersion === expected.kernelVersion &&
@@ -122,10 +124,14 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     const previous = this.history.get(metadata.nodeId) ?? [];
     const next = [snapshot, ...previous.filter((item) =>
       item.barIndex !== snapshot.barIndex ||
+      item.nextBarIndex !== snapshot.nextBarIndex ||
+      item.modelVersion !== snapshot.modelVersion ||
       item.dataRevision !== snapshot.dataRevision ||
       item.parametersSignature !== snapshot.parametersSignature ||
       item.kernelType !== snapshot.kernelType ||
-      item.kernelVersion !== snapshot.kernelVersion,
+      item.kernelVersion !== snapshot.kernelVersion ||
+      item.revision !== snapshot.revision ||
+      !sameStringSet(item.inputDependencies, snapshot.inputDependencies),
     )];
     this.history.set(metadata.nodeId, next.slice(0, this.historyLimit));
     return snapshot;
@@ -135,9 +141,16 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     return this.snapshots.get(nodeId);
   }
 
-  at(nodeId: string, barIndex: number): CoreSpiritKernelSnapshot<TState> | undefined {
+  at(
+    nodeId: string,
+    barIndex: number,
+    expected?: CoreSpiritKernelSnapshotIdentity,
+  ): CoreSpiritKernelSnapshot<TState> | undefined {
     const entries = this.history.get(nodeId);
-    return entries?.find((entry) => entry.barIndex === barIndex);
+    // Search the retained checkpoint history for a compatible identity instead
+    // of rejecting a valid older revision just because a newer incompatible
+    // checkpoint happens to represent the same bar.
+    return entries?.find((entry) => entry.barIndex === barIndex && identityMatches(entry, expected));
   }
 
   restore(
@@ -165,9 +178,9 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     copyFrom: (target: TState, source: TState) => void,
     expected?: CoreSpiritKernelSnapshotIdentity,
   ): boolean {
-    const snapshot = this.at(nodeId, barIndex);
+    const snapshot = this.at(nodeId, barIndex, expected);
     if (!snapshot || snapshot.modelVersion !== modelVersion ||
-        !sameStringSet(snapshot.inputDependencies, inputDependencies) || !identityMatches(snapshot, expected)) return false;
+        !sameStringSet(snapshot.inputDependencies, inputDependencies)) return false;
     try { copyFrom(target, snapshot.state); return true; }
     catch { return false; }
   }
