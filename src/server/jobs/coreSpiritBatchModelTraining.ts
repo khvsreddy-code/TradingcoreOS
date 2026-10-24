@@ -182,8 +182,26 @@ export async function runChunkedCoreSpiritModelTraining(
   }
   const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
   const purgeBars = rawPurge;
+  const rawEmbargo = trainingParameters.embargoBars ?? 0;
+  const embargoBars = rawEmbargo;
   if (typeof purgeBars !== 'number' || !Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
     throw new Error('purgeBars must be an integer from 0 to 500.');
+  }
+  if (typeof embargoBars !== 'number' || !Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+    throw new Error('embargoBars must be an integer from 0 to 500.');
+  }
+  const limits = getCoreSpiritResearchLimits('batch');
+  const rawWindow = trainingParameters.trainingWindowRows ?? limits.maxTrainingWindowRows;
+  const requestedTrainingWindowRows = rawWindow;
+  if (typeof requestedTrainingWindowRows !== 'number' || !Number.isInteger(requestedTrainingWindowRows) ||
+      requestedTrainingWindowRows < 48 || requestedTrainingWindowRows > limits.maxTrainingWindowRows) {
+    throw new Error('trainingWindowRows must be an integer from 48 to ' + limits.maxTrainingWindowRows + ' for the batch worker class.');
+  }
+  const rawFitEvery = trainingParameters.fitEvery ?? 64;
+  const requestedFitEvery = rawFitEvery;
+  if (typeof requestedFitEvery !== 'number' || !Number.isInteger(requestedFitEvery) ||
+      requestedFitEvery < 1 || requestedFitEvery > limits.maxTrainingFitEvery) {
+    throw new Error('fitEvery must be an integer from 1 to ' + limits.maxTrainingFitEvery + ' for the batch worker class.');
   }
 
   const budget = makeBudget();
@@ -235,10 +253,16 @@ export async function runChunkedCoreSpiritModelTraining(
     }
 
     const rowCount = manifest.rowCount;
-    const evaluableRows = rowCount - purgeBars;
+    const boundaryGap = purgeBars + embargoBars;
+    if (boundaryGap >= rowCount) throw new Error('Purge and embargo gaps must sum to less than the dataset row count.');
+    const evaluableRows = rowCount - boundaryGap;
     const validationCount = Math.floor(evaluableRows * validationFraction);
     const trainingCount = evaluableRows - validationCount;
-    const validationStart = trainingCount + purgeBars;
+    const validationStart = trainingCount + boundaryGap;
+    const trainingWindowRows = Math.min(trainingCount, requestedTrainingWindowRows);
+    // Expensive EM passes run over a bounded window; scale refit cadence with
+    // dataset size so the worker does not repeatedly fit almost-identical windows.
+    const fitEvery = Math.max(requestedFitEvery, Math.min(limits.maxTrainingFitEvery, Math.ceil(trainingCount / 32)));
     const states = Number(featureGraph.states ?? 3);
     if (!Number.isInteger(states) || states < 2 || states > 12 ||
         trainingCount < Math.max(12, states * 4) || validationCount < 12 ||
@@ -281,12 +305,10 @@ export async function runChunkedCoreSpiritModelTraining(
 
     const covariance = featureGraph.covariance === 'diagonal' ? 'diagonal' : 'full';
     const fitIterations = Number(trainingParameters.fitIterations ?? 3);
-    const fitEvery = Number(trainingParameters.fitEvery ?? 64);
     if (!Number.isInteger(fitIterations) || fitIterations < 1 || fitIterations > 6) throw new Error('fitIterations must be between 1 and 6.');
-    if (!Number.isInteger(fitEvery) || fitEvery < 1 || fitEvery > 64) throw new Error('fitEvery must be between 1 and 64.');
 
     const hmm = new CoreSpiritGaussianHMM({
-      states, covariance, maxObservations: Math.min(trainingCount, 1_024), fitEvery, fitIterations,
+      states, covariance, maxObservations: trainingWindowRows, fitEvery, fitIterations,
     });
     const decoded = new Set<number>();
     rowIndex = 0;
@@ -305,7 +327,13 @@ export async function runChunkedCoreSpiritModelTraining(
     }
     if (rowIndex !== rowCount) throw new Error('Dataset changed during model fitting.');
     budget.assertWithinBudget('model fitting');
-    const hmmState: CoreSpiritGaussianHMMState = hmm.exportTrainedState();
+    const fittedState = hmm.exportTrainedState();
+    // Learned parameters may use a wider research window, but the sealed state
+    // persisted for inference retains the live runtime's 1,024-observation cap.
+    const hmmState: CoreSpiritGaussianHMMState = Object.freeze({
+      ...fittedState,
+      maxObservations: Math.min(fittedState.maxObservations, 1_024),
+    });
     const finalPosterior = hmm.posterior();
     const confidence = hmm.probabilityLatest() ?? 0;
     const validationModel = CoreSpiritGaussianHMM.fromTrainedState(hmmState);
@@ -342,7 +370,7 @@ export async function runChunkedCoreSpiritModelTraining(
     }
     const meanValidationConfidence = validationConfidenceSum / validationSamples;
     const safety = featureGraph.researchSafety;
-    const validationProtocol = purgeBars > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1';
+    const validationProtocol = boundaryGap > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1';
     const validationResults = {
       protocol: validationProtocol,
       trainingSampleCount: trainingCount,
@@ -392,13 +420,17 @@ export async function runChunkedCoreSpiritModelTraining(
         validationProtocol,
         purgeBars,
         purgedDatasetRows: purgeBars,
+        embargoBars,
+        embargoedDatasetRows: embargoBars,
         states,
         covariance,
         fitIterations,
         fitEvery,
+        trainingWindowRows,
         maxObservations: hmm.maxObservations,
+        inferenceRuntimeMaxObservations: 1_024,
         trainingRowsProcessed: trainingCount,
-        fitWindowPolicy: 'sliding-recent-window-v1',
+        fitWindowPolicy: 'sliding-recent-window-bounded-v2',
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
         datasetStorageFormat: 'json-chunks-v1',
