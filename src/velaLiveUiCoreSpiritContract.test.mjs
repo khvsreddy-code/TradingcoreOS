@@ -13,7 +13,12 @@ const nativeRenderer = read('../vendor/vela/src/renderers/native/NativeRenderer.
 const chartKernel = read('./services/core/chart/velaNativeChartKernel.ts');
 const chartRenderer = read('../vendor/vela/src/core/ports/IChartRenderer.ts');
 const nativeIndicator = read('../vendor/vela/src/core/native-indicators/NativeIndicator.ts');
+const velaProvenance = read('../vendor/vela/UPSTREAM.md');
+const velaReleaseNotes = read('../vendor/vela/CHANGELOG.md');
 
+assert.match(velaProvenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'live chart integration must be pinned to the 0.8.5 source baseline');
+assert.match(velaReleaseNotes, /^## \[0\.8\.5\]/m, '0.8.5 integration contract must be backed by the vendored upstream release notes');
+assert.match(velaReleaseNotes, /waitsForHistory: true/, 'release notes should cover the history-gated native indicator lifecycle');
 assert.match(terminal, /background:'#141518'/, 'live chart should use Vela charcoal canvas');
 assert.match(terminal, /upColor:'#089981'/, 'live chart should use Vela bullish candle color');
 assert.match(terminal, /downColor:'#f23645'/, 'live chart should use Vela bearish candle color');
