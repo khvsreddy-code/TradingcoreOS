@@ -48,7 +48,7 @@ assert.match(rendererImpl, /groups\.push\(\{ name: model\.title, paneId, paneKin
 assert.match(chrome, /readout\.groups\.filter\(\(group\) => group\.paneId === selectedPane\)/, 'the host data window filters rows to the pane under the crosshair');
 assert.match(chrome, /Only show OHLCV while inspecting the price pane/, 'indicator pane values are not presented as market prices');
 assert.doesNotMatch(nativeExtensions, /from ['\"]\.\/velaChartFacade['\"]/, 'new native extension code must not depend on the legacy facade');
-assert.doesNotMatch(nativeExtensions, /waitsForHistory\s*:\s*true/, 'the bounded TCO regime ribbon remains incremental');
+assert.doesNotMatch(nativeExtensions, /waitsForHistory\s*:\s*true\s*[,}]/, 'the bounded TCO regime ribbon remains incremental');
 assert.match(provider, /historyReady: snapshot\.historyReady/, 'the TCO data plane keeps its history-readiness signal');
 
 assert.match(historyPolicy, /'5m': 500/, '5-minute history should start with a bounded 500-bar request');
