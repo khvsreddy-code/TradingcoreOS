@@ -253,6 +253,16 @@ export class CoreSpiritDatasetBatchRepository {
       if (error) throw new Error('Unable to close dataset chunk ingestion: ' + error.message);
       session = await this.getSession(sessionId);
       if (!session) throw new Error('Dataset batch session not found after sealing began.');
+      // Another worker may have sealed the same immutable session while this
+      // request was waiting on storage. Return that committed result idempotently.
+      if (session.status === 'sealed' && session.datasetSnapshotId && session.datasetHash && session.datasetManifest) {
+        return {
+          datasetSnapshotId: session.datasetSnapshotId,
+          datasetVersion: session.datasetHash,
+          rowCount: session.expectedRowCount,
+          manifest: session.datasetManifest,
+        };
+      }
     }
     if (session.status !== 'sealing') throw new Error('Dataset batch session cannot be finalized from its current state.');
 
