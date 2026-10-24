@@ -139,6 +139,16 @@ assert(Math.abs(probabilitySum - 1) < 1e-6, 'HMM filtered posterior probabilitie
 assert((hmm.probabilityLatest() ?? 0) > 0 && (hmm.probabilityLatest() ?? 1) <= 1, 'HMM confidence must be a valid probability');
 const revised = hmm.observe([0.23, 0.01], 1_700_000_000 + 71 * 60, ['return', 'volatility']);
 assert(revised !== null, 'HMM should accept a corrected developing-bar observation without double-appending it');
+hmm.fitFinal();
+const finalHMMState = hmm.exportTrainedState();
+assert(finalHMMState.maxObservations <= 1_024, 'the default live/inference HMM state remains capped after a final refit');
+let oversizedInferenceStateRejected = false;
+try {
+  CoreSpiritGaussianHMM.fromTrainedState({ ...finalHMMState, maxObservations: 2_048 });
+} catch {
+  oversizedInferenceStateRejected = true;
+}
+assert(oversizedInferenceStateRejected, 'larger research-fit windows must not silently increase the persisted inference buffer cap');
 
 const hmmSource = [
   'model regimeHMM: HMM<float> {',
