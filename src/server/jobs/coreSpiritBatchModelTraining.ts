@@ -5,7 +5,6 @@ import {
   CoreSpiritDatasetBatchRepository,
   coreSpiritDatasetManifestHash,
   type CoreSpiritDatasetManifest,
-  type StoredDatasetChunk,
 } from '../storage/CoreSpiritDatasetBatchRepository.js';
 import { getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
 import { CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
@@ -53,7 +52,7 @@ function parseManifest(value: Record<string, unknown>, snapshot: ChunkedSnapshot
   if (manifest.formatVersion !== 1 || manifest.datasetRevision !== 1 ||
       manifest.storageFormat !== 'json-chunks-v1' ||
       manifest.datasetVersion !== snapshot.datasetVersion ||
-      manifest.researchArtifactId === '' ||
+      typeof manifest.researchArtifactId !== 'string' || manifest.researchArtifactId.length === 0 ||
       !Number.isSafeInteger(manifest.rowCount) || manifest.rowCount < 24 ||
       manifest.rowCount > getCoreSpiritResearchLimits('batch').maxRows ||
       !Number.isSafeInteger(manifest.chunkSize) || manifest.chunkSize < 100 ||
@@ -136,7 +135,7 @@ async function* iterateVerifiedRows(
       throw new Error('Dataset chunk content hash or time bounds do not match its immutable manifest.');
     }
     for (const row of rows) {
-      budget.assertWithinBudget('row validation');
+      if (index % 256 === 0) budget.assertWithinBudget('row validation');
       if (!Number.isSafeInteger(row.timestamp) || !Number.isSafeInteger(row.availableAt) ||
           row.timestamp <= previousTimestamp || row.timestamp < from || row.timestamp > to ||
           row.availableAt > row.timestamp || row.confirmed !== true ||
@@ -191,6 +190,7 @@ export async function runChunkedCoreSpiritModelTraining(
   const batches = new CoreSpiritDatasetBatchRepository(ownerUserId);
   try {
     const manifest = parseManifest(snapshot.datasetManifest, snapshot);
+    if (manifest.researchArtifactId !== researchArtifactId) throw new Error('Dataset manifest is bound to a different research artifact.');
     const manifestHash = await coreSpiritDatasetManifestHash({
       rowCount: manifest.rowCount,
       featureSchema: manifest.featureSchema,
