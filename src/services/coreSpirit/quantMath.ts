@@ -298,6 +298,8 @@ export class CoreSpiritGaussianHMM {
   private readonly refreshPosteriorOnObserve: boolean;
   private observations: number[][] = [];
   private timestamps: number[] = [];
+  private observationStart = 0;
+  private observationCount = 0;
   private fields?: string[];
   private transition: number[][] = [];
   private startProbability: number[] = [];
@@ -323,6 +325,17 @@ export class CoreSpiritGaussianHMM {
     this.refreshPosteriorOnObserve = options.refreshPosteriorOnObserve ?? true;
   }
 
+  /** Return the active bounded window in chronological order; full windows are ring-buffered. */
+  private observationWindow(): number[][] {
+    if (this.observationStart === 0 && this.observationCount === this.observations.length) {
+      return this.observations;
+    }
+    return [
+      ...this.observations.slice(this.observationStart),
+      ...this.observations.slice(0, this.observationStart),
+    ];
+  }
+
   observe(row: readonly number[], timestamp: number, fields?: readonly string[]): number | null {
     if (!row.length || row.length > 16 || !row.every(Number.isFinite)) return null;
     if (!Number.isFinite(timestamp)) return null;
@@ -330,35 +343,43 @@ export class CoreSpiritGaussianHMM {
       throw new Error('HMM feature schema changed while the model was active; reset or use a new model name');
     }
     if (!this.fields && fields) this.fields = [...fields];
-    const previousTimestamp = this.timestamps[this.timestamps.length - 1];
-    if (this.observations.length && row.length !== this.observations[0]!.length) {
+    const hasObservations = this.observationCount > 0;
+    const lastIndex = hasObservations
+      ? (this.observationStart + this.observationCount - 1) % this.maxObservations : -1;
+    const previousTimestamp = hasObservations ? this.timestamps[lastIndex]! : undefined;
+    if (hasObservations && row.length !== this.observations[this.observationStart]!.length) {
       throw new Error('HMM feature dimension changed while the model was active');
     }
-    if (this.observations.length && timestamp < previousTimestamp!) throw new Error('HMM observations must be chronological');
-    if (this.observations.length && timestamp === previousTimestamp) {
-      this.observations[this.observations.length - 1] = [...row];
+    if (hasObservations && timestamp < previousTimestamp!) throw new Error('HMM observations must be chronological');
+    if (hasObservations && timestamp === previousTimestamp) {
+      this.observations[lastIndex] = [...row];
     } else {
-      this.observations.push([...row]);
-      this.timestamps.push(timestamp);
-      if (this.observations.length > this.maxObservations) {
-        this.observations.shift();
-        this.timestamps.shift();
+      if (this.observationCount < this.maxObservations) {
+        this.observations.push([...row]);
+        this.timestamps.push(timestamp);
+        this.observationCount += 1;
+      } else {
+        // O(1) replacement keeps long batch ingestion linear instead of shifting
+        // every retained row for every observation after the window fills.
+        this.observations[this.observationStart] = [...row];
+        this.timestamps[this.observationStart] = timestamp;
+        this.observationStart = (this.observationStart + 1) % this.maxObservations;
       }
       this.updatesSinceFit += 1;
     }
-    if (this.observations.length >= Math.max(12, this.states * 4) &&
+    if (this.observationCount >= Math.max(12, this.states * 4) &&
         (!this.fitted || this.updatesSinceFit >= this.fitEvery)) {
       this.fitBounded();
       this.updatesSinceFit = 0;
     } else if (this.fitted && this.refreshPosteriorOnObserve) {
-      this.latestPosterior = this.filterLatest(this.observations);
+      this.latestPosterior = this.filterLatest(this.observationWindow());
     }
     return this.decodeLatest();
   }
 
   /** Force a final bounded EM fit on the latest training window before artifact sealing. */
   fitFinal(): void {
-    if (this.observations.length < Math.max(12, this.states * 4)) {
+    if (this.observationCount < Math.max(12, this.states * 4)) {
       throw new Error('Cannot finalize an HMM before enough historical observations have been collected.');
     }
     this.checkBudget?.();
@@ -534,7 +555,7 @@ export class CoreSpiritGaussianHMM {
 
   private fitBounded(): void {
     this.checkBudget?.();
-    const rows = this.observations;
+    const rows = this.observationWindow();
     const count = rows.length;
     const dimensions = rows[0]!.length;
     const ordered = [...rows].sort((a, b) => a[0]! - b[0]!);
