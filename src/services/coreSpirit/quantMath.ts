@@ -198,6 +198,8 @@ export type CoreSpiritGaussianHMMOptions = Readonly<{
   fitIterations?: number;
   /** Optional synchronous guard used by isolated batch training; never stored in artifacts. */
   checkBudget?: () => void;
+  /** Disable expensive full-window filtering between fit checkpoints in training jobs. Defaults on for live use. */
+  refreshPosteriorOnObserve?: boolean;
 }>;
 
 type GaussianParameters = { mean: number[]; covariance: number[][]; lower: number[][]; logDeterminant: number };
@@ -293,6 +295,7 @@ export class CoreSpiritGaussianHMM {
   private readonly fitEvery: number;
   private readonly fitIterations: number;
   private readonly checkBudget?: () => void;
+  private readonly refreshPosteriorOnObserve: boolean;
   private observations: number[][] = [];
   private timestamps: number[] = [];
   private fields?: string[];
@@ -317,6 +320,7 @@ export class CoreSpiritGaussianHMM {
     this.fitEvery = Math.max(1, Math.min(65_536, Math.floor(options.fitEvery ?? 8)));
     this.fitIterations = Math.max(1, Math.min(6, Math.floor(options.fitIterations ?? 3)));
     this.checkBudget = options.checkBudget;
+    this.refreshPosteriorOnObserve = options.refreshPosteriorOnObserve ?? true;
   }
 
   observe(row: readonly number[], timestamp: number, fields?: readonly string[]): number | null {
@@ -346,7 +350,7 @@ export class CoreSpiritGaussianHMM {
         (!this.fitted || this.updatesSinceFit >= this.fitEvery)) {
       this.fitBounded();
       this.updatesSinceFit = 0;
-    } else if (this.fitted) {
+    } else if (this.fitted && this.refreshPosteriorOnObserve) {
       this.latestPosterior = this.filterLatest(this.observations);
     }
     return this.decodeLatest();
