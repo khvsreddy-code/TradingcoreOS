@@ -30,6 +30,9 @@ if (head.status !== 0) fail(head.stderr || 'could not read upstream git HEAD');
 if (head.stdout.trim() !== UPSTREAM_COMMIT) {
   fail(`expected upstream HEAD ${UPSTREAM_COMMIT}, got ${head.stdout.trim()}`);
 }
+const status = spawnSync('git', ['-C', upstreamDir, 'status', '--porcelain'], { encoding: 'utf8' });
+if (status.status !== 0) fail(status.stderr || 'could not verify upstream working tree');
+if (status.stdout.trim()) fail('upstream checkout must be clean before generating the source diff');
 
 const patchManifest = JSON.parse(fs.readFileSync(PATCH_MANIFEST, 'utf8'));
 const patches = patchManifest.patches;
