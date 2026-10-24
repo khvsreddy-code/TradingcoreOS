@@ -3157,7 +3157,12 @@ function modelToValuePatch(model: IndicatorModel, previous: IndicatorModel | und
         const emitted = delta ?? fullSeriesDelta(current);
         series.push(emitted);
         const values = emitted.kind === 'points' ? emitted.points : emitted.kind === 'bars' ? emitted.bars : emitted.markers;
-        if (!model.dirty) for (const value of values) { from = Math.min(from, value.time); to = Math.max(to, value.time); }
+        if (!model.dirty) for (const value of values) {
+            // 0.8.5 represents candle/plot gaps as empty slots; these remain index-aligned but have no time.
+            if (!value) continue;
+            from = Math.min(from, value.time);
+            to = Math.max(to, value.time);
+        }
 
         if (prev && isLineLikeSeries(current) && isLineLikeSeries(prev)) {
             const styleChanged = !lineStyleEqual(current.style, prev.style);
