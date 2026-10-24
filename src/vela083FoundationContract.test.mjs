@@ -43,7 +43,7 @@ assert.equal(overlayDiff.counts.localOnly, overlayDiff.localOnly.length, 'diff s
 assert.ok(overlayDiff.modified.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every modified upstream source file must have a patch owner');
 assert.ok(overlayDiff.localOnly.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every TCO-only source file must have a patch owner');
 assert.match(persistedDocument, /paneHeightWeights\?: Record<string, number>/, 'pane weights are part of the versioned per-cell state');
-assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 32\)/, 'persisted pane count is bounded');
+assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 64\)/, 'persisted pane count is bounded');
 assert.match(paneCell, /private restorePaneHeightWeights\(\)/, 'saved pane proportions are restored to the native chart');
 assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.8.5 pane API');
 assert.match(paneCell, /paneHeightWeights: this\.readPaneHeightWeights\(\)/, 'live pane weights are included in chart snapshots');
