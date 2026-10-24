@@ -12,7 +12,6 @@ import type {
   CoreSpiritDataAlignment,
   CoreSpiritDataRequest,
 } from './types';
-import { normalizeCoreSpiritTimeframe } from '../core/data/marketDataGraph';
 
 export const CORE_SPIRIT_MULTI_SYMBOL_TIMEFRAME_VERSION = 1 as const;
 
