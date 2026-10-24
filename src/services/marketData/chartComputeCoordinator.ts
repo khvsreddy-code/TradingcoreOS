@@ -229,8 +229,17 @@ class SharedWorkerQueue<Payload extends object, Result> {
       const item = this.queue[0]!;
       const affinityWorker = item.affinityKey ? this.affinity.get(item.affinityKey) : undefined;
       const preferredIdle = affinityWorker && !this.busy.has(affinityWorker) ? affinityWorker : undefined;
-      const idle = preferredIdle || this.workers.find(worker => worker && !this.busy.has(worker))
-        || (this.workers.length < this.maxWorkers ? this.createWorker() : undefined);
+      let idle = preferredIdle || this.workers.find(worker => worker && !this.busy.has(worker));
+      if (!idle && this.workers.length < this.maxWorkers) {
+        try { idle = this.createWorker(); }
+        catch (error) {
+          // A worker bootstrap failure rejects this request so the caller can use
+          // its bounded fallback; never leave a ghost queue entry behind.
+          this.queue.shift();
+          this.settle(item, error instanceof Error ? error : new Error(String(error)));
+          continue;
+        }
+      }
       if (!idle) return;
       this.queue.shift();
       if (item.affinityKey && !affinityWorker) this.affinity.set(item.affinityKey, idle);
