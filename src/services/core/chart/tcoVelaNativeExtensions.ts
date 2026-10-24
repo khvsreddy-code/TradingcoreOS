@@ -1,14 +1,15 @@
 import {
   registerNativeIndicator,
-  registerRendererLayer,
   type NativeIndicator,
   type NativeIndicatorContext,
   type NativeIndicatorDescriptor,
-  type InputSchema,
-  type InputValue,
+} from '../../../../vendor/vela/src/core/native-indicators';
+import type { InputSchema, InputValue } from '../../../../vendor/vela/src/core/model/inputs';
+import {
+  registerRendererLayer,
   type RendererLayerDefinition,
   type RendererLayerArgs,
-} from './velaChartFacade';
+} from '../../../../vendor/vela/src/renderers/native/layers';
 
 type RegimeLayerData = {
   state: -1 | 0 | 1;
