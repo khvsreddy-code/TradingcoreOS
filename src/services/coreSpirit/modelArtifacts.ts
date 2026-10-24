@@ -612,6 +612,57 @@ export async function verifyModelArtifactIntegrity<TWeights>(artifact: ModelArti
   }
 }
 
+/**
+ * Re-checks the immutable model ABI on every production inference path.
+ * A historical approval cannot authorize running an artifact after the compiler,
+ * IR, runtime, feature schema, target horizon, or model implementation has changed.
+ */
+export async function assertModelArtifactRuntimeCompatibility(
+  artifact: ModelArtifact<unknown>,
+  currentVersions: { compiler: string; ir: string; runtime: string },
+): Promise<void> {
+  const provenance = artifact?.provenance;
+  const contract = artifact?.contract;
+  if (!provenance || !contract ||
+      provenance.compilerVersion !== currentVersions.compiler ||
+      provenance.irVersion !== currentVersions.ir ||
+      provenance.runtimeVersion !== currentVersions.runtime ||
+      provenance.dependencyVersions.corespiritCompiler !== currentVersions.compiler ||
+      provenance.dependencyVersions.corespiritIr !== currentVersions.ir ||
+      provenance.dependencyVersions.corespiritRuntime !== currentVersions.runtime ||
+      provenance.modelImplementation !== 'corespirit-gaussian-hmm-v1') {
+    throw new Error('CoreSpirit model ABI/version compatibility changed; retrain and re-approve this exact artifact hash before inference.');
+  }
+  const weights = artifact.weights && typeof artifact.weights === 'object'
+    ? artifact.weights as Record<string, unknown> : {};
+  const featureNames = Array.isArray(weights.featureNames) ? weights.featureNames : [];
+  const schema = contract.featureSchema;
+  const schemaHash = await coreSpiritSha256({
+    version: schema.version,
+    orderedNames: schema.orderedNames,
+    types: schema.types,
+  });
+  const targetHorizon = Number(
+    provenance.trainingParameters.forecastHorizonBars ??
+    provenance.trainingParameters.targetHorizonBars ??
+    provenance.trainingParameters.horizon ??
+    contract.target.forecastHorizonBars,
+  );
+  if (weights.modelType !== 'gaussian-hmm' || !weights.hmm ||
+      !contract.datasetSnapshot ||
+      contract.datasetSnapshot.hash !== provenance.datasetVersion ||
+      contract.datasetSnapshot.version !== provenance.datasetVersion ||
+      !Array.isArray(featureNames) ||
+      schemaHash !== schema.hash ||
+      schema.orderedNames.length !== featureNames.length ||
+      schema.orderedNames.some((name, index) => name !== featureNames[index]) ||
+      contract.validation.protocol !== provenance.validationResults.protocol ||
+      contract.temporal.validationProtocol !== provenance.validationResults.protocol ||
+      contract.target.forecastHorizonBars !== targetHorizon) {
+    throw new Error('CoreSpirit model feature/validation ABI is incompatible with its immutable artifact contract.');
+  }
+}
+
 /** Pins inference to one immutable artifact; it never invokes training. */
 export async function loadModelForInference<TWeights, TFeatures, TPrediction>(
   store: ModelArtifactStore<TWeights>,

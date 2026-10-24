@@ -13,6 +13,7 @@ import {
 } from '../../services/coreSpirit/researchValidation.js';
 import {
   createResearchArtifact,
+  assertModelArtifactRuntimeCompatibility,
   coreSpiritSha256,
   loadModelForInference,
   verifyModelArtifactIntegrity,
@@ -787,6 +788,11 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     const storedArtifact = await store.getByHash(hash);
     if (!storedArtifact) return fail(res, 404, 'Model artifact not found.');
     if (storedArtifact.hash.toLowerCase() !== hash || !(await verifyModelArtifactIntegrity(storedArtifact))) return fail(res, 409, 'Model artifact integrity check failed.');
+    await assertModelArtifactRuntimeCompatibility(storedArtifact, {
+      compiler: CORE_SPIRIT_COMPILER_VERSION,
+      ir: String(CORE_SPIRIT_IR_VERSION),
+      runtime: CORE_SPIRIT_RUNTIME_VERSION,
+    });
     const release = await store.ensureModelReleaseControl(hash);
     if (release.status !== 'approved' || release.approvalChecks.productionEligible !== true) {
       return fail(res, 409, 'Model candidate is not approved for production inference. Review chronological holdout, source causality, lookahead and provenance before approving the exact artifact hash.');
@@ -828,7 +834,7 @@ coreSpiritModelRoutes.post('/models/:hash/predict', async (req: AuthenticatedReq
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Model inference failed.';
-    const status = /not found/i.test(message) ? 404 : /feature count|feature schema/i.test(message) ? 422 : 400;
+    const status = /not found/i.test(message) ? 404 : /ABI\/version compatibility|feature\/validation ABI/i.test(message) ? 409 : /feature count|feature schema/i.test(message) ? 422 : 400;
     fail(res, status, message);
   }
 });
