@@ -421,8 +421,8 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
     return fail(res, 400, 'fitEvery must be an integer from 1 to 64.');
   }
   const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
-  const purgeBars = Number(rawPurge);
-  if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
+  const purgeBars = rawPurge;
+  if (typeof purgeBars !== 'number' || !Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
     return fail(res, 400, 'purgeBars must be an integer from 0 to 500.');
   }
 
