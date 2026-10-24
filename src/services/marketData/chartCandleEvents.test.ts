@@ -29,4 +29,7 @@ assert.equal(invalidationModeForCandleChange(backfillChange),'full-replay');
 assert.equal(isCurrentCandleDatasetChange(appendChange,{datasetKey:'NSE:NIFTY|5m',datasetGeneration:4,revision:9}),true);
 assert.equal(isCurrentCandleDatasetChange(appendChange,{datasetKey:'NSE:NIFTY|5m',datasetGeneration:5}),false);
 assert.throws(()=>createCandleDatasetChange({datasetKey:'NSE:NIFTY|5m',datasetGeneration:4,previousRevision:9,revision:9,kind:'replace',from:3,to:4,candleCount:4}),/advance monotonically/);
+assert.throws(()=>createCandleDatasetChange({datasetKey:'NSE:NIFTY|5m',datasetGeneration:4,previousRevision:Number.NaN,revision:10,kind:'replace',from:3,to:4,candleCount:4}),/previous revision/);
+assert.throws(()=>createCandleDatasetChange({datasetKey:'NSE:NIFTY|5m',datasetGeneration:Number.NaN,previousRevision:9,revision:10,kind:'replace',from:3,to:4,candleCount:4}),/generation/);
+assert.throws(()=>createCandleDatasetChange({datasetKey:'NSE:NIFTY|5m',datasetGeneration:4,previousRevision:9,revision:10,kind:'replace',from:Number.NaN,to:4,candleCount:4}),/dirty range/);
 console.log('CHART_CANDLE_EVENT_CANONICALIZATION_OK');

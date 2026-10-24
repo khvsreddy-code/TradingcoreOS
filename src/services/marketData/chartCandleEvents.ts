@@ -52,17 +52,24 @@ export function createCandleDatasetChange(input: {
   timestampMs?: number; emittedAtMs?: number;
 }): CandleDatasetChange {
   const datasetKey = String(input.datasetKey ?? '').trim();
-  const previousRevision = Math.max(0, Math.floor(input.previousRevision));
+  const previousRevision = Math.floor(input.previousRevision);
   const revision = Math.floor(input.revision);
+  const datasetGeneration = Math.floor(input.datasetGeneration);
+  const candleCount = Math.floor(input.candleCount);
+  const fromValue = Number(input.from);
+  const toValue = Number(input.to);
   if (!datasetKey) throw new Error('Candle mutation requires a dataset key');
+  if (!Number.isSafeInteger(previousRevision) || previousRevision < 0) throw new Error('Candle mutation previous revision must be a non-negative safe integer');
   if (!Number.isSafeInteger(revision) || revision <= previousRevision) throw new Error('Candle mutation revision must advance monotonically');
-  const candleCount = Math.max(0, Math.floor(input.candleCount));
-  const from = Math.max(0, Math.min(candleCount, Math.floor(input.from)));
-  const to = Math.max(from, Math.min(candleCount, Math.floor(input.to)));
+  if (!Number.isSafeInteger(datasetGeneration) || datasetGeneration < 0) throw new Error('Candle mutation generation must be a non-negative safe integer');
+  if (!Number.isSafeInteger(candleCount) || candleCount < 0) throw new Error('Candle mutation candle count must be a non-negative safe integer');
+  if (!Number.isFinite(fromValue) || !Number.isFinite(toValue)) throw new Error('Candle mutation dirty range must be finite');
+  const from = Math.max(0, Math.min(candleCount, Math.floor(fromValue)));
+  const to = Math.max(from, Math.min(candleCount, Math.floor(toValue)));
   const timestampMs = input.timestampMs;
   return Object.freeze({
     schemaVersion: 1 as const, datasetKey,
-    datasetGeneration: Math.max(0, Math.floor(input.datasetGeneration)),
+    datasetGeneration,
     previousRevision, revision, kind: input.kind,
     dirtyRange: Object.freeze({ from, to }), candleCount,
     ...(Number.isFinite(timestampMs) && Number(timestampMs) > 0 ? { timestampMs: Number(timestampMs) } : {}),

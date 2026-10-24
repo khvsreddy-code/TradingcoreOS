@@ -9,7 +9,7 @@ assert.match(coordinator,/advanceGeneration\(/,'worker queue fences old dataset 
 assert.match(coordinator,/maxQueued = 96/,'chart compute queue is bounded');
 assert.match(coordinator,/Stale chart worker result rejected by the dataset revision fence/,'stale worker results do not enter caches');
 assert.match(coordinator,/if \(isAbortError\(error\)\) throw error/,'cancellation is not treated as a computation failure and rerun on the UI thread');
-assert.match(coordinator,/cancelOlder: mode === 'full-replay' \|\| generationChanged/,'corrections and dataset resets cancel stale recursive state');
+assert.match(coordinator,/advanceGeneration\\(scope, change\\.revision, mode === 'full-replay' \\|\\| generationChanged\\)/,'corrections and dataset resets cancel stale recursive state');
 assert.match(dataPlane,/chartComputeCoordinator\.applyCandleChange\(change\)/,'data plane publishes its canonical event into shared compute invalidation');
 assert.match(graph,/invalidateIndicatorDependencyCache/,'snapshot indicator cache invalidation follows graph dependencies');
 assert.match(graph,/if \(change\) invalidateIndicatorDependencyCache\(cache, configs, change\)/,'graph evaluation consumes mutation revisions');
