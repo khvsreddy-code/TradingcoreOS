@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const exists = (path) => fs.existsSync(new URL(path, import.meta.url));
@@ -31,6 +32,9 @@ assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4
 assert.match(releaseNotes, /^## \[0\.8\.5\]/m, 'vendored changelog must include the 0.8.5 release notes');
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
+const noticeBytes = Buffer.from(notice, 'utf8');
+const noticeBlobSha = createHash('sha1').update(Buffer.from('blob ' + noticeBytes.length + '\\0', 'utf8')).update(noticeBytes).digest('hex');
+assert.equal(noticeBlobSha, '44a31353c6635be99277f19c3298c435ecd67456', 'Vela NOTICE must remain byte-identical to upstream 0.8.5');
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
 assert.equal(overlayDiff.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'machine-generated diff must use the pinned source commit');
 assert.equal(releaseDiff.upstream.base.commit, '850fa1f431e2065e9b0074c4b0555a48a2999eaf', 'release diff must compare from the exact 0.8.4 source base');
