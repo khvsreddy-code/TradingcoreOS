@@ -182,10 +182,24 @@ export function validateSynchronizedSnapshot(
   if (context.maxStalenessMs != null &&
       Math.max(0, context.asOfTimestamp - freshnessTimestamp) * 1000 > context.maxStalenessMs) return null;
   const dataRevision = snapshotRevision(snapshot);
+  const developing = closeNotReached || markedDeveloping;
+  // Canonicalize the complete reference at the boundary. Downstream caches and
+  // alignment must not distinguish "5" from "5m", or "chart" from its resolved
+  // timeframe, and every accepted sample must carry an explicit phase/revision.
+  const symbol = snapshot.symbol.trim().toUpperCase() === 'CURRENT'
+    ? String(context.baseSymbol ?? snapshot.symbol).trim().toUpperCase()
+    : snapshot.symbol.trim().toUpperCase();
+  const rawTimeframe = snapshot.timeframe.trim().toLowerCase() === 'chart'
+    ? String(context.baseTimeframe ?? snapshot.timeframe)
+    : snapshot.timeframe;
+  const timeframe = normalizeCoreSpiritTimeframe(rawTimeframe);
   return Object.freeze({
     ...snapshot,
+    symbol,
+    timeframe,
     ...(resolvedCloseTimestamp == null ? {} : { closeTimestamp:resolvedCloseTimestamp }),
-    ...(closeNotReached ? {state:'developing' as const,confirmationPhase:'developing' as const} : {}),
+    state: developing ? 'developing' as const : snapshot.state ?? 'confirmed' as const,
+    confirmationPhase: developing ? 'developing' as const : 'confirmed' as const,
     dataRevision,
   });
 }
