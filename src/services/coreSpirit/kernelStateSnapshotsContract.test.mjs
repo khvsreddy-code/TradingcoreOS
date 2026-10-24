@@ -23,9 +23,16 @@ const expected = {
   parametersSignature:base.parametersSignature,
   dataRevision:base.dataRevision,
   nextBarIndex:base.nextBarIndex,
+  inputDependencies:base.inputDependencies,
 };
 
 store.capture(base, {value:42}, clone);
+assert.equal(store.at(base.nodeId, base.barIndex), undefined,
+  'bar-index-only lookup must not expose an unvalidated checkpoint');
+assert.equal(store.at(base.nodeId, base.barIndex, expected)?.state.value, 42,
+  'full identity lookup may return a compatible checkpoint');
+assert.equal(store.at(base.nodeId, base.barIndex, {...expected, inputDependencies:['high']}), undefined,
+  'checkpoint lookup must reject a changed dependency chain');
 const target = {};
 assert.equal(store.restore(target, base.nodeId, base.modelVersion, ['close'], 99, copyFrom),
   false, 'restore without an explicit full identity must fail closed');
