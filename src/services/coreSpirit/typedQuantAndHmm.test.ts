@@ -124,6 +124,20 @@ assert(invalidHMMConfig.diagnostics.some(item => item.code === 'TYPE_HMM_STATES'
 const boundedResearchHmm = new CoreSpiritGaussianHMM({ states: 3, maxObservations: 2_048, fitEvery: 512, fitIterations: 1 });
 assert(boundedResearchHmm.maxObservations === 2_048,
   'isolated research training should support a configurable window larger than the legacy 1,024-observation cap');
+const deferredFilterHmm = new CoreSpiritGaussianHMM({
+  states: 3, maxObservations: 128, fitEvery: 64, fitIterations: 1, refreshPosteriorOnObserve: false,
+});
+for (let index = 0; index < 24; index += 1) {
+  deferredFilterHmm.observe([Math.sin(index / 3), Math.cos(index / 5)], 1_710_000_000 + index * 60_000, ['return', 'volatility']);
+}
+const checkpointPosterior = Array.from(deferredFilterHmm.posterior()!.data);
+deferredFilterHmm.observe([0.71, -0.23], 1_710_000_000 + 24 * 60_000, ['return', 'volatility']);
+const deferredPosterior = Array.from(deferredFilterHmm.posterior()!.data);
+assert(deferredPosterior.every((value, index) => value === checkpointPosterior[index]),
+  'batch training may defer full-window posterior recomputation between scheduled fit checkpoints');
+deferredFilterHmm.fitFinal();
+assert(deferredFilterHmm.exportTrainedState().maxObservations === 128,
+  'final fit should seal a finite research window rather than embedding all historical observations');
 const hmm = new CoreSpiritGaussianHMM({ states: 3, emission: 'gaussian', covariance: 'full', fitEvery: 4, fitIterations: 2 });
 let state: number | null = null;
 for (let i = 0; i < 72; i += 1) {
