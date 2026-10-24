@@ -16,10 +16,14 @@ const extension = read('./services/core/chart/tcoVelaNativeExtensions.ts');
 const provenance = read('../vendor/vela/UPSTREAM.md');
 const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 const sourceSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
+const releaseSnapshot = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'conformance must target the pinned Vela source commit');
 assert.equal(sourceSnapshot.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'the machine-generated source diff must use the same upstream pin');
 assert.ok(patchManifest.patches.length >= 6, 'local overlay patch ownership must remain declared');
+assert.equal(releaseSnapshot.upstream.base.version, '0.8.4', 'upstream release delta starts at 0.8.4');
+assert.equal(releaseSnapshot.upstream.release.version, '0.8.5', 'upstream release delta ends at 0.8.5');
+assert.equal(releaseSnapshot.counts.total, releaseSnapshot.files.length, 'release diff file inventory must be complete');
 
 assert.match(renderer, /function slotsBefore\(/, 'future/offset plot times must be represented by sparse slots');
 assert.match(renderer, /setBarsColumns\(/, 'full bar replacement must enter the native renderer through the columnar API');
