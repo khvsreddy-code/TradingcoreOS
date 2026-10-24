@@ -19,6 +19,7 @@ const engine = read('../vendor/vela/src/core/engine/EngineOrchestrator.ts');
 const sceneGraph = read('../vendor/vela/src/renderers/native/core/SceneGraph.ts');
 const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack.ts');
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
+const persistedDocument = read('../vendor/vela/src/state/document.ts');
 
 assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
 assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
@@ -38,6 +39,9 @@ assert.match(overlayStack, /export function/, 'the overlay stacking order logic 
 assert.match(averages, /type: 'lsma'/, 'the breaking linear regression curve is replaced by LSMA');
 assert.match(averages, /type: 'linear-regression-slope'/, 'linear regression slope remains an explicit study');
 assert.doesNotMatch(averages, /type: 'linear-regression'/, 'the removed 0.8.5 linear-regression built-in must not be re-registered');
+assert.match(persistedDocument, /type !== 'linear-regression'/, 'saved chart state must migrate the retired study before restore');
+assert.match(persistedDocument, /slope \? 'linear-regression-slope' : 'lsma'/, 'saved Curve and Slope modes must migrate to the correct replacement study');
+assert.match(persistedDocument, /length: 100, \.\.\.rest/, 'saved linear-regression curves preserve their former 100-bar default when becoming LSMA');
 for (const path of [
   '../vendor/vela/src/renderers/native/chrome/priceAxisTicks.ts',
   '../vendor/vela/src/renderers/native/chrome/vela-logos.ts',
