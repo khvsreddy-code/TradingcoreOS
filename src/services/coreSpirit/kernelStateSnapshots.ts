@@ -150,7 +150,8 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     // Search the retained checkpoint history for a compatible identity instead
     // of rejecting a valid older revision just because a newer incompatible
     // checkpoint happens to represent the same bar.
-    return entries?.find((entry) => entry.barIndex === barIndex && identityMatches(entry, expected));
+    return entries?.find((entry) => entry.barIndex === barIndex &&
+      (expected ? identityMatches(entry, expected) : true));
   }
 
   restore(
@@ -178,6 +179,7 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     copyFrom: (target: TState, source: TState) => void,
     expected?: CoreSpiritKernelSnapshotIdentity,
   ): boolean {
+    if (!expected) return false;
     const snapshot = this.at(nodeId, barIndex, expected);
     if (!snapshot || snapshot.modelVersion !== modelVersion ||
         !sameStringSet(snapshot.inputDependencies, inputDependencies)) return false;
