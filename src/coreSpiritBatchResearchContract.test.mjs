@@ -17,6 +17,8 @@ const server = read('../server.ts');
 assert.match(limits, /CORESPIRIT_BATCH_MAX_DATASET_ROWS/);
 assert.match(limits, /CORESPIRIT_BATCH_MAX_MEMORY_BYTES/);
 assert.match(limits, /CORESPIRIT_BATCH_MAX_EXECUTION_MS/);
+assert.match(limits, /CORESPIRIT_BATCH_MAX_TRAINING_WINDOW_ROWS/);
+assert.match(limits, /CORESPIRIT_BATCH_MAX_FIT_EVERY/);
 assert.match(limits, /CORESPIRIT_RESEARCH_HARD_MAX_ROWS = 1_000_000/);
 assert.match(routes, /const MAX_ROWS = getCoreSpiritResearchLimits\('interactive'\)\.maxRows/,
   'synchronous training payloads must remain separately capped');
@@ -39,10 +41,16 @@ assert.match(batchWorker, /process\.memoryUsage\(\)\.rss/);
 assert.match(batchWorker, /maxExecutionMs/);
 assert.match(batchWorker, /for await \(const item of iterateVerifiedRows/);
 assert.match(batchWorker, /Dataset chunk content hash or time bounds/);
-assert.match(batchWorker, /validationStart = trainingCount \+ purgeBars/);
+assert.match(batchWorker, /validationStart = trainingCount \+ boundaryGap/);
+assert.match(batchWorker, /embargoedDatasetRows: embargoBars/);
+assert.match(batchWorker, /trainingWindowRows/);
+assert.match(batchWorker, /inferenceRuntimeMaxObservations: 1_024/);
+assert.match(batchWorker, /maxObservations: Math\.min\(fittedState\.maxObservations, 1_024\)/);
 assert.match(batchWorker, /validationModel\.setInferenceBoundaryExclusive\(trainingEndTimestamp\)/);
 assert.match(batchWorker, /datasetStorageFormat: 'json-chunks-v1'/);
 assert.match(trainingWorker, /runChunkedCoreSpiritModelTraining/);
+assert.match(trainingWorker, /embargoBars: split\.embargoedCount/);
+assert.match(trainingWorker, /trainingWindowRows/);
 assert.match(artifacts, /\['chronological-holdout-v1', 'purged-chronological-v1'\]/);
 
 assert.match(migration, /row_count between 12 and 1000000/);
