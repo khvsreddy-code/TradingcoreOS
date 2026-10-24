@@ -30,6 +30,8 @@ assert.match(routes, /post\('\/training-runs\/from-dataset'/);
 assert.match(batchRepository, /corespirit-dataset-chunk-v1/);
 assert.match(batchRepository, /coreSpiritDatasetManifestHash/);
 assert.match(batchRepository, /storageFormat: 'json-chunks-v1'/);
+assert.match(batchRepository, /observedTimeRange/);
+assert.match(batchWorker, /observed time range does not match its immutable chunk descriptors/);
 assert.match(batchRepository, /status: 'sealing'/);
 assert.match(batchRepository, /status: 'sealed'/);
 assert.match(batchRepository, /async \*iterateChunks/);
