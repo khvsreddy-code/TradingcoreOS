@@ -306,7 +306,7 @@ function sanitizeCell(raw: unknown): CellState | null {
     if (c.paneHeightWeights != null && typeof c.paneHeightWeights === 'object' && !Array.isArray(c.paneHeightWeights)) {
         const source = c.paneHeightWeights as Record<string, unknown>;
         const paneHeightWeights: Record<string, number> = Object.create(null) as Record<string, number>;
-        for (const paneId of Object.keys(source).slice(0, 32)) {
+        for (const paneId of Object.keys(source).slice(0, 64)) {
             const weight = source[paneId];
             // A persisted document is untrusted: cap count and magnitude, reject prototype
             // keys, and accept only finite positive numeric weights used by the renderer.
