@@ -139,21 +139,17 @@ function aggregateRows(
     out.push(currentBucket,open,high,low,close,volume);
   };
 
-  let currentSessionId = '';
   for(let i=0;i<view.time.length;i+=1){
     const t=Number(view.time[i]);
     if(!Number.isFinite(t))continue;
     const bucket=bucketStart(t,intervalSeconds,anchorSecondsUtc,sessionProfile);
-    // Ignore off-session observations. Session identity is part of the
-    // aggregate key: two distinct exchange sessions must never be merged just
-    // because their nominal UTC bucket starts happen to match.
+    // Ignore off-session observations without splitting immediately. The next
+    // valid bar tells us whether the gap changed the bucket (overnight/holiday)
+    // or merely interrupted the same bucket (a scheduled session break).
     if (!Number.isFinite(bucket)) continue;
-    const session = sessionProfile?.sessionAt?.(t);
-    const sessionId = session?.id ?? '';
-    if(bucket!==currentBucket || sessionId!==currentSessionId){
+    if(bucket!==currentBucket){
       flush();
       currentBucket=bucket;
-      currentSessionId=sessionId;
       open=Number(view.open[i]);
       high=Number(view.high[i]);
       low=Number(view.low[i]);
