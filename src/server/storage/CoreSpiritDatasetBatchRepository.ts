@@ -30,6 +30,7 @@ export type CoreSpiritDatasetManifest = Readonly<{
   rowCount: number;
   featureSchema: Readonly<{ version: '1'; orderedNames: readonly string[]; types: readonly 'number'[]; hash: string }>;
   trainingRange: ResearchDateRange;
+  observedTimeRange: ResearchDateRange;
   chunkSize: number;
   chunkCount: number;
   chunks: readonly DatasetChunkDescriptor[];
@@ -124,7 +125,8 @@ export class CoreSpiritDatasetBatchRepository {
       throw new Error('Batch dataset rowCount must be between 24 and ' + limits.maxRows + ' for the configured worker class.');
     }
     const from = Date.parse(input.trainingRange.from);
-    const to = Date.parse(input.trainingRange.to);
+    const dateOnlyTo = /^\d{4}-\d{2}-\d{2}$/.test(input.trainingRange.to);
+    const to = Date.parse(input.trainingRange.to) + (dateOnlyTo ? 86_399_999 : 0);
     if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error('Batch training range is invalid.');
     const chunkSize = input.chunkSize ?? limits.maxChunkRows;
     if (!Number.isSafeInteger(chunkSize) || chunkSize < 100 || chunkSize > Math.min(1_000, limits.maxChunkRows)) {
@@ -292,6 +294,10 @@ export class CoreSpiritDatasetBatchRepository {
       rowCount: session.expectedRowCount, featureSchema, trainingRange: session.trainingRange,
       chunkSize: session.chunkSize, chunks: descriptors,
     });
+    const observedTimeRange: ResearchDateRange = {
+      from: new Date(descriptors[0]!.firstTimestamp).toISOString(),
+      to: new Date(descriptors[descriptors.length - 1]!.lastTimestamp).toISOString(),
+    };
     const manifest: CoreSpiritDatasetManifest = Object.freeze({
       formatVersion: 1,
       datasetRevision: 1,
@@ -300,6 +306,7 @@ export class CoreSpiritDatasetBatchRepository {
       rowCount: session.expectedRowCount,
       featureSchema,
       trainingRange: session.trainingRange,
+      observedTimeRange,
       chunkSize: session.chunkSize,
       chunkCount: descriptors.length,
       chunks: Object.freeze(descriptors),
