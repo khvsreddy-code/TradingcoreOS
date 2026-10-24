@@ -22,6 +22,7 @@ export type ChronologicalResearchSplit<T extends ResearchFeatureRow> = Readonly<
   validationRange: ResearchDateRange;
   validationFraction: number;
   purgedCount: number;
+  embargoedCount: number;
   validationProtocol: 'chronological-holdout-v1' | 'purged-chronological-v1';
 }>;
 
@@ -93,7 +94,7 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
   validationFraction = DEFAULT_RESEARCH_VALIDATION_FRACTION,
   minimumTrainingRows = 12,
   minimumValidationRows = MIN_RESEARCH_VALIDATION_ROWS,
-  options: { maxRows?: number; purgeBars?: number } = {},
+  options: { maxRows?: number; purgeBars?: number; embargoBars?: number } = {},
 ): ChronologicalResearchSplit<T> {
   if (!Number.isFinite(validationFraction) || validationFraction < 0.1 || validationFraction > 0.4) {
     throw new Error('validationFraction must be between 0.10 and 0.40 for chronological holdout validation.');
@@ -104,22 +105,27 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
   }
   const maxRows = Math.max(1, Math.min(CORESPIRIT_MAX_DATASET_ROWS, Math.floor(options.maxRows ?? DEFAULT_RESEARCH_MAX_ROWS)));
   const purgeBars = Math.max(0, Math.floor(options.purgeBars ?? 0));
+  const embargoBars = Math.max(0, Math.floor(options.embargoBars ?? 0));
+  // For the single chronological holdout, purge and embargo form one explicit
+  // no-train/no-validation boundary gap. They are separately recorded because
+  // purge is label-horizon driven while embargo is an additional safety margin.
+  const boundaryGap = purgeBars + embargoBars;
   if (!Array.isArray(rows) || rows.length > maxRows) {
     throw new Error('Research datasets are limited to ' + maxRows + ' rows for this training backend.');
   }
-  if (purgeBars > 500 || purgeBars >= rows.length) {
-    throw new Error('Validation purge gap must be between 0 and 500 bars and smaller than the dataset.');
+  if (purgeBars > 500 || embargoBars > 500 || boundaryGap >= rows.length) {
+    throw new Error('Purge and embargo must each be between 0 and 500 bars and sum to less than the dataset.');
   }
-  const evaluableRows = rows.length - purgeBars;
+  const evaluableRows = rows.length - boundaryGap;
   const validationCount = Math.floor(evaluableRows * validationFraction);
   const trainingCount = evaluableRows - validationCount;
   if (trainingCount < minimumTrainingRows || validationCount < minimumValidationRows) {
-    throw new Error('Not enough rows for a chronological holdout with ' + purgeBars + ' purged boundary bars: require at least ' +
-      (minimumTrainingRows + minimumValidationRows + purgeBars) +
+    throw new Error('Not enough rows for a chronological holdout with ' + purgeBars + ' purged and ' + embargoBars + ' embargoed boundary bars: require at least ' +
+      (minimumTrainingRows + minimumValidationRows + boundaryGap) +
       ' total rows at the selected validationFraction.');
   }
   const trainingRows = rows.slice(0, trainingCount);
-  const validationStart = trainingCount + purgeBars;
+  const validationStart = trainingCount + boundaryGap;
   const validationRows = rows.slice(validationStart);
   const trainingRange = isoRange(trainingRows);
   const validationRange = isoRange(validationRows);
@@ -134,7 +140,8 @@ export function splitChronologicalResearchRows<T extends ResearchFeatureRow>(
     validationRange,
     validationFraction: validationCount / evaluableRows,
     purgedCount: purgeBars,
-    validationProtocol: purgeBars > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1',
+    embargoedCount: embargoBars,
+    validationProtocol: boundaryGap > 0 ? 'purged-chronological-v1' : 'chronological-holdout-v1',
   });
 }
 export type ResearchSafetySummary = Readonly<{
