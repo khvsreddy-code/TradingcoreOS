@@ -428,11 +428,12 @@ coreSpiritModelRoutes.post('/training-runs/from-dataset', async (req: Authentica
   }
   const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
   const purgeBars = rawPurge;
-  const embargoBars = Number(trainingParameters.embargoBars ?? 0);
+  const rawEmbargo = trainingParameters.embargoBars ?? 0;
+  const embargoBars = rawEmbargo;
   if (typeof purgeBars !== 'number' || !Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
     return fail(res, 400, 'purgeBars must be an integer from 0 to 500.');
   }
-  if (!Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+  if (typeof embargoBars !== 'number' || !Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
     return fail(res, 400, 'embargoBars must be an integer from 0 to 500.');
   }
 
