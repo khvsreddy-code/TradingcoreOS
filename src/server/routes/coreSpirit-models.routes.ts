@@ -9,6 +9,7 @@ import {
   DEFAULT_RESEARCH_VALIDATION_FRACTION,
   MIN_RESEARCH_VALIDATION_ROWS,
   type ResearchFeatureRow,
+  type ResearchSafetySummary,
 } from '../../services/coreSpirit/researchValidation.js';
 import {
   createResearchArtifact,
