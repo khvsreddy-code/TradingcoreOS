@@ -82,6 +82,7 @@ function parseSession(row: Record<string, unknown>): CoreSpiritDatasetBatchSessi
 }
 
 export async function coreSpiritDatasetManifestHash(input: {
+  researchArtifactId: string;
   rowCount: number;
   featureSchema: CoreSpiritDatasetManifest['featureSchema'];
   trainingRange: ResearchDateRange;
@@ -91,6 +92,7 @@ export async function coreSpiritDatasetManifestHash(input: {
   return coreSpiritSha256({
     protocol: 'corespirit-dataset-manifest-v1',
     datasetRevision: 1,
+    researchArtifactId: input.researchArtifactId,
     rowCount: input.rowCount,
     featureSchema: input.featureSchema,
     trainingRange: input.trainingRange,
@@ -284,14 +286,16 @@ export class CoreSpiritDatasetBatchRepository {
       types: session.featureNames.map(() => 'number' as const),
       hash: await coreSpiritSha256({ version: '1', orderedNames: session.featureNames, types: session.featureNames.map(() => 'number') }),
     };
+    const researchArtifactId = await this.getResearchArtifactId(sessionId);
     const datasetVersion = await coreSpiritDatasetManifestHash({
+      researchArtifactId,
       rowCount: session.expectedRowCount, featureSchema, trainingRange: session.trainingRange,
       chunkSize: session.chunkSize, chunks: descriptors,
     });
     const manifest: CoreSpiritDatasetManifest = Object.freeze({
       formatVersion: 1,
       datasetRevision: 1,
-      researchArtifactId: await this.getResearchArtifactId(sessionId),
+      researchArtifactId,
       datasetVersion,
       rowCount: session.expectedRowCount,
       featureSchema,
