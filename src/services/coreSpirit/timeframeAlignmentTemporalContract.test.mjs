@@ -112,6 +112,12 @@ const synchronized = synchronizeMarketSnapshots([
 });
 assert.equal(synchronized.size, 2, 'same symbol on different timeframes must have distinct canonical identities');
 assert.equal(synchronized.get('ALPHA::1m')?.value, 2);
+assert.equal(synchronized.get('ALPHA::1m')?.symbol, 'ALPHA');
+assert.equal(synchronized.get('ALPHA::1m')?.timeframe, '1m');
+assert.equal(synchronized.get('ALPHA::1m')?.confirmationPhase, 'confirmed',
+  'accepted references must carry an explicit normalized confirmation phase');
+assert.ok(synchronized.get('ALPHA::1m')?.dataRevision != null,
+  'accepted references must carry a stable explicit data revision');
 
 // The newest revision at a candle timestamp is authoritative even when it
 // invalidates that candle for historical use. Never resurrect the older
