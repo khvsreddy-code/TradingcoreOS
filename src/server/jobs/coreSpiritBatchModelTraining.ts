@@ -384,7 +384,7 @@ export async function runChunkedCoreSpiritModelTraining(
       if (rowIndex % 10_000 === 0) {
         await repository.updateTrainingRun(trainingRunId, {
           status: 'running',
-          progress: Math.min(95, 80 + Math.floor((Math.min(rowIndex, rowCount - validationStart) / (rowCount - validationStart)) * 15)),
+          progress: Math.min(95, 80 + Math.floor((Math.max(0, Math.min(rowIndex - validationStart, validationCount)) / validationCount) * 15)),
         });
       }
     }
