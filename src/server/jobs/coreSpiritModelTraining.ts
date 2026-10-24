@@ -216,7 +216,6 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     for (let index = 0; index < trainingRows.length; index += 1) {
       if ((index & 63) === 0) budget.assertWithinBudget('model fitting');
       const row = trainingRows[index]!;
-      if ((index & 63) === 0) budget.assertWithinBudget('model fitting');
       const state = hmm.observe(row.values, row.timestamp, payload.featureNames);
       const observedCount = index + 1;
       const isFitCheckpoint = observedCount === minimumFitRows ||
