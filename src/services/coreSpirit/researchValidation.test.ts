@@ -82,6 +82,12 @@ assert(split.validationRange.from === new Date(split.validationRows[0]!.timestam
   'validation provenance must record the first held-out decision timestamp');
 rejects(() => splitChronologicalResearchRows(confirmed.slice(0, 40), 0.2, 24, 12),
   'a too-small validation tail must fail instead of reporting in-sample metrics');
+rejects(() => splitChronologicalResearchRows(confirmed, 0.2, 48, 12, { embargoBars: -1 }),
+  'negative embargo values must be rejected rather than silently clamped');
+rejects(() => splitChronologicalResearchRows(confirmed, 0.2, 48, 12, { purgeBars: 1.5 }),
+  'fractional purge counts must be rejected instead of rounded');
+rejects(() => splitChronologicalResearchRows(confirmed, 0.2, 48, 12, { maxRows: Number.NaN }),
+  'invalid row caps must fail closed instead of disabling the comparison');
 
 const largeRows: ResearchFeatureRow[] = Array.from({ length: 6_000 }, (_, index) => {
   const timestamp = start + index * 300_000;
