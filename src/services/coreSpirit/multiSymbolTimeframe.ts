@@ -11,6 +11,7 @@ import type {
   CoreSpiritDataAlignment,
   CoreSpiritDataRequest,
 } from './types';
+import { normalizeCoreSpiritTimeframe } from '../core/data/marketDataGraph';
 
 export const CORE_SPIRIT_MULTI_SYMBOL_TIMEFRAME_VERSION = 1 as const;
 
@@ -123,7 +124,7 @@ function snapshotRevision(snapshot: CoreSpiritDataSnapshot): string | number {
   // payload changes and result selection never depends on arrival order.
   return 'content:' + JSON.stringify([
     snapshot.symbol.trim().toUpperCase(),
-    snapshot.timeframe.trim().toLowerCase(),
+    normalizeCoreSpiritTimeframe(snapshot.timeframe).toLowerCase(),
     snapshot.timestamp ?? null,
     snapshot.closeTimestamp ?? null,
     snapshot.value,
@@ -197,7 +198,7 @@ export function synchronizeMarketSnapshots(
   for (const candidate of snapshots) {
     const valid = validateSynchronizedSnapshot(candidate, context);
     if (!valid) continue;
-    const identity = `${valid.symbol.trim().toUpperCase()}::${valid.timeframe.trim().toLowerCase()}`;
+    const identity = `${valid.symbol.trim().toUpperCase()}::${normalizeCoreSpiritTimeframe(valid.timeframe).toLowerCase()}`;
     const existing = bySymbol.get(identity);
     const time = Number(valid.timestamp ?? -Infinity);
     const oldTime = Number(existing?.timestamp ?? -Infinity);
