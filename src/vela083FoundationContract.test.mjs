@@ -23,6 +23,7 @@ const persistedDocument = read('../vendor/vela/src/state/document.ts');
 const inputController = read('../vendor/vela/src/renderers/native/core/InputController.ts');
 const paneCell = read('../vendor/vela/src/workspace/ChartCell.ts');
 const overlayDiff = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
+const releaseDiff = JSON.parse(read('../vendor/vela/UPSTREAM-RELEASE-DIFF.json'));
 const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 
 assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
@@ -32,6 +33,11 @@ assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
 assert.equal(overlayDiff.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'machine-generated diff must use the pinned source commit');
+assert.equal(releaseDiff.upstream.base.commit, '850fa1f431e2065e9b0074c4b0555a48a2999eaf', 'release diff must compare from the exact 0.8.4 source base');
+assert.equal(releaseDiff.upstream.release.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'release diff must terminate at the exact 0.8.5 source commit');
+assert.equal(releaseDiff.counts.total, releaseDiff.files.length, 'release diff summary must match changed source entries');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/PanesControl.ts'), 'release diff must include the pane API change');
+assert.ok(releaseDiff.files.some((file) => file.path === 'src/core/native-indicators/classics/averages.ts'), 'release diff must include the breaking regression-study migration');
 assert.equal(overlayDiff.counts.modified, overlayDiff.modified.length, 'diff summary must agree with the per-file modifications');
 assert.equal(overlayDiff.counts.localOnly, overlayDiff.localOnly.length, 'diff summary must agree with TCO-only source files');
 assert.ok(overlayDiff.modified.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every modified upstream source file must have a patch owner');
