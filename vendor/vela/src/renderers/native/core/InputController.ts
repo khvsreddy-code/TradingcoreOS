@@ -635,7 +635,7 @@ export class InputController {
             this.deps.endPaneResize?.();
         } else if (tapRelease && this.region === 'data') {
             this.deps.onClick(x, y);
-        } else if (this.dragging && this.region === 'data') {
+        } else if (this.dragging && this.region === 'data' && wasTouch) {
             const stale = e.timeStamp - this.lastT > FLING_STALE_MS;
             if (!stale && Math.abs(this.vx) > FLING_MIN_SPEED) {
                 const pitch = this.deps.getCoords().pxPerBar();
