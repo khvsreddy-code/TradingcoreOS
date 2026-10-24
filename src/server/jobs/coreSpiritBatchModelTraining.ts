@@ -304,16 +304,21 @@ export async function runChunkedCoreSpiritModelTraining(
     const fitIterations = Number(trainingParameters.fitIterations ?? 3);
     if (!Number.isInteger(fitIterations) || fitIterations < 1 || fitIterations > 6) throw new Error('fitIterations must be between 1 and 6.');
 
+    const minimumFitRows = Math.max(12, states * 4);
     const hmm = new CoreSpiritGaussianHMM({
       states, covariance, maxObservations: trainingWindowRows, fitEvery, fitIterations,
       checkBudget: () => budget.checkExecutionBudget('model fitting'),
+      refreshPosteriorOnObserve: false,
     });
     const decoded = new Set<number>();
     rowIndex = 0;
     for await (const item of iterateVerifiedRows(batches, snapshot.batchSessionId, manifest, featureNames, budget)) {
       if (item.index < trainingCount) {
         const state = hmm.observe(item.row.values, item.row.timestamp, featureNames);
-        if (state !== null) decoded.add(state);
+        const observedCount = item.index + 1;
+        const isFitCheckpoint = observedCount === minimumFitRows ||
+          (observedCount > minimumFitRows && (observedCount - minimumFitRows) % fitEvery === 0);
+        if (state !== null && isFitCheckpoint) decoded.add(state);
       }
       rowIndex += 1;
       if (rowIndex % 10_000 === 0) {
@@ -328,6 +333,8 @@ export async function runChunkedCoreSpiritModelTraining(
     // Seal parameters fitted on the latest training window, not the last periodic refit.
     hmm.fitFinal();
     budget.assertWithinBudget('final model fit');
+    const finalDecoded = hmm.decodeLatest();
+    if (finalDecoded !== null) decoded.add(finalDecoded);
     const fittedState = hmm.exportTrainedState();
     // Learned parameters may use a wider research window, but the sealed state
     // persisted for inference retains the live runtime's 1,024-observation cap.
