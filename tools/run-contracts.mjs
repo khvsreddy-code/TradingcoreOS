@@ -13,6 +13,8 @@ const contracts = [
   ['live-candle-lifecycle', ['src/liveCandleLifecycleContract.test.mjs', false]],
   ['live-candle-timestamp-toolbar', ['src/liveCandleTimestampAndToolbarContract.test.mjs', false]],
   ['vela-085-foundation', ['src/vela083FoundationContract.test.mjs', false]],
+  ['vela-pane-layout-persistence-runtime', ['src/velaPaneLayoutPersistence.test.ts', true]],
+  ['vela-085-conformance', ['src/vela085ConformanceContract.test.mjs', false]],
   ['vela-live-ui-corespirit', ['src/velaLiveUiCoreSpiritContract.test.mjs', false]],
   ['fyers-option-search-token', ['src/fyersOptionSearchTokenContract.test.mjs', true]],
   ['vela-native-lazy', ['src/velaNativeIndicatorLazyContract.test.mjs', false]],
