@@ -2,6 +2,7 @@ import { coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../..
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 import { CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
+import { getCoreSpiritResearchLimits } from '../coreSpiritResearchLimits.js';
 import { runChunkedCoreSpiritModelTraining } from './coreSpiritBatchModelTraining.js';
 import {
   assertNoKnownLabelLeakage,
@@ -163,18 +164,33 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
       throw new Error('purgeBars must be an integer from 0 to 500.');
     }
+    const embargoBars = Number(payload.trainingParameters.embargoBars ?? 0);
+    if (!Number.isInteger(embargoBars) || embargoBars < 0 || embargoBars > 500) {
+      throw new Error('embargoBars must be an integer from 0 to 500.');
+    }
     const split = splitChronologicalResearchRows(
       payload.rows,
       Number(payload.trainingParameters.validationFraction ?? 0.2),
       Math.max(12, states * 4),
       12,
-      { maxRows: MAX_HMM_TRAINING_ROWS, purgeBars },
+      { maxRows: MAX_HMM_TRAINING_ROWS, purgeBars, embargoBars },
     );
     const trainingRows = split.trainingRows;
     const validationRows = split.validationRows;
+    const trainingLimits = getCoreSpiritResearchLimits('interactive');
+    const requestedTrainingWindowRows = Number(payload.trainingParameters.trainingWindowRows ?? trainingLimits.maxTrainingWindowRows);
+    if (!Number.isInteger(requestedTrainingWindowRows) || requestedTrainingWindowRows < 48 ||
+        requestedTrainingWindowRows > trainingLimits.maxTrainingWindowRows) {
+      throw new Error('trainingWindowRows must be an integer from 48 to ' + trainingLimits.maxTrainingWindowRows + ' for interactive training.');
+    }
+    const trainingWindowRows = Math.min(trainingRows.length, requestedTrainingWindowRows);
+    const requestedFitEvery = Number(payload.trainingParameters.fitEvery ?? 64);
+    if (!Number.isInteger(requestedFitEvery) || requestedFitEvery < 1 || requestedFitEvery > trainingLimits.maxTrainingFitEvery) {
+      throw new Error('fitEvery must be an integer from 1 to ' + trainingLimits.maxTrainingFitEvery + ' for interactive training.');
+    }
+    const fitEvery = Math.max(requestedFitEvery, Math.min(trainingLimits.maxTrainingFitEvery, Math.ceil(trainingRows.length / 32)));
     const covariance = featureGraph.covariance === 'diagonal' ? 'diagonal' : 'full';
     const fitIterations = Number(payload.trainingParameters.fitIterations ?? 3);
-    const fitEvery = Number(payload.trainingParameters.fitEvery ?? 64);
     if (!Number.isInteger(fitIterations) || fitIterations < 1 || fitIterations > 6) {
       throw new Error('fitIterations must be between 1 and 6');
     }
@@ -186,7 +202,7 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     const hmm = new CoreSpiritGaussianHMM({
       states,
       covariance,
-      maxObservations: trainingRows.length,
+      maxObservations: trainingWindowRows,
       fitEvery,
       fitIterations,
     });
@@ -276,11 +292,15 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
         validationProtocol: split.validationProtocol,
         purgeBars: split.purgedCount,
         purgedDatasetRows: split.purgedCount,
+        embargoBars: split.embargoedCount,
+        embargoedDatasetRows: split.embargoedCount,
         states,
         covariance,
         fitIterations,
         fitEvery,
-        maxObservations: trainingRows.length,
+        trainingWindowRows,
+        maxObservations: hmm.maxObservations,
+        inferenceRuntimeMaxObservations: 1_024,
         initializer: 'deterministic-quantile-v1',
         seedPolicy: 'recorded-for-lineage; built-in HMM initializer is deterministic',
       },
