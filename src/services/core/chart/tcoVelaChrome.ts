@@ -2513,6 +2513,16 @@ const dataWindowPanel: SidePanelDescriptor = {
     const rows = document.createElement('div');
     rows.style.cssText = 'display:flex;flex-direction:column;gap:4px;overflow:auto;min-height:0;';
     root.appendChild(rows);
+    let pointerPane: { paneId: string | null; paneKind: string | null } = { paneId: null, paneKind: null };
+    let offPaneCrosshair: (() => void) | null = null;
+    const attachPaneContext = (): void => {
+      offPaneCrosshair?.();
+      pointerPane = { paneId: null, paneKind: null };
+      offPaneCrosshair = ctx.chart.renderer.onCrosshairMove((event) => {
+        pointerPane = { paneId: event.paneId ?? null, paneKind: event.paneKind ?? null };
+        render();
+      });
+    };
 
     const field = (label: string, value: string, tone = '#cbd5e1') => {
       const row = document.createElement('div');
@@ -2524,7 +2534,10 @@ const dataWindowPanel: SidePanelDescriptor = {
 
     const render = () => {
       rows.textContent = '';
-      context.textContent = `${ctx.symbol} · ${ctx.timeframe}`;
+      const paneLabel = pointerPane.paneId
+        ? `${pointerPane.paneKind === 'price' ? 'Price pane' : pointerPane.paneKind === 'study' ? 'Study pane' : 'Pane'} · ${pointerPane.paneId}`
+        : 'Move crosshair over a pane';
+      context.textContent = `${ctx.symbol} · ${ctx.timeframe} · ${paneLabel}`;
       const readout = ctx.chart.renderer.dataWindowReadout?.();
       if (!readout) {
         field('Status', 'Unavailable on current renderer', '#facc15');
@@ -2551,12 +2564,17 @@ const dataWindowPanel: SidePanelDescriptor = {
       }
     };
 
+    attachPaneContext();
     render();
     const timer = window.setInterval(render, 250);
     return {
-      onOpen: render,
-      onChart: render,
-      destroy: () => window.clearInterval(timer),
+      onOpen: () => { attachPaneContext(); render(); },
+      onChart: () => { attachPaneContext(); render(); },
+      destroy: () => {
+        window.clearInterval(timer);
+        offPaneCrosshair?.();
+        offPaneCrosshair = null;
+      },
     };
   },
 };
