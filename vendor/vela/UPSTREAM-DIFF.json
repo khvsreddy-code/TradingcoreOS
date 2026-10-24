@@ -1697,7 +1697,7 @@
     {
       "path": "src/workspace/ChartCell.ts",
       "upstreamBlob": "1656ed878502465b0cbe6a43d5e816d37e1cdc16",
-      "localBlob": "cedbdc90d0f07936f86063afa682edba0c48c957",
+      "localBlob": "6b52b07ea600af25a177004a92efc0ee9aad321e",
       "patchId": "pane-layout-persistence"
     },
     {
