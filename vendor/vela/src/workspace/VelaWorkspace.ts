@@ -1935,6 +1935,7 @@ export class VelaWorkspace {
         // keep the mobile bar's maximize stop truthful.
         chart.on('pane:changed', () => {
             if (cell.id === this.activeId) this.syncMobileMaximize();
+            this.markStateDirty();
         });
         // Mobile: long-press an axis strip → timezone / price-scale sheet (desktop keeps
         // the right-click menu). The press's own pointerdown already activated the cell.
