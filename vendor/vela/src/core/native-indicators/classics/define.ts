@@ -77,6 +77,13 @@ export interface ClassicIndicatorSpec {
     shortTitle?: string;
     /** true = draws over the price candles; false = its own pane below. */
     overlay: boolean;
+    /**
+     * Delay the first compute until Vela has finished loading the requested history.
+     * Reserve this for studies whose output would be misleading while older requested
+     * bars are still arriving (for example a loaded-history all-time high/low).
+     * Normal rolling and recursive indicators should remain incremental.
+     */
+    waitsForHistory?: boolean;
     inputs: InputSchema[];
     compute(bars: readonly OHLCV[], inputs: Record<string, InputValue>): ClassicOutput;
 }
@@ -229,9 +236,10 @@ export function classicDescriptor(spec: ClassicIndicatorSpec): NativeIndicatorDe
         overlay: spec.overlay,
         // Studies stack (a 20 and a 200 moving average side by side) — unlike the layer-backed natives.
         multiInstance: true,
-        // A study's values depend on every bar before them (an EMA's seed, an RSI's
-        // smoothing), so it computes once over the whole history, as script indicators do.
-        waitsForHistory: true,
+        // History gating is opt-in per study. Most classic studies are useful over the
+        // current progressive snapshot and recompute as older bars arrive; gating every
+        // classic silently delays first paint on ordinary MA/RSI/MACD/VWAP studies.
+        ...(spec.waitsForHistory ? { waitsForHistory: true } : {}),
         inputsSchema: () => spec.inputs,
         defaultInputs: () => Object.fromEntries(spec.inputs.map((i) => [i.key, i.defval])),
         create: () => new ClassicIndicator(spec),
