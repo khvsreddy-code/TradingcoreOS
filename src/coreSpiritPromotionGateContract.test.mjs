@@ -13,6 +13,7 @@ assert.match(gate,/summarizeResearchSafety\(/);
 assert.match(gate,/snapshot\.sourceVerified === true/);
 assert.match(gate,/contractSchemaHash/);
 assert.match(routes,/validateModelPromotion\(/);
+assert.match(routes,/assertModelArtifactRuntimeCompatibility\(storedArtifact/);
 assert.match(training,/datasetSnapshotId,/);
 assert.match(batch,/datasetSnapshotId: String\(rawPayload\.datasetSnapshotId/);
 assert.match(client,/CORE_SPIRIT_RUNTIME_VERSION/);

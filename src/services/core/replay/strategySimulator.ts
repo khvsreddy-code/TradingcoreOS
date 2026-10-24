@@ -126,9 +126,9 @@ function timelineOf(datasets:readonly SimulationDataset[]):Frame[]{
 }
 function actionsOf(actions:readonly SimulationAction[],frames:readonly Frame[]):SimulationAction[]{
   if(!Array.isArray(actions)||actions.length>1_000_000)throw new Error('Actions must be a bounded array.');
-  const times=new Set(frames.map(f=>f.time)),sequences=new Set<string>();
+  const minTime=frames[0]!.time, maxTime=frames[frames.length-1]!.time, sequences=new Set<string>();
   for(const a of actions){
-    if(!a||!Number.isSafeInteger(a.signalTimeMs)||!times.has(a.signalTimeMs)||!Number.isSafeInteger(a.sequence)||a.sequence<0)throw new Error('Each action needs a timeline timestamp and a non-negative sequence.');
+    if(!a||!Number.isSafeInteger(a.signalTimeMs)||a.signalTimeMs<minTime||a.signalTimeMs>maxTime||!Number.isSafeInteger(a.sequence)||a.sequence<0)throw new Error('Each action needs a timestamp within the dataset and a non-negative sequence.');
     const key=a.signalTimeMs+':'+a.sequence;if(sequences.has(key))throw new Error('Action sequences must be unique at a given timestamp.');sequences.add(key);
   }
   return [...actions].sort((a,b)=>a.signalTimeMs-b.signalTimeMs||a.sequence-b.sequence);

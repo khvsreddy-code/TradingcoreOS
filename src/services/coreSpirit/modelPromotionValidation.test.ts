@@ -130,7 +130,8 @@ const leakage = await validate(makeArtifact(['future_return']), snapshot({ rows 
 assert.equal(leakage.productionEligible, false, 'a known future-derived feature cannot be promoted');
 assert.equal(leakage.checks.labelLeakageCheckPassed, false);
 
-const mismatchedSchema = await validate(makeArtifact(['close']), snapshot({ rows, featureNames: ['close', 'volume'] }));
+const twoFeatureRows = rows.map(row => ({ ...row, values: [row.values[0]!, row.values[0]! / 2] }));
+const mismatchedSchema = await validate(makeArtifact(['close']), snapshot({ rows: twoFeatureRows, featureNames: ['close', 'volume'] }));
 assert.equal(mismatchedSchema.productionEligible, false, 'a dataset feature schema different from the model must fail closed');
 assert.equal(mismatchedSchema.checks.datasetSnapshotBound, false);
 assert.equal(mismatchedSchema.checks.featureSchemaMatched, false);
