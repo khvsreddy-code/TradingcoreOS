@@ -74,6 +74,13 @@ function parseManifest(value: Record<string, unknown>, snapshot: ChunkedSnapshot
       manifest.sourceAttestationHash !== null) {
     throw new Error('Chunked dataset manifest has an unsupported schema, source trust state, or row/chunk shape.');
   }
+  const firstChunk = manifest.chunks[0];
+  const lastChunk = manifest.chunks[manifest.chunks.length - 1];
+  if (!firstChunk || !lastChunk || !manifest.observedTimeRange ||
+      manifest.observedTimeRange.from !== new Date(firstChunk.firstTimestamp).toISOString() ||
+      manifest.observedTimeRange.to !== new Date(lastChunk.lastTimestamp).toISOString()) {
+    throw new Error('Dataset manifest observed time range does not match its immutable chunk descriptors.');
+  }
   for (let index = 0; index < manifest.chunks.length; index += 1) {
     const chunk = manifest.chunks[index]!;
     const expectedRows = index === manifest.chunkCount - 1
