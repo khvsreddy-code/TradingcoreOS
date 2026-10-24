@@ -97,14 +97,17 @@ rejects(() => validateConfirmedResearchRows(largeRows, featureNames),
   'interactive validation defaults must remain capped separately from batch datasets');
 const validatedLargeRows = validateConfirmedResearchRows(largeRows, featureNames, { maxRows: 6_000 });
 assert(validatedLargeRows.length === 6_000, 'bounded batch validation must support a dataset larger than the former 5,000-row ceiling');
-const purgedLargeSplit = splitChronologicalResearchRows(validatedLargeRows, 0.2, 48, 12, { maxRows: 6_000, purgeBars: 12 });
-assert(purgedLargeSplit.purgedCount === 12 &&
+const purgedLargeSplit = splitChronologicalResearchRows(validatedLargeRows, 0.2, 48, 12, {
+  maxRows: 6_000, purgeBars: 12, embargoBars: 8,
+});
+assert(purgedLargeSplit.purgedCount === 12 && purgedLargeSplit.embargoedCount === 8 &&
   purgedLargeSplit.validationProtocol === 'purged-chronological-v1',
-  'large datasets must retain the requested purge/embargo between training and validation');
+  'large datasets must separately account for purged and embargoed boundary rows');
 assert(purgedLargeSplit.trainingRows.at(-1)!.timestamp < purgedLargeSplit.validationRows[0]!.timestamp,
   'large research splits must remain strictly chronological');
-assert(purgedLargeSplit.trainingRows.length + purgedLargeSplit.purgedCount + purgedLargeSplit.validationRows.length === 6_000,
-  'all dataset rows must be accounted for as training, purged or validation');
+assert(purgedLargeSplit.trainingRows.length + purgedLargeSplit.purgedCount +
+  purgedLargeSplit.embargoedCount + purgedLargeSplit.validationRows.length === 6_000,
+  'all dataset rows must be accounted for as training, purged, embargoed or validation');
 
 const futureAst = new CoreSpiritParser('let leaked = close[-1]\nplot(leaked)').parse();
 const futureCausality = analyzeCoreSpiritCausality(futureAst);
