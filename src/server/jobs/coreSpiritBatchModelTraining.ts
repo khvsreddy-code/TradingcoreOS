@@ -181,8 +181,8 @@ export async function runChunkedCoreSpiritModelTraining(
     throw new Error('validationFraction must be between 0.10 and 0.40.');
   }
   const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
-  const purgeBars = Number(rawPurge);
-  if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
+  const purgeBars = rawPurge;
+  if (typeof purgeBars !== 'number' || !Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
     throw new Error('purgeBars must be an integer from 0 to 500.');
   }
 
