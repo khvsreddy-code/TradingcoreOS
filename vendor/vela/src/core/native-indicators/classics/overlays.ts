@@ -278,6 +278,10 @@ const fiftyTwoWeek: ClassicIndicatorSpec = {
     title: '52 Week High/Low',
     shortTitle: '52W H/L',
     overlay: true,
+    // The optional all-time extrema are defined over the full loaded chart history,
+    // not only the progressively painted first chunk. Keep this one study off partial
+    // output until the requested historical window completes.
+    waitsForHistory: true,
     inputs: [
         intInput('weeks', 'Weeks', 52, 1, 520, 'Length of the rolling window, in weeks.'),
         boolInput('showAllTime', 'Show All-Time High/Low', false, SETTINGS, "Additionally display the all-time high and low, tracked over the symbol's full loaded history."),
