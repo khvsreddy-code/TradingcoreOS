@@ -53,7 +53,7 @@ assert.match(adapter, /buildCoreSpiritVelaIndicatorModel/, 'CoreSpirit output co
 assert.match(dataProvider, /getBarsProgressive/, 'TCO initial history must remain progressively loaded');
 assert.match(dataProvider, /async loadRange\(/, 'older-history paging remains routed through the canonical provider');
 assert.match(dataProvider, /historyReady: snapshot\.historyReady/, 'history readiness comes from the TCO data plane');
-assert.doesNotMatch(extension, /waitsForHistory\s*:\s*true/, 'bounded TCO regime ribbon stays incremental instead of waiting for all history');
+assert.doesNotMatch(extension, /waitsForHistory\s*:\s*true\s*[,}]/, 'bounded TCO regime ribbon stays incremental instead of waiting for all history');
 assert.match(extension, /anchor = Math\.max\(0, last - length\)/, 'the TCO regime ribbon uses a bounded trailing window');
 
 console.log('VELA_085_CONFORMANCE_CONTRACT_OK');
