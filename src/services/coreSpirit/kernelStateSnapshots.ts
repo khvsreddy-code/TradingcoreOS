@@ -39,7 +39,7 @@ export type CoreSpiritKernelSnapshotMetadata = Readonly<{
 
 export type CoreSpiritKernelSnapshotIdentity = Readonly<Pick<
   CoreSpiritKernelSnapshotMetadata,
-  'modelVersion' | 'kernelType' | 'kernelVersion' | 'parametersSignature' | 'dataRevision' | 'nextBarIndex'
+  'modelVersion' | 'kernelType' | 'kernelVersion' | 'parametersSignature' | 'dataRevision' | 'nextBarIndex' | 'inputDependencies'
 >>;
 
 function sameStringSet(a: readonly string[], b: readonly string[]): boolean {
@@ -62,7 +62,8 @@ function identityMatches<TState>(
     snapshot.kernelVersion === expected.kernelVersion &&
     snapshot.parametersSignature === expected.parametersSignature &&
     snapshot.dataRevision === expected.dataRevision &&
-    snapshot.nextBarIndex === expected.nextBarIndex;
+    snapshot.nextBarIndex === expected.nextBarIndex &&
+    sameStringSet(snapshot.inputDependencies, expected.inputDependencies);
 }
 
 export class CoreSpiritKernelSnapshotStore<TState> {
@@ -146,12 +147,15 @@ export class CoreSpiritKernelSnapshotStore<TState> {
     barIndex: number,
     expected?: CoreSpiritKernelSnapshotIdentity,
   ): CoreSpiritKernelSnapshot<TState> | undefined {
+    // A bar index alone is not a checkpoint identity. Requiring the full
+    // expected identity here prevents callers from accidentally retrieving a
+    // stale state after corrections, parameter edits, kernel upgrades or a
+    // dependency-chain change.
+    if (!expected) return undefined;
     const entries = this.history.get(nodeId);
-    // Search the retained checkpoint history for a compatible identity instead
-    // of rejecting a valid older revision just because a newer incompatible
-    // checkpoint happens to represent the same bar.
-    return entries?.find((entry) => entry.barIndex === barIndex &&
-      (expected ? identityMatches(entry, expected) : true));
+    // Search retained history for a compatible checkpoint rather than stopping
+    // at a newer incompatible entry for the same node/bar.
+    return entries?.find((entry) => entry.barIndex === barIndex && identityMatches(entry, expected));
   }
 
   restore(
