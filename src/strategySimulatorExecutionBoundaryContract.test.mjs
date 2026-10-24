@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
+const simulator=read('./services/core/replay/strategySimulator.ts');
+const engine=read('./services/engine/TradingEngine.ts');
+assert.match(simulator,/executionAuthority:'simulation-only'/);
+assert.match(simulator,/liveBrokerOrdersSubmitted:false/);
+assert.match(simulator,/intrabarPolicy/);
+assert.match(simulator,/maxGrossExposureMultiple/);
+assert.match(simulator,/i\\.type==='stop-limit'/);
+assert.doesNotMatch(simulator,/from ['"].*TradingEngine/);
+assert.doesNotMatch(simulator,/\\.placeOrder\\(/);
+assert.match(engine,/public async placeOrder\\(order: OrderRequest\\)/);
+console.log('STRATEGY_SIMULATION_LIVE_EXECUTION_BOUNDARY_OK');
