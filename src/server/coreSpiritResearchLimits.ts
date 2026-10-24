@@ -4,6 +4,8 @@ export type CoreSpiritResearchWorkload = 'interactive' | 'batch';
 export const CORESPIRIT_RESEARCH_HARD_MAX_ROWS = 1_000_000;
 const HARD_MAX_MEMORY_BYTES = 1024 * 1024 * 1024;
 const HARD_MAX_EXECUTION_MS = 15 * 60 * 1000;
+const HARD_MAX_TRAINING_WINDOW_ROWS = 4_096;
+const HARD_MAX_TRAINING_FIT_EVERY = 4_096;
 
 function boundedEnvInt(
   name: string,
@@ -30,6 +32,8 @@ export function getCoreSpiritResearchLimits(workload: CoreSpiritResearchWorkload
       maxChunkBytes: 2 * 1024 * 1024,
       maxMemoryBytes: 256 * 1024 * 1024,
       maxExecutionMs: 30_000,
+      maxTrainingWindowRows: boundedEnvInt('CORESPIRIT_INTERACTIVE_TRAINING_WINDOW_ROWS', 1_024, 48, 1_024),
+      maxTrainingFitEvery: 64,
     });
   }
 
@@ -40,5 +44,7 @@ export function getCoreSpiritResearchLimits(workload: CoreSpiritResearchWorkload
     maxChunkBytes: boundedEnvInt('CORESPIRIT_BATCH_CHUNK_MAX_BYTES', 2 * 1024 * 1024, 64 * 1024, 4 * 1024 * 1024),
     maxMemoryBytes: boundedEnvInt('CORESPIRIT_BATCH_MAX_MEMORY_BYTES', 512 * 1024 * 1024, 128 * 1024 * 1024, HARD_MAX_MEMORY_BYTES),
     maxExecutionMs: boundedEnvInt('CORESPIRIT_BATCH_MAX_EXECUTION_MS', 5 * 60 * 1000, 30_000, HARD_MAX_EXECUTION_MS),
+    maxTrainingWindowRows: boundedEnvInt('CORESPIRIT_BATCH_MAX_TRAINING_WINDOW_ROWS', 2_048, 48, HARD_MAX_TRAINING_WINDOW_ROWS),
+    maxTrainingFitEvery: boundedEnvInt('CORESPIRIT_BATCH_MAX_FIT_EVERY', HARD_MAX_TRAINING_FIT_EVERY, 64, HARD_MAX_TRAINING_FIT_EVERY),
   });
 }
