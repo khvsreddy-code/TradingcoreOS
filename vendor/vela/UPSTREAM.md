@@ -21,11 +21,13 @@ Integration adapters are maintained in `src/TcoVelaDataProvider.ts` and `src/ser
 
 ## Reproducible source comparison and patch ownership
 
-`vendor/vela/UPSTREAM-DIFF.json` is the generated file-by-file comparison of the vendored
-`src/` tree to upstream tag `v0.8.5`. Its Git blob hashes distinguish unchanged files,
-modified upstream files, TCO-only source files, and upstream files not present locally.
-`vendor/vela/patches.json` assigns each local modification group a purpose and tests;
-the generator fails when a changed or local-only source file has no patch owner.
+Two exact source reports are checked in:
+`vendor/vela/UPSTREAM-RELEASE-DIFF.json` records the upstream 0.8.4-to-0.8.5
+source-file delta, while `vendor/vela/UPSTREAM-DIFF.json` compares the current TCO
+vendor source against pinned upstream 0.8.5. Their Git blob hashes distinguish unchanged
+files, modified upstream files, TCO-only source files, and upstream files not present
+locally. `vendor/vela/patches.json` assigns each local modification group a purpose and
+tests; the generator fails when a changed or local-only source file has no patch owner.
 
 Recreate and verify the snapshot with an upstream checkout pinned to the exact commit:
 
