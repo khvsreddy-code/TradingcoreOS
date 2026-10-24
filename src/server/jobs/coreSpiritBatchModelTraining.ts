@@ -325,6 +325,9 @@ export async function runChunkedCoreSpiritModelTraining(
     }
     if (rowIndex !== rowCount) throw new Error('Dataset changed during model fitting.');
     budget.assertWithinBudget('model fitting');
+    // Seal parameters fitted on the latest training window, not the last periodic refit.
+    hmm.fitFinal();
+    budget.assertWithinBudget('final model fit');
     const fittedState = hmm.exportTrainedState();
     // Learned parameters may use a wider research window, but the sealed state
     // persisted for inference retains the live runtime's 1,024-observation cap.
