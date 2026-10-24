@@ -2843,14 +2843,14 @@ export class NativeRenderer implements IChartRenderer {
         return this.coords.logicalToTime(this.coords.xToLogical(x));
     }
 
-    priceToCoordinate(price: number): number | null {
-        const pane = this.scene.panes.get(PRICE_PANE_ID);
+    priceToCoordinate(price: number, paneId: string = PRICE_PANE_ID): number | null {
+        const pane = this.scene.panes.get(paneId);
         if (!pane || !Number.isFinite(price)) return null;
         return this.coords.priceToY(price, pane.scale, pane.bounds);
     }
 
-    coordinateToPrice(y: number): number | null {
-        const pane = this.scene.panes.get(PRICE_PANE_ID);
+    coordinateToPrice(y: number, paneId: string = PRICE_PANE_ID): number | null {
+        const pane = this.scene.panes.get(paneId);
         if (!pane || !Number.isFinite(y)) return null;
         return this.coords.yToPrice(y, pane.scale, pane.bounds);
     }
