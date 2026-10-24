@@ -4,6 +4,7 @@ import { CoreSpiritGaussianHMM } from './quantMath.ts';
 import { fetchCoreSpiritHMMArtifact } from './modelArtifactClient.ts';
 import { CoreSpiritRuntime } from './runtime.ts';
 import { makeCoreSpiritProgram } from './coreSpiritPipeline.ts';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION, CORE_SPIRIT_RUNTIME_VERSION } from './VERSION.ts';
 import {
   createResearchArtifact,
   InMemoryModelArtifactStore,
@@ -42,8 +43,8 @@ async function main(): Promise<void> {
   const research = await createResearchArtifact({
     name: 'nifty-regime-v7',
     source,
-    compilerVersion: 'corespirit-compiler-test',
-    irVersion: '1',
+    compilerVersion: CORE_SPIRIT_COMPILER_VERSION,
+    irVersion: String(CORE_SPIRIT_IR_VERSION),
     featureGraph,
     ir: compiled.ir,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -67,10 +68,13 @@ async function main(): Promise<void> {
   const provenance: ModelProvenance = {
     sourceHash: research.sourceHash,
     compilerVersion: research.compilerVersion,
-    runtimeVersion: 'corespirit-runtime-test',
+    runtimeVersion: CORE_SPIRIT_RUNTIME_VERSION,
     irVersion: research.irVersion,
     featureGraphHash: research.featureGraphHash,
     datasetVersion: 'a'.repeat(64),
+    datasetSource: 'user_supplied',
+    datasetSourceVerified: false,
+    datasetSourceAttestationHash: null,
     trainingRange: { from: '2025-01-01', to: '2025-12-31' },
     validationRange: { from: '2026-01-01', to: '2026-01-31' },
     validationResults: {
@@ -104,7 +108,7 @@ async function main(): Promise<void> {
       blockers: [],
       warnings: [],
     },
-    dependencyVersions: { corespiritCompiler: research.compilerVersion, corespiritIr: research.irVersion },
+    dependencyVersions: { corespiritCompiler: research.compilerVersion, corespiritIr: research.irVersion, corespiritRuntime: CORE_SPIRIT_RUNTIME_VERSION },
   };
   const artifact = await sealModelArtifact({
     research,

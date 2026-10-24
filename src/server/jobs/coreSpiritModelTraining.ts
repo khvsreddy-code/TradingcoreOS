@@ -162,8 +162,12 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
     budget.assertWithinBudget('dataset integrity validation');
 
     const states = Number(featureGraph.states ?? 3);
+    const forecastHorizonBars = Number(payload.trainingParameters.forecastHorizonBars ?? payload.trainingParameters.targetHorizonBars ?? payload.trainingParameters.horizon ?? 1);
     const rawPurgeBars = payload.trainingParameters.purgeBars ?? payload.trainingParameters.forecastHorizonBars ?? payload.trainingParameters.horizon ?? 1;
     const purgeBars = Number(rawPurgeBars);
+    if (!Number.isSafeInteger(forecastHorizonBars) || forecastHorizonBars < 1 || forecastHorizonBars > 500 || purgeBars < forecastHorizonBars) {
+      throw new Error('Purged bars must cover the configured forecast horizon (1–500 bars).');
+    }
     if (!Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
       throw new Error('purgeBars must be an integer from 0 to 500.');
     }
@@ -306,6 +310,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
       researchSafety: safety,
       trainingParameters: {
         ...payload.trainingParameters,
+        researchArtifactId: payload.researchArtifactId,
+        datasetSnapshotId,
+        forecastHorizonBars,
         validationFraction: split.validationFraction,
         validationProtocol: split.validationProtocol,
         purgeBars: split.purgedCount,

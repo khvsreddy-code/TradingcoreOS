@@ -81,6 +81,7 @@ const contracts = [
   ['corespirit-research-temporal-validation', ['src/services/coreSpirit/researchValidation.test.ts', true]],
   ['corespirit-bounded-chunked-research', ['src/coreSpiritBatchResearchContract.test.mjs', false]],
   ['corespirit-model-provenance-and-release', ['src/coreSpiritResearchModelLifecycleContract.test.mjs', false]],
+  ['corespirit-model-promotion-recomputation', ['src/coreSpiritPromotionGateContract.test.mjs', false]],
   ['artifact-hygiene', ['src/generatedArtifactHygieneContract.test.mjs', false]],
   ['routes', ['src/routeContract.test.mjs', false]],
   ['indicator-dependency-graph', ['src/indicatorDependencyGraphContract.test.mjs', false]],

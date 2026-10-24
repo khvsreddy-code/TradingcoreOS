@@ -178,9 +178,13 @@ export async function runChunkedCoreSpiritModelTraining(
     throw new Error('validationFraction must be between 0.10 and 0.40.');
   }
   const rawPurge = trainingParameters.purgeBars ?? trainingParameters.forecastHorizonBars ?? trainingParameters.horizon ?? 1;
+  const forecastHorizonBars = Number(trainingParameters.forecastHorizonBars ?? trainingParameters.targetHorizonBars ?? trainingParameters.horizon ?? 1);
   const purgeBars = rawPurge;
   const rawEmbargo = trainingParameters.embargoBars ?? 0;
   const embargoBars = rawEmbargo;
+  if (!Number.isSafeInteger(forecastHorizonBars) || forecastHorizonBars < 1 || forecastHorizonBars > 500 || Number(purgeBars) < forecastHorizonBars) {
+    throw new Error('Purged bars must cover the configured forecast horizon (1–500 bars).');
+  }
   if (typeof purgeBars !== 'number' || !Number.isInteger(purgeBars) || purgeBars < 0 || purgeBars > 500) {
     throw new Error('purgeBars must be an integer from 0 to 500.');
   }
@@ -424,6 +428,9 @@ export async function runChunkedCoreSpiritModelTraining(
       researchSafety: safety,
       trainingParameters: {
         ...trainingParameters,
+        researchArtifactId,
+        datasetSnapshotId: String(rawPayload.datasetSnapshotId ?? ''),
+        forecastHorizonBars,
         validationFraction: validationCount / evaluableRows,
         validationProtocol,
         purgeBars,

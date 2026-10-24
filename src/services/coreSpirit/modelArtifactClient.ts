@@ -1,9 +1,11 @@
 import {
+  coreSpiritSha256,
   verifyModelArtifactIntegrity,
   type ModelArtifact,
 } from './modelArtifacts.js';
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState, type CoreSpiritHMMArtifactBinding } from './quantMath.js';
 import type { CoreSpiritHMMArtifactResolver } from './runtime.js';
+import { CORE_SPIRIT_COMPILER_VERSION, CORE_SPIRIT_IR_VERSION, CORE_SPIRIT_RUNTIME_VERSION } from './VERSION.js';
 
 type GaussianHMMWeights = Readonly<{
   modelType: 'gaussian-hmm';
@@ -64,6 +66,31 @@ export async function fetchCoreSpiritHMMArtifact(
       'Review its chronological holdout, provenance, causality and lookahead report, then explicitly approve the exact artifact hash.',
     );
   }
+  if (artifact.provenance.compilerVersion !== CORE_SPIRIT_COMPILER_VERSION ||
+      artifact.provenance.irVersion !== String(CORE_SPIRIT_IR_VERSION) ||
+      artifact.provenance.runtimeVersion !== CORE_SPIRIT_RUNTIME_VERSION ||
+      artifact.provenance.dependencyVersions.corespiritCompiler !== CORE_SPIRIT_COMPILER_VERSION ||
+      artifact.provenance.dependencyVersions.corespiritIr !== String(CORE_SPIRIT_IR_VERSION) ||
+      artifact.provenance.dependencyVersions.corespiritRuntime !== CORE_SPIRIT_RUNTIME_VERSION ||
+      artifact.provenance.modelImplementation !== 'corespirit-gaussian-hmm-v1' ||
+      !artifact.contract) {
+    throw new Error('CoreSpirit model ABI/version compatibility changed; retrain and re-approve this exact artifact hash before inference.');
+  }
+  const featureSchemaHash = await coreSpiritSha256({
+    version: artifact.contract.featureSchema.version,
+    orderedNames: artifact.contract.featureSchema.orderedNames,
+    types: artifact.contract.featureSchema.types,
+  });
+  const boundFeatureNames = Array.isArray((artifact.weights as Partial<GaussianHMMWeights>)?.featureNames)
+    ? (artifact.weights as Partial<GaussianHMMWeights>).featureNames! : [];
+  if (featureSchemaHash !== artifact.contract.featureSchema.hash ||
+      artifact.contract.featureSchema.orderedNames.length !== boundFeatureNames.length ||
+      artifact.contract.featureSchema.orderedNames.some((name,index)=>name !== boundFeatureNames[index]) ||
+      artifact.contract.validation.protocol !== artifact.provenance.validationResults.protocol ||
+      artifact.contract.temporal.validationProtocol !== artifact.provenance.validationResults.protocol) {
+    throw new Error('CoreSpirit model feature/validation ABI is incompatible with its immutable artifact contract.');
+  }
+
   const weights = artifact.weights as Partial<GaussianHMMWeights>;
   if (weights.modelType !== 'gaussian-hmm' || typeof weights.modelAlias !== 'string' ||
       !weights.modelAlias.trim() || !Array.isArray(weights.featureNames) ||
