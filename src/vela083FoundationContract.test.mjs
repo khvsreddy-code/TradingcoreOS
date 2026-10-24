@@ -21,6 +21,9 @@ const overlayStack = read('../vendor/vela/src/renderers/native/core/overlayStack
 const averages = read('../vendor/vela/src/core/native-indicators/classics/averages.ts');
 const persistedDocument = read('../vendor/vela/src/state/document.ts');
 const inputController = read('../vendor/vela/src/renderers/native/core/InputController.ts');
+const paneCell = read('../vendor/vela/src/workspace/ChartCell.ts');
+const overlayDiff = JSON.parse(read('../vendor/vela/UPSTREAM-DIFF.json'));
+const patchManifest = JSON.parse(read('../vendor/vela/patches.json'));
 
 assert.match(provenance, /Upstream source version: \*\*0\.8\.5\*\*/, 'vendored Vela foundation must pin the actual upstream source version');
 assert.match(provenance, /Previous source base: Vela 0\.8\.4/, 'record the 0.8.4 ancestry of the upstream release');
@@ -28,6 +31,16 @@ assert.match(releaseNotes, /^## \[0\.8\.5\]/m, 'vendored changelog must include 
 assert.match(releaseNotes, /Linear Regression is now two studies/, 'document the breaking linear-regression study replacement');
 assert.match(notice, /ATTRIBUTION REQUIREMENT[\s\S]*visible attribution to the Vela project/, 'preserve the required Vela attribution notice');
 assert.match(provenance, /596cbbdeba15406cfb72465afd07f8c60c6b1852/, 'record the exact upstream source commit');
+assert.equal(overlayDiff.upstream.commit, '596cbbdeba15406cfb72465afd07f8c60c6b1852', 'machine-generated diff must use the pinned source commit');
+assert.equal(overlayDiff.counts.modified, overlayDiff.modified.length, 'diff summary must agree with the per-file modifications');
+assert.equal(overlayDiff.counts.localOnly, overlayDiff.localOnly.length, 'diff summary must agree with TCO-only source files');
+assert.ok(overlayDiff.modified.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every modified upstream source file must have a patch owner');
+assert.ok(overlayDiff.localOnly.every((file) => patchManifest.patches.some((patch) => patch.id === file.patchId)), 'every TCO-only source file must have a patch owner');
+assert.match(persistedDocument, /paneHeightWeights\?: Record<string, number>/, 'pane weights are part of the versioned per-cell state');
+assert.match(persistedDocument, /Object\.keys\(source\)\.slice\(0, 32\)/, 'persisted pane count is bounded');
+assert.match(paneCell, /private restorePaneHeightWeights\(\)/, 'saved pane proportions are restored to the native chart');
+assert.match(paneCell, /chart\.panes\.setHeightWeight\(pane\.id, weight\)/, 'restoration uses the native Vela 0.8.5 pane API');
+assert.match(paneCell, /paneHeightWeights: this\.readPaneHeightWeights\(\)/, 'live pane weights are included in chart snapshots');
 assert.match(vela, /priceAxis\?\.ticks|priceAxisTicks/, 'carry the upstream custom price-axis ticks API');
 assert.match(options, /priceAxis\??:/, 'carry the upstream price-axis option contract');
 assert.match(nativeIndicator, /waitsForHistory\?: boolean/, 'native indicators can opt into full-history gating');
