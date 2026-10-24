@@ -28,7 +28,7 @@ assert.match(batchRepository, /storageFormat: 'json-chunks-v1'/);
 assert.match(batchRepository, /status: 'sealing'/);
 assert.match(batchRepository, /status: 'sealed'/);
 assert.match(batchRepository, /async \*iterateChunks/);
-assert.match(batchRepository, /rows,\s*storage_mode: 'chunked-v1'/);
+assert.match(batchRepository, /rows:\s*\[\],\s*storage_mode: 'chunked-v1'/);
 assert.match(snapshotRepository, /storageMode === 'chunked-v1'/,
   'snapshot reads must not require all chunked rows to be embedded in one JSON object');
 
