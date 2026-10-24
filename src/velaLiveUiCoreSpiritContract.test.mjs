@@ -38,6 +38,8 @@ assert.match(chartKernel, /priceToCoordinate\(event\.price, paneId\)/, 'TCO maps
 assert.match(chartKernel, /paneKind: event\.paneKind \?\? null/, 'TCO preserves click pane-kind metadata');
 assert.match(chartKernel, /paneId: event\.paneId \?\? null/, 'TCO click callbacks preserve the actual pane identity');
 assert.match(contextMenu, /pointer\.paneId|paneId:.*pointer/, 'native context-menu actions receive the pane under the pointer');
+assert.match(chrome, /pointerPane = \{ paneId: event\.paneId \?\? null, paneKind: event\.paneKind \?\? null \}/, 'the TCO data window displays the pane reported by crosshair events');
+assert.match(chrome, /Study pane/, 'the TCO data window distinguishes indicator panes from the price pane');
 assert.doesNotMatch(nativeExtensions, /from ['\"]\.\/velaChartFacade['\"]/, 'new native extension code must not depend on the legacy facade');
 assert.doesNotMatch(nativeExtensions, /waitsForHistory\s*:\s*true/, 'the bounded TCO regime ribbon remains incremental');
 assert.match(provider, /historyReady: snapshot\.historyReady/, 'the TCO data plane keeps its history-readiness signal');
