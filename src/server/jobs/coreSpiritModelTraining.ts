@@ -2,6 +2,7 @@ import { coreSpiritSha256, sealModelArtifact, type ModelProvenance } from '../..
 import { CoreSpiritGaussianHMM, type CoreSpiritGaussianHMMState } from '../../services/coreSpirit/quantMath.js';
 import { CoreSpiritArtifactRepository } from '../storage/CoreSpiritArtifactRepository.js';
 import { CORE_SPIRIT_RUNTIME_VERSION } from '../../services/coreSpirit/VERSION.js';
+import { runChunkedCoreSpiritModelTraining } from './coreSpiritBatchModelTraining.js';
 import {
   assertNoKnownLabelLeakage,
   splitChronologicalResearchRows,
@@ -110,6 +111,9 @@ export async function runCoreSpiritModelTraining(ownerUserId: string, rawPayload
   if (!snapshot) throw new Error('Immutable dataset snapshot not found for this owner');
   if (String(rawPayload.datasetVersion ?? '') !== snapshot.datasetVersion) {
     throw new Error('Queued dataset version does not match the immutable snapshot');
+  }
+  if (snapshot.storageMode === 'chunked-v1') {
+    return runChunkedCoreSpiritModelTraining(ownerUserId, rawPayload, snapshot, repository);
   }
   const payload = parsePayload({
     ...rawPayload,
