@@ -42,9 +42,13 @@ assert.match(batchRepository, /rows:\s*\[\],\s*storage_mode: 'chunked-v1'/);
 assert.match(snapshotRepository, /storageMode === 'chunked-v1'/,
   'snapshot reads must not require all chunked rows to be embedded in one JSON object');
 
-assert.match(batchWorker, /process\.memoryUsage\(\)\.rss/);
+assert.match(limits, /process\.memoryUsage\(\)\.rss/);
 assert.match(batchWorker, /maxExecutionMs/);
+assert.match(limits, /createCoreSpiritResearchBudget/);
+assert.match(trainingWorker, /createCoreSpiritResearchBudget\('interactive'\)/);
 assert.match(batchWorker, /checkExecutionBudget\('model fitting'\)/);
+assert.match(batchWorker, /hmm\.fitFinal\(\)/);
+assert.match(trainingWorker, /hmm\.fitFinal\(\)/);
 assert.match(quantMath, /checkBudget\?: \(\) => void/);
 assert.match(quantMath, /this\.checkBudget\?\.\(\)/);
 assert.match(quantMath, /Math\.min\(4_096, Math\.floor\(options\.maxObservations/);
