@@ -39,7 +39,8 @@ assert.match(chartRenderer, /paneId\?: string \| null/, 'Vela click/crosshair co
 assert.match(chartKernel, /priceToCoordinate\(event\.price, paneId\)/, 'TCO maps clicked values on the actual pane scale');
 assert.match(chartKernel, /paneKind: event\.paneKind \?\? null/, 'TCO preserves click pane-kind metadata');
 assert.match(chartKernel, /paneId: event\.paneId \?\? null/, 'TCO click callbacks preserve the actual pane identity');
-assert.match(contextMenu, /pointer\.paneId|paneId:.*pointer/, 'native context-menu actions receive the pane under the pointer');
+assert.match(contextMenu, /this\.crosshair = \{ price: e\.price, time: e\.time, paneKind: e\.paneKind \?\? null, paneId: e\.paneId \?\? null \}/, 'context-menu crosshair state retains native pane identity');
+assert.match(contextMenu, /pointer: \{ value: this\.pointer, enumerable: true \}/, 'context-menu contributions receive the pointer captured when the menu opened');
 assert.match(chrome, /pointerPane = \{ paneId: event\.paneId \?\? null, paneKind: event\.paneKind \?\? null \}/, 'the TCO data window displays the pane reported by crosshair events');
 assert.match(chrome, /Study pane/, 'the TCO data window distinguishes indicator panes from the price pane');
 assert.match(rendererPorts, /paneKind\?: 'price' \| 'study'/, 'data-window groups carry their owning pane kind');
