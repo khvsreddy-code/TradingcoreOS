@@ -194,11 +194,37 @@ export function synchronizeMarketSnapshots(
   snapshots: readonly CoreSpiritDataSnapshot[],
   context: SnapshotValidationContext,
 ): ReadonlyMap<string, CoreSpiritDataSnapshot> {
-  const bySymbol = new Map<string, CoreSpiritDataSnapshot>();
+  // Resolve the authoritative revision for each candle before applying
+  // confirmation policy. Otherwise a newer developing revision is discarded
+  // first and an older confirmed revision of that same candle can reappear.
+  const latestRevisionByCandle = new Map<string, CoreSpiritDataSnapshot>();
   for (const candidate of snapshots) {
+    if (!candidate || typeof candidate.symbol !== 'string' || typeof candidate.timeframe !== 'string' ||
+        !candidate.symbol.trim() || !candidate.timeframe.trim() ||
+        candidate.timestamp == null || !Number.isFinite(Number(candidate.timestamp))) continue;
+    const identity = [
+      candidate.symbol.trim().toUpperCase(),
+      candidate.timeframe.trim().toLowerCase(),
+      Number(candidate.timestamp),
+    ].join('::');
+    const existing = latestRevisionByCandle.get(identity);
+    if (!existing) {
+      latestRevisionByCandle.set(identity, candidate);
+      continue;
+    }
+    const revisionOrder =
+      typeof candidate.revision === 'number' && typeof existing.revision === 'number' &&
+      candidate.revision !== existing.revision
+        ? candidate.revision > existing.revision ? 1 : -1
+        : String(snapshotRevision(candidate)).localeCompare(String(snapshotRevision(existing)));
+    if (revisionOrder > 0) latestRevisionByCandle.set(identity, candidate);
+  }
+
+  const bySymbol = new Map<string, CoreSpiritDataSnapshot>();
+  for (const candidate of latestRevisionByCandle.values()) {
     const valid = validateSynchronizedSnapshot(candidate, context);
     if (!valid) continue;
-    const identity = `${valid.symbol.trim().toUpperCase()}::${normalizeCoreSpiritTimeframe(valid.timeframe).toLowerCase()}`;
+    const identity = `${valid.symbol.trim().toUpperCase()}::${valid.timeframe.trim().toLowerCase()}`;
     const existing = bySymbol.get(identity);
     const time = Number(valid.timestamp ?? -Infinity);
     const oldTime = Number(existing?.timestamp ?? -Infinity);
