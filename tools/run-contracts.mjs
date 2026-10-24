@@ -79,7 +79,6 @@ const contracts = [
   ['corespirit-model-lifecycle-training-inference', ['src/services/coreSpirit/modelLifecycle.test.ts', true]],
   ['strategy-simulator-deterministic-ledger', ['src/services/core/replay/strategySimulator.test.ts', true]],
   ['core-spirit-simulation-intent-adapter', ['src/services/core/replay/coreSpiritStrategySimulationAdapter.test.ts', true]],
-  ['core-spirit-simulation-intent-adapter', ['src/services/core/replay/coreSpiritStrategySimulationAdapter.test.ts', true]],
   ['replay-timestamp-ordering', ['src/services/core/replay/replayValidator.test.ts', true]],
   ['strategy-simulator-live-execution-boundary', ['src/strategySimulatorExecutionBoundaryContract.test.mjs', false]],
   ['corespirit-replay-execution-parity', ['src/services/coreSpirit/replayContract.test.ts', true]],
