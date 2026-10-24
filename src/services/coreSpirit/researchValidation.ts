@@ -52,8 +52,8 @@ export function validateConfirmedResearchRows<T extends ResearchFeatureRow>(
   return rows.map((row, index) => {
     if (!row || typeof row !== 'object' ||
         Object.keys(row).some(key => !['timestamp','availableAt','confirmed','phase','values','source','revision'].includes(key)) ||
-        typeof row.timestamp !== 'number' || !Number.isFinite(row.timestamp) ||
-        typeof row.availableAt !== 'number' || !Number.isFinite(row.availableAt) ||
+        typeof row.timestamp !== 'number' || !Number.isSafeInteger(row.timestamp) ||
+        typeof row.availableAt !== 'number' || !Number.isSafeInteger(row.availableAt) ||
         row.availableAt > row.timestamp ||
         row.confirmed !== true ||
         (row.phase !== 'historical' && row.phase !== 'confirmed') ||
