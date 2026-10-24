@@ -48,3 +48,49 @@ export function getCoreSpiritResearchLimits(workload: CoreSpiritResearchWorkload
     maxTrainingFitEvery: boundedEnvInt('CORESPIRIT_BATCH_MAX_FIT_EVERY', HARD_MAX_TRAINING_FIT_EVERY, 64, HARD_MAX_TRAINING_FIT_EVERY),
   });
 }
+
+/**
+ * A per-job resource guard shared by both worker classes. The inexpensive
+ * deadline check can be called from CPU-bound numerical loops; RSS is sampled
+ * at least once per second and always at explicit stage boundaries.
+ */
+export function createCoreSpiritResearchBudget(workload: CoreSpiritResearchWorkload) {
+  const limits = getCoreSpiritResearchLimits(workload);
+  const startedAt = Date.now();
+  const deadline = startedAt + limits.maxExecutionMs;
+  let lastMemoryCheck = startedAt;
+
+  function assertDeadline(stage: string, now = Date.now()): void {
+    if (now > deadline) {
+      throw new Error('CoreSpirit ' + workload + ' training exceeded the ' +
+        limits.maxExecutionMs + ' ms execution budget during ' + stage + '.');
+    }
+  }
+
+  function checkMemoryBudget(stage: string): void {
+    const rss = typeof process.memoryUsage === 'function' ? process.memoryUsage().rss : 0;
+    if (rss > limits.maxMemoryBytes) {
+      throw new Error('CoreSpirit ' + workload + ' training exceeded the ' +
+        limits.maxMemoryBytes + ' byte worker RSS budget during ' + stage + '.');
+    }
+  }
+
+  function assertWithinBudget(stage: string): void {
+    const now = Date.now();
+    assertDeadline(stage, now);
+    lastMemoryCheck = now;
+    checkMemoryBudget(stage);
+  }
+
+  function checkExecutionBudget(stage: string): void {
+    const now = Date.now();
+    assertDeadline(stage, now);
+    if (now - lastMemoryCheck >= 1_000) {
+      lastMemoryCheck = now;
+      checkMemoryBudget(stage);
+    }
+  }
+
+  return Object.freeze({ limits, startedAt, deadline, assertWithinBudget, checkExecutionBudget });
+}
+
