@@ -55,6 +55,7 @@ assert.match(quantMath, /this\.fitted && this\.refreshPosteriorOnObserve/);
 assert.match(batchWorker, /refreshPosteriorOnObserve: false/);
 assert.match(trainingWorker, /refreshPosteriorOnObserve: false/);
 assert.match(quantMath, /Math\.min\(4_096, Math\.floor\(options\.maxObservations/);
+assert.doesNotMatch(quantMath, /this\.observations\.shift\(\)/, 'bounded HMM ingestion must not shift the full window for every row');
 assert.match(quantMath, /snapshot\.maxObservations > 1024/, 'sealed model inference state remains capped independently of wider research fitting');
 assert.match(batchWorker, /for await \(const item of iterateVerifiedRows/);
 assert.match(batchWorker, /Dataset chunk content hash or time bounds/);
